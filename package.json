@@ -1,7 +1,7 @@
 {
   "name": "smart-city-booking-backend",
   "version": "2.0.0",
-  "description": "A restful engine for booking and managing smart city services.",
+  "description": "An open-source backend system for booking and managing resources in smart cities and regions.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -13,6 +13,7 @@
   },
   "keywords": [
     "smartcity",
+    "smartregion",
     "booking"
   ],
   "author": "Eisenschmidt Consulting Crew GmbH",
