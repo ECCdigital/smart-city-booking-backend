@@ -81,7 +81,7 @@ class CheckoutController {
 
         if (!booking.isCommitted) {
           try {
-            await MailController.sendBookingRequest(
+            await MailController.sendBookingRequestConfirmation(
                 booking.mail,
                 booking.id,
                 booking.tenant
