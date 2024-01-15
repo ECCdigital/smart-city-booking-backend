@@ -265,7 +265,7 @@ class MailController {
 
   static async sendPasswordResetRequest(address, hookId, tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
-    let content = `<p>Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Link.<br>Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}}">${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}</a>`;
+    let content = `<p>Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Link.<br>Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}">${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}</a>`;
 
     await MailerService.send(
       tenantId,
