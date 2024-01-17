@@ -23,8 +23,7 @@ class HtmlEngine {
       const tenantObj = await TenantManager.getTenant(bookable.tenant);
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
-      htmlOutput +=
-          `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
+      htmlOutput += `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
       htmlOutput += "<h4>" + (bookable.title || "") + "</h4>";
       htmlOutput +=
         '<p class="description">' + (bookable.description || "") + "</p>";
@@ -95,8 +94,7 @@ class HtmlEngine {
   static async bookable(bookable) {
     let htmlOutput = '<div class="bookable-item">';
 
-    htmlOutput +=
-      `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
+    htmlOutput += `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
     htmlOutput += "<h3>" + (bookable.title || "") + "</h3>";
     htmlOutput +=
       '<p class="description">' + (bookable.description || "") + "</p>";
@@ -179,7 +177,7 @@ class HtmlEngine {
       htmlOutput += '<div class="related-bookable-objects">';
       htmlOutput += await HtmlEngine.bookablesToList(
         relatedBookables,
-        bookable.relatedBookableIds
+        bookable.relatedBookableIds,
       );
       htmlOutput += "</div>";
     }
@@ -201,9 +199,23 @@ class HtmlEngine {
       });
 
       htmlOutput += `<li class="event" rel="${tags.trim()}">`;
-      htmlOutput +=
-        `<img src="${event.information?.teaserImage}" class="cover-image"  alt="${event.information.teaserImage.name}"/>`;
+      htmlOutput += `<img src="${event.information?.teaserImage}" class="cover-image"  alt="${event.information.teaserImage.name}"/>`;
       htmlOutput += "<h3>" + (event.information?.name || "") + "</h3>";
+
+      const startDate = Intl.DateTimeFormat("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(new Date(event.information.startDate));
+      const endDate = Intl.DateTimeFormat("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(new Date(event.information.endDate));
+      let dateString = `${startDate} ${event.information.startTime || ""} - ${
+        startDate !== endDate ? endDate + " " : ""
+      }${event.information.endTime || ""}`;
+
       htmlOutput +=
         '<p class="organizer-name">' +
         (event.eventOrganizer?.name || "") +
@@ -316,7 +328,7 @@ class HtmlEngine {
     if (event.eventLocation.room) {
       var eventLocationBookable = await BookableManager.getBookable(
         event.eventLocation.room,
-        event.tenant
+        event.tenant,
       );
       htmlOutput += `<div class="room">${eventLocationBookable.title}</div>`;
     }
@@ -454,7 +466,7 @@ class HtmlEngine {
       (bookable) =>
         bookable.type === "ticket" &&
         bookable.eventId === event.id &&
-        bookable.isPublic === true
+        bookable.isPublic === true,
     );
 
     if (relatedTickets.length > 0) {
