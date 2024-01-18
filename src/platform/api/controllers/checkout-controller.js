@@ -81,10 +81,10 @@ class CheckoutController {
 
         if (!booking.isCommitted) {
           try {
-            await MailController.sendBookingRequest(
-              booking.mail,
-              booking.id,
-              booking.tenant,
+            await MailController.sendBookingRequestConfirmation(
+                booking.mail,
+                booking.id,
+                booking.tenant
             );
           } catch (err) {
             console.log(err);
