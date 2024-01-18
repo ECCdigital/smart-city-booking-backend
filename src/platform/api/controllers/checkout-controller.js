@@ -20,7 +20,7 @@ class CheckoutController {
       timeBegin,
       timeEnd,
       bookableId,
-      parseInt(amount)
+      parseInt(amount),
     );
 
     try {
@@ -34,7 +34,7 @@ class CheckoutController {
 
   static async checkout(request, response) {
     const tenantId = request.params.tenant;
-    const simulate = request.query.simulate === "false";
+    const simulate = request.query.simulate === "true";
     const user = request.user;
     const tenant = await TenantManager.getTenant(tenantId);
 
@@ -71,7 +71,7 @@ class CheckoutController {
       location,
       email,
       phone,
-      comment
+      comment,
     );
 
     try {
@@ -93,9 +93,9 @@ class CheckoutController {
         if (booking.isCommitted && booking.isPayed) {
           try {
             await MailController.sendBookingConfirmation(
-                booking.mail,
-                booking.id,
-                booking.tenant
+              booking.mail,
+              booking.id,
+              booking.tenant,
             );
           } catch (err) {
             console.log(err);
@@ -103,15 +103,14 @@ class CheckoutController {
         }
 
         try {
-            await MailController.sendIncomingBooking(
-                booking.mail,
-                booking.id,
-                booking.tenant
-            );
+          await MailController.sendIncomingBooking(
+            booking.mail,
+            booking.id,
+            booking.tenant,
+          );
         } catch (err) {
-            console.log(err);
+          console.log(err);
         }
-
       } else {
         console.log("Simulate booking");
       }
