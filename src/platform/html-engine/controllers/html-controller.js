@@ -17,7 +17,7 @@ class HtmlController {
     if (ids) {
       const idsArray = ids.split(",");
       bookables = bookables.filter((bookable) =>
-        idsArray.includes(bookable.id)
+        idsArray.includes(bookable.id),
       );
     }
 
@@ -54,17 +54,17 @@ class HtmlController {
       events = events.filter((event) => idsArray.includes(event.id));
     }
 
-    events
+    events = events
       .filter(
         (event) =>
           event.information &&
           event.information.startDate &&
-          event.information.startDate > new Date()
+          Date.parse(event.information.startDate) > new Date(),
       )
       .sort(
         (a, b) =>
           Date.parse(a.information.startDate) -
-          Date.parse(b.information.startDate)
+          Date.parse(b.information.startDate),
       );
 
     const htmlOutput = await HtmlEngine.eventsToList(events);
