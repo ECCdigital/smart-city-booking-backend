@@ -18,30 +18,30 @@ class CalendarController {
 
       // Get the Bookings that are directly related to the bookable object
       bookings = bookings.concat(
-        await BookingManager.getRelatedBookings(tenant, bookable.id)
+        await BookingManager.getRelatedBookings(tenant, bookable.id),
       );
 
       // Get all Bookings that are related to a child bookable
       const relatedBookables = await BookableManager.getRelatedBookables(
         bookable.id,
-        tenant
+        tenant,
       );
 
       for (const relatedBookable of relatedBookables) {
         bookings = bookings.concat(
-          await BookingManager.getRelatedBookings(tenant, relatedBookable.id)
+          await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
         );
       }
 
       // Get all Bookings that are related to a parent bookable
       const parentBookables = await BookableManager.getParentBookables(
         bookable.id,
-        tenant
+        tenant,
       );
 
       for (const relatedBookable of relatedBookables) {
         bookings = bookings.concat(
-          await BookingManager.getRelatedBookings(tenant, relatedBookable.id)
+          await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
         );
       }
 
@@ -49,6 +49,10 @@ class CalendarController {
       occupancies = occupancies.concat(
         bookings
           .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
+          .filter(
+            (booking, index, self) =>
+              self.findIndex((b) => b.id === booking.id) === index,
+          )
           .map((booking) => {
             return {
               bookableId: bookable.id,
@@ -56,7 +60,7 @@ class CalendarController {
               timeBegin: booking.timeBegin,
               timeEnd: booking.timeEnd,
             };
-          })
+          }),
       );
     }
 
