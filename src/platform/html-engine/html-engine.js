@@ -23,7 +23,9 @@ class HtmlEngine {
       const tenantObj = await TenantManager.getTenant(bookable.tenant);
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
-      htmlOutput += `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
+      if (bookable.imgUrl) {
+        htmlOutput += `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
+      }
       htmlOutput += "<h4>" + (bookable.title || "") + "</h4>";
       htmlOutput +=
         '<p class="description">' + (bookable.description || "") + "</p>";
