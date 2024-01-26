@@ -202,19 +202,23 @@ class HtmlEngine {
       htmlOutput += `<img src="${event.information?.teaserImage}" class="cover-image"  alt="${event.information.teaserImage.name}"/>`;
       htmlOutput += "<h3>" + (event.information?.name || "") + "</h3>";
 
-      const startDate = Intl.DateTimeFormat("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }).format(new Date(event.information.startDate));
-      const endDate = Intl.DateTimeFormat("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }).format(new Date(event.information.endDate));
-      let dateString = `${startDate} ${event.information.startTime || ""} - ${
-        startDate !== endDate ? endDate + " " : ""
-      }${event.information.endTime || ""}`;
+      if (!!event.information?.startDate && !!event.information?.endDate) {
+        const startDate = Intl.DateTimeFormat("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        }).format(new Date(event.information.startDate));
+        const endDate = Intl.DateTimeFormat("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        }).format(new Date(event.information.endDate));
+        let dateString = `${startDate} ${event.information.startTime || ""} - ${
+          startDate !== endDate ? endDate + " " : ""
+        }${event.information.endTime || ""}`;
+
+        htmlOutput += `<p class="date">${dateString}</p>`;
+      }
 
       htmlOutput +=
         '<p class="organizer-name">' +
