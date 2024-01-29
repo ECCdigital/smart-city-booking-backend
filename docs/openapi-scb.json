@@ -1,0 +1,2657 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Smart City Booking API",
+    "description": "Smart City Booking Manager is a system to create and manage location-based resources such as rooms, devices and courses and provide the services necessary to make them available to be booked by customers. This documentation provides an overview of the provided API Endpoints.",
+    "version": "2.0"
+  },
+  "license": {
+    "name": "GNU GPL ",
+    "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+  },
+  "version": "2.0",
+  "servers": [
+    {
+      "url": "/api",
+      "description": "URL for API calls, BASE_URL from .env  plus /api -route and path to endpoint",
+      "variables": {
+        "BASE_URL": {
+          "default": ""
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "authentication",
+      "description": "Operations about authentication"
+    },
+    {
+      "name": "tenant",
+      "description": "Operations about tenants"
+    },
+    {
+      "name": "user",
+      "description": "Operations about user"
+    },
+    {
+      "name": "roles",
+      "description": "Operations about user roles"
+    },
+    {
+      "name": "bookables",
+      "description": "Operations about bookable items"
+    },
+    {
+      "name": "events",
+      "description": "Operations about events"
+    },
+    {
+      "name": "bookings",
+      "description": "Operations about bookings"
+    },
+    {
+      "name": "files",
+      "description": "Operations about files"
+    },
+    {
+      "name": "checkout",
+      "description": "Operations regarding the checkout process"
+    },
+    {
+      "name": "payments",
+      "description": "Operations regarding the payment"
+    },
+    {
+      "name": "coupons",
+      "description": "Operations about coupons"
+    },
+    {
+      "name": "calendar",
+      "description": "Operations about the calendar"
+    }
+  ],
+  "paths": {
+    "/auth/:tenant/signup": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "create a new user",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "user email address"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "firstname": {
+                    "type": "string"
+                  },
+                  "lastname": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/verify/:hookId": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "verify the new user",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "description": "verification token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "redirect to frontend page"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/reset/:hookId": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "verify password reset",
+        "parameters": [
+          {
+            "name": "hookId",
+            "in": "path",
+            "description": "verification token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/resetpassword": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "reset the password",
+        "parameters": [
+          {
+            "name": "hookId",
+            "in": "query",
+            "description": "verification token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+            {
+                "name": "tenantId",
+                "in": "query",
+                "description": "tenant id",
+                "required": true,
+                "schema": {
+                "type": "string"
+                }
+            }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "user id",
+                    "required": true
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "new password",
+                    "required": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/signin": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "sign in",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+            {
+                "name": "userId",
+                "in": "query",
+                "description": "user id",
+                "required": true,
+                "schema": {
+                "type": "string"
+                }
+            }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "user id"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "description": "tenant id"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/signout": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "sign out",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "check user permissions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "user id"
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "description": "tenant id"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.user"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tenants": {
+      "get": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "get all tenants",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.tenant"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "create or update a tenant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/models.tenant"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/tenants/:id": {
+      "get": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "get a specific tenant",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.tenant"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tenant"
+        ],
+        "summary": "delete a tenant",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+            {
+                "name": "userId",
+                "in": "query",
+                "description": "user id",
+                "required": true,
+                "schema": {
+                "type": "string"
+                }
+            }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "user"
+        ],
+        "summary": "get all users",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+            {
+                "name": "userId",
+                "in": "query",
+                "description": "user id",
+                "required": true,
+                "schema": {
+                "type": "string"
+                }
+            }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.user"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "user"
+        ],
+        "summary": "create a new user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/models.user"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/users/ids": {
+      "get": {
+        "tags": [
+          "user"
+        ],
+        "summary": "get all user ids",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/users/:id": {
+      "get": {
+        "tags": [
+          "user"
+        ],
+        "summary": "get a specific user",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "user id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+            {
+                "name": "tenantId",
+                "in": "query",
+                "description": "tenant id",
+                "required": true,
+                "schema": {
+                "type": "string"
+                }
+            }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.user"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "user"
+        ],
+        "summary": "delete a user",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "user id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+            {
+                "name": "tenantId",
+                "in": "query",
+                "description": "tenant id",
+                "required": true,
+                "schema": {
+                "type": "string"
+                }
+            },
+            {
+                "name": "userId",
+                "in": "query",
+                "description": "user id",
+                "required": true,
+                "schema": {
+                "type": "string"
+                }
+            }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/user": {
+      "put": {
+        "tags": [
+          "user"
+        ],
+        "summary": "update the current user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/definitions/models.user"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/roles": {
+      "get": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "Get all roles",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.role"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "create or update a role",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/models.role"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/roles/:id": {
+      "get": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "get a specific role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "role id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.role"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "delete a role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "role id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/bookables": {
+      "get": {
+        "tags": [
+          "bookables"
+        ],
+        "summary": "get all bookables",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.bookable"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "bookables"
+        ],
+        "summary": "create or update a bookable",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isUpdate",
+            "in": "query",
+            "description": "check if request is bookable update or new bookable",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/models.bookable"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Created"
+            },
+            "403": {
+              "description": "Forbidden"
+            }
+          }
+        }
+      }
+    },
+    "/bookables/:id": {
+      "get": {
+        "tags": [
+          "bookables"
+        ],
+        "summary": "get a specific bookable",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "bookable id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.bookable"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "bookables"
+        ],
+        "summary": "delete a bookable",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "bookable id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/bookables/:id/bookings": {
+      "get": {
+        "tags": [
+          "bookables"
+        ],
+        "summary": "get related bookings for a specific bookable",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "bookable id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.bookable"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/bookables/:id/openingHours": {
+      "get": {
+        "tags": [
+          "bookables"
+        ],
+        "summary": "get opening hours for a specific bookable",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "bookable id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/schemas.openingHours"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/bookables/_meta/tags": {
+      "get": {
+        "tags": [
+          "bookables"
+        ],
+        "summary": "get all tags for bookables",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/schemas.tags"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "get all events",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.event"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "events"
+        ],
+        "summary": "create or update an event",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isUpdate",
+            "in": "query",
+            "description": "check if request is event update or new event",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/models.event"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "events"
+        ],
+        "summary": "delete an event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "event id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/events/:id": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "get a specific event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "event id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/definitions/models.event"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "events"
+        ],
+        "summary": "delete an event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "event id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/events/:id/bookings": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "get related bookings for a specific event",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "event id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "type": "array",
+                "schema": {
+                  "$ref": "#/definitions/models.booking"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bookings": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "get all bookings",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.booking"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "create a new booking",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/models.booking"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/bookings/:id": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "get a specific booking",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "booking id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.booking"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "delete a booking",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "booking id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/bookings/:id/status": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "get the status of a specific booking",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "booking id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/schemas.bookingStatus"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        }
+      }
+    },
+    "/bookings/:id/commit": {
+      "post": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "commit a booking",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "booking id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isNotCommitted",
+            "in": "query",
+            "description": "commit status of booking",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/bookings/mybookings": {
+      "get": {
+        "tags": [
+          "bookings"
+        ],
+        "summary": "get all bookings for the current user",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/files/list": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "get all files",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeProtected",
+            "in": "query",
+            "description": "don't include protected files",
+            "required": true,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/files/get": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "get a specific file",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "file name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "description": "user name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required parameters"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Error downloading file from NextCloud"
+          }
+        }
+      }
+    },
+    "/files": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "upload a file",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "success"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Error uploading file to NextCloud"
+          }
+        }
+      }
+    },
+    "/checkout": {
+      "post": {
+        "tags": [
+          "checkout"
+        ],
+        "summary": "initiate checkout",
+        "parameters": [
+          {
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.booking"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing parameters"
+          },
+          "409": {
+            "description": "(Error Message)"
+          }
+        }
+      }
+    },
+    "/checkout/validateItem": {
+      "post": {
+        "tags": [
+          "checkout"
+        ],
+        "summary": "validate item",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "409": {
+            "description": "(Error Message)"
+          }
+        }
+      }
+    },
+    "/payments": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "redirect to payment provider, get payment url",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paymentUrl": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/payments/notify": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "payment notification",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "400": {
+            "description": "Bad Request"
+          }
+        }
+      }
+    },
+    "/payments/response": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "payment response",
+        "responses": {
+          "302": {
+            "description": "redirect to booking confirmation page"
+          }
+        }
+      }
+    },
+    "/coupons": {
+      "get": {
+        "tags": [
+          "coupons"
+        ],
+        "summary": "get all coupons",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/models.coupon"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "coupons"
+        ],
+        "summary": "create or update a coupon",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/models.coupon"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Created",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/models.coupon"
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "(Error Message)"
+            },
+            "403": {
+              "description": "Forbidden"
+            }
+          }
+        }
+      }
+    },
+    "/coupons/:id": {
+      "get": {
+        "tags": [
+          "coupons"
+        ],
+        "summary": "get a specific coupon",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "coupon id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/definitions/models.coupon"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "not available"
+          },
+          "404": {
+            "description": "not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "coupons"
+        ],
+        "summary": "delete a coupon",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/calendar/occupancy": {
+      "get": {
+        "tags": [
+          "calendar"
+        ],
+        "summary": "Get all calendar occupancies",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "tenant name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "description": "start date",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "description": "end date",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/schemas.calendarOccupancy"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "models.tenant": {
+      "title": "Tenant",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "contactName": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "mail": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "_id": {
+          "type": "string"
+        },
+        "noreplyHost": {
+          "type": "string"
+        },
+        "noreplyMail": {
+          "type": "string"
+        },
+        "noreplyDisplayName": {
+          "type": "string"
+        },
+        "noreplyPort": {
+          "type": "string"
+        },
+        "noreplyPassword": {
+          "type": "string"
+        },
+        "paymentMerchantId": {
+          "type": "string"
+        },
+        "paymentMerchantProjectId": {
+          "type": "string"
+        },
+        "genericMailTemplate": {
+          "type": "string"
+        },
+        "receiptTemplate": {
+          "type": "string"
+        },
+        "receiptNumberPrefix": {
+          "type": "string"
+        },
+        "paymentSecret": {
+          "type": "string"
+        },
+        "paymentPurposeSuffix": {
+          "type": "string"
+        },
+        "noreplyUser": {
+          "type": "string"
+        }
+      }
+    },
+    "models.user": {
+      "title": "User",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "firstName": {
+          "type": "string"
+        },
+        "lastName": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "zipCode": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "created": {
+          "type": "UNIX timestamp"
+        },
+        "isVerified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "models.role": {
+      "title": "Role",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "manageBookables": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "create": true,
+          "readAny": true,
+          "readOwn": true,
+          "updateAny": true,
+          "updateOwn": true,
+          "deleteAny": true,
+          "deleteOwn": true
+        },
+        "manageUsers": {
+          "type": "array",
+          "items": {
+            "type": "boolean",
+            "create": true,
+            "readAny": true,
+            "readOwn": true,
+            "updateAny": true,
+            "updateOwn": true,
+            "deleteAny": true,
+            "deleteOwn": true
+          }
+        },
+        "manageTenants": {
+          "type": "array",
+          "items": {
+            "type": "boolean",
+            "create": true,
+            "readAny": true,
+            "readOwn": true,
+            "updateAny": true,
+            "updateOwn": true,
+            "deleteAny": true,
+            "deleteOwn": true
+          }
+        },
+        "manageRoles": {
+          "type": "array",
+          "items": {
+            "type": "boolean",
+            "create": true,
+            "readAny": true,
+            "readOwn": true,
+            "updateAny": true,
+            "updateOwn": true,
+            "deleteAny": true,
+            "deleteOwn": true
+          }
+        },
+        "manageCoupons": {
+          "type": "array",
+          "items": {
+            "type": "boolean",
+            "create": true,
+            "readAny": true,
+            "readOwn": true,
+            "updateAny": true,
+            "updateOwn": true,
+            "deleteAny": true,
+            "deleteOwn": true
+          }
+        },
+        "freeBookings": {
+          "type": "boolean",
+          "default": true
+        },
+        "_id": {
+          "type": "string"
+        },
+        "adminInterfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "locations": "",
+            "tenants": "",
+            "users": "",
+            "roles": "",
+            "bookings": "",
+            "coupons": "",
+            "rooms": "",
+            "resources": "",
+            "tickets": "",
+            "events": ""
+          }
+        },
+        "ownerTenant": {
+          "type": "string"
+        }
+      }
+    },
+    "models.bookable": {
+      "title": "Bookable",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "openingHours": {
+          "$ref": "#/definitions/schemas.openingHours"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "created": {
+          "type": "UNIX timestamp"
+        },
+        "modified": {
+          "type": "UNIX timestamp"
+        }
+      }
+    },
+    "models.event": {
+      "title": "Event",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "timeBegin": {
+          "type": "UNIX timestamp"
+        },
+        "timeEnd": {
+          "type": "UNIX timestamp"
+        },
+        "hostUserId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "models.booking": {
+      "title": "Booking",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "bookable": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "created": {
+          "type": "UNIX timestamp"
+        },
+        "modified": {
+          "type": "UNIX timestamp"
+        },
+        "status": {
+          "type": "string"
+        },
+        "start": {
+          "type": "UNIX timestamp"
+        },
+        "end": {
+          "type": "UNIX timestamp"
+        },
+        "price": {
+          "type": "number"
+        },
+        "coupon": {
+          "type": "string"
+        },
+        "payment": {
+          "type": "string"
+        },
+        "paymentStatus": {
+          "type": "string"
+        },
+        "paymentMethod": {
+          "type": "string"
+        },
+        "paymentProvider": {
+          "type": "string"
+        },
+        "paymentProviderTransactionId": {
+          "type": "string"
+        },
+        "paymentProviderTransactionStatus": {
+          "type": "string"
+        },
+        "paymentProviderTransactionAmount": {
+          "type": "string"
+        },
+        "paymentProviderTransactionCurrency": {
+          "type": "string"
+        },
+        "paymentProviderTransactionDate": {
+          "type": "string"
+        },
+        "paymentProviderTransactionPurpose": {
+          "type": "string"
+        },
+        "paymentProviderTransactionSignature": {
+          "type": "string"
+        },
+        "paymentProviderTransactionRaw": {
+          "type": "string"
+        },
+        "paymentProviderTransactionError": {
+          "type": "string"
+        },
+        "paymentProviderTransactionErrorCode": {
+          "type": "string"
+        },
+        "paymentProviderTransactionErrorMessage": {
+          "type": "string"
+        },
+        "paymentProviderTransactionErrorDetail": {
+          "type": "string"
+        },
+        "paymentProviderTransactionErrorRaw": {
+          "type": "string"
+        },
+        "paymentProviderTransactionErrorSignature": {
+          "type": "string"
+        },
+        "paymentProviderTransactionErrorDate": {
+          "type": "string",
+          "format": "date-time",
+          "example": "2021-01-01T00:00:00.000Z",
+          "description": "Date of the error",
+          "required": true,
+          "readOnly": true,
+          "writeOnly": false,
+          "nullable": false,
+          "deprecated": false,
+          "xml": {
+            "name": "paymentProviderTransactionErrorDate",
+            "namespace": "http://example.com/schema/sample",
+            "prefix": "sample",
+            "attribute": false,
+            "wrapped": false,
+            "wrappedName": "paymentProviderTransactionErrorDate",
+            "xml": {
+              "name": "paymentProviderTransactionErrorDate",
+              "namespace": "http://example.com/schema/sample",
+              "prefix": "sample",
+              "attribute": false,
+              "wrapped": false,
+              "wrappedName": "paymentProviderTransactionErrorDate"
+            }
+          }
+        }
+      }
+    },
+    "models.coupon": {
+      "title": "Coupon",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "tenant": {
+          "type": "string"
+        },
+        "created": {
+          "type": "UNIX timestamp"
+        },
+        "modified": {
+          "type": "UNIX timestamp"
+        }
+      }
+    },
+    "schemas.openingHours": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string"
+          },
+          "from": {
+            "type": "UNIX timestamp"
+          },
+          "to": {
+            "type": "UNIX timestamp"
+          }
+        }
+      }
+    },
+    "schemas.tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schemas.calendarOccupancy": {
+      "type": "object",
+      "properties": {
+        "bookable": {
+          "type": "string"
+        },
+        "start": {
+          "type": "UNIX timestamp"
+        },
+        "end": {
+          "type": "UNIX timestamp"
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas.bookingStatus": {
+      "type": "object",
+      "properties": {
+        "isCommitted": {
+          "type": "boolean"
+        },
+        "isPaid": {
+          "type": "boolean"
+        },
+        "bookingId": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
+
