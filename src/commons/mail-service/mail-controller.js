@@ -214,7 +214,7 @@ class MailController {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte nutzen Sie den folgenden Link, um Ihre Buchung abzuschließen.</p><br>`;
 
-    const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?id=${bookingId}`;
+    const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?id=${bookingId}&tenant=${tenantId}`;
     content += `<p><a href="${paymentLink}">${paymentLink}</a></p>`;
 
     content += await MailController.generateBookingDetails(bookingId, tenantId);
