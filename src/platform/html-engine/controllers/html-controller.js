@@ -58,8 +58,8 @@ class HtmlController {
       .filter(
         (event) =>
           event.information &&
-          event.information.startDate &&
-          Date.parse(event.information.startDate) > new Date(),
+          event.information.endDate &&
+          Date.parse(event.information.endDate) + 1 >= new Date(),
       )
       .sort(
         (a, b) =>
