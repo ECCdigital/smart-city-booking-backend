@@ -156,7 +156,14 @@ class TenantController {
 
   static async storeTenant(request, response) {
     const tenant = Object.assign(new Tenant(), request.body);
-    const isUpdate = !(await TenantManager.getTenant(tenant.id))._id;
+    let isUpdate = false;
+
+      try {
+        const existingTenant = await TenantManager.getTenant(tenant.id);
+        isUpdate = existingTenant && existingTenant._id;
+      } catch (error) {
+        isUpdate = false;
+      }
 
     if (isUpdate) {
       await TenantController.updateTenant(request, response);
