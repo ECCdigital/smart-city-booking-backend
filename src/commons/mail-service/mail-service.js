@@ -4,8 +4,8 @@ const Mustache = require("mustache");
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
 
-const log = bunyan.createLogger({
-  name: "mail-service",
+const logger = bunyan.createLogger({
+  name: "mail-service.js",
   level: process.env.LOG_LEVEL,
 });
 
@@ -23,16 +23,16 @@ class MailerService {
   static processTemplate(templateName, model) {
     return new Promise((resolve, reject) => {
       const filename = __dirname + "/templates/" + templateName + ".html";
-      log.debug(
+      logger.debug(
         "Processing E-Mail Template from " +
           filename +
           "with model " +
-          JSON.stringify(model)
+          JSON.stringify(model),
       );
 
       fs.readFile(filename, "utf-8", (err, template) => {
         if (err) {
-          log.error(err);
+          logger.error(err);
           reject(err);
         }
 
@@ -59,7 +59,7 @@ class MailerService {
     templateName,
     model,
     attachments,
-    bcc
+    bcc,
   ) {
     return new Promise((resolve, reject) => {
       model.baseUrl = process.env.BACKEND_URL;
@@ -77,11 +77,11 @@ class MailerService {
             };
 
             if (process.env.MAIL_ENABLED === "true") {
-              console.log(
-                "Sending mail to " + address + " with subject " + subject
+              logger.info(
+                `${tenantId} -- sending mail to ${address} with subject ${subject} and template ${templateName}`,
               );
 
-              const transporter = nodemailer.createTransport({
+              const config = {
                 pool: true,
                 host: tenant.noreplyHost,
                 port: tenant.noreplyPort,
@@ -90,10 +90,19 @@ class MailerService {
                   user: tenant.noreplyUser,
                   pass: tenant.noreplyPassword,
                 },
-              });
+              };
+
+              logger.debug(
+                `${tenantId} -- using mail configuration ${JSON.stringify(
+                  config,
+                )}`,
+              );
+
+              const transporter = nodemailer.createTransport(config);
+
               transporter.sendMail(message, (err) => {
                 if (err) {
-                  console.log(err);
+                  console.error(err);
                 }
 
                 resolve();
@@ -103,7 +112,7 @@ class MailerService {
             }
           })
           .catch((err) => {
-            log.error(err);
+            logger.error(err);
             reject(err);
           });
       });

@@ -6,6 +6,12 @@ const BookingManager = require("../data-managers/booking-manager");
 const BookableManager = require("../data-managers/bookable-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const FileManager = require("../data-managers/file-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "mail-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 const os = require("os");
 const path = require("path");
@@ -78,98 +84,105 @@ class PdfService {
     bookingId,
     tenantId,
     receiptNumber,
-    forcedReceiptTemplate
+    forcedReceiptTemplate,
   ) {
-    let booking = await BookingManager.getBooking(bookingId, tenantId);
-    let bookables = (await BookableManager.getBookables(tenantId)).filter((b) =>
-      booking.bookableItems.some((bi) => bi.bookableId === b.id)
-    );
+    try {
+      let booking = await BookingManager.getBooking(bookingId, tenantId);
+      let bookables = (await BookableManager.getBookables(tenantId)).filter(
+        (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
+      );
 
-    const tenant = await TenantManager.getTenant(tenantId);
+      const tenant = await TenantManager.getTenant(tenantId);
 
-    const totalAmount = PdfService.formatCurrency(booking.priceEur);
+      const totalAmount = PdfService.formatCurrency(booking.priceEur);
 
-    let bookingPeriod = "-";
-    if (booking.timeBegin && booking.timeEnd) {
-      bookingPeriod =
-        PdfService.formatDateTime(booking.timeBegin) +
-        " - " +
-        PdfService.formatDateTime(booking.timeEnd);
-    }
-    let bookedItems = "";
+      let bookingPeriod = "-";
+      if (booking.timeBegin && booking.timeEnd) {
+        bookingPeriod =
+          PdfService.formatDateTime(booking.timeBegin) +
+          " - " +
+          PdfService.formatDateTime(booking.timeEnd);
+      }
+      let bookedItems = "";
 
-    for (const bookableItem of booking.bookableItems) {
-      const bookable = bookables.find((b) => b.id === bookableItem.bookableId);
-      bookedItems += `<div>${bookable.title}, Anzahl: ${bookableItem.amount}</div>`;
-    }
+      for (const bookableItem of booking.bookableItems) {
+        const bookable = bookables.find(
+          (b) => b.id === bookableItem.bookableId,
+        );
+        bookedItems += `<div>${bookable.title}, Anzahl: ${bookableItem.amount}</div>`;
+      }
 
-    if (booking._couponUsed) {
-      if (booking._couponUsed.type === "fixed") {
-        bookedItems += `<div>
+      if (booking._couponUsed) {
+        if (booking._couponUsed.type === "fixed") {
+          bookedItems += `<div>
                     Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}€)<br>
                 </div>`;
-      } else if (booking._couponUsed.type === "percentage") {
-        bookedItems += `<div>
+        } else if (booking._couponUsed.type === "percentage") {
+          bookedItems += `<div>
                     Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}%)<br>
                 </div>`;
+        }
       }
-    }
 
-    const payMethodTranslated = PdfService.translatePayMethod(
-      booking.payMethod
-    );
+      const payMethodTranslated = PdfService.translatePayMethod(
+        booking.payMethod,
+      );
 
-    const payDate = PdfService.formatDateTime(booking.timeCreated);
+      const payDate = PdfService.formatDateTime(booking.timeCreated);
 
-    const receiptAddress = `${booking.company || ""} 
+      const receiptAddress = `${booking.company || ""} 
             ${booking.company ? "<br />" : ""}
             ${booking.name}<br />
             ${booking.street}<br />
             ${booking.zipCode} ${booking.location}`;
 
-    const frontendURL = process.env.FRONTEND_URL;
+      const frontendURL = process.env.FRONTEND_URL;
 
-    const currentDate = PdfService.formatDate(new Date());
+      const currentDate = PdfService.formatDate(new Date());
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox"],
-    });
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox"],
+      });
 
-    const page = await browser.newPage();
+      const page = await browser.newPage();
 
-    const html = fs.readFileSync(
-      `${__dirname}/templates/${
-        forcedReceiptTemplate || tenant.receiptTemplate
-      }.html`,
-      "utf8"
-    );
+      const html = fs.readFileSync(
+        `${__dirname}/templates/${
+          forcedReceiptTemplate || tenant.receiptTemplate
+        }.html`,
+        "utf8",
+      );
 
-    const data = {
-      bookingId: bookingId,
-      tenant: tenantId,
-      totalAmount: totalAmount,
-      bookingPeriod: bookingPeriod,
-      bookedItems: bookedItems,
-      bookingDate: currentDate,
-      receiptNumber: receiptNumber,
-      receiptAddress: receiptAddress,
-      payMethod: payMethodTranslated,
-      payDate: payDate,
-    };
+      const data = {
+        bookingId: bookingId,
+        tenant: tenantId,
+        totalAmount: totalAmount,
+        bookingPeriod: bookingPeriod,
+        bookedItems: bookedItems,
+        bookingDate: currentDate,
+        receiptNumber: receiptNumber,
+        receiptAddress: receiptAddress,
+        payMethod: payMethodTranslated,
+        payDate: payDate,
+      };
 
-    const renderedHtml = Mustache.render(html, data);
+      const renderedHtml = Mustache.render(html, data);
 
-    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
+      await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
 
-    const pdfBuffer = await page.pdf({ format: "A4" });
+      const pdfBuffer = await page.pdf({ format: "A4" });
 
-    pdfBuffer.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
-    await FileManager.createFile(tenantId, pdfBuffer, "public", "receipts");
+      pdfBuffer.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
+      await FileManager.createFile(tenantId, pdfBuffer, "public", "receipts");
 
-    await browser.close();
+      await browser.close();
 
-    return pdfBuffer;
+      return pdfBuffer;
+    } catch (err) {
+      logger.error(err);
+      throw err;
+    }
   }
 }
 

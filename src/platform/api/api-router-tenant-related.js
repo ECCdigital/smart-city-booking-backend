@@ -23,9 +23,21 @@ router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 
 // Protected
-router.put("/bookables", AuthenticationController.isSignedIn, BookableController.storeBookable);
-router.delete("/bookables/:id", AuthenticationController.isSignedIn, BookableController.removeBookable);
-router.get("/bookables/_meta/tags", AuthenticationController.isSignedIn, BookableController.getTags);
+router.put(
+  "/bookables",
+  AuthenticationController.isSignedIn,
+  BookableController.storeBookable,
+);
+router.delete(
+  "/bookables/:id",
+  AuthenticationController.isSignedIn,
+  BookableController.removeBookable,
+);
+router.get(
+  "/bookables/_meta/tags",
+  AuthenticationController.isSignedIn,
+  BookableController.getTags,
+);
 
 // EVENTS
 // ======
@@ -36,34 +48,91 @@ router.get("/events/:id", EventController.getEvent);
 router.get("/events/:id/bookings", BookingController.getEventBookings);
 
 // Protected
-router.put("/events", AuthenticationController.isSignedIn, EventController.storeEvent);
-router.delete("/events/:id", AuthenticationController.isSignedIn, EventController.removeEvent);
-router.get("/events/_meta/tags", AuthenticationController.isSignedIn, EventController.getTags);
+router.put(
+  "/events",
+  AuthenticationController.isSignedIn,
+  EventController.storeEvent,
+);
+router.delete(
+  "/events/:id",
+  AuthenticationController.isSignedIn,
+  EventController.removeEvent,
+);
+router.get(
+  "/events/_meta/tags",
+  AuthenticationController.isSignedIn,
+  EventController.getTags,
+);
 
 // USERS
 // =====
 
 // Protected
-router.get("/users", AuthenticationController.isSignedIn, UserController.getUsers);
-router.get("/users/ids", AuthenticationController.isSignedIn, UserController.getUserIds);
-router.get("/users/:id", AuthenticationController.isSignedIn, UserController.getUser);
-router.put("/users", AuthenticationController.isSignedIn, UserController.storeUser);
-router.put("/user", AuthenticationController.isSignedIn, UserController.updateMe);
-router.delete("/users/:id", AuthenticationController.isSignedIn, UserController.removeUser);
+router.get(
+  "/users",
+  AuthenticationController.isSignedIn,
+  UserController.getUsers,
+);
+router.get(
+  "/users/ids",
+  AuthenticationController.isSignedIn,
+  UserController.getUserIds,
+);
+router.get(
+  "/users/:id",
+  AuthenticationController.isSignedIn,
+  UserController.getUser,
+);
+router.put(
+  "/users",
+  AuthenticationController.isSignedIn,
+  UserController.storeUser,
+);
+router.put(
+  "/user",
+  AuthenticationController.isSignedIn,
+  UserController.updateMe,
+);
+router.delete(
+  "/users/:id",
+  AuthenticationController.isSignedIn,
+  UserController.removeUser,
+);
 
 // BOOKINGS
 // ========
 
 // Public
 router.get("/bookings", BookingController.getBookings);
-router.get("/bookings/:id", BookingController.getBooking);
+
 router.get("/bookings/:id/status", BookingController.getBookingStatus);
 
 // Protected
-router.put("/bookings", AuthenticationController.isSignedIn, BookingController.storeBooking);
-router.get("/mybookings", AuthenticationController.isSignedIn, BookingController.getAssignedBookings);
-router.delete("/bookings/:id", AuthenticationController.isSignedIn, BookingController.removeBooking);
-router.get("/bookings/:id/commit", AuthenticationController.isSignedIn, BookingController.commitBooking);
+router.get(
+  "/bookings/:id",
+  AuthenticationController.isSignedIn,
+  BookingController.getBooking,
+);
+router.put(
+  "/bookings",
+  AuthenticationController.isSignedIn,
+  BookingController.storeBooking,
+);
+router.get(
+  "/mybookings",
+  AuthenticationController.isSignedIn,
+  BookingController.getAssignedBookings,
+);
+router.delete(
+  "/bookings/:id",
+  AuthenticationController.isSignedIn,
+  BookingController.removeBooking,
+);
+router.get(
+  "/bookings/:id/commit",
+  AuthenticationController.isSignedIn,
+  BookingController.commitBooking,
+);
 
 // CHECKOUT
 // ========

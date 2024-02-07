@@ -5,6 +5,12 @@ const BookableManager = require("../../../commons/data-managers/bookable-manager
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "payment-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class PaymentController {
   static async getPaymentUrl(request, response) {
@@ -25,16 +31,16 @@ class PaymentController {
     const PROJECT_SECRET = tenant.paymentSecret;
 
     const notifyUrl = `${request.protocol}://${request.get(
-      "host"
+      "host",
     )}/api/${tenantId}/payments/notify`;
     const successUrl = `${request.protocol}://${request.get(
-      "host"
+      "host",
     )}/api/${tenantId}/payments/response?id=${merchantTxId}&tenant=${tenantId}&status=success`;
     const failUrl = `${request.protocol}://${request.get(
-      "host"
+      "host",
     )}/api/${tenantId}/payments/response?id=${merchantTxId}&tenant=${tenantId}&status=fail`;
     const backUrl = `${request.protocol}://${request.get(
-      "host"
+      "host",
     )}/api/${tenantId}/payments/response?id=${merchantTxId}&tenant=${tenantId}&status=back`;
 
     const booking = await BookingManager.getBooking(merchantTxId, tenantId);
@@ -46,7 +52,7 @@ class PaymentController {
     const hash = crypto
       .createHmac("md5", PROJECT_SECRET)
       .update(
-        `${MERCHANT_ID}${PROJECT_ID}${merchantTxId}${amount}${currency}${purpose}${type}${test}${successUrl}${backUrl}${failUrl}${notifyUrl}`
+        `${MERCHANT_ID}${PROJECT_ID}${merchantTxId}${amount}${currency}${purpose}${type}${test}${successUrl}${backUrl}${failUrl}${notifyUrl}`,
       )
       .digest("hex");
 
@@ -80,14 +86,17 @@ class PaymentController {
         const paymentUrl = res.data?.url;
 
         if (paymentUrl) {
+          logger.info(
+            `Payment URL requested for booking ${merchantTxId}: ${paymentUrl}`,
+          );
           response.status(200).send({ paymentUrl });
         } else {
-          console.log(res.data);
+          logger.warn("could not get payment url.", res.data);
           response.sendStatus(500);
         }
       })
       .catch(function (error) {
-        console.log(error);
+        logger.error(error);
         response.sendStatus(400);
       });
   }
@@ -125,22 +134,38 @@ class PaymentController {
           response.sendStatus(404);
         } else {
           if (paymentResult === "4000") {
+            logger.info(
+              `${tenantId} -- GrioPay responds with status 4000 / successfully payed for booking ${merchantTxId} .`,
+            );
+
             booking.isPayed = true;
             booking.payMethod = payMethod;
+
             await BookingManager.setBookingPayedStatus(booking);
             await MailController.sendBookingConfirmation(
               booking.mail,
               booking.id,
-              booking.tenant
+              booking.tenant,
+            );
+
+            logger.info(
+              `${tenantId} -- booking ${merchantTxId} successfully payed and updated.`,
             );
             response.sendStatus(200);
           } else {
             // await BookingManager.removeBooking(merchantTxId, tenant)
+            logger.warn(
+              `${tenantId} -- booking ${merchantTxId} could not be payed.`,
+              response.data,
+            );
             response.sendStatus(200);
           }
         }
       }
     } else {
+      logger.warn(
+        `${tenantId} -- could not get payment result for booking ${merchantTxId}.`,
+      );
       response.sendStatus(400);
     }
   }
@@ -148,7 +173,7 @@ class PaymentController {
   static async paymentResponse(request, response) {
     response.redirect(
       302,
-      `${process.env.FRONTEND_URL}/checkout/status?${request._parsedOriginalUrl?.query}`
+      `${process.env.FRONTEND_URL}/checkout/status?${request._parsedOriginalUrl?.query}`,
     );
   }
 }

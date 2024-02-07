@@ -1,4 +1,10 @@
 const FileManager = require("../../../commons/data-managers/file-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "next-cloud-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 const PUBLIC_PATH = "public";
 const PROTECTED_PATH = "protected";
@@ -27,7 +33,7 @@ class NextCloudController {
       if (!!user && includeProtected) {
         const protectedFiles = await FileManager.getFiles(
           tenant,
-          PROTECTED_PATH
+          PROTECTED_PATH,
         );
         files = [
           ...files,
@@ -38,9 +44,13 @@ class NextCloudController {
         ];
       }
 
+      logger.info(
+        `${tenant} -- sending ${files.length} files to user ${user?.id}. `,
+      );
+
       response.status(200).send(files);
     } catch (err) {
-      console.log("Error getting files from Next Cloud.", err);
+      logger.error("Error getting files from Next Cloud.", err);
       response.status(500).send("Error getting files from Next Cloud.");
     }
   }
@@ -54,22 +64,31 @@ class NextCloudController {
     const filename = request.query.name;
 
     if (!tenant || !filename) {
+      logger.warn(
+        `${tenant} -- could not get file for user ${user?.id}. Missing required parameters.`,
+      );
       response.status(400).send("Missing required parameters.");
       return;
     }
     try {
       if (!!user || filename.startsWith(`/${PUBLIC_PATH}/`)) {
         const content = await FileManager.getFile(tenant, filename);
+        logger.info(
+          `${tenant} -- sending file ${filename} to user ${user?.id}`,
+        );
         response.setHeader(
           "Content-Disposition",
-          `attachment; filename=${filename}`
+          `attachment; filename=${filename}`,
         );
         response.status(200).send(content);
       } else {
+        logger.warn(
+          `${tenant} -- could not get file for user ${user?.id}. Unauthorized.`,
+        );
         response.status(401).send("Unauthorized.");
       }
     } catch (err) {
-      console.log("Error downloading file from Next Cloud.", err);
+      logger.error("Error downloading file from Next Cloud.", err);
       response.status(500).send("Error downloading file from Next Cloud.");
     }
   }
@@ -85,11 +104,15 @@ class NextCloudController {
 
     const user = request.user;
     if (!user) {
+      logger.warn(`${tenant} -- could not upload file. Unauthorized.`);
       response.status(401).send("Unauthorized.");
       return;
     }
 
     if (!tenant || !file) {
+      logger.warn(
+        `${tenant} -- could not upload file. Missing required parameters.`,
+      );
       response.status(400).send("Missing required parameters.");
       return;
     }
@@ -106,9 +129,12 @@ class NextCloudController {
         "/" +
         customDirectory;
       await FileManager.createFile(tenant, file, accessLevel, subDirectory);
+      logger.info(
+        `${tenant} -- file uploaded successfully by user ${user?.id}.`,
+      );
       response.status(201).send("File uploaded successfully.");
     } catch (err) {
-      console.log("Error uploading file to Next Cloud.", err);
+      logger.error("Error uploading file to Next Cloud.", err);
       response.status(500).send("Error uploading file to Next Cloud.");
     }
   }

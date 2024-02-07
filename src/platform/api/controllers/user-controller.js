@@ -3,6 +3,12 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const RoleManager = require("../../../commons/data-managers/role-manager");
 const { User } = require("../../../commons/entities/user");
 const { RolePermission } = require("../../../commons/entities/role");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "user-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class UserPermissions {
   static _isSelf(user, userId, userTenant) {
@@ -14,7 +20,7 @@ class UserPermissions {
       userId,
       tenant,
       RolePermission.MANAGE_USERS,
-      "create"
+      "create",
     );
   }
 
@@ -24,7 +30,7 @@ class UserPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_USERS,
-        "readAny"
+        "readAny",
       )
     ) {
       return true;
@@ -36,7 +42,7 @@ class UserPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_USERS,
-        "readOwn"
+        "readOwn",
       ))
     ) {
       return true;
@@ -51,7 +57,7 @@ class UserPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_USERS,
-        "updateAny"
+        "updateAny",
       )
     )
       return true;
@@ -62,7 +68,7 @@ class UserPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_USERS,
-        "updateOwn"
+        "updateOwn",
       ))
     )
       return true;
@@ -76,7 +82,7 @@ class UserPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_USERS,
-        "deleteAny"
+        "deleteAny",
       )
     )
       return true;
@@ -87,7 +93,7 @@ class UserPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_USERS,
-        "deleteOwn"
+        "deleteOwn",
       ))
     )
       return true;
@@ -101,35 +107,56 @@ class UserPermissions {
  */
 class UserController {
   static async getUsers(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
 
-    const userObjects = await UserManager.getUsers(tenant);
+      const userObjects = await UserManager.getUsers(tenant);
 
-    const allowedUserObjects = [];
-    for (const userObject of userObjects) {
-      if (await UserPermissions._allowRead(userObject, user.id, user.tenant)) {
-        allowedUserObjects.push(userObject);
+      const allowedUserObjects = [];
+      for (const userObject of userObjects) {
+        if (
+          await UserPermissions._allowRead(userObject, user.id, user.tenant)
+        ) {
+          allowedUserObjects.push(userObject);
+        }
       }
-    }
 
-    response.status(200).send(allowedUserObjects);
+      logger.info(
+        `${tenant} -- sending ${allowedUserObjects.length} users to user ${user?.id}`,
+      );
+      response.status(200).send(allowedUserObjects);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get Users");
+    }
   }
 
   static async getUser(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const id = request.params.id;
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
 
-    if (id) {
-      if (await UserPermissions._allowRead(user, user.id, user.tenant)) {
-        const userObject = await UserManager.getUser(id, tenant);
-        response.status(200).send(userObject);
+      if (id) {
+        if (await UserPermissions._allowRead(user, user.id, user.tenant)) {
+          const userObject = await UserManager.getUser(id, tenant);
+          logger.info(
+            `${tenant} -- Sending user ${userObject.id} to user ${user?.id}`,
+          );
+          response.status(200).send(userObject);
+        } else {
+          logger.warn(
+            `${tenant} -- User ${user?.id} is not allowed to read user ${id}`,
+          );
+          response.sendStatus(403);
+        }
       } else {
-        response.sendStatus(403);
+        response.sendStatus(400);
       }
-    } else {
-      response.sendStatus(400);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get user");
     }
   }
 
@@ -153,51 +180,89 @@ class UserController {
   }
 
   static async createUser(request, response) {
-    const user = request.user;
+    try {
+      const user = request.user;
 
-    const userObject = Object.assign(new User(), request.body);
+      const userObject = Object.assign(new User(), request.body);
 
-    if (await UserPermissions._allowCreate(userObject, user.id, user.tenant)) {
-      await UserManager.storeUser(userObject);
-      response.sendStatus(201);
-    } else {
-      response.sendStatus(403);
+      if (
+        await UserPermissions._allowCreate(userObject, user.id, user.tenant)
+      ) {
+        await UserManager.storeUser(userObject);
+        logger.info(
+          `${user?.tenant} -- created user ${userObject.id} by user ${user?.id}`,
+        );
+        response.sendStatus(201);
+      } else {
+        logger.warn(
+          `${user?.tenant} -- User ${user?.id} not allowed to create user`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("could not create user");
     }
   }
 
   static async updateUser(request, response) {
-    const user = request.user;
+    try {
+      const user = request.user;
 
-    const userObject = Object.assign(new User(), request.body);
+      const userObject = Object.assign(new User(), request.body);
 
-    if (await UserPermissions._allowUpdate(userObject, user.id, user.tenant)) {
-      await UserManager.storeUser(userObject);
-      response.sendStatus(200);
-    } else {
-      response.sendStatus(403);
+      if (
+        await UserPermissions._allowUpdate(userObject, user.id, user.tenant)
+      ) {
+        await UserManager.storeUser(userObject);
+        logger.info(
+          `${user.tenant} -- updated user ${userObject.id} by user ${user?.id}`,
+        );
+        response.sendStatus(200);
+      } else {
+        logger.warn(
+          `${user?.tenant} -- User ${user?.id} not allowed to update user`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("could not update user");
     }
   }
 
   static async removeUser(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
 
-    const id = request.params.id;
-    if (id) {
-      const userObject = await UserManager.getUser(id, tenant);
+      const id = request.params.id;
+      if (id) {
+        const userObject = await UserManager.getUser(id, tenant);
 
-      if (
-        await UserPermissions._allowDelete(userObject, user.id, user.tenant)
-      ) {
-        await UserManager.deleteUser(id, tenant);
-        response.sendStatus(200);
+        if (
+          await UserPermissions._allowDelete(userObject, user.id, user.tenant)
+        ) {
+          await UserManager.deleteUser(id, tenant);
+          logger.info(`${tenant} -- removed user ${id} by user ${user?.id}`);
+          response.sendStatus(200);
+        } else {
+          logger.warn(
+            `${tenant} -- User ${user?.id} not allowed to remove user`,
+          );
+          response.sendStatus(403);
+        }
       } else {
-        response.sendStatus(403);
+        logger.warn(
+          `${tenant} -- Could not remove user by user ${user?.id}. Missing required parameters.`,
+        );
+        response.sendStatus(400);
       }
-    } else {
-      response.sendStatus(400);
+    } catch (error) {
+      response.status(500).send("could not remove user");
     }
   }
+
   // Allows only to change the display name
   static updateMe(request, response) {
     const user = Object.assign(new User(), request.user);
@@ -226,7 +291,7 @@ class UserController {
                   request.session.save();
                   UserManager.getUserPermissions(
                     userFromDb.id,
-                    userFromDb.tenant
+                    userFromDb.tenant,
                   )
                     .then((permissions) => {
                       userFromDb.permissions = permissions;
@@ -256,9 +321,18 @@ class UserController {
   }
 
   static async getUserIds(request, response) {
-    const tenant = request.params.tenant;
-    const userObjects = await UserManager.getUsers(tenant);
-    response.status(200).send(userObjects.map((user) => user.id));
+    try {
+      const user = request.user;
+      const tenant = request.params.tenant;
+      const userObjects = await UserManager.getUsers(tenant);
+      logger.info(
+        `${tenant} -- sending ${userObjects.length} user ids to user ${user?.id}`,
+      );
+      response.status(200).send(userObjects.map((user) => user.id));
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get User IDs");
+    }
   }
 }
 
