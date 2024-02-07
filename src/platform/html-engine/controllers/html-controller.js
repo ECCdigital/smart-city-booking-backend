@@ -54,12 +54,15 @@ class HtmlController {
       events = events.filter((event) => idsArray.includes(event.id));
     }
 
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
     events = events
       .filter(
         (event) =>
           event.information &&
           event.information.endDate &&
-          Date.parse(event.information.endDate) + 1 >= new Date(),
+          new Date(event.information.endDate) >= yesterday,
       )
       .sort(
         (a, b) =>
