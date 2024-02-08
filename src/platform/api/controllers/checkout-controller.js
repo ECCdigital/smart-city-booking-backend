@@ -15,7 +15,7 @@ class CheckoutController {
   static async validateItem(request, response) {
     const tenantId = request.params.tenant;
     const user = request.user;
-    const { bookableId, timeBegin, timeEnd, amount } = request.body;
+    const { bookableId, timeBegin, timeEnd, amount, couponCode } = request.body;
 
     if (!bookableId || !amount) {
       logger.warn(
@@ -31,6 +31,7 @@ class CheckoutController {
       timeEnd,
       bookableId,
       parseInt(amount),
+      couponCode,
     );
 
     try {
@@ -38,7 +39,10 @@ class CheckoutController {
       logger.info(
         `${tenantId} -- validated bookable ${bookableId} for user ${user?.id} with amount ${amount} and time ${timeBegin} - ${timeEnd}`,
       );
-      return response.sendStatus(200);
+      return response.status(200).json({
+        regularPriceEur: await itemCheckoutService.regularPriceEur(),
+        userPriceEur: await itemCheckoutService.userPriceEur(),
+      });
     } catch (err) {
       logger.warn(err);
       return response.status(409).send(err.message);

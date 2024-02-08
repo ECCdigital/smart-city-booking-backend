@@ -4,6 +4,13 @@ const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
 const UserManager = require("../../data-managers/user-manager");
 const { RolePermission } = require("../../entities/role");
+const bunyan = require("bunyan");
+const CouponManager = require("../../data-managers/coupon-manager");
+
+const logger = bunyan.createLogger({
+  name: "item-checkout-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class CheckoutPermissions {
   static _isOwner(bookable, userId, tenant) {
@@ -17,7 +24,7 @@ class CheckoutPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "readAny"
+        "readAny",
       ))
     )
       return true;
@@ -29,7 +36,7 @@ class CheckoutPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "readOwn"
+        "readOwn",
       ))
     )
       return true;
@@ -39,7 +46,7 @@ class CheckoutPermissions {
       ...(
         await UserManager.getUsersWithRoles(
           tenant,
-          bookable.permittedRoles || []
+          bookable.permittedRoles || [],
         )
       ).map((u) => u.id),
     ];
@@ -62,23 +69,33 @@ class ItemCheckoutService {
    * @param {Date} timeEnd The timestamp of the end of the booking
    * @param {Array} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
+   * @param {string} couponCode The coupon code
    */
-  constructor(user, tenantId, timeBegin, timeEnd, bookableId, amount) {
+  constructor(
+    user,
+    tenantId,
+    timeBegin,
+    timeEnd,
+    bookableId,
+    amount,
+    couponCode,
+  ) {
     this.user = user;
     this.tenantId = tenantId;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
     this.bookableId = bookableId;
     this.amount = amount;
+    this.couponCode = couponCode;
   }
 
   async calculateAmountBooked(bookable) {
     let concurrentBookings;
 
-    if (await this.isTimeRelated() || await this._isLongRange()) {
+    if ((await this.isTimeRelated()) || (await this._isLongRange())) {
       if (!this.timeBegin || !this.timeEnd) {
         throw new Error(
-          `Bookable with ID ${bookable.id} is time related but no time is given.`
+          `Bookable with ID ${bookable.id} is time related but no time is given.`,
         );
       }
 
@@ -86,12 +103,12 @@ class ItemCheckoutService {
         bookable.id,
         bookable.tenant,
         this.timeBegin,
-        this.timeEnd
+        this.timeEnd,
       );
     } else {
       concurrentBookings = await BookingManager.getRelatedBookings(
         bookable.id,
-        bookable.tenant
+        bookable.tenant,
       );
     }
 
@@ -105,7 +122,7 @@ class ItemCheckoutService {
   async calculateAmountBookedTicketsByParent(parentBookable) {
     const childBookables = await BookableManager.getRelatedBookables(
       parentBookable.id,
-      parentBookable.tenant
+      parentBookable.tenant,
     );
 
     let amountBooked = 0;
@@ -136,22 +153,13 @@ class ItemCheckoutService {
     );
   }
 
-  async _isLongRange(){
+  async _isLongRange() {
     const bookable = await this.getBookable();
     return bookable.isLongRange === true;
   }
 
-  async totalPriceEur() {
+  async regularPriceEur() {
     const bookable = await this.getBookable();
-
-    if (
-      !!this.user &&
-      !!bookable.freeBookingUsers &&
-      bookable.freeBookingUsers.includes(this.user?.id) &&
-      bookable.tenant === this.user?.tenant
-    ) {
-      return 0;
-    }
 
     let multiplier;
     switch (bookable.priceCategory) {
@@ -171,6 +179,39 @@ class ItemCheckoutService {
     return (bookable.priceEur || 0) * multiplier * this.amount;
   }
 
+  async userPriceEur() {
+    const bookable = await this.getBookable();
+
+    const freeBookingUsers = [
+      ...(bookable.freeBookingUsers || []),
+      ...(
+        await UserManager.getUsersWithRoles(
+          this.tenantId,
+          bookable.freeBookingRoles || [],
+        )
+      ).map((u) => u.id),
+    ];
+
+    if (
+      !!this.user &&
+      freeBookingUsers.includes(this.user?.id) &&
+      bookable.tenant === this.user?.tenant
+    ) {
+      logger.info(
+        `User ${this.user?.id} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
+      );
+      return 0;
+    }
+
+    const total = await CouponManager.applyCoupon(
+      this.couponCode,
+      this.tenantId,
+      await this.regularPriceEur(),
+    );
+
+    return total;
+  }
+
   async checkPermissions() {
     const bookable = await this.getBookable();
     if (bookable.isBookable !== true) {
@@ -181,11 +222,11 @@ class ItemCheckoutService {
       !(await CheckoutPermissions._allowCheckout(
         bookable,
         this.user?.id,
-        this.tenantId
+        this.tenantId,
       ))
     ) {
       throw new Error(
-        `Sie sind nicht berechtigt, das Objekt ${bookable.title} zu buchen.`
+        `Sie sind nicht berechtigt, das Objekt ${bookable.title} zu buchen.`,
       );
     }
   }
@@ -202,12 +243,11 @@ class ItemCheckoutService {
     const isAvailable =
       !bookable.amount || amountBooked + this.amount <= bookable.amount;
 
-
     if (!isAvailable) {
       throw new Error(
         `Das Objekt ${bookable.title} ist nur noch ${
           bookable.amount - amountBooked
-        } mal verfügbar.`
+        } mal verfügbar.`,
       );
     }
 
@@ -218,18 +258,21 @@ class ItemCheckoutService {
     const bookable = await this.getBookable();
     const parentBookables = await BookableManager.getParentBookables(
       bookable.id,
-      bookable.tenant
+      bookable.tenant,
     );
 
     for (const parentBookable of parentBookables) {
-      const parentAmountBooked = await this.calculateAmountBooked(parentBookable);
+      const parentAmountBooked =
+        await this.calculateAmountBooked(parentBookable);
 
       let isAvailable;
       if (bookable.type === "ticket") {
-        const amountBooked =  await this.calculateAmountBookedTicketsByParent(parentBookable);
+        const amountBooked =
+          await this.calculateAmountBookedTicketsByParent(parentBookable);
         isAvailable =
           !parentBookable.amount ||
-          parentAmountBooked + amountBooked + this.amount <= parentBookable.amount;
+          parentAmountBooked + amountBooked + this.amount <=
+            parentBookable.amount;
       } else {
         isAvailable =
           !parentBookable.amount || parentAmountBooked < parentBookable.amount;
@@ -237,7 +280,7 @@ class ItemCheckoutService {
 
       if (!isAvailable) {
         throw new Error(
-          `Übergeordnetes Objekt ${parentBookable.title} ist nicht verfügbar.`
+          `Übergeordnetes Objekt ${parentBookable.title} ist nicht verfügbar.`,
         );
       }
     }
@@ -249,7 +292,7 @@ class ItemCheckoutService {
     const bookable = await this.getBookable();
     const childBookables = await BookableManager.getRelatedBookables(
       bookable.id,
-      bookable.tenant
+      bookable.tenant,
     );
 
     for (const childBookable of childBookables) {
@@ -257,7 +300,7 @@ class ItemCheckoutService {
 
       if (amountBooked > 0) {
         throw new Error(
-          `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`
+          `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
         );
       }
     }
@@ -270,19 +313,20 @@ class ItemCheckoutService {
     if (bookable.type === "ticket" && !!bookable.eventId) {
       const event = await EventManager.getEvent(
         bookable.eventId,
-        bookable.tenant
+        bookable.tenant,
       );
 
       const eventBookings = await BookingManager.getEventBookings(
         bookable.tenant,
-        bookable.eventId
+        bookable.eventId,
       );
 
       const amountBooked = eventBookings
         .map((cb) => cb.bookableItems)
         .flat()
         .filter(
-          (bi) => bi.bookableId === bookable.id && bi.tenant === bookable.tenant
+          (bi) =>
+            bi.bookableId === bookable.id && bi.tenant === bookable.tenant,
         )
         .reduce((acc, bi) => acc + bi.amount, 0);
 
@@ -291,7 +335,7 @@ class ItemCheckoutService {
         amountBooked + this.amount >= event.attendees.maxAttendees
       ) {
         throw new Error(
-          `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`
+          `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
         );
       }
     }
@@ -305,13 +349,13 @@ class ItemCheckoutService {
 
     if (bookable.minBookingDuration && hours < bookable.minBookingDuration) {
       throw new Error(
-        `Die Buchungsdauer für das Objekt muss mindestens ${bookable.minBookingDuration} Stunden betragen.`
+        `Die Buchungsdauer für das Objekt muss mindestens ${bookable.minBookingDuration} Stunden betragen.`,
       );
     }
 
     if (bookable.maxBookingDuration && hours > bookable.maxBookingDuration) {
       throw new Error(
-        `Die Buchungsdauer für das Objekt darf ${bookable.maxBookingDuration} Stunden nicht überschreiten.`
+        `Die Buchungsdauer für das Objekt darf ${bookable.maxBookingDuration} Stunden nicht überschreiten.`,
       );
     }
 
@@ -331,7 +375,7 @@ class ItemCheckoutService {
 
     const parentBookables = await BookableManager.getParentBookables(
       bookable.id,
-      bookable.tenant
+      bookable.tenant,
     );
 
     for (const b of [bookable, ...parentBookables]) {
@@ -339,11 +383,11 @@ class ItemCheckoutService {
         await OpeningHoursManager.hasOpeningHoursConflict(
           b,
           this.timeBegin,
-          this.timeEnd
+          this.timeEnd,
         )
       ) {
         throw new Error(
-          `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`
+          `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`,
         );
       }
     }
