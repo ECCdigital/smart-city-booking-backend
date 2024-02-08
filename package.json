@@ -1,6 +1,6 @@
 {
   "name": "smart-city-booking-backend",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "An open-source backend system for booking and managing resources in smart cities and regions.",
   "main": "src/server.js",
   "scripts": {
