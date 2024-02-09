@@ -1,6 +1,9 @@
+const { Worker } = require('worker_threads');
+const path = require('path');
+const bunyan = require("bunyan");
+
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
   name: "calendar-controller.js",
@@ -8,77 +11,45 @@ const logger = bunyan.createLogger({
 });
 
 /**
- * Web Controller for Calendar related data.
+ * CalendarController class.
+ *
+ * This class is responsible for handling requests related to occupancies in the calendar.
+ * It provides a static method `getOccupancies` which fetches occupancies for all bookables for a given tenant.
+ * The occupancies are fetched asynchronously using worker threads, one for each bookable.
+ * The results from all worker threads are combined into a single array of occupancies, which is then sent as the response.
  */
 class CalendarController {
   static async getOccupancies(request, response) {
-    try {
-      const user = request.user;
-      var tenant = request.params.tenant;
+    const tenant = request.params.tenant;
+    let occupancies = [];
 
-      let occupancies = [];
+    const bookables = await BookableManager.getBookables(tenant);
+    /**
+     * Initializes a worker thread for each bookable to asynchronously fetch occupancies, returning promises for their resolutions or rejections.
+     */
+    const workers = bookables.map((bookable) => {
+      return new Promise((resolve, reject) => {
 
-      var bookables = await BookableManager.getBookables(tenant);
+        const worker = new Worker(path.resolve(__dirname,"../../../commons/utilities/calendar-occupancy-worker.js"));
+        worker.postMessage({ bookable, tenant });
 
-      for (const bookable of bookables) {
-        let bookings = [];
+        worker.on('message', resolve);
+        worker.on('error', reject);
+        worker.on('exit', (code) => {
+          if (code !== 0) {
+            reject(new Error(`Worker stopped with exit code ${code}`));
+          }
+        });
+      });
+    });
 
-        // Get the Bookings that are directly related to the bookable object
-        bookings = bookings.concat(
-          await BookingManager.getRelatedBookings(tenant, bookable.id),
-        );
+    const results = await Promise.all(workers);
+    results.forEach((result) => {
+      occupancies = occupancies.concat(result);
+    });
 
-        // Get all Bookings that are related to a child bookable
-        const relatedBookables = await BookableManager.getRelatedBookables(
-          bookable.id,
-          tenant,
-        );
 
-        for (const relatedBookable of relatedBookables) {
-          bookings = bookings.concat(
-            await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
-          );
-        }
-
-        // Get all Bookings that are related to a parent bookable
-        const parentBookables = await BookableManager.getParentBookables(
-          bookable.id,
-          tenant,
-        );
-
-        for (const relatedBookable of relatedBookables) {
-          bookings = bookings.concat(
-            await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
-          );
-        }
-
-        // Add the bookings to the occupancies array
-        occupancies = occupancies.concat(
-          bookings
-            .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
-            .filter(
-              (booking, index, self) =>
-                self.findIndex((b) => b.id === booking.id) === index,
-            )
-            .map((booking) => {
-              return {
-                bookableId: bookable.id,
-                title: bookable.title,
-                timeBegin: booking.timeBegin,
-                timeEnd: booking.timeEnd,
-              };
-            }),
-        );
-      }
-
-      logger.info(
-        `${tenant} -- Sending ${occupancies.length} occupancies to user ${user?.id}`,
-      );
-      response.status(200).send(occupancies);
-    } catch (err) {
-      logger.error(err);
-      response.status(500).send("clould not get occupancies");
-    }
+    response.status(200).send(occupancies);
   }
 }
 
