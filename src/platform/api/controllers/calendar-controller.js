@@ -2,6 +2,14 @@ const BookableManager = require("../../../commons/data-managers/bookable-manager
 const { Worker } = require('worker_threads');
 const path = require('path');
 
+/**
+ * CalendarController class.
+ *
+ * This class is responsible for handling requests related to occupancies in the calendar.
+ * It provides a static method `getOccupancies` which fetches occupancies for all bookables for a given tenant.
+ * The occupancies are fetched asynchronously using worker threads, one for each bookable.
+ * The results from all worker threads are combined into a single array of occupancies, which is then sent as the response.
+ */
 class CalendarController {
   static async getOccupancies(request, response) {
     const tenant = request.params.tenant;
