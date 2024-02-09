@@ -1,68 +1,37 @@
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
-const BookingManager = require("../../../commons/data-managers/booking-manager");
-const RoleManager = require("../../../commons/data-managers/role-manager");
+const { Worker } = require('worker_threads');
+const path = require('path');
 
-/**
- * Web Controller for Calendar related data.
- */
 class CalendarController {
   static async getOccupancies(request, response) {
-    var tenant = request.params.tenant;
-
+    const startTime = Date.now();
+    const tenant = request.params.tenant;
     let occupancies = [];
 
-    var bookables = await BookableManager.getBookables(tenant);
+    const bookables = await BookableManager.getBookables(tenant);
+    const workers = bookables.map((bookable) => {
+      return new Promise((resolve, reject) => {
 
-    for (const bookable of bookables) {
-      let bookings = [];
+        const worker = new Worker(path.resolve(__dirname,"../../../commons/utilities/bookableWorker.js"));
+        worker.postMessage({ bookable, tenant });
 
-      // Get the Bookings that are directly related to the bookable object
-      bookings = bookings.concat(
-        await BookingManager.getRelatedBookings(tenant, bookable.id),
-      );
+        worker.on('message', resolve);
+        worker.on('error', reject);
+        worker.on('exit', (code) => {
+          if (code !== 0) {
+            reject(new Error(`Worker stopped with exit code ${code}`));
+          }
+        });
+      });
+    });
 
-      // Get all Bookings that are related to a child bookable
-      const relatedBookables = await BookableManager.getRelatedBookables(
-        bookable.id,
-        tenant,
-      );
+    const results = await Promise.all(workers);
+    results.forEach((result) => {
+      occupancies = occupancies.concat(result);
+    });
 
-      for (const relatedBookable of relatedBookables) {
-        bookings = bookings.concat(
-          await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
-        );
-      }
+    console.log("Time:", Date.now() - startTime, "ms", "Occupancies:", occupancies.length);
 
-      // Get all Bookings that are related to a parent bookable
-      const parentBookables = await BookableManager.getParentBookables(
-        bookable.id,
-        tenant,
-      );
-
-      for (const relatedBookable of relatedBookables) {
-        bookings = bookings.concat(
-          await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
-        );
-      }
-
-      // Add the bookings to the occupancies array
-      occupancies = occupancies.concat(
-        bookings
-          .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
-          .filter(
-            (booking, index, self) =>
-              self.findIndex((b) => b.id === booking.id) === index,
-          )
-          .map((booking) => {
-            return {
-              bookableId: bookable.id,
-              title: bookable.title,
-              timeBegin: booking.timeBegin,
-              timeEnd: booking.timeEnd,
-            };
-          }),
-      );
-    }
 
     response.status(200).send(occupancies);
   }

@@ -22,13 +22,11 @@ class DatabaseManager {
         var dbUrl = dbUrl || process.env.DB_URL;
         var dbName = dbName || process.env.DB_NAME;
 
-        console.log('Establishing connection to database at ' + dbUrl);
         
         return new Promise((resolve, reject) => {
             MongoClient.connect(dbUrl, { useNewUrlParser: true }).then(client => {
                 dbClient = client;
                 db = client.db(dbName);
-                console.log('Database connection successfully established.');
                 resolve(db);
             }).catch(err => {
                 console.error('Could not establish connection to database.', err);

@@ -49,6 +49,7 @@ class BookingManager {
    * Get all bookings related to a bookable object.
    *
    * @param {string} tenant Identifier of the tenant
+   * @param bookableId
    * @returns List of bookings
    * @returns
    */
