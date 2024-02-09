@@ -324,11 +324,23 @@ class UserController {
     try {
       const user = request.user;
       const tenant = request.params.tenant;
+      const filterRoles = !!request.query.roles
+        ? request.query.roles.split(",")
+        : [];
+
       const userObjects = await UserManager.getUsers(tenant);
+      const filteredUserObjects = userObjects.filter((userObject) => {
+        if (filterRoles) {
+          return filterRoles.some((role) => userObject.roles.includes(role));
+        } else {
+          return true;
+        }
+      });
+
       logger.info(
-        `${tenant} -- sending ${userObjects.length} user ids to user ${user?.id}`,
+        `${tenant} -- sending ${filteredUserObjects.length} user ids to user ${user?.id}`,
       );
-      response.status(200).send(userObjects.map((user) => user.id));
+      response.status(200).send(filteredUserObjects.map((user) => user.id));
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get User IDs");

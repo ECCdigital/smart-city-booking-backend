@@ -27,7 +27,7 @@ class BundleCheckoutService {
     location,
     email,
     phone,
-    comment
+    comment,
   ) {
     this.user = user;
     this.tenant = tenant;
@@ -50,11 +50,11 @@ class BundleCheckoutService {
     chunkLength = 4,
     possible = "ABCDEFGHJKMNPQRSTUXY",
     ensureUnique = true,
-    retryCount = 10
+    retryCount = 10,
   ) {
     if (ensureUnique && retryCount <= 0) {
       throw new Error(
-        "Unable to generate booking number. Retry count exceeded."
+        "Unable to generate booking number. Retry count exceeded.",
       );
     }
 
@@ -74,7 +74,7 @@ class BundleCheckoutService {
           chunkLength,
           possible,
           ensureUnique,
-          retryCount - 1
+          retryCount - 1,
         );
       }
     }
@@ -90,7 +90,7 @@ class BundleCheckoutService {
         this.timeBegin,
         this.timeEnd,
         bookableItem.bookableId,
-        bookableItem.amount
+        bookableItem.amount,
       );
 
       await itemCheckoutService.checkAll();
@@ -99,7 +99,7 @@ class BundleCheckoutService {
     return true;
   }
 
-  async totalPriceEur() {
+  async userPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
       const itemCheckoutService = new ItemCheckoutService(
@@ -108,18 +108,11 @@ class BundleCheckoutService {
         this.timeBegin,
         this.timeEnd,
         bookableItem.bookableId,
-        bookableItem.amount
-      );
-
-      total += await itemCheckoutService.totalPriceEur();
-    }
-
-    if (!!this.couponCode) {
-      total = await CouponManager.applyCoupon(
+        bookableItem.amount,
         this.couponCode,
-        this.tenant,
-        total
       );
+
+      total += await itemCheckoutService.userPriceEur();
     }
 
     return Math.round(total * 100) / 100;
@@ -129,7 +122,7 @@ class BundleCheckoutService {
     for (const bookableItem of this.bookableItems) {
       const bookable = await BookableManager.getBookable(
         bookableItem.bookableId,
-        this.tenant
+        this.tenant,
       );
 
       if (!bookable.autoCommitBooking) return false;
@@ -143,7 +136,7 @@ class BundleCheckoutService {
     for (const bookableItem of this.bookableItems) {
       bookableItem._bookableUsed = await BookableManager.getBookable(
         bookableItem.bookableId,
-        this.tenant
+        this.tenant,
       );
       delete bookableItem._bookableUsed._id;
     }
@@ -165,15 +158,15 @@ class BundleCheckoutService {
       mail: this.email,
       phone: this.phone,
       comment: this.comment,
-      priceEur: await this.totalPriceEur(),
+      priceEur: await this.userPriceEur(),
       isCommitted: await this.isAutoCommit(),
-      isPayed: await this.totalPriceEur() === 0,
+      isPayed: (await this.userPriceEur()) === 0,
     };
 
     if (this.couponCode) {
       booking._couponUsed = await CouponManager.getCoupon(
         this.couponCode,
-        this.tenant
+        this.tenant,
       );
       delete booking._couponUsed._id;
     }
