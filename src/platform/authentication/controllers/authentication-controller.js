@@ -2,6 +2,12 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const RoleManager = require("../../../commons/data-managers/role-manager");
 var { User, HookTypes } = require("../../../commons/entities/user");
 var { Role } = require("../../../commons/entities/role");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "authentication-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 /**
  * Controller for user authentication.
@@ -23,10 +29,11 @@ class AuthenticationController {
     UserManager.getUserPermissions(user.id, user.tenant)
       .then((permissions) => {
         user.permissions = permissions;
+        logger.info(`User ${user.id} signed in.`);
         response.status(200).send(user);
       })
       .catch((err) => {
-        console.error(err);
+        logger.error(err);
         response.sendStatus(500);
       });
   }
@@ -48,18 +55,22 @@ class AuthenticationController {
               undefined,
               request.params.tenant,
               request.body.firstName,
-              request.body.lastName
+              request.body.lastName,
             );
             user.setPassword(request.body.password);
 
             UserManager.signupUser(user)
               .then(() => {
                 //UserUtilities.linkGuestBookingsToUser(user.id, user.tenant);
+                logger.info(`User ${user.id} signed up.`);
                 response.sendStatus(200);
               })
-              .catch((err) => response.sendStatus(500));
+              .catch((err) => {
+                logger.error(err);
+                response.status(500).send("could not signup user");
+              });
           }
-        }
+        },
       );
     } else {
       response.sendStatus(400);
@@ -84,7 +95,7 @@ class AuthenticationController {
         (permissions) => {
           userPublic.permissions = permissions;
           response.status(200).send(userPublic);
-        }
+        },
       );
     } else {
       response.status(200).send(userPublic);
@@ -102,11 +113,17 @@ class AuthenticationController {
         } else if (hookType === HookTypes.RESET_PASSWORD) {
           additionalUrl = "/password/confirmed";
         }
+
+        logger.info(`Hook ${hookId} released.`);
+
         // redirect to the frontend
         response.redirect(`${process.env.FRONTEND_URL}${additionalUrl}`);
         next();
       })
-      .catch((err) => response.sendStatus(500));
+      .catch((err) => {
+        logger.error(err);
+        response.status(500).send("could not releasae hook");
+      });
   }
 
   static resetPassword(request, response) {
@@ -120,14 +137,22 @@ class AuthenticationController {
           if (user) {
             UserManager.resetPassword(user, password)
               .then(() => {
+                logger.info(`Password reset for user ${user.id}.`);
                 response.sendStatus(200);
               })
-              .catch((err) => response.sendStatus(500));
+              .catch((err) => {
+                logger.error(err);
+                response.status(500).send("could not reset password");
+              });
           } else {
+            logger.warn(`Could not reset password. User ${id} not found.`);
             response.sendStatus(404);
           }
         })
-        .catch((err) => response.sendStatus(500));
+        .catch((err) => {
+          logger.error(err);
+          response.sendStatus(500);
+        });
     } else {
       response.sendStatus(400);
     }

@@ -6,6 +6,12 @@ const BookableManager = require("../../../commons/data-managers/bookable-manager
 const { v4: uuidv4 } = require("uuid");
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "event-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class EventPermissions {
   static _isOwner(event, userId, tenant) {
@@ -19,7 +25,7 @@ class EventPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "create"
+        "create",
       ))
     );
   }
@@ -31,7 +37,7 @@ class EventPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "readAny"
+        "readAny",
       ))
     )
       return true;
@@ -43,7 +49,7 @@ class EventPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "readOwn"
+        "readOwn",
       ))
     )
       return true;
@@ -58,7 +64,7 @@ class EventPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "updateAny"
+        "updateAny",
       ))
     )
       return true;
@@ -70,7 +76,7 @@ class EventPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "updateOwn"
+        "updateOwn",
       ))
     )
       return true;
@@ -85,7 +91,7 @@ class EventPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "deleteAny"
+        "deleteAny",
       ))
     )
       return true;
@@ -97,7 +103,7 @@ class EventPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKABLES,
-        "deleteOwn"
+        "deleteOwn",
       ))
     )
       return true;
@@ -111,19 +117,38 @@ class EventPermissions {
  */
 class EventController {
   static async getEvents(request, response) {
-    const tenant = request.params.tenant;
-    const events = await EventManager.getEvents(tenant);
-    response.status(200).send(events);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const events = await EventManager.getEvents(tenant);
+      logger.info(
+        `${tenant} -- sending ${events.length} events to user ${user?.id}`,
+      );
+      response.status(200).send(events);
+    } catch (err) {
+      logger.warn(err);
+      response.status(500).send("could not get events");
+    }
   }
 
   static async getEvent(request, response) {
-    const tenant = request.params.tenant;
-    const id = request.params.id;
-    if (id) {
-      const event = await EventManager.getEvent(id, tenant);
-      response.status(200).send(event);
-    } else {
-      response.sendStatus(400);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
+      if (id) {
+        const event = await EventManager.getEvent(id, tenant);
+        logger.info(
+          `${tenant} -- sending event ${event.id} to user ${user?.id}`,
+        );
+        response.status(200).send(event);
+      } else {
+        logger.warn(`Could not get event. Missing ID.`);
+        response.sendStatus(400);
+      }
+    } catch (err) {
+      logger.warn(err);
+      response.status(500).send("could not get event");
     }
   }
 
@@ -146,64 +171,97 @@ class EventController {
   }
 
   static async createEvent(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const event = Object.assign(new Event(), request.body);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const event = Object.assign(new Event(), request.body);
 
-    event.id = uuidv4();
-    event.ownerUserId = user.id;
+      event.id = uuidv4();
+      event.ownerUserId = user?.id;
 
-    if (await EventPermissions._allowCreate(event, user.id, tenant)) {
-      await EventManager.storeEvent(event);
-      response.sendStatus(201);
-    } else {
-      response.sendStatus(403);
+      if (await EventPermissions._allowCreate(event, user.id, tenant)) {
+        await EventManager.storeEvent(event);
+        logger.info(
+          `${tenant} -- created event ${event.id} by user ${user?.id}`,
+        );
+        response.sendStatus(201);
+      } else {
+        logger.warn(`User ${user?.id} not allowed to create event`);
+        response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not create event");
     }
   }
 
   static async updateEvent(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const event = Object.assign(new Event(), request.body);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const event = Object.assign(new Event(), request.body);
 
-    if (await EventPermissions._allowUpdate(event, user.id, user.tenant)) {
-      await EventManager.storeEvent(event);
-      response.sendStatus(201);
-    } else {
-      response.sendStatus(403);
+      if (await EventPermissions._allowUpdate(event, user.id, user.tenant)) {
+        await EventManager.storeEvent(event);
+        logger.info(
+          `${tenant} -- updated event ${event.id} by user ${user?.id}`,
+        );
+        response.sendStatus(201);
+      } else {
+        logger.warn(`User ${user?.id} not allowed to update event`);
+        response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not update event");
     }
   }
 
   static async removeEvent(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
 
-    const id = request.params.id;
-    if (id) {
-      const event = await EventManager.getEvent(id, tenant);
+      const id = request.params.id;
+      if (id) {
+        const event = await EventManager.getEvent(id, tenant);
 
-      if (await EventPermissions._allowDelete(event, user.id, user.tenant)) {
-        await EventManager.removeEvent(id, tenant);
-        response.sendStatus(200);
+        if (await EventPermissions._allowDelete(event, user.id, user.tenant)) {
+          await EventManager.removeEvent(id, tenant);
+          logger.info(`${tenant} -- removed event ${id} by user ${user?.id}`);
+          response.sendStatus(200);
+        } else {
+          logger.warn(`User ${user?.id} not allowed to remove event`);
+          response.sendStatus(403);
+        }
       } else {
-        response.sendStatus(403);
+        response.sendStatus(400);
       }
-    } else {
-      response.sendStatus(400);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not remove event");
     }
   }
 
   static async getTags(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
 
-    const events = await EventManager.getEvents(tenant);
-    const tags = events
-      .map((e) => e.information?.tags || [])
-      .flat()
-      .filter((value, index, self) => self.indexOf(value) === index);
+      const events = await EventManager.getEvents(tenant);
+      const tags = events
+        .map((e) => e.information?.tags || [])
+        .flat()
+        .filter((value, index, self) => self.indexOf(value) === index);
 
-    response.status(200).send(tags);
+      logger.info(
+        `${tenant} -- sending ${tags.length} tags to user ${user?.id}`,
+      );
+      response.status(200).send(tags);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not get tags");
+    }
   }
 }
 

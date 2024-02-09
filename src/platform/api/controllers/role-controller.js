@@ -2,6 +2,12 @@ const RoleManager = require("../../../commons/data-managers/role-manager");
 const { Role, RolePermission } = require("../../../commons/entities/role");
 const { v4: uuidv4 } = require("uuid");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "role-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class RolePermissions {
   static _isOwner(role, userId, tenant) {
@@ -13,7 +19,7 @@ class RolePermissions {
       userId,
       tenant,
       RolePermission.MANAGE_ROLES,
-      "create"
+      "create",
     );
   }
 
@@ -23,7 +29,7 @@ class RolePermissions {
         userId,
         tenant,
         RolePermission.MANAGE_ROLES,
-        "readAny"
+        "readAny",
       )
     )
       return true;
@@ -34,7 +40,7 @@ class RolePermissions {
         userId,
         tenant,
         RolePermission.MANAGE_ROLES,
-        "readOwn"
+        "readOwn",
       ))
     )
       return true;
@@ -43,13 +49,12 @@ class RolePermissions {
   }
 
   static async _allowUpdate(role, userId, tenant) {
-
     if (
       await UserManager.hasPermission(
         userId,
         tenant,
         RolePermission.MANAGE_ROLES,
-        "updateAny"
+        "updateAny",
       )
     ) {
       return true;
@@ -61,7 +66,7 @@ class RolePermissions {
         userId,
         tenant,
         RolePermission.MANAGE_ROLES,
-        "updateOwn"
+        "updateOwn",
       ))
     ) {
       return true;
@@ -76,7 +81,7 @@ class RolePermissions {
         userId,
         tenant,
         RolePermission.MANAGE_ROLES,
-        "deleteAny"
+        "deleteAny",
       )
     )
       return true;
@@ -87,7 +92,7 @@ class RolePermissions {
         userId,
         tenant,
         RolePermission.MANAGE_ROLES,
-        "deleteOwn"
+        "deleteOwn",
       ))
     )
       return true;
@@ -97,36 +102,51 @@ class RolePermissions {
 }
 
 /**
- * Web Controller for Bookables.
+ * Web Controller for Roles.
  */
 class RoleController {
   static async getRoles(request, response) {
-    const user = request.user;
-    const roles = await RoleManager.getRoles();
+    try {
+      const user = request.user;
+      const roles = await RoleManager.getRoles();
 
-    let allowedRoles = [];
-    for (let role of roles) {
-      if (await RolePermissions._allowRead(role, user.id, user.tenant)) {
-        allowedRoles.push(role);
+      let allowedRoles = [];
+      for (let role of roles) {
+        if (await RolePermissions._allowRead(role, user.id, user.tenant)) {
+          allowedRoles.push(role);
+        }
       }
-    }
 
-    response.status(200).send(allowedRoles);
+      logger.info(`Sending ${allowedRoles.length} roles to user ${user?.id}`);
+      response.status(200).send(allowedRoles);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get roles");
+    }
   }
 
   static async getRole(request, response) {
-    const id = request.params.id;
-    const user = request.user;
+    try {
+      const id = request.params.id;
+      const user = request.user;
 
-    if (id) {
-      const role = await RoleManager.getRole(id);
-      if (await RolePermissions._allowRead(role, user.id, user.tenant)) {
-        response.status(200).send(role);
+      if (id) {
+        const role = await RoleManager.getRole(id);
+        if (await RolePermissions._allowRead(role, user.id, user.tenant)) {
+          logger.info(`Sending role ${role.id} to user ${user?.id}`);
+          response.status(200).send(role);
+        } else {
+          logger.warn(
+            `User ${user?.id} is not allowed to read role ${role.id}`,
+          );
+          response.sendStatus(403);
+        }
       } else {
-        response.sendStatus(403);
+        response.sendStatus(400);
       }
-    } else {
-      response.sendStatus(400);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get role");
     }
   }
 
@@ -149,47 +169,68 @@ class RoleController {
   }
 
   static async createRole(request, response) {
-    const user = request.user;
-    const role = Object.assign(new Role(), request.body);
+    try {
+      const user = request.user;
+      const role = Object.assign(new Role(), request.body);
 
-    role.id = uuidv4();
-    role.ownerUserId = user.id;
-    role.ownerTenant = user.tenant;
+      role.id = uuidv4();
+      role.ownerUserId = user.id;
+      role.ownerTenant = user.tenant;
 
-    if (await RolePermissions._allowCreate(role, user.id, user.tenant)) {
-      await RoleManager.storeRole(role);
-      response.sendStatus(201);
-    } else {
-      response.sendStatus(403);
+      if (await RolePermissions._allowCreate(role, user.id, user.tenant)) {
+        await RoleManager.storeRole(role);
+        logger.info(`Created role ${role.id} by user ${user?.id}`);
+        response.sendStatus(201);
+      } else {
+        logger.warn(`User ${user?.id} not allowed to create role`);
+        response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not create role");
     }
   }
 
   static async updateRole(request, response) {
-    const user = request.user;
-    const role = Object.assign(new Role(), request.body);
+    try {
+      const user = request.user;
+      const role = Object.assign(new Role(), request.body);
 
-    if (await RolePermissions._allowUpdate(role, user.id, user.tenant)) {
-      await RoleManager.storeRole(role);
-      response.sendStatus(201);
-    } else {
-      response.sendStatus(403);
+      if (await RolePermissions._allowUpdate(role, user.id, user.tenant)) {
+        await RoleManager.storeRole(role);
+        logger.info(`Updated role ${role.id} by user ${user?.id}`);
+        response.sendStatus(201);
+      } else {
+        logger.warn(`User ${user?.id} not allowed to update role`);
+        response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not update role");
     }
   }
 
   static async removeRole(request, response) {
-    const user = request.user;
+    try {
+      const user = request.user;
 
-    const id = request.params.id;
-    if (id) {
-      const role = await RoleManager.getRole(id);
-      if (await RolePermissions._allowDelete(role, user.id, user.tenant)) {
-        await RoleManager.removeRole(id);
-        response.sendStatus(200);
+      const id = request.params.id;
+      if (id) {
+        const role = await RoleManager.getRole(id);
+        if (await RolePermissions._allowDelete(role, user.id, user.tenant)) {
+          await RoleManager.removeRole(id);
+          logger.info(`Removed role ${role.id} by user ${user?.id}`);
+          response.sendStatus(200);
+        } else {
+          logger.warn(`User ${user?.id} not allowed to remove role`);
+          response.sendStatus(403);
+        }
       } else {
-        response.sendStatus(403);
+        response.sendStatus(400);
       }
-    } else {
-      response.sendStatus(400);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not remove role");
     }
   }
 }

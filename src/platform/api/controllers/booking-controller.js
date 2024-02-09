@@ -1,6 +1,5 @@
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const RoleManager = require("../../../commons/data-managers/role-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
 const { Booking } = require("../../../commons/entities/booking");
 const { RolePermission } = require("../../../commons/entities/role");
@@ -10,6 +9,12 @@ const OpeningHoursManager = require("../../../commons/utilities/opening-hours-ma
 const CouponManager = require("../../../commons/data-managers/coupon-manager");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "booking-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class BookingPermissions {
   static _isOwner(booking, userId, tenant) {
@@ -23,7 +28,7 @@ class BookingPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKINGS,
-        "create"
+        "create",
       ))
     );
   }
@@ -35,7 +40,7 @@ class BookingPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKINGS,
-        "readAny"
+        "readAny",
       ))
     )
       return true;
@@ -47,7 +52,7 @@ class BookingPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKINGS,
-        "readOwn"
+        "readOwn",
       ))
     )
       return true;
@@ -62,7 +67,7 @@ class BookingPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKINGS,
-        "updateAny"
+        "updateAny",
       ))
     )
       return true;
@@ -73,7 +78,7 @@ class BookingPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKINGS,
-        "updateOwn"
+        "updateOwn",
       ))
     )
       return true;
@@ -88,7 +93,7 @@ class BookingPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKINGS,
-        "deleteAny"
+        "deleteAny",
       ))
     )
       return true;
@@ -100,7 +105,7 @@ class BookingPermissions {
         userId,
         tenant,
         RolePermission.MANAGE_BOOKINGS,
-        "deleteOwn"
+        "deleteOwn",
       ))
     )
       return true;
@@ -118,7 +123,7 @@ class BookingController {
       booking._populated = {
         bookable: await BookableManager.getBookable(
           booking.bookableId,
-          booking.tenant
+          booking.tenant,
         ),
       };
     }
@@ -142,31 +147,48 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async getBookings(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const bookings = await BookingManager.getBookings(tenant);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const bookings = await BookingManager.getBookings(tenant);
 
-    if (request.query.public === "true") {
-      const anonymizedBookings = bookings.map((b) => {
-        return BookingController.anonymizeBooking(b);
-      });
+      if (request.query.public === "true") {
+        const anonymizedBookings = bookings.map((b) => {
+          return BookingController.anonymizeBooking(b);
+        });
 
-      response.status(200).send(anonymizedBookings);
-    } else if (user) {
-      if (request.query.populate === "true") {
-        await BookingController._populate(bookings);
-      }
-
-      const allowedBookings = [];
-      for (const booking of bookings) {
-        if (user && await BookingPermissions._allowRead(booking, user.id, user.tenant)) {
-          allowedBookings.push(booking);
+        logger.info(
+          `${tenant} -- sending ${anonymizedBookings.length} anonymized bookings to user ${user?.id}`,
+        );
+        response.status(200).send(anonymizedBookings);
+      } else if (user) {
+        if (request.query.populate === "true") {
+          await BookingController._populate(bookings);
         }
-      }
 
-      response.status(200).send(allowedBookings);
-    } else {
-      response.sendStatus(403);
+        const allowedBookings = [];
+        for (const booking of bookings) {
+          if (
+            user &&
+            (await BookingPermissions._allowRead(booking, user.id, user.tenant))
+          ) {
+            allowedBookings.push(booking);
+          }
+        }
+
+        logger.info(
+          `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
+        );
+        response.status(200).send(allowedBookings);
+      } else {
+        logger.warn(
+          `${tenant} -- could not get bookings. User is not authenticated`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get bookings");
     }
   }
 
@@ -177,24 +199,35 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async getAssignedBookings(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
 
-    const hasPermission = user.tenant === tenant;
+      const hasPermission = user.tenant === tenant;
 
-    if (hasPermission) {
-      const bookings = await BookingManager.getAssignedBookings(
-        tenant,
-        user.id
-      );
+      if (hasPermission) {
+        const bookings = await BookingManager.getAssignedBookings(
+          tenant,
+          user.id,
+        );
 
-      if (request.query.populate === "true") {
-        await BookingController._populate(bookings);
+        if (request.query.populate === "true") {
+          await BookingController._populate(bookings);
+        }
+
+        logger.info(
+          `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
+        );
+        response.status(200).send(bookings);
+      } else {
+        logger.warn(
+          `${tenant} -- could not get assigned bookings. User is not authenticated`,
+        );
+        response.sendStatus(403);
       }
-
-      response.status(200).send(bookings);
-    } else {
-      response.sendStatus(403);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get assigned bookings");
     }
   }
 
@@ -206,76 +239,84 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async getRelatedBookings(request, response) {
-    const user = request.user;
-    const tenant = request.params.tenant;
-    const bookableId = request.params.id;
+    try {
+      const user = request.user;
+      const tenant = request.params.tenant;
+      const bookableId = request.params.id;
 
-    const includeRelatedBookings = request.query.related === "true";
-    const includeParentBookings = request.query.parent === "true";
+      const includeRelatedBookings = request.query.related === "true";
+      const includeParentBookings = request.query.parent === "true";
 
-    let bookings = await BookingManager.getRelatedBookings(tenant, bookableId);
-
-    if (includeRelatedBookings) {
-      let relatedBookables = await BookableManager.getRelatedBookables(
+      let bookings = await BookingManager.getRelatedBookings(
+        tenant,
         bookableId,
-        tenant
       );
 
-      for (let relatedBookable of relatedBookables) {
-        let relatedBookings = await BookingManager.getRelatedBookings(
+      if (includeRelatedBookings) {
+        let relatedBookables = await BookableManager.getRelatedBookables(
+          bookableId,
           tenant,
-          relatedBookable.id
         );
 
-        bookings = bookings.concat(relatedBookings);
+        for (let relatedBookable of relatedBookables) {
+          let relatedBookings = await BookingManager.getRelatedBookings(
+            tenant,
+            relatedBookable.id,
+          );
+
+          bookings = bookings.concat(relatedBookings);
+        }
       }
-    }
 
-    if (includeParentBookings) {
-      let parentBookables = await BookableManager.getParentBookables(
-        bookableId,
-        tenant
-      );
-
-      for (let parentBookable of parentBookables) {
-        let parentBookings = await BookingManager.getRelatedBookings(
+      if (includeParentBookings) {
+        let parentBookables = await BookableManager.getParentBookables(
+          bookableId,
           tenant,
-          parentBookable.id
         );
 
-        bookings = bookings.concat(parentBookings);
+        for (let parentBookable of parentBookables) {
+          let parentBookings = await BookingManager.getRelatedBookings(
+            tenant,
+            parentBookable.id,
+          );
+
+          bookings = bookings.concat(parentBookings);
+        }
       }
-    }
 
-    if (request.query.public === "true") {
-      const anonymizedBookings = bookings.map((b) => {
-        return {
-          id: b.id,
-          tenant: b.tenant,
-          bookableId: b.bookableId,
-          timeBegin: b.timeBegin,
-          timeEnd: b.timeEnd,
-        };
-      });
+      if (request.query.public === "true") {
+        const anonymizedBookings = bookings.map((b) => {
+          return {
+            id: b.id,
+            tenant: b.tenant,
+            bookableId: b.bookableId,
+            timeBegin: b.timeBegin,
+            timeEnd: b.timeEnd,
+          };
+        });
 
-      response.status(200).send(anonymizedBookings);
-    } else if (user) {
-      const hasPermission =
-        user.tenant === tenant &&
-        (await UserManager.hasPermission(
-          user.id,
-          user.tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny"
-        ));
+        response.status(200).send(anonymizedBookings);
+      } else if (user) {
+        const hasPermission =
+          user.tenant === tenant &&
+          (await UserManager.hasPermission(
+            user.id,
+            user.tenant,
+            RolePermission.MANAGE_BOOKINGS,
+            "readAny",
+          ));
 
-      if (hasPermission) {
-        response.status(200).send(bookings);
+        if (hasPermission) {
+          response.status(200).send(bookings);
+        } else {
+          response.sendStatus(403);
+        }
       } else {
         response.sendStatus(403);
       }
-    } else {
-      response.sendStatus(403);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get related bookings");
     }
   }
 
@@ -286,17 +327,42 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async getBooking(request, response) {
-    const tenantId = request.params.tenant;
+    try {
+      const user = request.user;
+      const tenantId = request.params.tenant;
+      const id = request.params.id;
 
-    const id = request.params.id;
-    if (id) {
-      const booking = await BookingManager.getBooking(id, tenantId);
+      if (id) {
+        const booking = await BookingManager.getBooking(id, tenantId);
 
-        await BookingController._populate([booking]);
-        response.status(200).send(booking);
+        const hasPermission =
+          (user.tenant === tenantId &&
+            (await UserManager.hasPermission(
+              user.id,
+              user.tenant,
+              RolePermission.MANAGE_BOOKINGS,
+              "readAny",
+            ))) ||
+          BookingPermissions._isOwner(booking, user.id, user.tenant);
 
-    } else {
-      response.sendStatus(400);
+        if (hasPermission) {
+          await BookingController._populate([booking]);
+          logger.info(
+            `${tenantId} -- sending booking ${id} to user ${user?.id}`,
+          );
+          response.status(200).send(booking);
+        } else {
+          logger.warn(
+            `${tenantId} -- could not get booking. User ${user?.id} is not authenticated`,
+          );
+          response.sendStatus(403);
+        }
+      } else {
+        response.sendStatus(400);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get booking");
     }
   }
 
@@ -307,18 +373,33 @@ class BookingController {
    * @param response
    * @returns {Promise<void>}
    */
-    static async getBookingStatus(request, response) {
-        const tenantId = request.params.tenant;
-        const id = request.params.id;
+  static async getBookingStatus(request, response) {
+    try {
+      const user = request.user;
+      const tenantId = request.params.tenant;
+      const id = request.params.id;
 
-        if (id) {
-            const bookingStatus = await BookingManager.getBookingStatus(tenantId, id);
+      if (id) {
+        const bookingStatus = await BookingManager.getBookingStatus(
+          tenantId,
+          id,
+        );
 
-            response.status(200).send(bookingStatus);
-            } else {
-            response.sendStatus(400);
-        }
+        logger.info(
+          `${tenantId} -- sending booking status ${bookingStatus} for booking ${id} to user ${user?.id}`,
+        );
+        response.status(200).send(bookingStatus);
+      } else {
+        logger.warn(
+          `${tenantId} -- could not get booking status. No booking ID provided`,
+        );
+        response.sendStatus(400);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get booking status");
     }
+  }
 
   /**
    * @obsolete Use createBooking or updateBooking instead.
@@ -331,7 +412,7 @@ class BookingController {
 
     let isUpdate = !!(await BookingManager.getBooking(
       booking.id,
-      booking.tenant
+      booking.tenant,
     ));
 
     if (isUpdate) {
@@ -342,322 +423,182 @@ class BookingController {
   }
 
   static async createBooking(request, response) {
-    const user = request.user;
-    const booking = Object.assign(new Booking(), request.body);
+    try {
+      const user = request.user;
+      const booking = Object.assign(new Booking(), request.body);
 
-    if (await BookingPermissions._allowCreate(booking, user.id, user.tenant)) {
-      await BookingManager.storeBooking(booking);
-      response.status(201).send(booking);
-    } else {
-      response.sendStatus(403);
+      if (
+        await BookingPermissions._allowCreate(booking, user.id, user.tenant)
+      ) {
+        await BookingManager.storeBooking(booking);
+        logger.info(
+          `${booking.tenant} -- created booking ${booking.id} by user ${user?.id}`,
+        );
+        response.status(201).send(booking);
+      } else {
+        logger.warn(
+          `${booking.tenant} -- User ${user?.id} is not allowed to create booking.`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not create booking");
     }
   }
 
   static async updateBooking(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const booking = Object.assign(new Booking(), request.body);
-
-    if (await BookingPermissions._allowUpdate(booking, user.id, user.tenant)) {
-      await BookingManager.storeBooking(booking);
-      response.status(201).send(booking);
-    } else {
-      response.sendStatus(403);
-    }
-  }
-
-  static async removeBooking(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-
-    const id = request.params.id;
-    if (id) {
-      const booking = await BookingManager.getBooking(id, tenant);
-
-      if (
-        await BookingPermissions._allowDelete(booking, user.id, user.tenant)
-      ) {
-        await BookingManager.removeBooking(id, tenant);
-        response.sendStatus(200);
-      } else {
-        response.sendStatus(403);
-      }
-    } else {
-      response.sendStatus(400);
-    }
-  }
-
-  static async commitBooking(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const isNotCommitted = false;
-
-    const id = request.params.id;
-    if (id) {
-      const booking = await BookingManager.getBooking(id, tenant);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const booking = Object.assign(new Booking(), request.body);
 
       if (
         await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
       ) {
-        if (
-          booking.isPayed === true ||
-          !booking.priceEur ||
-          booking.priceEur === 0
-        ) {
-          await MailController.sendFreeBookingConfirmation(
-            booking.mail,
-            booking.id,
-            booking.tenant
-          );
-          response.sendStatus(200);
-        } else {
-          await MailController.sendPaymentRequest(
-            booking.mail,
-            booking.id,
-            booking.tenant
-          );
-          response.sendStatus(200);
-        }
-
-        booking.isCommitted = true;
         await BookingManager.storeBooking(booking);
+        logger.info(
+          `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
+        );
+        response.status(201).send(booking);
       } else {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to update booking.`,
+        );
         response.sendStatus(403);
       }
-    } else {
-      response.sendStatus(400);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not update booking");
     }
   }
 
-  static async checkout(request, response) {
-    const tenantId = request.params.tenant;
-    const user = request.user;
-    const simulate = request.query.simulate === "true";
+  static async removeBooking(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
 
-    const tenant = await TenantManager.getTenant(tenantId);
-
-    let bookingAttempt = request.body;
-
-    if (bookingAttempt.tenant && bookingAttempt.bookableIds?.length > 0) {
-      const bookables = await BookableManager.getBookables(tenantId);
-
-      const relevantBookables = bookables.filter((b) =>
-        bookingAttempt.bookableIds.includes(b.id)
-      );
-
-      for (let bookable of relevantBookables) {
-        if (!bookable.isBookable || !bookable.isPublic) {
-          //send response with not allowed bookable
-          response.status(400).send({
-            message: "Bookable is not bookable",
-          });
-          return;
-        }
-      }
-
-      let bookingConflicts = false;
-      let autoCommitBooking = true;
-      let totalPrice = 0;
-      for (let bookable of relevantBookables) {
-        autoCommitBooking = autoCommitBooking && bookable.autoCommitBooking;
-        totalPrice += bookable.getTotalPrice(
-          bookingAttempt.timeBegin,
-          bookingAttempt.timeEnd
-        );
+      const id = request.params.id;
+      if (id) {
+        const booking = await BookingManager.getBooking(id, tenant);
 
         if (
-          bookable.isScheduleRelated === true ||
-          bookable.isTimePeriodRelated === true
+          await BookingPermissions._allowDelete(booking, user.id, user.tenant)
         ) {
-          let concurrentBookings = await BookingManager.getConcurrentBookings(
-            bookable.id,
-            bookable.tenant,
-            bookingAttempt.timeBegin,
-            bookingAttempt.timeEnd
-          );
-
-          // Find concurrent Bookings regarding related Bookables
-          const relatedBookables = await BookableManager.getRelatedBookables(
-            bookable.id,
-            bookable.tenant
-          );
-          for (let relatedBookable of relatedBookables) {
-            concurrentBookings = concurrentBookings.concat(
-              await BookingManager.getConcurrentBookings(
-                relatedBookable.id,
-                relatedBookable.tenant,
-                bookingAttempt.timeBegin,
-                bookingAttempt.timeEnd
-              )
-            );
-          }
-          const parentBookables = await BookableManager.getParentBookables(
-            bookable.id,
-            bookable.tenant,
-            []
-          );
-          for (let parentBookable of parentBookables) {
-            concurrentBookings = concurrentBookings.concat(
-              await BookingManager.getConcurrentBookings(
-                parentBookable.id,
-                parentBookable.tenant,
-                bookingAttempt.timeBegin,
-                bookingAttempt.timeEnd
-              )
-            );
-          }
-
-          bookingConflicts =
-            bookingConflicts || concurrentBookings.length >= bookable.amount;
-
-
+          await BookingManager.removeBooking(id, tenant);
+          logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
+          response.sendStatus(200);
         } else {
-          let concurrentBookings = await BookingManager.getRelatedBookings(
-            tenantId,
-            bookable.id
+          logger.warn(
+            `${tenant} -- User ${user?.id} is not allowed to remove booking.`,
           );
-
-          bookingConflicts =
-            bookingConflicts || concurrentBookings.length >= bookable.amount;
-        }
-
-        // If Bookable is a Ticket and the Event is related to an ID with limited number of attendees, check if there
-        // are enough seats for related event left
-        if (bookable.type === "ticket" && bookable.eventId) {
-          const event = await EventManager.getEvent(
-            bookable.eventId,
-            bookable.tenant,
-
-          );
-          const eventBookings = await BookingManager.getEventBookings(
-            bookable.tenant,
-            bookable.eventId
-          );
-
-          bookingConflicts =
-            bookingConflicts ||
-            (!event.attendees.maxAttendees &&
-              eventBookings.length >= event.attendees.maxAttendees);
-        }
-      }
-
-      // Check Opening Hours for Parent and Related Bookables
-      const myBooking = await BookableManager.getBookable(
-        bookingAttempt.bookableIds[0],
-        bookingAttempt.tenant
-      );
-      if (myBooking.isScheduleRelated) {
-        const parentBookables = [];
-        for (const bookableId of bookingAttempt.bookableIds) {
-          parentBookables.push(
-            ...(await BookableManager.getParentBookables(bookableId, tenantId))
-          );
-        }
-        const bookablesIdsToCheckOpeningHours = parentBookables;
-        bookablesIdsToCheckOpeningHours.push(myBooking);
-
-        for (const bookable of bookablesIdsToCheckOpeningHours) {
-          // Check Opening Hours
-          if (
-            await OpeningHoursManager.hasOpeningHoursConflict(
-              bookable,
-              bookingAttempt.timeBegin,
-              bookingAttempt.timeEnd
-            )
-          ) {
-            bookingConflicts = true;
-            break;
-          }
-        }
-      }
-
-      if (bookingConflicts === false) {
-        let booking = Object.assign(new Booking(), bookingAttempt);
-
-        booking.id = uuidv4();
-        booking.tenant = tenantId;
-        booking.isCommitted = autoCommitBooking;
-        booking.isPayed = totalPrice === 0;
-        booking.assignedUserId = user?.id;
-        booking.priceEur = totalPrice;
-
-        //Set priceEur to 0 if user has free-bookings permission and user exists
-        if (
-          user &&
-          (await UserManager.hasPermission(
-            user.id,
-            user.tenant,
-            RolePermission.FREE_BOOKINGS
-          ))
-        ) {
-          booking.priceEur = 0;
-          booking.isPayed = true;
-        }
-
-        if (simulate === false) {
-          if (booking.coupon) {
-            booking.priceEur = await CouponManager.applyCoupon(
-              booking.coupon.id,
-              booking.tenant,
-              booking.priceEur
-            );
-          }
-          await BookingManager.storeBooking(booking);
-          if (!booking.isCommitted) {
-            await MailController.sendBookingRequestConfirmation(
-              booking.mail,
-              booking.id,
-              booking.tenant
-            );
-          }
-          if (booking.isCommitted && booking.isPayed) {
-            await MailController.sendBookingConfirmation(
-              booking.mail,
-              booking.id,
-              booking.tenant
-            );
-          }
-
-          await MailController.sendIncomingBooking(
-            tenant.mail,
-            booking.id,
-            booking.tenant
-          );
-          response.status(201).send(booking);
-        } else {
-          response.status(200).send(booking);
+          response.sendStatus(403);
         }
       } else {
-        response.sendStatus(409);
+        logger.warn(
+          `${tenant} -- could not remove booking. No booking ID provided`,
+        );
+        response.sendStatus(400);
       }
-    } else {
-      response.sendStatus(400);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not remove booking");
+    }
+  }
+
+  static async commitBooking(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const isNotCommitted = false;
+
+      const id = request.params.id;
+      if (id) {
+        const booking = await BookingManager.getBooking(id, tenant);
+
+        if (
+          await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
+        ) {
+          if (
+            booking.isPayed === true ||
+            !booking.priceEur ||
+            booking.priceEur === 0
+          ) {
+            await MailController.sendFreeBookingConfirmation(
+              booking.mail,
+              booking.id,
+              booking.tenant,
+            );
+            logger.info(
+              `${tenant} -- booking ${id} committed by user ${user?.id} and sent free booking confirmation to ${booking.mail} `,
+            );
+            response.sendStatus(200);
+          } else {
+            await MailController.sendPaymentRequest(
+              booking.mail,
+              booking.id,
+              booking.tenant,
+            );
+            logger.info(
+              `${tenant} -- booking ${id} committed by user ${user?.id} and sent payment request to ${booking.mail} `,
+            );
+            response.sendStatus(200);
+          }
+
+          booking.isCommitted = true;
+          await BookingManager.storeBooking(booking);
+        } else {
+          logger.warn(
+            `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
+          );
+          response.sendStatus(403);
+        }
+      } else {
+        logger.warn(
+          `${tenant} -- could not commit booking. No booking ID provided`,
+        );
+        response.sendStatus(400);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not commit booking");
     }
   }
 
   static async getEventBookings(request, response) {
-    const tenantId = request.params.tenant;
-    const user = request.user;
-    const eventId = request.params.id;
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const eventId = request.params.id;
 
-    const bookables = await BookableManager.getBookables(tenantId);
-    const eventTickets = bookables.filter(
-      (b) => b.type === "ticket" && b.eventId === eventId
-    );
+      const bookables = await BookableManager.getBookables(tenantId);
+      const eventTickets = bookables.filter(
+        (b) => b.type === "ticket" && b.eventId === eventId,
+      );
 
-    const bookings = await BookingManager.getBookings(tenantId);
-    const eventBookings = bookings.filter((b) =>
-      b.bookableIds.some((id) => eventTickets.some((t) => t.id === id))
-    );
+      const bookings = await BookingManager.getBookings(tenantId);
+      const eventBookings = bookings.filter((b) =>
+        b.bookableIds.some((id) => eventTickets.some((t) => t.id === id)),
+      );
 
-    const allowedBookings = [];
-    for (const booking of eventBookings) {
-      if (user && await BookingPermissions._allowRead(booking, user.id, user.tenant)) {
-        allowedBookings.push(booking);
+      const allowedBookings = [];
+      for (const booking of eventBookings) {
+        if (
+          user &&
+          (await BookingPermissions._allowRead(booking, user.id, user.tenant))
+        ) {
+          allowedBookings.push(booking);
+        }
       }
-    }
 
-    response.status(200).send(allowedBookings);
+      logger.info(
+        `${tenantId} -- sending ${allowedBookings.length} allowed event bookings to user ${user?.id}`,
+      );
+      response.status(200).send(allowedBookings);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get event bookings");
+    }
   }
 }
 

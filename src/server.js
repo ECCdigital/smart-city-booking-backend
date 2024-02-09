@@ -8,9 +8,15 @@ const helmet = require("helmet");
 const fileUpload = require("express-fileupload");
 const passport = require("passport");
 const LocalStrategy = require("passport-local");
+const bunyan = require("bunyan");
 
 const dbm = require("./commons/utilities/database-manager.js");
 const UserManager = require("./commons/data-managers/user-manager");
+
+const logger = bunyan.createLogger({
+  name: "server.js",
+  level: process.env.LOG_LEVEL,
+});
 
 const app = express();
 app.use(fileUpload());
@@ -23,7 +29,7 @@ app.use(function (req, res, next) {
   res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
   res.header(
     "Access-Control-Allow-Headers",
-    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept"
+    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept",
   );
   if ("OPTIONS" === req.method) {
     res.send(200);
@@ -80,8 +86,8 @@ passport.use(
           done(null, false);
         }
       });
-    }
-  )
+    },
+  ),
 );
 
 passport.serializeUser(function (user, done) {
@@ -113,6 +119,7 @@ app.use("/csv/:tenant", exportersRouterTenantRelated);
 dbm.connect().then(() => {
   const port = process.env.PORT;
   app.listen(port, () => {
+    logger.info(`App listening at ${port}`);
     app.emit("app_started");
   });
 });

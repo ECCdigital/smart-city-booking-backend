@@ -12,6 +12,10 @@ class HtmlEngine {
     return "";
   }
 
+  static generateImageHtml(imgUrl, className, altText) {
+    return imgUrl ? `<img src="${imgUrl}" class="${className}"  alt="${altText}"/>` : "";
+  }
+
   static async bookablesToList(bookables, order = []) {
     var htmlOutput = '<ul class="booking-manager-list">';
 
@@ -23,7 +27,7 @@ class HtmlEngine {
       const tenantObj = await TenantManager.getTenant(bookable.tenant);
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
-      htmlOutput += `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
+      htmlOutput += this.generateImageHtml(bookable.imgUrl,'cover-image', bookable.title);
       htmlOutput += "<h4>" + (bookable.title || "") + "</h4>";
       htmlOutput +=
         '<p class="description">' + (bookable.description || "") + "</p>";
@@ -94,7 +98,7 @@ class HtmlEngine {
   static async bookable(bookable) {
     let htmlOutput = '<div class="bookable-item">';
 
-    htmlOutput += `<img src="${bookable.imgUrl}" class="cover-image"  alt="${bookable.title}"/>`;
+    htmlOutput += this.generateImageHtml(bookable.imgUrl, 'cover-image', bookable.title);
     htmlOutput += "<h3>" + (bookable.title || "") + "</h3>";
     htmlOutput +=
       '<p class="description">' + (bookable.description || "") + "</p>";
@@ -199,22 +203,26 @@ class HtmlEngine {
       });
 
       htmlOutput += `<li class="event" rel="${tags.trim()}">`;
-      htmlOutput += `<img src="${event.information?.teaserImage}" class="cover-image"  alt="${event.information.teaserImage.name}"/>`;
+      htmlOutput += this.generateImageHtml(event.information.teaserImage, 'cover-image', event.information.teaserImage.name);
       htmlOutput += "<h3>" + (event.information?.name || "") + "</h3>";
 
-      const startDate = Intl.DateTimeFormat("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }).format(new Date(event.information.startDate));
-      const endDate = Intl.DateTimeFormat("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }).format(new Date(event.information.endDate));
-      let dateString = `${startDate} ${event.information.startTime || ""} - ${
-        startDate !== endDate ? endDate + " " : ""
-      }${event.information.endTime || ""}`;
+      if (!!event.information?.startDate && !!event.information?.endDate) {
+        const startDate = Intl.DateTimeFormat("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        }).format(new Date(event.information.startDate));
+        const endDate = Intl.DateTimeFormat("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        }).format(new Date(event.information.endDate));
+        let dateString = `${startDate} ${event.information.startTime || ""} - ${
+          startDate !== endDate ? endDate + " " : ""
+        }${event.information.endTime || ""}`;
+
+        htmlOutput += `<p class="date">${dateString}</p>`;
+      }
 
       htmlOutput +=
         '<p class="organizer-name">' +
@@ -268,7 +276,7 @@ class HtmlEngine {
     htmlOutput += `<div class="information">`;
     htmlOutput += `<h1>Informationen</h1>`;
     htmlOutput += `<h2>${event.information.name || ""}</h2>`;
-    htmlOutput += `<img src="${event.information.teaserImage}" class="teaser-image"  alt="${event.information.teaserImage.name}"/>`;
+    htmlOutput += this.generateImageHtml(event.information.teaserImage, 'teaser-image', event.information.teaserImage.name);
     htmlOutput += `<div class="description">${
       event.information.description || ""
     }</div>`;
@@ -345,9 +353,7 @@ class HtmlEngine {
     htmlOutput += `<div class="name">${event.eventOrganizer.name || ""}</div>`;
 
     if (event.eventOrganzier) {
-      if (event.eventOrganizer.contactPersonImage) {
-        htmlOutput += `<img class="contact-person-image" src="${event.eventOrganizer.contactPersonImage}" class="contact-person-image" alt="${event.eventOrganizer.contactPersonName}"/>`;
-      }
+      htmlOutput += this.generateImageHtml(event.eventOrganizer.contactPersonImage, 'contact-person-image', event.eventOrganizer.contactPersonName);
       htmlOutput += `<div class="contact-person-name">${
         event.eventOrganizer.contactPersonName || ""
       }</div>`;
@@ -368,11 +374,7 @@ class HtmlEngine {
         htmlOutput += speaker.name
           ? `<div class="speaker-name">${speaker.name || ""}</div>`
           : "";
-        htmlOutput += speaker.image
-          ? `<img class="speaker-image" src="${speaker.image || ""}"  alt="${
-              speaker.name
-            }"/>`
-          : "";
+        htmlOutput += this.generateImageHtml(speaker.image, 'speaker-image', speaker.name);
         htmlOutput += speaker.phoneNumber
           ? `<div class="speaker-phone-number">${
               speaker.phoneNumber || ""
@@ -437,7 +439,7 @@ class HtmlEngine {
       htmlOutput += '<ul class="event-images-list">';
       event.images.forEach((image) => {
         htmlOutput += '<li class="event-image">';
-        htmlOutput += `<img src="${image}" class="event-image" alt="${image.name}"/>`;
+        htmlOutput += this.generateImageHtml(image, 'event-image', image.name);
         htmlOutput += "</li>";
       });
       htmlOutput += "</ul>";

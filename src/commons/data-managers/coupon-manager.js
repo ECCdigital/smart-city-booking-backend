@@ -5,7 +5,6 @@ const { Coupon } = require("../entities/coupon");
  * Data Manager for coupon objects.
  */
 class CouponManager {
-
   /**
    * Get a specific coupon
    *
@@ -95,7 +94,7 @@ class CouponManager {
         });
       return await this.getCoupon(coupon.id, coupon.tenant);
     } catch (err) {
-      console.log("Error: " + err);
+      logger.error(err);
       return err;
     }
   }
@@ -133,7 +132,7 @@ class CouponManager {
       case Coupon.COUPON_TYPE.PERCENTAGE:
         discountedPrice = Math.max(
           0,
-          bookingPrice * (1 - coupon.discount / 100)
+          bookingPrice * (1 - coupon.discount / 100),
         ); //.toFixed(2);
         break;
       case Coupon.COUPON_TYPE.FIXED:

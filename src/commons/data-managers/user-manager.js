@@ -1,6 +1,12 @@
 const { User, HookTypes } = require("../entities/user");
 var dbm = require("../utilities/database-manager");
 const MailController = require("../mail-service/mail-controller");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "user-manager.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class UserManager {
   static getUser(id, tenant) {
@@ -26,7 +32,7 @@ class UserManager {
               user.hooks,
               user.isVerified,
               user.created,
-              user.roles
+              user.roles,
             );
             resolve(u);
           }
@@ -156,7 +162,7 @@ class UserManager {
               user.hooks,
               user.isVerified,
               user.created,
-              user.roles
+              user.roles,
             );
             //find hook by id
             const hookType = u.hooks.find((h) => h.id === hookId).type;
@@ -216,9 +222,7 @@ class UserManager {
         .then((roles) => {
           // Combine role permissions to specific user permissions
           if (roles.length === 0) {
-            console.log(
-              "No roles found for user " + userId + " in tenant " + tenant
-            );
+            logger.warn(`${tenant} -- User ${userId} has no roles assigned.}`);
             resolve({});
           } else {
             const permissions = roles.reduce((prev, curr) => {

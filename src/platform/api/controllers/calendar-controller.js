@@ -1,6 +1,14 @@
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const { Worker } = require('worker_threads');
 const path = require('path');
+const bunyan = require("bunyan");
+
+const BookableManager = require("../../../commons/data-managers/bookable-manager");
+const BookingManager = require("../../../commons/data-managers/booking-manager");
+
+const logger = bunyan.createLogger({
+  name: "calendar-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 /**
  * CalendarController class.

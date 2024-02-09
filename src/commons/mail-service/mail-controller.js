@@ -40,7 +40,7 @@ class MailController {
   static async getPopulatedBookables(bookingId, tenant) {
     let booking = await BookingManager.getBooking(bookingId, tenant);
     let bookables = (await BookableManager.getBookables(tenant)).filter((b) =>
-      booking.bookableItems.some((bi) => bi.bookableId === b.id)
+      booking.bookableItems.some((bi) => bi.bookableId === b.id),
     );
 
     for (const bookable of bookables) {
@@ -56,12 +56,12 @@ class MailController {
     let booking = await BookingManager.getBooking(bookingId, tenantId);
     let bookables = await MailController.getPopulatedBookables(
       bookingId,
-      tenantId
+      tenantId,
     );
 
     let content = `<strong>Buchungsnummer:</strong> ${booking.id}
             <br><strong>Gesamtbetrag:</strong> ${MailController.formatCurrency(
-              booking.priceEur
+              booking.priceEur,
             )}             
             <br><strong>Firma:</strong> ${
               !booking.company ? "" : booking.company
@@ -70,8 +70,8 @@ class MailController {
             <br><strong>Adresse:</strong> ${
               !booking.street ? "" : booking.street
             } in ${!booking.zipCode ? "" : booking.zipCode} ${
-      !booking.location ? "" : booking.location
-    }
+              !booking.location ? "" : booking.location
+            }
             <br><strong>Telefon:</strong> ${!booking.phone ? "" : booking.phone}
             <br><strong>E-Mail:</strong> ${!booking.mail ? "" : booking.mail}
             <br><br><strong>Hinweise zur Buchung:</strong>
@@ -79,7 +79,7 @@ class MailController {
 
     if (booking.timeBegin && booking.timeEnd) {
       content += `<br><strong>Buchungszeitraum:</strong> ${MailController.formatDateTime(
-        booking.timeBegin
+        booking.timeBegin,
       )} - ${MailController.formatDateTime(booking.timeEnd)}`;
     }
 
@@ -101,17 +101,17 @@ class MailController {
                       bookable._populated.event.information.name
                     }<br>
                     vom ${MailController.formatDate(
-                      bookable._populated.event.information.startDate
+                      bookable._populated.event.information.startDate,
                     )} ${
-          bookable._populated.event.information.startTime
-        } bis ${MailController.formatDate(
-          bookable._populated.event.information.endDate
-        )} ${bookable._populated.event.information.endTime}<br>
+                      bookable._populated.event.information.startTime
+                    } bis ${MailController.formatDate(
+                      bookable._populated.event.information.endDate,
+                    )} ${bookable._populated.event.information.endTime}<br>
                     Ort: ${bookable._populated.event.eventLocation.name}, ${
-          bookable._populated.event.eventAddress.street
-        }, ${bookable._populated.event.eventAddress.houseNumber} ${
-          bookable._populated.event.eventAddress.zip
-        } ${bookable._populated.event.eventAddress.city}
+                      bookable._populated.event.eventAddress.street
+                    }, ${bookable._populated.event.eventAddress.houseNumber} ${
+                      bookable._populated.event.eventAddress.zip
+                    } ${bookable._populated.event.eventAddress.city}
                 </div>`;
       }
 
@@ -137,10 +137,10 @@ class MailController {
   static async sendBookingConfirmation(address, bookingId, tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
     const booking = await BookingManager.getBooking(bookingId, tenantId);
-    
+
     let content = `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`;
     content += await MailController.generateBookingDetails(bookingId, tenantId);
-    
+
     let attachments = undefined;
 
     if (booking?.priceEur > 0) {
@@ -149,7 +149,7 @@ class MailController {
       const pdfBuffer = await PdfService.generateReceipt(
         bookingId,
         tenantId,
-        receiptNumber
+        receiptNumber,
       );
       attachments = [
         {
@@ -170,7 +170,7 @@ class MailController {
         content: content,
       },
       attachments,
-      tenant.mail
+      tenant.mail,
     );
   }
 
@@ -189,7 +189,7 @@ class MailController {
         content: content,
       },
       undefined,
-      tenant.mail
+      tenant.mail,
     );
   }
 
@@ -206,7 +206,7 @@ class MailController {
       {
         title: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
         content: content,
-      }
+      },
     );
   }
 
@@ -214,7 +214,7 @@ class MailController {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte nutzen Sie den folgenden Link, um Ihre Buchung abzuschließen.</p><br>`;
 
-    const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?id=${bookingId}`;
+    const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?id=${bookingId}&tenant=${tenantId}`;
     content += `<p><a href="${paymentLink}">${paymentLink}</a></p>`;
 
     content += await MailController.generateBookingDetails(bookingId, tenantId);
@@ -227,7 +227,7 @@ class MailController {
       {
         title: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
         content: content,
-      }
+      },
     );
   }
 
@@ -243,7 +243,7 @@ class MailController {
       {
         title: "Eine neue Buchungsanfrage liegt vor",
         content: content,
-      }
+      },
     );
   }
 
@@ -259,7 +259,7 @@ class MailController {
       {
         title: "Bestätigen Sie Ihre E-Mail-Adresse",
         content: content,
-      }
+      },
     );
   }
 
@@ -275,7 +275,7 @@ class MailController {
       {
         title: "Bestätigen Sie die Änderung Ihres Passworts",
         content: content,
-      }
+      },
     );
   }
 }
