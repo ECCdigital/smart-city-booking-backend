@@ -4,15 +4,17 @@ const path = require('path');
 
 class CalendarController {
   static async getOccupancies(request, response) {
-    const startTime = Date.now();
     const tenant = request.params.tenant;
     let occupancies = [];
 
     const bookables = await BookableManager.getBookables(tenant);
+    /**
+     * Initializes a worker thread for each bookable to asynchronously fetch occupancies, returning promises for their resolutions or rejections.
+     */
     const workers = bookables.map((bookable) => {
       return new Promise((resolve, reject) => {
 
-        const worker = new Worker(path.resolve(__dirname,"../../../commons/utilities/bookableWorker.js"));
+        const worker = new Worker(path.resolve(__dirname,"../../../commons/utilities/calendar-occupancy-worker.js"));
         worker.postMessage({ bookable, tenant });
 
         worker.on('message', resolve);
@@ -29,8 +31,6 @@ class CalendarController {
     results.forEach((result) => {
       occupancies = occupancies.concat(result);
     });
-
-    console.log("Time:", Date.now() - startTime, "ms", "Occupancies:", occupancies.length);
 
 
     response.status(200).send(occupancies);

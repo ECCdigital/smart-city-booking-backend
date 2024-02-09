@@ -1,18 +1,28 @@
-// bookableWorker.js
 const { parentPort } = require('worker_threads');
 const BookableManager = require("../data-managers/bookable-manager");
 const BookingManager = require("../data-managers/booking-manager");
-var dbm = require("../utilities/database-manager");
+const dbm = require("../utilities/database-manager");
 
 async function initDbConnection() {
-    await dbm.connect(); // Angenommen, dies ist die Methode zum Herstellen der Verbindung
+    await dbm.connect();
 }
 
+/**
+ * Fetches occupancies for a given bookable and tenant.
+ *
+ * This function first initializes a database connection, then fetches all related bookings for the given bookable and tenant.
+ * It also fetches all related bookables for the given bookable and tenant, and their related bookings.
+ * The function then filters out bookings without a begin and end time, removes duplicate bookings, and maps the bookings to a new format.
+ *
+ * @param {Object} bookable - The bookable object.
+ * @param {Object} tenant - The tenant object.
+ *
+ * @returns {Promise<Array>} - A promise that resolves with an array of occupancies for the bookable.
+ */
 async function fetchOccupancies(bookable, tenant) {
     return initDbConnection().then(async () => {
         let bookings = [];
 
-        // Logik zum Abrufen der Buchungen, wie im ursprünglichen Code
         bookings = bookings.concat(
             await BookingManager.getRelatedBookings(tenant, bookable.id),
         );
@@ -29,8 +39,7 @@ async function fetchOccupancies(bookable, tenant) {
             );
         }
 
-        // Filter und Map-Logik, wie im ursprünglichen Code
-        const occupancies = bookings
+        return bookings
             .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
             .filter(
                 (booking, index, self) =>
@@ -42,11 +51,22 @@ async function fetchOccupancies(bookable, tenant) {
                 timeBegin: booking.timeBegin,
                 timeEnd: booking.timeEnd,
             }));
-        return occupancies;
     });
 
 }
 
+/**
+ * Fetches occupancies for a given bookable and tenant.
+ *
+ * This function first initializes a database connection, then fetches all related bookings for the given bookable and tenant.
+ * It also fetches all related bookables for the given bookable and tenant, and their related bookings.
+ * The function then filters out bookings without a begin and end time, removes duplicate bookings, and maps the bookings to a new format.
+ *
+ * @param {Object} bookable - The bookable object.
+ * @param {Object} tenant - The tenant object.
+ *
+ * @returns {Promise<Array>} - A promise that resolves with an array of occupancies for the bookable.
+ */
 parentPort.on('message', async ({ bookable, tenant }) => {
     const occupancies = await fetchOccupancies(bookable, tenant);
     parentPort.postMessage(occupancies);

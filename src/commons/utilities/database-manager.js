@@ -24,7 +24,7 @@ class DatabaseManager {
 
         
         return new Promise((resolve, reject) => {
-            MongoClient.connect(dbUrl, { useNewUrlParser: true }).then(client => {
+            MongoClient.connect(dbUrl).then(client => {
                 dbClient = client;
                 db = client.db(dbName);
                 resolve(db);
