@@ -26,28 +26,16 @@ class DatabaseManager {
     var dbUrl = dbUrl || process.env.DB_URL;
     var dbName = dbName || process.env.DB_NAME;
 
-
-    /**
-     * Connect to the application database.
-     * 
-     * @param {String} dbUrl The Connection URI to the mongodb Database.
-     * @param {String} dbName Name of the Database.
-     * @returns the Database object.
-     */
-    static connect(dbUrl, dbName) {
-        var dbUrl = dbUrl || process.env.DB_URL;
-        var dbName = dbName || process.env.DB_NAME;
-
-        
-        return new Promise((resolve, reject) => {
-            MongoClient.connect(dbUrl).then(client => {
-                dbClient = client;
-                db = client.db(dbName);
-                resolve(db);
-            }).catch(err => {
-                console.error('Could not establish connection to database.', err);
-                reject(err);
-            });
+    return new Promise((resolve, reject) => {
+      MongoClient.connect(dbUrl)
+        .then((client) => {
+          dbClient = client;
+          db = client.db(dbName);
+          resolve(db);
+        })
+        .catch((err) => {
+          console.error("Could not establish connection to database.", err);
+          reject(err);
         });
     });
   }
