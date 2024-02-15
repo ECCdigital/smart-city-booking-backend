@@ -116,28 +116,32 @@ class BookingManager {
     });
   }
 
-    /**
-     * Get the status of a booking.
-     *
-     * @param tenant
-     * @param bookingId
-     * @returns {Promise<>} status of the booking
-     */
-    static async getBookingStatus(tenant, bookingId) {
-        return new Promise((resolve, reject) => {
-            dbm
-                .get()
-                .collection("bookings")
-                .findOne({ tenant: tenant, id: bookingId })
-                .then((rawBooking) => {
-                    const booking = Object.assign(new Booking(), rawBooking);
-                    const bookingStatus = {isCommitted: booking.isCommitted, isPayed: booking.isPayed, bookingId: booking.id};
+  /**
+   * Get the status of a booking.
+   *
+   * @param tenant
+   * @param bookingId
+   * @returns {Promise<>} status of the booking
+   */
+  static async getBookingStatus(tenant, bookingId) {
+    return new Promise((resolve, reject) => {
+      dbm
+        .get()
+        .collection("bookings")
+        .findOne({ tenant: tenant, id: bookingId })
+        .then((rawBooking) => {
+          const booking = Object.assign(new Booking(), rawBooking);
+          const bookingStatus = {
+            isCommitted: booking.isCommitted,
+            isPayed: booking.isPayed,
+            bookingId: booking.id,
+          };
 
-                    resolve(bookingStatus);
-                })
-                .catch((err) => reject(err));
-        });
-    }
+          resolve(bookingStatus);
+        })
+        .catch((err) => reject(err));
+    });
+  }
 
   /**
    * Insert a booking object into the database or update it.
@@ -191,7 +195,7 @@ class BookingManager {
       BookingManager.getRelatedBookings(tenant, bookableId)
         .then((bookings) => {
           var concurrentBookings = bookings.filter((b) =>
-            isRangeOverlap(b.timeBegin, b.timeEnd, timeBegin, timeEnd)
+            isRangeOverlap(b.timeBegin, b.timeEnd, timeBegin, timeEnd, true),
           );
 
           resolve(concurrentBookings);
@@ -243,7 +247,7 @@ class BookingManager {
             .toArray()
             .then((rawBookings) => {
               let bookings = rawBookings.map((rb) =>
-                Object.assign(new Booking(), rb)
+                Object.assign(new Booking(), rb),
               );
               resolve(bookings);
             })

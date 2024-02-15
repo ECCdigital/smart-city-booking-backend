@@ -21,6 +21,10 @@ router.get("/bookables", BookableController.getBookables);
 router.get("/bookables/:id", BookableController.getBookable);
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
+router.get(
+  "/bookables/:id/availability",
+  CalendarController.getBookableAvailabilty,
+);
 
 // Protected
 router.put(
