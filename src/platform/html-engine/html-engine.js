@@ -13,7 +13,9 @@ class HtmlEngine {
   }
 
   static generateImageHtml(imgUrl, className, altText) {
-    return imgUrl ? `<img src="${imgUrl}" class="${className}"  alt="${altText}"/>` : "";
+    return imgUrl
+      ? `<img src="${imgUrl}" class="${className}"  alt="${altText}"/>`
+      : "";
   }
 
   static async bookablesToList(bookables, order = []) {
@@ -27,7 +29,11 @@ class HtmlEngine {
       const tenantObj = await TenantManager.getTenant(bookable.tenant);
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
-      htmlOutput += this.generateImageHtml(bookable.imgUrl,'cover-image', bookable.title);
+      htmlOutput += this.generateImageHtml(
+        bookable.imgUrl,
+        "cover-image",
+        bookable.title,
+      );
       htmlOutput += "<h4>" + (bookable.title || "") + "</h4>";
       htmlOutput +=
         '<p class="description">' + (bookable.description || "") + "</p>";
@@ -98,7 +104,11 @@ class HtmlEngine {
   static async bookable(bookable) {
     let htmlOutput = '<div class="bookable-item">';
 
-    htmlOutput += this.generateImageHtml(bookable.imgUrl, 'cover-image', bookable.title);
+    htmlOutput += this.generateImageHtml(
+      bookable.imgUrl,
+      "cover-image",
+      bookable.title,
+    );
     htmlOutput += "<h3>" + (bookable.title || "") + "</h3>";
     htmlOutput +=
       '<p class="description">' + (bookable.description || "") + "</p>";
@@ -203,7 +213,11 @@ class HtmlEngine {
       });
 
       htmlOutput += `<li class="event" rel="${tags.trim()}">`;
-      htmlOutput += this.generateImageHtml(event.information.teaserImage, 'cover-image', event.information.teaserImage.name);
+      htmlOutput += this.generateImageHtml(
+        event.information.teaserImage,
+        "cover-image",
+        event.information.name,
+      );
       htmlOutput += "<h3>" + (event.information?.name || "") + "</h3>";
 
       if (!!event.information?.startDate && !!event.information?.endDate) {
@@ -276,7 +290,11 @@ class HtmlEngine {
     htmlOutput += `<div class="information">`;
     htmlOutput += `<h1>Informationen</h1>`;
     htmlOutput += `<h2>${event.information.name || ""}</h2>`;
-    htmlOutput += this.generateImageHtml(event.information.teaserImage, 'teaser-image', event.information.teaserImage.name);
+    htmlOutput += this.generateImageHtml(
+      event.information.teaserImage,
+      "teaser-image",
+      event.information.teaserImage.name,
+    );
     htmlOutput += `<div class="description">${
       event.information.description || ""
     }</div>`;
@@ -353,7 +371,11 @@ class HtmlEngine {
     htmlOutput += `<div class="name">${event.eventOrganizer.name || ""}</div>`;
 
     if (event.eventOrganzier) {
-      htmlOutput += this.generateImageHtml(event.eventOrganizer.contactPersonImage, 'contact-person-image', event.eventOrganizer.contactPersonName);
+      htmlOutput += this.generateImageHtml(
+        event.eventOrganizer.contactPersonImage,
+        "contact-person-image",
+        event.eventOrganizer.contactPersonName,
+      );
       htmlOutput += `<div class="contact-person-name">${
         event.eventOrganizer.contactPersonName || ""
       }</div>`;
@@ -374,7 +396,11 @@ class HtmlEngine {
         htmlOutput += speaker.name
           ? `<div class="speaker-name">${speaker.name || ""}</div>`
           : "";
-        htmlOutput += this.generateImageHtml(speaker.image, 'speaker-image', speaker.name);
+        htmlOutput += this.generateImageHtml(
+          speaker.image,
+          "speaker-image",
+          speaker.name,
+        );
         htmlOutput += speaker.phoneNumber
           ? `<div class="speaker-phone-number">${
               speaker.phoneNumber || ""
@@ -439,7 +465,7 @@ class HtmlEngine {
       htmlOutput += '<ul class="event-images-list">';
       event.images.forEach((image) => {
         htmlOutput += '<li class="event-image">';
-        htmlOutput += this.generateImageHtml(image, 'event-image', image.name);
+        htmlOutput += this.generateImageHtml(image, "event-image", image.name);
         htmlOutput += "</li>";
       });
       htmlOutput += "</ul>";
