@@ -293,7 +293,7 @@ class HtmlEngine {
     htmlOutput += this.generateImageHtml(
       event.information.teaserImage,
       "teaser-image",
-      event.information.teaserImage.name,
+      event.information.name,
     );
     htmlOutput += `<div class="description">${
       event.information.description || ""
