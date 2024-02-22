@@ -137,7 +137,7 @@ class CheckoutController {
 
         try {
           await MailController.sendIncomingBooking(
-            booking.mail,
+            tenant.mail,
             booking.id,
             booking.tenant,
           );
