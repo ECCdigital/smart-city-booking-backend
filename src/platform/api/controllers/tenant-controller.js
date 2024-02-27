@@ -158,7 +158,7 @@ class TenantController {
       if (id) {
         const tenant = await TenantManager.getTenant(id);
 
-        if (await TenantPermissions._allowRead(tenant, user.id, user.tenant)) {
+        if (user && await TenantPermissions._allowRead(tenant, user.id, user.tenant)) {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );
@@ -174,6 +174,7 @@ class TenantController {
             location: tenant.location,
             mail: tenant.mail,
             phone: tenant.phone,
+            website: tenant.website,
           });
         }
       } else {
