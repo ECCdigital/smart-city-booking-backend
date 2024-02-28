@@ -1,5 +1,3 @@
-const { v4: uuidv4 } = require("uuid");
-
 /**
  * A Booking object represents a single reservation of a resource by exactly one user.
  */
@@ -31,7 +29,7 @@ class Booking {
     bookableIds,
     isCommitted
   ) {
-    this.id = id || uuidv4();
+    this.id = id;
     this.tenant = tenant;
     this.assignedUserId = assignedUserId;
     this.mail = mail;
