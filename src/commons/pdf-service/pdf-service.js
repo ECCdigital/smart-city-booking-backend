@@ -171,7 +171,8 @@ class PdfService {
 
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
 
-      const pdfBuffer = await page.pdf({ format: "A4" });
+      let pdfBuffer = {}
+      pdfBuffer.data = await page.pdf({ format: "A4" });
 
       pdfBuffer.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
       await FileManager.createFile(tenantId, pdfBuffer, "public", "receipts");
