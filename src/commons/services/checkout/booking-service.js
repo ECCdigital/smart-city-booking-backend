@@ -32,9 +32,8 @@ class BookingService {
       comment,
       isCommitted,
       isPayed,
+      priceEur,
     } = request.body;
-
-    console.log(mail)
 
     logger.info(
         `${tenantId}, cid ${checkoutId} -- checkout request by user ${user?.id} with simulate=${simulate}`,
@@ -68,6 +67,7 @@ class BookingService {
       comment,
       manualBooking ? isCommitted : undefined,
       manualBooking ? isPayed : undefined,
+      manualBooking ? priceEur : undefined,
     );
 
     const booking = await bundleCheckoutService.prepareBooking(manualBooking);

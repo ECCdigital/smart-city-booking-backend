@@ -29,6 +29,7 @@ class BundleCheckoutService {
     comment,
     isCommitted = false,
     isPayed = false,
+    priceEur = undefined,
   ) {
     this.user = user;
     this.tenant = tenant;
@@ -46,6 +47,7 @@ class BundleCheckoutService {
     this.comment = comment;
     this.isCommitted = isCommitted;
     this.isPayed = isPayed;
+    this.priceEur = priceEur;
   }
 
   async generateBookingReference(
@@ -102,20 +104,24 @@ class BundleCheckoutService {
     return true;
   }
 
-  async userPriceEur() {
+  async userPriceEur(manualBooking) {
     let total = 0;
-    for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService = new ItemCheckoutService(
-        this.user,
-        this.tenant,
-        this.timeBegin,
-        this.timeEnd,
-        bookableItem.bookableId,
-        bookableItem.amount,
-        this.couponCode,
-      );
+    if(!manualBooking) {
+      for (const bookableItem of this.bookableItems) {
+        const itemCheckoutService = new ItemCheckoutService(
+          this.user,
+          this.tenant,
+          this.timeBegin,
+          this.timeEnd,
+          bookableItem.bookableId,
+          bookableItem.amount,
+          this.couponCode,
+        );
 
-      total += await itemCheckoutService.userPriceEur();
+        total += await itemCheckoutService.userPriceEur();
+      }
+    } else {
+        total = this.priceEur;
     }
 
     return Math.round(total * 100) / 100;
@@ -163,7 +169,7 @@ class BundleCheckoutService {
       mail: this.email,
       phone: this.phone,
       comment: this.comment,
-      priceEur: await this.userPriceEur(),
+      priceEur: await this.userPriceEur(manualBooking),
       isCommitted: manualBooking ? this.isCommitted : await this.isAutoCommit(),
       isPayed: manualBooking ? this.isPayed : (await this.userPriceEur()) === 0,
     };
