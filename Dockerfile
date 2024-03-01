@@ -1,24 +1,34 @@
-FROM node:slim
+FROM node:21.6.1-alpine
 
-# Set Puppeteer to skip downloading Chromium since we'll be installing it manually
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
+# Installieren Sie die notwendigen Abhängigkeiten für Puppeteer
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    wget \
+    g++ \
+    gcc \
+    libx11-dev \
+    libxkbfile-dev \
+    libsecret-dev \
+    make \
+    python3 \
+    xvfb \
+    ttf-freefont \
+    nss
 
-# Install Google Chrome
-RUN apt-get update && apt-get install -y wget gnupg && \
-    wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list && \
-    apt-get update && \
-    apt-get install -y google-chrome-stable --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
+# Setzen Sie die Umgebungsvariable für Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
-# Set the working directory
-WORKDIR /usr/src/app
+# Setzen Sie das Arbeitsverzeichnis
+WORKDIR /app
 
-# Copy package files and install dependencies
+# Kopieren Sie die Dateien package.json und package-lock.json (falls vorhanden)
 COPY package*.json ./
-RUN npm ci --omit=dev
 
-# Copy the rest of the application
+# Installieren Sie die Projektabhängigkeiten
+RUN npm install
+
+# Kopieren Sie den Rest der Anwendung
 COPY . .
 
 # Expose port 8080 and start the application
