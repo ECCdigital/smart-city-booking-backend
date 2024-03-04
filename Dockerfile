@@ -1,23 +1,26 @@
-FROM node:current-alpine
+FROM node:slim
 
-RUN apk add chromium
+# Set Puppeteer to skip downloading Chromium since we'll be installing it manually
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Install Google Chrome
+RUN apt-get update && apt-get install -y wget gnupg && \
+    wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list && \
+    apt-get update && \
+    apt-get install -y google-chrome-stable --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
-# Create app directory
+# Set the working directory
 WORKDIR /usr/src/app
 
-# Install app dependencies
-# A wildcard is used to ensure both package.json AND package-lock.json are copied
-# where available (npm@5+)
+# Copy package files and install dependencies
 COPY package*.json ./
-
-# If you are building your code for production
 RUN npm ci --omit=dev
 
-# Bundle app source
+# Copy the rest of the application
 COPY . .
 
+# Expose port 8080 and start the application
 EXPOSE 8080
 CMD [ "node", "src/server.js" ]
