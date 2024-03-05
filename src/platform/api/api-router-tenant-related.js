@@ -7,7 +7,7 @@ const UserController = require("./controllers/user-controller");
 const CalendarController = require("./controllers/calendar-controller");
 const CouponController = require("./controllers/coupon-controller");
 const ExportController = require("../exporters/controllers/csv-export-controller");
-const BookingController = require("./controllers/booking-controller");
+const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const NextCloudController = require("./controllers/next-cloud-controller");
 
@@ -136,7 +136,7 @@ router.get(
 
 // CHECKOUT
 // ========
-router.post("/checkout", CheckoutController.checkout);
+router.post("/checkout", (req, res) => CheckoutController.checkout(req, res));
 router.post("/checkout/validateItem", CheckoutController.validateItem);
 
 // PAYMENTS

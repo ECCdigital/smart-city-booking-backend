@@ -1,7 +1,6 @@
 const ItemCheckoutService = require("./item-checkout-service");
 const CouponManager = require("../../data-managers/coupon-manager");
 const BookableManager = require("../../data-managers/bookable-manager");
-const { Coupon } = require("../../entities/coupon");
 const BookingManager = require("../../data-managers/booking-manager");
 
 class BookableItem {
@@ -28,6 +27,9 @@ class BundleCheckoutService {
     email,
     phone,
     comment,
+    isCommitted = false,
+    isPayed = false,
+    priceEur = undefined,
   ) {
     this.user = user;
     this.tenant = tenant;
@@ -43,6 +45,9 @@ class BundleCheckoutService {
     this.email = email;
     this.phone = phone;
     this.comment = comment;
+    this.isCommitted = isCommitted;
+    this.isPayed = isPayed;
+    this.priceEur = priceEur;
   }
 
   async generateBookingReference(
@@ -99,20 +104,24 @@ class BundleCheckoutService {
     return true;
   }
 
-  async userPriceEur() {
+  async userPriceEur(manualBooking) {
     let total = 0;
-    for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService = new ItemCheckoutService(
-        this.user,
-        this.tenant,
-        this.timeBegin,
-        this.timeEnd,
-        bookableItem.bookableId,
-        bookableItem.amount,
-        this.couponCode,
-      );
+    if(!manualBooking) {
+      for (const bookableItem of this.bookableItems) {
+        const itemCheckoutService = new ItemCheckoutService(
+          this.user,
+          this.tenant,
+          this.timeBegin,
+          this.timeEnd,
+          bookableItem.bookableId,
+          bookableItem.amount,
+          this.couponCode,
+        );
 
-      total += await itemCheckoutService.userPriceEur();
+        total += await itemCheckoutService.userPriceEur();
+      }
+    } else {
+        total = this.priceEur;
     }
 
     return Math.round(total * 100) / 100;
@@ -130,8 +139,10 @@ class BundleCheckoutService {
 
     return true;
   }
-  async prepareBooking() {
-    await this.checkAll();
+  async prepareBooking(manualBooking) {
+    if (!manualBooking) {
+      await this.checkAll();
+    }
 
     for (const bookableItem of this.bookableItems) {
       bookableItem._bookableUsed = await BookableManager.getBookable(
@@ -158,9 +169,9 @@ class BundleCheckoutService {
       mail: this.email,
       phone: this.phone,
       comment: this.comment,
-      priceEur: await this.userPriceEur(),
-      isCommitted: await this.isAutoCommit(),
-      isPayed: (await this.userPriceEur()) === 0,
+      priceEur: await this.userPriceEur(manualBooking),
+      isCommitted: manualBooking ? this.isCommitted : await this.isAutoCommit(),
+      isPayed: manualBooking ? this.isPayed : (await this.userPriceEur()) === 0,
     };
 
     if (this.couponCode) {
