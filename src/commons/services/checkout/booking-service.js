@@ -2,8 +2,11 @@ const bunyan = require("bunyan");
 const BookingManager = require("../../data-managers/booking-manager");
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
-const {getTenant} = require("../../data-managers/tenant-manager");
+const { getTenant } = require("../../data-managers/tenant-manager");
 const BundleCheckoutService = require("./bundle-checkout-service");
+const PdfService = require("../../pdf-service/pdf-service");
+const pdfService = require("../../pdf-service/pdf-service");
+const fs = require("fs");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -36,18 +39,18 @@ class BookingService {
     } = request.body;
 
     logger.info(
-        `${tenantId}, cid ${checkoutId} -- checkout request by user ${user?.id} with simulate=${simulate}`,
+      `${tenantId}, cid ${checkoutId} -- checkout request by user ${user?.id} with simulate=${simulate}`,
     );
     logger.debug(
-        `${tenantId}, cid ${checkoutId} -- Checkout Details: timeBegin=${timeBegin}, timeEnd=${timeEnd}, bookableItems=${bookableItems}, couponCode=${couponCode}, name=${name}, company=${company}, street=${street}, zipCode=${zipCode}, location=${location}, email=${mail}, phone=${phone}, comment=${comment}`,
+      `${tenantId}, cid ${checkoutId} -- Checkout Details: timeBegin=${timeBegin}, timeEnd=${timeEnd}, bookableItems=${bookableItems}, couponCode=${couponCode}, name=${name}, company=${company}, street=${street}, zipCode=${zipCode}, location=${location}, email=${mail}, phone=${phone}, comment=${comment}`,
     );
 
     if (!bookableItems || bookableItems.length === 0) {
       logger.warn(
-          `${tenantId}, cid ${checkoutId} -- checkout stopped. Missing parameters`,
+        `${tenantId}, cid ${checkoutId} -- checkout stopped. Missing parameters`,
       );
 
-      throw new Error("Missing parameters", {cause: {code: 400}});
+      throw new Error("Missing parameters", { cause: { code: 400 } });
     }
 
     const bundleCheckoutService = new BundleCheckoutService(
@@ -72,23 +75,23 @@ class BookingService {
 
     const booking = await bundleCheckoutService.prepareBooking(manualBooking);
     logger.debug(
-        `${tenantId}, cid ${checkoutId} -- Booking prepared: ${JSON.stringify(
-            booking,
-        )}`,
+      `${tenantId}, cid ${checkoutId} -- Booking prepared: ${JSON.stringify(
+        booking,
+      )}`,
     );
 
     if (simulate === false) {
       await BookingManager.storeBooking(booking);
 
       logger.info(
-          `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
+        `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
       );
       if (!booking.isCommitted) {
         try {
           await MailController.sendBookingRequestConfirmation(
-              booking.mail,
-              booking.id,
-              booking.tenant,
+            booking.mail,
+            booking.id,
+            booking.tenant,
           );
         } catch (err) {
           logger.error(err);
@@ -97,9 +100,9 @@ class BookingService {
       if (booking.isCommitted && booking.isPayed) {
         try {
           await MailController.sendBookingConfirmation(
-              booking.mail,
-              booking.id,
-              booking.tenant,
+            booking.mail,
+            booking.id,
+            booking.tenant,
           );
         } catch (err) {
           logger.error(err);
@@ -108,9 +111,9 @@ class BookingService {
 
       try {
         await MailController.sendIncomingBooking(
-            tenant.mail,
-            booking.id,
-            booking.tenant,
+          tenant.mail,
+          booking.id,
+          booking.tenant,
         );
       } catch (err) {
         logger.error(err);

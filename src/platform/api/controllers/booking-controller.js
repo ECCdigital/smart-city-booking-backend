@@ -11,7 +11,12 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const CheckoutController = require("./checkout-controller");
-const {createBooking} = require("../../../commons/services/checkout/booking-service");
+const {
+  createBooking,
+} = require("../../../commons/services/checkout/booking-service");
+const IdGenerator = require("../../../commons/utilities/id-generator");
+const pdfService = require("../../../commons/pdf-service/pdf-service");
+const FileManager = require("../../../commons/data-managers/file-manager");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -412,10 +417,9 @@ class BookingController {
   static async storeBooking(request, response) {
     const booking = Object.assign(new Booking(), request.body);
 
-    let isUpdate = !!(await BookingManager.getBooking(
-      booking.id,
-      booking.tenant,
-    )) && !!booking.id;
+    let isUpdate =
+      !!(await BookingManager.getBooking(booking.id, booking.tenant)) &&
+      !!booking.id;
 
     if (isUpdate) {
       await BookingController.updateBooking(request, response);
@@ -425,23 +429,29 @@ class BookingController {
   }
 
   static async createBooking(request, response) {
-  const user = request.user;
-  const booking = Object.assign(new Booking(), request.body);
+    const user = request.user;
+    const booking = Object.assign(new Booking(), request.body);
 
-  if (!(await BookingPermissions._allowCreate(booking, user.id, user.tenant))) {
-    logger.warn(`${booking.tenant} -- User ${user?.id} is not allowed to create booking.`);
-    return response.sendStatus(403);
-  }
+    if (
+      !(await BookingPermissions._allowCreate(booking, user.id, user.tenant))
+    ) {
+      logger.warn(
+        `${booking.tenant} -- User ${user?.id} is not allowed to create booking.`,
+      );
+      return response.sendStatus(403);
+    }
 
-  try {
-    const newBooking = await createBooking(request, true);
-    return response.status(200).send(newBooking);
-  } catch (err) {
-    logger.error(err);
-    const statusCode = err.cause?.code === 400 ? 400 : 500;
-    return response.status(statusCode).send(err.message || "Could not create booking");
+    try {
+      const newBooking = await createBooking(request, true);
+      return response.status(200).send(newBooking);
+    } catch (err) {
+      logger.error(err);
+      const statusCode = err.cause?.code === 400 ? 400 : 500;
+      return response
+        .status(statusCode)
+        .send(err.message || "Could not create booking");
+    }
   }
-}
 
   static async updateBooking(request, response) {
     try {
@@ -596,6 +606,50 @@ class BookingController {
       response.status(500).send("Could not get event bookings");
     }
   }
+
+  static async generateReceipt(request, response) {
+    const tenantId = request.params.tenant;
+    const bookingId = request.params.id;
+    const user = request.user;
+
+    const forcedReceiptTemplate = request.query.template || undefined;
+    let receiptNumber = request.query.receiptNumber || undefined;
+
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (await BookingPermissions._allowRead(booking, user?.id, user?.tenant)) {
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (!receiptNumber) {
+        const receiptId = await IdGenerator.next(tenantId, 4);
+        receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}`;
+      }
+
+      const buffer = await pdfService.generateReceipt(
+        bookingId,
+        tenantId,
+        receiptNumber,
+        forcedReceiptTemplate,
+      );
+
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename=Zahlungsbeleg-${receiptNumber}.pdf`,
+      );
+
+      logger.info(
+        `${tenantId} -- User ${user?.id} generated receipt with receipt number ${receiptNumber} for booking ${bookingId}`,
+      );
+
+      response.status(201).send(buffer.data);
+    } else {
+      logger.warn(
+        `${tenantId} -- User ${user?.id} is not allowed to generate receipt for booking ${bookingId}`,
+      );
+      response.sendStatus(403);
+    }
+  }
 }
 
-module.exports = {BookingController, BookingPermissions};
+module.exports = { BookingController, BookingPermissions };

@@ -133,6 +133,11 @@ router.get(
   AuthenticationController.isSignedIn,
   BookingController.commitBooking,
 );
+router.get(
+  "/bookings/:id/generate-receipt",
+  AuthenticationController.isSignedIn,
+  BookingController.generateReceipt,
+);
 
 // CHECKOUT
 // ========
