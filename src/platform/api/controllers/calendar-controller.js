@@ -42,8 +42,8 @@ class CalendarController {
 
     let bookables = await BookableManager.getBookables(tenant);
 
-    if (bookableIds) {
-        bookables = bookables.filter((bookable) => bookableIds.includes(bookable.id));
+    if (bookableIds && bookableIds.length > 0) {
+      bookables = bookables.filter((bookable) => bookableIds.includes(bookable.id));
     }
 
     /**
