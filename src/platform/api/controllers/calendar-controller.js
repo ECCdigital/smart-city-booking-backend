@@ -19,11 +19,33 @@ const logger = bunyan.createLogger({
  * The results from all worker threads are combined into a single array of occupancies, which is then sent as the response.
  */
 class CalendarController {
+
+  /**
+   * Asynchronously fetches occupancies for all bookables for a given tenant.
+   *
+   * @async
+   * @static
+   * @function getOccupancies
+   * @param {Object} request - The HTTP request object.
+   * @param {Object} response - The HTTP response object.
+   * @returns {void}
+   *
+   * @example
+   * // GET /api/<tenant>/calendar/occupancy?ids=1,2,3
+   * CalendarController.getOccupancies(req, res);
+   */
   static async getOccupancies(request, response) {
     const tenant = request.params.tenant;
+    const bookableIds = request.query.ids;
     let occupancies = [];
 
-    const bookables = await BookableManager.getBookables(tenant);
+
+    let bookables = await BookableManager.getBookables(tenant);
+
+    if (bookableIds) {
+        bookables = bookables.filter((bookable) => bookableIds.includes(bookable.id));
+    }
+
     /**
      * Initializes a worker thread for each bookable to asynchronously fetch occupancies, returning promises for their resolutions or rejections.
      */
