@@ -3,16 +3,26 @@ const BookingManager = require("../../data-managers/booking-manager");
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
 const { getTenant } = require("../../data-managers/tenant-manager");
-const BundleCheckoutService = require("./bundle-checkout-service");
-const PdfService = require("../../pdf-service/pdf-service");
-const pdfService = require("../../pdf-service/pdf-service");
-const fs = require("fs");
+const {
+  AutomaticBundleCheckoutService,
+  ManualBundleCheckoutService,
+} = require("./bundle-checkout-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
   level: process.env.LOG_LEVEL,
 });
 class BookingService {
+  /**
+   * This is a static asynchronous method that creates a booking.
+   *
+   * @param {Object} request - The request object from the client.
+   * @param {Boolean}  manualBooking - The manual booking object.
+   *
+   * @returns {Object} booking - The booking object that was created.
+   *
+   * @throws {Error} Will throw an error if the bookableItems array is empty or not provided.
+   */
   static async createBooking(request, manualBooking = false) {
     const checkoutId = uuidV4();
     const tenantId = request.params.tenant;
@@ -33,9 +43,6 @@ class BookingService {
       mail,
       phone,
       comment,
-      isCommitted,
-      isPayed,
-      priceEur,
     } = request.body;
 
     logger.info(
@@ -53,27 +60,50 @@ class BookingService {
       throw new Error("Missing parameters", { cause: { code: 400 } });
     }
 
-    const bundleCheckoutService = new BundleCheckoutService(
-      user,
-      tenantId,
-      timeBegin,
-      timeEnd,
-      bookableItems,
-      couponCode,
-      name,
-      company,
-      street,
-      zipCode,
-      location,
-      mail,
-      phone,
-      comment,
-      manualBooking ? isCommitted : undefined,
-      manualBooking ? isPayed : undefined,
-      manualBooking ? priceEur : undefined,
-    );
+    let bundleCheckoutService;
 
-    const booking = await bundleCheckoutService.prepareBooking(manualBooking);
+    if (manualBooking) {
+      bundleCheckoutService = new ManualBundleCheckoutService(
+        user,
+        tenantId,
+        timeBegin,
+        timeEnd,
+        bookableItems,
+        couponCode,
+        name,
+        company,
+        street,
+        zipCode,
+        location,
+        mail,
+        phone,
+        comment,
+        Number(request.body.priceEur),
+        Boolean(request.body.isCommitted),
+        Boolean(request.body.isPayed),
+      );
+
+    } else {
+      bundleCheckoutService = new AutomaticBundleCheckoutService(
+        user,
+        tenantId,
+        timeBegin,
+        timeEnd,
+        bookableItems,
+        couponCode,
+        name,
+        company,
+        street,
+        zipCode,
+        location,
+        mail,
+        phone,
+        comment,
+      );
+    }
+
+    const booking = await bundleCheckoutService.prepareBooking();
+
     logger.debug(
       `${tenantId}, cid ${checkoutId} -- Booking prepared: ${JSON.stringify(
         booking,
