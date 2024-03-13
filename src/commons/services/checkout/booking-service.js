@@ -4,7 +4,7 @@ const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
 const { getTenant } = require("../../data-managers/tenant-manager");
 const {
-  AutomaticBundleCheckoutService,
+  BundleCheckoutService,
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
 
@@ -84,7 +84,7 @@ class BookingService {
       );
 
     } else {
-      bundleCheckoutService = new AutomaticBundleCheckoutService(
+      bundleCheckoutService = new BundleCheckoutService(
         user,
         tenantId,
         timeBegin,

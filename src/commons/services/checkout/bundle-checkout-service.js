@@ -192,14 +192,6 @@ class BundleCheckoutService {
     }
 }
 
-
-/**
- * Class representing an automatic bundle checkout service.
- * @extends BundleCheckoutService
- */
-class AutomaticBundleCheckoutService extends BundleCheckoutService {
-}
-
 /**
  * Class representing a manual bundle checkout service.
  * @extends BundleCheckoutService
@@ -295,7 +287,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
 }
 
 module.exports = {
-    AutomaticBundleCheckoutService,
+    BundleCheckoutService,
     ManualBundleCheckoutService,
 };
 
