@@ -7,6 +7,10 @@ async function initDbConnection() {
     await dbm.connect();
 }
 
+async function closeDbConnection() {
+    await dbm.close();
+}
+
 /**
  * Fetches occupancies for a given bookable and tenant.
  *
@@ -52,7 +56,6 @@ async function fetchOccupancies(bookable, tenant) {
                 timeEnd: booking.timeEnd,
             }));
     });
-
 }
 
 /**
@@ -69,5 +72,6 @@ async function fetchOccupancies(bookable, tenant) {
  */
 parentPort.on('message', async ({ bookable, tenant }) => {
     const occupancies = await fetchOccupancies(bookable, tenant);
+    await closeDbConnection();
     parentPort.postMessage(occupancies);
 });
