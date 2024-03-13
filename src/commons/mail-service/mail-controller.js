@@ -1,10 +1,7 @@
 const MailerService = require("./mail-service");
-
 const BookingManager = require("../data-managers/booking-manager");
 const BookableManager = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
-const PdfService = require("../pdf-service/pdf-service");
-const IdGenerator = require("../utilities/id-generator");
 const TenantManager = require("../data-managers/tenant-manager");
 
 class MailController {
