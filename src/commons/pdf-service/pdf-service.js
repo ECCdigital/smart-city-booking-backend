@@ -15,6 +15,7 @@ const logger = bunyan.createLogger({
 
 const os = require("os");
 const path = require("path");
+const IdGenerator = require("../utilities/id-generator");
 
 class PdfService {
   static formatDateTime(value) {
@@ -83,16 +84,17 @@ class PdfService {
   static async generateReceipt(
     bookingId,
     tenantId,
-    receiptNumber,
     forcedReceiptTemplate,
   ) {
     try {
+      const tenant = await TenantManager.getTenant(tenantId);
+      const receiptId = await IdGenerator.next(tenantId, 4);
+      const receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}`;
       let booking = await BookingManager.getBooking(bookingId, tenantId);
       let bookables = (await BookableManager.getBookables(tenantId)).filter(
         (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
       );
 
-      const tenant = await TenantManager.getTenant(tenantId);
 
       const totalAmount = PdfService.formatCurrency(booking.priceEur);
 
@@ -136,8 +138,6 @@ class PdfService {
             ${booking.street}<br />
             ${booking.zipCode} ${booking.location}`;
 
-      const frontendURL = process.env.FRONTEND_URL;
-
       const currentDate = PdfService.formatDate(new Date());
 
       const browser = await puppeteer.launch({
@@ -171,15 +171,14 @@ class PdfService {
 
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
 
-      let pdfBuffer = {}
-      pdfBuffer.data = await page.pdf({ format: "A4" });
+      let pdfData = {}
+      pdfData.buffer = await page.pdf({ format: "A4" });
 
-      pdfBuffer.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
-      await FileManager.createFile(tenantId, pdfBuffer, "public", "receipts");
+      pdfData.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
 
       await browser.close();
 
-      return pdfBuffer;
+      return pdfData;
     } catch (err) {
       logger.error(err);
       throw err;
