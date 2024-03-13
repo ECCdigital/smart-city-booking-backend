@@ -18,13 +18,13 @@ class DatabaseManager {
   /**
    * Connect to the application database.
    *
-   * @param {String} dbUrl The Connection URI to the mongodb Database.
-   * @param {String} dbName Name of the Database.
+   * @param {String} databaseUrl The Connection URI to the mongodb Database.
+   * @param {String} databaseName Name of the Database.
    * @returns the Database object.
    */
-  static connect(dbUrl, dbName) {
-    var dbUrl = dbUrl || process.env.DB_URL;
-    var dbName = dbName || process.env.DB_NAME;
+  static connect(databaseUrl= undefined, databaseName = undefined) {
+    const dbUrl = databaseUrl || process.env.DB_URL;
+    const dbName = databaseName || process.env.DB_NAME;
 
     return new Promise((resolve, reject) => {
       MongoClient.connect(dbUrl)
@@ -53,7 +53,6 @@ class DatabaseManager {
    * Close the current database connection.
    */
   static close() {
-    logger.info("Closing connection to database.");
     dbClient.close();
   }
 }

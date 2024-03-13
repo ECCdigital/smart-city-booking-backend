@@ -59,16 +59,17 @@ async function fetchOccupancies(bookable, tenant) {
 }
 
 /**
- * Fetches occupancies for a given bookable and tenant.
+ * Event listener for 'message' event on parentPort.
  *
- * This function first initializes a database connection, then fetches all related bookings for the given bookable and tenant.
- * It also fetches all related bookables for the given bookable and tenant, and their related bookings.
- * The function then filters out bookings without a begin and end time, removes duplicate bookings, and maps the bookings to a new format.
+ * This function is triggered when a 'message' event is emitted on the parentPort. The event data should contain a bookable and a tenant.
+ * It fetches occupancies for the given bookable and tenant by calling the fetchOccupancies function.
+ * After fetching the occupancies, it closes the database connection and posts the occupancies back to the parent thread using parentPort.postMessage.
  *
- * @param {Object} bookable - The bookable object.
- * @param {Object} tenant - The tenant object.
- *
- * @returns {Promise<Array>} - A promise that resolves with an array of occupancies for the bookable.
+ * @listens parentPort:message
+ * @param {Object} message - The message object received from the parent thread.
+ * @param {Object} message.bookable - The bookable object.
+ * @param {Object} message.tenant - The tenant object.
+ * @returns {Promise<void>} - A promise that resolves when the occupancies have been posted back to the parent thread.
  */
 parentPort.on('message', async ({ bookable, tenant }) => {
     const occupancies = await fetchOccupancies(bookable, tenant);
