@@ -21,6 +21,11 @@ class MailerService {
    */
   static async processTemplate(emailTemplate, model) {
     logger.debug(`Processing mail template ${emailTemplate} with model ${JSON.stringify(model)}`);
+
+    if (!this.isValidTemplate(emailTemplate)) {
+      logger.error(`Email template ${emailTemplate} is invalid`);
+      throw new Error("Invalid template");
+    }
     try {
       return Mustache.render(emailTemplate, model);
     } catch (err) {
@@ -107,6 +112,31 @@ class MailerService {
           });
       });
     });
+  }
+
+  static isValidTemplate(template) {
+    const patterns = [
+      /<!DOCTYPE html>/,
+      /<html.*?>/,
+      /<\/html>/,
+      /<head>/,
+      /<\/head>/,
+      /<body>/,
+      /<\/body>/,
+      /<footer.*?>/,
+      /<\/footer>/,
+      /\{\{ title \}\}/,
+      /\{\{\{ content \}\}\}/
+    ];
+
+
+    const missingElement = patterns.find(pattern => !pattern.test(template));
+
+    if (missingElement !== undefined) {
+      logger.error(`Email template is missing required pattern: ${missingElement}`);
+    }
+
+    return !missingElement;
   }
 }
 

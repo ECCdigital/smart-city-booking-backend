@@ -1,11 +1,8 @@
-//puppeteer index.js
 const puppeteer = require("puppeteer");
-const fs = require("fs");
 const Mustache = require("mustache");
 const BookingManager = require("../data-managers/booking-manager");
 const BookableManager = require("../data-managers/bookable-manager");
 const TenantManager = require("../data-managers/tenant-manager");
-const FileManager = require("../data-managers/file-manager");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -84,7 +81,6 @@ class PdfService {
   static async generateReceipt(
     bookingId,
     tenantId,
-    forcedReceiptTemplate,
   ) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
@@ -147,12 +143,11 @@ class PdfService {
 
       const page = await browser.newPage();
 
-      const html = fs.readFileSync(
-        `${__dirname}/templates/${
-          forcedReceiptTemplate || tenant.receiptTemplate
-        }.html`,
-        "utf8",
-      );
+      const html= tenant.receiptTemplate
+
+      if (!this.isValidTemplate(html)) {
+        throw new Error("Invalid receipt template");
+      }
 
       const data = {
         bookingId: bookingId,
@@ -183,6 +178,27 @@ class PdfService {
       logger.error(err);
       throw err;
     }
+  }
+
+  static isValidTemplate(template) {
+    const patterns = [
+      /<!DOCTYPE html>/,
+      /<html.*?>/,
+      /<\/html>/,
+      /<head>/,
+      /<\/head>/,
+      /<body>/,
+      /<\/body>/,
+    ];
+
+
+    const missingElement = patterns.find(pattern => !pattern.test(template));
+
+    if (missingElement !== undefined) {
+      logger.error(`PDF template is missing required pattern: ${missingElement}`);
+    }
+
+    return !missingElement;
   }
 }
 
