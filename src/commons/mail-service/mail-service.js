@@ -36,12 +36,12 @@ class MailerService {
 /**
    * Send a mail using a template file and dynamic attributes.
    *
-   * @param tenantId
+   * @param {string} tenantId The tenant ID.
    * @param {string} address The mail address of the receiver.
    * @param {string} subject The subject of the mail.
-   * @param mailTemplate
+   * @param {string} mailTemplate String with HTML content of the mail template.
    * @param {object} model An object containing attributes, see #processTemplate
-   * @param attachments
+   * @param {array} attachments An array of attachments to be sent with the mail.
    * @param bcc
    * @returns Promise <>
    */
