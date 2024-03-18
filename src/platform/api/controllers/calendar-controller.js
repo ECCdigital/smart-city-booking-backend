@@ -55,6 +55,7 @@ class CalendarController {
         const worker = new Worker(path.resolve(__dirname,"../../../commons/utilities/calendar-occupancy-worker.js"));
         worker.postMessage({ bookable, tenant });
 
+
         worker.on('message', resolve);
         worker.on('error', reject);
         worker.on('exit', (code) => {
@@ -62,6 +63,7 @@ class CalendarController {
             reject(new Error(`Worker stopped with exit code ${code}`));
           }
         });
+        worker.terminate();
       });
     });
 
