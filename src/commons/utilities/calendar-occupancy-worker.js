@@ -75,4 +75,5 @@ parentPort.on('message', async ({ bookable, tenant }) => {
     const occupancies = await fetchOccupancies(bookable, tenant);
     await closeDbConnection();
     parentPort.postMessage(occupancies);
+    parentPort.close();
 });
