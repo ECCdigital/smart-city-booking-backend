@@ -5,8 +5,7 @@ const { v4: uuidV4 } = require("uuid");
 const { getTenant } = require("../../data-managers/tenant-manager");
 const BundleCheckoutService = require("./bundle-checkout-service");
 const PdfService = require("../../pdf-service/pdf-service");
-const pdfService = require("../../pdf-service/pdf-service");
-const fs = require("fs");
+const FileManager = require("../../data-managers/file-manager");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -98,11 +97,38 @@ class BookingService {
         }
       }
       if (booking.isCommitted && booking.isPayed) {
+        let attachments = [];
+        try {
+          if (booking.priceEur > 0) {
+            const pdfData = await PdfService.generateReceipt(
+              booking.id,
+              tenantId,
+            );
+            attachments = [
+              {
+                filename: pdfData.name,
+                content: pdfData.buffer,
+                contentType: "application/pdf",
+              },
+            ];
+            await FileManager.createFile(
+              tenantId,
+              pdfData.buffer,
+              pdfData.name,
+              "public",
+              "receipts",
+            );
+          }
+        } catch (err) {
+          logger.error(err);
+        }
+
         try {
           await MailController.sendBookingConfirmation(
             booking.mail,
             booking.id,
             booking.tenant,
+            attachments,
           );
         } catch (err) {
           logger.error(err);
