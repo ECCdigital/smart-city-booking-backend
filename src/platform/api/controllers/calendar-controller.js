@@ -63,7 +63,6 @@ class CalendarController {
             reject(new Error(`Worker stopped with exit code ${code}`));
           }
         });
-        worker.terminate();
       });
     });
 
