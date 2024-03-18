@@ -17,6 +17,7 @@ const {
 const IdGenerator = require("../../../commons/utilities/id-generator");
 const pdfService = require("../../../commons/pdf-service/pdf-service");
 const FileManager = require("../../../commons/data-managers/file-manager");
+const PdfService = require("../../../commons/pdf-service/pdf-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -604,50 +605,6 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get event bookings");
-    }
-  }
-
-  static async generateReceipt(request, response) {
-    const tenantId = request.params.tenant;
-    const bookingId = request.params.id;
-    const user = request.user;
-
-    const forcedReceiptTemplate = request.query.template || undefined;
-    let receiptNumber = request.query.receiptNumber || undefined;
-
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-
-    if (await BookingPermissions._allowRead(booking, user?.id, user?.tenant)) {
-      const tenant = await TenantManager.getTenant(tenantId);
-
-      if (!receiptNumber) {
-        const receiptId = await IdGenerator.next(tenantId, 4);
-        receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}`;
-      }
-
-      const buffer = await pdfService.generateReceipt(
-        bookingId,
-        tenantId,
-        receiptNumber,
-        forcedReceiptTemplate,
-      );
-
-      response.setHeader("Content-Type", "application/pdf");
-      response.setHeader(
-        "Content-Disposition",
-        `attachment; filename=Zahlungsbeleg-${receiptNumber}.pdf`,
-      );
-
-      logger.info(
-        `${tenantId} -- User ${user?.id} generated receipt with receipt number ${receiptNumber} for booking ${bookingId}`,
-      );
-
-      response.status(201).send(buffer.data);
-    } else {
-      logger.warn(
-        `${tenantId} -- User ${user?.id} is not allowed to generate receipt for booking ${bookingId}`,
-      );
-      response.sendStatus(403);
     }
   }
 }

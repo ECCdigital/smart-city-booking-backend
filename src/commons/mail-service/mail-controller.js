@@ -1,10 +1,7 @@
 const MailerService = require("./mail-service");
-
 const BookingManager = require("../data-managers/booking-manager");
 const BookableManager = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
-const PdfService = require("../pdf-service/pdf-service");
-const IdGenerator = require("../utilities/id-generator");
 const TenantManager = require("../data-managers/tenant-manager");
 
 class MailController {
@@ -134,31 +131,11 @@ class MailController {
     return content;
   }
 
-  static async sendBookingConfirmation(address, bookingId, tenantId) {
+  static async sendBookingConfirmation(address, bookingId, tenantId, attachments = undefined) {
     const tenant = await TenantManager.getTenant(tenantId);
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
 
     let content = `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`;
     content += await MailController.generateBookingDetails(bookingId, tenantId);
-
-    let attachments = undefined;
-
-    if (booking?.priceEur > 0) {
-      const receiptId = await IdGenerator.next(tenantId, 4);
-      const receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}`;
-      const pdfBuffer = await PdfService.generateReceipt(
-        bookingId,
-        tenantId,
-        receiptNumber,
-      );
-      attachments = [
-        {
-          filename: `Zahlungsbeleg-${receiptNumber}.pdf`,
-          content: pdfBuffer,
-          contentType: "application/pdf",
-        },
-      ];
-    }
 
     await MailerService.send(
       tenantId,
