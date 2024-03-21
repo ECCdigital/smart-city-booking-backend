@@ -128,11 +128,38 @@ class BookingService {
         }
       }
       if (booking.isCommitted && booking.isPayed) {
+        let attachments = [];
+        try {
+          if (booking.priceEur > 0) {
+            const pdfData = await PdfService.generateReceipt(
+              booking.id,
+              tenantId,
+            );
+            attachments = [
+              {
+                filename: pdfData.name,
+                content: pdfData.buffer,
+                contentType: "application/pdf",
+              },
+            ];
+            await FileManager.createFile(
+              tenantId,
+              pdfData.buffer,
+              pdfData.name,
+              "public",
+              "receipts",
+            );
+          }
+        } catch (err) {
+          logger.error(err);
+        }
+
         try {
           await MailController.sendBookingConfirmation(
             booking.mail,
             booking.id,
             booking.tenant,
+            attachments,
           );
         } catch (err) {
           logger.error(err);

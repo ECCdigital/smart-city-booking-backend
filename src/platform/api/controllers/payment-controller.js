@@ -6,6 +6,8 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const bunyan = require("bunyan");
+const PdfService = require("../../../commons/pdf-service/pdf-service");
+const FileManager = require("../../../commons/data-managers/file-manager");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -142,10 +144,39 @@ class PaymentController {
             booking.payMethod = payMethod;
 
             await BookingManager.setBookingPayedStatus(booking);
+
+            let attachments = [];
+            try {
+              if (booking.priceEur > 0) {
+                const pdfData = await PdfService.generateReceipt(
+                    booking.id,
+                    tenantId,
+                );
+                attachments = [
+                  {
+                    filename: pdfData.name,
+                    content: pdfData.buffer,
+                    contentType: "application/pdf",
+                  },
+                ];
+                await FileManager.createFile(
+                    tenantId,
+                    pdfData.buffer,
+                    pdfData.name,
+                    "public",
+                    "receipts",
+                );
+              }
+            } catch (err) {
+              logger.error(err);
+            }
+
+
             await MailController.sendBookingConfirmation(
               booking.mail,
               booking.id,
               booking.tenant,
+              attachments,
             );
 
             logger.info(
