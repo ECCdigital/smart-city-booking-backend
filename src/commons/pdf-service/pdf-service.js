@@ -1,11 +1,8 @@
-//puppeteer index.js
 const puppeteer = require("puppeteer");
-const fs = require("fs");
 const Mustache = require("mustache");
 const BookingManager = require("../data-managers/booking-manager");
 const BookableManager = require("../data-managers/bookable-manager");
 const TenantManager = require("../data-managers/tenant-manager");
-const FileManager = require("../data-managers/file-manager");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -15,6 +12,7 @@ const logger = bunyan.createLogger({
 
 const os = require("os");
 const path = require("path");
+const IdGenerator = require("../utilities/id-generator");
 
 class PdfService {
   static formatDateTime(value) {
@@ -83,16 +81,16 @@ class PdfService {
   static async generateReceipt(
     bookingId,
     tenantId,
-    receiptNumber,
-    forcedReceiptTemplate,
   ) {
     try {
+      const tenant = await TenantManager.getTenant(tenantId);
+      const receiptId = await IdGenerator.next(tenantId, 4);
+      const receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}`;
       let booking = await BookingManager.getBooking(bookingId, tenantId);
       let bookables = (await BookableManager.getBookables(tenantId)).filter(
         (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
       );
 
-      const tenant = await TenantManager.getTenant(tenantId);
 
       const totalAmount = PdfService.formatCurrency(booking.priceEur);
 
@@ -136,8 +134,6 @@ class PdfService {
             ${booking.street}<br />
             ${booking.zipCode} ${booking.location}`;
 
-      const frontendURL = process.env.FRONTEND_URL;
-
       const currentDate = PdfService.formatDate(new Date());
 
       const browser = await puppeteer.launch({
@@ -147,12 +143,11 @@ class PdfService {
 
       const page = await browser.newPage();
 
-      const html = fs.readFileSync(
-        `${__dirname}/templates/${
-          forcedReceiptTemplate || tenant.receiptTemplate
-        }.html`,
-        "utf8",
-      );
+      const html= tenant.receiptTemplate
+
+      if (!this.isValidTemplate(html)) {
+        throw new Error("Invalid receipt template");
+      }
 
       const data = {
         bookingId: bookingId,
@@ -171,18 +166,39 @@ class PdfService {
 
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
 
-      const pdfBuffer = await page.pdf({ format: "A4" });
+      let pdfData = {}
+      pdfData.buffer = await page.pdf({ format: "A4" });
 
-      pdfBuffer.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
-      await FileManager.createFile(tenantId, pdfBuffer, "public", "receipts");
+      pdfData.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
 
       await browser.close();
 
-      return pdfBuffer;
+      return pdfData;
     } catch (err) {
       logger.error(err);
       throw err;
     }
+  }
+
+  static isValidTemplate(template) {
+    const patterns = [
+      /<!DOCTYPE html>/,
+      /<html.*?>/,
+      /<\/html>/,
+      /<head>/,
+      /<\/head>/,
+      /<body>/,
+      /<\/body>/,
+    ];
+
+
+    const missingElement = patterns.find(pattern => !pattern.test(template));
+
+    if (missingElement !== undefined) {
+      logger.error(`PDF template is missing required pattern: ${missingElement}`);
+    }
+
+    return !missingElement;
   }
 }
 

@@ -10,6 +10,14 @@ const CouponManager = require("../../../commons/data-managers/coupon-manager");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
+const CheckoutController = require("./checkout-controller");
+const {
+  createBooking,
+} = require("../../../commons/services/checkout/booking-service");
+const IdGenerator = require("../../../commons/utilities/id-generator");
+const pdfService = require("../../../commons/pdf-service/pdf-service");
+const FileManager = require("../../../commons/data-managers/file-manager");
+const PdfService = require("../../../commons/pdf-service/pdf-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -410,10 +418,9 @@ class BookingController {
   static async storeBooking(request, response) {
     const booking = Object.assign(new Booking(), request.body);
 
-    let isUpdate = !!(await BookingManager.getBooking(
-      booking.id,
-      booking.tenant,
-    ));
+    let isUpdate =
+      !!(await BookingManager.getBooking(booking.id, booking.tenant)) &&
+      !!booking.id;
 
     if (isUpdate) {
       await BookingController.updateBooking(request, response);
@@ -423,27 +430,27 @@ class BookingController {
   }
 
   static async createBooking(request, response) {
-    try {
-      const user = request.user;
-      const booking = Object.assign(new Booking(), request.body);
+    const user = request.user;
+    const booking = Object.assign(new Booking(), request.body);
 
-      if (
-        await BookingPermissions._allowCreate(booking, user.id, user.tenant)
-      ) {
-        await BookingManager.storeBooking(booking);
-        logger.info(
-          `${booking.tenant} -- created booking ${booking.id} by user ${user?.id}`,
-        );
-        response.status(201).send(booking);
-      } else {
-        logger.warn(
-          `${booking.tenant} -- User ${user?.id} is not allowed to create booking.`,
-        );
-        response.sendStatus(403);
-      }
+    if (
+      !(await BookingPermissions._allowCreate(booking, user.id, user.tenant))
+    ) {
+      logger.warn(
+        `${booking.tenant} -- User ${user?.id} is not allowed to create booking.`,
+      );
+      return response.sendStatus(403);
+    }
+
+    try {
+      const newBooking = await createBooking(request, true);
+      return response.status(200).send(newBooking);
     } catch (err) {
       logger.error(err);
-      response.status(500).send("Could not create booking");
+      const statusCode = err.cause?.code === 400 ? 400 : 500;
+      return response
+        .status(statusCode)
+        .send(err.message || "Could not create booking");
     }
   }
 
@@ -602,4 +609,4 @@ class BookingController {
   }
 }
 
-module.exports = BookingController;
+module.exports = { BookingController, BookingPermissions };
