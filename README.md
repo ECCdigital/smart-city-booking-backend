@@ -206,15 +206,12 @@ Returns the tenant with the specified ID. If accessed without authentication, on
 Input:
 - id: The ID of the tenant
 
-### PUT /api/tenants/:id (Protected)
-Updates or creates the tenant with the specified ID.
+### PUT /api/tenants (Protected)
+Updates or creates the tenant.
 
 **Required permission:** tenant.allowCreate / tenant.allowUpdate
 
-Input:
-- id: The ID of the tenant
-
-body: A valid tenant object
+Body: A valid tenant object
 
 ### DELETE /api/tenants/:id (Protected)
 Deletes the tenant with the specified ID.
@@ -233,15 +230,21 @@ Returns a list of all roles.
 ### GET /api/roles/:id (Protected)
 Returns the role with the specified ID.
 
+Input:
+- id: The ID of the role
+
 **Required permission:** role.allowRead
 
-### PUT /api/roles/:id (Protected)
-Updates or creates the role with the specified ID.
+### PUT /api/roles (Protected)
+Updates or creates the role.
 
 **Required permission:** role.allowCreate / role.allowUpdate
 
 ### DELETE /api/roles/:id (Protected)
 Deletes the role with the specified ID.
+
+Input:
+- id: The ID of the role
 
 **Required permission:** role.allowDelete
 
@@ -250,43 +253,237 @@ Deletes the role with the specified ID.
 ---
 
 ### GET /api/:tenant/bookables (Public)
+Returns a list of all bookables for the specified tenant.
+
+Input:
+- tenant: The tenant ID
+
 ### GET /api/:tenant/bookables/:id (Public)
+Returns the bookable with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the bookable
+
 ### GET /api/:tenant/bookables/:id/bookings (Public)
+Returns a list of all bookings for the specified bookable.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the bookable
+- related: If true, the bookings of related bookables are included in the response. (Query parameter)
+- parent: If true, the bookings of the parent bookables are included in the response. (Query parameter)
+
 ### GET /api/:tenant/bookables/:id/openingHours (Public)
-### PUT /api/:tenant/bookables/:id (Protected)
+Returns the opening hours of the specified bookable.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the bookable
+
+### PUT /api/:tenant/bookables (Protected)
+Updates or creates the bookable.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** bookable.allowCreate / bookable.allowUpdate
+
+Body: A valid bookable object
+
 ### DELETE /api/:tenant/bookables/:id (Protected)
+Deletes the bookable with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the bookable
+
+**Required permission:** bookable.allowDelete
+
+### GET /api/:tenant/bookables/_meta/_tags (Protected)
+Returns a list of all tags used in the bookables of the specified tenant.
+
+Input:
+- tenant: The tenant ID
 
 ### Events
 
 ---
 
 ### GET /api/:tenant/events (Public)
+Returns a list of all events for the specified tenant.
+
+Input:
+- tenant: The tenant ID
+
 ### GET /api/:tenant/events/:id (Public)
+Returns the event with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the event
+
 ### GET /api/:tenant/events/:id/bookings (Public)
+Returns a list of all bookings for the specified event.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the event
+
 ### PUT /api/:tenant/events (Protected)
+Updates or creates the event.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** event.allowCreate / event.allowUpdate
+
+Body: A valid event object
+
 ### DELETE /api/:tenant/events/:id (Protected)
+Deletes the event with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the event
+
+**Required permission:** event.allowDelete
+
+### GET /api/:tenant/events/_meta/_tags (Protected)
+Returns a list of all tags used in the events of the specified tenant.
+
+Input:
+- tenant: The tenant ID
 
 ### Users
 
 ---
 
 ### GET /api/:tenant/users (Protected)
+Returns a list of all users for the specified tenant.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** user.allowRead
+
 ### GET /api/:tenant/users/ids (Protected)
+Returns a list of all user IDs for the specified tenant.
+
+Input:
+- tenant: The tenant ID
+- roles: If provided, only user IDs with the specified roles are included in the response. (Query parameter)
+
 ### GET /api/:tenant/users/:id (Protected)
+Returns the user with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the user
+
+**Required permission:** user.allowRead
+
 ### PUT /api/:tenant/users (Protected)
+Updates or creates the user.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** user.allowCreate / user.allowUpdate
+
+Body: A valid user object
+
 ### PUT /api/:tenant/user (Protected)
+Updates the user object of the currently authenticated user.
+
+Input:
+- tenant: The tenant ID
+
+Body: A valid user object
+
 ### DELETE /api/:tenant/users/:id (Protected)
+Deletes the user with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the user
+
+**Required permission:** user.allowDelete
 
 ### Bookings
 
 ---
 
-### GET /api/:tenant/bookings (Protected)
-### PUT /api/:tenant/mybookings (Protected)
+### GET /api/:tenant/bookings (public)
+Returns a list of all bookings for the specified tenant.
+
+Input:
+- tenant: The tenant ID
+- public: If true, only public bookings are included in the response. (Query parameter)
+- user: If provided, only bookings of the specified user are included in the response. (Optional)
+  - populate: If true, the user object is included in the response. (Query parameter)
+
+**Required permission:** booking.allowRead (If public is false)
+
+### GET /api/:tenant/bookings/:id/status (public)
+Returns the status of the booking with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the booking
+
 ### GET /api/:tenant/bookings/:id (Protected)
+Returns the booking with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the booking
+
+**Required permission:** booking.allowRead / Owner of the booking
+
+
+### GET /api/:tenant/bookings (Protected)
+Returns a list of all bookings for the specified tenant.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** booking.allowRead / Owner of the booking
+
 ### PUT /api/:tenant/bookings (Protected)
+Updates or creates the booking.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** booking.allowCreate / booking.allowUpdate
+
+Body: A valid booking object
+
+### GET /api/:tenant/mybookings (Protected)
+Returns a list of all bookings of the currently authenticated user.
+
+Input:
+- tenant: The tenant ID
+
 ### DELETE /api/:tenant/bookings/:id (Protected)
+Deletes the booking with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the booking
+
+**Required permission:** booking.allowDelete
+
+
 ### GET /api/:tenant/bookings/:id/commit (Protected)
+Commits the booking with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the booking
+
+**Required permission:** booking.allowUpdate
 
 ### Coupons
 
