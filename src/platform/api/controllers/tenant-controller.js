@@ -1,10 +1,10 @@
-const RoleManager = require("../../../commons/data-managers/role-manager");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const { Bookable } = require("../../../commons/entities/bookable");
 const Tenant = require("../../../commons/entities/tenant");
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
+const {readFileSync} = require("fs");
+const {join} = require("path");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -224,8 +224,11 @@ class TenantController {
           `created tenant admin ${tenantAdmin.id} for new tenant ${tenant.id}`,
         );
 
-        tenant.genericMailTemplate = "default-generic-mail-template.temp";
-        tenant.receiptTemplate = "default-receipt-template.temp";
+        const emailTemplate = readFileSync(join(__dirname, "../../../commons/mail-service/templates/default-generic-mail-template.temp.html"), "utf8");
+        const receiptTemplate = readFileSync(join(__dirname, "../../../commons/pdf-service/templates/default-receipt-template.temp.html"), "utf8");
+
+        tenant.genericMailTemplate = emailTemplate;
+        tenant.receiptTemplate = receiptTemplate;
 
         await TenantManager.storeTenant(tenant);
         logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
