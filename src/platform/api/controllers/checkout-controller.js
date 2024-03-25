@@ -3,10 +3,6 @@ const bunyan = require("bunyan");
 const {
   createBooking,
 } = require("../../../commons/services/checkout/booking-service");
-const pdfService = require("../../../commons/pdf-service/pdf-service");
-const IdGenerator = require("../../../commons/utilities/id-generator");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const FileManager = require("../../../commons/data-managers/file-manager");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -51,11 +47,11 @@ class CheckoutController {
     }
   }
 
-  static async checkout(request, response, manualBooking = false) {
+  static async checkout(request, response) {
     try {
       return response
         .status(200)
-        .send(await createBooking(request, manualBooking));
+        .send(await createBooking(request));
     } catch (err) {
       logger.error(err);
       response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);

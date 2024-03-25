@@ -140,7 +140,7 @@ router.get(
 
 // CHECKOUT
 // ========
-router.post("/checkout", (req, res) => CheckoutController.checkout(req, res));
+router.post("/checkout", CheckoutController.checkout);
 router.post("/checkout/validateItem", CheckoutController.validateItem);
 
 // PAYMENTS
