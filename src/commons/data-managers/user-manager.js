@@ -351,7 +351,6 @@ class UserManager {
 
   static async hasPermission(userId, tenant, permissionName, accessLevel) {
     if (!userId || !tenant || !permissionName || !accessLevel) {
-      console.warn("UserManager.hasPermission: Missing parameter(s)!");
       return false;
     }
 
