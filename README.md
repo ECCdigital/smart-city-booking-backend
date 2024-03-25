@@ -490,38 +490,141 @@ Input:
 ---
 
 ### GET /api/:tenant/coupons (Public)
+Returns a list of all coupons for the specified tenant.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** coupon.allowRead
+
 ### GET /api/:tenant/coupons/:id (Public)
+Returns the coupon with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the coupon
+
 ### PUT /api/:tenant/coupons (Protected)
+Updates or creates the coupon.
+
+Input:
+- tenant: The tenant ID
+
+**Required permission:** coupon.allowCreate / coupon.allowUpdate
+
+Body: A valid coupon object
+
 ### DELETE /api/:tenant/coupons/:id (Protected)
+Deletes the coupon with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the coupon
+
+**Required permission:** coupon.allowDelete
 
 ### Checkout
 
 ---
 
 ### POST /api/:tenant/checkout (Public)
+Creates a new booking and returns the booking object.
+
+Input:
+- tenant: The tenant ID
+
+Body: A valid booking object
+
 ### POST /api/:tenant/checkout/validateItem (Public)
+Validates a bookable item for checkout.
+
+Input:
+- tenant: The tenant ID
+
+Body: {
+    "bookableId": "<bookable-id>",
+    "timeBegin": "<start-time>",
+    "timeEnd": "<end-time>",
+    "amount": "<amount>"
+    "couponCode": "<coupon-code>"
+    }
 
 ### Payments / S-Public-Services
 
 ---
 
 ### POST /api/:tenant/payments (Public)
+Returns a payment URL for the specified booking.
+
+Input:
+- tenant: The tenant ID
+
+Body: bookingId
+
 ### GET /api/:tenant/payments/notify (Public)
+Notifies the backend about a payment status.
+
+Input:
+- tenant: The tenant ID
+- gcMerchantTxId: The merchant transaction ID (Query parameter)
+- gcResultPayment: The payment result (Query parameter)
+- gcPaymethod: The payment method (Query parameter)
+- gcType: The payment type (Query parameter)
+- gcProjectId: The project ID (Query parameter)
+- gcReference: The payment reference (Query parameter)
+- gcBackendTxId: The backend transaction ID (Query parameter)
+- gcAmount: The payment amount (Query parameter)
+- gcCurrency: The payment currency (Query parameter)
+- gcHash: The payment hash (Query parameter)
+
 ### POST /api/:tenant/payments/response (Public)
+Redirects the user to the payment response page.
+
+Input:
+- tenant: The tenant ID
+- parsedOriginalUrl: The original URL (Body)
 
 ### Calendars
 
 ---
 
 ### GET /api/:tenant/occupancy (Public)
+Returns the occupancy of a tenant or if provided of a bookable.
+
+Input:
+- tenant: The tenant ID
+- ids: A comma-separated list of bookable IDs (Query parameter)
 
 ### Files (Nextcloud)
 
 ---
 
 ### GET /api/:tenant/files/list (Public / Protected)
+Returns a list of all files in the Nextcloud storage.
+
+Input:
+- tenant: The tenant ID
+- includeProtected: If true, protected files are included in the response. (Query parameter)
+
+
 ### GET /api/:tenant/files/get (Public / Protected)
+Returns the file with the specified ID.
+
+Input:
+- tenant: The tenant ID
+- id: The ID of the file
+
 ### POST /api/:tenant/files (Protected)
+Uploads a file to the Nextcloud storage.
+
+Input:
+- tenant: The tenant ID
+- file: The file to upload
+
+Body: {
+    "accessLevel": "public" / "protected"
+    "customDirectory": "directory"
+    }
 
 
 ## Entitites
