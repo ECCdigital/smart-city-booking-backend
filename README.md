@@ -541,13 +541,17 @@ Validates a bookable item for checkout.
 Input:
 - tenant: The tenant ID
 
-Body: {
+
+Body: 
+```JSON
+{
     "bookableId": "<bookable-id>",
     "timeBegin": "<start-time>",
     "timeEnd": "<end-time>",
     "amount": "<amount>"
     "couponCode": "<coupon-code>"
-    }
+}
+```
 
 ### Payments / S-Public-Services
 
@@ -621,10 +625,13 @@ Input:
 - tenant: The tenant ID
 - file: The file to upload
 
-Body: {
+Body: 
+```JSON
+{
     "accessLevel": "public" / "protected"
     "customDirectory": "directory"
-    }
+}
+```
 
 
 ## Entitites
