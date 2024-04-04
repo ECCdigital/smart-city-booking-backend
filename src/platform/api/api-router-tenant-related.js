@@ -21,6 +21,10 @@ router.get("/bookables", BookableController.getBookables);
 router.get("/bookables/:id", BookableController.getBookable);
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
+router.get(
+  "/bookables/:id/availability",
+  CalendarController.getBookableAvailabilty,
+);
 
 // Protected
 router.put(
@@ -136,7 +140,7 @@ router.get(
 
 // CHECKOUT
 // ========
-router.post("/checkout", (req, res) => CheckoutController.checkout(req, res));
+router.post("/checkout", CheckoutController.checkout);
 router.post("/checkout/validateItem", CheckoutController.validateItem);
 
 // PAYMENTS
