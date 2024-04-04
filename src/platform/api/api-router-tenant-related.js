@@ -32,6 +32,7 @@ router.put(
   AuthenticationController.isSignedIn,
   BookableController.storeBookable,
 );
+
 router.delete(
   "/bookables/:id",
   AuthenticationController.isSignedIn,
@@ -41,6 +42,11 @@ router.get(
   "/bookables/_meta/tags",
   AuthenticationController.isSignedIn,
   BookableController.getTags,
+);
+router.get(
+  "/bookables/count/check",
+  AuthenticationController.isSignedIn,
+  BookableController.countCheck,
 );
 
 // EVENTS
@@ -66,6 +72,11 @@ router.get(
   "/events/_meta/tags",
   AuthenticationController.isSignedIn,
   EventController.getTags,
+);
+router.get(
+  "/events/count/check",
+  AuthenticationController.isSignedIn,
+  EventController.countCheck,
 );
 
 // USERS

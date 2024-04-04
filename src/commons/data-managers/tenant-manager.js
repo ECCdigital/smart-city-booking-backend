@@ -58,17 +58,17 @@ class TenantManager {
   static getTenant(id) {
     return new Promise((resolve, reject) => {
       dbm
-          .get()
-          .collection("tenants")
-          .findOne({ id: id })
-          .then((rawTenant) => {
-            if (!rawTenant) {
-              return reject(new Error(`No tenant found with ID: ${id}`));
-            }
-            const tenant = Object.assign(new Tenant(), rawTenant);
-            resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
-          })
-          .catch((err) => reject(err));
+        .get()
+        .collection("tenants")
+        .findOne({ id: id })
+        .then((rawTenant) => {
+          if (!rawTenant) {
+            return reject(new Error(`No tenant found with ID: ${id}`));
+          }
+          const tenant = Object.assign(new Tenant(), rawTenant);
+          resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
+        })
+        .catch((err) => reject(err));
     });
   }
 
@@ -79,21 +79,25 @@ class TenantManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeTenant(tenant, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("tenants")
-        .replaceOne(
-          { id: tenant.id },
-          SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
-          {
-            upsert: upsert,
+  static async storeTenant(tenant, upsert = true) {
+      try {
+          const tenantsCollection = dbm.get().collection("tenants");
+          const existingTenant = await tenantsCollection.findOne({ id: tenant.id });
+
+          if (!existingTenant) {
+              if (await this.checkTenantCount() === false) {
+                  throw new Error(`Maximum number of tenants reached.`);
+              }
           }
-        )
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+
+          await tenantsCollection.replaceOne(
+              { id: tenant.id },
+              SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
+              { upsert: upsert },
+          );
+      } catch (err) {
+          throw new Error(`Error storing tenant: ${err.message}`);
+      }
   }
 
   /**
@@ -111,6 +115,12 @@ class TenantManager {
         .then(() => resolve())
         .catch((err) => reject(err));
     });
+  }
+
+  static async checkTenantCount() {
+      const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
+      const count = await dbm.get().collection("tenants").countDocuments({});
+      return !(maxTenants && count >= maxTenants);
   }
 }
 

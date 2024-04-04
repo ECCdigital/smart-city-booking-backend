@@ -291,6 +291,15 @@ class TenantController {
       response.status(500).send("could not remove tenant");
     }
   }
+  static async countCheck(request, response) {
+    try {
+      const isCreateAllowed = await TenantManager.checkTenantCount();
+      response.status(200).send(isCreateAllowed);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not check if creation is possible");
+    }
+  }
 }
 
 module.exports = TenantController;

@@ -17,6 +17,7 @@ router.get('/tenants/:id', TenantController.getTenant);
 
 router.put('/tenants', AuthenticationController.isSignedIn, TenantController.storeTenant);
 router.delete('/tenants/:id', AuthenticationController.isSignedIn, TenantController.removeTenant);
+router.get('/tenants/count/check', AuthenticationController.isSignedIn, TenantController.countCheck);
 
 // ROLES
 // =====

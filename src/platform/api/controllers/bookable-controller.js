@@ -370,6 +370,17 @@ class BookableController {
       response.status(500).send("Could not get opening hours");
     }
   }
+
+  static async countCheck(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const isCreateAllowed = await BookableManager.checkBookableCount(tenant);
+      response.status(200).send(isCreateAllowed);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not check if creation is possible");
+    }
+  }
 }
 
 module.exports = BookableController;

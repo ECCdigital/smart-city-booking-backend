@@ -263,6 +263,16 @@ class EventController {
       response.status(500).send("could not get tags");
     }
   }
+  static async countCheck(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const isCreateAllowed = await EventManager.checkEventCount(tenant);
+      response.status(200).send(isCreateAllowed);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not check if creation is possible");
+    }
+  }
 }
 
 module.exports = EventController;

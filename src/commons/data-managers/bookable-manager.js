@@ -70,17 +70,30 @@ class BookableManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeBookable(bookable, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookables")
-        .replaceOne({ id: bookable.id, tenant: bookable.tenant }, bookable, {
-          upsert: upsert,
-        })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async storeBookable(bookable, upsert = true) {
+    try {
+      const bookablesCollection = dbm.get().collection("bookables");
+      const existingBookable = await bookablesCollection.findOne({
+        id: bookable.id,
+        tenant: bookable.tenant,
+      });
+
+      if (!existingBookable) {
+        if (await this.checkBookableCount(bookable.tenant) === false) {
+          throw new Error(
+            `Maximum number of bookables reached.`,
+          );
+        }
+      }
+
+      await bookablesCollection.replaceOne(
+        { id: bookable.id, tenant: bookable.tenant },
+        bookable,
+        { upsert: upsert },
+      );
+    } catch (err) {
+      throw new Error(`Error storing bookable: ${err.message}`);
+    }
   }
 
   /**
@@ -116,8 +129,8 @@ class BookableManager {
           await BookableManager.getRelatedBookables(
             b.id,
             b.tenant,
-            (d || 0) + 1
-          )
+            (d || 0) + 1,
+          ),
         );
       }
     }
@@ -145,7 +158,15 @@ class BookableManager {
 
     return pBookables;
   }
+
+  static async checkBookableCount(tenant) {
+    const maxBookables = parseInt(process.env.MAX_BOOKABLES, 10);
+    const count = await dbm.get().collection("bookables").countDocuments({ tenant: tenant });
+    return !(maxBookables && count >= maxBookables);
+  }
 }
+
+
 
 async function getAllParents(id, tenant, parentBookables, depth) {
   if (depth < 5) {
@@ -158,7 +179,7 @@ async function getAllParents(id, tenant, parentBookables, depth) {
     for (const b of bookables) {
       parentBookables.push(Object.assign(new Bookable(), b));
       parentBookables = parentBookables.concat(
-        await getAllParents(b.id, b.tenant, parentBookables, depth + 1)
+        await getAllParents(b.id, b.tenant, parentBookables, depth + 1),
       );
     }
 
