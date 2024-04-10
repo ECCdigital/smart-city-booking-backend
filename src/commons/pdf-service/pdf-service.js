@@ -145,7 +145,7 @@ class PdfService {
 
       const html= tenant.receiptTemplate
 
-      if (!this.isValidTemplate(html)) {
+      if (!PdfService.isValidTemplate(html)) {
         throw new Error("Invalid receipt template");
       }
 
