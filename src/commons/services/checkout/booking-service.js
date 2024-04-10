@@ -7,6 +7,8 @@ const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
+const PdfService = require("../../pdf-service/pdf-service");
+const FileManager = require("../../data-managers/file-manager");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
