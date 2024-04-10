@@ -133,7 +133,7 @@ class BookingService {
         let attachments = [];
         try {
           if (booking.priceEur > 0) {
-            const pdfData = await generateReceipt(
+            const pdfData = await PdfService.generateReceipt(
               booking.id,
               tenantId,
             );
