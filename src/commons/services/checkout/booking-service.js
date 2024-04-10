@@ -7,6 +7,7 @@ const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
+const {generateReceipt} = require("../../pdf-service/pdf-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -131,7 +132,7 @@ class BookingService {
         let attachments = [];
         try {
           if (booking.priceEur > 0) {
-            const pdfData = await PdfService.generateReceipt(
+            const pdfData = await generateReceipt(
               booking.id,
               tenantId,
             );
