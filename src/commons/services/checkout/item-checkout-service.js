@@ -6,6 +6,7 @@ const UserManager = require("../../data-managers/user-manager");
 const { RolePermission } = require("../../entities/role");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
+const {getTenant} = require("../../data-managers/tenant-manager");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -395,6 +396,24 @@ class ItemCheckoutService {
     return true;
   }
 
+  async checkBookingAdvanced () {
+    const tenant = await getTenant(this.tenantId);
+
+    const maxAdvancedBookingMonths = Number(tenant.maxBookingAdvancedInMonths);
+    if (!maxAdvancedBookingMonths) {
+      return true;
+    }
+
+    const maxAdvancedBookingDate = new Date();
+    maxAdvancedBookingDate.setMonth(maxAdvancedBookingDate.getMonth() + maxAdvancedBookingMonths);
+
+    if (this.timeBegin > maxAdvancedBookingDate) {
+      throw new Error(`Sie können maximal ${maxAdvancedBookingMonths} Monate im Voraus buchen.`);
+    }
+
+    return true;
+  }
+
   async checkAll() {
     await this.checkPermissions();
     await this.checkOpeningHours();
@@ -403,6 +422,7 @@ class ItemCheckoutService {
     await this.checkEventSeats();
     await this.checkParentAvailability();
     await this.checkChildBookings();
+    await this.checkBookingAdvanced();
   }
 }
 
