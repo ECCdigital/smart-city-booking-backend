@@ -399,7 +399,7 @@ class ItemCheckoutService {
   async checkBookingAdvanced () {
     const tenant = await getTenant(this.tenantId);
 
-    const maxAdvancedBookingMonths = Number(tenant.maxBookingAdvancedInMonths);
+    const maxAdvancedBookingMonths = Number(tenant?.maxBookingAdvancedInMonths);
     if (!maxAdvancedBookingMonths) {
       return true;
     }
