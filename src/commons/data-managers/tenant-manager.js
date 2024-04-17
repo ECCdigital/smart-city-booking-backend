@@ -1,7 +1,7 @@
-var validate = require("jsonschema").validate;
+const validate = require("jsonschema").validate;
 
 const Tenant = require("../entities/tenant");
-var dbm = require("../utilities/database-manager");
+const dbm = require("../utilities/database-manager");
 const SecurityUtils = require("../utilities/security-utils");
 
 const TENANT_ENCRYPT_KEYS = [
@@ -22,8 +22,8 @@ class TenantManager {
    * @returns true, if the object is a valid tenant object
    */
   static validateTenant(tenant) {
-    var schema = require("../schemas/tenant.schema.json");
-    return validate(tenant, schema).errors.length == 0;
+    const schema = require("../schemas/tenant.schema.json");
+    return validate(tenant, schema).errors.length === 0;
   }
 
   /**
@@ -38,8 +38,8 @@ class TenantManager {
         .find({})
         .toArray()
         .then((rawTenants) => {
-          var tenants = rawTenants.map((rt) => {
-            var tenant = Object.assign(new Tenant(), rt);
+          const tenants = rawTenants.map((rt) => {
+            const tenant = Object.assign(new Tenant(), rt);
             return SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS);
           });
 
