@@ -58,17 +58,17 @@ class TenantManager {
   static getTenant(id) {
     return new Promise((resolve, reject) => {
       dbm
-          .get()
-          .collection("tenants")
-          .findOne({ id: id })
-          .then((rawTenant) => {
-            if (!rawTenant) {
-              return reject(new Error(`No tenant found with ID: ${id}`));
-            }
-            const tenant = Object.assign(new Tenant(), rawTenant);
-            resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
-          })
-          .catch((err) => reject(err));
+        .get()
+        .collection("tenants")
+        .findOne({ id: id })
+        .then((rawTenant) => {
+          if (!rawTenant) {
+            return reject(new Error(`No tenant found with ID: ${id}`));
+          }
+          const tenant = Object.assign(new Tenant(), rawTenant);
+          resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
+        })
+        .catch((err) => reject(err));
     });
   }
 
@@ -89,7 +89,7 @@ class TenantManager {
           SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
           {
             upsert: upsert,
-          }
+          },
         )
         .then(() => resolve())
         .catch((err) => reject(err));
@@ -111,6 +111,39 @@ class TenantManager {
         .then(() => resolve())
         .catch((err) => reject(err));
     });
+  }
+
+  static getTenantApps(tenantId) {
+    try {
+      const tenant = dbm.get().collection("tenants").findOne({
+        id: tenantId,
+      });
+      return tenant.applications;
+    } catch (err) {
+      throw new Error(`No tenant found with ID: ${tenantId}`);
+    }
+  }
+
+  static getTenantApp(tenantId, appId) {
+    try {
+      const tenant = dbm.get().collection("tenants").findOne({
+        id: tenantId,
+      });
+      return tenant.applications.find((app) => app.id === appId);
+    } catch (err) {
+      throw new Error(`No tenant found with ID: ${tenantId}`);
+    }
+  }
+
+  static getTenantAppByType(tenantId, appType) {
+    try {
+      const tenant = dbm.get().collection("tenants").findOne({
+        id: tenantId,
+      });
+      return tenant.applications.filter((app) => app.type === appType);
+    } catch (err) {
+      throw new Error(`No tenant found with ID: ${tenantId}`);
+    }
   }
 }
 
