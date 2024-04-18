@@ -65,6 +65,7 @@ class Bookable {
    * @param {array<string>} relatedBookableIds related bookable objects that have to be checked during booking
    * @param {boolean} isBookable true, if the bookable object is bookable
    * @param {boolean} isPublic true, if the bookable object is visible to the public
+   * @param lockerDetails Details about the locker, e.g. locker number, locker size
    */
   constructor(
     id,
@@ -90,7 +91,8 @@ class Bookable {
     priceCategory,
     relatedBookableIds,
     isBookable,
-    isPublic
+    isPublic,
+    lockerDetails,
   ) {
     this.id = id;
     this.tenant = tenant;
@@ -116,6 +118,7 @@ class Bookable {
     this.relatedBookableIds = relatedBookableIds || [];
     this.isBookable = isBookable || false;
     this.isPublic = isPublic || false;
+    this.lockerDetails = lockerDetails || [];
   }
 
   /**
