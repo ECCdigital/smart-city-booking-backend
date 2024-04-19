@@ -1,13 +1,13 @@
 const crypto = require("crypto");
 const axios = require("axios");
 const qs = require("qs");
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const PdfService = require("../../../commons/pdf-service/pdf-service");
 const FileManager = require("../../../commons/data-managers/file-manager");
+const LockerService = require("../../../commons/services/locker/locker-service");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -178,6 +178,12 @@ class PaymentController {
               booking.tenant,
               attachments,
             );
+
+            try {
+              await LockerService.handleCreate(booking.tenant, booking.id);
+            } catch (err) {
+              logger.error(err);
+            }
 
             logger.info(
               `${tenantId} -- booking ${merchantTxId} successfully payed and updated.`,

@@ -9,6 +9,7 @@ const {
 } = require("./bundle-checkout-service");
 const PdfService = require("../../pdf-service/pdf-service");
 const FileManager = require("../../data-managers/file-manager");
+const LockerService = require("../locker/locker-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -163,6 +164,12 @@ class BookingService {
             booking.tenant,
             attachments,
           );
+        } catch (err) {
+          logger.error(err);
+        }
+
+        try {
+          await LockerService.handleCreate(booking.tenant, booking.id);
         } catch (err) {
           logger.error(err);
         }

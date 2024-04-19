@@ -113,9 +113,9 @@ class TenantManager {
     });
   }
 
-  static getTenantApps(tenantId) {
+  static async getTenantApps(tenantId) {
     try {
-      const tenant = dbm.get().collection("tenants").findOne({
+      const tenant = await dbm.get().collection("tenants").findOne({
         id: tenantId,
       });
       return tenant.applications;
@@ -124,9 +124,9 @@ class TenantManager {
     }
   }
 
-  static getTenantApp(tenantId, appId) {
+  static async getTenantApp(tenantId, appId) {
     try {
-      const tenant = dbm.get().collection("tenants").findOne({
+      const tenant = await dbm.get().collection("tenants").findOne({
         id: tenantId,
       });
       return tenant.applications.find((app) => app.id === appId);
@@ -135,9 +135,9 @@ class TenantManager {
     }
   }
 
-  static getTenantAppByType(tenantId, appType) {
+  static async getTenantAppByType(tenantId, appType) {
     try {
-      const tenant = dbm.get().collection("tenants").findOne({
+      const tenant = await dbm.get().collection("tenants").findOne({
         id: tenantId,
       });
       return tenant.applications.filter((app) => app.type === appType);
