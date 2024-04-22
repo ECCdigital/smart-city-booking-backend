@@ -2,7 +2,7 @@ const ItemCheckoutService = require("./item-checkout-service");
 const BookableManager = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
-const {getAvailableLocker} = require("../locker/locker-service");
+const LockerService = require("../locker/locker-service");
 
 /**
  * Class representing a bundle checkout service.
@@ -152,7 +152,8 @@ class BundleCheckoutService {
         let lockerInfo = [];
         try {
             for (const bookableItem of this.bookableItems) {
-                lockerInfo = lockerInfo.concat(await getAvailableLocker(bookableItem.bookableId , this.tenant, this.timeBegin, this.timeEnd, bookableItem.amount));
+                const lockerServiceInstance = LockerService.getInstance();
+                lockerInfo = lockerInfo.concat(await lockerServiceInstance.getAvailableLocker(bookableItem.bookableId , this.tenant, this.timeBegin, this.timeEnd, bookableItem.amount));
             }
         } catch (error) {
             throw new Error(error);

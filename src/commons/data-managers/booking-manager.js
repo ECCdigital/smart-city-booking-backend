@@ -201,6 +201,30 @@ class BookingManager {
     });
   }
 
+  static getBookingsByTimeRange(tenant, timeBegin, timeEnd) {
+    return new Promise((resolve, reject) => {
+      dbm
+        .get()
+        .collection("bookings")
+        .find({
+          tenant: tenant,
+          $or: [
+            { timeBegin: { $gte: timeBegin, $lt: timeEnd } },
+            { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
+          ],
+        })
+        .toArray()
+        .then((rawBookings) => {
+          var bookings = rawBookings.map((rb) => {
+            return Object.assign(new Booking(), rb);
+          });
+
+          resolve(bookings);
+        })
+        .catch((err) => reject(err));
+    });
+  }
+
   /**
    * Update committed status of a booking object.
    *

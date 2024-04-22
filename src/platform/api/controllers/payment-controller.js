@@ -180,7 +180,8 @@ class PaymentController {
             );
 
             try {
-              await LockerService.handleCreate(booking.tenant, booking.id);
+              const lockerServiceInstance = LockerService.getInstance();
+              await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
             } catch (err) {
               logger.error(err);
             }
