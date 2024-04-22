@@ -1,24 +1,13 @@
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const EventManager = require("../../../commons/data-managers/event-manager");
 const { Booking } = require("../../../commons/entities/booking");
 const { RolePermission } = require("../../../commons/entities/role");
-const { v4: uuidv4 } = require("uuid");
 const MailController = require("../../../commons/mail-service/mail-controller");
-const OpeningHoursManager = require("../../../commons/utilities/opening-hours-manager");
-const CouponManager = require("../../../commons/data-managers/coupon-manager");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
-const CheckoutController = require("./checkout-controller");
 const {
   createBooking,
 } = require("../../../commons/services/checkout/booking-service");
-const IdGenerator = require("../../../commons/utilities/id-generator");
-const pdfService = require("../../../commons/pdf-service/pdf-service");
-const FileManager = require("../../../commons/data-managers/file-manager");
-const PdfService = require("../../../commons/pdf-service/pdf-service");
-
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
   level: process.env.LOG_LEVEL,
