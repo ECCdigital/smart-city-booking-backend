@@ -396,19 +396,19 @@ class ItemCheckoutService {
     return true;
   }
 
-  async checkBookingAdvanced () {
+  async checkMaxBookingDate () {
     const tenant = await getTenant(this.tenantId);
 
-    const maxAdvancedBookingMonths = Number(tenant?.maxBookingAdvancedInMonths);
-    if (!maxAdvancedBookingMonths) {
+    const maxBookingMonths = Number(tenant?.maxBookingMonths);
+    if (!maxBookingMonths) {
       return true;
     }
 
-    const maxAdvancedBookingDate = new Date();
-    maxAdvancedBookingDate.setMonth(maxAdvancedBookingDate.getMonth() + maxAdvancedBookingMonths);
+    const maxBookingDate = new Date();
+    maxBookingDate.setMonth(maxBookingDate.getMonth() + maxBookingMonths);
 
-    if (this.timeBegin > maxAdvancedBookingDate) {
-      throw new Error(`Sie können maximal ${maxAdvancedBookingMonths} Monate im Voraus buchen.`);
+    if (this.timeBegin > maxBookingDate) {
+      throw new Error(`Sie können maximal ${maxBookingMonths} Monate im Voraus buchen.`);
     }
 
     return true;
@@ -422,7 +422,7 @@ class ItemCheckoutService {
     await this.checkEventSeats();
     await this.checkParentAvailability();
     await this.checkChildBookings();
-    await this.checkBookingAdvanced();
+    await this.checkMaxBookingDate();
   }
 }
 
