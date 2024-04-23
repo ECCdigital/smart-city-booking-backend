@@ -266,7 +266,7 @@ class EventController {
   static async countCheck(request, response) {
     try {
       const tenant = request.params.tenant;
-      const isCreateAllowed = await EventManager.checkEventCount(tenant);
+      const isCreateAllowed = await EventManager.checkPublicEventCount(tenant);
       response.status(200).send(isCreateAllowed);
     } catch (err) {
       logger.error(err);

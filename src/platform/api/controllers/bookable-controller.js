@@ -374,7 +374,7 @@ class BookableController {
   static async countCheck(request, response) {
     try {
       const tenant = request.params.tenant;
-      const isCreateAllowed = await BookableManager.checkBookableCount(tenant);
+      const isCreateAllowed = await BookableManager.checkPublicBookableCount(tenant);
       response.status(200).send(isCreateAllowed);
     } catch (err) {
       logger.error(err);

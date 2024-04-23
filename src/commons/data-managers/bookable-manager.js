@@ -79,9 +79,15 @@ class BookableManager {
       });
 
       if (!existingBookable) {
-        if (await this.checkBookableCount(bookable.tenant) === false) {
+        if (await this.checkPublicBookableCount(bookable.tenant) === false && bookable.isPublic) {
           throw new Error(
-            `Maximum number of bookables reached.`,
+            `Maximum number of public bookables reached.`,
+          );
+        }
+      } else if (!existingBookable.isPublic && bookable.isPublic) {
+        if (await this.checkPublicBookableCount(bookable.tenant) === false) {
+          throw new Error(
+              `Maximum number of public bookables reached.`,
           );
         }
       }
@@ -159,9 +165,9 @@ class BookableManager {
     return pBookables;
   }
 
-  static async checkBookableCount(tenant) {
+  static async checkPublicBookableCount(tenant) {
     const maxBookables = parseInt(process.env.MAX_BOOKABLES, 10);
-    const count = await dbm.get().collection("bookables").countDocuments({ tenant: tenant });
+    const count = await dbm.get().collection("bookables").countDocuments({ tenant: tenant, isPublic: true});
     return !(maxBookables && count >= maxBookables);
   }
 }

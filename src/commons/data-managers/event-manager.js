@@ -79,8 +79,12 @@ class EventManager {
       });
 
       if (!existingEvents) {
-        if ((await this.checkEventCount(event.tenant)) === false) {
-          throw new Error(`Maximum number of events reached.`);
+        if ((await this.checkPublicEventCount(event.tenant)) === false && event.isPublic) {
+          throw new Error(`Maximum number of  public  events reached.`);
+        }
+      } else if (!existingEvents.isPublic && event.isPublic) {
+        if ((await this.checkPublicEventCount(event.tenant)) === false) {
+          throw new Error(`Maximum number of public events reached.`);
         }
       }
 
@@ -124,9 +128,9 @@ class EventManager {
    * @param {string} tenant - The identifier of the tenant.
    * @returns {Promise<boolean>} A promise that resolves to a boolean indicating whether the tenant can create more events.
    */
-  static async checkEventCount(tenant) {
+  static async checkPublicEventCount(tenant) {
     const maxEvents = parseInt(process.env.MAX_EVENTS, 10);
-    const count = await dbm.get().collection("events").countDocuments({ tenant: tenant });
+    const count = await dbm.get().collection("events").countDocuments({ tenant: tenant, isPublic: true });
     return !(maxEvents && count >= maxEvents);
   }
 }
