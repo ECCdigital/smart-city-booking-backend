@@ -81,11 +81,11 @@ class PdfService {
   static async generateReceipt(
     bookingId,
     tenantId,
+    receiptNumber,
   ) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
-      const receiptId = await IdGenerator.next(tenantId, 4);
-      const receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}`;
+
       let booking = await BookingManager.getBooking(bookingId, tenantId);
       let bookables = (await BookableManager.getBookables(tenantId)).filter(
         (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),

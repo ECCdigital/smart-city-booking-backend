@@ -8,6 +8,7 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const PdfService = require("../../../commons/pdf-service/pdf-service");
 const FileManager = require("../../../commons/data-managers/file-manager");
+const ReceiptService = require("../../../commons/services/receipt/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -148,10 +149,9 @@ class PaymentController {
             let attachments = [];
             try {
               if (booking.priceEur > 0) {
-                const pdfData = await PdfService.generateReceipt(
-                    booking.id,
-                    tenantId,
-                );
+
+                const pdfData = await ReceiptService.createReceipt(tenantId, booking.id);
+
                 attachments = [
                   {
                     filename: pdfData.name,
@@ -159,13 +159,6 @@ class PaymentController {
                     contentType: "application/pdf",
                   },
                 ];
-                await FileManager.createFile(
-                    tenantId,
-                    pdfData.buffer,
-                    pdfData.name,
-                    "public",
-                    "receipts",
-                );
               }
             } catch (err) {
               logger.error(err);
