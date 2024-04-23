@@ -21,38 +21,42 @@ class NextCloudController {
    * Get a list of all public files related to a tenant.
    */
   static async getFiles(request, response) {
-    const { params: { tenant }, user, query: { includeProtected = "false" } } = request;
+    const {
+      params: { tenant },
+      user,
+      query: { includeProtected = "false" },
+    } = request;
     const includeProtectedBool = includeProtected !== "false";
 
-  try {
-    const files = await FileManager.getFiles(tenant, PUBLIC_PATH);
-    const publicFiles = files.map((file) => ({
-      ...file,
-      accessLevel: "public",
-    }));
-
-    let protectedFiles = [];
-    if (request.isAuthenticated() && includeProtectedBool) {
-      const protectedFilesData = await FileManager.getFiles(
-        tenant,
-        PROTECTED_PATH,
-      );
-      protectedFiles = protectedFilesData.map((file) => ({
+    try {
+      const files = await FileManager.getFiles(tenant, PUBLIC_PATH);
+      const publicFiles = files.map((file) => ({
         ...file,
-        accessLevel: "protected",
+        accessLevel: "public",
       }));
-    }
 
-    const allFiles = [...publicFiles, ...protectedFiles];
-    logger.info(
-      `${tenant} -- sending ${allFiles.length} files to user ${user?.id}. `,
-    );
-    response.status(200).send(allFiles);
-  } catch (err) {
-    logger.error("Error getting files from Next Cloud.", err);
-    response.status(500).send("Error getting files from Next Cloud.");
+      let protectedFiles = [];
+      if (request.isAuthenticated() && includeProtectedBool) {
+        const protectedFilesData = await FileManager.getFiles(
+          tenant,
+          PROTECTED_PATH,
+        );
+        protectedFiles = protectedFilesData.map((file) => ({
+          ...file,
+          accessLevel: "protected",
+        }));
+      }
+
+      const allFiles = [...publicFiles, ...protectedFiles];
+      logger.info(
+        `${tenant} -- sending ${allFiles.length} files to user ${user?.id}. `,
+      );
+      response.status(200).send(allFiles);
+    } catch (err) {
+      logger.error("Error getting files from Next Cloud.", err);
+      response.status(500).send("Error getting files from Next Cloud.");
+    }
   }
-}
 
   /**
    * Download a file from the public folder of a tenant.
@@ -107,14 +111,22 @@ class NextCloudController {
    * Upload a file to the public folder of a tenant.
    */
   static async createFile(request, response) {
-    const tenant = request.params.tenant;
-    const file = request.files.file;
-    const accessLevel = request.body.accessLevel;
-    const customDirectory = request.body.customDirectory;
+    const {
+      params: { tenant },
+      user,
+      files: { file },
+      body: { accessLevel, customDirectory },
+    } = request;
 
-    const user = request.user;
-    if (!user) {
-      logger.warn(`${tenant} -- could not upload file. Unauthorized.`);
+    const createPermissions = await UserManager.hasPermission(
+      user?.id,
+      tenant,
+      RolePermission.MANAGE_BOOKABLES,
+      "create",
+    );
+
+    if (!createPermissions) {
+      logger.warn(`${tenant} -- Unauthorized.`);
       response.status(401).send("Unauthorized.");
       return;
     }

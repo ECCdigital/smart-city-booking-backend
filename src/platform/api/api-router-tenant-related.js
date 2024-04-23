@@ -166,6 +166,6 @@ router.delete("/coupons/:id", CouponController.deleteCoupon);
 // ==========
 router.get("/files/list", NextCloudController.getFiles);
 router.get("/files/get", NextCloudController.getFile);
-router.post("/files", NextCloudController.createFile);
+router.post("/files", AuthenticationController.isSignedIn, NextCloudController.createFile);
 
 module.exports = router;
