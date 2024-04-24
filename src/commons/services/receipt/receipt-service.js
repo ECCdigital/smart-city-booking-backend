@@ -19,17 +19,17 @@ class ReceiptService {
         (attachment) => attachment.type === "receipt",
       ) || [];
       
-      let version = 1;
+      let revision = 1;
       let receiptId = null;
 
       if(existingReceipts.length > 0) {
-        version = Math.max(...existingReceipts.map(receipt => receipt.revision)) + 1;
+        revision = Math.max(...existingReceipts.map(receipt => receipt.revision)) + 1;
         receiptId = existingReceipts[0].receiptId;
       } else {
         receiptId = await IdGenerator.next(tenantId, 4);
       }
 
-      const receiptNumber =`${tenant.receiptNumberPrefix}-${receiptId}-${version}`;
+      const receiptNumber =`${tenant.receiptNumberPrefix}-${receiptId}-${revision}`;
 
       const pdfData = await PdfService.generateReceipt(
         bookingId,

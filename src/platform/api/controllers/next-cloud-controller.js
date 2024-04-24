@@ -1,7 +1,5 @@
 const FileManager = require("../../../commons/data-managers/file-manager");
 const bunyan = require("bunyan");
-const UserManager = require("../../../commons/data-managers/user-manager");
-const { RolePermission } = require("../../../commons/entities/role");
 
 const logger = bunyan.createLogger({
   name: "next-cloud-controller.js",
@@ -10,7 +8,6 @@ const logger = bunyan.createLogger({
 
 const PUBLIC_PATH = "public";
 const PROTECTED_PATH = "protected";
-const RECEIPTS_PATH = "receipts";
 
 /**
  * The Next Cloud Controller provides Endpoints to upload and download files from the Next Cloud platform connected to
@@ -64,7 +61,6 @@ class NextCloudController {
   static async getFile(request, response) {
     const {
       params: { tenant },
-      user,
       query: { name: filename },
     } = request;
 
@@ -77,18 +73,10 @@ class NextCloudController {
     try {
       const isPublicPath = filename.startsWith(`/${PUBLIC_PATH}/`);
       const isProtected = filename.startsWith(`/${PROTECTED_PATH}/`);
-      const isReceiptsPath = filename.startsWith(`/${RECEIPTS_PATH}/`);
-      const readPermissions = await UserManager.hasPermission(
-        user?.id,
-        tenant,
-        RolePermission.MANAGE_BOOKINGS,
-        "readAny",
-      );
 
       if (
         isPublicPath ||
-        (isProtected && request.isAuthenticated()) ||
-        (isReceiptsPath && readPermissions && request.isAuthenticated())
+        (isProtected && request.isAuthenticated())
       ) {
         const content = await FileManager.getFile(tenant, filename);
         logger.info(`${tenant} -- sending file ${filename}`);
@@ -117,19 +105,6 @@ class NextCloudController {
       files: { file },
       body: { accessLevel, customDirectory },
     } = request;
-
-    const createPermissions = await UserManager.hasPermission(
-      user?.id,
-      tenant,
-      RolePermission.MANAGE_BOOKABLES,
-      "create",
-    );
-
-    if (!createPermissions) {
-      logger.warn(`${tenant} -- Unauthorized.`);
-      response.status(401).send("Unauthorized.");
-      return;
-    }
 
     if (!tenant || !file) {
       logger.warn(
