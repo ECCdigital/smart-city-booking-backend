@@ -1,37 +1,9 @@
-const { v4: uuidv4 } = require("uuid");
-
 const BookableTypes = Object.freeze({
   EVENT_LOCATION: "event-location",
   ROOM: "room",
   RESOURCE: "resource",
   TICKET: "ticket",
 });
-
-const AttachmentTypes = Object.freeze({
-  PREVIEW_IMAGE: "preview-image",
-  AGREEMENT: "agreement",
-  DOCUMENT: "document",
-});
-
-/**
- * An attachment is used to reference external documents related to a bookable object.
- */
-class Attachment {
-  /**
-   * Create a new attachment object
-   *
-   * @param id Unique identifier of the attachment (inside booking context)
-   * @param type The type of the attachment, NOTE: Use AttachmentTypes
-   * @param title The display name of the attachment
-   * @param url The url that refers to the attachment
-   */
-  constructor(id, type, title, url) {
-    this.id = id || uuidv4();
-    this.type = type;
-    this.title = title;
-    this.url = url;
-  }
-}
 
 /**
  * A Bookable is every location, room, ticket, resource or similar that may be booked via the booking manager platform.

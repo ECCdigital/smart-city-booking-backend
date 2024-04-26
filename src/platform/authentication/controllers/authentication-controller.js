@@ -1,9 +1,6 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-const RoleManager = require("../../../commons/data-managers/role-manager");
 var { User, HookTypes } = require("../../../commons/entities/user");
-var { Role } = require("../../../commons/entities/role");
 const bunyan = require("bunyan");
-const { getTenant } = require("../../../commons/data-managers/tenant-manager");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",

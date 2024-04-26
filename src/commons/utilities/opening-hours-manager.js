@@ -1,5 +1,4 @@
 const { Bookable } = require("../entities/bookable");
-const { get } = require("./database-manager");
 const {
   getBookable,
   getParentBookables,
@@ -192,7 +191,7 @@ class OpeningHoursManager {
             acc[weekday].endTime = endTime;
           }
         } else {
-          const { weekdays, ...newCur } = cur;
+          const { ...newCur } = cur;
           acc[weekday] = { ...newCur };
         }
       });

@@ -10,8 +10,6 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
-const os = require("os");
-const path = require("path");
 const IdGenerator = require("../utilities/id-generator");
 
 class PdfService {

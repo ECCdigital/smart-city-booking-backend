@@ -3,7 +3,6 @@ const path = require("path");
 const bunyan = require("bunyan");
 
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
-const BookingManager = require("../../../commons/data-managers/booking-manager");
 const ItemCheckoutService = require("../../../commons/services/checkout/item-checkout-service");
 
 const logger = bunyan.createLogger({
@@ -122,7 +121,8 @@ class CalendarController {
 
       try {
         await ics.checkAll();
-      } catch (e) {
+      } catch (err) {
+        logger.error(err);
         if (
           items.length > 0 &&
           items[items.length - 1].timeEnd === intervalBegin

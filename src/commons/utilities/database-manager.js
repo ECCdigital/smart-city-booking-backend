@@ -1,13 +1,7 @@
-const bunyan = require("bunyan");
 const MongoClient = require("mongodb").MongoClient;
 
 var db;
 var dbClient;
-
-const logger = bunyan.createLogger({
-  name: "database-manager.js",
-  level: process.env.LOG_LEVEL,
-});
 
 /**
  * The Database Manager handles and manages the database connection.

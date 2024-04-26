@@ -263,15 +263,13 @@ class ItemCheckoutService {
     );
 
     for (const parentBookable of parentBookables) {
-      const parentAmountBooked = await this.calculateAmountBooked(
-        parentBookable,
-      );
+      const parentAmountBooked =
+        await this.calculateAmountBooked(parentBookable);
 
       let isAvailable;
       if (bookable.type === "ticket") {
-        const amountBooked = await this.calculateAmountBookedTicketsByParent(
-          parentBookable,
-        );
+        const amountBooked =
+          await this.calculateAmountBookedTicketsByParent(parentBookable);
         isAvailable =
           !parentBookable.amount ||
           parentAmountBooked + amountBooked + this.amount <=
