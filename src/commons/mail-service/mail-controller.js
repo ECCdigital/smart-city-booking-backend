@@ -67,8 +67,8 @@ class MailController {
             <br><strong>Adresse:</strong> ${
               !booking.street ? "" : booking.street
             } in ${!booking.zipCode ? "" : booking.zipCode} ${
-              !booking.location ? "" : booking.location
-            }
+      !booking.location ? "" : booking.location
+    }
             <br><strong>Telefon:</strong> ${!booking.phone ? "" : booking.phone}
             <br><strong>E-Mail:</strong> ${!booking.mail ? "" : booking.mail}
             <br><br><strong>Hinweise zur Buchung:</strong>
@@ -100,15 +100,15 @@ class MailController {
                     vom ${MailController.formatDate(
                       bookable._populated.event.information.startDate,
                     )} ${
-                      bookable._populated.event.information.startTime
-                    } bis ${MailController.formatDate(
-                      bookable._populated.event.information.endDate,
-                    )} ${bookable._populated.event.information.endTime}<br>
+          bookable._populated.event.information.startTime
+        } bis ${MailController.formatDate(
+          bookable._populated.event.information.endDate,
+        )} ${bookable._populated.event.information.endTime}<br>
                     Ort: ${bookable._populated.event.eventLocation.name}, ${
-                      bookable._populated.event.eventAddress.street
-                    }, ${bookable._populated.event.eventAddress.houseNumber} ${
-                      bookable._populated.event.eventAddress.zip
-                    } ${bookable._populated.event.eventAddress.city}
+          bookable._populated.event.eventAddress.street
+        }, ${bookable._populated.event.eventAddress.houseNumber} ${
+          bookable._populated.event.eventAddress.zip
+        } ${bookable._populated.event.eventAddress.city}
                 </div>`;
       }
 
@@ -131,7 +131,12 @@ class MailController {
     return content;
   }
 
-  static async sendBookingConfirmation(address, bookingId, tenantId, attachments = undefined) {
+  static async sendBookingConfirmation(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
     const tenant = await TenantManager.getTenant(tenantId);
 
     let content = `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`;

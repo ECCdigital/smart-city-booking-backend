@@ -3,7 +3,7 @@ const RoleManager = require("../../../commons/data-managers/role-manager");
 var { User, HookTypes } = require("../../../commons/entities/user");
 var { Role } = require("../../../commons/entities/role");
 const bunyan = require("bunyan");
-const {getTenant} = require("../../../commons/data-managers/tenant-manager");
+const { getTenant } = require("../../../commons/data-managers/tenant-manager");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -62,8 +62,8 @@ class AuthenticationController {
 
             UserManager.signupUser(user)
               .then(() => {
-                  logger.info(`User ${user.id} signed up.`);
-                  response.status(201).send({tenantId: request.params.tenant});
+                logger.info(`User ${user.id} signed up.`);
+                response.status(201).send({ tenantId: request.params.tenant });
               })
               .catch((err) => {
                 logger.error(err);

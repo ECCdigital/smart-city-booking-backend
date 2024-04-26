@@ -78,10 +78,7 @@ class PdfService {
     }
   }
 
-  static async generateReceipt(
-    bookingId,
-    tenantId,
-  ) {
+  static async generateReceipt(bookingId, tenantId) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
       const receiptId = await IdGenerator.next(tenantId, 4);
@@ -90,7 +87,6 @@ class PdfService {
       let bookables = (await BookableManager.getBookables(tenantId)).filter(
         (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
       );
-
 
       const totalAmount = PdfService.formatCurrency(booking.priceEur);
 
@@ -143,7 +139,7 @@ class PdfService {
 
       const page = await browser.newPage();
 
-      const html= tenant.receiptTemplate
+      const html = tenant.receiptTemplate;
 
       if (!PdfService.isValidTemplate(html)) {
         throw new Error("Invalid receipt template");
@@ -166,7 +162,7 @@ class PdfService {
 
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
 
-      let pdfData = {}
+      let pdfData = {};
       pdfData.buffer = await page.pdf({ format: "A4" });
 
       pdfData.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
@@ -191,11 +187,12 @@ class PdfService {
       /<\/body>/,
     ];
 
-
-    const missingElement = patterns.find(pattern => !pattern.test(template));
+    const missingElement = patterns.find((pattern) => !pattern.test(template));
 
     if (missingElement !== undefined) {
-      logger.error(`PDF template is missing required pattern: ${missingElement}`);
+      logger.error(
+        `PDF template is missing required pattern: ${missingElement}`,
+      );
     }
 
     return !missingElement;

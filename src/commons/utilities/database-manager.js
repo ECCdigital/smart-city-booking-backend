@@ -22,7 +22,7 @@ class DatabaseManager {
    * @param {String} databaseName Name of the Database.
    * @returns the Database object.
    */
-  static connect(databaseUrl= undefined, databaseName = undefined) {
+  static connect(databaseUrl = undefined, databaseName = undefined) {
     const dbUrl = databaseUrl || process.env.DB_URL;
     const dbName = databaseName || process.env.DB_NAME;
 

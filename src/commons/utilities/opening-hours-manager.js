@@ -1,6 +1,9 @@
-const {Bookable} = require("../entities/bookable");
-const {get} = require("./database-manager");
-const {getBookable, getParentBookables} = require("../data-managers/bookable-manager");
+const { Bookable } = require("../entities/bookable");
+const { get } = require("./database-manager");
+const {
+  getBookable,
+  getParentBookables,
+} = require("../data-managers/bookable-manager");
 
 /**
  *  Opening Hours Manager
@@ -33,7 +36,7 @@ class OpeningHoursManager {
       // check if booking is in opening hours
       for (let day of days) {
         const dayOpeningHours = openingHours.filter((oh) =>
-          oh.weekdays.includes(day)
+          oh.weekdays.includes(day),
         );
 
         if (dayOpeningHours.length === 0) {
@@ -47,7 +50,7 @@ class OpeningHoursManager {
           const ohEnd = new Date(timeEnd);
           ohStart.setHours(
             oh.startTime.split(":")[0],
-            oh.startTime.split(":")[1]
+            oh.startTime.split(":")[1],
           );
           ohEnd.setHours(oh.endTime.split(":")[0], oh.endTime.split(":")[1]);
 
@@ -95,10 +98,10 @@ class OpeningHoursManager {
         if (sohDates.length > 0) {
           for (const sohDate of sohDates) {
             const sohStartDate = new Date(
-              `${sohDate.date}T${sohDate.startTime}`
+              `${sohDate.date}T${sohDate.startTime}`,
             ).getTime();
             const sohEndDate = new Date(
-              `${sohDate.date}T${sohDate.endTime}`
+              `${sohDate.date}T${sohDate.endTime}`,
             ).getTime();
 
             if (
@@ -121,12 +124,12 @@ class OpeningHoursManager {
   }
   static async getRelatedOpeningHours(bookableId, tenant) {
     let bookable = await getBookable(bookableId, tenant);
-    let relatedBookables = await getParentBookables(bookableId, tenant) || [];
+    let relatedBookables = (await getParentBookables(bookableId, tenant)) || [];
 
     relatedBookables.push(bookable);
 
     relatedBookables = relatedBookables.filter((b, i) => {
-        return relatedBookables.findIndex((b2) => b2.id === b.id) === i;
+      return relatedBookables.findIndex((b2) => b2.id === b.id) === i;
     });
 
     const specialOpeningHours = [];
@@ -137,30 +140,35 @@ class OpeningHoursManager {
       }
     }
 
-    const filteredSpecialOpeningHours = specialOpeningHours.reduce((acc, cur) => {
-      const date = cur.date;
-      const existing = acc.find(item => item.date === date);
+    const filteredSpecialOpeningHours = specialOpeningHours.reduce(
+      (acc, cur) => {
+        const date = cur.date;
+        const existing = acc.find((item) => item.date === date);
 
-      if (!existing) {
-        acc.push(cur);
-      } else {
-        if (existing.startTime === existing.endTime || cur.startTime === cur.endTime) {
-          if (cur.startTime === cur.endTime) {
-            existing.startTime = cur.startTime;
-            existing.endTime = cur.endTime;
-          }
+        if (!existing) {
+          acc.push(cur);
         } else {
-          if (existing.startTime < cur.startTime) {
-            existing.startTime = cur.startTime;
-          }
-          if (existing.endTime > cur.endTime) {
-            existing.endTime = cur.endTime;
+          if (
+            existing.startTime === existing.endTime ||
+            cur.startTime === cur.endTime
+          ) {
+            if (cur.startTime === cur.endTime) {
+              existing.startTime = cur.startTime;
+              existing.endTime = cur.endTime;
+            }
+          } else {
+            if (existing.startTime < cur.startTime) {
+              existing.startTime = cur.startTime;
+            }
+            if (existing.endTime > cur.endTime) {
+              existing.endTime = cur.endTime;
+            }
           }
         }
-      }
-      return acc;
-    }, []);
-
+        return acc;
+      },
+      [],
+    );
 
     relatedBookables = relatedBookables.map((b) => {
       return Object.assign(new Bookable(), b);
@@ -191,8 +199,10 @@ class OpeningHoursManager {
       return acc;
     }, {});
 
-    return {regularOpeningHours: combinedOpeningHours, specialOpeningHours: filteredSpecialOpeningHours};
-
+    return {
+      regularOpeningHours: combinedOpeningHours,
+      specialOpeningHours: filteredSpecialOpeningHours,
+    };
   }
 }
 

@@ -21,7 +21,7 @@ class UserUtilities {
     var bookings = await BookingManager.getBookings(tenant);
 
     var relatedBookings = bookings.filter(
-      (b) => b.mail.toLowerCase() === user.id.toLowerCase()
+      (b) => b.mail.toLowerCase() === user.id.toLowerCase(),
     );
 
     for (var booking of relatedBookings) {

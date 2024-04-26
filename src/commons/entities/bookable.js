@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4 } = require("uuid");
 
 const BookableTypes = Object.freeze({
   EVENT_LOCATION: "event-location",
@@ -10,14 +10,13 @@ const BookableTypes = Object.freeze({
 const AttachmentTypes = Object.freeze({
   PREVIEW_IMAGE: "preview-image",
   AGREEMENT: "agreement",
-  DOCUMENT: 'document'
+  DOCUMENT: "document",
 });
 
 /**
  * An attachment is used to reference external documents related to a bookable object.
  */
 class Attachment {
-
   /**
    * Create a new attachment object
    *
@@ -32,7 +31,6 @@ class Attachment {
     this.title = title;
     this.url = url;
   }
-
 }
 
 /**
@@ -90,7 +88,7 @@ class Bookable {
     priceCategory,
     relatedBookableIds,
     isBookable,
-    isPublic
+    isPublic,
   ) {
     this.id = id;
     this.tenant = tenant;
@@ -151,7 +149,7 @@ class Bookable {
    * @param {string} flag Name of the flag
    */
   removeFlag(flag) {
-    this.flags = this.flags.filter(t => t !== flag);
+    this.flags = this.flags.filter((t) => t !== flag);
   }
 
   /**
@@ -167,7 +165,7 @@ class Bookable {
    * @param {string} id the attachment id
    */
   removeAttachment(id) {
-    this.attachments = this.attachments.filter(a => a.id !== id);
+    this.attachments = this.attachments.filter((a) => a.id !== id);
   }
 
   /**
@@ -175,11 +173,10 @@ class Bookable {
    */
   getTotalPrice(timeBegin, timeEnd) {
     var duration = (timeEnd - timeBegin) / 1000 / 60 / 60; // Hours
-    if (this.priceCategory === 'per-hour') {
+    if (this.priceCategory === "per-hour") {
       return Math.round(this.priceEur * duration * 100) / 100;
-    }
-    else if (this.priceCategory === 'per-day') {
-      return Math.round(this.priceEur * duration / 24 * 100) / 100;
+    } else if (this.priceCategory === "per-day") {
+      return Math.round(((this.priceEur * duration) / 24) * 100) / 100;
     }
 
     return Math.round(this.priceEur * 100) / 100;

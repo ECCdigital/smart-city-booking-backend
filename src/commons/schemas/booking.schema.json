@@ -1,9 +1,9 @@
 {
-    "type": "object",
-    "properties": {
-        "id": { "type" : "string" },
-        "tenant": { "type" : "string" },
-        "mail": { "type": "string" }
-    },
-    "required": ["tenant"]
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "tenant": { "type": "string" },
+    "mail": { "type": "string" }
+  },
+  "required": ["tenant"]
 }

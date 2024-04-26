@@ -58,17 +58,17 @@ class TenantManager {
   static getTenant(id) {
     return new Promise((resolve, reject) => {
       dbm
-          .get()
-          .collection("tenants")
-          .findOne({ id: id })
-          .then((rawTenant) => {
-            if (!rawTenant) {
-              return reject(new Error(`No tenant found with ID: ${id}`));
-            }
-            const tenant = Object.assign(new Tenant(), rawTenant);
-            resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
-          })
-          .catch((err) => reject(err));
+        .get()
+        .collection("tenants")
+        .findOne({ id: id })
+        .then((rawTenant) => {
+          if (!rawTenant) {
+            return reject(new Error(`No tenant found with ID: ${id}`));
+          }
+          const tenant = Object.assign(new Tenant(), rawTenant);
+          resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
+        })
+        .catch((err) => reject(err));
     });
   }
 
@@ -89,7 +89,7 @@ class TenantManager {
           SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
           {
             upsert: upsert,
-          }
+          },
         )
         .then(() => resolve())
         .catch((err) => reject(err));
