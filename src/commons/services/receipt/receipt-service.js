@@ -60,6 +60,14 @@ class ReceiptService {
       throw err;
     }
   }
+  
+    static async getReceipt(tenantId, receiptName) {
+        try {
+          return await NextcloudManager.getFile(tenantId, `receipts/${receiptName}`);
+        } catch (err) {
+        throw err;
+        }
+    }
 }
 
 module.exports = ReceiptService;

@@ -608,47 +608,93 @@ class BookingController {
     }
   }
 
-  static async getReceipt(request, response) {}
+  static async getReceipt(request, response) {
+    const {
+      params: { tenant, id: bookingId, receiptId },
+      user,
+    } = request;
+
+    try {
+      if (!tenant || !bookingId || !receiptId) {
+        logger.warn(`${tenant} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+
+      const hasPermission =
+        (user.tenant === tenant &&
+          (await UserManager.hasPermission(
+            user.id,
+            user.tenant,
+            RolePermission.MANAGE_BOOKINGS,
+            "readAny",
+          ))) ||
+        BookingPermissions._isOwner(booking, user.id, user.tenant);
+
+      if (!hasPermission) {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to get receipt.`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const receipt = await ReceiptService.getReceipt(tenant, receiptId);
+
+      logger.info(
+        `${tenant} -- sending receipt ${receiptId} to user ${user?.id}`,
+      );
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${receiptId}`,
+      );
+
+      return response.status(200).send(receipt);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not get receipt");
+    }
+  }
 
   static async createReceipt(request, response) {
-   try {
+    try {
+      const {
+        params: { tenant, id: bookingId },
+        user,
+      } = request;
 
-     const {
-       params: {tenant, id: bookingId},
-       user,
-     } = request;
+      if (!tenant || !bookingId) {
+        logger.warn(`${tenant} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
 
-     if (!tenant || !bookingId) {
-       logger.warn(`${tenant} -- Missing required parameters.`);
-       return response.status(400).send("Missing required parameters.");
-     }
+      const booking = await BookingManager.getBooking(bookingId, tenant);
 
-     const booking = await BookingManager.getBooking(bookingId, tenant);
+      const hasPermission =
+        (user.tenant === tenant &&
+          (await UserManager.hasPermission(
+            user.id,
+            user.tenant,
+            RolePermission.MANAGE_BOOKINGS,
+            "updateAny",
+          ))) ||
+        BookingPermissions._isOwner(booking, user.id, user.tenant);
 
-     const hasPermission =
-         (user.tenant === tenant &&
-             (await UserManager.hasPermission(
-                 user.id,
-                 user.tenant,
-                 RolePermission.MANAGE_BOOKINGS,
-                 "updateAny",
-             ))) ||
-         BookingPermissions._isOwner(booking, user.id, user.tenant);
+      if (!hasPermission) {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to create receipt.`,
+        );
+        return response.sendStatus(403);
+      }
 
-     if (!hasPermission) {
-       logger.warn(
-           `${tenant} -- User ${user?.id} is not allowed to create receipt.`,
-       );
-       return response.sendStatus(403);
-     }
+      await ReceiptService.createReceipt(tenant, bookingId);
 
-     await ReceiptService.createReceipt(tenant, bookingId);
-
-     return response.sendStatus(200)
-   } catch (err) {
-     logger.error(err);
-     return response.status(500).send("Could not create receipt");
-   }
+      return response.sendStatus(200);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not create receipt");
+    }
   }
 }
 

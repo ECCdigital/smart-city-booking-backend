@@ -6,7 +6,6 @@ const PaymentController = require("./controllers/payment-controller");
 const UserController = require("./controllers/user-controller");
 const CalendarController = require("./controllers/calendar-controller");
 const CouponController = require("./controllers/coupon-controller");
-const ExportController = require("../exporters/controllers/csv-export-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
@@ -141,6 +140,12 @@ router.post(
     "/bookings/:id/receipt",
     AuthenticationController.isSignedIn,
     BookingController.createReceipt,
+)
+
+router.get(
+    "/bookings/:id/receipt/:receiptId",
+    AuthenticationController.isSignedIn,
+    BookingController.getReceipt,
 )
 
 // CHECKOUT
