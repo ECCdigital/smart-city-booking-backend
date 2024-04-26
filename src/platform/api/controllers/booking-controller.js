@@ -16,8 +16,8 @@ const {
 } = require("../../../commons/services/checkout/booking-service");
 const IdGenerator = require("../../../commons/utilities/id-generator");
 const pdfService = require("../../../commons/pdf-service/pdf-service");
-const FileManager = require("../../../commons/data-managers/file-manager");
 const PdfService = require("../../../commons/pdf-service/pdf-service");
+const ReceiptService = require("../../../commons/services/receipt/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -606,6 +606,49 @@ class BookingController {
       logger.error(err);
       response.status(500).send("Could not get event bookings");
     }
+  }
+
+  static async getReceipt(request, response) {}
+
+  static async createReceipt(request, response) {
+   try {
+
+     const {
+       params: {tenant, id: bookingId},
+       user,
+     } = request;
+
+     if (!tenant || !bookingId) {
+       logger.warn(`${tenant} -- Missing required parameters.`);
+       return response.status(400).send("Missing required parameters.");
+     }
+
+     const booking = await BookingManager.getBooking(bookingId, tenant);
+
+     const hasPermission =
+         (user.tenant === tenant &&
+             (await UserManager.hasPermission(
+                 user.id,
+                 user.tenant,
+                 RolePermission.MANAGE_BOOKINGS,
+                 "updateAny",
+             ))) ||
+         BookingPermissions._isOwner(booking, user.id, user.tenant);
+
+     if (!hasPermission) {
+       logger.warn(
+           `${tenant} -- User ${user?.id} is not allowed to create receipt.`,
+       );
+       return response.sendStatus(403);
+     }
+
+     await ReceiptService.createReceipt(tenant, bookingId);
+
+     return response.sendStatus(200)
+   } catch (err) {
+     logger.error(err);
+     return response.status(500).send("Could not create receipt");
+   }
   }
 }
 

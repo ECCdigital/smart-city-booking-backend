@@ -1,4 +1,6 @@
-const FileManager = require("../../../commons/data-managers/file-manager");
+const {
+  NextcloudManager,
+} = require("../../../commons/data-managers/file-manager");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -13,7 +15,7 @@ const PROTECTED_PATH = "protected";
  * The Next Cloud Controller provides Endpoints to upload and download files from the Next Cloud platform connected to
  * the booking manager instance.
  */
-class NextCloudController {
+class FileController {
   /**
    * Get a list of all public files related to a tenant.
    */
@@ -26,7 +28,7 @@ class NextCloudController {
     const includeProtectedBool = includeProtected !== "false";
 
     try {
-      const files = await FileManager.getFiles(tenant, PUBLIC_PATH);
+      const files = await NextcloudManager.getFiles(tenant, PUBLIC_PATH);
       const publicFiles = files.map((file) => ({
         ...file,
         accessLevel: "public",
@@ -34,7 +36,7 @@ class NextCloudController {
 
       let protectedFiles = [];
       if (request.isAuthenticated() && includeProtectedBool) {
-        const protectedFilesData = await FileManager.getFiles(
+        const protectedFilesData = await NextcloudManager.getFiles(
           tenant,
           PROTECTED_PATH,
         );
@@ -74,11 +76,8 @@ class NextCloudController {
       const isPublicPath = filename.startsWith(`/${PUBLIC_PATH}/`);
       const isProtected = filename.startsWith(`/${PROTECTED_PATH}/`);
 
-      if (
-        isPublicPath ||
-        (isProtected && request.isAuthenticated())
-      ) {
-        const content = await FileManager.getFile(tenant, filename);
+      if (isPublicPath || (isProtected && request.isAuthenticated())) {
+        const content = await NextcloudManager.getFile(tenant, filename);
         logger.info(`${tenant} -- sending file ${filename}`);
         response.setHeader(
           "Content-Disposition",
@@ -125,7 +124,7 @@ class NextCloudController {
         (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
         "/" +
         customDirectory;
-      await FileManager.createFile(
+      await NextcloudManager.createFile(
         tenant,
         file.data,
         file.name,
@@ -143,4 +142,4 @@ class NextCloudController {
   }
 }
 
-module.exports = NextCloudController;
+module.exports = FileController;

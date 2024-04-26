@@ -1,5 +1,5 @@
 const PdfService = require("../../pdf-service/pdf-service");
-const FileManager = require("../../data-managers/file-manager");
+const { NextcloudManager } = require("../../data-managers/file-manager");
 const IdGenerator = require("../../utilities/id-generator");
 const TenantManager = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
@@ -24,7 +24,7 @@ class ReceiptService {
 
       if(existingReceipts.length > 0) {
         revision = Math.max(...existingReceipts.map(receipt => receipt.revision)) + 1;
-        receiptId = existingReceipts[0].receiptId;
+        receiptId = existingReceipts[0].receiptId ||  await IdGenerator.next(tenantId, 4);
       } else {
         receiptId = await IdGenerator.next(tenantId, 4);
       }
@@ -37,7 +37,7 @@ class ReceiptService {
         receiptNumber,
       );
 
-      await FileManager.createFile(
+      await NextcloudManager.createFile(
         tenantId,
         pdfData.buffer,
         pdfData.name,
@@ -49,7 +49,8 @@ class ReceiptService {
         type: "receipt",
         name: pdfData.name,
         receiptId: receiptId,
-        revision: version,
+        revision: revision,
+        timeCreated: Date.now(),
       });
 
       await BookingManager.storeBooking(booking);

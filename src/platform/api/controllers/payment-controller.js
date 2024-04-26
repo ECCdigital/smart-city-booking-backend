@@ -7,7 +7,6 @@ const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const PdfService = require("../../../commons/pdf-service/pdf-service");
-const FileManager = require("../../../commons/data-managers/file-manager");
 const ReceiptService = require("../../../commons/services/receipt/receipt-service");
 
 const logger = bunyan.createLogger({
