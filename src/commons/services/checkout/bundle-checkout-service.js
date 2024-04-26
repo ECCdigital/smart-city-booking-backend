@@ -85,7 +85,7 @@ class BundleCheckoutService {
           chunkLength,
           possible,
           ensureUnique,
-          retryCount - 1
+          retryCount - 1,
         );
       }
     }
