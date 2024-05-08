@@ -8,6 +8,8 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const PdfService = require("../../../commons/pdf-service/pdf-service");
 const ReceiptService = require("../../../commons/services/receipt/receipt-service");
+const FileManager = require("../../../commons/data-managers/file-manager");
+const { GiroCockpitPaymentService } = require("../../../commons/services/payment/payment-service");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -15,92 +17,31 @@ const logger = bunyan.createLogger({
 });
 
 class PaymentController {
-  static async getPaymentUrl(request, response) {
-    const GIRO_CHECKOUT_URL =
-      "https://payment.girosolution.de/girocheckout/api/v2/paypage/init";
+  static async createPayment(request, response) {
+    const {
+      params: { tenant: tenantId },
+      body: { bookingId },
+    } = request;
 
-    const type = "SALE";
-    const test = 1;
-    const currency = "EUR";
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
 
-    const merchantTxId = request.body?.bookingId;
-    const tenantId = request.params?.tenant;
+    let paymentService = {};
 
-    const tenant = await TenantManager.getTenant(tenantId);
+    switch (booking.paymentMethod) {
+      case "giroCockpit":
+        paymentService = new GiroCockpitPaymentService(tenantId, bookingId);
+        break;
+      default:
+        return response.sendStatus(400);
+    }
 
-    const MERCHANT_ID = tenant.paymentMerchantId;
-    const PROJECT_ID = tenant.paymentProjectId;
-    const PROJECT_SECRET = tenant.paymentSecret;
-
-    const notifyUrl = `${request.protocol}://${request.get(
-      "host",
-    )}/api/${tenantId}/payments/notify`;
-    const successUrl = `${request.protocol}://${request.get(
-      "host",
-    )}/api/${tenantId}/payments/response?id=${merchantTxId}&tenant=${tenantId}&status=success`;
-    const failUrl = `${request.protocol}://${request.get(
-      "host",
-    )}/api/${tenantId}/payments/response?id=${merchantTxId}&tenant=${tenantId}&status=fail`;
-    const backUrl = `${request.protocol}://${request.get(
-      "host",
-    )}/api/${tenantId}/payments/response?id=${merchantTxId}&tenant=${tenantId}&status=back`;
-
-    const booking = await BookingManager.getBooking(merchantTxId, tenantId);
-
-    const amount = (booking.priceEur * 100 || 0).toString();
-
-    const purpose = `${booking.id} ${tenant.paymentPurposeSuffix || ""}`;
-
-    const hash = crypto
-      .createHmac("md5", PROJECT_SECRET)
-      .update(
-        `${MERCHANT_ID}${PROJECT_ID}${merchantTxId}${amount}${currency}${purpose}${type}${test}${successUrl}${backUrl}${failUrl}${notifyUrl}`,
-      )
-      .digest("hex");
-
-    const data = qs.stringify({
-      merchantId: MERCHANT_ID,
-      projectId: PROJECT_ID,
-      merchantTxId: merchantTxId,
-      amount: amount,
-      currency: currency,
-      purpose: purpose,
-      type: type,
-      test: test,
-      successUrl: successUrl,
-      backUrl: backUrl,
-      failUrl: failUrl,
-      notifyUrl: notifyUrl,
-      hash: hash,
-    });
-
-    const config = {
-      method: "post",
-      url: GIRO_CHECKOUT_URL,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      data: data,
-    };
-
-    axios(config)
-      .then(function (res) {
-        const paymentUrl = res.data?.url;
-
-        if (paymentUrl) {
-          logger.info(
-            `Payment URL requested for booking ${merchantTxId}: ${paymentUrl}`,
-          );
-          response.status(200).send({ paymentUrl });
-        } else {
-          logger.warn("could not get payment url.", res.data);
-          response.sendStatus(500);
-        }
-      })
-      .catch(function (error) {
-        logger.error(error);
-        response.sendStatus(400);
-      });
+    try {
+      const data =  await paymentService.createPayment();
+      response.status(200).send({ paymentMethod: booking.paymentMethod, data });
+    } catch (error) {
+      logger.error(error);
+      response.sendStatus(400);
+    }
   }
 
   static async paymentNotification(request, response) {

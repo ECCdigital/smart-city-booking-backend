@@ -157,7 +157,7 @@ router.post("/checkout/validateItem", CheckoutController.validateItem);
 // ========
 
 // Public
-router.post("/payments", PaymentController.getPaymentUrl);
+router.post("/payments", PaymentController.createPayment);
 router.get("/payments/notify", PaymentController.paymentNotification);
 router.post("/payments/response", PaymentController.paymentResponse);
 

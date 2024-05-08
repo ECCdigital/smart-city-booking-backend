@@ -1,7 +1,7 @@
-var validate = require("jsonschema").validate;
+const validate = require("jsonschema").validate;
 
 const Tenant = require("../entities/tenant");
-var dbm = require("../utilities/database-manager");
+const dbm = require("../utilities/database-manager");
 const SecurityUtils = require("../utilities/security-utils");
 
 const TENANT_ENCRYPT_KEYS = [
@@ -22,8 +22,8 @@ class TenantManager {
    * @returns true, if the object is a valid tenant object
    */
   static validateTenant(tenant) {
-    var schema = require("../schemas/tenant.schema.json");
-    return validate(tenant, schema).errors.length == 0;
+    const schema = require("../schemas/tenant.schema.json");
+    return validate(tenant, schema).errors.length === 0;
   }
 
   /**
@@ -38,8 +38,8 @@ class TenantManager {
         .find({})
         .toArray()
         .then((rawTenants) => {
-          var tenants = rawTenants.map((rt) => {
-            var tenant = Object.assign(new Tenant(), rt);
+          const tenants = rawTenants.map((rt) => {
+            const tenant = Object.assign(new Tenant(), rt);
             return SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS);
           });
 
@@ -58,17 +58,17 @@ class TenantManager {
   static getTenant(id) {
     return new Promise((resolve, reject) => {
       dbm
-          .get()
-          .collection("tenants")
-          .findOne({ id: id })
-          .then((rawTenant) => {
-            if (!rawTenant) {
-              return reject(new Error(`No tenant found with ID: ${id}`));
-            }
-            const tenant = Object.assign(new Tenant(), rawTenant);
-            resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
-          })
-          .catch((err) => reject(err));
+        .get()
+        .collection("tenants")
+        .findOne({ id: id })
+        .then((rawTenant) => {
+          if (!rawTenant) {
+            return reject(new Error(`No tenant found with ID: ${id}`));
+          }
+          const tenant = Object.assign(new Tenant(), rawTenant);
+          resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
+        })
+        .catch((err) => reject(err));
     });
   }
 
@@ -89,7 +89,7 @@ class TenantManager {
           SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
           {
             upsert: upsert,
-          }
+          },
         )
         .then(() => resolve())
         .catch((err) => reject(err));
@@ -111,6 +111,39 @@ class TenantManager {
         .then(() => resolve())
         .catch((err) => reject(err));
     });
+  }
+
+  static async getTenantApps(tenantId) {
+    try {
+      const tenant = await dbm.get().collection("tenants").findOne({
+        id: tenantId,
+      });
+      return tenant.applications;
+    } catch (err) {
+      throw new Error(`No tenant found with ID: ${tenantId}`);
+    }
+  }
+
+  static async getTenantApp(tenantId, appId) {
+    try {
+      const tenant = await dbm.get().collection("tenants").findOne({
+        id: tenantId,
+      });
+      return tenant.applications.find((app) => app.id === appId);
+    } catch (err) {
+      throw new Error(`No tenant found with ID: ${tenantId}`);
+    }
+  }
+
+  static async getTenantAppByType(tenantId, appType) {
+    try {
+      const tenant = await dbm.get().collection("tenants").findOne({
+        id: tenantId,
+      });
+      return tenant.applications.filter((app) => app.type === appType);
+    } catch (err) {
+      throw new Error(`No tenant found with ID: ${tenantId}`);
+    }
   }
 }
 
