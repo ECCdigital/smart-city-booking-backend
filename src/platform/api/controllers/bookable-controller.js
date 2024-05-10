@@ -156,7 +156,7 @@ class BookableController {
       let allowedBookables = [];
       for (const bookable of bookables) {
         if (
-          await BookablePermissions._allowRead(bookable, user?.id, user?.tenant)
+          await BookablePermissions._allowRead(bookable, user?.id, tenant)
         ) {
           allowedBookables.push(bookable);
         }
@@ -182,7 +182,7 @@ class BookableController {
         const bookable = await BookableManager.getBookable(id, tenant);
 
         if (
-          await BookablePermissions._allowRead(bookable, user?.id, user?.tenant)
+          await BookablePermissions._allowRead(bookable, user?.id, tenant)
         ) {
           if (request.query.populate === "true") {
             bookable._populated = {
@@ -244,7 +244,7 @@ class BookableController {
       bookable.ownerUserId = user.id;
 
       if (
-        await BookablePermissions._allowCreate(bookable, user.id, user.tenant)
+        await BookablePermissions._allowCreate(bookable, user.id, tenant)
       ) {
         await BookableManager.storeBookable(bookable);
         logger.info(
@@ -271,7 +271,7 @@ class BookableController {
       const bookable = Object.assign(new Bookable(), request.body);
 
       if (
-        await BookablePermissions._allowUpdate(bookable, user.id, user.tenant)
+        await BookablePermissions._allowUpdate(bookable, user.id, tenant)
       ) {
         await BookableManager.storeBookable(bookable);
         logger.info(
@@ -300,7 +300,7 @@ class BookableController {
         const bookable = await BookableManager.getBookable(id, tenant);
 
         if (
-          await BookablePermissions._allowDelete(bookable, user.id, user.tenant)
+          await BookablePermissions._allowDelete(bookable, user.id, tenant)
         ) {
           await BookableManager.removeBookable(id, tenant);
           logger.info(
