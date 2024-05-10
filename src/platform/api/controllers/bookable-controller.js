@@ -155,9 +155,7 @@ class BookableController {
 
       let allowedBookables = [];
       for (const bookable of bookables) {
-        if (
-          await BookablePermissions._allowRead(bookable, user?.id, tenant)
-        ) {
+        if (await BookablePermissions._allowRead(bookable, user?.id, tenant)) {
           allowedBookables.push(bookable);
         }
       }
@@ -181,9 +179,7 @@ class BookableController {
       if (id) {
         const bookable = await BookableManager.getBookable(id, tenant);
 
-        if (
-          await BookablePermissions._allowRead(bookable, user?.id, tenant)
-        ) {
+        if (await BookablePermissions._allowRead(bookable, user?.id, tenant)) {
           if (request.query.populate === "true") {
             bookable._populated = {
               event: await EventManager.getEvent(
@@ -243,9 +239,7 @@ class BookableController {
       bookable.id = uuidv4();
       bookable.ownerUserId = user.id;
 
-      if (
-        await BookablePermissions._allowCreate(bookable, user.id, tenant)
-      ) {
+      if (await BookablePermissions._allowCreate(bookable, user.id, tenant)) {
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -270,9 +264,7 @@ class BookableController {
 
       const bookable = Object.assign(new Bookable(), request.body);
 
-      if (
-        await BookablePermissions._allowUpdate(bookable, user.id, tenant)
-      ) {
+      if (await BookablePermissions._allowUpdate(bookable, user.id, tenant)) {
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
@@ -299,9 +291,7 @@ class BookableController {
       if (id) {
         const bookable = await BookableManager.getBookable(id, tenant);
 
-        if (
-          await BookablePermissions._allowDelete(bookable, user.id, tenant)
-        ) {
+        if (await BookablePermissions._allowDelete(bookable, user.id, tenant)) {
           await BookableManager.removeBookable(id, tenant);
           logger.info(
             `${tenant} -- Bookable ${id} removed by user ${user?.id}`,

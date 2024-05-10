@@ -202,6 +202,7 @@ class TenantController {
       const existingTenant = await TenantManager.getTenant(tenant.id);
       isUpdate = existingTenant && existingTenant._id;
     } catch (error) {
+      logger.error(error);
       isUpdate = false;
     }
 
