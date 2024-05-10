@@ -214,6 +214,10 @@ class TenantController {
 
       tenant.ownerUserId = user.id;
 
+      if (await TenantManager.checkTenantCount() === false) {
+        throw new Error(`Maximum number of tenants reached.`);
+      }
+
       if (await TenantPermissions._allowCreate(tenant, user.id, user.tenant)) {
         const tenantAdmin = Object.assign(new Object(), user);
         tenantAdmin.tenant = tenant.id;

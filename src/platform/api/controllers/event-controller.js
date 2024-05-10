@@ -176,6 +176,13 @@ class EventController {
       const user = request.user;
       const event = Object.assign(new Event(), request.body);
 
+      if (
+        (await EventManager.checkPublicEventCount(tenant)) === false &&
+        event.isPublic
+      ) {
+        throw new Error(`Maximum number of  public  events reached.`);
+      }
+
       event.id = uuidv4();
       event.ownerUserId = user?.id;
 
@@ -200,6 +207,14 @@ class EventController {
       const tenant = request.params.tenant;
       const user = request.user;
       const event = Object.assign(new Event(), request.body);
+
+      const existingEvents = await EventManager.getEvent(event.id, tenant);
+
+      if (!existingEvents.isPublic && event.isPublic) {
+        if ((await EventManager.checkPublicEventCount(tenant)) === false) {
+          throw new Error(`Maximum number of public events reached.`);
+        }
+      }
 
       if (await EventPermissions._allowUpdate(event, user.id, user.tenant)) {
         await EventManager.storeEvent(event);

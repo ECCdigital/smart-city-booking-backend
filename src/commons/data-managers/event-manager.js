@@ -78,16 +78,6 @@ class EventManager {
         tenant: event.tenant,
       });
 
-      if (!existingEvents) {
-        if ((await this.checkPublicEventCount(event.tenant)) === false && event.isPublic) {
-          throw new Error(`Maximum number of  public  events reached.`);
-        }
-      } else if (!existingEvents.isPublic && event.isPublic) {
-        if ((await this.checkPublicEventCount(event.tenant)) === false) {
-          throw new Error(`Maximum number of public events reached.`);
-        }
-      }
-
       await eventsCollection.replaceOne(
         { id: event.id, tenant: event.tenant },
         event,

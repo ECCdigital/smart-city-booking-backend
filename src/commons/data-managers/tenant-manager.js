@@ -82,13 +82,6 @@ class TenantManager {
   static async storeTenant(tenant, upsert = true) {
       try {
           const tenantsCollection = dbm.get().collection("tenants");
-          const existingTenant = await tenantsCollection.findOne({ id: tenant.id });
-
-          if (!existingTenant) {
-              if (await this.checkTenantCount() === false) {
-                  throw new Error(`Maximum number of tenants reached.`);
-              }
-          }
 
           await tenantsCollection.replaceOne(
               { id: tenant.id },
