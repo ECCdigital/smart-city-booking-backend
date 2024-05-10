@@ -5,6 +5,7 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
+const { parseBoolean } = require("../../../commons/utilities/parser");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -109,35 +110,36 @@ class TenantPermissions {
 class TenantController {
   static async getTenants(request, response) {
     try {
-      const user = request.user;
+      const {
+        user,
+        query: { publicTenants = "false" },
+      } = request;
+      const isPublicTenants = parseBoolean(publicTenants);
       const tenants = await TenantManager.getTenants();
+      const isAuthenticated = request.isAuthenticated();
 
-      if (!!user) {
-        let allowedTenants = [];
-        for (let tenant of tenants) {
-          if (
-            await TenantPermissions._allowRead(tenant, user.id, user.tenant)
-          ) {
-            allowedTenants.push(tenant);
-          }
-        }
+      if (isAuthenticated && user && !isPublicTenants) {
+        const checkPermissions = tenants.map((tenant) =>
+          TenantPermissions._allowRead(tenant, user.id, user.tenant).then(
+            (allowed) => (allowed ? tenant : null),
+          ),
+        );
+        const results = await Promise.all(checkPermissions);
+        const allowedTenants = results.filter((tenant) => tenant !== null);
 
         logger.info(
-          `Sending ${allowedTenants.length} allowed tenants to user ${user?.id} (incl. details)`,
+          `Sending ${allowedTenants.length} allowed tenants to user ${user.id} (incl. details)`,
         );
-
         response.status(200).send(allowedTenants);
       } else {
-        const publicTenants = tenants.map((t) => {
-          return {
-            id: t.id,
-            name: t.name,
-            contactName: t.contactName,
-            location: t.location,
-            mail: t.mail,
-            phone: t.phone,
-          };
-        });
+        const publicTenants = tenants.map((tenant) => ({
+          id: tenant.id,
+          name: tenant.name,
+          contactName: tenant.contactName,
+          location: tenant.location,
+          mail: tenant.mail,
+          phone: tenant.phone,
+        }));
 
         logger.info(
           `Sending ${publicTenants.length} public tenants to anonymous user`,
@@ -146,7 +148,7 @@ class TenantController {
       }
     } catch (err) {
       logger.error(err);
-      response.status(500).send("could not get tenants");
+      response.status(500).send("Could not get tenants");
     }
   }
 
@@ -200,7 +202,6 @@ class TenantController {
       const existingTenant = await TenantManager.getTenant(tenant.id);
       isUpdate = existingTenant && existingTenant._id;
     } catch (error) {
-      logger.error(error);
       isUpdate = false;
     }
 
