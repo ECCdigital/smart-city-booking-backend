@@ -155,9 +155,7 @@ class BookableController {
 
       let allowedBookables = [];
       for (const bookable of bookables) {
-        if (
-          await BookablePermissions._allowRead(bookable, user?.id, user?.tenant)
-        ) {
+        if (await BookablePermissions._allowRead(bookable, user?.id, tenant)) {
           allowedBookables.push(bookable);
         }
       }
@@ -181,9 +179,7 @@ class BookableController {
       if (id) {
         const bookable = await BookableManager.getBookable(id, tenant);
 
-        if (
-          await BookablePermissions._allowRead(bookable, user?.id, user?.tenant)
-        ) {
+        if (await BookablePermissions._allowRead(bookable, user?.id, tenant)) {
           if (request.query.populate === "true") {
             bookable._populated = {
               event: await EventManager.getEvent(
@@ -316,9 +312,7 @@ class BookableController {
       if (id) {
         const bookable = await BookableManager.getBookable(id, tenant);
 
-        if (
-          await BookablePermissions._allowDelete(bookable, user.id, user.tenant)
-        ) {
+        if (await BookablePermissions._allowDelete(bookable, user.id, tenant)) {
           await BookableManager.removeBookable(id, tenant);
           logger.info(
             `${tenant} -- Bookable ${id} removed by user ${user?.id}`,

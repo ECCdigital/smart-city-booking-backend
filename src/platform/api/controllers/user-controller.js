@@ -1,6 +1,4 @@
-const EventManager = require("../../../commons/data-managers/event-manager");
 const UserManager = require("../../../commons/data-managers/user-manager");
-const RoleManager = require("../../../commons/data-managers/role-manager");
 const { User } = require("../../../commons/entities/user");
 const { RolePermission } = require("../../../commons/entities/role");
 const bunyan = require("bunyan");
@@ -259,6 +257,7 @@ class UserController {
         response.sendStatus(400);
       }
     } catch (error) {
+      logger.error(error);
       response.status(500).send("could not remove user");
     }
   }

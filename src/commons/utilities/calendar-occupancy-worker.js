@@ -1,14 +1,14 @@
-const { parentPort } = require('worker_threads');
+const { parentPort } = require("worker_threads");
 const BookableManager = require("../data-managers/bookable-manager");
 const BookingManager = require("../data-managers/booking-manager");
 const dbm = require("../utilities/database-manager");
 
 async function initDbConnection() {
-    await dbm.connect();
+  await dbm.connect();
 }
 
 async function closeDbConnection() {
-    await dbm.close();
+  await dbm.close();
 }
 
 /**
@@ -24,38 +24,37 @@ async function closeDbConnection() {
  * @returns {Promise<Array>} - A promise that resolves with an array of occupancies for the bookable.
  */
 async function fetchOccupancies(bookable, tenant) {
-    return initDbConnection().then(async () => {
-        let bookings = [];
+  return initDbConnection().then(async () => {
+    let bookings = [];
 
-        bookings = bookings.concat(
-            await BookingManager.getRelatedBookings(tenant, bookable.id),
-        );
+    bookings = bookings.concat(
+      await BookingManager.getRelatedBookings(tenant, bookable.id),
+    );
 
+    const relatedBookables = await BookableManager.getRelatedBookables(
+      bookable.id,
+      tenant,
+    );
 
-        const relatedBookables = await BookableManager.getRelatedBookables(
-            bookable.id,
-            tenant,
-        );
+    for (const relatedBookable of relatedBookables) {
+      bookings = bookings.concat(
+        await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
+      );
+    }
 
-        for (const relatedBookable of relatedBookables) {
-            bookings = bookings.concat(
-                await BookingManager.getRelatedBookings(tenant, relatedBookable.id),
-            );
-        }
-
-        return bookings
-            .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
-            .filter(
-                (booking, index, self) =>
-                    self.findIndex((b) => b.id === booking.id) === index,
-            )
-            .map((booking) => ({
-                bookableId: bookable.id,
-                title: bookable.title,
-                timeBegin: booking.timeBegin,
-                timeEnd: booking.timeEnd,
-            }));
-    });
+    return bookings
+      .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
+      .filter(
+        (booking, index, self) =>
+          self.findIndex((b) => b.id === booking.id) === index,
+      )
+      .map((booking) => ({
+        bookableId: bookable.id,
+        title: bookable.title,
+        timeBegin: booking.timeBegin,
+        timeEnd: booking.timeEnd,
+      }));
+  });
 }
 
 /**
@@ -71,9 +70,9 @@ async function fetchOccupancies(bookable, tenant) {
  * @param {Object} message.tenant - The tenant object.
  * @returns {Promise<void>} - A promise that resolves when the occupancies have been posted back to the parent thread.
  */
-parentPort.on('message', async ({ bookable, tenant }) => {
-    const occupancies = await fetchOccupancies(bookable, tenant);
-    await closeDbConnection();
-    parentPort.postMessage(occupancies);
-    parentPort.close();
+parentPort.on("message", async ({ bookable, tenant }) => {
+  const occupancies = await fetchOccupancies(bookable, tenant);
+  await closeDbConnection();
+  parentPort.postMessage(occupancies);
+  parentPort.close();
 });
