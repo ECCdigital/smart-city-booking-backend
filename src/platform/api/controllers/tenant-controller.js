@@ -112,18 +112,20 @@ class TenantController {
     try {
       const {
         user,
-        query: { publicTenants= "false" },
+        query: { publicTenants = "false" },
       } = request;
       const isPublicTenants = parseBoolean(publicTenants);
       const tenants = await TenantManager.getTenants();
       const isAuthenticated = request.isAuthenticated();
 
       if (isAuthenticated && user && !isPublicTenants) {
-        const checkPermissions = tenants.map(tenant =>
-          TenantPermissions._allowRead(tenant, user.id, user.tenant).then(allowed => allowed ? tenant : null)
+        const checkPermissions = tenants.map((tenant) =>
+          TenantPermissions._allowRead(tenant, user.id, user.tenant).then(
+            (allowed) => (allowed ? tenant : null),
+          ),
         );
         const results = await Promise.all(checkPermissions);
-        const allowedTenants = results.filter(tenant => tenant !== null);
+        const allowedTenants = results.filter((tenant) => tenant !== null);
 
         logger.info(
           `Sending ${allowedTenants.length} allowed tenants to user ${user.id} (incl. details)`,
