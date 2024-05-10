@@ -24,6 +24,7 @@ class BundleCheckoutService {
      * @param {string} email - The email of the user.
      * @param {string} phone - The phone number of the user.
      * @param {string} comment - The comment of the user.
+     * @param {string} paymentMethod - The payment method.
      */
     constructor(
         user,
@@ -40,6 +41,7 @@ class BundleCheckoutService {
         email,
         phone,
         comment,
+        paymentMethod,
     ) {
         this.user = user;
         this.tenant = tenant;
@@ -55,6 +57,7 @@ class BundleCheckoutService {
         this.email = email;
         this.phone = phone;
         this.comment = comment;
+        this.paymentMethod = paymentMethod;
     }
 
     async generateBookingReference(
@@ -178,6 +181,7 @@ class BundleCheckoutService {
             priceEur: await this.userPriceEur(),
             isCommitted: await this.isAutoCommit(),
             isPayed: await this.isPaymentComplete(),
+            paymentMethod: this.paymentMethod,
         };
 
         if (this.couponCode) {
@@ -197,93 +201,100 @@ class BundleCheckoutService {
  * @extends BundleCheckoutService
  */
 class ManualBundleCheckoutService extends BundleCheckoutService {
+  /**
+   * Create a manual bundle checkout service.
+   * @param {string} user - The user ID.
+   * @param {string} tenant - The tenant ID.
+   * @param {Date} timeBegin - The start time.
+   * @param {Date} timeEnd - The end time.
+   * @param {Array} bookableItems - The items to be booked.
+   * @param {string} couponCode - The coupon code.
+   * @param {string} name - The name of the user.
+   * @param {string} company - The company of the user.
+   * @param {string} street - The street of the user.
+   * @param {string} zipCode - The zip code of the user.
+   * @param {string} location - The location of the user.
+   * @param {string} email - The email of the user.
+   * @param {string} phone - The phone number of the user.
+   * @param {string} comment - The comment of the user.
+   * @param {number} priceEur - The price in Euros.
+   * @param {boolean} isCommit - The commit status.
+   * @param {boolean} isPayed - The payment status.
+   * @param {string} paymentMethod - The payment method.
+   */
+  constructor(
+    user,
+    tenant,
+    timeBegin,
+    timeEnd,
+    bookableItems,
+    couponCode,
+    name,
+    company,
+    street,
+    zipCode,
+    location,
+    email,
+    phone,
+    comment,
+    priceEur,
+    isCommit,
+    isPayed,
+    paymentMethod,
+  ) {
+    super(
+      user,
+      tenant,
+      timeBegin,
+      timeEnd,
+      bookableItems,
+      couponCode,
+      name,
+      company,
+      street,
+      zipCode,
+      location,
+      email,
+      phone,
+      comment,
+      paymentMethod,
+    );
+    this.priceEur = priceEur;
+    this.isCommitted = isCommit;
+    this.isPayed = isPayed;
+  }
 
-    /**
-     * Create a manual bundle checkout service.
-     * @param {string} user - The user ID.
-     * @param {string} tenant - The tenant ID.
-     * @param {Date} timeBegin - The start time.
-     * @param {Date} timeEnd - The end time.
-     * @param {Array} bookableItems - The items to be booked.
-     * @param {string} couponCode - The coupon code.
-     * @param {string} name - The name of the user.
-     * @param {string} company - The company of the user.
-     * @param {string} street - The street of the user.
-     * @param {string} zipCode - The zip code of the user.
-     * @param {string} location - The location of the user.
-     * @param {string} email - The email of the user.
-     * @param {string} phone - The phone number of the user.
-     * @param {string} comment - The comment of the user.
-     * @param {number} priceEur - The price in Euros.
-     * @param {boolean} isCommit - The commit status.
-     * @param {boolean} isPayed - The payment status.
-     */
-    constructor(user,
-                tenant,
-                timeBegin,
-                timeEnd,
-                bookableItems,
-                couponCode,
-                name,
-                company,
-                street,
-                zipCode,
-                location,
-                email,
-                phone,
-                comment,
-                priceEur,
-                isCommit,
-                isPayed) {
-        super(
-            user,
-            tenant,
-            timeBegin,
-            timeEnd,
-            bookableItems,
-            couponCode,
-            name,
-            company,
-            street,
-            zipCode,
-            location,
-            email,
-            phone,
-            comment
-        );
-        this.priceEur = priceEur;
-        this.isCommitted = isCommit;
-        this.isPayed = isPayed;
-    }
+  checkAll() {
+    return true;
+  }
 
-    checkAll() {
-        return true;
+  async userPriceEur() {
+    const priceEur = Number(this.priceEur);
+    if (isNaN(priceEur) || priceEur < 0) {
+      await super.userPriceEur();
+    } else {
+      return priceEur;
     }
+  }
 
-    async userPriceEur() {
-        const priceEur = Number(this.priceEur);
-        if (isNaN(priceEur) || priceEur < 0) {
-            await super.userPriceEur();
-        } else {
-            return priceEur;
-        }
+  async isAutoCommit() {
+    if (
+      this.isCommitted !== undefined &&
+      typeof this.isCommitted === "boolean"
+    ) {
+      return this.isCommitted;
+    } else {
+      return await super.isAutoCommit();
     }
+  }
 
-    async isAutoCommit() {
-        if (this.isCommitted !== undefined && typeof this.isCommitted === "boolean") {
-            return this.isCommitted;
-        } else {
-            return await super.isAutoCommit();
-        }
+  async isPaymentComplete() {
+    if (this.isPayed !== undefined && typeof this.isPayed === "boolean") {
+      return this.isPayed;
+    } else {
+      return await super.isPaymentComplete();
     }
-
-    async isPaymentComplete() {
-        if (this.isPayed !== undefined && typeof this.isPayed === "boolean") {
-            return this.isPayed;
-        } else {
-            return await super.isPaymentComplete();
-        }
-    }
+  }
 }
 
 module.exports = {

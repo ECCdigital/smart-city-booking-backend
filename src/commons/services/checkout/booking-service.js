@@ -44,6 +44,7 @@ class BookingService {
       mail,
       phone,
       comment,
+      paymentMethod,
     } = request.body;
 
     logger.info(
@@ -79,6 +80,7 @@ class BookingService {
         mail,
         phone,
         comment,
+        paymentMethod,
         Number(request.body.priceEur),
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
@@ -100,6 +102,7 @@ class BookingService {
         mail,
         phone,
         comment,
+        paymentMethod,
       );
     }
 
