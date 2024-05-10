@@ -22,7 +22,7 @@ const argv = yargs(hideBin(process.argv)).argv;
     const outputPath = argv.output || "./receipt.pdf";
     const forcedReceiptTemplate = argv.template || null;
     console.log(
-      `Generating receipt for booking ${bookingId} in tenant ${tenantId}...`
+      `Generating receipt for booking ${bookingId} in tenant ${tenantId}...`,
     );
 
     await CommandLineServices.generateReceipt(
@@ -30,7 +30,7 @@ const argv = yargs(hideBin(process.argv)).argv;
       tenantId,
       receiptNumber,
       outputPath,
-      forcedReceiptTemplate
+      forcedReceiptTemplate,
     );
 
     console.log(`Receipt generated at ${outputPath}`);

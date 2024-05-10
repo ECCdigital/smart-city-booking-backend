@@ -1,7 +1,5 @@
-const RoleManager = require("../../../commons/data-managers/role-manager");
 const { RolePermission } = require("../../../commons/entities/role");
 const CouponManager = require("../../../commons/data-managers/coupon-manager");
-const { Booking } = require("../../../commons/entities/booking");
 const { Coupon } = require("../../../commons/entities/coupon");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
@@ -113,7 +111,6 @@ class CouponPermissions {
 class CouponController {
   static async storeCoupon(request, response) {
     const tenant = request.params.tenant;
-    const user = request.user;
     const coupon = Object.assign(new Coupon(), request.body);
 
     if (!coupon) {
@@ -204,7 +201,6 @@ class CouponController {
 
   static async getCoupon(request, response) {
     const tenant = request.params.tenant;
-    const user = request.user;
     const { id } = request.params;
 
     const coupon = await CouponManager.getCoupon(id, tenant);

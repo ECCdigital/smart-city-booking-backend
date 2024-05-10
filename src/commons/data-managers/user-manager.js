@@ -47,7 +47,7 @@ class UserManager {
         .get()
         .collection("users")
         .insertOne(user)
-        .then((response) => {
+        .then(() => {
           UserManager.requestVerification(user)
             .then(() => {
               resolve();
@@ -93,7 +93,7 @@ class UserManager {
         .get()
         .collection("users")
         .deleteOne({ id: id, tenant: tenant })
-        .then((response) => resolve())
+        .then(() => resolve())
         .catch((err) => reject(err));
     });
   }
@@ -104,7 +104,7 @@ class UserManager {
         .get()
         .collection("users")
         .replaceOne({ id: user.id, tenant: user.tenant }, user)
-        .then((response) => resolve())
+        .then(() => resolve())
         .catch((err) => reject(err));
     });
   }

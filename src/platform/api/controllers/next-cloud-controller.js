@@ -128,7 +128,13 @@ class NextCloudController {
         (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
         "/" +
         customDirectory;
-      await FileManager.createFile(tenant, file.data, file.name, accessLevel, subDirectory);
+      await FileManager.createFile(
+        tenant,
+        file.data,
+        file.name,
+        accessLevel,
+        subDirectory,
+      );
       logger.info(
         `${tenant} -- file uploaded successfully by user ${user?.id}.`,
       );

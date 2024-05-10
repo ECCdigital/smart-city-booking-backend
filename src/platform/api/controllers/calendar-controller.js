@@ -3,7 +3,6 @@ const path = require("path");
 const bunyan = require("bunyan");
 
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
-const BookingManager = require("../../../commons/data-managers/booking-manager");
 const ItemCheckoutService = require("../../../commons/services/checkout/item-checkout-service");
 
 const logger = bunyan.createLogger({
@@ -21,7 +20,6 @@ const logger = bunyan.createLogger({
  * response.
  */
 class CalendarController {
-
   /**
    * Asynchronously fetches occupancies for all bookables for a given tenant.
    *
@@ -41,11 +39,12 @@ class CalendarController {
     const bookableIds = request.query.ids;
     let occupancies = [];
 
-
     let bookables = await BookableManager.getBookables(tenant);
 
     if (bookableIds && bookableIds.length > 0) {
-      bookables = bookables.filter((bookable) => bookableIds.includes(bookable.id));
+      bookables = bookables.filter((bookable) =>
+        bookableIds.includes(bookable.id),
+      );
     }
 
     /**
@@ -62,9 +61,9 @@ class CalendarController {
         );
         worker.postMessage({ bookable, tenant });
 
-        worker.on('message', resolve);
-        worker.on('error', reject);
-        worker.on('exit', (code) => {
+        worker.on("message", resolve);
+        worker.on("error", reject);
+        worker.on("exit", (code) => {
           if (code !== 0) {
             reject(new Error(`Worker stopped with exit code ${code}`));
           }
@@ -122,7 +121,8 @@ class CalendarController {
 
       try {
         await ics.checkAll();
-      } catch (e) {
+      } catch (err) {
+        logger.error(err);
         if (
           items.length > 0 &&
           items[items.length - 1].timeEnd === intervalBegin

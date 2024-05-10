@@ -16,7 +16,7 @@ class FileManager {
       `${tenant}/${rootPath}`,
       {
         deep: true,
-      }
+      },
     );
 
     return directoryItems
@@ -57,7 +57,7 @@ class FileManager {
     const directory = `${tenant}/${subDirectory}`;
     let nextCloudPath = `${directory}/${fileName}`;
     await client.createDirectory(directory, { recursive: true });
-    await client.putFileContents(nextCloudPath, file, {contentLength: false});
+    await client.putFileContents(nextCloudPath, file, { contentLength: false });
   }
 }
 
