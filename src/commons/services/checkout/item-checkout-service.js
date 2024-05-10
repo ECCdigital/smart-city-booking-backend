@@ -6,7 +6,7 @@ const UserManager = require("../../data-managers/user-manager");
 const { RolePermission } = require("../../entities/role");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
-const {getTenant} = require("../../data-managers/tenant-manager");
+const { getTenant } = require("../../data-managers/tenant-manager");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -396,7 +396,7 @@ class ItemCheckoutService {
     return true;
   }
 
-  async checkMaxBookingDate () {
+  async checkMaxBookingDate() {
     const tenant = await getTenant(this.tenantId);
 
     const maxBookingMonths = Number(tenant?.maxBookingMonths);
@@ -408,7 +408,9 @@ class ItemCheckoutService {
     maxBookingDate.setMonth(maxBookingDate.getMonth() + maxBookingMonths);
 
     if (this.timeBegin > maxBookingDate) {
-      throw new Error(`Sie können maximal ${maxBookingMonths} Monate im Voraus buchen.`);
+      throw new Error(
+        `Sie können maximal ${maxBookingMonths} Monate im Voraus buchen.`,
+      );
     }
 
     return true;

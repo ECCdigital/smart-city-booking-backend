@@ -1,8 +1,6 @@
 var validate = require("jsonschema").validate;
 
-const { response } = require("express");
 const { isRangeOverlap } = require("range-overlap");
-const bookable = require("../entities/bookable");
 const { Booking } = require("../entities/booking");
 var dbm = require("../utilities/database-manager");
 

@@ -1,8 +1,5 @@
 const EventManager = require("../../../commons/data-managers/event-manager");
-const BookingManager = require("../../../commons/data-managers/booking-manager");
-const RoleManager = require("../../../commons/data-managers/role-manager");
 const { Event } = require("../../../commons/entities/event");
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const { v4: uuidv4 } = require("uuid");
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
