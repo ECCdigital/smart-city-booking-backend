@@ -73,10 +73,6 @@ class EventManager {
   static async storeEvent(event, upsert = true) {
     try {
       const eventsCollection = dbm.get().collection("events");
-      const existingEvents = await eventsCollection.findOne({
-        id: event.id,
-        tenant: event.tenant,
-      });
 
       await eventsCollection.replaceOne(
         { id: event.id, tenant: event.tenant },

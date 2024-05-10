@@ -73,10 +73,6 @@ class BookableManager {
   static async storeBookable(bookable, upsert = true) {
     try {
       const bookablesCollection = dbm.get().collection("bookables");
-      const existingBookable = await bookablesCollection.findOne({
-        id: bookable.id,
-        tenant: bookable.tenant,
-      });
 
       await bookablesCollection.replaceOne(
         { id: bookable.id, tenant: bookable.tenant },
