@@ -6,7 +6,6 @@ const PaymentController = require("./controllers/payment-controller");
 const UserController = require("./controllers/user-controller");
 const CalendarController = require("./controllers/calendar-controller");
 const CouponController = require("./controllers/coupon-controller");
-const ExportController = require("../exporters/controllers/csv-export-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const NextCloudController = require("./controllers/next-cloud-controller");
@@ -23,7 +22,7 @@ router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
   "/bookables/:id/availability",
-  CalendarController.getBookableAvailabilty,
+  CalendarController.getBookableAvailability,
 );
 
 // Protected

@@ -1,13 +1,7 @@
-const bunyan = require("bunyan");
 const MongoClient = require("mongodb").MongoClient;
 
 var db;
 var dbClient;
-
-const logger = bunyan.createLogger({
-  name: "database-manager.js",
-  level: process.env.LOG_LEVEL,
-});
 
 /**
  * The Database Manager handles and manages the database connection.
@@ -22,7 +16,7 @@ class DatabaseManager {
    * @param {String} databaseName Name of the Database.
    * @returns the Database object.
    */
-  static connect(databaseUrl= undefined, databaseName = undefined) {
+  static connect(databaseUrl = undefined, databaseName = undefined) {
     const dbUrl = databaseUrl || process.env.DB_URL;
     const dbName = databaseName || process.env.DB_NAME;
 

@@ -15,22 +15,22 @@ class IdGenerator {
     const tenant = await TenantManager.getTenant(tenantId);
 
     const year = new Date().getFullYear();
-    const idForCurrentYear = (tenant.receiptCount && tenant.receiptCount[year]) || 0;
+    const idForCurrentYear =
+      (tenant.receiptCount && tenant.receiptCount[year]) || 0;
     const newId = idForCurrentYear + 1;
 
     const updatedTenant = {
       ...tenant,
       receiptCount: {
         ...tenant.receiptCount,
-        [year]: newId
-      }
+        [year]: newId,
+      },
     };
 
     await TenantManager.storeTenant(updatedTenant);
 
     return formatId(newId, year, leadingZeros);
   }
-
 }
 
 /**
@@ -42,7 +42,10 @@ class IdGenerator {
  * @returns {string}
  */
 function formatId(id, year, leadingZeros) {
-  const formattedId = leadingZeros > 0 ? id.toString().padStart(leadingZeros, '0') : id.toString();
+  const formattedId =
+    leadingZeros > 0
+      ? id.toString().padStart(leadingZeros, "0")
+      : id.toString();
   return `${year}-${formattedId}`;
 }
 

@@ -1,7 +1,6 @@
 const crypto = require("crypto");
 const axios = require("axios");
 const qs = require("qs");
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
@@ -149,8 +148,8 @@ class PaymentController {
             try {
               if (booking.priceEur > 0) {
                 const pdfData = await PdfService.generateReceipt(
-                    booking.id,
-                    tenantId,
+                  booking.id,
+                  tenantId,
                 );
                 attachments = [
                   {
@@ -160,17 +159,16 @@ class PaymentController {
                   },
                 ];
                 await FileManager.createFile(
-                    tenantId,
-                    pdfData.buffer,
-                    pdfData.name,
-                    "public",
-                    "receipts",
+                  tenantId,
+                  pdfData.buffer,
+                  pdfData.name,
+                  "public",
+                  "receipts",
                 );
               }
             } catch (err) {
               logger.error(err);
             }
-
 
             await MailController.sendBookingConfirmation(
               booking.mail,

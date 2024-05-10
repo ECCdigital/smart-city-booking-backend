@@ -116,8 +116,8 @@ class BookableManager {
           await BookableManager.getRelatedBookables(
             b.id,
             b.tenant,
-            (d || 0) + 1
-          )
+            (d || 0) + 1,
+          ),
         );
       }
     }
@@ -158,7 +158,7 @@ async function getAllParents(id, tenant, parentBookables, depth) {
     for (const b of bookables) {
       parentBookables.push(Object.assign(new Bookable(), b));
       parentBookables = parentBookables.concat(
-        await getAllParents(b.id, b.tenant, parentBookables, depth + 1)
+        await getAllParents(b.id, b.tenant, parentBookables, depth + 1),
       );
     }
 
