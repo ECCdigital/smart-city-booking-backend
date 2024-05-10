@@ -162,7 +162,7 @@ class CalendarController {
 
         try {
           await ics.checkAll();
-        } catch (e) {
+        } catch {
           /**
            * Checks the availability of a bookable item within a given time range.
            *
@@ -185,8 +185,13 @@ class CalendarController {
             await checkAvailability(start, middle);
             await checkAvailability(middle, end);
           } else {
-            const bookings = await BookingManager.getConcurrentBookings(bookableId, tenant, start, end);
-            if(bookings.length > 0) {
+            const bookings = await BookingManager.getConcurrentBookings(
+              bookableId,
+              tenant,
+              start,
+              end,
+            );
+            if (bookings.length > 0) {
               bookings.forEach((booking) => {
                 items.push({
                   timeBegin: booking.timeBegin,
