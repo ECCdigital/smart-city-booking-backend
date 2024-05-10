@@ -149,12 +149,13 @@ class BookableManager {
 
   static async checkPublicBookableCount(tenant) {
     const maxBookables = parseInt(process.env.MAX_BOOKABLES, 10);
-    const count = await dbm.get().collection("bookables").countDocuments({ tenant: tenant, isPublic: true});
+    const count = await dbm
+      .get()
+      .collection("bookables")
+      .countDocuments({ tenant: tenant, isPublic: true });
     return !(maxBookables && count >= maxBookables);
   }
 }
-
-
 
 async function getAllParents(id, tenant, parentBookables, depth) {
   if (depth < 5) {

@@ -116,7 +116,10 @@ class EventManager {
    */
   static async checkPublicEventCount(tenant) {
     const maxEvents = parseInt(process.env.MAX_EVENTS, 10);
-    const count = await dbm.get().collection("events").countDocuments({ tenant: tenant, isPublic: true });
+    const count = await dbm
+      .get()
+      .collection("events")
+      .countDocuments({ tenant: tenant, isPublic: true });
     return !(maxEvents && count >= maxEvents);
   }
 }

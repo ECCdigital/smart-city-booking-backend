@@ -220,7 +220,7 @@ class TenantController {
 
       tenant.ownerUserId = user.id;
 
-      if (await TenantManager.checkTenantCount() === false) {
+      if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
       }
 

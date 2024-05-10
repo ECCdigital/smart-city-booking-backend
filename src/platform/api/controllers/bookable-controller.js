@@ -240,7 +240,8 @@ class BookableController {
       bookable.ownerUserId = user.id;
 
       if (
-        (await BookableManager.checkPublicBookableCount(bookable.tenant)) === false &&
+        (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+          false &&
         bookable.isPublic
       ) {
         throw new Error(`Maximum number of public bookables reached.`);
@@ -273,13 +274,17 @@ class BookableController {
 
       const bookable = Object.assign(new Bookable(), request.body);
 
-      const existingBookable = await BookableManager.getBookable(bookable.id, tenant);
+      const existingBookable = await BookableManager.getBookable(
+        bookable.id,
+        tenant,
+      );
 
       if (!existingBookable.isPublic && bookable.isPublic) {
-        if (await BookableManager.checkPublicBookableCount(bookable.tenant) === false) {
-          throw new Error(
-            `Maximum number of public bookables reached.`,
-          );
+        if (
+          (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+          false
+        ) {
+          throw new Error(`Maximum number of public bookables reached.`);
         }
       }
 

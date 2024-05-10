@@ -80,17 +80,17 @@ class TenantManager {
    * @returns Promise<>
    */
   static async storeTenant(tenant, upsert = true) {
-      try {
-          const tenantsCollection = dbm.get().collection("tenants");
+    try {
+      const tenantsCollection = dbm.get().collection("tenants");
 
-          await tenantsCollection.replaceOne(
-              { id: tenant.id },
-              SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
-              { upsert: upsert },
-          );
-      } catch (err) {
-          throw new Error(`Error storing tenant: ${err.message}`);
-      }
+      await tenantsCollection.replaceOne(
+        { id: tenant.id },
+        SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
+        { upsert: upsert },
+      );
+    } catch (err) {
+      throw new Error(`Error storing tenant: ${err.message}`);
+    }
   }
 
   /**
@@ -111,9 +111,9 @@ class TenantManager {
   }
 
   static async checkTenantCount() {
-      const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
-      const count = await dbm.get().collection("tenants").countDocuments({});
-      return !(maxTenants && count >= maxTenants);
+    const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
+    const count = await dbm.get().collection("tenants").countDocuments({});
+    return !(maxTenants && count >= maxTenants);
   }
 }
 
