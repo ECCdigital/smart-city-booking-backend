@@ -79,68 +79,139 @@ class CalendarController {
     response.status(200).send(occupancies);
   }
 
-  static async getBookableAvailabilty(request, response) {
-    const user = request.user;
-    const tenant = request.params.tenant;
-    const bookableId = request.params.id;
-
-    const amount = request.query.amount || 1;
-
-    const startDate = request.query.startDate
-      ? new Date(request.query.startDate)
-      : new Date();
-
-    const endDate = request.query.endDate
-      ? new Date(request.query.endDate)
-      : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
-
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-
-    const startTime = startDate.getTime();
-    const endTime = endDate.getTime();
-
-    const interval = 60000 * 60;
-    const items = [];
-
-    let i = startTime;
-
-    while (i + interval < endTime) {
-      const intervalBegin = i;
-      const intervalEnd = i + interval;
-
-      const ics = new ItemCheckoutService(
+  /**
+   * Asynchronously fetches the availability of a specific bookable item for a given tenant.
+   *
+   * @async
+   * @function getBookableAvailability
+   * @param {Object} request - The HTTP request object. The request should contain the tenant and bookable ID in the params, and optionally the amount, startDate, and endDate in the query.
+   * @param {Object} response - The HTTP response object. The response will contain an array of availability periods for the specified bookable item within the specified time range.
+   * @returns {void}
+   *
+   * @example
+   * // GET /api/<tenant>/bookables/<bookableId>/availability?amount=1&startDate=2022-01-01&endDate=2022-01-07
+   * CalendarController.getBookableAvailability(req, res);
+   */
+  static async getBookableAvailability(request, response) {
+    try {
+      const {
+        params: { tenant, id: bookableId },
         user,
-        tenant,
-        new Date(intervalBegin),
-        new Date(intervalEnd),
-        bookableId,
-        amount,
-        null,
-      );
+        query: { amount = 1, startDate: startDateQuery, endDate: endDateQuery },
+      } = request;
 
-      try {
-        await ics.checkAll();
-      } catch (err) {
-        logger.error(err);
-        if (
-          items.length > 0 &&
-          items[items.length - 1].timeEnd === intervalBegin
-        ) {
-          items[items.length - 1].timeEnd = intervalEnd;
+      if (!tenant || !bookableId) {
+        return response
+          .status(400)
+          .send({ error: "Tenant ID and bookable ID are required." });
+      }
+
+      const startDate = startDateQuery ? new Date(startDateQuery) : new Date();
+      const endDate = endDateQuery
+        ? new Date(endDateQuery)
+        : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
+
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+
+      let items = [];
+
+      function combinePeriods(items, index = 0, combined = []) {
+        // Sort items by timeBegin if it's the first call
+
+        if (index === 0) {
+          items.sort((a, b) => a.timeBegin - b.timeBegin);
+        }
+
+        // Base case: if index is out of bounds, return the combined periods
+        if (index >= items.length) {
+          return combined;
+        }
+
+        // Combine overlapping periods
+        const currentItem = items[index];
+        if (index === 0) {
+          combined.push(currentItem);
         } else {
-          items.push({
-            timeBegin: intervalBegin,
-            timeEnd: intervalEnd,
-            available: false,
-          });
+          const lastItem = combined[combined.length - 1];
+          if (
+            lastItem.available === currentItem.available &&
+            lastItem.timeEnd >= currentItem.timeBegin
+          ) {
+            lastItem.timeEnd = Math.max(lastItem.timeEnd, currentItem.timeEnd);
+          } else {
+            combined.push(currentItem);
+          }
+        }
+
+        // Recursive call for the next item
+        return combinePeriods(items, index + 1, combined);
+      }
+
+      // Function to check availability for a given time range
+      async function checkAvailability(start, end) {
+        const ics = new ItemCheckoutService(
+          user,
+          tenant,
+          new Date(start),
+          new Date(end),
+          bookableId,
+          Number(amount),
+          null,
+        );
+
+        try {
+          await ics.checkAll();
+        } catch {
+          /**
+           * Checks the availability of a bookable item within a given time range.
+           *
+           * If the time range is greater than 1 minute, the function splits the time range into two halves
+           * and checks the availability for each half separately. This is done by calculating the middle point
+           * of the time range and then recursively calling the `checkAvailability` function for the first half
+           * (from `start` to `middle`) and the second half (from `middle` to `end`).
+           *
+           * If the time range is not greater than 1 minute, the function marks the time range as unavailable.
+           * This is done by adding an object to the `items` array, with `timeBegin` and `timeEnd` set to `start`
+           * and `end` respectively, and `available` set to `false`.
+           *
+           * @param {number} start - The start time of the time range in milliseconds.
+           * @param {number} end - The end time of the time range in milliseconds.
+           * @returns {Promise<void>} A Promise that resolves when the availability check is complete.
+           */
+
+          if (end - start > 60000 * 15) {
+            const middle = Math.round(start + (end - start) / 2);
+            await checkAvailability(start, middle);
+            await checkAvailability(middle, end);
+          } else {
+            const bookings = await BookingManager.getConcurrentBookings(
+              bookableId,
+              tenant,
+              start,
+              end,
+            );
+            if (bookings.length > 0) {
+              bookings.forEach((booking) => {
+                items.push({
+                  timeBegin: booking.timeBegin,
+                  timeEnd: booking.timeEnd,
+                  available: false,
+                });
+              });
+            }
+          }
         }
       }
 
-      i = intervalEnd;
-    }
+      await checkAvailability(startDate.getTime(), endDate.getTime());
+      items = combinePeriods(items);
 
-    response.status(200).send(items);
+      response.status(200).send(items);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send({ error: "Internal server error" });
+    }
   }
 }
 

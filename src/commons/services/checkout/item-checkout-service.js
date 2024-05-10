@@ -86,7 +86,7 @@ class ItemCheckoutService {
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
     this.bookableId = bookableId;
-    this.amount = amount;
+    this.amount = Number(amount);
     this.couponCode = couponCode;
   }
 
