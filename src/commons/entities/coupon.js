@@ -1,5 +1,15 @@
 class Coupon {
-  constructor(id, description, type, discount, maxAmount, usedAmount, validFrom, validTo, tenant) {
+  constructor(
+    id,
+    description,
+    type,
+    discount,
+    maxAmount,
+    usedAmount,
+    validFrom,
+    validTo,
+    tenant,
+  ) {
     this.id = id;
     this.description = description;
     this.type = type;
@@ -13,17 +23,21 @@ class Coupon {
 
   static COUPON_TYPE = {
     PERCENTAGE: "percentage",
-    FIXED: "fixed"
-  }
+    FIXED: "fixed",
+  };
 
   isValid() {
     const today = new Date();
-    return (this.maxAmount === null || this.maxAmount === undefined || this.maxAmount > this.usedAmount)
-        && (!this.validFrom || this.validFrom <= today)
-        && (!this.validTo || this.validTo >= today);
+    return (
+      (this.maxAmount === null ||
+        this.maxAmount === undefined ||
+        this.maxAmount > this.usedAmount) &&
+      (!this.validFrom || this.validFrom <= today) &&
+      (!this.validTo || this.validTo >= today)
+    );
   }
 }
 
 module.exports = {
-  Coupon: Coupon
-}
+  Coupon: Coupon,
+};

@@ -83,7 +83,6 @@ class BookingService {
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
       );
-
     } else {
       bundleCheckoutService = new BundleCheckoutService(
         user,

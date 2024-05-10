@@ -10,8 +10,6 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
-const os = require("os");
-const path = require("path");
 const IdGenerator = require("../utilities/id-generator");
 
 class PdfService {
@@ -91,7 +89,6 @@ class PdfService {
         (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
       );
 
-
       const totalAmount = PdfService.formatCurrency(booking.priceEur);
 
       let bookingPeriod = "-";
@@ -143,7 +140,7 @@ class PdfService {
 
       const page = await browser.newPage();
 
-      const html= tenant.receiptTemplate
+      const html = tenant.receiptTemplate;
 
       if (!PdfService.isValidTemplate(html)) {
         throw new Error("Invalid receipt template");
@@ -166,7 +163,7 @@ class PdfService {
 
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
 
-      let pdfData = {}
+      let pdfData = {};
       pdfData.buffer = await page.pdf({ format: "A4" });
 
       pdfData.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
@@ -191,11 +188,12 @@ class PdfService {
       /<\/body>/,
     ];
 
-
-    const missingElement = patterns.find(pattern => !pattern.test(template));
+    const missingElement = patterns.find((pattern) => !pattern.test(template));
 
     if (missingElement !== undefined) {
-      logger.error(`PDF template is missing required pattern: ${missingElement}`);
+      logger.error(
+        `PDF template is missing required pattern: ${missingElement}`,
+      );
     }
 
     return !missingElement;
