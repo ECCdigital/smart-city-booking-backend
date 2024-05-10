@@ -10,8 +10,6 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
-const IdGenerator = require("../utilities/id-generator");
-
 class PdfService {
   static formatDateTime(value) {
     const formatter = new Intl.DateTimeFormat("de-DE", {
@@ -76,11 +74,7 @@ class PdfService {
     }
   }
 
-  static async generateReceipt(
-    bookingId,
-    tenantId,
-    receiptNumber,
-  ) {
+  static async generateReceipt(bookingId, tenantId, receiptNumber) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
 

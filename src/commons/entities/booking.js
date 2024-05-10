@@ -28,7 +28,7 @@ class Booking {
     timeCreated,
     bookableIds,
     isCommitted,
-    attachments
+    attachments,
   ) {
     this.id = id;
     this.tenant = tenant;

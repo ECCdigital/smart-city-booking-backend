@@ -131,7 +131,10 @@ class BookingService {
         let attachments = [];
         try {
           if (booking.priceEur > 0) {
-            const pdfData = await ReceiptService.createReceipt(tenantId, booking.id);
+            const pdfData = await ReceiptService.createReceipt(
+              tenantId,
+              booking.id,
+            );
 
             attachments = [
               {

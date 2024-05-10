@@ -146,8 +146,10 @@ class PaymentController {
             let attachments = [];
             try {
               if (booking.priceEur > 0) {
-
-                const pdfData = await ReceiptService.createReceipt(tenantId, booking.id);
+                const pdfData = await ReceiptService.createReceipt(
+                  tenantId,
+                  booking.id,
+                );
 
                 attachments = [
                   {
@@ -160,7 +162,6 @@ class PaymentController {
             } catch (err) {
               logger.error(err);
             }
-
 
             await MailController.sendBookingConfirmation(
               booking.mail,

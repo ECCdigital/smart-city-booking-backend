@@ -137,16 +137,16 @@ router.get(
   BookingController.commitBooking,
 );
 router.post(
-    "/bookings/:id/receipt",
-    AuthenticationController.isSignedIn,
-    BookingController.createReceipt,
-)
+  "/bookings/:id/receipt",
+  AuthenticationController.isSignedIn,
+  BookingController.createReceipt,
+);
 
 router.get(
-    "/bookings/:id/receipt/:receiptId",
-    AuthenticationController.isSignedIn,
-    BookingController.getReceipt,
-)
+  "/bookings/:id/receipt/:receiptId",
+  AuthenticationController.isSignedIn,
+  BookingController.getReceipt,
+);
 
 // CHECKOUT
 // ========
@@ -176,6 +176,10 @@ router.delete("/coupons/:id", CouponController.deleteCoupon);
 // ==========
 router.get("/files/list", FileController.getFiles);
 router.get("/files/get", FileController.getFile);
-router.post("/files", AuthenticationController.isSignedIn, FileController.createFile);
+router.post(
+  "/files",
+  AuthenticationController.isSignedIn,
+  FileController.createFile,
+);
 
 module.exports = router;
