@@ -44,7 +44,6 @@ class IdGenerator {
 
     return formatId(newId, year, leadingZeros);
   }
-
 }
 
 /**
@@ -56,7 +55,10 @@ class IdGenerator {
  * @returns {string}
  */
 function formatId(id, year, leadingZeros) {
-  const formattedId = leadingZeros > 0 ? id.toString().padStart(leadingZeros, '0') : id.toString();
+  const formattedId =
+    leadingZeros > 0
+      ? id.toString().padStart(leadingZeros, "0")
+      : id.toString();
   return `${year}-${formattedId}`;
 }
 

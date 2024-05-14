@@ -70,17 +70,20 @@ class EventManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeEvent(event, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("events")
-        .replaceOne({ id: event.id, tenant: event.tenant }, event, {
+  static async storeEvent(event, upsert = true) {
+    try {
+      const eventsCollection = dbm.get().collection("events");
+
+      await eventsCollection.replaceOne(
+        { id: event.id, tenant: event.tenant },
+        event,
+        {
           upsert: upsert,
-        })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+        },
+      );
+    } catch (err) {
+      throw new Error(`Error storing event: ${err.message}`);
+    }
   }
 
   /**
@@ -99,6 +102,25 @@ class EventManager {
         .then(() => resolve())
         .catch((err) => reject(err));
     });
+  }
+
+  /**
+   * Checks the current count of events for a specific tenant against the maximum allowed events.
+   * The maximum allowed events is defined in the environment variable MAX_EVENTS.
+   * If the current count of events is greater than or equal to the maximum allowed events, it returns false.
+   * If the current count of events is less than the maximum allowed events, or if MAX_EVENTS is not defined, it returns true.
+   *
+   * @async
+   * @param {string} tenant - The identifier of the tenant.
+   * @returns {Promise<boolean>} A promise that resolves to a boolean indicating whether the tenant can create more events.
+   */
+  static async checkPublicEventCount(tenant) {
+    const maxEvents = parseInt(process.env.MAX_EVENTS, 10);
+    const count = await dbm
+      .get()
+      .collection("events")
+      .countDocuments({ tenant: tenant, isPublic: true });
+    return !(maxEvents && count >= maxEvents);
   }
 }
 

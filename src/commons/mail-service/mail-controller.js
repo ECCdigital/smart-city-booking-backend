@@ -138,7 +138,12 @@ class MailController {
     return content;
   }
 
-  static async sendBookingConfirmation(address, bookingId, tenantId, attachments = undefined) {
+  static async sendBookingConfirmation(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
     const tenant = await TenantManager.getTenant(tenantId);
 
     let content = `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`;

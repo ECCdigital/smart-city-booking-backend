@@ -60,106 +60,105 @@ class BundleCheckoutService {
         this.paymentMethod = paymentMethod;
     }
 
-    async generateBookingReference(
-        length = 8,
-        chunkLength = 4,
-        possible = "ABCDEFGHJKMNPQRSTUXY",
-        ensureUnique = true,
-        retryCount = 10,
-    ) {
-        if (ensureUnique && retryCount <= 0) {
-            throw new Error(
-                "Unable to generate booking number. Retry count exceeded.",
-            );
-        }
-
-        let text = "";
-        for (let i = 0; i < length; i++) {
-            text += possible.charAt(Math.floor(Math.random() * possible.length));
-        }
-
-        for (let i = chunkLength; i < text.length; i += chunkLength + 1) {
-            text = text.slice(0, i) + "-" + text.slice(i);
-        }
-
-        if (ensureUnique) {
-            if (!!(await BookingManager.getBooking(text, this.tenant)._id)) {
-                return await this.generateBookingReference(
-                    length,
-                    chunkLength,
-                    possible,
-                    ensureUnique,
-                    retryCount - 1,
-                );
-            }
-        }
-
-        return text;
-    }
-    async checkAll() {
-        for (const bookableItem of this.bookableItems) {
-            const itemCheckoutService = new ItemCheckoutService(
-                this.user,
-                this.tenant,
-                this.timeBegin,
-                this.timeEnd,
-                bookableItem.bookableId,
-                bookableItem.amount,
-            );
-
-            await itemCheckoutService.checkAll();
-        }
-
-        return true;
+  async generateBookingReference(
+    length = 8,
+    chunkLength = 4,
+    possible = "ABCDEFGHJKMNPQRSTUXY",
+    ensureUnique = true,
+    retryCount = 10,
+  ) {
+    if (ensureUnique && retryCount <= 0) {
+      throw new Error(
+        "Unable to generate booking number. Retry count exceeded.",
+      );
     }
 
-    async userPriceEur() {
-        let total = 0;
-        for (const bookableItem of this.bookableItems) {
-            const itemCheckoutService = new ItemCheckoutService(
-                this.user,
-                this.tenant,
-                this.timeBegin,
-                this.timeEnd,
-                bookableItem.bookableId,
-                bookableItem.amount,
-                this.couponCode,
-            );
-
-            total += await itemCheckoutService.userPriceEur();
-        }
-
-        return Math.round(total * 100) / 100;
-
+    let text = "";
+    for (let i = 0; i < length; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
 
-    async isPaymentComplete() {
-        return await this.userPriceEur() === 0;
+    for (let i = chunkLength; i < text.length; i += chunkLength + 1) {
+      text = text.slice(0, i) + "-" + text.slice(i);
     }
 
-    async isAutoCommit() {
-        for (const bookableItem of this.bookableItems) {
-            const bookable = await BookableManager.getBookable(
-                bookableItem.bookableId,
-                this.tenant,
-            );
-
-            if (!bookable.autoCommitBooking) return false;
-        }
-
-        return true;
+    if (ensureUnique) {
+      if (!!(await BookingManager.getBooking(text, this.tenant)._id)) {
+        return await this.generateBookingReference(
+          length,
+          chunkLength,
+          possible,
+          ensureUnique,
+          retryCount - 1,
+        );
+      }
     }
 
-    async prepareBooking() {
-        await this.checkAll();
+    return text;
+  }
+  async checkAll() {
+    for (const bookableItem of this.bookableItems) {
+      const itemCheckoutService = new ItemCheckoutService(
+        this.user,
+        this.tenant,
+        this.timeBegin,
+        this.timeEnd,
+        bookableItem.bookableId,
+        bookableItem.amount,
+      );
 
-        for (const bookableItem of this.bookableItems) {
-            bookableItem._bookableUsed = await BookableManager.getBookable(
-                bookableItem.bookableId,
-                this.tenant,
-            );
-            delete bookableItem._bookableUsed._id;
-        }
+      await itemCheckoutService.checkAll();
+    }
+
+    return true;
+  }
+
+  async userPriceEur() {
+    let total = 0;
+    for (const bookableItem of this.bookableItems) {
+      const itemCheckoutService = new ItemCheckoutService(
+        this.user,
+        this.tenant,
+        this.timeBegin,
+        this.timeEnd,
+        bookableItem.bookableId,
+        bookableItem.amount,
+        this.couponCode,
+      );
+
+      total += await itemCheckoutService.userPriceEur();
+    }
+
+    return Math.round(total * 100) / 100;
+  }
+
+  async isPaymentComplete() {
+    return (await this.userPriceEur()) === 0;
+  }
+
+  async isAutoCommit() {
+    for (const bookableItem of this.bookableItems) {
+      const bookable = await BookableManager.getBookable(
+        bookableItem.bookableId,
+        this.tenant,
+      );
+
+      if (!bookable.autoCommitBooking) return false;
+    }
+
+    return true;
+  }
+
+  async prepareBooking() {
+    await this.checkAll();
+
+    for (const bookableItem of this.bookableItems) {
+      bookableItem._bookableUsed = await BookableManager.getBookable(
+        bookableItem.bookableId,
+        this.tenant,
+      );
+      delete bookableItem._bookableUsed._id;
+    }
 
         const booking = {
             id: await this.generateBookingReference(),
@@ -184,16 +183,16 @@ class BundleCheckoutService {
             paymentMethod: this.paymentMethod,
         };
 
-        if (this.couponCode) {
-            booking._couponUsed = await CouponManager.getCoupon(
-                this.couponCode,
-                this.tenant,
-            );
-            delete booking._couponUsed._id;
-        }
-
-        return booking;
+    if (this.couponCode) {
+      booking._couponUsed = await CouponManager.getCoupon(
+        this.couponCode,
+        this.tenant,
+      );
+      delete booking._couponUsed._id;
     }
+
+    return booking;
+  }
 }
 
 /**
@@ -298,7 +297,6 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
 }
 
 module.exports = {
-    BundleCheckoutService,
-    ManualBundleCheckoutService,
+  BundleCheckoutService,
+  ManualBundleCheckoutService,
 };
-

@@ -9,7 +9,6 @@ class Tenant {
         this.phone = phone;
         this.applications = applications;
     }
-
 }
 
 module.exports = Tenant;
