@@ -1,9 +1,6 @@
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const bunyan = require("bunyan");
-const {
-  GiroCockpitPaymentService, InvoicePaymentService,
-} = require("../../../commons/services/payment/payment-service");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const PaymentUtils = require("../../../commons/utilities/payment-utils");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -21,14 +18,14 @@ class PaymentController {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
     try {
-      let paymentService = await getPaymentService(
+      let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
         booking.paymentMethod,
       );
 
-      const data = await paymentService.createPayment();
-      response.status(200).send({ paymentMethod: booking.paymentMethod, data });
+      const data = await paymentService?.createPayment();
+      response.status(200).send({ paymentData:data, booking });
     } catch (error) {
       logger.error(error);
       response.sendStatus(400);
@@ -43,7 +40,7 @@ class PaymentController {
 
     const booking = await BookingManager.getBooking(bookingId, tenantId);
     try {
-      let paymentService = await getPaymentService(
+      let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
         booking.paymentMethod,
@@ -64,7 +61,7 @@ class PaymentController {
 
     const booking = await BookingManager.getBooking(bookingId, tenantId);
     try {
-      let paymentService = await getPaymentService(
+      let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
         booking.paymentMethod,
@@ -77,22 +74,6 @@ class PaymentController {
       response.sendStatus(400);
     }
   }
-}
-
-async function getPaymentService(tenantId, bookingId, paymentMethod) {
-  const paymentMethods = {
-    "giroCockpit": GiroCockpitPaymentService,
-    "invoice": InvoicePaymentService
-  };
-  const serviceClass = paymentMethods[paymentMethod];
-  if (!serviceClass) return null;
-
-  const paymentApp = await TenantManager.getTenantApp(tenantId, paymentMethod);
-  if (!paymentApp || !paymentApp.active) {
-    throw new Error(`${paymentMethod} payment app not found or inactive.`);
-  }
-
-  return new serviceClass(tenantId, bookingId);
 }
 
 module.exports = PaymentController;

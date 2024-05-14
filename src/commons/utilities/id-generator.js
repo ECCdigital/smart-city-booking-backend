@@ -9,22 +9,36 @@ class IdGenerator {
    *
    * @param tenantId The tenant ID
    * @param leadingZeros The number of leading zeros to pad the ID with
+   * @param {string} idType The type of ID to generate. Can be "receipt" or "invoice".
    * @returns {string} The next ID
    */
-  static async next(tenantId, leadingZeros = 0) {
+  static async next(tenantId, leadingZeros = 0, idType) {
     const tenant = await TenantManager.getTenant(tenantId);
-
+    let newId = 0;
     const year = new Date().getFullYear();
-    const idForCurrentYear = (tenant.receiptCount && tenant.receiptCount[year]) || 0;
-    const newId = idForCurrentYear + 1;
+    let updatedTenant;
 
-    const updatedTenant = {
-      ...tenant,
-      receiptCount: {
-        ...tenant.receiptCount,
-        [year]: newId
-      }
-    };
+    if (idType === "receipt") {
+      const idForCurrentYear = (tenant.receiptCount && tenant.receiptCount[year]) || 0;
+      newId = idForCurrentYear + 1;
+      updatedTenant = {
+        ...tenant,
+        receiptCount: {
+          ...tenant.receiptCount,
+          [year]: newId,
+        },
+      };
+    } else if (idType === "invoice") {
+      const idForCurrentYear = (tenant.invoiceCount && tenant.invoiceCount[year]) || 0;
+      newId = idForCurrentYear + 1;
+      updatedTenant = {
+        ...tenant,
+        invoiceCount: {
+          ...tenant.invoiceCount,
+          [year]: newId,
+        },
+      };
+    }
 
     await TenantManager.storeTenant(updatedTenant);
 

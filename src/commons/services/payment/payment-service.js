@@ -6,9 +6,9 @@ const qs = require("qs");
 const crypto = require("crypto");
 const SecurityUtils = require("../../utilities/security-utils");
 const BookingManager = require("../../data-managers/booking-manager");
-const ReceiptService = require("../../services/receipt/receipt-service");
-const MailController = require("../../mail-service/mail-controller");
+const ReceiptService = require("./receipt-service");
 const TenantManager = require("../../data-managers/tenant-manager");
+const InvoiceService = require("./invoice-service");
 
 const logger = bunyan.createLogger({
   name: "payment-service.js",
@@ -21,11 +21,21 @@ class PaymentService {
     this.bookingId = bookingId;
   }
 
-  createPayment() {}
+  createPayment() {
+    throw new Error("createPayment not implemented");
+  }
 
-  paymentNotification() {}
+  paymentNotification() {
+    throw new Error("paymentNotification not implemented");
+  }
 
-  paymentResponse() {}
+  paymentResponse() {
+    throw new Error("paymentResponse not implemented");
+  }
+
+  paymentRequest() {
+    throw new Error("paymentRequest not implemented");
+  }
 }
 
 class GiroCockpitPaymentService extends PaymentService {
@@ -103,6 +113,7 @@ class GiroCockpitPaymentService extends PaymentService {
   }
 
   async paymentNotification(args) {
+    const MailController = () =>require("../../mail-service/mail-controller");
     const {
       query: {
         gcMerchantTxId,
@@ -127,7 +138,10 @@ class GiroCockpitPaymentService extends PaymentService {
         throw new Error("Missing parameters");
       }
 
-      const booking = await BookingManager.getBooking(this.bookingId, this.tenantId);
+      const booking = await BookingManager.getBooking(
+        this.bookingId,
+        this.tenantId,
+      );
       const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
       const PROJECT_SECRET = SecurityUtils.decrypt(paymentApp.paymentSecret);
 
@@ -183,7 +197,7 @@ class GiroCockpitPaymentService extends PaymentService {
           }
 
           try {
-            await MailController.sendBookingConfirmation(
+            await MailController().sendBookingConfirmation(
               booking.mail,
               booking.id,
               this.tenantId,
@@ -195,7 +209,7 @@ class GiroCockpitPaymentService extends PaymentService {
 
           try {
             const tenant = await TenantManager.getTenant(this.tenantId);
-            await MailController.sendIncomingBooking(
+            await MailController().sendIncomingBooking(
               tenant.mail,
               this.bookingId,
               this.tenantId,
@@ -213,7 +227,8 @@ class GiroCockpitPaymentService extends PaymentService {
       } else {
         // TODO: remove booking?
         logger.warn(
-          `${this.tenantId} -- booking ${this.bookingId} could not be payed.`,);
+          `${this.tenantId} -- booking ${this.bookingId} could not be payed.`,
+        );
         return true;
       }
     } catch (error) {
@@ -224,6 +239,13 @@ class GiroCockpitPaymentService extends PaymentService {
   paymentResponse() {
     return `${process.env.FRONTEND_URL}/checkout/status?id=${this.bookingId}&tenant=${this.tenantId}`;
   }
+
+  async paymentRequest() {
+    const MailController = () =>require("../../mail-service/mail-controller");
+    const booking = await BookingManager.getBooking(this.bookingId, this.tenantId);
+
+    await MailController().sendPaymentLinkAfterBookingApproval(booking.mail, this.bookingId, this.tenantId);
+  }
 }
 
 class InvoicePaymentService extends PaymentService {
@@ -231,16 +253,67 @@ class InvoicePaymentService extends PaymentService {
     super(tenantId, bookingId);
   }
   async createPayment() {
+    const MailController = () =>require("../../mail-service/mail-controller");
     const booking = await getBooking(this.bookingId, this.tenantId);
-    const paymentApp = await getTenantApp(this.tenantId, "invoice");
-    console.log("paymentApp", paymentApp);
-    //TODO: create invoice
+
+    let attachments = [];
+    try {
+      const pdfData = await InvoiceService.createInvoice(
+        this.tenantId,
+        this.bookingId,
+      );
+
+      attachments = [
+        {
+          filename: pdfData.name,
+          content: pdfData.buffer,
+          contentType: "application/pdf",
+        },
+      ];
+    } catch (error) {
+      throw new Error(error);
+    }
+
+    try {
+      await MailController().sendInvoice(
+        booking.mail,
+        this.bookingId,
+        this.tenantId,
+        attachments,
+      );
+    } catch (err) {
+      logger.error(err);
+    }
+
+    return true;
   }
   async paymentNotification() {
     console.log("paymentNotification");
   }
   async paymentResponse() {
     console.log("paymentResponse");
+  }
+
+  async paymentRequest() {
+    const MailController = () => require("../../mail-service/mail-controller");
+    try {
+      const booking = await BookingManager.getBooking(this.bookingId, this.tenantId);
+      const pdfData = await InvoiceService.createInvoice(
+        this.tenantId,
+        this.bookingId,
+      );
+
+      const attachments = [
+        {
+          filename: pdfData.name,
+          content: pdfData.buffer,
+          contentType: "application/pdf",
+        },
+      ];
+      await MailController().sendInvoiceAfterBookingApproval(booking.mail, this.bookingId, this.tenantId, attachments);
+    } catch (error) {
+      throw new Error(error);
+    }
   }
 }
 

@@ -7,7 +7,7 @@ const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
-const ReceiptService = require("../receipt/receipt-service");
+const ReceiptService = require("../payment/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",

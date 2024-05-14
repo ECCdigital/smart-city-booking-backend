@@ -17,7 +17,7 @@ const {
 const IdGenerator = require("../../../commons/utilities/id-generator");
 const pdfService = require("../../../commons/pdf-service/pdf-service");
 const PdfService = require("../../../commons/pdf-service/pdf-service");
-const ReceiptService = require("../../../commons/services/receipt/receipt-service");
+const ReceiptService = require("../../../commons/services/payment/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -517,8 +517,6 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const isNotCommitted = false;
-
       const id = request.params.id;
       if (id) {
         const booking = await BookingManager.getBooking(id, tenant);
@@ -526,6 +524,8 @@ class BookingController {
         if (
           await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
         ) {
+          booking.isCommitted = true;
+          await BookingManager.storeBooking(booking);
           if (
             booking.isPayed === true ||
             !booking.priceEur ||
@@ -551,9 +551,6 @@ class BookingController {
             );
             response.sendStatus(200);
           }
-
-          booking.isCommitted = true;
-          await BookingManager.storeBooking(booking);
         } else {
           logger.warn(
             `${tenant} -- User ${user?.id} is not allowed to commit booking.`,

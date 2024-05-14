@@ -24,9 +24,9 @@ class ReceiptService {
 
       if(existingReceipts.length > 0) {
         revision = Math.max(...existingReceipts.map(receipt => receipt.revision)) + 1;
-        receiptId = existingReceipts[0].receiptId ||  await IdGenerator.next(tenantId, 4);
+        receiptId = existingReceipts[0].receiptId ||  await IdGenerator.next(tenantId, 4, "receipt");
       } else {
-        receiptId = await IdGenerator.next(tenantId, 4);
+        receiptId = await IdGenerator.next(tenantId, 4, "receipt");
       }
 
       const receiptNumber =`${tenant.receiptNumberPrefix}-${receiptId}-${revision}`;

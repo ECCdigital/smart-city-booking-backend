@@ -78,11 +78,7 @@ class PdfService {
     }
   }
 
-  static async generateReceipt(
-    bookingId,
-    tenantId,
-    receiptNumber,
-  ) {
+  static async generateReceipt(bookingId, tenantId, receiptNumber) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
 
@@ -90,7 +86,6 @@ class PdfService {
       let bookables = (await BookableManager.getBookables(tenantId)).filter(
         (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
       );
-
 
       const totalAmount = PdfService.formatCurrency(booking.priceEur);
 
@@ -143,7 +138,7 @@ class PdfService {
 
       const page = await browser.newPage();
 
-      const html= tenant.receiptTemplate
+      const html = tenant.receiptTemplate;
 
       if (!PdfService.isValidTemplate(html)) {
         throw new Error("Invalid receipt template");
@@ -166,7 +161,7 @@ class PdfService {
 
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
 
-      let pdfData = {}
+      let pdfData = {};
       pdfData.buffer = await page.pdf({ format: "A4" });
 
       pdfData.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
@@ -176,6 +171,100 @@ class PdfService {
       return pdfData;
     } catch (err) {
       logger.error(err);
+      throw err;
+    }
+  }
+
+  static async generateInvoice(tenantId, bookingId, invoiceNumber) {
+    try {
+      const tenant = await TenantManager.getTenant(tenantId);
+      const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
+
+      let booking = await BookingManager.getBooking(bookingId, tenantId);
+      let bookables = (await BookableManager.getBookables(tenantId)).filter(
+        (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
+      );
+
+      const totalAmount = PdfService.formatCurrency(booking.priceEur);
+
+      let bookingPeriod = "-";
+      if (booking.timeBegin && booking.timeEnd) {
+        bookingPeriod =
+          PdfService.formatDateTime(booking.timeBegin) +
+          " - " +
+          PdfService.formatDateTime(booking.timeEnd);
+      }
+      let bookedItems = "";
+
+      for (const bookableItem of booking.bookableItems) {
+        const bookable = bookables.find(
+          (b) => b.id === bookableItem.bookableId,
+        );
+        bookedItems += `<div>${bookable.title}, Anzahl: ${bookableItem.amount}</div>`;
+      }
+
+      if (booking._couponUsed) {
+        if (booking._couponUsed.type === "fixed") {
+          bookedItems += `<div>
+                    Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}€)<br>
+                </div>`;
+        } else if (booking._couponUsed.type === "percentage") {
+          bookedItems += `<div>
+                    Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}%)<br>
+                </div>`;
+        }
+      }
+
+      const invoiceAddress = `${booking.company || ""} 
+            ${booking.company ? "<br />" : ""}
+            ${booking.name}<br />
+            ${booking.street}<br />
+            ${booking.zipCode} ${booking.location}`;
+
+      const currentDate = PdfService.formatDate(new Date());
+
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox"],
+      });
+
+      const page = await browser.newPage();
+
+      const html = tenant.invoiceTemplate;
+
+      if (!PdfService.isValidTemplate(html)) {
+        throw new Error("Invalid receipt template");
+      }
+
+      const data = {
+        bookingId: bookingId,
+        tenant: tenantId,
+        totalAmount: totalAmount,
+        bookingPeriod: bookingPeriod,
+        bookedItems: bookedItems,
+        bookingDate: currentDate,
+        invoiceNumber: invoiceNumber,
+        invoiceAddress: invoiceAddress,
+        bank: invoiceApp.bank,
+        iban: invoiceApp.iban,
+        bic: invoiceApp.bic,
+        daysUntilPaymentDue: invoiceApp.daysUntilPaymentDue,
+
+      };
+
+      const renderedHtml = Mustache.render(html, data);
+
+      await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
+
+      let pdfData = {};
+      pdfData.buffer = await page.pdf({ format: "A4" });
+
+      pdfData.name = `Rechnung-${invoiceNumber}.pdf`;
+
+      await browser.close();
+
+      return pdfData;
+    } catch (err) {
       throw err;
     }
   }
@@ -191,11 +280,12 @@ class PdfService {
       /<\/body>/,
     ];
 
-
-    const missingElement = patterns.find(pattern => !pattern.test(template));
+    const missingElement = patterns.find((pattern) => !pattern.test(template));
 
     if (missingElement !== undefined) {
-      logger.error(`PDF template is missing required pattern: ${missingElement}`);
+      logger.error(
+        `PDF template is missing required pattern: ${missingElement}`,
+      );
     }
 
     return !missingElement;
