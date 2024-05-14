@@ -13,7 +13,6 @@ router.get("/tenants", TenantController.getTenants);
 router.get("/tenants/:id", TenantController.getTenant);
 
 // Protected
-
 router.put(
   "/tenants",
   AuthenticationController.isSignedIn,
@@ -23,6 +22,11 @@ router.delete(
   "/tenants/:id",
   AuthenticationController.isSignedIn,
   TenantController.removeTenant,
+);
+router.get(
+  "/tenants/count/check",
+  AuthenticationController.isSignedIn,
+  TenantController.countCheck,
 );
 
 // ROLES

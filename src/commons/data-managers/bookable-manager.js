@@ -70,17 +70,18 @@ class BookableManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeBookable(bookable, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookables")
-        .replaceOne({ id: bookable.id, tenant: bookable.tenant }, bookable, {
-          upsert: upsert,
-        })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async storeBookable(bookable, upsert = true) {
+    try {
+      const bookablesCollection = dbm.get().collection("bookables");
+
+      await bookablesCollection.replaceOne(
+        { id: bookable.id, tenant: bookable.tenant },
+        bookable,
+        { upsert: upsert },
+      );
+    } catch (err) {
+      throw new Error(`Error storing bookable: ${err.message}`);
+    }
   }
 
   /**
@@ -144,6 +145,15 @@ class BookableManager {
     });
 
     return pBookables;
+  }
+
+  static async checkPublicBookableCount(tenant) {
+    const maxBookables = parseInt(process.env.MAX_BOOKABLES, 10);
+    const count = await dbm
+      .get()
+      .collection("bookables")
+      .countDocuments({ tenant: tenant, isPublic: true });
+    return !(maxBookables && count >= maxBookables);
   }
 }
 

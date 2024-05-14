@@ -239,7 +239,17 @@ class BookableController {
       bookable.id = uuidv4();
       bookable.ownerUserId = user.id;
 
-      if (await BookablePermissions._allowCreate(bookable, user.id, tenant)) {
+      if (
+        (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+          false &&
+        bookable.isPublic
+      ) {
+        throw new Error(`Maximum number of public bookables reached.`);
+      }
+
+      if (
+        await BookablePermissions._allowCreate(bookable, user.id, user.tenant)
+      ) {
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -264,7 +274,23 @@ class BookableController {
 
       const bookable = Object.assign(new Bookable(), request.body);
 
-      if (await BookablePermissions._allowUpdate(bookable, user.id, tenant)) {
+      const existingBookable = await BookableManager.getBookable(
+        bookable.id,
+        tenant,
+      );
+
+      if (!existingBookable.isPublic && bookable.isPublic) {
+        if (
+          (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+          false
+        ) {
+          throw new Error(`Maximum number of public bookables reached.`);
+        }
+      }
+
+      if (
+        await BookablePermissions._allowUpdate(bookable, user.id, user.tenant)
+      ) {
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
@@ -358,6 +384,18 @@ class BookableController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get opening hours");
+    }
+  }
+
+  static async countCheck(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const isCreateAllowed =
+        await BookableManager.checkPublicBookableCount(tenant);
+      response.status(200).send(isCreateAllowed);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not check if creation is possible");
     }
   }
 }

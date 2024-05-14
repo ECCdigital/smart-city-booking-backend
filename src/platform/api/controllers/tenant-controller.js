@@ -220,6 +220,10 @@ class TenantController {
 
       tenant.ownerUserId = user.id;
 
+      if ((await TenantManager.checkTenantCount()) === false) {
+        throw new Error(`Maximum number of tenants reached.`);
+      }
+
       if (await TenantPermissions._allowCreate(tenant, user.id, user.tenant)) {
         const tenantAdmin = Object.assign(new Object(), user);
         tenantAdmin.tenant = tenant.id;
@@ -307,6 +311,15 @@ class TenantController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not remove tenant");
+    }
+  }
+  static async countCheck(request, response) {
+    try {
+      const isCreateAllowed = await TenantManager.checkTenantCount();
+      response.status(200).send(isCreateAllowed);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not check if creation is possible");
     }
   }
 }

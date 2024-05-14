@@ -79,21 +79,18 @@ class TenantManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeTenant(tenant, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("tenants")
-        .replaceOne(
-          { id: tenant.id },
-          SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
-          {
-            upsert: upsert,
-          },
-        )
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async storeTenant(tenant, upsert = true) {
+    try {
+      const tenantsCollection = dbm.get().collection("tenants");
+
+      await tenantsCollection.replaceOne(
+        { id: tenant.id },
+        SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
+        { upsert: upsert },
+      );
+    } catch (err) {
+      throw new Error(`Error storing tenant: ${err.message}`);
+    }
   }
 
   /**
@@ -111,6 +108,12 @@ class TenantManager {
         .then(() => resolve())
         .catch((err) => reject(err));
     });
+  }
+
+  static async checkTenantCount() {
+    const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
+    const count = await dbm.get().collection("tenants").countDocuments({});
+    return !(maxTenants && count >= maxTenants);
   }
 }
 
