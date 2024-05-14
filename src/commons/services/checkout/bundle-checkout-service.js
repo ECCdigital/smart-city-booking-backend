@@ -7,58 +7,57 @@ const CouponManager = require("../../data-managers/coupon-manager");
  * Class representing a bundle checkout service.
  */
 class BundleCheckoutService {
-
-    /**
-     * Create a bundle checkout service.
-     * @param {string} user - The user ID.
-     * @param {string} tenant - The tenant ID.
-     * @param {Date} timeBegin - The start time.
-     * @param {Date} timeEnd - The end time.
-     * @param {Array} bookableItems - The items to be booked.
-     * @param {string} couponCode - The coupon code.
-     * @param {string} name - The name of the user.
-     * @param {string} company - The company of the user.
-     * @param {string} street - The street of the user.
-     * @param {string} zipCode - The zip code of the user.
-     * @param {string} location - The location of the user.
-     * @param {string} email - The email of the user.
-     * @param {string} phone - The phone number of the user.
-     * @param {string} comment - The comment of the user.
-     * @param {string} paymentMethod - The payment method.
-     */
-    constructor(
-        user,
-        tenant,
-        timeBegin,
-        timeEnd,
-        bookableItems,
-        couponCode,
-        name,
-        company,
-        street,
-        zipCode,
-        location,
-        email,
-        phone,
-        comment,
-        paymentMethod,
-    ) {
-        this.user = user;
-        this.tenant = tenant;
-        this.timeBegin = timeBegin;
-        this.timeEnd = timeEnd;
-        this.bookableItems = bookableItems;
-        this.couponCode = couponCode;
-        this.name = name;
-        this.company = company;
-        this.street = street;
-        this.zipCode = zipCode;
-        this.location = location;
-        this.email = email;
-        this.phone = phone;
-        this.comment = comment;
-        this.paymentMethod = paymentMethod;
-    }
+  /**
+   * Create a bundle checkout service.
+   * @param {string} user - The user ID.
+   * @param {string} tenant - The tenant ID.
+   * @param {Date} timeBegin - The start time.
+   * @param {Date} timeEnd - The end time.
+   * @param {Array} bookableItems - The items to be booked.
+   * @param {string} couponCode - The coupon code.
+   * @param {string} name - The name of the user.
+   * @param {string} company - The company of the user.
+   * @param {string} street - The street of the user.
+   * @param {string} zipCode - The zip code of the user.
+   * @param {string} location - The location of the user.
+   * @param {string} email - The email of the user.
+   * @param {string} phone - The phone number of the user.
+   * @param {string} comment - The comment of the user.
+   * @param {string} paymentMethod - The payment method.
+   */
+  constructor(
+    user,
+    tenant,
+    timeBegin,
+    timeEnd,
+    bookableItems,
+    couponCode,
+    name,
+    company,
+    street,
+    zipCode,
+    location,
+    email,
+    phone,
+    comment,
+    paymentMethod,
+  ) {
+    this.user = user;
+    this.tenant = tenant;
+    this.timeBegin = timeBegin;
+    this.timeEnd = timeEnd;
+    this.bookableItems = bookableItems;
+    this.couponCode = couponCode;
+    this.name = name;
+    this.company = company;
+    this.street = street;
+    this.zipCode = zipCode;
+    this.location = location;
+    this.email = email;
+    this.phone = phone;
+    this.comment = comment;
+    this.paymentMethod = paymentMethod;
+  }
 
   async generateBookingReference(
     length = 8,
@@ -160,28 +159,28 @@ class BundleCheckoutService {
       delete bookableItem._bookableUsed._id;
     }
 
-        const booking = {
-            id: await this.generateBookingReference(),
-            tenant: this.tenant,
-            assignedUserId: this.user?.id,
-            timeBegin: this.timeBegin,
-            timeEnd: this.timeEnd,
-            timeCreated: Date.now(),
-            bookableItems: this.bookableItems,
-            couponCode: this.couponCode,
-            name: this.name,
-            company: this.company,
-            street: this.street,
-            zipCode: this.zipCode,
-            location: this.location,
-            mail: this.email,
-            phone: this.phone,
-            comment: this.comment,
-            priceEur: await this.userPriceEur(),
-            isCommitted: await this.isAutoCommit(),
-            isPayed: await this.isPaymentComplete(),
-            paymentMethod: this.paymentMethod,
-        };
+    const booking = {
+      id: await this.generateBookingReference(),
+      tenant: this.tenant,
+      assignedUserId: this.user?.id,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+      timeCreated: Date.now(),
+      bookableItems: this.bookableItems,
+      couponCode: this.couponCode,
+      name: this.name,
+      company: this.company,
+      street: this.street,
+      zipCode: this.zipCode,
+      location: this.location,
+      mail: this.email,
+      phone: this.phone,
+      comment: this.comment,
+      priceEur: await this.userPriceEur(),
+      isCommitted: await this.isAutoCommit(),
+      isPayed: await this.isPaymentComplete(),
+      paymentMethod: this.paymentMethod,
+    };
 
     if (this.couponCode) {
       booking._couponUsed = await CouponManager.getCoupon(

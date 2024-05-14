@@ -14,22 +14,25 @@ class ReceiptService {
         throw new Error("Booking or tenant not found.");
       }
 
+      const existingReceipts =
+        booking.attachments?.filter(
+          (attachment) => attachment.type === "receipt",
+        ) || [];
 
-      const existingReceipts = booking.attachments?.filter(
-        (attachment) => attachment.type === "receipt",
-      ) || [];
-      
       let revision = 1;
       let receiptId = null;
 
-      if(existingReceipts.length > 0) {
-        revision = Math.max(...existingReceipts.map(receipt => receipt.revision)) + 1;
-        receiptId = existingReceipts[0].receiptId ||  await IdGenerator.next(tenantId, 4, "receipt");
+      if (existingReceipts.length > 0) {
+        revision =
+          Math.max(...existingReceipts.map((receipt) => receipt.revision)) + 1;
+        receiptId =
+          existingReceipts[0].receiptId ||
+          (await IdGenerator.next(tenantId, 4, "receipt"));
       } else {
         receiptId = await IdGenerator.next(tenantId, 4, "receipt");
       }
 
-      const receiptNumber =`${tenant.receiptNumberPrefix}-${receiptId}-${revision}`;
+      const receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}-${revision}`;
 
       const pdfData = await PdfService.generateReceipt(
         bookingId,
@@ -60,14 +63,17 @@ class ReceiptService {
       throw err;
     }
   }
-  
-    static async getReceipt(tenantId, receiptName) {
-        try {
-          return await NextcloudManager.getFile(tenantId, `receipts/${receiptName}`);
-        } catch (err) {
-        throw err;
-        }
+
+  static async getReceipt(tenantId, receiptName) {
+    try {
+      return await NextcloudManager.getFile(
+        tenantId,
+        `receipts/${receiptName}`,
+      );
+    } catch (err) {
+      throw err;
     }
+  }
 }
 
 module.exports = ReceiptService;

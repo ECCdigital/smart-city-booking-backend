@@ -14,7 +14,6 @@ class PaymentController {
       body: { bookingId },
     } = request;
 
-
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
     try {
@@ -25,7 +24,7 @@ class PaymentController {
       );
 
       const data = await paymentService?.createPayment();
-      response.status(200).send({ paymentData:data, booking });
+      response.status(200).send({ paymentData: data, booking });
     } catch (error) {
       logger.error(error);
       response.sendStatus(400);

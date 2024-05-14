@@ -199,8 +199,12 @@ class MailController {
     );
   }
 
-
-  static async sendInvoice(address, bookingId, tenantId, attachments = undefined) {
+  static async sendInvoice(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p> Vielen Dank für Ihre Buchung bei ${tenant.name}. Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto. </p><br>`;
     content += await this.generateBookingDetails(bookingId, tenantId);
@@ -222,7 +226,11 @@ class MailController {
     );
   }
 
-  static async sendPaymentLinkAfterBookingApproval(address, bookingId, tenantId) {
+  static async sendPaymentLinkAfterBookingApproval(
+    address,
+    bookingId,
+    tenantId,
+  ) {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte nutzen Sie den folgenden Link, um Ihre Buchung abzuschließen.</p><br>`;
 
@@ -243,7 +251,12 @@ class MailController {
     );
   }
 
-  static async sendInvoiceAfterBookingApproval(address, bookingId, tenantId, attachments = undefined) {
+  static async sendInvoiceAfterBookingApproval(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p> Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto. </p><br>`;
     content += await this.generateBookingDetails(bookingId, tenantId);
@@ -265,7 +278,12 @@ class MailController {
     );
   }
 
-  static async sendPaymentRequest(address, bookingId, tenantId, attachments = undefined) {
+  static async sendPaymentRequest(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
 
@@ -281,7 +299,6 @@ class MailController {
       );
 
       await paymentService.paymentRequest();
-
     } catch (error) {
       logger.error(error);
       throw error;

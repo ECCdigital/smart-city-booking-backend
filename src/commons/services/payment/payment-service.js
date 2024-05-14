@@ -113,7 +113,7 @@ class GiroCockpitPaymentService extends PaymentService {
   }
 
   async paymentNotification(args) {
-    const MailController = () =>require("../../mail-service/mail-controller");
+    const MailController = () => require("../../mail-service/mail-controller");
     const {
       query: {
         gcMerchantTxId,
@@ -192,7 +192,7 @@ class GiroCockpitPaymentService extends PaymentService {
                 },
               ];
             }
-          } catch (error) {
+          } catch (err) {
             logger.error(err);
           }
 
@@ -241,10 +241,17 @@ class GiroCockpitPaymentService extends PaymentService {
   }
 
   async paymentRequest() {
-    const MailController = () =>require("../../mail-service/mail-controller");
-    const booking = await BookingManager.getBooking(this.bookingId, this.tenantId);
+    const MailController = () => require("../../mail-service/mail-controller");
+    const booking = await BookingManager.getBooking(
+      this.bookingId,
+      this.tenantId,
+    );
 
-    await MailController().sendPaymentLinkAfterBookingApproval(booking.mail, this.bookingId, this.tenantId);
+    await MailController().sendPaymentLinkAfterBookingApproval(
+      booking.mail,
+      this.bookingId,
+      this.tenantId,
+    );
   }
 }
 
@@ -253,7 +260,7 @@ class InvoicePaymentService extends PaymentService {
     super(tenantId, bookingId);
   }
   async createPayment() {
-    const MailController = () =>require("../../mail-service/mail-controller");
+    const MailController = () => require("../../mail-service/mail-controller");
     const booking = await getBooking(this.bookingId, this.tenantId);
 
     let attachments = [];
@@ -297,7 +304,10 @@ class InvoicePaymentService extends PaymentService {
   async paymentRequest() {
     const MailController = () => require("../../mail-service/mail-controller");
     try {
-      const booking = await BookingManager.getBooking(this.bookingId, this.tenantId);
+      const booking = await BookingManager.getBooking(
+        this.bookingId,
+        this.tenantId,
+      );
       const pdfData = await InvoiceService.createInvoice(
         this.tenantId,
         this.bookingId,
@@ -310,7 +320,12 @@ class InvoicePaymentService extends PaymentService {
           contentType: "application/pdf",
         },
       ];
-      await MailController().sendInvoiceAfterBookingApproval(booking.mail, this.bookingId, this.tenantId, attachments);
+      await MailController().sendInvoiceAfterBookingApproval(
+        booking.mail,
+        this.bookingId,
+        this.tenantId,
+        attachments,
+      );
     } catch (error) {
       throw new Error(error);
     }

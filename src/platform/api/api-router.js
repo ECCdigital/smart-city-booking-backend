@@ -5,7 +5,6 @@ const RoleController = require("./controllers/role-controller");
 
 var router = express.Router({ mergeParams: true });
 
-
 // TENANTS
 // =======
 

@@ -27,7 +27,7 @@ class InvoiceService {
           Math.max(...existingInvoices.map((invoice) => invoice.revision)) + 1;
         invoiceId =
           existingInvoices[0].invoiceId ||
-          await IdGenerator.next(tenantId, 4, "invoice");
+          (await IdGenerator.next(tenantId, 4, "invoice"));
       } else {
         invoiceId = await IdGenerator.next(tenantId, 4, "invoice");
       }

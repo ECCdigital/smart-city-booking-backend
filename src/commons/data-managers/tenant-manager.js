@@ -123,7 +123,7 @@ class TenantManager {
       });
       return tenant.applications;
     } catch (err) {
-      throw new Error(`No tenant found with ID: ${tenantId}`);
+      throw new Error(`No tenant found with ID: ${tenantId}, error: ${err}`);
     }
   }
 
@@ -134,7 +134,7 @@ class TenantManager {
       });
       return tenant.applications.find((app) => app.id === appId);
     } catch (err) {
-      throw new Error(`No tenant found with ID: ${tenantId}`);
+      throw new Error(`No tenant found with ID: ${tenantId}, error: ${err}`);
     }
   }
 
@@ -145,7 +145,7 @@ class TenantManager {
       });
       return tenant.applications.filter((app) => app.type === appType);
     } catch (err) {
-      throw new Error(`No tenant found with ID: ${tenantId}`);
+      throw new Error(`No tenant found with ID: ${tenantId}, error: ${err}`);
     }
   }
 }

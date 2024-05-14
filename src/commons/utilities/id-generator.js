@@ -19,7 +19,8 @@ class IdGenerator {
     let updatedTenant;
 
     if (idType === "receipt") {
-      const idForCurrentYear = (tenant.receiptCount && tenant.receiptCount[year]) || 0;
+      const idForCurrentYear =
+        (tenant.receiptCount && tenant.receiptCount[year]) || 0;
       newId = idForCurrentYear + 1;
       updatedTenant = {
         ...tenant,
@@ -29,7 +30,8 @@ class IdGenerator {
         },
       };
     } else if (idType === "invoice") {
-      const idForCurrentYear = (tenant.invoiceCount && tenant.invoiceCount[year]) || 0;
+      const idForCurrentYear =
+        (tenant.invoiceCount && tenant.invoiceCount[year]) || 0;
       newId = idForCurrentYear + 1;
       updatedTenant = {
         ...tenant,
