@@ -40,6 +40,9 @@ class TenantManager {
         .then((rawTenants) => {
           const tenants = rawTenants.map((rt) => {
             const tenant = Object.assign(new Tenant(), rt);
+            tenant.applications = tenant.applications.map((app) => {
+              return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+            });
             return SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS);
           });
 
@@ -66,6 +69,9 @@ class TenantManager {
             return reject(new Error(`No tenant found with ID: ${id}`));
           }
           const tenant = Object.assign(new Tenant(), rawTenant);
+          tenant.applications = rawTenant.applications.map((app) => {
+            return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+          });
           resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
         })
         .catch((err) => reject(err));
@@ -81,7 +87,12 @@ class TenantManager {
    */
   static async storeTenant(tenant, upsert = true) {
     try {
+      console.log(tenant.applications);
+
       const tenantsCollection = dbm.get().collection("tenants");
+      tenant.applications = tenant.applications.map((app) => {
+        return SecurityUtils.encryptObject(app, TENANT_ENCRYPT_KEYS);
+      });
 
       await tenantsCollection.replaceOne(
         { id: tenant.id },

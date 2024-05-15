@@ -245,6 +245,7 @@ class PdfService {
         iban: invoiceApp.iban,
         bic: invoiceApp.bic,
         daysUntilPaymentDue: invoiceApp.daysUntilPaymentDue,
+        purposeOfPayment: `${invoiceNumber} ${tenant.paymentPurposeSuffix}`,
       };
 
       const renderedHtml = Mustache.render(html, data);
