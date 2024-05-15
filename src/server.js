@@ -62,7 +62,7 @@ app.use((req, res, next) => {
   sessionMid(req, res, next);
 });
 
-app.use(express.urlencoded({limit: "1mb", extended: true }));
+app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));
 
 passport.use(
