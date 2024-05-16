@@ -1,7 +1,6 @@
 const dbm = require("../utilities/database-manager");
 const { validate } = require("jsonschema");
-const schema = require("../schemas/role.schema.json");
-const { Role, RolePermission } = require("../entities/role");
+const { Role } = require("../entities/role");
 
 /**
  * Data Manager for role objects. Role objects determine the permissions for users.

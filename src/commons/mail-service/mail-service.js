@@ -20,7 +20,11 @@ class MailerService {
    * @returns Promise <HTML output of the mail>
    */
   static async processTemplate(emailTemplate, model) {
-    logger.debug(`Processing mail template ${emailTemplate} with model ${JSON.stringify(model)}`);
+    logger.debug(
+      `Processing mail template ${emailTemplate} with model ${JSON.stringify(
+        model,
+      )}`,
+    );
 
     if (!this.isValidTemplate(emailTemplate)) {
       logger.error(`Email template ${emailTemplate} is invalid`);
@@ -33,7 +37,7 @@ class MailerService {
     }
   }
 
-/**
+  /**
    * Send a mail using a template file and dynamic attributes.
    *
    * @param {string} tenantId The tenant ID.
@@ -85,11 +89,14 @@ class MailerService {
                 },
               };
 
-              const logConfig = {...config, auth: { ...config.auth, pass: "********" }};
+              const logConfig = {
+                ...config,
+                auth: { ...config.auth, pass: "********" },
+              };
 
               logger.debug(
                 `${tenantId} -- using mail configuration ${JSON.stringify(
-                    logConfig,
+                  logConfig,
                 )}`,
               );
 
@@ -126,14 +133,15 @@ class MailerService {
       /<footer.*?>/,
       /<\/footer>/,
       /\{\{ title \}\}/,
-      /\{\{\{ content \}\}\}/
+      /\{\{\{ content \}\}\}/,
     ];
 
-
-    const missingElement = patterns.find(pattern => !pattern.test(template));
+    const missingElement = patterns.find((pattern) => !pattern.test(template));
 
     if (missingElement !== undefined) {
-      logger.error(`Email template is missing required pattern: ${missingElement}`);
+      logger.error(
+        `Email template is missing required pattern: ${missingElement}`,
+      );
     }
 
     return !missingElement;

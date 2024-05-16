@@ -3,8 +3,9 @@ const Tenant = require("../../../commons/entities/tenant");
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
-const {readFileSync} = require("fs");
-const {join} = require("path");
+const { readFileSync } = require("fs");
+const { join } = require("path");
+const { parseBoolean } = require("../../../commons/utilities/parser");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -109,35 +110,36 @@ class TenantPermissions {
 class TenantController {
   static async getTenants(request, response) {
     try {
-      const user = request.user;
+      const {
+        user,
+        query: { publicTenants = "false" },
+      } = request;
+      const isPublicTenants = parseBoolean(publicTenants);
       const tenants = await TenantManager.getTenants();
+      const isAuthenticated = request.isAuthenticated();
 
-      if (!!user) {
-        let allowedTenants = [];
-        for (let tenant of tenants) {
-          if (
-            await TenantPermissions._allowRead(tenant, user.id, user.tenant)
-          ) {
-            allowedTenants.push(tenant);
-          }
-        }
+      if (isAuthenticated && user && !isPublicTenants) {
+        const checkPermissions = tenants.map((tenant) =>
+          TenantPermissions._allowRead(tenant, user.id, user.tenant).then(
+            (allowed) => (allowed ? tenant : null),
+          ),
+        );
+        const results = await Promise.all(checkPermissions);
+        const allowedTenants = results.filter((tenant) => tenant !== null);
 
         logger.info(
-          `Sending ${allowedTenants.length} allowed tenants to user ${user?.id} (incl. details)`,
+          `Sending ${allowedTenants.length} allowed tenants to user ${user.id} (incl. details)`,
         );
-
         response.status(200).send(allowedTenants);
       } else {
-        const publicTenants = tenants.map((t) => {
-          return {
-            id: t.id,
-            name: t.name,
-            contactName: t.contactName,
-            location: t.location,
-            mail: t.mail,
-            phone: t.phone,
-          };
-        });
+        const publicTenants = tenants.map((tenant) => ({
+          id: tenant.id,
+          name: tenant.name,
+          contactName: tenant.contactName,
+          location: tenant.location,
+          mail: tenant.mail,
+          phone: tenant.phone,
+        }));
 
         logger.info(
           `Sending ${publicTenants.length} public tenants to anonymous user`,
@@ -146,7 +148,7 @@ class TenantController {
       }
     } catch (err) {
       logger.error(err);
-      response.status(500).send("could not get tenants");
+      response.status(500).send("Could not get tenants");
     }
   }
 
@@ -158,7 +160,10 @@ class TenantController {
       if (id) {
         const tenant = await TenantManager.getTenant(id);
 
-        if (user && await TenantPermissions._allowRead(tenant, user.id, user.tenant)) {
+        if (
+          user &&
+          (await TenantPermissions._allowRead(tenant, user.id, user.tenant))
+        ) {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );
@@ -193,12 +198,13 @@ class TenantController {
     const tenant = Object.assign(new Tenant(), request.body);
     let isUpdate = false;
 
-      try {
-        const existingTenant = await TenantManager.getTenant(tenant.id);
-        isUpdate = existingTenant && existingTenant._id;
-      } catch (error) {
-        isUpdate = false;
-      }
+    try {
+      const existingTenant = await TenantManager.getTenant(tenant.id);
+      isUpdate = existingTenant && existingTenant._id;
+    } catch (error) {
+      logger.error(error);
+      isUpdate = false;
+    }
 
     if (isUpdate) {
       await TenantController.updateTenant(request, response);
@@ -214,6 +220,10 @@ class TenantController {
 
       tenant.ownerUserId = user.id;
 
+      if ((await TenantManager.checkTenantCount()) === false) {
+        throw new Error(`Maximum number of tenants reached.`);
+      }
+
       if (await TenantPermissions._allowCreate(tenant, user.id, user.tenant)) {
         const tenantAdmin = Object.assign(new Object(), user);
         tenantAdmin.tenant = tenant.id;
@@ -224,8 +234,20 @@ class TenantController {
           `created tenant admin ${tenantAdmin.id} for new tenant ${tenant.id}`,
         );
 
-        const emailTemplate = readFileSync(join(__dirname, "../../../commons/mail-service/templates/default-generic-mail-template.temp.html"), "utf8");
-        const receiptTemplate = readFileSync(join(__dirname, "../../../commons/pdf-service/templates/default-receipt-template.temp.html"), "utf8");
+        const emailTemplate = readFileSync(
+          join(
+            __dirname,
+            "../../../commons/mail-service/templates/default-generic-mail-template.temp.html",
+          ),
+          "utf8",
+        );
+        const receiptTemplate = readFileSync(
+          join(
+            __dirname,
+            "../../../commons/pdf-service/templates/default-receipt-template.temp.html",
+          ),
+          "utf8",
+        );
 
         tenant.genericMailTemplate = emailTemplate;
         tenant.receiptTemplate = receiptTemplate;
@@ -289,6 +311,15 @@ class TenantController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not remove tenant");
+    }
+  }
+  static async countCheck(request, response) {
+    try {
+      const isCreateAllowed = await TenantManager.checkTenantCount();
+      response.status(200).send(isCreateAllowed);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not check if creation is possible");
     }
   }
 }

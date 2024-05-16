@@ -1,12 +1,12 @@
 {
-    "type": "object",
-    "properties": {
-        "id": { "type" : "string" },
-        "name": { "type" : "string" },
-        "contactName": { "type" : "string" },
-        "location": { "type" : "string" },
-        "mail": { "type" : "string" },
-        "phone": { "type" : "string" }
-    },
-    "required": ["id", "name", "contactName", "location", "mail", "phone"]
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "contactName": { "type": "string" },
+    "location": { "type": "string" },
+    "mail": { "type": "string" },
+    "phone": { "type": "string" }
+  },
+  "required": ["id", "name", "contactName", "location", "mail", "phone"]
 }
