@@ -1,4 +1,6 @@
-const FileManager = require("../../../commons/data-managers/file-manager");
+const {
+  NextcloudManager,
+} = require("../../../commons/data-managers/file-manager");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -13,42 +15,42 @@ const PROTECTED_PATH = "protected";
  * The Next Cloud Controller provides Endpoints to upload and download files from the Next Cloud platform connected to
  * the booking manager instance.
  */
-class NextCloudController {
+class FileController {
   /**
    * Get a list of all public files related to a tenant.
    */
   static async getFiles(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const includeProtected = request.query.includeProtected !== "false";
+    const {
+      params: { tenant },
+      user,
+      query: { includeProtected = "false" },
+    } = request;
+    const includeProtectedBool = includeProtected !== "false";
 
     try {
-      let files = [];
+      const files = await NextcloudManager.getFiles(tenant, PUBLIC_PATH);
+      const publicFiles = files.map((file) => ({
+        ...file,
+        accessLevel: "public",
+      }));
 
-      const publicFiles = await FileManager.getFiles(tenant, PUBLIC_PATH);
-      files = [
-        ...publicFiles.map((file) => ({ ...file, accessLevel: "public" })),
-      ];
-
-      if (!!user && includeProtected) {
-        const protectedFiles = await FileManager.getFiles(
+      let protectedFiles = [];
+      if (request.isAuthenticated() && includeProtectedBool) {
+        const protectedFilesData = await NextcloudManager.getFiles(
           tenant,
           PROTECTED_PATH,
         );
-        files = [
-          ...files,
-          ...protectedFiles.map((file) => ({
-            ...file,
-            accessLevel: "protected",
-          })),
-        ];
+        protectedFiles = protectedFilesData.map((file) => ({
+          ...file,
+          accessLevel: "protected",
+        }));
       }
 
+      const allFiles = [...publicFiles, ...protectedFiles];
       logger.info(
-        `${tenant} -- sending ${files.length} files to user ${user?.id}. `,
+        `${tenant} -- sending ${allFiles.length} files to user ${user?.id}. `,
       );
-
-      response.status(200).send(files);
+      response.status(200).send(allFiles);
     } catch (err) {
       logger.error("Error getting files from Next Cloud.", err);
       response.status(500).send("Error getting files from Next Cloud.");
@@ -59,32 +61,31 @@ class NextCloudController {
    * Download a file from the public folder of a tenant.
    */
   static async getFile(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const filename = request.query.name;
+    const {
+      params: { tenant },
+      query: { name: filename },
+    } = request;
 
     if (!tenant || !filename) {
-      logger.warn(
-        `${tenant} -- could not get file for user ${user?.id}. Missing required parameters.`,
-      );
+      logger.warn(`${tenant} -- Missing required parameters.`);
       response.status(400).send("Missing required parameters.");
       return;
     }
+
     try {
-      if (!!user || filename.startsWith(`/${PUBLIC_PATH}/`)) {
-        const content = await FileManager.getFile(tenant, filename);
-        logger.info(
-          `${tenant} -- sending file ${filename} to user ${user?.id}`,
-        );
+      const isPublicPath = filename.startsWith(`/${PUBLIC_PATH}/`);
+      const isProtected = filename.startsWith(`/${PROTECTED_PATH}/`);
+
+      if (isPublicPath || (isProtected && request.isAuthenticated())) {
+        const content = await NextcloudManager.getFile(tenant, filename);
+        logger.info(`${tenant} -- sending file ${filename}`);
         response.setHeader(
           "Content-Disposition",
           `attachment; filename=${filename}`,
         );
         response.status(200).send(content);
       } else {
-        logger.warn(
-          `${tenant} -- could not get file for user ${user?.id}. Unauthorized.`,
-        );
+        logger.warn(`${tenant} -- Unauthorized.`);
         response.status(401).send("Unauthorized.");
       }
     } catch (err) {
@@ -97,17 +98,12 @@ class NextCloudController {
    * Upload a file to the public folder of a tenant.
    */
   static async createFile(request, response) {
-    const tenant = request.params.tenant;
-    const file = request.files.file;
-    const accessLevel = request.body.accessLevel;
-    const customDirectory = request.body.customDirectory;
-
-    const user = request.user;
-    if (!user) {
-      logger.warn(`${tenant} -- could not upload file. Unauthorized.`);
-      response.status(401).send("Unauthorized.");
-      return;
-    }
+    const {
+      params: { tenant },
+      user,
+      files: { file },
+      body: { accessLevel, customDirectory },
+    } = request;
 
     if (!tenant || !file) {
       logger.warn(
@@ -128,7 +124,7 @@ class NextCloudController {
         (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
         "/" +
         customDirectory;
-      await FileManager.createFile(
+      await NextcloudManager.createFile(
         tenant,
         file.data,
         file.name,
@@ -146,4 +142,4 @@ class NextCloudController {
   }
 }
 
-module.exports = NextCloudController;
+module.exports = FileController;

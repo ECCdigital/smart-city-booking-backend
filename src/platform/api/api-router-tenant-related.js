@@ -8,7 +8,7 @@ const CalendarController = require("./controllers/calendar-controller");
 const CouponController = require("./controllers/coupon-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
-const NextCloudController = require("./controllers/next-cloud-controller");
+const FileController = require("./controllers/file-controller");
 
 var router = express.Router({ mergeParams: true });
 
@@ -147,6 +147,17 @@ router.get(
   AuthenticationController.isSignedIn,
   BookingController.commitBooking,
 );
+router.post(
+  "/bookings/:id/receipt",
+  AuthenticationController.isSignedIn,
+  BookingController.createReceipt,
+);
+
+router.get(
+  "/bookings/:id/receipt/:receiptId",
+  AuthenticationController.isSignedIn,
+  BookingController.getReceipt,
+);
 
 // CHECKOUT
 // ========
@@ -174,8 +185,12 @@ router.delete("/coupons/:id", CouponController.deleteCoupon);
 
 // NEXT CLOUD
 // ==========
-router.get("/files/list", NextCloudController.getFiles);
-router.get("/files/get", NextCloudController.getFile);
-router.post("/files", NextCloudController.createFile);
+router.get("/files/list", FileController.getFiles);
+router.get("/files/get", FileController.getFile);
+router.post(
+  "/files",
+  AuthenticationController.isSignedIn,
+  FileController.createFile,
+);
 
 module.exports = router;
