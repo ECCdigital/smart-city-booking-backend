@@ -131,7 +131,6 @@ class BookablePermissions {
  * Web Controller for Bookables.
  */
 class BookableController {
-
   /**
    * This method is used to get all bookable objects for a specific tenant.
    * It first fetches all bookables from the database.
@@ -183,7 +182,6 @@ class BookableController {
     }
   }
 
-
   /**
    * This method is used to get a specific bookable object.
    * It first checks if the bookable id is provided in the request.
@@ -225,7 +223,8 @@ class BookableController {
         return response.status(401).send("Authentication required");
       }
 
-      const hasPermittedRoles = bookable.permittedRoles && bookable.permittedRoles.length > 0;
+      const hasPermittedRoles =
+        bookable.permittedRoles && bookable.permittedRoles.length > 0;
       if (hasPermittedRoles && !user?.id) {
         logger.warn(
           `${tenant} -- Authentication required to access bookable ${id}`,
@@ -387,7 +386,6 @@ class BookableController {
       response.status(500).send("Could not update bookable");
     }
   }
-
 
   /**
    * This method is used to update an existing bookable object.
