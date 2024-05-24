@@ -23,7 +23,9 @@ class SecurityUtils {
   static encryptObject(object, keys) {
     const encryptedObject = Object.assign({}, object);
     for (const key of keys) {
-      encryptedObject[key] = SecurityUtils.encrypt(encryptedObject[key]);
+      if (encryptedObject.hasOwnProperty(key)) {
+        encryptedObject[key] = SecurityUtils.encrypt(encryptedObject[key]);
+      }
     }
     return encryptedObject;
   }

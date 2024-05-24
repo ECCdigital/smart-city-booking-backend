@@ -9,6 +9,7 @@ const TENANT_ENCRYPT_KEYS = [
   "paymentProjectId",
   "paymentSecret",
   "noreplyPassword",
+  "password",
 ];
 
 /**
@@ -40,6 +41,9 @@ class TenantManager {
         .then((rawTenants) => {
           const tenants = rawTenants.map((rt) => {
             const tenant = Object.assign(new Tenant(), rt);
+            tenant.applications = tenant.applications.map((app) => {
+              return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+            });
             return SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS);
           });
 
@@ -79,21 +83,21 @@ class TenantManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeTenant(tenant, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("tenants")
-        .replaceOne(
-          { id: tenant.id },
-          SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
-          {
-            upsert: upsert,
-          },
-        )
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async storeTenant(tenant, upsert = true) {
+    try {
+      const tenantsCollection = dbm.get().collection("tenants");
+      tenant.applications = tenant.applications.map((app) => {
+        return SecurityUtils.encryptObject(app, TENANT_ENCRYPT_KEYS);
+      });
+
+      await tenantsCollection.replaceOne(
+        { id: tenant.id },
+        SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
+        { upsert: upsert },
+      );
+    } catch (err) {
+      throw new Error(`Error storing tenant: ${err.message}`);
+    }
   }
 
   /**
