@@ -155,9 +155,7 @@ class BookableController {
 
       let allowedBookables = [];
       for (const bookable of bookables) {
-        if (
-          await BookablePermissions._allowRead(bookable, user?.id, user?.tenant)
-        ) {
+        if (await BookablePermissions._allowRead(bookable, user?.id, tenant)) {
           allowedBookables.push(bookable);
         }
       }
@@ -181,9 +179,7 @@ class BookableController {
       if (id) {
         const bookable = await BookableManager.getBookable(id, tenant);
 
-        if (
-          await BookablePermissions._allowRead(bookable, user?.id, user?.tenant)
-        ) {
+        if (await BookablePermissions._allowRead(bookable, user?.id, tenant)) {
           if (request.query.populate === "true") {
             bookable._populated = {
               event: await EventManager.getEvent(
@@ -244,6 +240,14 @@ class BookableController {
       bookable.ownerUserId = user.id;
 
       if (
+        (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+          false &&
+        bookable.isPublic
+      ) {
+        throw new Error(`Maximum number of public bookables reached.`);
+      }
+
+      if (
         await BookablePermissions._allowCreate(bookable, user.id, user.tenant)
       ) {
         await BookableManager.storeBookable(bookable);
@@ -269,6 +273,20 @@ class BookableController {
       const user = request.user;
 
       const bookable = Object.assign(new Bookable(), request.body);
+
+      const existingBookable = await BookableManager.getBookable(
+        bookable.id,
+        tenant,
+      );
+
+      if (!existingBookable.isPublic && bookable.isPublic) {
+        if (
+          (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+          false
+        ) {
+          throw new Error(`Maximum number of public bookables reached.`);
+        }
+      }
 
       if (
         await BookablePermissions._allowUpdate(bookable, user.id, user.tenant)
@@ -299,9 +317,7 @@ class BookableController {
       if (id) {
         const bookable = await BookableManager.getBookable(id, tenant);
 
-        if (
-          await BookablePermissions._allowDelete(bookable, user.id, user.tenant)
-        ) {
+        if (await BookablePermissions._allowDelete(bookable, user.id, tenant)) {
           await BookableManager.removeBookable(id, tenant);
           logger.info(
             `${tenant} -- Bookable ${id} removed by user ${user?.id}`,
@@ -368,6 +384,18 @@ class BookableController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get opening hours");
+    }
+  }
+
+  static async countCheck(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const isCreateAllowed =
+        await BookableManager.checkPublicBookableCount(tenant);
+      response.status(200).send(isCreateAllowed);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not check if creation is possible");
     }
   }
 }
