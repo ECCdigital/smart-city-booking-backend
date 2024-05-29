@@ -5,9 +5,7 @@ const { RolePermission } = require("../../../commons/entities/role");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
-const {
-  createBooking,
-} = require("../../../commons/services/checkout/booking-service");
+const BookingService = require("../../../commons/services/checkout/booking-service");
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
   level: process.env.LOG_LEVEL,
@@ -432,7 +430,7 @@ class BookingController {
     }
 
     try {
-      const newBooking = await createBooking(request, true);
+      const newBooking = await BookingService.createBooking(request, true);
       return response.status(200).send(newBooking);
     } catch (err) {
       logger.error(err);
@@ -452,7 +450,7 @@ class BookingController {
       if (
         await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
       ) {
-        await BookingManager.storeBooking(booking);
+        await BookingService.updateBooking(tenant, booking);
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );
@@ -481,7 +479,7 @@ class BookingController {
         if (
           await BookingPermissions._allowDelete(booking, user.id, user.tenant)
         ) {
-          await BookingManager.removeBooking(id, tenant);
+          await BookingService.cancelBooking(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
           response.sendStatus(200);
         } else {

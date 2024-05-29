@@ -1,5 +1,6 @@
 const { getBookable } = require("../../data-managers/bookable-manager");
 const { getTenantAppByType } = require("../../data-managers/tenant-manager");
+const BookingManager = require("../../data-managers/booking-manager");
 const {
   getConcurrentBookings,
   getBooking,
@@ -113,10 +114,14 @@ class LockerService {
           throw new Error("Not enough lockers available");
         }
 
-        const units = availableUnits.slice(0, amount);
+        const units = availableUnits.slice(0, amount).map((unit) => ({
+          ...unit,
+          bookableId,
+        }));
         units.forEach((unit) => {
           LockerService.reserveLocker(
             tenantId,
+            bookableId,
             unit.id,
             unit.lockerSystem,
             timeBegin,
@@ -189,7 +194,16 @@ class LockerService {
           default:
             throw new Error("Unsupported locker type");
         }
-        await locker.startReservation();
+        const updatedLockerInfo = await locker.startReservation(
+          booking.timeBegin,
+          booking.timeEnd,
+        );
+        booking.lockerInfo = booking.lockerInfo.map((locker) => {
+          if (locker.id === updatedLockerInfo.id) {
+            return updatedLockerInfo;
+          }
+          return locker;
+        });
         LockerService.freeReservedLocker(
           booking.tenant,
           unit.id,
@@ -198,19 +212,333 @@ class LockerService {
           booking.timeEnd,
         );
       }
+      await BookingManager.storeBooking(booking);
     } catch (error) {
       throw new Error(`Error in getting booking: ${error.message}`);
     }
   }
 
-  async handleUpdate(bookingId, tenantId) {}
+  /**
+   * Handles the update of a booking.
+   *
+   * This method is responsible for updating a booking and managing the associated locker units.
+   * It compares the old and updated booking, determines the changes, and performs the necessary actions.
+   * These actions can include cancelling, assigning, and updating locker units.
+   *
+   * The method throws an error if there is an issue retrieving the booking.
+   *
+   * @async
+   * @param {string} tenantId - The ID of the tenant.
+   * @param {Object} oldBooking - The booking object before the update.
+   * @param {Object} updatedBooking - The booking object after the update.
+   * @throws {Error} If there is an error in getting the booking.
+   */
+  async handleUpdate(tenantId, oldBooking, updatedBooking) {
+    try {
+      const noTimeChange =
+        oldBooking.timeBegin === updatedBooking.timeBegin &&
+        oldBooking.timeEnd === updatedBooking.timeEnd;
 
-  async handleCancel(bookingId, tenantId) {}
+      const getDifference = (oldBooking, updatedBooking) => {
+        const oldBookableItems = oldBooking.bookableItems;
+        const newBookableItems = updatedBooking.bookableItems;
+
+        const itemsRemoved = oldBookableItems.filter(
+          (oldItem) =>
+            !newBookableItems.some(
+              (newItem) => newItem.bookableId === oldItem.bookableId,
+            ),
+        );
+
+        const itemsAdded = newBookableItems.filter(
+          (newItem) =>
+            !oldBookableItems.some(
+              (oldItem) => oldItem.bookableId === newItem.bookableId,
+            ),
+        );
+
+        const itemsWithQuantityChanges = oldBookableItems
+          .map((oldItem) => {
+            const newItem = newBookableItems.find(
+              (newItem) => newItem.bookableId === oldItem.bookableId,
+            );
+            if (newItem && newItem.amount !== oldItem.amount) {
+              return {
+                bookableId: oldItem.bookableId,
+                oldAmount: oldItem.amount,
+                newAmount: newItem.amount,
+                quantityChange: newItem.amount - oldItem.amount,
+                changeType:
+                  newItem.amount > oldItem.amount ? "increased" : "decreased",
+              };
+            }
+            return null;
+          })
+          .filter((item) => item !== null);
+
+        const unchangedItems = oldBookableItems.filter((oldItem) =>
+          newBookableItems.some(
+            (newItem) =>
+              newItem.bookableId === oldItem.bookableId &&
+              newItem.amount === oldItem.amount,
+          ),
+        );
+
+        return {
+          itemsRemoved,
+          itemsAdded,
+          itemsWithQuantityChanges,
+          unchangedItems,
+        };
+      };
+
+      const {
+        itemsRemoved,
+        itemsAdded,
+        itemsWithQuantityChanges,
+        unchangedItems,
+      } = getDifference(oldBooking, updatedBooking);
+
+      let oldLockerUnits = LockerService.assignedLocker(oldBooking);
+
+      const processLocker = async (
+        unit,
+        action,
+        tenant,
+        bookingId,
+        timeBegin,
+        timeEnd,
+      ) => {
+        let locker;
+        switch (unit.lockerSystem) {
+          case LOCKER_TYPE.PAREVA:
+            locker = new ParevaLocker(tenant, bookingId, unit.id);
+            break;
+          case LOCKER_TYPE.LOCKY:
+            locker = new LockyLocker(tenant, bookingId, unit.id);
+            break;
+          default:
+            throw new Error("Unsupported locker type");
+        }
+        if (action === "cancel") {
+          await locker.cancelReservation(unit.id);
+        } else if (action === "start") {
+          return await locker.startReservation(timeBegin, timeEnd);
+        } else if (action === "update") {
+          return await locker.updateReservation(timeBegin, timeEnd);
+        }
+      };
+
+      const cancelLockers = async (items, units) => {
+        for (const item of items) {
+          let filteredUnitsToBeCanceled = units.filter((unit) =>
+            itemsRemoved.find(
+              (removedItem) => removedItem.bookableId === unit.bookableId,
+            ),
+          );
+
+          await Promise.all(
+            filteredUnitsToBeCanceled.map(async (unit) => {
+              try {
+                await processLocker(
+                  unit,
+                  "cancel",
+                  oldBooking.tenant,
+                  oldBooking.id,
+                );
+                updatedBooking.lockerInfo = updatedBooking.lockerInfo.filter(
+                  (locker) => locker.id !== unit.id,
+                );
+              } catch (error) {
+                console.log(`Error in canceling reservation: ${error.message}`);
+              }
+            }),
+          );
+
+          oldLockerUnits = oldLockerUnits.filter((locker) =>
+            filteredUnitsToBeCanceled.every((unit) => unit.id !== locker.id),
+          );
+        }
+      };
+
+      const assignLockers = async (item, booking, quantity) => {
+        const lockerUnitsToBeAssigned = await this.getAvailableLocker(
+          item.bookableId,
+          booking.tenant,
+          booking.timeBegin,
+          booking.timeEnd,
+          quantity,
+        );
+        if (lockerUnitsToBeAssigned.length === 0) {
+          return;
+        }
+        oldBooking.lockerInfo = oldBooking.lockerInfo.concat(
+          lockerUnitsToBeAssigned,
+        );
+        booking.lockerInfo = booking.lockerInfo.concat(lockerUnitsToBeAssigned);
+        await BookingManager.storeBooking(oldBooking);
+
+        const updatedLockerInfo = await Promise.all(
+          lockerUnitsToBeAssigned.map(async (unit) => {
+            return processLocker(
+              unit,
+              "start",
+              booking.tenant,
+              booking.id,
+              booking.timeBegin,
+              booking.timeEnd,
+            );
+          }),
+        );
+
+        booking.lockerInfo = booking.lockerInfo.map(
+          (locker) =>
+            updatedLockerInfo.find((info) => info && info.id === locker.id) ||
+            locker,
+        );
+
+        await Promise.all(
+          lockerUnitsToBeAssigned.map((unit) => {
+            return LockerService.freeReservedLocker(
+              booking.tenant,
+              unit.id,
+              unit.lockerSystem,
+              booking.timeBegin,
+              booking.timeEnd,
+            );
+          }),
+        );
+      };
+
+      const handleQuantityChanges = async (items, units, booking) => {
+        for (const item of items) {
+          if (item.changeType === "decreased") {
+            let canceledUnits = units
+              .filter((unit) => unit.bookableId === item.bookableId)
+              .slice(0, Math.abs(item.quantityChange));
+
+            await Promise.all(
+              canceledUnits.map(async (unit) => {
+                try {
+                  await processLocker(
+                    unit,
+                    "cancel",
+                    oldBooking.tenant,
+                    oldBooking.id,
+                  );
+                  booking.lockerInfo = booking.lockerInfo.filter(
+                    (locker) => locker.id !== unit.id,
+                  );
+                } catch (error) {
+                  console.log(
+                    `Error in canceling reservation: ${error.message}`,
+                  );
+                }
+                oldLockerUnits = oldLockerUnits.filter(
+                  (locker) => locker.id !== unit.id,
+                );
+              }),
+            );
+          }
+
+          if (item.changeType === "increased") {
+            const quantityDifference = item.newAmount - item.oldAmount;
+            await assignLockers(item, booking, quantityDifference);
+          }
+        }
+      };
+
+      await cancelLockers(itemsRemoved, oldLockerUnits);
+      await Promise.all(
+        itemsAdded.map((item) =>
+          assignLockers(item, updatedBooking, item.amount),
+        ),
+      );
+      await handleQuantityChanges(
+        itemsWithQuantityChanges,
+        oldLockerUnits,
+        updatedBooking,
+      );
+
+      if (!noTimeChange) {
+        const filteredUnitsToBeUpdated = oldLockerUnits.filter(
+          (unit) =>
+            unchangedItems.some(
+              (item) => item.bookableId === unit.bookableId,
+            ) ||
+            itemsWithQuantityChanges.some(
+              (item) => item.bookableId === unit.bookableId,
+            ),
+        );
+
+        await Promise.all(
+          filteredUnitsToBeUpdated.map(async (unit) => {
+            const updatedLockerInfo = await processLocker(
+              unit,
+              "update",
+              oldBooking.tenant,
+              oldBooking.id,
+              updatedBooking.timeBegin,
+              updatedBooking.timeEnd,
+            );
+            if (updatedLockerInfo) {
+              updatedBooking.lockerInfo = updatedBooking.lockerInfo.map(
+                (locker) =>
+                  locker.id === updatedLockerInfo.id
+                    ? updatedLockerInfo
+                    : locker,
+              );
+            }
+          }),
+        );
+      }
+
+      await BookingManager.storeBooking(updatedBooking);
+    } catch (error) {
+      throw new Error(`Error in getting booking: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handles the cancellation of a booking.
+   *
+   * This method is responsible for cancelling a booking and managing the associated locker units.
+   * It retrieves the booking based on the provided bookingId and tenantId, determines the locker units associated with the booking,
+   * and performs the necessary actions to cancel these locker units.
+   *
+   * The method throws an error if the booking is not found.
+   *
+   * @async
+   * @param {string} tenantId - The ID of the tenant.
+   * @param {string} bookingId - The ID of the booking.
+   * @throws {Error} If the booking is not found.
+   */
+  async handleCancel(tenantId, bookingId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    const lockerUnitsToBeCanceled = LockerService.assignedLocker(booking);
+
+    for (const unit of lockerUnitsToBeCanceled) {
+      let locker;
+      switch (unit.lockerSystem) {
+        case LOCKER_TYPE.PAREVA:
+          locker = new ParevaLocker(tenantId, bookingId, unit.id);
+          break;
+        case LOCKER_TYPE.LOCKY:
+          locker = new LockyLocker(tenantId, bookingId, unit.id);
+          break;
+        default:
+          throw new Error("Unsupported locker type");
+      }
+      await locker.cancelReservation(unit.id);
+    }
+  }
 
   /**
    * Reserves a locker for the given tenantId, unitId, lockerSystem, startTime, endTime, and reserveTime.
    * The locker is added to the reservedLockers array.
    * @param {string} tenantId - The ID of the tenant.
+   * @param bookableId
    * @param {string} unitId - The ID of the locker unit.
    * @param {string} lockerSystem - The locker system.
    * @param {number} startTime - The start time for the locker reservation.
@@ -219,6 +547,7 @@ class LockerService {
    */
   static reserveLocker(
     tenantId,
+    bookableId,
     unitId,
     lockerSystem,
     startTime,
@@ -227,6 +556,7 @@ class LockerService {
   ) {
     LockerService.reservedLockers.push({
       tenantId,
+      bookableId,
       unitId,
       lockerSystem,
       startTime,

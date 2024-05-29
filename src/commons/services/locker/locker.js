@@ -1,3 +1,5 @@
+const BookingManager = require("../../data-managers/booking-manager");
+
 /**
  * BaseLocker is a class that represents a locker reservation system.
  * It is intended to be extended by other classes that implement the specific logic for different types of lockers.
@@ -19,37 +21,67 @@ class BaseLocker {
    * Starts a new reservation.
    * This method should be overridden by subclasses.
    */
-  startReservation() {
-  }
+  startReservation() {}
 
   /**
    * Updates an existing reservation.
    * This method should be overridden by subclasses.
    */
-  updateReservation() {}
+  updateReservation(timeBegin, timeEnd) {}
 
   /**
    * Cancels an existing reservation.
    * This method should be overridden by subclasses.
    */
-  cancelReservation() {}
+  cancelReservation(unitId) {}
 }
 
 class ParevaLocker extends BaseLocker {
+  async startReservation(timeBegin, timeEnd) {
+    const booking = await BookingManager.getBooking(
+      this.bookingId,
+      this.tenantId,
+    );
 
-  startReservation() {
-    console.log("ParevaLocker.startReservation");
-    console.log(this.tenantId);
-    console.log(this.bookingId);
-    console.log(this.unitId);
+    // ToDo: Call Pareva API to start reservation
+    let response;
+
+    const processId = Math.random() * 1000;
+
+    await new Promise(resolve => setTimeout(() => {
+      response = { test: 1231, processId: processId };
+      resolve();
+    }, 1000));
+
+    const updatedLockerInfo = booking.lockerInfo.find(
+      (locker) => locker.id === this.unitId,
+    );
+    updatedLockerInfo.processId = response.processId;
+
+    return updatedLockerInfo
   }
 
-  updateReservation() {
+  async updateReservation(timeBegin, timeEnd) {
     console.log("ParevaLocker.updateReservation");
+    try {
+      await this.cancelReservation(this.unitId);
+      return await this.startReservation(timeBegin,timeEnd);
+    } catch (err) {
+      console.error(err);
+      throw new Error("Unable to update reservation");
+    }
   }
 
-  cancelReservation() {
-    console.log("ParevaLocker.cancelReservation");
+  async cancelReservation(unitId) {
+    try {
+      console.log("ParevaLocker.cancelReservation", unitId);
+      await new Promise(resolve => setTimeout(() => {
+        resolve();
+      }, 1000));
+    } catch (err) {
+      console.error(err);
+      throw new Error("Unable to cancel reservation");
+    }
   }
 }
 
@@ -65,8 +97,8 @@ class LockyLocker extends BaseLocker {
     console.log("LockyLocker.updateReservation");
   }
 
-  cancelReservation() {
-    console.log("LockyLocker.cancelReservation");
+  async cancelReservation(unitId) {
+    console.log("LockyLocker.cancelReservation", unitId);
   }
 }
 
