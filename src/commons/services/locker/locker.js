@@ -45,12 +45,7 @@ class ParevaLocker extends BaseLocker {
       const tenant = await this.getTenant();
       const parevaApp = this.getParevaApp(tenant);
 
-      const {
-        user: username,
-        password,
-        serverUrl,
-        lockerId,
-      } = parevaApp;
+      const { user: username, password, serverUrl, lockerId } = parevaApp;
 
       const { mail: userEmail } = booking;
       const productId = locker.unitId;
@@ -72,15 +67,15 @@ class ParevaLocker extends BaseLocker {
         additionalInfo: {},
       });
 
-      const base64Credentials = Buffer.from(
-        `${username}:${password}`
-      ).toString("base64");
+      const base64Credentials = Buffer.from(`${username}:${password}`).toString(
+        "base64",
+      );
 
       const config = this.createAxiosConfig(
         "post",
         `${trimmedUrl}/locker/${lockerId}/rental/${productId}/open`,
         base64Credentials,
-        data
+        data,
       );
 
       const response = await axios.request(config);
@@ -108,23 +103,18 @@ class ParevaLocker extends BaseLocker {
       const tenant = await this.getTenant();
       const parevaApp = this.getParevaApp(tenant);
 
-      const {
-        user: username,
-        password,
-        serverUrl,
-        lockerId,
-      } = parevaApp;
+      const { user: username, password, serverUrl, lockerId } = parevaApp;
       const { processId } = locker;
       const trimmedUrl = serverUrl.replace(/\/$/, "");
 
-      const base64Credentials = Buffer.from(
-        `${username}:${password}`
-      ).toString("base64");
+      const base64Credentials = Buffer.from(`${username}:${password}`).toString(
+        "base64",
+      );
 
       const config = this.createAxiosConfig(
         "post",
         `${trimmedUrl}/locker/${lockerId}/process/${processId}/cancel`,
-        base64Credentials
+        base64Credentials,
       );
 
       const response = await axios.request(config);
@@ -150,7 +140,7 @@ class ParevaLocker extends BaseLocker {
 
   getLocker(booking) {
     const locker = booking.lockerInfo.find(
-      (locker) => locker.id === this.unitId
+      (locker) => locker.id === this.unitId,
     );
     if (!locker) throw new Error("Locker not found");
     return locker;
@@ -158,7 +148,7 @@ class ParevaLocker extends BaseLocker {
 
   getParevaApp(tenant) {
     const parevaApp = tenant.applications.find(
-      (app) => app.type === "locker" && app.id === "pareva" && app.active
+      (app) => app.type === "locker" && app.id === "pareva" && app.active,
     );
     if (!parevaApp) throw new Error("Pareva application not found");
     return parevaApp;
@@ -180,7 +170,6 @@ class ParevaLocker extends BaseLocker {
     return config;
   }
 }
-
 
 module.exports = {
   BaseLocker,
