@@ -518,6 +518,10 @@ class LockerService {
 
     const lockerUnitsToBeCanceled = LockerService.assignedLocker(booking);
 
+    if (!lockerUnitsToBeCanceled) {
+      return;
+    }
+
     for (const unit of lockerUnitsToBeCanceled) {
       let locker;
       switch (unit.lockerSystem) {

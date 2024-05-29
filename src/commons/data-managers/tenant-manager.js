@@ -70,6 +70,9 @@ class TenantManager {
             return reject(new Error(`No tenant found with ID: ${id}`));
           }
           const tenant = Object.assign(new Tenant(), rawTenant);
+          tenant.applications = tenant.applications.map((app) => {
+            return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+          });
           resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
         })
         .catch((err) => reject(err));
