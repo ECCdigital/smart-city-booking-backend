@@ -6,9 +6,6 @@ const MailController = require("../../../commons/mail-service/mail-controller");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const BookingService = require("../../../commons/services/checkout/booking-service");
-const {
-  createBooking,
-} = require("../../../commons/services/checkout/booking-service");
 const ReceiptService = require("../../../commons/services/receipt/receipt-service");
 
 const logger = bunyan.createLogger({

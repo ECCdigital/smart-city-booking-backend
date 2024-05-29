@@ -28,13 +28,13 @@ class BaseLocker {
    * Updates an existing reservation.
    * This method should be overridden by subclasses.
    */
-  updateReservation(timeBegin, timeEnd) {}
+  updateReservation() {}
 
   /**
    * Cancels an existing reservation.
    * This method should be overridden by subclasses.
    */
-  cancelReservation(unitId) {}
+  cancelReservation() {}
 }
 
 class ParevaLocker extends BaseLocker {

@@ -5,11 +5,8 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const bunyan = require("bunyan");
-const PdfService = require("../../../commons/pdf-service/pdf-service");
-const FileManager = require("../../../commons/data-managers/file-manager");
 const LockerService = require("../../../commons/services/locker/locker-service");
 const ReceiptService = require("../../../commons/services/receipt/receipt-service");
-
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -176,7 +173,10 @@ class PaymentController {
 
             try {
               const lockerServiceInstance = LockerService.getInstance();
-              await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
+              await lockerServiceInstance.handleCreate(
+                booking.tenant,
+                booking.id,
+              );
             } catch (err) {
               logger.error(err);
             }

@@ -120,7 +120,6 @@ class TenantManager {
     });
   }
 
-
   static async getTenantApps(tenantId) {
     try {
       const tenant = await dbm.get().collection("tenants").findOne({

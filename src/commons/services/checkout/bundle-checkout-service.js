@@ -145,23 +145,30 @@ class BundleCheckoutService {
     return true;
   }
 
-    async getLockerInfo() {
-        let lockerInfo = [];
-        try {
-            for (const bookableItem of this.bookableItems) {
-                const lockerServiceInstance = LockerService.getInstance();
-                lockerInfo = lockerInfo.concat(await lockerServiceInstance.getAvailableLocker(bookableItem.bookableId , this.tenant, this.timeBegin, this.timeEnd, bookableItem.amount));
-            }
-        } catch (error) {
-            throw new Error(error);
-        }
-        return lockerInfo;
+  async getLockerInfo() {
+    let lockerInfo = [];
+    try {
+      for (const bookableItem of this.bookableItems) {
+        const lockerServiceInstance = LockerService.getInstance();
+        lockerInfo = lockerInfo.concat(
+          await lockerServiceInstance.getAvailableLocker(
+            bookableItem.bookableId,
+            this.tenant,
+            this.timeBegin,
+            this.timeEnd,
+            bookableItem.amount,
+          ),
+        );
+      }
+    } catch (error) {
+      throw new Error(error);
     }
-
+    return lockerInfo;
+  }
 
   async prepareBooking() {
     await this.checkAll();
-    
+
     for (const bookableItem of this.bookableItems) {
       bookableItem._bookableUsed = await BookableManager.getBookable(
         bookableItem.bookableId,
@@ -170,30 +177,28 @@ class BundleCheckoutService {
       delete bookableItem._bookableUsed._id;
     }
 
-        const booking = {
-            id: await this.generateBookingReference(),
-            tenant: this.tenant,
-            assignedUserId: this.user?.id,
-            timeBegin: this.timeBegin,
-            timeEnd: this.timeEnd,
-            timeCreated: Date.now(),
-            bookableItems: this.bookableItems,
-            couponCode: this.couponCode,
-            name: this.name,
-            company: this.company,
-            street: this.street,
-            zipCode: this.zipCode,
-            location: this.location,
-            mail: this.email,
-            phone: this.phone,
-            comment: this.comment,
-            priceEur: await this.userPriceEur(),
-            isCommitted: await this.isAutoCommit(),
-            isPayed: await this.isPaymentComplete(),
-            lockerInfo: await this.getLockerInfo(),
-        };
-
-
+    const booking = {
+      id: await this.generateBookingReference(),
+      tenant: this.tenant,
+      assignedUserId: this.user?.id,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+      timeCreated: Date.now(),
+      bookableItems: this.bookableItems,
+      couponCode: this.couponCode,
+      name: this.name,
+      company: this.company,
+      street: this.street,
+      zipCode: this.zipCode,
+      location: this.location,
+      mail: this.email,
+      phone: this.phone,
+      comment: this.comment,
+      priceEur: await this.userPriceEur(),
+      isCommitted: await this.isAutoCommit(),
+      isPayed: await this.isPaymentComplete(),
+      lockerInfo: await this.getLockerInfo(),
+    };
 
     if (this.couponCode) {
       booking._couponUsed = await CouponManager.getCoupon(
