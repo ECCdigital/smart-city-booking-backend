@@ -11,6 +11,8 @@ const PdfService = require("../../pdf-service/pdf-service");
 const FileManager = require("../../data-managers/file-manager");
 const LockerService = require("../locker/locker-service");
 const { getBooking } = require("../../data-managers/booking-manager");
+const ReceiptService = require("../receipt/receipt-service");
+
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -134,10 +136,11 @@ class BookingService {
         let attachments = [];
         try {
           if (booking.priceEur > 0) {
-            const pdfData = await PdfService.generateReceipt(
-              booking.id,
+            const pdfData = await ReceiptService.createReceipt(
               tenantId,
+              booking.id,
             );
+
             attachments = [
               {
                 filename: pdfData.name,
@@ -145,13 +148,6 @@ class BookingService {
                 contentType: "application/pdf",
               },
             ];
-            await FileManager.createFile(
-              tenantId,
-              pdfData.buffer,
-              pdfData.name,
-              "public",
-              "receipts",
-            );
           }
         } catch (err) {
           logger.error(err);

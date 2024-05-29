@@ -1,5 +1,4 @@
 class Tenant {
-
     constructor(id, name, contactName, location, mail, phone, applications = []) {
         this.id = id;
         this.name = name;

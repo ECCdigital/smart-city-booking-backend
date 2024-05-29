@@ -1,22 +1,30 @@
 const { createClient } = require("webdav");
 
-function _getClient() {
-  const nextCloudUrl = process.env.NEXTCLOUD_URL;
-  return createClient(`${nextCloudUrl}/remote.php/webdav`, {
-    username: process.env.NEXTCLOUD_USERNAME,
-    password: process.env.NEXTCLOUD_PASSWORD,
-  });
+class FileManager {
+  static async getFiles() {}
+
+  static async getFile() {}
+
+  static async createFile() {}
 }
 
-class FileManager {
+class NextcloudManager extends FileManager {
+  static _getClient() {
+    const nextCloudUrl = process.env.NEXTCLOUD_URL;
+    return createClient(`${nextCloudUrl}/remote.php/webdav`, {
+      username: process.env.NEXTCLOUD_USERNAME,
+      password: process.env.NEXTCLOUD_PASSWORD,
+    });
+  }
+
   static async getFiles(tenant, rootPath) {
-    const client = _getClient();
+    const client = NextcloudManager._getClient();
 
     const directoryItems = await client.getDirectoryContents(
       `${tenant}/${rootPath}`,
       {
         deep: true,
-      }
+      },
     );
 
     return directoryItems
@@ -32,7 +40,7 @@ class FileManager {
   }
 
   static async getFile(tenant, filename) {
-    const client = _getClient();
+    const client = NextcloudManager._getClient();
     return await client.getFileContents(`${tenant}/${filename}`);
   }
 
@@ -53,12 +61,15 @@ class FileManager {
    * FileManager.createFile('tenant1', { name: 'file.txt', data: 'Hello, world!' }, 'public', 'documents');
    */
   static async createFile(tenant, file, fileName, accessLevel, subDirectory) {
-    const client = _getClient();
+    const client = NextcloudManager._getClient();
     const directory = `${tenant}/${subDirectory}`;
     let nextCloudPath = `${directory}/${fileName}`;
     await client.createDirectory(directory, { recursive: true });
-    await client.putFileContents(nextCloudPath, file, {contentLength: false});
+    await client.putFileContents(nextCloudPath, file, { contentLength: false });
   }
 }
 
-module.exports = FileManager;
+module.exports = {
+  FileManager,
+  NextcloudManager,
+};

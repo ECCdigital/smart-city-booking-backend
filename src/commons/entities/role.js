@@ -1,11 +1,11 @@
 const RolePermission = Object.freeze({
-    MANAGE_BOOKABLES: 'manageBookables',
-    MANAGE_USERS: 'manageUsers',
-    MANAGE_TENANTS: 'manageTenants',
-    MANAGE_ROLES: 'manageRoles',
-    MANAGE_BOOKINGS: 'manageBookings',
-    MANAGE_COUPONS: 'manageCoupons',
-    FREE_BOOKINGS: 'freeBookings'
+  MANAGE_BOOKABLES: "manageBookables",
+  MANAGE_USERS: "manageUsers",
+  MANAGE_TENANTS: "manageTenants",
+  MANAGE_ROLES: "manageRoles",
+  MANAGE_BOOKINGS: "manageBookings",
+  MANAGE_COUPONS: "manageCoupons",
+  FREE_BOOKINGS: "freeBookings",
 });
 
 /**
@@ -25,7 +25,17 @@ class Role {
    * @param {boolean} freeBookings allow users to book without paying
    *
    */
-  constructor(id,name , manageBookables, manageUsers, manageTenants, manageBookings, manageRoles, manageCoupons, freeBookings) {
+  constructor(
+    id,
+    name,
+    manageBookables,
+    manageUsers,
+    manageTenants,
+    manageBookings,
+    manageRoles,
+    manageCoupons,
+    freeBookings,
+  ) {
     this.id = id;
     this.name = name;
     this.manageBookables = manageBookables;
@@ -40,5 +50,5 @@ class Role {
 
 module.exports = {
   Role: Role,
-  RolePermission: RolePermission
+  RolePermission: RolePermission,
 };

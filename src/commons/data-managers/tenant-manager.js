@@ -120,6 +120,7 @@ class TenantManager {
     });
   }
 
+
   static async getTenantApps(tenantId) {
     try {
       const tenant = await dbm.get().collection("tenants").findOne({
@@ -151,6 +152,11 @@ class TenantManager {
     } catch (err) {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
+  }
+  static async checkTenantCount() {
+    const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
+    const count = await dbm.get().collection("tenants").countDocuments({});
+    return !(maxTenants && count >= maxTenants);
   }
 }
 

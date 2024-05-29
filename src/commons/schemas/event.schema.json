@@ -1,17 +1,17 @@
 {
-    "type": "object",
-    "properties": {
-        "id": { "type" : "string" },
-        "tenant": { "type" : "string" },
-        "title": { "type" : "string" },
-        "timeBegin": { "type" : "integer" },
-        "timeEnd": { "type" : "integer" },
-        "hostUserId": { "type" : "string" },
-        "description": { "type" : "string" },
-        "location": { "type" : "string" },
-        "tags": { "type" : "array" },
-        "flags": { "type" : "array" },
-        "isPublic": { "type" : "boolean" }
-    },
-    "required": ["id", "tenant"]
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "tenant": { "type": "string" },
+    "title": { "type": "string" },
+    "timeBegin": { "type": "integer" },
+    "timeEnd": { "type": "integer" },
+    "hostUserId": { "type": "string" },
+    "description": { "type": "string" },
+    "location": { "type": "string" },
+    "tags": { "type": "array" },
+    "flags": { "type": "array" },
+    "isPublic": { "type": "boolean" }
+  },
+  "required": ["id", "tenant"]
 }

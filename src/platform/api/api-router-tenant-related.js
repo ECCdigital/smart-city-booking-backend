@@ -8,7 +8,7 @@ const CalendarController = require("./controllers/calendar-controller");
 const CouponController = require("./controllers/coupon-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
-const NextCloudController = require("./controllers/next-cloud-controller");
+const FileController = require("./controllers/file-controller");
 
 var router = express.Router({ mergeParams: true });
 
@@ -22,7 +22,7 @@ router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
   "/bookables/:id/availability",
-  CalendarController.getBookableAvailabilty,
+  CalendarController.getBookableAvailability,
 );
 
 // Protected
@@ -31,6 +31,7 @@ router.put(
   AuthenticationController.isSignedIn,
   BookableController.storeBookable,
 );
+
 router.delete(
   "/bookables/:id",
   AuthenticationController.isSignedIn,
@@ -40,6 +41,11 @@ router.get(
   "/bookables/_meta/tags",
   AuthenticationController.isSignedIn,
   BookableController.getTags,
+);
+router.get(
+  "/bookables/count/check",
+  AuthenticationController.isSignedIn,
+  BookableController.countCheck,
 );
 
 // EVENTS
@@ -65,6 +71,11 @@ router.get(
   "/events/_meta/tags",
   AuthenticationController.isSignedIn,
   EventController.getTags,
+);
+router.get(
+  "/events/count/check",
+  AuthenticationController.isSignedIn,
+  EventController.countCheck,
 );
 
 // USERS
@@ -136,6 +147,17 @@ router.get(
   AuthenticationController.isSignedIn,
   BookingController.commitBooking,
 );
+router.post(
+  "/bookings/:id/receipt",
+  AuthenticationController.isSignedIn,
+  BookingController.createReceipt,
+);
+
+router.get(
+  "/bookings/:id/receipt/:receiptId",
+  AuthenticationController.isSignedIn,
+  BookingController.getReceipt,
+);
 
 // CHECKOUT
 // ========
@@ -163,8 +185,12 @@ router.delete("/coupons/:id", CouponController.deleteCoupon);
 
 // NEXT CLOUD
 // ==========
-router.get("/files/list", NextCloudController.getFiles);
-router.get("/files/get", NextCloudController.getFile);
-router.post("/files", NextCloudController.createFile);
+router.get("/files/list", FileController.getFiles);
+router.get("/files/get", FileController.getFile);
+router.post(
+  "/files",
+  AuthenticationController.isSignedIn,
+  FileController.createFile,
+);
 
 module.exports = router;
