@@ -182,25 +182,7 @@ class ParevaLocker extends BaseLocker {
 }
 
 
-class LockyLocker extends BaseLocker {
-  startReservation() {
-    console.log("LockyLocker.startReservation");
-    console.log(this.tenantId);
-    console.log(this.bookingId);
-    console.log(this.unitId);
-  }
-
-  updateReservation() {
-    console.log("LockyLocker.updateReservation");
-  }
-
-  async cancelReservation(unitId) {
-    console.log("LockyLocker.cancelReservation", unitId);
-  }
-}
-
 module.exports = {
   BaseLocker,
   ParevaLocker,
-  LockyLocker,
 };

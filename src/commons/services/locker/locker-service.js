@@ -6,13 +6,12 @@ const {
   getBooking,
   getBookingsByTimeRange,
 } = require("../../data-managers/booking-manager");
-const { ParevaLocker, LockyLocker } = require("./locker");
+const { ParevaLocker } = require("./locker");
 
 const APP_TYPE = "locker";
 
 const LOCKER_TYPE = {
   PAREVA: "pareva",
-  LOCKY: "locky",
 };
 
 /**
@@ -188,9 +187,6 @@ class LockerService {
           case LOCKER_TYPE.PAREVA:
             locker = new ParevaLocker(booking.tenant, booking.id, unit.id);
             break;
-          case LOCKER_TYPE.LOCKY:
-            locker = new LockyLocker(booking.tenant, booking.id, unit.id);
-            break;
           default:
             throw new Error("Unsupported locker type");
         }
@@ -313,9 +309,6 @@ class LockerService {
         switch (unit.lockerSystem) {
           case LOCKER_TYPE.PAREVA:
             locker = new ParevaLocker(tenant, bookingId, unit.id);
-            break;
-          case LOCKER_TYPE.LOCKY:
-            locker = new LockyLocker(tenant, bookingId, unit.id);
             break;
           default:
             throw new Error("Unsupported locker type");
@@ -527,9 +520,6 @@ class LockerService {
       switch (unit.lockerSystem) {
         case LOCKER_TYPE.PAREVA:
           locker = new ParevaLocker(tenantId, bookingId, unit.id);
-          break;
-        case LOCKER_TYPE.LOCKY:
-          locker = new LockyLocker(tenantId, bookingId, unit.id);
           break;
         default:
           throw new Error("Unsupported locker type");
