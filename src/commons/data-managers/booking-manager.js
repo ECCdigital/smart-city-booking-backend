@@ -1,8 +1,8 @@
-var validate = require("jsonschema").validate;
+const validate = require("jsonschema").validate;
 
 const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking");
-var dbm = require("../utilities/database-manager");
+const dbm = require("../utilities/database-manager");
 
 /**
  * Data Manager for Booking objects.
@@ -197,6 +197,30 @@ class BookingManager {
           );
 
           resolve(concurrentBookings);
+        })
+        .catch((err) => reject(err));
+    });
+  }
+
+  static getBookingsByTimeRange(tenant, timeBegin, timeEnd) {
+    return new Promise((resolve, reject) => {
+      dbm
+        .get()
+        .collection("bookings")
+        .find({
+          tenant: tenant,
+          $or: [
+            { timeBegin: { $gte: timeBegin, $lt: timeEnd } },
+            { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
+          ],
+        })
+        .toArray()
+        .then((rawBookings) => {
+          var bookings = rawBookings.map((rb) => {
+            return Object.assign(new Booking(), rb);
+          });
+
+          resolve(bookings);
         })
         .catch((err) => reject(err));
     });
