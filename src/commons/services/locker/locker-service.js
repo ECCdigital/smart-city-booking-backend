@@ -508,7 +508,7 @@ class LockerService {
               if (updatedLockerInfo) {
                 booking.lockerInfo = booking.lockerInfo.map((locker) =>
                   locker.id === updatedLockerInfo.id
-                    ? { ...locker, isConfirmed: true }
+                    ? { ...updatedLockerInfo, isConfirmed: true }
                     : locker,
                 );
               }
