@@ -119,6 +119,10 @@ class ParevaLocker extends BaseLocker {
         base64Credentials,
       );
 
+      if (!processId) {
+        return;
+      }
+
       const response = await axios.request(config);
 
       if (response.status !== 200) {

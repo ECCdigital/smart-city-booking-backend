@@ -541,7 +541,7 @@ class BookingController {
           }
 
           booking.isCommitted = true;
-          await BookingManager.storeBooking(booking);
+          await BookingService.updateBooking(booking);
         } else {
           logger.warn(
             `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
