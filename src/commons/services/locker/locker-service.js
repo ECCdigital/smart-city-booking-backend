@@ -116,6 +116,7 @@ class LockerService {
         const units = availableUnits.slice(0, amount).map((unit) => ({
           ...unit,
           bookableId,
+          isConfirmed: false,
         }));
         units.forEach((unit) => {
           LockerService.reserveLocker(
@@ -486,8 +487,43 @@ class LockerService {
         );
       }
 
+      const confirmLockers = async (units, booking) => {
+        const lockersToConfirm = units.filter(
+          (unit) =>
+            !unit.isConfirmed &&
+            unchangedItems.some((item) => item.bookableId === unit.bookableId),
+        );
+
+        await Promise.all(
+          lockersToConfirm.map(async (unit) => {
+            try {
+              const updatedLockerInfo = await processLocker(
+                unit,
+                "start",
+                booking.tenant,
+                booking.id,
+                booking.timeBegin,
+                booking.timeEnd,
+              );
+              if (updatedLockerInfo) {
+                booking.lockerInfo = booking.lockerInfo.map((locker) =>
+                  locker.id === updatedLockerInfo.id
+                    ? { ...locker, isConfirmed: true }
+                    : locker,
+                );
+              }
+            } catch (error) {
+              throw new Error(error);
+            }
+          }),
+        );
+      };
+
+      await confirmLockers(oldLockerUnits, updatedBooking);
+
       await BookingManager.storeBooking(updatedBooking);
     } catch (error) {
+      console.log(`Error in updating booking: ${error}`);
       throw new Error(`Error in getting booking: ${error.message}`);
     }
   }
