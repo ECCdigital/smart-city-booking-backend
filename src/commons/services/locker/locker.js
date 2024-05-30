@@ -83,6 +83,7 @@ class ParevaLocker extends BaseLocker {
       const response = await axios.request(config);
 
       locker.processId = response.data.processId;
+      locker.isConfirmed = true;
       return locker;
     } catch (err) {
       throw new Error(`${err.message}`);
