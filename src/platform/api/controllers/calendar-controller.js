@@ -4,6 +4,7 @@ const bunyan = require("bunyan");
 
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const ItemCheckoutService = require("../../../commons/services/checkout/item-checkout-service");
+const BookingManager = require("../../../commons/data-managers/booking-manager");
 
 const logger = bunyan.createLogger({
   name: "calendar-controller.js",
