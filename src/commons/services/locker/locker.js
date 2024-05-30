@@ -47,6 +47,8 @@ class ParevaLocker extends BaseLocker {
 
       const { user: username, password, serverUrl, lockerId } = parevaApp;
 
+      const tenantMail = tenant.mail;
+
       const { mail: userEmail } = booking;
       const productId = locker.unitId;
 
@@ -62,7 +64,7 @@ class ParevaLocker extends BaseLocker {
         email: userEmail,
         plannedBegin: `${timeBeginTimestamp}`,
         date_estimate_delivery: `${duration}`,
-        fromEmail: userEmail,
+        fromEmail: tenantMail,
         itemName: "",
         additionalInfo: {},
       });
