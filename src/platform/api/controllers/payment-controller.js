@@ -5,6 +5,7 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const bunyan = require("bunyan");
+const LockerService = require("../../../commons/services/locker/locker-service");
 const ReceiptService = require("../../../commons/services/receipt/receipt-service");
 
 const logger = bunyan.createLogger({
@@ -169,6 +170,16 @@ class PaymentController {
               booking.tenant,
               attachments,
             );
+
+            try {
+              const lockerServiceInstance = LockerService.getInstance();
+              await lockerServiceInstance.handleCreate(
+                booking.tenant,
+                booking.id,
+              );
+            } catch (err) {
+              logger.error(err);
+            }
 
             logger.info(
               `${tenantId} -- booking ${merchantTxId} successfully payed and updated.`,

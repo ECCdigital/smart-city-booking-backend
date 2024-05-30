@@ -1,7 +1,7 @@
-var validate = require("jsonschema").validate;
+const validate = require("jsonschema").validate;
 
 const { Bookable } = require("../entities/bookable");
-var dbm = require("../utilities/database-manager");
+const dbm = require("../utilities/database-manager");
 
 /**
  * Data Manager for Bookable objects.
@@ -14,7 +14,7 @@ class BookableManager {
    * @returns true, if the object is a valid bookable object
    */
   static validateBookable(bookable) {
-    var schema = require("../schemas/bookable.schema.json");
+    const schema = require("../schemas/bookable.schema.json");
     return validate(bookable, schema).errors.length === 0;
   }
 
@@ -31,11 +31,9 @@ class BookableManager {
         .find({ tenant: tenant })
         .toArray()
         .then((rawBookables) => {
-          var bookables = rawBookables.map((rb) => {
-            var bookable = Object.assign(new Bookable(), rb);
-            return bookable;
+          const bookables = rawBookables.map((rb) => {
+            return Object.assign(new Bookable(), rb);
           });
-
           resolve(bookables);
         })
         .catch((err) => reject(err));
@@ -56,7 +54,7 @@ class BookableManager {
         .collection("bookables")
         .findOne({ id: id, tenant: tenant })
         .then((rawBookable) => {
-          var bookable = Object.assign(new Bookable(), rawBookable);
+          const bookable = Object.assign(new Bookable(), rawBookable);
           resolve(bookable);
         })
         .catch((err) => reject(err));
@@ -87,9 +85,9 @@ class BookableManager {
   /**
    * Remove a bookable object from the database.
    *
-   * @param {Bookable} bookable The bookable object to be stored.
-   * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
+   * @param id The id of the bookable to remove
+   * @param tenant The tenant of the bookable to remove
    */
   static removeBookable(id, tenant) {
     return new Promise((resolve, reject) => {

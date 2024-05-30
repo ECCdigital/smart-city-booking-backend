@@ -2,6 +2,7 @@ const ItemCheckoutService = require("./item-checkout-service");
 const BookableManager = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
+const LockerService = require("../locker/locker-service");
 
 /**
  * Class representing a bundle checkout service.
@@ -141,8 +142,28 @@ class BundleCheckoutService {
 
       if (!bookable.autoCommitBooking) return false;
     }
-
     return true;
+  }
+
+  async getLockerInfo() {
+    let lockerInfo = [];
+    try {
+      for (const bookableItem of this.bookableItems) {
+        const lockerServiceInstance = LockerService.getInstance();
+        lockerInfo = lockerInfo.concat(
+          await lockerServiceInstance.getAvailableLocker(
+            bookableItem.bookableId,
+            this.tenant,
+            this.timeBegin,
+            this.timeEnd,
+            bookableItem.amount,
+          ),
+        );
+      }
+    } catch (error) {
+      throw new Error(error);
+    }
+    return lockerInfo;
   }
 
   async prepareBooking() {
@@ -176,6 +197,7 @@ class BundleCheckoutService {
       priceEur: await this.userPriceEur(),
       isCommitted: await this.isAutoCommit(),
       isPayed: await this.isPaymentComplete(),
+      lockerInfo: await this.getLockerInfo(),
     };
 
     if (this.couponCode) {
