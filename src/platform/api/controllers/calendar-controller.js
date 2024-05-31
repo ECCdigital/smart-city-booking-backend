@@ -36,6 +36,7 @@ class CalendarController {
    * CalendarController.getOccupancies(req, res);
    */
   static async getOccupancies(request, response) {
+    console.log("getOccupancies");
     const tenant = request.params.tenant;
     const bookableIds = request.query.ids;
     let occupancies = [];
@@ -186,20 +187,25 @@ class CalendarController {
             await checkAvailability(start, middle);
             await checkAvailability(middle, end);
           } else {
-            const bookings = await BookingManager.getConcurrentBookings(
-              bookableId,
-              tenant,
-              start,
-              end,
-            );
-            if (bookings.length > 0) {
-              bookings.forEach((booking) => {
-                items.push({
-                  timeBegin: booking.timeBegin,
-                  timeEnd: booking.timeEnd,
-                  available: false,
+            const relatedBookables = await BookableManager.getRelatedBookables(bookableId, tenant);
+            const bookable = await BookableManager.getBookable(bookableId, tenant);
+            const bookableToCheck = relatedBookables.concat(bookable);
+            for (const relatedBookable of bookableToCheck) {
+              const bookings = await BookingManager.getConcurrentBookings(
+                relatedBookable.id,
+                tenant,
+                start,
+                end,
+              );
+              if (bookings.length > 0) {
+                bookings.forEach((booking) => {
+                  items.push({
+                    timeBegin: booking.timeBegin,
+                    timeEnd: booking.timeEnd,
+                    available: false,
+                  });
                 });
-              });
+              }
             }
           }
         }
