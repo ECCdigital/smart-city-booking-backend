@@ -187,8 +187,14 @@ class CalendarController {
             await checkAvailability(start, middle);
             await checkAvailability(middle, end);
           } else {
-            const relatedBookables = await BookableManager.getRelatedBookables(bookableId, tenant);
-            const bookable = await BookableManager.getBookable(bookableId, tenant);
+            const relatedBookables = await BookableManager.getRelatedBookables(
+              bookableId,
+              tenant,
+            );
+            const bookable = await BookableManager.getBookable(
+              bookableId,
+              tenant,
+            );
             const bookableToCheck = relatedBookables.concat(bookable);
             for (const relatedBookable of bookableToCheck) {
               const bookings = await BookingManager.getConcurrentBookings(
