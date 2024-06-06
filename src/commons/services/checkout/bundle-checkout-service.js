@@ -171,15 +171,19 @@ class BundleCheckoutService {
 
   processAttachments(bookableItems, attachmentStatus) {
     const attachments = bookableItems.reduce((acc, bookableItem) => {
-      const itemAttachments = bookableItem._bookableUsed.attachments.map((attachment) => {
-        attachment.bookableId = bookableItem.bookableId;
-        return attachment;
-      });
+      const itemAttachments = bookableItem._bookableUsed.attachments.map(
+        (attachment) => {
+          attachment.bookableId = bookableItem.bookableId;
+          return attachment;
+        },
+      );
       return acc.concat(itemAttachments);
     }, []);
 
     return attachments.map((attachment) => {
-      const status = attachmentStatus?.find((status) => status.id === attachment.id);
+      const status = attachmentStatus?.find(
+        (status) => status.id === attachment.id,
+      );
       return {
         type: attachment.type,
         title: attachment.title,
@@ -189,7 +193,6 @@ class BundleCheckoutService {
       };
     });
   }
-
 
   async prepareBooking() {
     await this.checkAll();
@@ -219,7 +222,10 @@ class BundleCheckoutService {
       mail: this.email,
       phone: this.phone,
       comment: this.comment,
-      attachments: this.processAttachments(this.bookableItems, this.attachmentStatus),
+      attachments: this.processAttachments(
+        this.bookableItems,
+        this.attachmentStatus,
+      ),
       priceEur: await this.userPriceEur(),
       isCommitted: await this.isAutoCommit(),
       isPayed: await this.isPaymentComplete(),
