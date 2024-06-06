@@ -45,6 +45,7 @@ class BookingService {
       mail,
       phone,
       comment,
+      attachmentStatus,
     } = request.body;
 
     logger.info(
@@ -80,6 +81,7 @@ class BookingService {
         mail,
         phone,
         comment,
+        attachmentStatus,
         Number(request.body.priceEur),
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
@@ -100,6 +102,7 @@ class BookingService {
         mail,
         phone,
         comment,
+        attachmentStatus,
       );
     }
 
