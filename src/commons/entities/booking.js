@@ -7,6 +7,7 @@ class Booking {
    *
    * @param {string} id Identifier of the booking, set undefined to generate random UUID
    * @param {string} tenant Identifier of the tenant
+   * @param {string} bookableId The foreign identifier indicating the booked resource
    * @param {string} assignedUserId The foreign identifier of the user related to this booking
    * @param {string} mail e-mail address in case no user is assigned to the booking
    * @param {string} comment A free text comment by the user

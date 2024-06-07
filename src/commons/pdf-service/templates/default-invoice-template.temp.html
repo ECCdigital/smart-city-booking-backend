@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html xmlns:background-size="http://java.sun.com/JSP/Page">
+<head>
+  <meta charset="utf-8"/>
+  <title>Ihre Rechnung</title>
+
+  <style>
+      @import url('https://fonts.googleapis.com/css2?family=Work+Sans&display=swap');
+
+      body {
+          padding-left: 1.0cm;
+          padding-right: 1.0cm;
+          padding-top: 0.5cm;
+          padding-bottom: 0.5cm;
+      }
+
+      .invoice-box {
+          font-size: 12px;
+          line-height: 16px;
+          font-family: 'Work Sans', 'SansSerif', 'SansSerif', SansSerif, SansSerif, sans-serif;
+          padding-bottom: 20px;
+      }
+
+      .invoice-box table {
+          width: 100%;
+          line-height: inherit;
+          text-align: left;
+          padding-bottom: 20px;
+      }
+
+      .invoice-box table td {
+          padding: 5px;
+          vertical-align: top;
+      }
+
+      .invoice-box table tr td:nth-child(2) {
+          text-align: right;
+          line-height: 18px;
+      }
+
+      .invoice-box table tr.top table td tr {
+          padding-bottom: 20px;
+          text-align: center;
+      }
+
+      .invoice-box table tr.heading td {
+          background: #eee;
+          border-bottom: 1px solid #ddd;
+          font-weight: bold;
+      }
+
+      .invoice-box table tr.item td {
+          border-bottom: 1px solid #eee;
+      }
+
+      .invoice-box table tr.item.last td {
+          border-bottom: none;
+      }
+
+      .invoice-box table tr.total td:nth-child(2) {
+          border-top: 2px solid #eee;
+          font-weight: bold;
+      }
+
+      @media only screen and (max-width: 600px) {
+          .invoice-box table tr.top table td {
+
+              display: block;
+              text-align: center;
+          }
+
+          .invoice-box table tr.information table td {
+
+              display: block;
+              text-align: center;
+
+          }
+      }
+
+      .invoice-box.rtl table {
+          text-align: right;
+          padding-bottom: 20px;
+      }
+
+      .invoice-box.rtl table tr td:nth-child(2) {
+          text-align: left;
+      }
+
+      .header {
+          text-align: center;
+          font-size: 12px;
+          line-height: 25px;
+          padding-bottom: 20px;
+          padding-left: 40px;
+      }
+
+      .header-address {
+          text-align: left;
+          padding-left: 40px;
+      }
+
+      .information {
+          padding-top: 0px;
+          padding-bottom: 20px;
+          line-height: 20px;
+          font-size: 12px;
+          text-align: left;
+      }
+
+      .details {
+          padding-bottom: 40px;
+          line-height: 14px;
+          font-size: 10px;
+          text-align: left;
+          horiz-align: right;
+      }
+
+      .spacer {
+          padding-bottom: 20px;
+          padding-left: 0px;
+          padding-right: 10px;
+          min-width: 80px;
+      }
+
+      .image {
+          width: 100%;
+          max-width: 60px;
+          padding-bottom: 20px;
+          padding-left: 20px;
+      }
+
+      .logo {
+          width: 100%;
+          max-width: 250px;
+          padding-bottom: 20px;
+      }
+
+      .footer {
+          bottom: 0;
+          right: 0;
+          position: absolute;
+          padding: 20px;
+          text-align: left;
+          line-height: 15px;
+          font-size: 8px;
+      }
+  </style>
+</head>
+
+<body>
+<div class="invoice-box">
+  <tr class="top">
+    <td colspan="2">
+      <table>
+        <tr>
+          <td>
+            <div class="header">
+              <span style="font-weight: bold; font-size: x-large">Smart City Booking</span>
+              <br>
+              <br>
+            </div>
+            <div class="header-address">
+                        <span style="font-size: x-small; text-decoration: underline"></span>
+              <br><br>
+              {{{invoiceAddress}}}
+            </div>
+
+          </td>
+          <td>
+            <div class="spacer"></div>
+          </td>
+          <td>
+            <div>
+              <div class="details">
+                Rechnungsnummer: {{invoiceNumber}} <br> <br>
+                [Ort], {{bookingDate}}</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <div class="information">
+    <span style="font-size: larger; font-weight: bolder"> Rechnung – Smart City Booking </span><br>
+    <br>
+    <p>Sehr geehrte Damen und Herren, <br> <br>
+      Vielen Dank für Ihre Buchung bei Smart City Booking. Bitte überweisen Sie den genannten Gesamtbetrag innerhalb von {{ daysUntilPaymentDue }} Tagen, mit Angabe des Verwendungszwecks {{ purposeOfPayment }}, auf das Konto: <br>
+      <br>
+      {{ bank }} <br>
+      IBAN: {{ iban }} <br>
+      BIC: {{ bic }} <br>
+      Verwendungszweck: {{ purposeOfPayment }} <br>
+      </p>
+  </div>
+  <table>
+    <tr class="item">
+      <td>Buchungsnummer</td>
+
+      <td>{{bookingId}}</td>
+    </tr>
+
+    <tr class="item">
+      <td>Gesamtbetrag</td>
+      <td>{{totalAmount}}</td>
+    </tr>
+
+    <tr class="item">
+      <td>Buchungszeitraum</td>
+
+      <td>{{bookingPeriod}}</td>
+    </tr>
+
+    <tr class="item last">
+      <td>Buchungsobjekt</td>
+
+      <td>{{{bookedItems}}}</td>
+    </tr>
+  </table>
+
+  <div class="information">
+    Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift gültig.
+  </div>
+
+  <div class="footer">
+  </div>
+</div>
+
+</body>
+</html>
