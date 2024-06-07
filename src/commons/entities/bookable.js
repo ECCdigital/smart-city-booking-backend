@@ -36,6 +36,7 @@ class Bookable {
    * @param {boolean} isBookable true, if the bookable object is bookable
    * @param {boolean} isPublic true, if the bookable object is visible to the public
    * @param lockerDetails Details about the locker, e.g. locker number, locker size
+   * @param {array<string>} requiredFields List of required fields for the bookable object
    */
   constructor(
     id,
@@ -63,6 +64,7 @@ class Bookable {
     isBookable,
     isPublic,
     lockerDetails,
+    requiredFields,
   ) {
     this.id = id;
     this.tenant = tenant;
@@ -89,6 +91,7 @@ class Bookable {
     this.isBookable = isBookable || false;
     this.isPublic = isPublic || false;
     this.lockerDetails = lockerDetails || [];
+    this.requiredFields = requiredFields || [];
   }
 
   /**
