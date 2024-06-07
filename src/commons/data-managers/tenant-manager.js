@@ -9,6 +9,7 @@ const TENANT_ENCRYPT_KEYS = [
   "paymentProjectId",
   "paymentSecret",
   "noreplyPassword",
+  "password",
 ];
 
 /**
@@ -69,7 +70,7 @@ class TenantManager {
             return reject(new Error(`No tenant found with ID: ${id}`));
           }
           const tenant = Object.assign(new Tenant(), rawTenant);
-          tenant.applications = rawTenant.applications.map((app) => {
+          tenant.applications = tenant.applications.map((app) => {
             return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
           });
           resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
@@ -87,8 +88,6 @@ class TenantManager {
    */
   static async storeTenant(tenant, upsert = true) {
     try {
-      console.log(tenant.applications);
-
       const tenantsCollection = dbm.get().collection("tenants");
       tenant.applications = tenant.applications.map((app) => {
         return SecurityUtils.encryptObject(app, TENANT_ENCRYPT_KEYS);
@@ -121,12 +120,6 @@ class TenantManager {
     });
   }
 
-  static async checkTenantCount() {
-    const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
-    const count = await dbm.get().collection("tenants").countDocuments({});
-    return !(maxTenants && count >= maxTenants);
-  }
-
   static async getTenantApps(tenantId) {
     try {
       const tenant = await dbm.get().collection("tenants").findOne({
@@ -134,7 +127,7 @@ class TenantManager {
       });
       return tenant.applications;
     } catch (err) {
-      throw new Error(`No tenant found with ID: ${tenantId}, error: ${err}`);
+      throw new Error(`No tenant found with ID: ${tenantId}`);
     }
   }
 
@@ -145,7 +138,7 @@ class TenantManager {
       });
       return tenant.applications.find((app) => app.id === appId);
     } catch (err) {
-      throw new Error(`No tenant found with ID: ${tenantId}, error: ${err}`);
+      throw new Error(`No tenant found with ID: ${tenantId}`);
     }
   }
 
@@ -156,8 +149,13 @@ class TenantManager {
       });
       return tenant.applications.filter((app) => app.type === appType);
     } catch (err) {
-      throw new Error(`No tenant found with ID: ${tenantId}, error: ${err}`);
+      throw new Error(`No tenant found with ID: ${tenantId}`);
     }
+  }
+  static async checkTenantCount() {
+    const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
+    const count = await dbm.get().collection("tenants").countDocuments({});
+    return !(maxTenants && count >= maxTenants);
   }
 }
 
