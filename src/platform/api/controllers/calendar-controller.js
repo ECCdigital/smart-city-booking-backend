@@ -116,6 +116,20 @@ class CalendarController {
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
 
+      const [parentBookables, bookable, relatedBookables] = await Promise.all([
+        BookableManager.getParentBookables(bookableId, tenant),
+        BookableManager.getBookable(bookableId, tenant),
+        BookableManager.getRelatedBookables(
+          bookableId,
+          tenant)
+      ]);
+
+      const bookableToCheck = [
+        ...relatedBookables,
+        bookable,
+        ...parentBookables
+      ];
+
       let items = [];
 
       function combinePeriods(items, index = 0, combined = []) {
@@ -146,11 +160,31 @@ class CalendarController {
           }
         }
 
-        // Recursive call for the next item
         return combinePeriods(items, index + 1, combined);
       }
 
-      // Function to check availability for a given time range
+      /**
+       * Asynchronously checks the availability of a bookable item within a given time range.
+       *
+       * This function is used to determine whether a bookable item is available within a specified time range.
+       * It does this by creating an instance of the `ItemCheckoutService` class and calling its `checkAll` method.
+       * If the `checkAll` method throws an error, the function assumes that the bookable item is not available.
+       *
+       * If the time range is greater than 15 minutes, the function splits the time range into two halves
+       * and checks the availability for each half separately. This is done by calculating the middle point
+       * of the time range and then recursively calling the `checkAvailability` function for the first half
+       * (from `start` to `middle`) and the second half (from `middle` to `end`).
+       *
+       * If the time range is not greater than 15 minutes, the function marks the time range as unavailable.
+       * This is done by adding an object to the `items` array, with `timeBegin` and `timeEnd` set to `start`
+       * and `end` respectively, and `available` set to `false`.
+       *
+       * @async
+       * @function checkAvailability
+       * @param {number} start - The start time of the time range in milliseconds.
+       * @param {number} end - The end time of the time range in milliseconds.
+       * @returns {Promise<void>} A Promise that resolves when the availability check is complete.
+       */
       async function checkAvailability(start, end) {
         const ics = new ItemCheckoutService(
           user,
@@ -188,20 +222,6 @@ class CalendarController {
             await checkAvailability(middle, end);
           } else {
 
-            const [parentBookables, bookable, relatedBookables] = await Promise.all([
-              BookableManager.getParentBookables(bookableId, tenant),
-              BookableManager.getBookable(bookableId, tenant),
-              BookableManager.getRelatedBookables(
-              bookableId,
-              tenant)
-            ]);
-
-            const bookableToCheck = [
-              ...relatedBookables,
-              bookable,
-              ...parentBookables
-            ];
-
             for (const relatedBookable of bookableToCheck) {
               const bookings = await BookingManager.getConcurrentBookings(
                 relatedBookable.id,
@@ -223,7 +243,87 @@ class CalendarController {
         }
       }
 
-      await checkAvailability(startDate.getTime(), endDate.getTime());
+      /**
+       * Generates time periods based on the provided start date, end date, and opening hours.
+       * The function creates a list of time periods, each indicating whether a bookable item is available or not.
+       *
+       * @param {Date} startDate - The start date of the period.
+       * @param {Date} endDate - The end date of the period.
+       * @param {Array} openingHours - An array of objects, each containing the opening hours for a specific day of the week.
+       * @returns {Array} An array of time periods, each represented as an object with `start`, `end`, and `available` properties.
+       */
+      function generateTimePeriods(startDate, endDate, openingHours) {
+
+        if (openingHours.length === 0) {
+          return [{ start: startDate.getTime(), end: endDate.getTime(), available: true }];
+        }
+        const periods = [];
+        let currentDate = new Date(startDate);
+
+        while (currentDate <= endDate) {
+          const weekday = (currentDate.getDay() + 6) % 7 + 1; // monday = 1, ..., sunday = 7
+
+          const hoursForToday = openingHours.find(hours => hours.weekdays.includes(weekday));
+
+          if (hoursForToday) {
+            const start = new Date(currentDate);
+            const [startHour, startMinute] = hoursForToday.startTime.split(':');
+            start.setHours(startHour, startMinute, 0, 0);
+
+            const end = new Date(currentDate);
+            const [endHour, endMinute] = hoursForToday.endTime.split(':');
+            end.setHours(endHour, endMinute, 0, 0);
+
+            periods.push({ start: start.getTime(), end: end.getTime(), available: true });
+
+            const startOfDay = new Date(currentDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(currentDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            if (start.getTime() > startOfDay.getTime()) {
+              periods.push({ start: startOfDay.getTime(), end: start.getTime(), available: false });
+            }
+            if (end.getTime() < endOfDay.getTime()) {
+              periods.push({ start: end.getTime(), end: endOfDay.getTime(), available: false });
+            }
+          } else {
+            const startOfDay = new Date(currentDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(currentDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            periods.push({ start: startOfDay.getTime(), end: endOfDay.getTime(), available: false });
+          }
+
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        return periods;
+      }
+
+      const openingHours = bookableToCheck.map((b) => {
+        if (b.isOpeningHoursRelated && b.openingHours.length > 0) {
+          return b.openingHours;
+        } else {
+          return [];
+        }
+      }).flat();
+
+      const availablePeriods = generateTimePeriods(startDate, endDate, openingHours);
+
+      for (const period of availablePeriods) {
+        if (period.available) {
+          await checkAvailability(period.start, period.end);
+        } else {
+          items.push({
+            timeBegin: period.start,
+            timeEnd: period.end,
+            available: false,
+          });
+        }
+      }
+
       items = combinePeriods(items);
 
       response.status(200).send(items);
