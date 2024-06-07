@@ -119,15 +119,13 @@ class CalendarController {
       const [parentBookables, bookable, relatedBookables] = await Promise.all([
         BookableManager.getParentBookables(bookableId, tenant),
         BookableManager.getBookable(bookableId, tenant),
-        BookableManager.getRelatedBookables(
-          bookableId,
-          tenant)
+        BookableManager.getRelatedBookables(bookableId, tenant),
       ]);
 
       const bookableToCheck = [
         ...relatedBookables,
         bookable,
-        ...parentBookables
+        ...parentBookables,
       ];
 
       let items = [];
@@ -221,7 +219,6 @@ class CalendarController {
             await checkAvailability(start, middle);
             await checkAvailability(middle, end);
           } else {
-
             for (const relatedBookable of bookableToCheck) {
               const bookings = await BookingManager.getConcurrentBookings(
                 relatedBookable.id,
@@ -253,28 +250,39 @@ class CalendarController {
        * @returns {Array} An array of time periods, each represented as an object with `start`, `end`, and `available` properties.
        */
       function generateTimePeriods(startDate, endDate, openingHours) {
-
         if (openingHours.length === 0) {
-          return [{ start: startDate.getTime(), end: endDate.getTime(), available: true }];
+          return [
+            {
+              start: startDate.getTime(),
+              end: endDate.getTime(),
+              available: true,
+            },
+          ];
         }
         const periods = [];
         let currentDate = new Date(startDate);
 
         while (currentDate <= endDate) {
-          const weekday = (currentDate.getDay() + 6) % 7 + 1; // monday = 1, ..., sunday = 7
+          const weekday = ((currentDate.getDay() + 6) % 7) + 1; // monday = 1, ..., sunday = 7
 
-          const hoursForToday = openingHours.find(hours => hours.weekdays.includes(weekday));
+          const hoursForToday = openingHours.find((hours) =>
+            hours.weekdays.includes(weekday),
+          );
 
           if (hoursForToday) {
             const start = new Date(currentDate);
-            const [startHour, startMinute] = hoursForToday.startTime.split(':');
+            const [startHour, startMinute] = hoursForToday.startTime.split(":");
             start.setHours(startHour, startMinute, 0, 0);
 
             const end = new Date(currentDate);
-            const [endHour, endMinute] = hoursForToday.endTime.split(':');
+            const [endHour, endMinute] = hoursForToday.endTime.split(":");
             end.setHours(endHour, endMinute, 0, 0);
 
-            periods.push({ start: start.getTime(), end: end.getTime(), available: true });
+            periods.push({
+              start: start.getTime(),
+              end: end.getTime(),
+              available: true,
+            });
 
             const startOfDay = new Date(currentDate);
             startOfDay.setHours(0, 0, 0, 0);
@@ -282,10 +290,18 @@ class CalendarController {
             endOfDay.setHours(23, 59, 59, 999);
 
             if (start.getTime() > startOfDay.getTime()) {
-              periods.push({ start: startOfDay.getTime(), end: start.getTime(), available: false });
+              periods.push({
+                start: startOfDay.getTime(),
+                end: start.getTime(),
+                available: false,
+              });
             }
             if (end.getTime() < endOfDay.getTime()) {
-              periods.push({ start: end.getTime(), end: endOfDay.getTime(), available: false });
+              periods.push({
+                start: end.getTime(),
+                end: endOfDay.getTime(),
+                available: false,
+              });
             }
           } else {
             const startOfDay = new Date(currentDate);
@@ -293,7 +309,11 @@ class CalendarController {
             const endOfDay = new Date(currentDate);
             endOfDay.setHours(23, 59, 59, 999);
 
-            periods.push({ start: startOfDay.getTime(), end: endOfDay.getTime(), available: false });
+            periods.push({
+              start: startOfDay.getTime(),
+              end: endOfDay.getTime(),
+              available: false,
+            });
           }
 
           currentDate.setDate(currentDate.getDate() + 1);
@@ -302,15 +322,21 @@ class CalendarController {
         return periods;
       }
 
-      const openingHours = bookableToCheck.map((b) => {
-        if (b.isOpeningHoursRelated && b.openingHours.length > 0) {
-          return b.openingHours;
-        } else {
-          return [];
-        }
-      }).flat();
+      const openingHours = bookableToCheck
+        .map((b) => {
+          if (b.isOpeningHoursRelated && b.openingHours.length > 0) {
+            return b.openingHours;
+          } else {
+            return [];
+          }
+        })
+        .flat();
 
-      const availablePeriods = generateTimePeriods(startDate, endDate, openingHours);
+      const availablePeriods = generateTimePeriods(
+        startDate,
+        endDate,
+        openingHours,
+      );
 
       for (const period of availablePeriods) {
         if (period.available) {
