@@ -1,6 +1,7 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 var { User, HookTypes } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
+const passport = require("passport");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -21,19 +22,37 @@ class AuthenticationController {
     }
   }
 
-  static signin(request, response) {
-    const user = request.user;
+  static signin(request, response, next) {
+    try {
+      passport.authenticate(
+        "keycloak-signin",
+        { session: false },
+        async (err, user, info) => {
+          console.log("user", user);
+          if (err) {
+            return next(err);
+          }
+          if (!user) {
+            logger.info(
+              `UserController - signin: ${info.message} User: ${id} ${info.attempts || ""}`,
+            );
+            return response.sendStatus(401);
+          }
 
-    UserManager.getUserPermissions(user.id, user.tenant)
-      .then((permissions) => {
-        user.permissions = permissions;
-        logger.info(`User ${user.id} signed in.`);
-        response.status(200).send(user);
-      })
-      .catch((err) => {
-        logger.error(err);
-        response.sendStatus(500);
-      });
+          request.login(user, { session: true }, async (err) => {
+            if (err) {
+              return next(err);
+            }
+            request.session.save();
+            logger.info(`UserController - signin: User signed in: ${user.id}`);
+            return response.status(200).send(user);
+          });
+        },
+      )(request, response, next);
+    } catch (err) {
+      logger.error("AuthController - signin: ", err);
+      response.sendStatus(500);
+    }
   }
 
   static signup(request, response) {

@@ -1,6 +1,7 @@
 var express = require("express");
 var router = express.Router({ mergeParams: true });
 const passport = require("passport");
+require("./auth-initialization");
 
 const AuthenticationController = require("./controllers/authentication-controller");
 
@@ -9,12 +10,11 @@ router.post("/signup", AuthenticationController.signup);
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);
 router.post("/resetpassword", AuthenticationController.resetPassword);
+router.post("/keycloak/callback", () => {
+  console.log("keycloak callback");
+});
 
-router.post(
-  "/signin",
-  passport.authenticate("local"),
-  AuthenticationController.signin,
-);
+router.post("/signin", AuthenticationController.signin);
 router.get(
   "/me",
   AuthenticationController.isSignedIn,
