@@ -10,12 +10,12 @@ class BaseLocker {
    * Constructs a new BaseLocker instance.
    * @param {string} tenantId - The ID of the tenant reserving the locker.
    * @param {string} bookingId - The ID of the booking.
-   * @param {string} unitId - The ID of the locker unit being reserved.
+   * @param {string} id - The ID of the locker unit being reserved.
    */
-  constructor(tenantId, bookingId, unitId) {
+  constructor(tenantId, bookingId, id) {
     this.tenantId = tenantId;
     this.bookingId = bookingId;
-    this.unitId = unitId;
+    this.id = id;
   }
 
   /**
@@ -50,7 +50,7 @@ class ParevaLocker extends BaseLocker {
       const tenantMail = tenant.mail;
 
       const { mail: userEmail } = booking;
-      const productId = locker.unitId;
+      const productId = locker.id;
 
       const [timeBeginTimestamp, timeEndTimestamp] = [
         new Date(timeBegin).getTime(),
@@ -146,9 +146,7 @@ class ParevaLocker extends BaseLocker {
   }
 
   getLocker(booking) {
-    const locker = booking.lockerInfo.find(
-      (locker) => locker.id === this.unitId,
-    );
+    const locker = booking.lockerInfo.find((locker) => locker.id === this.id);
     if (!locker) throw new Error("Locker not found");
     return locker;
   }
