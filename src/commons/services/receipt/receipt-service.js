@@ -50,7 +50,7 @@ class ReceiptService {
 
       booking.attachments.push({
         type: "receipt",
-        name: pdfData.name,
+        title: pdfData.name,
         receiptId: receiptId,
         revision: revision,
         timeCreated: Date.now(),
