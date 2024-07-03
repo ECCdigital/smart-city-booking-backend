@@ -14,7 +14,8 @@ router.post("/keycloak/callback", () => {
   console.log("keycloak callback");
 });
 
-router.post("/signin", AuthenticationController.signin);
+router.post("/signin", passport.authenticate("local-signin"), AuthenticationController.signin);
+router.post("/sso", AuthenticationController.ssoLogin);
 router.get(
   "/me",
   AuthenticationController.isSignedIn,
