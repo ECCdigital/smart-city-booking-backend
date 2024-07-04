@@ -1,4 +1,5 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
 var { User, HookTypes } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
 const axios = require('axios');
@@ -37,13 +38,50 @@ class AuthenticationController {
       });
   }
 
+  static async checkUserRole(app, userId, jwtToken) {
+    try {
+      const token = jwtToken;
+      const roleUrl = `${app.serverUrl}/realms/${app.realm}/protocol/openid-connect/token/introspect`;
+
+
+      const roleResponse = await axios.get(roleUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      console.log(roleResponse.data);
+
+    } catch (error) {
+      if (error.response) {
+        // Server hat mit einem Statuscode geantwortet, der außerhalb des Bereichs von 2xx liegt
+        console.error('Response error:', error.response.data);
+      } else if (error.request) {
+        // Die Anfrage wurde gesendet, aber keine Antwort erhalten
+        console.error('Request error:', error.request);
+      } else {
+        // Ein Fehler ist aufgetreten, als die Anfrage eingerichtet wurde
+        console.error('Setup error:', error.message);
+      }
+      console.error('Error config:', error.config);
+    }
+  }
+
   static async ssoLogin(request, response, next) {
     const {
       body: { token },
       params: { tenant },
     } = request;
 
-    const url = `http://localhost:8085/realms/myrealm/protocol/openid-connect/userinfo`;
+    const app = await TenantManager.getTenantApp(tenant, "keycloak");
+
+    const url = `${app.serverUrl}/realms/${app.realm}/protocol/openid-connect/userinfo`;
+
+    const inrourl = `${app.serverUrl}/realms/${app.realm}/protocol/openid-connect/token/introspect`;
+
+    const clientSecret = "O83IjXzvPn68g1ozYMrMJpXPRWdoQ0N1"
+
+    console.log(token);
 
     try {
       const kcResponse = await axios.get(url, {
@@ -51,6 +89,19 @@ class AuthenticationController {
           Authorization: `Bearer ${token}`,
         },
       })
+      console.log(kcResponse.data);
+
+      const introspectResponse = await axios.post(inrourl, `client_id=${app.clientIdApi}&client_secret=${clientSecret}&token=${token}`, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+
+      console.log(introspectResponse.data);
+
+
+      const userAccess = introspectResponse.resource_access
+
       const user = await UserManager.getUser(kcResponse.data.email, tenant);
       if (!user) {
         response.sendStatus(401);

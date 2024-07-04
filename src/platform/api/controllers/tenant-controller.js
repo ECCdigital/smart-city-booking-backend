@@ -323,6 +323,36 @@ class TenantController {
       response.status(500).send("Could not check if creation is possible");
     }
   }
+
+  static async getSsoConfig(request, response) {
+    try {
+      const {
+        params: { id: tenantId },
+      } = request;
+
+      const applications = await TenantManager.getTenantApps(tenantId);
+      const keycloakApp = applications.find(
+        (app) => app.id === "keycloak" && app.active,
+      );
+
+      let config = {};
+
+      if (!keycloakApp) {
+        response.status(200).send(config);
+      } else {
+        config = {
+          realm: keycloakApp.realm,
+          serverUrl: keycloakApp.serverUrl,
+          clientId: keycloakApp.clientIdApp,
+          active: keycloakApp.active,
+        };
+        response.status(200).send(config);
+      }
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get public applications");
+    }
+  }
 }
 
 module.exports = TenantController;

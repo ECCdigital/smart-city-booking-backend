@@ -11,7 +11,7 @@ var router = express.Router({ mergeParams: true });
 // Public
 router.get("/tenants", TenantController.getTenants);
 router.get("/tenants/:id", TenantController.getTenant);
-router.get("/tenants/:id/public/applications", TenantController.getApplications);
+router.get("/tenants/:id/sso/config", TenantController.getSsoConfig);
 
 // Protected
 router.put(
