@@ -1055,7 +1055,95 @@ Example:
 
 Events are not considered as bookables. Instead, they serve as a representation of real-world events, holding crucial information such as the event description, date and time, speakers, and more. This data is primarily used for display purposes on a website, providing users with detailed information about the event. Events can also be linked to tickets, allowing users to book their attendance for these events. However, the booking process is handled through the associated tickets, not the events themselves.
 
-// TODO: Add example
+| Field          | Description                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| id             | The unique identifier of the event                                                           |
+| tenant         | The tenant to which the event belongs.                                                       |
+| attachments    | An array of attachments related to the event. Each attachment is a string.                   |
+| attendees      | An object containing information about the attendees of the event.                           |
+| eventAddress   | An object containing the address of the event.                                               |
+| eventLocation  | An object containing the location of the event.                                              |
+| eventOrganizer | An object containing information about the organizer of the event.                           |
+| format         | The format of the event.                                                                     |
+| images         | An array of images related to the event. Each image has an id, title, type, and url.         |
+| information    | An object containing additional information about the event.                                 |
+| isPublic       | A boolean indicating whether the event is public.                                            |
+| schedules      | An array of schedules for the event. Each schedule has a start time, end time, and location. |
+
+Example:
+
+```JSON
+{
+  "id": "event-123",
+  "tenant": "default",
+  "attachments": [ ],
+  "attendees": {
+    "publicEvent": true,
+    "needsRegistration": false,
+    "free": false,
+    "maxAttendees": null,
+    "priceCategories": []
+  },
+  "eventAddress": {
+    "street": "",
+    "houseNumber": "",
+    "additional": "",
+    "city": "",
+    "zip": ""
+  },
+  "eventLocation": {
+    "name": "",
+    "phoneNumber": "",
+    "emailAddress": "",
+    "select": null,
+    "room": null,
+    "url": ""
+  },
+  "eventOrganizer": {
+    "name": "",
+    "addContactPerson": true,
+    "contactPersonName": "",
+    "contactPersonPhoneNumber": "",
+    "contactPersonEmailAddress": "",
+    "contactPersonImage": null,
+    "speakers": []
+  },
+  "format": 0,
+  "images": [ ],
+  "information": {
+    "name": "",
+    "teaserText": "",
+    "description": "",
+    "teaserImage": null,
+    "startDate": "",
+    "startTime": "",
+    "endDate": "",
+    "endTime": "",
+    "tags": [],
+    "flags": []
+  },
+  "isPublic": true,
+  "schedules": [
+    [
+      {
+        "id": "",
+        "date": "",
+        "time": "",
+        "description": "",
+        "schedules": []
+      },
+      {
+        "id": "",
+        "date": "",
+        "time": "",
+        "description": "",
+        "schedules": []
+      }
+    ]
+  ]
+}
+
+```
 
 ## Integrate data into a website
 
@@ -1086,7 +1174,11 @@ To use the SDK, you need to include the following script in your HTML file:
 To display a list of bookables on your website, you can use the following code:
 
 ```html
-<div id="bm-bookable-list" data-type="room" data-ids="bklbl-123,bkbl-345"></div>
+<div
+  class="bm-bookable-list"
+  data-type="room"
+  data-ids="bklbl-123,bkbl-345"
+></div>
 ```
 
 | Parameter            | Description                                                                                                                               |
@@ -1099,7 +1191,7 @@ To display a list of bookables on your website, you can use the following code:
 Display a single bookable item on your website:
 
 ```html
-<div id="bm-bookable-item" data-id="bklbl-123" data-id-param="bkm_id"></div>
+<div class="bm-bookable-item" data-id="bklbl-123" data-id-param="bkm_id"></div>
 ```
 
 | Parameter     | Description                                                                                                                                                               |
@@ -1112,7 +1204,7 @@ Display a single bookable item on your website:
 Display a list of events on your website:
 
 ```html
-<div id="bm-event-list" data-ids="evt-123,evt-234"></div>
+<div class="bm-event-list" data-ids="evt-123,evt-234"></div>
 ```
 
 | Parameter | Description                                                                                                |
@@ -1124,7 +1216,7 @@ Display a list of events on your website:
 Display a single event item on your website:
 
 ```html
-<div id="bm-event-item" data-id="evt-123" data-id-param="evt_id"></div>
+<div class="bm-event-item" data-id="evt-123" data-id-param="evt_id"></div>
 ```
 
 | Parameter     | Description                                                                                                                                                         |

@@ -7,6 +7,7 @@ const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
+const LockerService = require("../locker/locker-service");
 const ReceiptService = require("../receipt/receipt-service");
 
 const logger = bunyan.createLogger({
@@ -44,6 +45,7 @@ class BookingService {
       mail,
       phone,
       comment,
+      attachmentStatus,
     } = request.body;
 
     logger.info(
@@ -79,6 +81,7 @@ class BookingService {
         mail,
         phone,
         comment,
+        attachmentStatus,
         Number(request.body.priceEur),
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
@@ -99,6 +102,7 @@ class BookingService {
         mail,
         phone,
         comment,
+        attachmentStatus,
       );
     }
 
@@ -158,6 +162,13 @@ class BookingService {
         } catch (err) {
           logger.error(err);
         }
+
+        try {
+          const lockerServiceInstance = LockerService.getInstance();
+          await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
+        } catch (err) {
+          logger.error(err);
+        }
       }
 
       try {
@@ -173,6 +184,41 @@ class BookingService {
       logger.info(`${tenantId}, cid ${checkoutId} -- Simulated booking`);
     }
     return booking;
+  }
+
+  static async cancelBooking(tenantId, bookingId) {
+    try {
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+
+      const lockerServiceInstance = LockerService.getInstance();
+      await lockerServiceInstance.handleCancel(booking.tenant, booking.id);
+      await BookingManager.removeBooking(booking.id, booking.tenant);
+    } catch (error) {
+      throw new Error(`Error cancelling booking: ${error.message}`);
+    }
+  }
+
+  static async updateBooking(tenantId, updatedBooking) {
+    const oldBooking = await BookingManager.getBooking(
+      updatedBooking.id,
+      tenantId,
+    );
+
+    try {
+      await BookingManager.storeBooking(updatedBooking);
+      const lockerServiceInstance = LockerService.getInstance();
+      await lockerServiceInstance.handleUpdate(
+        updatedBooking.tenant,
+        oldBooking,
+        updatedBooking,
+      );
+    } catch (error) {
+      await BookingManager.storeBooking(oldBooking);
+      throw new Error(`Error updating booking: ${error.message}`);
+    }
   }
 }
 
