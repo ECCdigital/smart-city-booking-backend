@@ -25,6 +25,7 @@ passport.use(
         if (
           user !== undefined &&
           user.isVerified &&
+          user.authType === "local" &&
           user.verifyPassword(password)
         ) {
           done(null, user);

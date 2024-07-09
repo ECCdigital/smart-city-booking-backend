@@ -1,8 +1,7 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
-var { User, HookTypes } = require("../../../commons/entities/user");
+const SsoService = require("../../../commons/services/sso/sso-service");
+const { User, HookTypes } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
-const axios = require('axios');
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -38,90 +37,32 @@ class AuthenticationController {
       });
   }
 
-  static async checkUserRole(app, userId, jwtToken) {
-    try {
-      const token = jwtToken;
-      const roleUrl = `${app.serverUrl}/realms/${app.realm}/protocol/openid-connect/token/introspect`;
-
-
-      const roleResponse = await axios.get(roleUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      console.log(roleResponse.data);
-
-    } catch (error) {
-      if (error.response) {
-        // Server hat mit einem Statuscode geantwortet, der außerhalb des Bereichs von 2xx liegt
-        console.error('Response error:', error.response.data);
-      } else if (error.request) {
-        // Die Anfrage wurde gesendet, aber keine Antwort erhalten
-        console.error('Request error:', error.request);
-      } else {
-        // Ein Fehler ist aufgetreten, als die Anfrage eingerichtet wurde
-        console.error('Setup error:', error.message);
-      }
-      console.error('Error config:', error.config);
-    }
-  }
-
   static async ssoLogin(request, response, next) {
-    const {
-      body: { token },
-      params: { tenant },
-    } = request;
-
-    const app = await TenantManager.getTenantApp(tenant, "keycloak");
-
-    const url = `${app.serverUrl}/realms/${app.realm}/protocol/openid-connect/userinfo`;
-
-    const inrourl = `${app.serverUrl}/realms/${app.realm}/protocol/openid-connect/token/introspect`;
-
-    const clientSecret = "O83IjXzvPn68g1ozYMrMJpXPRWdoQ0N1"
-
-    console.log(token);
-
     try {
-      const kcResponse = await axios.get(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      console.log(kcResponse.data);
+      const {
+        body: { token },
+        params: { tenant },
+      } = request;
+      const user = await SsoService.handleLogin(tenant, token);
 
-      const introspectResponse = await axios.post(inrourl, `client_id=${app.clientIdApi}&client_secret=${clientSecret}&token=${token}`, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
-
-      console.log(introspectResponse.data);
-
-
-      const userAccess = introspectResponse.resource_access
-
-      const user = await UserManager.getUser(kcResponse.data.email, tenant);
-      if (!user) {
-        response.sendStatus(401);
-      } else {
-        user.permissions = await UserManager.getUserPermissions(
-          user.id,
-          user.tenant,
-        );
+      if (user) {
         request.login(user, { session: true }, async (err) => {
           if (err) {
             return next(err);
           }
-          request.session.save();
-          logger.info(`UserController - signin: User signed in: ${kcResponse.data.email}`);
-          return response.status(200).send(user);
+          request.session.save((err) => {
+            if (err) {
+              return next(err);
+            }
+            response.status(200).send(user);
+          });
         });
+      } else {
+        response.sendStatus(401);
       }
     } catch (error) {
+      response.status(error.status || 500).send(error.message);
       logger.error(error);
-      response.sendStatus(401);
     }
   }
 
@@ -160,6 +101,19 @@ class AuthenticationController {
       );
     } else {
       response.sendStatus(400);
+    }
+  }
+
+  static async ssoSignup(request, response) {
+    try {
+      const {
+        body: { token },
+        params: { tenant },
+      } = request;
+      await SsoService.handleSignup(tenant, token);
+      response.sendStatus(201);
+    } catch (error) {
+      response.status(error.status).send(error.message);
     }
   }
 

@@ -10,12 +10,14 @@ router.post("/signup", AuthenticationController.signup);
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);
 router.post("/resetpassword", AuthenticationController.resetPassword);
-router.post("/keycloak/callback", () => {
-  console.log("keycloak callback");
-});
 
-router.post("/signin", passport.authenticate("local-signin"), AuthenticationController.signin);
-router.post("/sso", AuthenticationController.ssoLogin);
+router.post(
+  "/signin",
+  passport.authenticate("local-signin"),
+  AuthenticationController.signin,
+);
+router.post("/sso/signin", AuthenticationController.ssoLogin);
+router.post("/sso/signup", AuthenticationController.ssoSignup);
 router.get(
   "/me",
   AuthenticationController.isSignedIn,

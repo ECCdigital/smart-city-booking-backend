@@ -33,6 +33,7 @@ class UserManager {
               user.isVerified,
               user.created,
               user.roles,
+              user.authType,
             );
             resolve(u);
           }
@@ -110,6 +111,9 @@ class UserManager {
   }
 
   static requestVerification(user) {
+    if (user.isVerified) {
+      return Promise.resolve();
+    }
     return new Promise((resolve, reject) => {
       var hook = user.addHook(HookTypes.VERIFY);
 

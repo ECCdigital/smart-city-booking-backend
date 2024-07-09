@@ -343,7 +343,7 @@ class TenantController {
         config = {
           realm: keycloakApp.realm,
           serverUrl: keycloakApp.serverUrl,
-          clientId: keycloakApp.clientIdApp,
+          clientId: keycloakApp.publicClient,
           active: keycloakApp.active,
         };
         response.status(200).send(config);

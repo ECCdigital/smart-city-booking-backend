@@ -7,11 +7,9 @@ const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const fileUpload = require("express-fileupload");
 const passport = require("passport");
-const LocalStrategy = require("passport-local");
 const bunyan = require("bunyan");
 
 const dbm = require("./commons/utilities/database-manager.js");
-const UserManager = require("./commons/data-managers/user-manager");
 
 const logger = bunyan.createLogger({
   name: "server.js",

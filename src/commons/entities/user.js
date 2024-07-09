@@ -21,6 +21,7 @@ class User {
     isVerified,
     created,
     roles,
+    authType,
   ) {
     this.id = id;
     this.secret = secret;
@@ -35,6 +36,7 @@ class User {
     this.isVerified = isVerified || false;
     this.created = created || Date.now();
     this.roles = roles || [];
+    this.authType = authType || "local";
   }
 
   verifyPassword(password) {

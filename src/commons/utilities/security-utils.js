@@ -15,6 +15,9 @@ class SecurityUtils {
   }
 
   static decrypt(text) {
+    if (text == null) {
+      return null;
+    }
     let iv = Buffer.from(text.iv, "hex");
     let encryptedText = Buffer.from(text.data, "hex");
     let decipher = crypto.createDecipheriv(
