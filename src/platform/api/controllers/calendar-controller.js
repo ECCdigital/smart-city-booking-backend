@@ -36,7 +36,6 @@ class CalendarController {
    * CalendarController.getOccupancies(req, res);
    */
   static async getOccupancies(request, response) {
-    console.log("getOccupancies");
     const tenant = request.params.tenant;
     const bookableIds = request.query.ids;
     let occupancies = [];
