@@ -243,6 +243,18 @@ class HtmlEngine {
         (event.eventOrganizer?.name || "") +
         "</p>";
       htmlOutput +=
+        '<p class="contact-name">' +
+        (event.eventOrganizer?.contactPersonName || "") +
+        "</p>";
+      htmlOutput +=
+        '<p class="contact-phone">' +
+        (event.eventOrganizer?.contactPersonPhoneNumber || "") +
+        "</p>";
+      htmlOutput +=
+        '<p class="contact-email">' +
+        (event.eventOrganizer?.contactPersonEmailAddress || "") +
+        "</p>";
+      htmlOutput +=
         '<p class="teaser-text">' +
         (event.information?.teaserText || "") +
         "</p>";
