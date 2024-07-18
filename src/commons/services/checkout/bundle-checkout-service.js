@@ -290,10 +290,10 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     email,
     phone,
     comment,
-    attachmentStatus,
     priceEur,
     isCommit,
     isPayed,
+    attachmentStatus,
     paymentMethod,
   ) {
     super(
