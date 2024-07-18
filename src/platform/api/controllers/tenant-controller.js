@@ -139,6 +139,7 @@ class TenantController {
           location: tenant.location,
           mail: tenant.mail,
           phone: tenant.phone,
+          defaultEventCreationMode: tenant.defaultEventCreationMode,
         }));
 
         logger.info(
