@@ -507,54 +507,53 @@ class BookingController {
       const tenant = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
-      if (id) {
-        const booking = await BookingManager.getBooking(id, tenant);
+      if (!id) {
+        return response.sendStatus(400);
+      }
 
+      const booking = await BookingManager.getBooking(id, tenant);
+
+      if (
+        await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
+      ) {
         if (
-          await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
+          booking.isPayed === true ||
+          !booking.priceEur ||
+          booking.priceEur === 0
         ) {
-          booking.isCommitted = true;
-          await BookingService.updateBooking(tenant, booking);
-          if (
-            booking.isPayed === true ||
-            !booking.priceEur ||
-            booking.priceEur === 0
-          ) {
-            await MailController.sendFreeBookingConfirmation(
-              booking.mail,
-              booking.id,
-              booking.tenant,
-            );
-            logger.info(
-              `${tenant} -- booking ${id} committed by user ${user?.id} and sent free booking confirmation to ${booking.mail} `,
-            );
-            response.sendStatus(200);
-          } else {
-            await MailController.sendPaymentRequest(
-              booking.mail,
-              booking.id,
-              booking.tenant,
-            );
-            logger.info(
-              `${tenant} -- booking ${id} committed by user ${user?.id} and sent payment request to ${booking.mail} `,
-            );
-            response.sendStatus(200);
-          }
-        } else {
-          logger.warn(
-            `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
+          await MailController.sendFreeBookingConfirmation(
+            booking.mail,
+            booking.id,
+            booking.tenant,
           );
-          response.sendStatus(403);
+          logger.info(
+            `${tenant} -- booking ${id} committed by user ${user?.id} and sent free booking confirmation to ${booking.mail}`,
+          );
+        } else {
+          await MailController.sendPaymentRequest(
+            booking.mail,
+            booking.id,
+            booking.tenant,
+          );
+          logger.info(
+            `${tenant} -- booking ${id} committed by user ${user?.id} and sent payment request to ${booking.mail}`,
+          );
         }
+
+        booking.isCommitted = true;
+        await BookingService.updateBooking(tenant, booking);
+        return response.sendStatus(200);
       } else {
         logger.warn(
-          `${tenant} -- could not commit booking. No booking ID provided`,
+          `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
         );
-        response.sendStatus(400);
+        return response.sendStatus(403);
       }
     } catch (err) {
       logger.error(err);
-      response.status(500).send("Could not commit booking");
+      if (!response.headersSent) {
+        response.status(500).send("Could not commit booking");
+      }
     }
   }
 
