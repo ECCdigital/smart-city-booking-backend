@@ -25,6 +25,7 @@ class BundleCheckoutService {
    * @param {string} phone - The phone number of the user.
    * @param {string} comment - The comment of the user.
    * @param {Array} attachmentStatus - The attachments of the user.
+   * @param {string} paymentMethod - The payment method.
    */
   constructor(
     user,
@@ -42,6 +43,7 @@ class BundleCheckoutService {
     phone,
     comment,
     attachmentStatus,
+    paymentMethod,
   ) {
     this.user = user;
     this.tenant = tenant;
@@ -58,6 +60,7 @@ class BundleCheckoutService {
     this.phone = phone;
     this.comment = comment;
     this.attachmentStatus = attachmentStatus;
+    this.paymentMethod = paymentMethod;
   }
 
   async generateBookingReference(
@@ -229,6 +232,7 @@ class BundleCheckoutService {
       priceEur: await this.userPriceEur(),
       isCommitted: await this.isAutoCommit(),
       isPayed: await this.isPaymentComplete(),
+      paymentMethod: this.paymentMethod,
       lockerInfo: await this.getLockerInfo(),
     };
 
@@ -269,6 +273,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {boolean} isCommit - The commit status.
    * @param {boolean} isPayed - The payment status.
    * @param {Array} attachmentStatus - The attachments of the user.
+   * @param {string} paymentMethod - The payment method.
    */
   constructor(
     user,
@@ -289,6 +294,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     priceEur,
     isCommit,
     isPayed,
+    paymentMethod,
   ) {
     super(
       user,
@@ -306,6 +312,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       phone,
       comment,
       attachmentStatus,
+      paymentMethod,
     );
     this.priceEur = priceEur;
     this.isCommitted = isCommit;
