@@ -5,8 +5,8 @@ const { RolePermission } = require("../../../commons/entities/role");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
+const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
-const ReceiptService = require("../../../commons/services/receipt/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -506,7 +506,6 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-
       const id = request.params.id;
       if (!id) {
         return response.sendStatus(400);

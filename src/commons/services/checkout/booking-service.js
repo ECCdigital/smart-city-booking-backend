@@ -7,8 +7,8 @@ const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
+const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
-const ReceiptService = require("../receipt/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -45,6 +45,8 @@ class BookingService {
       mail,
       phone,
       comment,
+      attachmentStatus,
+      paymentMethod,
     } = request.body;
 
     logger.info(
@@ -80,6 +82,8 @@ class BookingService {
         mail,
         phone,
         comment,
+        attachmentStatus,
+        paymentMethod,
         Number(request.body.priceEur),
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
@@ -100,6 +104,8 @@ class BookingService {
         mail,
         phone,
         comment,
+        attachmentStatus,
+        paymentMethod,
       );
     }
 
@@ -216,6 +222,7 @@ class BookingService {
       await BookingManager.storeBooking(oldBooking);
       throw new Error(`Error updating booking: ${error.message}`);
     }
+    return updatedBooking;
   }
 }
 
