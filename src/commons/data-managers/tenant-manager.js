@@ -125,7 +125,10 @@ class TenantManager {
       const tenant = await dbm.get().collection("tenants").findOne({
         id: tenantId,
       });
-      return tenant.applications;
+      const applications = tenant.applications;
+      return applications.map((app) => {
+        return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+      });
     } catch (err) {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
@@ -136,7 +139,8 @@ class TenantManager {
       const tenant = await dbm.get().collection("tenants").findOne({
         id: tenantId,
       });
-      return tenant.applications.find((app) => app.id === appId);
+      const application = tenant.applications.find((app) => app.id === appId);
+      return SecurityUtils.decryptObject(application, TENANT_ENCRYPT_KEYS);
     } catch (err) {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
@@ -147,7 +151,13 @@ class TenantManager {
       const tenant = await dbm.get().collection("tenants").findOne({
         id: tenantId,
       });
-      return tenant.applications.filter((app) => app.type === appType);
+
+      const applications = tenant.applications.filter(
+        (app) => app.type === appType,
+      );
+      return applications.map((app) => {
+        return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+      });
     } catch (err) {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
