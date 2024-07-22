@@ -51,14 +51,22 @@ class LockerService {
   static reservedLockers = [];
 
   /**
-   * Gets the available locker for the given bookableId, tenantId, timeBegin, timeEnd, and amount.
-   * It throws an error if the bookable resource is not found or if there are not enough lockers available.
+   * This asynchronous function is used to get available lockers for a specific booking.
+   * It first retrieves the bookable resource and checks if it exists. If not, it throws an error.
+   * Then it retrieves the locker applications for the tenant and checks if there are any active locker applications.
+   * If there are active locker applications and the bookable resource is active, it calculates the occupied units and possible units.
+   * It then filters the possible units to get the available units.
+   * If the number of available units is less than the requested amount, it throws an error.
+   * Otherwise, it reserves the lockers and returns the units.
+   *
+   * @async
    * @param {string} bookableId - The ID of the bookable resource.
    * @param {string} tenantId - The ID of the tenant.
    * @param {number} timeBegin - The start time for the locker reservation.
    * @param {number} timeEnd - The end time for the locker reservation.
    * @param {number} amount - The number of lockers to reserve.
    * @returns {Array} An array of locker units that have been reserved.
+   * @throws {Error} If the bookable resource is not found or if there are not enough lockers available.
    */
   async getAvailableLocker(bookableId, tenantId, timeBegin, timeEnd, amount) {
     try {
@@ -89,24 +97,41 @@ class LockerService {
         }
 
         const activeLockerAppIds = activeLockerApps.map((app) => app.id);
-        const availableUnits = possibleUnits.filter((unit) => {
-          const isOccupied = occupiedUnits.some(
+
+        const calculateRemainingAmount = (unit) => {
+          const occupiedUnitsWithSameId = occupiedUnits.filter(
             (occupiedUnit) =>
               occupiedUnit.id === unit.id &&
               occupiedUnit.lockerSystem === unit.lockerSystem,
           );
+          return Number(unit.amount) - occupiedUnitsWithSameId.length;
+        };
+
+        const availableUnits = possibleUnits.flatMap((unit) => {
+          const remainingAmount = calculateRemainingAmount(unit);
+          const isOccupied = remainingAmount <= 0;
           const isReserved = LockerService.isLockerReserved(
-            unit.tenantId,
+            tenantId,
             unit.id,
             unit.lockerSystem,
             timeBegin,
             timeEnd,
+            remainingAmount,
+            Number(unit.amount),
           );
-          return (
+
+          if (
             !isReserved &&
             !isOccupied &&
             activeLockerAppIds.includes(unit.lockerSystem)
-          );
+          ) {
+            return Array(remainingAmount).fill({
+              id: unit.id,
+              lockerSystem: unit.lockerSystem,
+            });
+          } else {
+            return [];
+          }
         });
 
         if (availableUnits.length < amount) {
@@ -114,10 +139,12 @@ class LockerService {
         }
 
         const units = availableUnits.slice(0, amount).map((unit) => ({
-          ...unit,
+          id: unit.id,
+          lockerSystem: unit.lockerSystem,
           bookableId,
           isConfirmed: false,
         }));
+
         units.forEach((unit) => {
           LockerService.reserveLocker(
             tenantId,
@@ -569,7 +596,7 @@ class LockerService {
    * The locker is added to the reservedLockers array.
    * @param {string} tenantId - The ID of the tenant.
    * @param bookableId
-   * @param {string} unitId - The ID of the locker unit.
+   * @param {string} id - The ID of the locker unit.
    * @param {string} lockerSystem - The locker system.
    * @param {number} startTime - The start time for the locker reservation.
    * @param {number} endTime - The end time for the locker reservation.
@@ -578,7 +605,7 @@ class LockerService {
   static reserveLocker(
     tenantId,
     bookableId,
-    unitId,
+    id,
     lockerSystem,
     startTime,
     endTime,
@@ -587,7 +614,7 @@ class LockerService {
     LockerService.reservedLockers.push({
       tenantId,
       bookableId,
-      unitId,
+      id,
       lockerSystem,
       startTime,
       endTime,
@@ -599,23 +626,17 @@ class LockerService {
    * Frees a reserved locker for the given tenantId, unitId, lockerSystem, startTime, and endTime.
    * The locker is removed from the reservedLockers array.
    * @param {string} tenantId - The ID of the tenant.
-   * @param {string} unitId - The ID of the locker unit.
+   * @param {string} id - The ID of the locker unit.
    * @param {string} lockerSystem - The locker system.
    * @param {number} startTime - The start time for the locker reservation.
    * @param {number} endTime - The end time for the locker reservation.
    */
-  static freeReservedLocker(
-    tenantId,
-    unitId,
-    lockerSystem,
-    startTime,
-    endTime,
-  ) {
+  static freeReservedLocker(tenantId, id, lockerSystem, startTime, endTime) {
     LockerService.reservedLockers = LockerService.reservedLockers.filter(
       (locker) => {
         return (
           locker.tenantId !== tenantId &&
-          locker.unitId !== unitId &&
+          locker.id !== id &&
           locker.lockerSystem !== lockerSystem &&
           locker.startTime !== startTime &&
           locker.endTime !== endTime
@@ -627,21 +648,36 @@ class LockerService {
   /**
    * Checks if a locker is reserved for the given tenantId, unitId, lockerSystem, timeBegin, and timeEnd.
    * @param {string} tenantId - The ID of the tenant.
-   * @param {string} unitId - The ID of the locker unit.
+   * @param {string} id - The ID of the locker unit.
    * @param {string} lockerSystem - The locker system.
    * @param {number} timeBegin - The start time for the locker reservation.
    * @param {number} timeEnd - The end time for the locker reservation.
+   * @param {number} requiredAmount - The number of possible lockers left.
+   * @param {number} unitAmount - The total number of lockers.
    * @returns {boolean} True if the locker is reserved, false otherwise.
    */
-  static isLockerReserved(tenantId, unitId, lockerSystem, timeBegin, timeEnd) {
-    return LockerService.reservedLockers.some(
+  static isLockerReserved(
+    tenantId,
+    id,
+    lockerSystem,
+    timeBegin,
+    timeEnd,
+    requiredAmount,
+    unitAmount,
+  ) {
+    const reservedLockers = LockerService.reservedLockers.filter(
       (locker) =>
         locker.tenantId === tenantId &&
-        locker.unitId === unitId &&
+        locker.id === id &&
         locker.lockerSystem === lockerSystem &&
         locker.startTime <= timeBegin &&
         locker.endTime >= timeEnd,
     );
+    if (reservedLockers.length > 0) {
+      return reservedLockers.length >= unitAmount - requiredAmount;
+    } else {
+      return false;
+    }
   }
 
   /**

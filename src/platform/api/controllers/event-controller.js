@@ -1,9 +1,9 @@
 const EventManager = require("../../../commons/data-managers/event-manager");
 const { Event } = require("../../../commons/entities/event");
-const { v4: uuidv4 } = require("uuid");
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
+const EventService = require("../../../commons/services/event-service");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -169,9 +169,14 @@ class EventController {
 
   static async createEvent(request, response) {
     try {
-      const tenant = request.params.tenant;
-      const user = request.user;
-      const event = Object.assign(new Event(), request.body);
+      const {
+        params: { tenant },
+        user,
+        body: event,
+        query: { withTickets = "false" },
+      } = request;
+
+      const withTicketsBoolean = withTickets === "true";
 
       if (
         (await EventManager.checkPublicEventCount(tenant)) === false &&
@@ -180,11 +185,9 @@ class EventController {
         throw new Error(`Maximum number of  public  events reached.`);
       }
 
-      event.id = uuidv4();
-      event.ownerUserId = user?.id;
-
       if (await EventPermissions._allowCreate(event, user.id, tenant)) {
-        await EventManager.storeEvent(event);
+        await EventService.createEvent(tenant, event, user, withTicketsBoolean);
+
         logger.info(
           `${tenant} -- created event ${event.id} by user ${user?.id}`,
         );
