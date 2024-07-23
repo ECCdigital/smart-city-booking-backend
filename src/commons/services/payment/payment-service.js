@@ -56,9 +56,9 @@ class GiroCockpitPaymentService extends PaymentService {
         paymentApp.paymentPurposeSuffix || ""
       }`;
 
-      const MERCHANT_ID = SecurityUtils.decrypt(paymentApp.paymentMerchantId);
-      const PROJECT_ID = SecurityUtils.decrypt(paymentApp.paymentProjectId);
-      const PROJECT_SECRET = SecurityUtils.decrypt(paymentApp.paymentSecret);
+      const MERCHANT_ID = paymentApp.paymentMerchantId;
+      const PROJECT_ID = paymentApp.paymentProjectId;
+      const PROJECT_SECRET = paymentApp.paymentSecret;
 
       const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?id=${this.bookingId}`;
       const successUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${merchantTxId}&tenant=${this.tenantId}&status=success&paymentMethod=${paymentApp.id}`;
