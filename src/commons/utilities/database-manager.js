@@ -43,6 +43,10 @@ class DatabaseManager {
     return db;
   }
 
+  static getClient() {
+    return dbClient;
+  }
+
   /**
    * Close the current database connection.
    */
