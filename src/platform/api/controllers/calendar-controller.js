@@ -356,6 +356,92 @@ class CalendarController {
       response.status(500).send({ error: "Internal server error" });
     }
   }
+
+  static getTimePeriodsPerHour(startDate, endDate, interval = 60000 * 60) {
+    var timePeriodsArray = [];
+    var currentDateTime = new Date(startDate);
+
+    while (currentDateTime <= endDate) {
+      var nextDateTime = new Date(currentDateTime.getTime() + interval);
+      timePeriodsArray.push({ timeBegin: currentDateTime.getTime(), timeEnd: nextDateTime.getTime(), available: false });
+      currentDateTime = nextDateTime;
+    }
+
+    return timePeriodsArray;
+  }
+  
+  static async getBookableAvailabilityFixed(request, response) {
+    const {
+      params: { tenant, id: bookableId },
+      user,
+      query: { amount = 1, startDate: startDateQuery, endDate: endDateQuery },
+    } = request;
+
+    if (!tenant || !bookableId) {
+      return response
+          .status(400)
+          .send({ error: "Tenant ID and bookable ID are required." });
+    }
+
+    const startDate = startDateQuery ? new Date(startDateQuery) : new Date();
+    const endDate = endDateQuery
+        ? new Date(endDateQuery)
+        : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
+
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    const periods = CalendarController.getTimePeriodsPerHour(startDate, endDate);
+    for (const p of periods) {
+      const itemCheckoutService = new ItemCheckoutService(
+            user,
+            tenant,
+            new Date(p.timeBegin),
+            new Date(p.timeEnd),
+            bookableId,
+            Number(amount),
+            null,
+        );
+
+      try {
+        await itemCheckoutService.checkAll();
+        p.available = true;
+      }
+      catch (error) {
+        p.available = false;
+      }
+    };
+
+    periods.sort((a, b) => a.timeBegin - b.timeBegin);
+
+    let combinedPeriods = [];
+    let currentPeriod = periods[0];
+
+    for (let i = 1; i < periods.length; i++) {
+      if (periods[i].available === currentPeriod.available) {
+        currentPeriod.timeEnd = periods[i].timeEnd;
+      } else {
+        combinedPeriods.push(currentPeriod);
+        currentPeriod = periods[i];
+      }
+    }
+
+    console.log(combinedPeriods.filter(p => p.available === true).map(
+        p => {
+            return {
+              timeBegin: p.timeBegin,
+              timeEnd: p.timeEnd,
+                timeBeginDt: new Date(p.timeBegin).toISOString(),
+                timeEndDt: new Date(p.timeEnd).toISOString()
+            };
+
+        }
+    ));
+
+    combinedPeriods.push(currentPeriod);
+
+    response.status(200).send(combinedPeriods);
+  }
 }
 
 module.exports = CalendarController;
