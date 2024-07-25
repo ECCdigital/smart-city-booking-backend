@@ -117,7 +117,7 @@ class GiroCockpitPaymentService extends PaymentService {
     const {
       query: {
         gcMerchantTxId,
-        gcResultPayment: paymentResult,
+        gcResultPayment,
         gcPaymethod,
         gcType,
         gcProjectId,
@@ -126,7 +126,6 @@ class GiroCockpitPaymentService extends PaymentService {
         gcAmount,
         gcCurrency,
         gcHash,
-        gcPaymentMethod: payMethod,
       },
     } = args;
 
@@ -143,7 +142,7 @@ class GiroCockpitPaymentService extends PaymentService {
         this.tenantId,
       );
       const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
-      const PROJECT_SECRET = SecurityUtils.decrypt(paymentApp.paymentSecret);
+      const PROJECT_SECRET = paymentApp.paymentSecret;
 
       const hashString =
         gcPaymethod +
@@ -154,7 +153,7 @@ class GiroCockpitPaymentService extends PaymentService {
         gcBackendTxId +
         gcAmount +
         gcCurrency +
-        paymentResult;
+        gcResultPayment;
 
       const hash = crypto
         .createHmac("md5", PROJECT_SECRET)
@@ -168,12 +167,12 @@ class GiroCockpitPaymentService extends PaymentService {
         throw new Error("Hash mismatch");
       }
 
-      if (paymentResult === "4000") {
+      if (gcResultPayment === "4000") {
         logger.info(
           `${this.tenantId} -- GiroCockpit responds with status 4000 / successfully payed for booking ${this.bookingId} .`,
         );
         booking.isPayed = true;
-        booking.payMethod = payMethod;
+        booking.payMethod = gcPaymethod;
         await BookingManager.setBookingPayedStatus(booking);
 
         if (booking.isCommitted && booking.isPayed) {
