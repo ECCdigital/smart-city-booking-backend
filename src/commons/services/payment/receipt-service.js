@@ -27,9 +27,9 @@ class ReceiptService {
           Math.max(...existingReceipts.map((receipt) => receipt.revision)) + 1;
         receiptId =
           existingReceipts[0].receiptId ||
-          (await IdGenerator.next(tenantId, 4));
+          (await IdGenerator.next(tenantId, 4, "receipt"));
       } else {
-        receiptId = await IdGenerator.next(tenantId, 4);
+        receiptId = await IdGenerator.next(tenantId, 4, "receipt");
       }
 
       const receiptNumber = `${tenant.receiptNumberPrefix}-${receiptId}-${revision}`;
@@ -50,7 +50,7 @@ class ReceiptService {
 
       booking.attachments.push({
         type: "receipt",
-        name: pdfData.name,
+        title: pdfData.name,
         receiptId: receiptId,
         revision: revision,
         timeCreated: Date.now(),

@@ -51,7 +51,10 @@ app.use((req, res, next) => {
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: process.env.DB_URL }),
+    store: MongoStore.create({
+      client: dbm.getClient(),
+      dbName: process.env.DB_NAME,
+    }),
     cookie: {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 48,
@@ -62,8 +65,8 @@ app.use((req, res, next) => {
   sessionMid(req, res, next);
 });
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json({ extended: true }));
+app.use(express.urlencoded({ limit: "1mb", extended: true }));
+app.use(express.json({ limit: "1mb" }));
 
 passport.use(
   new LocalStrategy(

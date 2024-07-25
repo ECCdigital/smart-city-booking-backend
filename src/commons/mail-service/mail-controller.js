@@ -3,6 +3,13 @@ const BookingManager = require("../data-managers/booking-manager");
 const BookableManager = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
+const bunyan = require("bunyan");
+const PaymentUtils = require("../utilities/payment-utils");
+
+const logger = bunyan.createLogger({
+  name: "checkout-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class MailController {
   static formatDateTime(value) {
@@ -192,7 +199,38 @@ class MailController {
     );
   }
 
-  static async sendPaymentRequest(address, bookingId, tenantId) {
+  static async sendInvoice(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+    let content = `<p> Vielen Dank für Ihre Buchung bei ${tenant.name}. Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto. </p><br>`;
+    content += await this.generateBookingDetails(bookingId, tenantId);
+
+    const subject = `Rechnung zu Ihrer Buchung bei ${tenant.name}`;
+    const model = {
+      title: `Rechnung zu Ihrer Buchung bei ${tenant.name}`,
+      content: content,
+    };
+    const template = tenant.genericMailTemplate;
+
+    await MailerService.send(
+      tenantId,
+      address,
+      subject,
+      template,
+      model,
+      attachments,
+    );
+  }
+
+  static async sendPaymentLinkAfterBookingApproval(
+    address,
+    bookingId,
+    tenantId,
+  ) {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte nutzen Sie den folgenden Link, um Ihre Buchung abzuschließen.</p><br>`;
 
@@ -211,6 +249,60 @@ class MailController {
         content: content,
       },
     );
+  }
+
+  static async sendInvoiceAfterBookingApproval(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+    let content = `<p> Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto. </p><br>`;
+    content += await this.generateBookingDetails(bookingId, tenantId);
+
+    const subject = `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`;
+    const model = {
+      title: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
+      content: content,
+    };
+    const template = tenant.genericMailTemplate;
+
+    await MailerService.send(
+      tenantId,
+      address,
+      subject,
+      template,
+      model,
+      attachments,
+    );
+  }
+
+  static async sendPaymentRequest(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
+    try {
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+
+      const paymentService = await PaymentUtils.getPaymentService(
+        tenantId,
+        bookingId,
+        booking.paymentMethod,
+        attachments,
+      );
+
+      await paymentService.paymentRequest();
+    } catch (error) {
+      logger.error(error);
+      throw error;
+    }
   }
 
   static async sendIncomingBooking(address, bookingId, tenantId) {

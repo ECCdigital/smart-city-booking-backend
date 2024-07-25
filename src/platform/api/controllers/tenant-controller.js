@@ -139,6 +139,7 @@ class TenantController {
           location: tenant.location,
           mail: tenant.mail,
           phone: tenant.phone,
+          defaultEventCreationMode: tenant.defaultEventCreationMode,
         }));
 
         logger.info(
@@ -311,6 +312,34 @@ class TenantController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not remove tenant");
+    }
+  }
+
+  static async getActivePaymentApps(request, response) {
+    try {
+      const {
+        params: { id: tenantId },
+        user,
+      } = request;
+
+      const paymentApps = await TenantManager.getTenantAppByType(
+        tenantId,
+        "payment",
+      );
+      const filteredPaymentApps = paymentApps
+        .filter((app) => app.active)
+        .map((app) => ({
+          id: app.id,
+          title: app.title,
+        }));
+
+      logger.info(
+        `${tenantId} -- sending ${paymentApps.length} payment apps to user ${user?.id}`,
+      );
+      response.status(200).send(filteredPaymentApps);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not get payment apps");
     }
   }
   static async countCheck(request, response) {
