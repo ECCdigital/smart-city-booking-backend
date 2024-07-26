@@ -17,7 +17,7 @@ async function migrate() {
             return {
               ...rest,
               caption: contentTitle || "",
-              title: "",
+              title: "Download",
             };
           })
         : [];
