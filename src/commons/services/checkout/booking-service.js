@@ -82,11 +82,11 @@ class BookingService {
         mail,
         phone,
         comment,
-        attachmentStatus,
-        paymentMethod,
         Number(request.body.priceEur),
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
+        attachmentStatus,
+        paymentMethod,
       );
     } else {
       bundleCheckoutService = new BundleCheckoutService(
