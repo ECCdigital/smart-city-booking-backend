@@ -1,4 +1,5 @@
 const { Bookable } = require("../entities/bookable");
+const { isRangeOverlap } = require("range-overlap");
 const {
   getBookable,
   getParentBookables,
@@ -53,9 +54,11 @@ class OpeningHoursManager {
           );
           ohEnd.setHours(oh.endTime.split(":")[0], oh.endTime.split(":")[1]);
 
-          if (bookingStart < ohStart || bookingEnd > ohEnd) {
-            return true;
+          if (isRangeOverlap(bookingStart, bookingEnd, ohStart, ohEnd, true) && bookingStart >= ohStart && bookingEnd <= ohEnd) {
+            // Booking is within opening hours, so no conflict
+            return false;
           }
+
         }
       }
     }
@@ -119,7 +122,8 @@ class OpeningHoursManager {
       }
       return false;
     }
-    return false;
+
+    return true;
   }
   static async getRelatedOpeningHours(bookableId, tenant) {
     let bookable = await getBookable(bookableId, tenant);
