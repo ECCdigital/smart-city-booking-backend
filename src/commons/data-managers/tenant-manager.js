@@ -189,23 +189,27 @@ class TenantManager {
       const tenant = await dbm.get().collection("tenants").findOne({
         id: tenantId,
       });
-      const application = tenant.applications.filter(
+      const applications = tenant.applications.filter(
         (app) => app.type === appType,
       );
-      if (!application) {
+      if (!applications) {
         throw new Error(`No application found with type: ${appType}`);
       }
-      if (application.id === APP_IDS.KEYCLOAK) {
-        const app = Object.assign(new KeycloakApplication(), application);
-        app.decryptSecret();
-        return app;
-      } else {
-        return SecurityUtils.decryptObject(application, TENANT_ENCRYPT_KEYS);
-      }
+
+      return applications.map((app) => {
+        if (app.id === APP_IDS.KEYCLOAK) {
+          const application = Object.assign(new KeycloakApplication(), app);
+          application.decryptSecret();
+          return application;
+        } else {
+          return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+        }
+      });
     } catch (err) {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
   }
+
   static async checkTenantCount() {
     const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
     const count = await dbm.get().collection("tenants").countDocuments({});
