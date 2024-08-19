@@ -54,11 +54,14 @@ class OpeningHoursManager {
           );
           ohEnd.setHours(oh.endTime.split(":")[0], oh.endTime.split(":")[1]);
 
-          if (isRangeOverlap(bookingStart, bookingEnd, ohStart, ohEnd, true) && bookingStart >= ohStart && bookingEnd <= ohEnd) {
+          if (
+            isRangeOverlap(bookingStart, bookingEnd, ohStart, ohEnd, true) &&
+            bookingStart >= ohStart &&
+            bookingEnd <= ohEnd
+          ) {
             // Booking is within opening hours, so no conflict
             return false;
           }
-
         }
       }
     }
