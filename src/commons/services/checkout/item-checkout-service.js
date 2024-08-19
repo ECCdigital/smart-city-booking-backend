@@ -348,6 +348,10 @@ class ItemCheckoutService {
     const bookable = await this.getBookable();
     const hours = this.getBookingDuration() / 60;
 
+    if (!bookable.isScheduleRelated) {
+      return true;
+    }
+
     if (bookable.minBookingDuration && hours < bookable.minBookingDuration) {
       throw new Error(
         `Die Buchungsdauer für das Objekt muss mindestens ${bookable.minBookingDuration} Stunden betragen.`,
