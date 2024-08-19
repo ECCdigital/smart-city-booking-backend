@@ -363,13 +363,17 @@ class CalendarController {
 
     while (currentDateTime <= endDate) {
       var nextDateTime = new Date(currentDateTime.getTime() + interval);
-      timePeriodsArray.push({ timeBegin: currentDateTime.getTime(), timeEnd: nextDateTime.getTime(), available: false });
+      timePeriodsArray.push({
+        timeBegin: currentDateTime.getTime(),
+        timeEnd: nextDateTime.getTime(),
+        available: false,
+      });
       currentDateTime = nextDateTime;
     }
 
     return timePeriodsArray;
   }
-  
+
   static async getBookableAvailabilityFixed(request, response) {
     const {
       params: { tenant, id: bookableId },
@@ -379,29 +383,32 @@ class CalendarController {
 
     if (!tenant || !bookableId) {
       return response
-          .status(400)
-          .send({ error: "Tenant ID and bookable ID are required." });
+        .status(400)
+        .send({ error: "Tenant ID and bookable ID are required." });
     }
 
     const startDate = startDateQuery ? new Date(startDateQuery) : new Date();
     const endDate = endDateQuery
-        ? new Date(endDateQuery)
-        : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
+      ? new Date(endDateQuery)
+      : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
 
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
 
-    const periods = CalendarController.getTimePeriodsPerHour(startDate, endDate);
+    const periods = CalendarController.getTimePeriodsPerHour(
+      startDate,
+      endDate,
+    );
     for (const p of periods) {
       const itemCheckoutService = new ItemCheckoutService(
-            user,
-            tenant,
-            new Date(p.timeBegin),
-            new Date(p.timeEnd),
-            bookableId,
-            Number(amount),
-            null,
-        );
+        user,
+        tenant,
+        new Date(p.timeBegin),
+        new Date(p.timeEnd),
+        bookableId,
+        Number(amount),
+        null,
+      );
 
       try {
         // in order to check calendar availability, we generally need to perform all checks of the checkout service.
@@ -414,11 +421,10 @@ class CalendarController {
         await itemCheckoutService.checkChildBookings();
         await itemCheckoutService.checkMaxBookingDate();
         p.available = true;
-      }
-      catch (error) {
+      } catch (error) {
         p.available = false;
       }
-    };
+    }
 
     periods.sort((a, b) => a.timeBegin - b.timeBegin);
 
@@ -434,17 +440,18 @@ class CalendarController {
       }
     }
 
-    console.log(combinedPeriods.filter(p => p.available === true).map(
-        p => {
-            return {
-              timeBegin: p.timeBegin,
-              timeEnd: p.timeEnd,
-                timeBeginDt: new Date(p.timeBegin).toISOString(),
-                timeEndDt: new Date(p.timeEnd).toISOString()
-            };
-
-        }
-    ));
+    console.log(
+      combinedPeriods
+        .filter((p) => p.available === true)
+        .map((p) => {
+          return {
+            timeBegin: p.timeBegin,
+            timeEnd: p.timeEnd,
+            timeBeginDt: new Date(p.timeBegin).toISOString(),
+            timeEndDt: new Date(p.timeEnd).toISOString(),
+          };
+        }),
+    );
 
     combinedPeriods.push(currentPeriod);
 
