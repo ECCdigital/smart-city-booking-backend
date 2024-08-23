@@ -442,18 +442,6 @@ class CalendarController {
       }
     }
 
-    console.log(combinedPeriods.filter(p => p.available === true).map(
-        p => {
-            return {
-              timeBegin: p.timeBegin,
-              timeEnd: p.timeEnd,
-                timeBeginDt: new Date(p.timeBegin).toISOString(),
-                timeEndDt: new Date(p.timeEnd).toISOString()
-            };
-
-        }
-    ));
-
     combinedPeriods.push(currentPeriod);
 
     response.status(200).send(combinedPeriods);
