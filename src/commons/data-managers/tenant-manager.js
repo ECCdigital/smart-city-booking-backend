@@ -129,7 +129,7 @@ class TenantManager {
       return applications.map((app) => {
         return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
       });
-    } catch (err) {
+    } catch {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
   }
@@ -141,7 +141,7 @@ class TenantManager {
       });
       const application = tenant.applications.find((app) => app.id === appId);
       return SecurityUtils.decryptObject(application, TENANT_ENCRYPT_KEYS);
-    } catch (err) {
+    } catch {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
   }
@@ -158,7 +158,7 @@ class TenantManager {
       return applications.map((app) => {
         return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
       });
-    } catch (err) {
+    } catch {
       throw new Error(`No tenant found with ID: ${tenantId}`);
     }
   }

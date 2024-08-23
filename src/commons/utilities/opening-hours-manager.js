@@ -19,7 +19,10 @@ class OpeningHoursManager {
    * @returns {Promise<boolean>}
    */
   static async hasOpeningHoursConflict(bookable, timeBegin, timeEnd) {
-    if(!bookable.isOpeningHoursRelated && !bookable.isSpecialOpeningHoursRelated) {
+    if (
+      !bookable.isOpeningHoursRelated &&
+      !bookable.isSpecialOpeningHoursRelated
+    ) {
       return false;
     }
 
@@ -51,8 +54,8 @@ class OpeningHoursManager {
           const bookingStart = new Date(timeBegin);
           const bookingEnd = new Date(timeEnd);
 
-          let ohStart
-          let ohEnd
+          let ohStart;
+          let ohEnd;
 
           if (oh.weekdays.includes(new Date(timeBegin).getDay())) {
             ohStart = new Date(timeBegin);
@@ -62,19 +65,20 @@ class OpeningHoursManager {
             ohEnd = new Date(timeEnd);
           }
 
-
-
           ohStart.setHours(
             oh.startTime.split(":")[0],
             oh.startTime.split(":")[1],
           );
           ohEnd.setHours(oh.endTime.split(":")[0], oh.endTime.split(":")[1]);
 
-          if (isRangeOverlap(bookingStart, bookingEnd, ohStart, ohEnd, true) && bookingStart >= ohStart && bookingEnd <= ohEnd) {
+          if (
+            isRangeOverlap(bookingStart, bookingEnd, ohStart, ohEnd, true) &&
+            bookingStart >= ohStart &&
+            bookingEnd <= ohEnd
+          ) {
             // Booking is within opening hours, so no conflict
             return false;
           }
-
         }
       }
     }
