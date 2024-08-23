@@ -57,7 +57,7 @@ class PaymentController {
         `${tenantId} -- booking ${bookingId} successfully payed and updated.`,
       );
       response.sendStatus(200);
-    } catch (error) {
+    } catch {
       logger.warn(
         `${tenantId} -- could not get payment result for booking ${bookingId}.`,
       );
