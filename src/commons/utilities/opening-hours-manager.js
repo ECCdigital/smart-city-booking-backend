@@ -142,7 +142,7 @@ class OpeningHoursManager {
       }
       return false;
     }
-    return false;
+    return true;
   }
   static async getRelatedOpeningHours(bookableId, tenant) {
     let bookable = await getBookable(bookableId, tenant);
