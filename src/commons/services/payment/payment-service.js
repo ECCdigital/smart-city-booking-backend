@@ -4,7 +4,6 @@ const bunyan = require("bunyan");
 const axios = require("axios");
 const qs = require("qs");
 const crypto = require("crypto");
-const SecurityUtils = require("../../utilities/security-utils");
 const BookingManager = require("../../data-managers/booking-manager");
 const ReceiptService = require("./receipt-service");
 const TenantManager = require("../../data-managers/tenant-manager");

@@ -19,6 +19,13 @@ class OpeningHoursManager {
    * @returns {Promise<boolean>}
    */
   static async hasOpeningHoursConflict(bookable, timeBegin, timeEnd) {
+    if (
+      !bookable.isOpeningHoursRelated &&
+      !bookable.isSpecialOpeningHoursRelated
+    ) {
+      return false;
+    }
+
     if (bookable.isOpeningHoursRelated) {
       const openingHours = bookable.openingHours;
       const bookingStartDay = new Date(timeBegin).getDay();
@@ -46,8 +53,18 @@ class OpeningHoursManager {
         for (let oh of dayOpeningHours) {
           const bookingStart = new Date(timeBegin);
           const bookingEnd = new Date(timeEnd);
-          const ohStart = new Date(timeBegin);
-          const ohEnd = new Date(timeEnd);
+
+          let ohStart;
+          let ohEnd;
+
+          if (oh.weekdays.includes(new Date(timeBegin).getDay())) {
+            ohStart = new Date(timeBegin);
+            ohEnd = new Date(timeBegin);
+          } else {
+            ohStart = new Date(timeEnd);
+            ohEnd = new Date(timeEnd);
+          }
+
           ohStart.setHours(
             oh.startTime.split(":")[0],
             oh.startTime.split(":")[1],
