@@ -119,6 +119,10 @@ class MailController {
                 </div>`;
       }
 
+      if (bookable.bookingNotes.length > 0) {
+        content += `${bookable.bookingNotes}`;
+      }
+
       content += `</div>`;
     }
 
