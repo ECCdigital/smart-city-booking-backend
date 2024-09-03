@@ -193,7 +193,15 @@ class CalendarController {
         );
 
         try {
-          await ics.checkAll();
+          // in order to check calendar availability, we generally need to perform all checks of the checkout service.
+          // EXCEPTION: we do not need to check minimum / maximum durations when checking fixed time periods
+          await ics.checkPermissions();
+          await ics.checkOpeningHours();
+          await ics.checkAvailability();
+          await ics.checkEventSeats();
+          await ics.checkParentAvailability();
+          await ics.checkChildBookings();
+          await ics.checkMaxBookingDate();
         } catch {
           /**
            * Checks the availability of a bookable item within a given time range.
@@ -421,7 +429,7 @@ class CalendarController {
         await itemCheckoutService.checkChildBookings();
         await itemCheckoutService.checkMaxBookingDate();
         p.available = true;
-      } catch (error) {
+      } catch {
         p.available = false;
       }
     }
@@ -439,19 +447,6 @@ class CalendarController {
         currentPeriod = periods[i];
       }
     }
-
-    console.log(
-      combinedPeriods
-        .filter((p) => p.available === true)
-        .map((p) => {
-          return {
-            timeBegin: p.timeBegin,
-            timeEnd: p.timeEnd,
-            timeBeginDt: new Date(p.timeBegin).toISOString(),
-            timeEndDt: new Date(p.timeEnd).toISOString(),
-          };
-        }),
-    );
 
     combinedPeriods.push(currentPeriod);
 
