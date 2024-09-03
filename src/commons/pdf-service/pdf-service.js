@@ -99,6 +99,9 @@ class PdfService {
           (b) => b.id === bookableItem.bookableId,
         );
         bookedItems += `<div>${bookable.title}, Anzahl: ${bookableItem.amount}</div>`;
+        if (bookable.bookingNotes.length > 0) {
+          bookedItems += `<div>${bookable.bookingNotes}</div>`;
+        }
       }
 
       if (booking._couponUsed) {
@@ -197,6 +200,9 @@ class PdfService {
           (b) => b.id === bookableItem.bookableId,
         );
         bookedItems += `<div>${bookable.title}, Anzahl: ${bookableItem.amount}</div>`;
+        if (bookable.bookingNotes.length > 0) {
+          bookedItems += `<div>${bookable.bookingNotes}</div>`;
+        }
       }
 
       if (booking._couponUsed) {
