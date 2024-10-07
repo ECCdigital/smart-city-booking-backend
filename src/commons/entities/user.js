@@ -13,6 +13,7 @@ class User {
     tenant,
     firstName,
     lastName,
+    company,
     phone,
     address,
     zipCode,
@@ -27,6 +28,7 @@ class User {
     this.tenant = tenant;
     this.firstName = firstName;
     this.lastName = lastName;
+    this.company = company;
     this.phone = phone;
     this.address = address;
     this.zipCode = zipCode;
@@ -90,6 +92,7 @@ class User {
       id: this.id,
       firstName: this.firstName,
       lastName: this.lastName,
+      company: this.company,
       phone: this.phone,
       address: this.address,
       zipCode: this.zipCode,
