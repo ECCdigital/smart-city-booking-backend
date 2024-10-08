@@ -281,7 +281,8 @@ class UserController {
               userFromDb.city = request.body.city;
               UserManager.updateUser(userFromDb)
                 .then(() => {
-                  request.session.passport.user.firstName = userFromDb.firstName;
+                  request.session.passport.user.firstName =
+                    userFromDb.firstName;
                   request.session.passport.user.lastName = userFromDb.lastName;
                   request.session.passport.user.company = userFromDb.company;
                   request.session.passport.user.phone = userFromDb.phone;
