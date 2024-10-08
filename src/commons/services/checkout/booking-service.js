@@ -9,6 +9,8 @@ const {
 } = require("./bundle-checkout-service");
 const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
+const EventManager = require("../../data-managers/event-manager");
+const { isEmail } = require('validator');
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -175,6 +177,13 @@ class BookingService {
       }
 
       try {
+        const isTicketBooking = bookableItems.some(isTicket);
+
+        if (isTicketBooking) {
+          const eventIds = bookableItems.map(getEventForTicket);
+          await sendEmailToOrganizer(eventIds, tenantId, booking);
+        }
+
         await MailController.sendIncomingBooking(
           tenant.mail,
           booking.id,
@@ -227,3 +236,53 @@ class BookingService {
 }
 
 module.exports = BookingService;
+
+
+function isTicket(bookableItem) {
+  if (!bookableItem?._bookableUsed) {
+    return false;
+  }
+  return bookableItem._bookableUsed.type === "ticket";
+}
+
+function getEventForTicket(bookableItem) {
+  return bookableItem._bookableUsed.eventId || null;
+}
+
+async function sendEmailToOrganizer(eventIds, tenantId, booking) {
+  try {
+    const uniqueEventIds = [...new Set(eventIds)];
+
+    const events = await Promise.all(
+      uniqueEventIds.map(eventId => EventManager.getEvent(eventId, tenantId))
+    );
+
+    const organizerMails = events
+      .map(event => event.eventOrganizer?.contactPersonEmailAddress)
+      .filter(email => isEmail(email));
+    const uniqueOrganizerMails = [...new Set(organizerMails)];
+
+    if (uniqueOrganizerMails.length === 0) {
+      logger.warn(`Keine gültigen Veranstalter-E-Mail-Adressen gefunden für Buchung ${booking.id}`);
+      return;
+    }
+
+    const emailPromises = uniqueOrganizerMails.map(async (organizerMail) => {
+      try {
+        await MailController.sendIncomingBooking(
+          organizerMail,
+          booking.id,
+          booking.tenant,
+        );
+        logger.info(`E-Mail erfolgreich an Veranstalter ${organizerMail} für Buchung ${booking.id} gesendet.`);
+      } catch (err) {
+        logger.error(`Fehler beim Senden der E-Mail an ${organizerMail} für Buchung ${booking.id}: ${err.message}`);
+      }
+    });
+
+    await Promise.all(emailPromises);
+
+  } catch (err) {
+    logger.error(`Fehler beim Abrufen von Veranstaltungen oder Senden von E-Mails: ${err.message}`);
+  }
+}
