@@ -705,7 +705,7 @@ class LockerService {
    * @returns {Array} An array of locker units that have been assigned.
    */
   static assignedLocker(booking) {
-    return booking.lockerInfo;
+    return booking.lockerInfo || [];
   }
 }
 
