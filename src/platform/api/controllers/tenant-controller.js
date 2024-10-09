@@ -180,7 +180,6 @@ class TenantController {
             mail: tenant.mail,
             phone: tenant.phone,
             website: tenant.website,
-            applications: tenant.applications,
           });
         }
       } else {
