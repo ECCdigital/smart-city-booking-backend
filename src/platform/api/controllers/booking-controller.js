@@ -516,32 +516,10 @@ class BookingController {
       if (
         await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
       ) {
-        if (
-          booking.isPayed === true ||
-          !booking.priceEur ||
-          booking.priceEur === 0
-        ) {
-          await MailController.sendFreeBookingConfirmation(
-            booking.mail,
-            booking.id,
-            booking.tenant,
-          );
-          logger.info(
-            `${tenant} -- booking ${id} committed by user ${user?.id} and sent free booking confirmation to ${booking.mail}`,
-          );
-        } else {
-          await MailController.sendPaymentRequest(
-            booking.mail,
-            booking.id,
-            booking.tenant,
-          );
-          logger.info(
-            `${tenant} -- booking ${id} committed by user ${user?.id} and sent payment request to ${booking.mail}`,
-          );
-        }
-
-        booking.isCommitted = true;
-        await BookingService.updateBooking(tenant, booking);
+        logger.info(
+          `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
+        );
+        await BookingService.commitBooking(tenant, booking);
         return response.sendStatus(200);
       } else {
         logger.warn(

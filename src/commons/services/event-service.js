@@ -21,7 +21,9 @@ class EventService {
         type: "ticket",
         title: event.information.name,
         description: event.information.teaserText,
-        amount: Number(event.attendees.maxAttendees),
+        isBookable: true,
+        isPublic: true,
+        autoCommitBooking: true,
       });
       await BookableManager.storeBookable(ticket);
     }

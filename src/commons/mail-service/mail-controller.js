@@ -5,6 +5,7 @@ const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../utilities/payment-utils");
+const UserManager = require("../data-managers/user-manager");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -325,6 +326,22 @@ class MailController {
     );
   }
 
+  static async sendNewBooking(address, bookingId, tenantId) {
+    const tenant = await TenantManager.getTenant(tenantId);
+    let content = `<p>Es liegt eine neue Buchung vor.</p><br>`;
+    content += await MailController.generateBookingDetails(bookingId, tenantId);
+    await MailerService.send(
+      tenantId,
+      address,
+      "Eine neue Buchung liegt vor",
+      tenant.genericMailTemplate,
+      {
+        title: "Eine neue Buchung liegt vor",
+        content: content,
+      },
+    );
+  }
+
   static async sendVerificationRequest(address, hookId, tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}">${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}</a>`;
@@ -352,6 +369,31 @@ class MailController {
       tenant.genericMailTemplate,
       {
         title: "Bestätigen Sie die Änderung Ihres Passworts",
+        content: content,
+      },
+    );
+  }
+
+  static async sendUserCreated(address, tenantId, userId) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    const user = await UserManager.getUser(userId, tenant.id);
+
+    let content = `<p>Ein neuer Benutzer wurde erstellt.</p><br>`;
+    content += `<p>Vorname: ${user.firstName}</p>`;
+    content += `<p>Nachname: ${user.lastName}</p>`;
+    content += `<p>E-Mail: ${user.id}</p>`;
+    content += `<p>Mandant: ${user.tenant}</p>`;
+    content += `<br>`;
+    content += `<p> Registrierungsdatum: ${MailController.formatDateTime(user.created)}</p>`;
+
+    await MailerService.send(
+      tenantId,
+      address,
+      "Ein neuer Benutzer wurde erstellt",
+      tenant.genericMailTemplate,
+      {
+        title: "Ein neuer Benutzer wurde erstellt",
         content: content,
       },
     );

@@ -1,6 +1,5 @@
 const { User, HookTypes } = require("../entities/user");
 var dbm = require("../utilities/database-manager");
-const MailController = require("../mail-service/mail-controller");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -113,6 +112,8 @@ class UserManager {
     return new Promise((resolve, reject) => {
       var hook = user.addHook(HookTypes.VERIFY);
 
+      const MailController = require("../mail-service/mail-controller");
+
       UserManager.updateUser(user)
         .then(() => {
           MailController.sendVerificationRequest(user.id, hook.id, user.tenant)
@@ -128,6 +129,8 @@ class UserManager {
   static resetPassword(user, password) {
     return new Promise((resolve, reject) => {
       const hook = user.addPasswordResetHook(password);
+
+      const MailController = require("../mail-service/mail-controller");
 
       UserManager.updateUser(user)
         .then(() => {

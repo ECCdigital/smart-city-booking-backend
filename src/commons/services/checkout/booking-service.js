@@ -9,6 +9,8 @@ const {
 } = require("./bundle-checkout-service");
 const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
+const EventManager = require("../../data-managers/event-manager");
+const { isEmail } = require("validator");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -172,6 +174,13 @@ class BookingService {
         } catch (err) {
           logger.error(err);
         }
+
+        const isTicketBooking = bookableItems.some(isTicket);
+
+        if (isTicketBooking) {
+          const eventIds = bookableItems.map(getEventForTicket);
+          await sendEmailToOrganizer(eventIds, tenantId, booking);
+        }
       }
 
       try {
@@ -224,6 +233,99 @@ class BookingService {
     }
     return updatedBooking;
   }
+
+  static async commitBooking(tenant, booking) {
+    try {
+      booking.isCommitted = true;
+      await BookingService.updateBooking(tenant, booking);
+      if (
+        booking.isPayed === true ||
+        !booking.priceEur ||
+        booking.priceEur === 0
+      ) {
+        await MailController.sendFreeBookingConfirmation(
+          booking.mail,
+          booking.id,
+          booking.tenant,
+        );
+        logger.info(
+          `${tenant} -- booking ${booking.id} committed and sent free booking confirmation to ${booking.mail}`,
+        );
+      } else {
+        await MailController.sendPaymentRequest(
+          booking.mail,
+          booking.id,
+          booking.tenant,
+        );
+        logger.info(
+          `${tenant} -- booking ${booking.id} committed and sent payment request to ${booking.mail}`,
+        );
+      }
+      const bookableItems = booking.bookableItems;
+      const isTicketBooking = bookableItems.some(isTicket);
+
+      if (isTicketBooking) {
+        const eventIds = bookableItems.map(getEventForTicket);
+        await sendEmailToOrganizer(eventIds, tenant, booking);
+      }
+    } catch (error) {
+      throw new Error(`Error committing booking: ${error.message}`);
+    }
+  }
 }
 
 module.exports = BookingService;
+
+function isTicket(bookableItem) {
+  if (!bookableItem?._bookableUsed) {
+    return false;
+  }
+  return bookableItem._bookableUsed.type === "ticket";
+}
+
+function getEventForTicket(bookableItem) {
+  return bookableItem._bookableUsed.eventId || null;
+}
+
+async function sendEmailToOrganizer(eventIds, tenantId, booking) {
+  try {
+    const uniqueEventIds = [...new Set(eventIds)];
+
+    const events = await Promise.all(
+      uniqueEventIds.map((eventId) => EventManager.getEvent(eventId, tenantId)),
+    );
+
+    const organizerMails = events
+      .map((event) => event.eventOrganizer?.contactPersonEmailAddress)
+      .filter((email) => isEmail(email));
+    const uniqueOrganizerMails = [...new Set(organizerMails)];
+
+    if (uniqueOrganizerMails.length === 0) {
+      logger.warn(`No organizer found for booking: ${booking.id}`);
+      return;
+    }
+
+    const emailPromises = uniqueOrganizerMails.map(async (organizerMail) => {
+      try {
+        await MailController.sendNewBooking(
+          organizerMail,
+          booking.id,
+          booking.tenant,
+        );
+        logger.info(
+          `Successfully send mail to organizer ${organizerMail} for booking ${booking.id}.`,
+        );
+      } catch (err) {
+        logger.error(
+          `Error while sending mail to organizer ${organizerMail} for booking ${booking.id}: ${err.message}`,
+        );
+      }
+    });
+
+    await Promise.all(emailPromises);
+  } catch (err) {
+    logger.error(
+      `Error when retrieving events or sending mails: ${err.message}`,
+    );
+  }
+}
