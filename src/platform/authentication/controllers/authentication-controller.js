@@ -1,6 +1,8 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 var { User, HookTypes } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const MailController = require("../../../commons/mail-service/mail-controller");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -58,8 +60,17 @@ class AuthenticationController {
             user.setPassword(request.body.password);
 
             UserManager.signupUser(user)
-              .then(() => {
+              .then(async () => {
                 logger.info(`User ${user.id} signed up.`);
+
+                const tenant = await TenantManager.getTenant(user.tenant);
+
+                await MailController.sendUserCreated(
+                  tenant.mail,
+                  user.tenant,
+                  user.id,
+                );
+
                 response.status(201).send({ tenantId: request.params.tenant });
               })
               .catch((err) => {

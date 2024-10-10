@@ -5,6 +5,7 @@ const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../utilities/payment-utils");
+const UserManager = require("../data-managers/user-manager");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -368,6 +369,31 @@ class MailController {
       tenant.genericMailTemplate,
       {
         title: "Bestätigen Sie die Änderung Ihres Passworts",
+        content: content,
+      },
+    );
+  }
+
+  static async sendUserCreated(address, tenantId, userId) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    const user = await UserManager.getUser(userId, tenant.id);
+
+    let content = `<p>Ein neuer Benutzer wurde erstellt.</p><br>`;
+    content += `<p>Vorname: ${user.firstName}</p>`;
+    content += `<p>Nachname: ${user.lastName}</p>`;
+    content += `<p>E-Mail: ${user.id}</p>`;
+    content += `<p>Mandant: ${user.tenant}</p>`;
+    content += `<br>`;
+    content += `<p> Registrierungsdatum: ${MailController.formatDateTime(user.created)}</p>`;
+
+    await MailerService.send(
+      tenantId,
+      address,
+      "Ein neuer Benutzer wurde erstellt",
+      tenant.genericMailTemplate,
+      {
+        title: "Ein neuer Benutzer wurde erstellt",
         content: content,
       },
     );
