@@ -137,7 +137,6 @@ class BookingService {
         }
       }
       if (booking.isCommitted && booking.isPayed) {
-        console.log("commit booking and payed");
         let attachments = [];
         try {
           if (booking.priceEur > 0) {
