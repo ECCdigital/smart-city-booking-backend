@@ -7,7 +7,7 @@
 
 The "smart-city-booking" booking platform is an open-source software system with a focus on Smart Cities and Smart Regions. It offers an efficient solution that allows citizens, organizations, and companies to book and manage resources provided by public administrations. This platform provides a variety of configuration options to ensure flexible adaptation to individual needs.
 
-This repository contains the backend of the application. The frontend is managed at https://github.com/ECCdigital/scanbunny-vue-app/smart-city-booking-vue-app.git
+This repository contains the backend of the application. The frontend is managed at https://github.com/ECCdigital/smart-city-booking-vue-app.git
 
 ## Getting Started
 
