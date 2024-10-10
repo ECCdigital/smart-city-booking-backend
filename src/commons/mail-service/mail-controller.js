@@ -325,6 +325,22 @@ class MailController {
     );
   }
 
+  static async sendNewBooking(address, bookingId, tenantId) {
+    const tenant = await TenantManager.getTenant(tenantId);
+    let content = `<p>Es liegt eine neue Buchung vor.</p><br>`;
+    content += await MailController.generateBookingDetails(bookingId, tenantId);
+    await MailerService.send(
+      tenantId,
+      address,
+      "Eine neue Buchung liegt vor",
+      tenant.genericMailTemplate,
+      {
+        title: "Eine neue Buchung liegt vor",
+        content: content,
+      },
+    );
+  }
+
   static async sendVerificationRequest(address, hookId, tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
     let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}">${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}</a>`;
