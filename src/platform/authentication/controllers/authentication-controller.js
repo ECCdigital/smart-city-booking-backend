@@ -43,7 +43,8 @@ class AuthenticationController {
       request.body.id &&
       request.body.password &&
       request.body.firstName &&
-      request.body.lastName
+      request.body.lastName &&
+      request.body.company
     ) {
       UserManager.getUser(request.body.id, request.params.tenant).then(
         (user) => {
@@ -56,6 +57,7 @@ class AuthenticationController {
               request.params.tenant,
               request.body.firstName,
               request.body.lastName,
+              request.body.company,
             );
             user.setPassword(request.body.password);
 
