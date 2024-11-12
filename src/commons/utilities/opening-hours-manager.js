@@ -39,7 +39,8 @@ class OpeningHoursManager {
       promises.push(Promise.resolve(false));
     }
 
-    const [openingHoursConflict, specialOpeningHoursConflict] = await Promise.all(promises);
+    const [openingHoursConflict, specialOpeningHoursConflict] =
+      await Promise.all(promises);
 
     if (specialOpeningHoursRelated && specialOpeningHoursConflict !== null) {
       return specialOpeningHoursConflict;
