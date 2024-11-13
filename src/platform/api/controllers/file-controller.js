@@ -102,9 +102,9 @@ class FileController {
    * @returns {Promise<void>} - A promise that resolves when the file upload is complete.
    */
   static async createFile(request, response) {
-    const file = request.files?.file
+    const file = request.files?.file;
     if (!file) {
-      return response.status(400).send('No file uploaded.');
+      return response.status(400).send("No file uploaded.");
     }
     const {
       params: { tenant },
