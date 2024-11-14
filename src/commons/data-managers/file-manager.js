@@ -51,7 +51,7 @@ class NextcloudManager extends FileManager {
    * It first creates the directory (if it doesn't exist) and then uploads the file to the directory.
    *
    * @param {string} tenant - The tenant ID. This is used to create a tenant-specific directory in the Nextcloud server.
-   * @param {Object} file - The file to be uploaded. It should be an object with `name` and `data` properties.
+   * @param {Buffer} file - The file to be uploaded. It should be an object with `name` and `data` properties.
    * @param {string} fileName - The name of the file to be uploaded.
    * @param {string} accessLevel - The access level for the file. This parameter is currently not used in the method.
    * @param {string} subDirectory - The subdirectory under the tenant directory where the file should be uploaded.

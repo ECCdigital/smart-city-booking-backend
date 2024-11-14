@@ -95,13 +95,20 @@ class FileController {
   }
 
   /**
-   * Upload a file to the public folder of a tenant.
+   * Upload a file to the public or protected folder of a tenant.
+   *
+   * @param {Object} request - The request object from the client.
+   * @param {Object} response - The response object to send the result.
+   * @returns {Promise<void>} - A promise that resolves when the file upload is complete.
    */
   static async createFile(request, response) {
+    const file = request.files?.file;
+    if (!file) {
+      return response.status(400).send("No file uploaded.");
+    }
     const {
       params: { tenant },
       user,
-      files: { file },
       body: { accessLevel, customDirectory },
     } = request;
 
