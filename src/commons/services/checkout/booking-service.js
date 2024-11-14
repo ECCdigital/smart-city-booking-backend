@@ -272,6 +272,33 @@ class BookingService {
       throw new Error(`Error committing booking: ${error.message}`);
     }
   }
+
+  static async checkBookingStatus(bookingId, lastName, tenantId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking.id) {
+      throw { message: "Booking not found", code: 404 };
+    }
+
+    if (!booking.name.toLowerCase().includes(lastName.toLowerCase())) {
+      throw { message: "Missmatch", code: 401 };
+    }
+
+    const leadingBookableItem = booking.bookableItems[0]._bookableUsed;
+
+    return {
+      bookingId: booking.id,
+      title: leadingBookableItem.title,
+      name: booking.name,
+      status: {
+        paymentStatus: booking.isPayed ? "paid" : "pending",
+        bookingStatus: booking.isCommitted ? "confirmed" : "pending",
+      },
+      timeBegin: booking.timeBegin,
+      timeEnd: booking.timeEnd,
+      timeCreated: booking.timeCreated,
+    };
+  }
 }
 
 module.exports = BookingService;
