@@ -2,7 +2,6 @@ const BookableManager = require("../../../commons/data-managers/bookable-manager
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const { Booking } = require("../../../commons/entities/booking");
 const { RolePermission } = require("../../../commons/entities/role");
-const MailController = require("../../../commons/mail-service/mail-controller");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
@@ -661,7 +660,6 @@ class BookingController {
   }
 
   static async getPublicBookingStatus(request, response) {
-    console.log("getPublicBookingStatus");
     const {
       params: { tenant, id },
       query: { lastname },
@@ -683,7 +681,9 @@ class BookingController {
       return response.status(200).send(status);
     } catch (err) {
       logger.error(err);
-      return response.status(err.code || 500).send("Could not get public booking status");
+      return response
+        .status(err.code || 500)
+        .send("Could not get public booking status");
     }
   }
 }
