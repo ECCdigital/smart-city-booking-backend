@@ -53,57 +53,41 @@ class CsvExportController {
     } = request;
 
     const event = await EventManager.getEvent(eventId, tenantId);
-    if (!(await CsvExportController._hasPermission(event, user.id, tenantId))) {
+    if (!(await CsvExportController._hasPermission(event, user?.id, tenantId))) {
       return response.sendStatus(403);
     }
 
-    const bookables = await BookableManager.getBookables(tenantId);
-    const eventTickets = bookables.filter(
-      (b) => b.type === "ticket" && b.eventId == eventId,
-    );
+    const eventBookings = await BookingManager.getEventBookings(tenantId, eventId);
 
-    const bookings = await BookingManager.getBookings(tenantId);
-    const eventBookings = bookings
-      .filter((b) => {
-        const validIds =
-          b.bookableIds.length > 0
-            ? b.bookableIds
-            : b.bookableItems.map((item) => item.bookableId);
-        return validIds.some((id) => eventTickets.some((t) => t.id == id));
-      })
-      .map((b) => {
-        const validIds =
-          b.bookableIds.length > 0
-            ? b.bookableIds
-            : b.bookableItems.map((item) => item.bookableId);
-        const ticket = eventTickets.find((t) => validIds.includes(t.id))?.title;
-
+    const attandeeList = eventBookings.map((b) => {
         return {
-          id: b.id,
-          ticket,
-          assignedUserId: b.assignedUserId,
-          mail: b.mail,
-          company: b.company,
-          name: b.name,
-          street: b.street,
-          zipCode: b.zipCode,
-          location: b.location,
-          comment: b.comment?.replace(/(\r\n|\n|\r)/gm, " "),
-          timeBegin: Formatters.formatDateTime(b.timeBegin),
-          timeEnd: Formatters.formatDateTime(b.timeEnd),
-          timeCreated: Formatters.formatDateTime(b.timeCreated),
-          isCommitted: b.isCommitted ? "Ja" : "Nein",
-          isPayed: b.isPayed ? "Ja" : "Nein",
-          priceEur: Formatters.formatCurrency(b.priceEur),
-          payMethod: Formatters.translatePayMethod(b.payMethod),
-        };
-      });
+            id: b.id,
+            ticket: b.bookableItems.length > 0 ? b.bookableItems[0]._bookableUsed?.title : "Unbekannt",
+            amount: b.bookableItems.length > 0 ? b.bookableItems[0].amount : "0",
+            assignedUserId: b.assignedUserId,
+            mail: b.mail,
+            company: b.company,
+            name: b.name,
+            street: b.street,
+            zipCode: b.zipCode,
+            location: b.location,
+            comment: b.comment?.replace(/(\r\n|\n|\r)/gm, " "),
+            timeBegin: Formatters.formatDateTime(b.timeBegin),
+            timeEnd: Formatters.formatDateTime(b.timeEnd),
+            timeCreated: Formatters.formatDateTime(b.timeCreated),
+            isCommitted: b.isCommitted ? "Ja" : "Nein",
+            isPayed: b.isPayed ? "Ja" : "Nein",
+            priceEur: Formatters.formatCurrency(b.priceEur),
+            payMethod: Formatters.translatePayMethod(b.payMethod),
+          };
+  });
 
     response.setHeader("Content-Type", "text/csv");
     response.status(200).send(
-      CsvExportController._toCsv(eventBookings, {
+        '\uFEFF'  + CsvExportController._toCsv(attandeeList, {
         id: "Buchungsnummer",
         ticket: "Ticket",
+        amount: "Anzahl",
         assignedUserId: "Angemeldeter Benutzer",
         mail: "E-Mail Adresse",
         company: "Firma",
