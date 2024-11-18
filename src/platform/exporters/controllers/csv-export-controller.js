@@ -4,6 +4,12 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const Formatters = require("../../../commons/utilities/formatters");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "csv-export-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class CsvExportController {
   // transform a list of objects to a csv string
@@ -47,40 +53,32 @@ class CsvExportController {
   }
 
   static async getEventBookings(request, response) {
-    const {
-      params: { tenant: tenantId, id: eventId },
-      user,
-    } = request;
+    try {
+      const {
+        params: { tenant: tenantId, id: eventId },
+        user,
+      } = request;
 
-    const event = await EventManager.getEvent(eventId, tenantId);
-    if (!(await CsvExportController._hasPermission(event, user.id, tenantId))) {
-      return response.sendStatus(403);
-    }
+      const event = await EventManager.getEvent(eventId, tenantId);
+      if (
+        !(await CsvExportController._hasPermission(event, user?.id, tenantId))
+      ) {
+        return response.sendStatus(403);
+      }
 
-    const bookables = await BookableManager.getBookables(tenantId);
-    const eventTickets = bookables.filter(
-      (b) => b.type === "ticket" && b.eventId == eventId,
-    );
+      const eventBookings = await BookingManager.getEventBookings(
+        tenantId,
+        eventId,
+      );
 
-    const bookings = await BookingManager.getBookings(tenantId);
-    const eventBookings = bookings
-      .filter((b) => {
-        const validIds =
-          b.bookableIds.length > 0
-            ? b.bookableIds
-            : b.bookableItems.map((item) => item.bookableId);
-        return validIds.some((id) => eventTickets.some((t) => t.id == id));
-      })
-      .map((b) => {
-        const validIds =
-          b.bookableIds.length > 0
-            ? b.bookableIds
-            : b.bookableItems.map((item) => item.bookableId);
-        const ticket = eventTickets.find((t) => validIds.includes(t.id))?.title;
-
+      const attendeeList = eventBookings.map((b) => {
         return {
           id: b.id,
-          ticket,
+          ticket:
+            b.bookableItems.length > 0
+              ? b.bookableItems[0]._bookableUsed?.title
+              : "Unbekannt",
+          amount: b.bookableItems.length > 0 ? b.bookableItems[0].amount : "0",
           assignedUserId: b.assignedUserId,
           mail: b.mail,
           company: b.company,
@@ -99,28 +97,36 @@ class CsvExportController {
         };
       });
 
-    response.setHeader("Content-Type", "text/csv");
-    response.status(200).send(
-      CsvExportController._toCsv(eventBookings, {
-        id: "Buchungsnummer",
-        ticket: "Ticket",
-        assignedUserId: "Angemeldeter Benutzer",
-        mail: "E-Mail Adresse",
-        company: "Firma",
-        name: "Name",
-        street: "Straße",
-        zipCode: "PLZ",
-        location: "Ort",
-        comment: "Buchungshinweise",
-        timeBegin: "Buchungsbeginn",
-        timeEnd: "Buchungsende",
-        timeCreated: "Buchungsdatum",
-        isCommitted: "Buchung bestätigt",
-        isPayed: "Buchung bezahlt",
-        priceEur: "Preis",
-        payMethod: "Zahlungsart",
-      }),
-    );
+      // Using the BOM character to ensure that Excel opens the CSV file correctly on Windows Machines
+      const csvResult =
+        "\uFEFF" +
+        CsvExportController._toCsv(attendeeList, {
+          id: "Buchungsnummer",
+          ticket: "Ticket",
+          amount: "Anzahl",
+          assignedUserId: "Angemeldeter Benutzer",
+          mail: "E-Mail Adresse",
+          company: "Firma",
+          name: "Name",
+          street: "Straße",
+          zipCode: "PLZ",
+          location: "Ort",
+          comment: "Buchungshinweise",
+          timeBegin: "Buchungsbeginn",
+          timeEnd: "Buchungsende",
+          timeCreated: "Buchungsdatum",
+          isCommitted: "Buchung bestätigt",
+          isPayed: "Buchung bezahlt",
+          priceEur: "Preis",
+          payMethod: "Zahlungsart",
+        });
+
+      response.setHeader("Content-Type", "text/csv");
+      response.status(200).send(csvResult);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("could not get event bookings");
+    }
   }
 }
 
