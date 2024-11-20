@@ -20,6 +20,7 @@ class Bookable {
    * @param {string} description Short description of the bookable object
    * @param {array<string>} flags Set of String used to indicate specific properties such as 'barrier-free'
    * @param {double} priceEur Price of the resource in Euro
+   * @param {double} priceValueAddedTax Value added tax of the price
    * @param {integer} amount Number of available bookable resource, e.g. 5 tickets
    * @param {boolean} autoCommitBooking true, if the resource is bookable without any manual management steps
    * @param {string} location Location of the object, e.g. city and street
@@ -49,6 +50,7 @@ class Bookable {
     description,
     flags,
     priceEur,
+    priceValueAddedTax,
     amount,
     autoCommitBooking,
     location,
@@ -77,6 +79,7 @@ class Bookable {
     this.description = description;
     this.flags = flags || [];
     this.priceEur = priceEur;
+    this.priceValueAddedTax = priceValueAddedTax;
     this.amount = amount;
     this.autoCommitBooking = autoCommitBooking;
     this.location = location;

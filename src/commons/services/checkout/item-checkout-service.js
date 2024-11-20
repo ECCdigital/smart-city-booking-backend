@@ -159,6 +159,11 @@ class ItemCheckoutService {
     return bookable.isLongRange === true;
   }
 
+  async priceValueAddedTax() {
+    const bookable = await this.getBookable();
+    return (bookable.priceValueAddedTax || 0) / 100;
+  }
+
   async regularPriceEur() {
     const bookable = await this.getBookable();
 
@@ -177,7 +182,14 @@ class ItemCheckoutService {
         multiplier = 1;
     }
 
-    return (bookable.priceEur || 0) * multiplier * this.amount;
+    const price = (bookable.priceEur || 0) * multiplier * this.amount;
+    return Math.round(price * 100) / 100;
+  }
+
+  async regularGrossPriceEur() {
+    const price =
+      (await this.regularPriceEur()) * (1 + (await this.priceValueAddedTax()));
+    return Math.round(price * 100) / 100;
   }
 
   async userPriceEur() {
@@ -210,7 +222,13 @@ class ItemCheckoutService {
       await this.regularPriceEur(),
     );
 
-    return total;
+    return Math.round(total * 100) / 100;
+  }
+
+  async userGrossPriceEur() {
+    const price =
+      (await this.userPriceEur()) * (1 + (await this.priceValueAddedTax()));
+    return Math.round(price * 100) / 100;
   }
 
   async checkPermissions() {

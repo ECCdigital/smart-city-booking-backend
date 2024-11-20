@@ -135,6 +135,30 @@ class BundleCheckoutService {
     return Math.round(total * 100) / 100;
   }
 
+  async userGrossPriceEur() {
+    let total = 0;
+    for (const bookableItem of this.bookableItems) {
+      const itemCheckoutService = new ItemCheckoutService(
+        this.user,
+        this.tenant,
+        this.timeBegin,
+        this.timeEnd,
+        bookableItem.bookableId,
+        bookableItem.amount,
+        this.couponCode,
+      );
+
+      total += await itemCheckoutService.userGrossPriceEur();
+    }
+
+    return Math.round(total * 100) / 100;
+  }
+
+  async vatIncludedEur() {
+    const vat = (await this.userGrossPriceEur()) - (await this.userPriceEur());
+    return Math.round(vat * 100) / 100;
+  }
+
   async isPaymentComplete() {
     return (await this.userPriceEur()) === 0;
   }
@@ -201,6 +225,24 @@ class BundleCheckoutService {
     await this.checkAll();
 
     for (const bookableItem of this.bookableItems) {
+      const itemCheckoutService = new ItemCheckoutService(
+        this.user,
+        this.tenant,
+        this.timeBegin,
+        this.timeEnd,
+        bookableItem.bookableId,
+        bookableItem.amount,
+        this.couponCode,
+      );
+
+      bookableItem.regularPriceEur =
+        await itemCheckoutService.regularPriceEur();
+      bookableItem.regularGrossPriceEur =
+        await itemCheckoutService.regularGrossPriceEur();
+      bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
+      bookableItem.userGrossPriceEur =
+        await itemCheckoutService.userGrossPriceEur();
+
       bookableItem._bookableUsed = await BookableManager.getBookable(
         bookableItem.bookableId,
         this.tenant,
@@ -229,7 +271,8 @@ class BundleCheckoutService {
         this.bookableItems,
         this.attachmentStatus,
       ),
-      priceEur: await this.userPriceEur(),
+      priceEur: await this.userGrossPriceEur(),
+      vatIncludedEur: await this.vatIncludedEur(),
       isCommitted: await this.isAutoCommit(),
       isPayed: await this.isPaymentComplete(),
       paymentMethod: this.paymentMethod,
