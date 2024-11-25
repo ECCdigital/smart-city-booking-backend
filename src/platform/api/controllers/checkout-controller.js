@@ -45,8 +45,6 @@ class CheckoutController {
         userGrossPriceEur: await itemCheckoutService.userGrossPriceEur(),
       };
 
-      console.log(payload);
-
       return response.status(200).json(payload);
     } catch (err) {
       logger.warn(err);
