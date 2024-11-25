@@ -209,8 +209,8 @@ class PdfService {
         bookedItems += "<tr>";
         bookedItems += `<td class="bi-title">${bookable.title}</td>`;
         bookedItems += `<td class="bi-amount">${bookableItem.amount}</td>`;
-        bookedItems += `<td class="bi-price-item">${pdfService.formatCurrency(bookableItem.userPriceEur)}</td>`;
-        bookedItems += `<td class="bi-price-total">${pdfService.formatCurrency(bookableItem.userPriceEur * bookableItem.amount)}</td>`;
+        bookedItems += `<td class="bi-price-item">${PdfService.formatCurrency(bookableItem.userPriceEur)}</td>`;
+        bookedItems += `<td class="bi-price-total">${PdfService.formatCurrency(bookableItem.userPriceEur * bookableItem.amount)}</td>`;
         bookedItems += "</tr>";
       }
 
@@ -223,17 +223,17 @@ class PdfService {
 
       bookedItems += '<tr class="netto">';
       bookedItems += `<td class="bi-title" colspan="3">Gesamt (netto)</td>`;
-      bookedItems += `<td class="bi-price-total-netto">${pdfService.formatCurrency(booking.priceEur - booking.vatIncludedEur)}</td>`;
+      bookedItems += `<td class="bi-price-total-netto">${PdfService.formatCurrency(booking.priceEur - booking.vatIncludedEur)}</td>`;
       bookedItems += "</tr>";
 
       bookedItems += '<tr class="mwst">';
       bookedItems += `<td class="bi-title" colspan="3">zzgl. MwSt.</td>`;
-      bookedItems += `<td class="bi-mwst">${pdfService.formatCurrency(booking.vatIncludedEur)}</td>`;
+      bookedItems += `<td class="bi-mwst">${PdfService.formatCurrency(booking.vatIncludedEur)}</td>`;
       bookedItems += "</tr>";
 
       bookedItems += '<tr class="brutto">';
-      bookedItems += `<td class="bi-title" colspan="3">Gesamt (brutto)</td>`;
-      bookedItems += `<td class="bi-price-total-brutto">${pdfService.formatCurrency(booking.priceEur)}</td>`;
+      bookedItems += `<td class="bi-title" colspan="3"><strong>Gesamt (brutto)</strong></td>`;
+      bookedItems += `<td class="bi-price-total-brutto"><strong>${PdfService.formatCurrency(booking.priceEur)}</strong></td>`;
       bookedItems += "</tr>";
 
       bookedItems += "</table>";
