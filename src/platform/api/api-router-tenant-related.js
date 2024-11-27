@@ -120,6 +120,10 @@ router.delete(
 router.get("/bookings", BookingController.getBookings);
 
 router.get("/bookings/:id/status", BookingController.getBookingStatus);
+router.get(
+  "/bookings/:id/status/public",
+  BookingController.getPublicBookingStatus,
+);
 
 // Protected
 router.get(

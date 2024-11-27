@@ -181,6 +181,7 @@ class TenantController {
             mail: tenant.mail,
             phone: tenant.phone,
             website: tenant.website,
+            enablePublicStatusView: tenant.enablePublicStatusView,
           });
         }
       } else {

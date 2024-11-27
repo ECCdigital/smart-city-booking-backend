@@ -658,6 +658,34 @@ class BookingController {
       return response.status(500).send("Could not create receipt");
     }
   }
+
+  static async getPublicBookingStatus(request, response) {
+    const {
+      params: { tenant, id },
+      query: { lastname },
+    } = request;
+
+    if (!tenant || !id || !lastname) {
+      logger.warn(`${tenant} -- Missing required parameters.`);
+      return response.status(400).send("Missing required parameters.");
+    }
+
+    try {
+      const status = await BookingService.checkBookingStatus(
+        id,
+        lastname,
+        tenant,
+      );
+
+      logger.info(`${tenant} -- sending public booking status to user`);
+      return response.status(200).send(status);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.code || 500)
+        .send("Could not get public booking status");
+    }
+  }
 }
 
 module.exports = { BookingController, BookingPermissions };

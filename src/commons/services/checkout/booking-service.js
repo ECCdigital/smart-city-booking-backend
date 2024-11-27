@@ -272,6 +272,53 @@ class BookingService {
       throw new Error(`Error committing booking: ${error.message}`);
     }
   }
+
+  static async checkBookingStatus(bookingId, name, tenantId) {
+    const tenant = await getTenant(tenantId);
+
+    if (!tenant.enablePublicStatusView) {
+      throw { message: "Public status view disabled ", code: 405 };
+    }
+
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking.id) {
+      throw { message: "Booking not found", code: 404 };
+    }
+
+    if (booking.name.toLowerCase() !== name.toLowerCase()) {
+      throw { message: "Missmatch", code: 401 };
+    }
+
+    const leadingBookableItem = booking.bookableItems[0]._bookableUsed;
+
+    let valid;
+
+    if (booking.timeEnd && booking.timeEnd) {
+      if (booking.timeEnd < new Date()) {
+        valid = "expired";
+      } else if (booking.timeBegin > new Date()) {
+        valid = "pending";
+      } else {
+        valid = "active";
+      }
+    }
+
+    return {
+      bookingId: booking.id,
+      title: leadingBookableItem.title,
+      name: booking.name,
+      status: {
+        paymentStatus: booking.isPayed ? "paid" : "pending",
+        bookingStatus: booking.isCommitted ? "confirmed" : "pending",
+        activeStatus: valid,
+      },
+      timeBegin: booking.timeBegin,
+      timeEnd: booking.timeEnd,
+      timeCreated: booking.timeCreated,
+      comment: booking.comment,
+    };
+  }
 }
 
 module.exports = BookingService;
