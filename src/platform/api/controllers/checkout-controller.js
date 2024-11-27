@@ -37,10 +37,15 @@ class CheckoutController {
       logger.info(
         `${tenantId} -- validated bookable ${bookableId} for user ${user?.id} with amount ${amount} and time ${timeBegin} - ${timeEnd}`,
       );
-      return response.status(200).json({
+
+      const payload = {
         regularPriceEur: await itemCheckoutService.regularPriceEur(),
         userPriceEur: await itemCheckoutService.userPriceEur(),
-      });
+        regularGrossPriceEur: await itemCheckoutService.regularGrossPriceEur(),
+        userGrossPriceEur: await itemCheckoutService.userGrossPriceEur(),
+      };
+
+      return response.status(200).json(payload);
     } catch (err) {
       logger.warn(err);
       return response.status(409).send(err.message);

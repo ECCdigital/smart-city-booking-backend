@@ -193,35 +193,56 @@ class PdfService {
           " - " +
           PdfService.formatDateTime(booking.timeEnd);
       }
-      let bookedItems = "";
+
+      let bookedItems = '<table class="booked-items">';
+      bookedItems +=
+        "<thead><tr>" +
+        "<th class='bi-title'>Beschreibung</th>" +
+        "<th class='bi-amount'>Anzahl</th>" +
+        "<th class='bi-price-item'>Einzelpreis</th>" +
+        "<th class='bi-price-total'>Gesamtpreis</th>" +
+        "</tr></thead>";
 
       for (const bookableItem of booking.bookableItems) {
-        const bookable = bookables.find(
-          (b) => b.id === bookableItem.bookableId,
-        );
-        bookedItems += `<div>${bookable.title}, Anzahl: ${bookableItem.amount}</div>`;
-        if (bookable.bookingNotes.length > 0) {
-          bookedItems += `<div>${bookable.bookingNotes}</div>`;
-        }
+        const bookable = bookableItem._bookableUsed;
+
+        bookedItems += "<tr>";
+        bookedItems += `<td class="bi-title">${bookable.title}</td>`;
+        bookedItems += `<td class="bi-amount">${bookableItem.amount}</td>`;
+        bookedItems += `<td class="bi-price-item">${PdfService.formatCurrency(bookableItem.userPriceEur)}</td>`;
+        bookedItems += `<td class="bi-price-total">${PdfService.formatCurrency(bookableItem.userPriceEur * bookableItem.amount)}</td>`;
+        bookedItems += "</tr>";
       }
 
       if (booking._couponUsed) {
-        if (booking._couponUsed.type === "fixed") {
-          bookedItems += `<div>
-                    Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}€)<br>
-                </div>`;
-        } else if (booking._couponUsed.type === "percentage") {
-          bookedItems += `<div>
-                    Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}%)<br>
-                </div>`;
-        }
+        bookedItems += '<tr class="coupon">';
+        bookedItems += `<td class="bi-title" colspan="3">${booking._couponUsed.description}</td>`;
+        bookedItems += `<td class="bi-coupon-value">-${booking._couponUsed.discount} ${booking._couponUsed.type === "fixed" ? "€" : "%"}</td>`;
+        bookedItems += "</tr>";
       }
+
+      bookedItems += '<tr class="netto">';
+      bookedItems += `<td class="bi-title" colspan="3">Gesamt (netto)</td>`;
+      bookedItems += `<td class="bi-price-total-netto">${PdfService.formatCurrency(booking.priceEur - booking.vatIncludedEur)}</td>`;
+      bookedItems += "</tr>";
+
+      bookedItems += '<tr class="mwst">';
+      bookedItems += `<td class="bi-title" colspan="3">zzgl. MwSt.</td>`;
+      bookedItems += `<td class="bi-mwst">${PdfService.formatCurrency(booking.vatIncludedEur)}</td>`;
+      bookedItems += "</tr>";
+
+      bookedItems += '<tr class="brutto">';
+      bookedItems += `<td class="bi-title" colspan="3"><strong>Gesamt (brutto)</strong></td>`;
+      bookedItems += `<td class="bi-price-total-brutto"><strong>${PdfService.formatCurrency(booking.priceEur)}</strong></td>`;
+      bookedItems += "</tr>";
+
+      bookedItems += "</table>";
 
       const invoiceAddress = `${booking.company || ""} 
             ${booking.company ? "<br />" : ""}
-            ${booking.name}<br />
-            ${booking.street}<br />
-            ${booking.zipCode} ${booking.location}`;
+            ${booking.name || ""}<br />
+            ${booking.street || ""}<br />
+            ${booking.zipCode || ""} ${booking.location || ""}`;
 
       const currentDate = PdfService.formatDate(new Date());
 
