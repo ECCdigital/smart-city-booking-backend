@@ -32,7 +32,7 @@ class InvoiceService {
         invoiceId = await IdGenerator.next(tenantId, 4, "invoice");
       }
 
-      const invoiceNumber = `${tenant.invoiceNumberPrefix}-${invoiceId}-${revision}`;
+      const invoiceNumber = `${tenant.receiptNumberPrefix}-${invoiceId}-${revision}`;
 
       const pdfData = await PdfService.generateInvoice(
         tenantId,
