@@ -207,7 +207,8 @@ class MailController {
     };
 
     const content = `
-    <p>Mit diesem QR-Code können Sie jederzeit den Status Ihrer Buchung einsehen.</p>
+    <p>Mit diesem Link können Sie jederzeit den Status Ihrer Buchung einsehen.</p>
+    <a href="${QRUrl}">${QRUrl}</a>
     <img src="cid:qrcode_cid" alt="QR Code" />`;
 
     return { content, attachment };
