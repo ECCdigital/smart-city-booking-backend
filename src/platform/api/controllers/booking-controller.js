@@ -2,7 +2,6 @@ const BookableManager = require("../../../commons/data-managers/bookable-manager
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const { Booking } = require("../../../commons/entities/booking");
 const { RolePermission } = require("../../../commons/entities/role");
-const MailController = require("../../../commons/mail-service/mail-controller");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
