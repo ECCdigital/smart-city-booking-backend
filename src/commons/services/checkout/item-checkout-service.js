@@ -327,13 +327,14 @@ class ItemCheckoutService {
         .flat()
         .filter(
           (bi) =>
-            bi.bookableId === bookable.id && bi.tenant === bookable.tenant,
+            bi._bookableUsed.eventId === bookable.eventId &&
+            bi._bookableUsed.tenant === bookable.tenant,
         )
         .reduce((acc, bi) => acc + bi.amount, 0);
 
       if (
         !!event.attendees.maxAttendees &&
-        amountBooked + this.amount >= event.attendees.maxAttendees
+        amountBooked + this.amount > event.attendees.maxAttendees
       ) {
         throw new Error(
           `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
