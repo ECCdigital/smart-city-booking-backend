@@ -167,6 +167,7 @@ class UserManager {
               user.isVerified,
               user.created,
               user.roles,
+              user.company,
             );
             //find hook by id
             const hookType = u.hooks.find((h) => h.id === hookId).type;
