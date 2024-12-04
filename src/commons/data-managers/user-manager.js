@@ -15,6 +15,7 @@ class UserManager {
         .collection("users")
         .findOne({ id: id, tenant: tenant })
         .then((user) => {
+          console.log(user);
           if (!user) {
             resolve(undefined);
           } else {
@@ -32,6 +33,7 @@ class UserManager {
               user.isVerified,
               user.created,
               user.roles,
+              user.company,
             );
             resolve(u);
           }

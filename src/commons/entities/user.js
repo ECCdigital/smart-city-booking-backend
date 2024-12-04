@@ -21,6 +21,7 @@ class User {
     isVerified,
     created,
     roles,
+    company,
   ) {
     this.id = id;
     this.secret = secret;
@@ -35,6 +36,7 @@ class User {
     this.isVerified = isVerified || false;
     this.created = created || Date.now();
     this.roles = roles || [];
+    this.company = company;
   }
 
   verifyPassword(password) {
@@ -90,6 +92,7 @@ class User {
       id: this.id,
       firstName: this.firstName,
       lastName: this.lastName,
+      company: this.company,
       phone: this.phone,
       address: this.address,
       zipCode: this.zipCode,

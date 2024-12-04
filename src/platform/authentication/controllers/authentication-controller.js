@@ -50,13 +50,14 @@ class AuthenticationController {
           if (user) {
             response.sendStatus(409);
           } else {
-            const user = new User(
-              request.body.id,
-              undefined,
-              request.params.tenant,
-              request.body.firstName,
-              request.body.lastName,
-            );
+            const user = Object.assign(new User(), {
+              id: request.body.id,
+              secret: undefined,
+              tenant: request.params.tenant,
+              firstName: request.body.firstName,
+              lastName: request.body.lastName,
+              company: request.body.company,
+            });
             user.setPassword(request.body.password);
 
             UserManager.signupUser(user)

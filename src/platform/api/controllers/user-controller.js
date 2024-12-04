@@ -265,6 +265,8 @@ class UserController {
   // Allows only to change the display name
   static updateMe(request, response) {
     const user = Object.assign(new User(), request.user);
+    console.log("updateme", user);
+
     // get user from db
     UserManager.getUser(user.id, user.tenant)
       .then((userFromDb) => {
@@ -274,6 +276,7 @@ class UserController {
             if (request.body.firstName && request.body.lastName) {
               userFromDb.firstName = request.body.firstName;
               userFromDb.lastName = request.body.lastName;
+              userFromDb.company = request.body.company;
               userFromDb.phone = request.body.phone;
               userFromDb.address = request.body.address;
               userFromDb.zipCode = request.body.zipCode;
