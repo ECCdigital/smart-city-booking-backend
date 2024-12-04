@@ -273,6 +273,24 @@ class BookingService {
     }
   }
 
+  static async rejectBooking(tenant, booking) {
+    try {
+      booking.isRejected = true;
+      await BookingService.updateBooking(tenant, booking);
+
+      await MailController.sendBookingRejection(
+        booking.mail,
+        booking.id,
+        booking.tenant,
+      );
+      logger.info(
+        `${tenant} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
+      );
+    } catch (error) {
+      throw new Error(`Error committing booking: ${error.message}`);
+    }
+  }
+
   static async checkBookingStatus(bookingId, name, tenantId) {
     const tenant = await getTenant(tenantId);
 
