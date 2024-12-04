@@ -265,8 +265,6 @@ class UserController {
   // Allows only to change the display name
   static updateMe(request, response) {
     const user = Object.assign(new User(), request.user);
-    console.log("updateme", user);
-
     // get user from db
     UserManager.getUser(user.id, user.tenant)
       .then((userFromDb) => {
