@@ -427,6 +427,7 @@ class MailController {
     let content = `<p>Ein neuer Benutzer wurde erstellt.</p><br>`;
     content += `<p>Vorname: ${user.firstName}</p>`;
     content += `<p>Nachname: ${user.lastName}</p>`;
+    content += `<p>Firma: ${user.company}</p>`;
     content += `<p>E-Mail: ${user.id}</p>`;
     content += `<p>Mandant: ${user.tenant}</p>`;
     content += `<br>`;

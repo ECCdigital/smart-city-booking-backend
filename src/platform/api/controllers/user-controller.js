@@ -274,6 +274,7 @@ class UserController {
             if (request.body.firstName && request.body.lastName) {
               userFromDb.firstName = request.body.firstName;
               userFromDb.lastName = request.body.lastName;
+              userFromDb.company = request.body.company;
               userFromDb.phone = request.body.phone;
               userFromDb.address = request.body.address;
               userFromDb.zipCode = request.body.zipCode;
