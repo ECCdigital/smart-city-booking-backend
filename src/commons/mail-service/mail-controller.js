@@ -236,6 +236,27 @@ class MailController {
     });
   }
 
+  static async sendBookingRejection(
+    address,
+    bookingId,
+    tenantId,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    await this._sendBookingMail({
+      address,
+      bookingId,
+      tenantId,
+      subject: `Ihre Buchung im ${tenant.name} wurde storniert`,
+      title: `Ihre Buchung im ${tenant.name} wurde storniert`,
+      message: `<p>Die nachfolgende Buchung wurde storniert.</p><br>`,
+      includeQRCode: false,
+      attachments,
+      sendBCC: true,
+    });
+  }
+
   static async sendFreeBookingConfirmation(address, bookingId, tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
     const includeQRCode = tenant.enablePublicStatusView;

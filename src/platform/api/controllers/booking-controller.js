@@ -534,6 +534,39 @@ class BookingController {
     }
   }
 
+  static async rejectBooking(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
+      if (!id) {
+        return response.sendStatus(400);
+      }
+
+      const booking = await BookingManager.getBooking(id, tenant);
+
+      if (
+        await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
+      ) {
+        logger.info(
+          `${tenant} -- rejected booking ${booking.id} by user ${user?.id}`,
+        );
+        await BookingService.rejectBooking(tenant, booking);
+        return response.sendStatus(200);
+      } else {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to reject booking.`,
+        );
+        return response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      if (!response.headersSent) {
+        response.status(500).send("Could not reject booking");
+      }
+    }
+  }
+
   static async getEventBookings(request, response) {
     try {
       const tenantId = request.params.tenant;

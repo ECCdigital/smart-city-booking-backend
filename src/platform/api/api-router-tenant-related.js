@@ -151,6 +151,11 @@ router.get(
   AuthenticationController.isSignedIn,
   BookingController.commitBooking,
 );
+router.get(
+  "/bookings/:id/reject",
+  AuthenticationController.isSignedIn,
+  BookingController.rejectBooking,
+);
 router.post(
   "/bookings/:id/receipt",
   AuthenticationController.isSignedIn,

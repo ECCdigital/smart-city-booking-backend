@@ -192,8 +192,15 @@ class BookingManager {
     return new Promise((resolve, reject) => {
       BookingManager.getRelatedBookings(tenant, bookableId)
         .then((bookings) => {
-          var concurrentBookings = bookings.filter((b) =>
-            isRangeOverlap(b.timeBegin, b.timeEnd, timeBegin, timeEnd, true),
+          var concurrentBookings = bookings.filter(
+            (b) =>
+              isRangeOverlap(
+                b.timeBegin,
+                b.timeEnd,
+                timeBegin,
+                timeEnd,
+                true,
+              ) && !b.isRejected,
           );
 
           resolve(concurrentBookings);
