@@ -21,18 +21,14 @@ const logger = bunyan.createLogger({
  */
 class CalendarController {
   /**
-   * Asynchronously fetches occupancies for all bookables for a given tenant.
+   * Fetches occupancies for all bookables for a given tenant.
+   * The occupancies are fetched asynchronously and combined into a single array.
    *
    * @async
-   * @static
    * @function getOccupancies
-   * @param {Object} request - The HTTP request object.
-   * @param {Object} response - The HTTP response object.
-   * @returns {void}
-   *
-   * @example
-   * // GET /api/<tenant>/calendar/occupancy?ids=1,2,3
-   * CalendarController.getOccupancies(req, res);
+   * @param {Object} request - The HTTP request object containing tenant and bookable IDs.
+   * @param {Object} response - The HTTP response object to send the result.
+   * @returns {Promise<void>} - A promise that resolves when the occupancies are fetched and sent.
    */
   static async getOccupancies(request, response) {
     const tenant = request.params.tenant;
@@ -47,34 +43,34 @@ class CalendarController {
       );
     }
 
-    /**
-     * Initializes a worker thread for each bookable to asynchronously fetch occupancies, returning promises for their
-     * resolutions or rejections.
-     */
-    const workers = bookables.map((bookable) => {
-      return new Promise((resolve, reject) => {
-        const worker = new Worker(
-          path.resolve(
-            __dirname,
-            "../../../commons/utilities/calendar-occupancy-worker.js",
-          ),
-        );
-        worker.postMessage({ bookable, tenant });
+    for (const bookable of bookables) {
 
-        worker.on("message", resolve);
-        worker.on("error", reject);
-        worker.on("exit", (code) => {
-          if (code !== 0) {
-            reject(new Error(`Worker stopped with exit code ${code}`));
-          }
-        });
-      });
-    });
+      const relatedBookables = await BookableManager.getRelatedBookables(
+        bookable.id,
+        tenant,
+      );
 
-    const results = await Promise.all(workers);
-    results.forEach((result) => {
-      occupancies = occupancies.concat(result);
-    });
+      const relatedIds = relatedBookables.map((rb) => rb.id);
+
+      let bookings = await BookingManager.getRelatedBookingsBatch(tenant, relatedIds);
+
+      const bookingMap = new Map();
+      for (const booking of bookings) {
+        bookingMap.set(booking.id, booking);
+      }
+      const uniqueBookings = [...bookingMap.values()];
+
+      occupancies.push(
+        ...uniqueBookings
+          .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
+          .map((booking) => ({
+            bookableId: bookable.id,
+            title: bookable.title,
+            timeBegin: booking.timeBegin,
+            timeEnd: booking.timeEnd,
+          })),
+      );
+    }
 
     response.status(200).send(occupancies);
   }
