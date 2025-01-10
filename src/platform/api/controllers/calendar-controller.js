@@ -1,5 +1,3 @@
-const { Worker } = require("worker_threads");
-const path = require("path");
 const bunyan = require("bunyan");
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
@@ -44,7 +42,6 @@ class CalendarController {
     }
 
     for (const bookable of bookables) {
-
       const relatedBookables = await BookableManager.getRelatedBookables(
         bookable.id,
         tenant,
@@ -52,7 +49,10 @@ class CalendarController {
 
       const relatedIds = relatedBookables.map((rb) => rb.id);
 
-      let bookings = await BookingManager.getRelatedBookingsBatch(tenant, relatedIds);
+      let bookings = await BookingManager.getRelatedBookingsBatch(
+        tenant,
+        relatedIds,
+      );
 
       const bookingMap = new Map();
       for (const booking of bookings) {
