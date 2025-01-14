@@ -9,6 +9,7 @@ const CouponController = require("./controllers/coupon-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
+const WorkflowController = require("./controllers/workflow-controller");
 
 var router = express.Router({ mergeParams: true });
 
@@ -201,5 +202,10 @@ router.post(
   AuthenticationController.isSignedIn,
   FileController.createFile,
 );
+
+// WORKFLOW
+// ========
+router.get("/workflow", WorkflowController.getWorkflow);
+router.put("/workflow/task", WorkflowController.updateTask);
 
 module.exports = router;
