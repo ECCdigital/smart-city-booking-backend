@@ -6,7 +6,7 @@ class Workflow {
     this.description = description || "";
     this.states = states || [];
     this.archive = archive || [];
-    this.active = active || false
+    this.active = active || false;
   }
 }
 

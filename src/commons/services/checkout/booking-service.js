@@ -10,7 +10,6 @@ const {
 const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
 const EventManager = require("../../data-managers/event-manager");
-const WorkflowService = require("../workflow/workflow-service");
 const { isEmail } = require("validator");
 
 const logger = bunyan.createLogger({

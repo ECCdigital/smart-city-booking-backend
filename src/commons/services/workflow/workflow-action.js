@@ -20,15 +20,13 @@ class EmailAction extends WorkflowAction {
   }
 
   async execute() {
-    await MailController.sendWorkflowNotification(
-      {
-        sendTo: this._action.sendTo,
-        tenantId: this.tenantId,
-        bookingId: this.taskId,
-        oldStatus: this.sourceStatus,
-        newStatus: this.destinationStatus,
-      }
-    )
+    await MailController.sendWorkflowNotification({
+      sendTo: this._action.sendTo,
+      tenantId: this.tenantId,
+      bookingId: this.taskId,
+      oldStatus: this.sourceStatus,
+      newStatus: this.destinationStatus,
+    });
   }
 }
 

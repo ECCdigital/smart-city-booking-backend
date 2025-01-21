@@ -287,18 +287,6 @@ class BookingManager {
     });
   }
 
-  static async getBookingById(tenant, bookingId) {
-    try {
-      const booking = await dbm
-        .get()
-        .collection("bookings")
-        .findOne({ tenant: tenant, _id: new ObjectID(bookingId) });
-      return Object.assign(new Booking(booking));
-    } catch (err) {
-      return null;
-    }
-  }
-
   static async getBookingsCustomFilter(tenant, filter) {
     try {
       const bookings = await dbm

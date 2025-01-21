@@ -215,7 +215,7 @@ router.post(
   "/workflow/",
   AuthenticationController.isSignedIn,
   WorkflowController.createWorkflow,
-)
+);
 router.put(
   "/workflow/",
   AuthenticationController.isSignedIn,

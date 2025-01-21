@@ -59,7 +59,7 @@ class Booking {
     this.timeEnd = timeEnd;
     this.timeCreated = timeCreated || Date.now();
     this.priceEur = priceEur;
-    this.vatIncludedEur = vatIncludedEur
+    this.vatIncludedEur = vatIncludedEur;
     this.bookableIds = bookableIds || [];
     this.isCommitted = isCommitted || false;
     this.isPayed = isPayed || false;
