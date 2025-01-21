@@ -1,4 +1,5 @@
 const validate = require("jsonschema").validate;
+const ObjectID = require("mongodb").ObjectId;
 
 const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking");
@@ -34,7 +35,7 @@ class BookingManager {
         .toArray()
         .then((rawBookings) => {
           var bookings = rawBookings.map((rb) => {
-            return Object.assign(new Booking(), rb);
+            return new Booking(rb);
           });
 
           resolve(bookings);
@@ -107,7 +108,7 @@ class BookingManager {
         .collection("bookings")
         .findOne({ id: id, tenant: tenant })
         .then((rawBooking) => {
-          var booking = Object.assign(new Booking(), rawBooking);
+          const booking = new Booking(rawBooking);
           resolve(booking);
         })
         .catch((err) => reject(err));
@@ -224,7 +225,7 @@ class BookingManager {
         .toArray()
         .then((rawBookings) => {
           var bookings = rawBookings.map((rb) => {
-            return Object.assign(new Booking(), rb);
+            return Object.assign(new Booking(rb));
           });
 
           resolve(bookings);
@@ -276,7 +277,7 @@ class BookingManager {
             .toArray()
             .then((rawBookings) => {
               let bookings = rawBookings.map((rb) =>
-                Object.assign(new Booking(), rb),
+                Object.assign(new Booking(rb)),
               );
               resolve(bookings);
             })
@@ -284,6 +285,31 @@ class BookingManager {
         })
         .catch((err) => reject(err));
     });
+  }
+
+  static async getBookingById(tenant, bookingId) {
+    try {
+      const booking = await dbm
+        .get()
+        .collection("bookings")
+        .findOne({ tenant: tenant, _id: new ObjectID(bookingId) });
+      return Object.assign(new Booking(booking));
+    } catch (err) {
+      return null;
+    }
+  }
+
+  static async getBookingsCustomFilter(tenant, filter) {
+    try {
+      const bookings = await dbm
+        .get()
+        .collection("bookings")
+        .find({ tenant: tenant, ...filter })
+        .toArray();
+      return bookings.map((b) => Object.assign(new Booking(b)));
+    } catch (err) {
+      return null;
+    }
   }
 }
 

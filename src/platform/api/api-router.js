@@ -1,6 +1,6 @@
 var express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
-const TenantController = require("./controllers/tenant-controller");
+const { TenantController } = require("./controllers/tenant-controller");
 const RoleController = require("./controllers/role-controller");
 
 var router = express.Router({ mergeParams: true });

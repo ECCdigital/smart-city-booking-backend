@@ -18,30 +18,58 @@ class Booking {
    * @param {boolean} isCommitted true, if the booking is committed
    * @param {array<object>} attachments
    */
-  constructor(
+  constructor({
     id,
     tenant,
     assignedUserId,
     mail,
     comment,
+    location,
+    zipCode,
+    street,
+    name,
+    phone,
     timeBegin,
     timeEnd,
     timeCreated,
+    priceEur,
+    vatIncludedEur,
     bookableIds,
     isCommitted,
+    isPayed,
+    isRejected,
+    paymentMethod,
     attachments,
-  ) {
+    bookableItems,
+    lockerInfo,
+    couponCode,
+    _couponUsed,
+  }) {
     this.id = id;
     this.tenant = tenant;
     this.assignedUserId = assignedUserId;
     this.mail = mail;
     this.comment = comment;
+    this.location = location;
+    this.zipCode = zipCode;
+    this.street = street;
+    this.name = name;
+    this.phone = phone;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
     this.timeCreated = timeCreated || Date.now();
+    this.priceEur = priceEur;
+    this.vatIncludedEur = vatIncludedEur
     this.bookableIds = bookableIds || [];
     this.isCommitted = isCommitted || false;
+    this.isPayed = isPayed || false;
+    this.isRejected = isRejected || false;
+    this.paymentMethod = paymentMethod || null;
     this.attachments = attachments || [];
+    this.bookableItems = bookableItems || [];
+    this.lockerInfo = lockerInfo || {};
+    this.couponCode = couponCode || null;
+    this._couponUsed = _couponUsed || null;
   }
 
   /**
