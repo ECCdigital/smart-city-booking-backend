@@ -422,17 +422,17 @@ class ItemCheckoutService {
   async checkMaxBookingDate() {
     const tenant = await getTenant(this.tenantId);
 
-    const maxBookingMonths = Number(tenant?.maxBookingMonths);
-    if (!maxBookingMonths) {
+    const maxBookingAdvanceInMonths = Number(tenant?.maxBookingAdvanceInMonths);
+    if (!maxBookingAdvanceInMonths) {
       return true;
     }
 
     const maxBookingDate = new Date();
-    maxBookingDate.setMonth(maxBookingDate.getMonth() + maxBookingMonths);
+    maxBookingDate.setMonth(maxBookingDate.getMonth() + maxBookingAdvanceInMonths);
 
     if (this.timeBegin > maxBookingDate) {
       throw new Error(
-        `Sie können maximal ${maxBookingMonths} Monate im Voraus buchen.`,
+        `Sie können maximal ${maxBookingAdvanceInMonths} Monate im Voraus buchen.`,
       );
     }
 
