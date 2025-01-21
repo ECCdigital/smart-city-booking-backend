@@ -1,5 +1,4 @@
 const validate = require("jsonschema").validate;
-const ObjectID = require("mongodb").ObjectId;
 
 const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking");
@@ -295,7 +294,7 @@ class BookingManager {
         .find({ tenant: tenant, ...filter })
         .toArray();
       return bookings.map((b) => Object.assign(new Booking(b)));
-    } catch (err) {
+    } catch {
       return null;
     }
   }
