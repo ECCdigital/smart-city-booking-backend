@@ -428,7 +428,9 @@ class ItemCheckoutService {
     }
 
     const maxBookingDate = new Date();
-    maxBookingDate.setMonth(maxBookingDate.getMonth() + maxBookingAdvanceInMonths);
+    maxBookingDate.setMonth(
+      maxBookingDate.getMonth() + maxBookingAdvanceInMonths,
+    );
 
     if (this.timeBegin > maxBookingDate) {
       throw new Error(
