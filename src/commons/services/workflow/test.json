@@ -1,0 +1,16 @@
+{
+  "states": {
+    "0": {
+      "id": 123,
+      "name": "Test",
+      "actions": [
+        {
+          "type": "email",
+          "sendTo": "x.x@x.x",
+          "subject": "Test",
+          "body": "Test"
+        }
+      ]
+    }
+  }
+}

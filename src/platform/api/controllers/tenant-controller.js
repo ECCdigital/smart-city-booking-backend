@@ -354,4 +354,4 @@ class TenantController {
   }
 }
 
-module.exports = TenantController;
+module.exports = { TenantController, TenantPermissions };

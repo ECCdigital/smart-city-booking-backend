@@ -6,6 +6,7 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
+const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -56,6 +57,15 @@ class BookingPermissions {
     return false;
   }
 
+  static async _allowReadAny(userId, tenant) {
+    return await UserManager.hasPermission(
+      userId,
+      tenant,
+      RolePermission.MANAGE_BOOKINGS,
+      "readAny",
+    );
+  }
+
   static async _allowUpdate(booking, userId, tenant) {
     if (
       tenant === booking.tenant &&
@@ -80,6 +90,15 @@ class BookingPermissions {
       return true;
 
     return false;
+  }
+
+  static async _allowUpdateAny(userId, tenant) {
+    return await UserManager.hasPermission(
+      userId,
+      tenant,
+      RolePermission.MANAGE_BOOKINGS,
+      "updateAny",
+    );
   }
 
   static async _allowDelete(booking, userId, tenant) {
@@ -120,6 +139,10 @@ class BookingController {
         bookable: await BookableManager.getBookable(
           booking.bookableId,
           booking.tenant,
+        ),
+        workflowStatus: await WorkflowService.getWorkflowStatus(
+          booking.tenant,
+          booking.id,
         ),
       };
     }
@@ -404,7 +427,7 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async storeBooking(request, response) {
-    const booking = Object.assign(new Booking(), request.body);
+    const booking = new Booking(request.body);
 
     let isUpdate =
       !!(await BookingManager.getBooking(booking.id, booking.tenant)) &&
@@ -419,7 +442,7 @@ class BookingController {
 
   static async createBooking(request, response) {
     const user = request.user;
-    const booking = Object.assign(new Booking(), request.body);
+    const booking = new Booking(request.body);
 
     if (
       !(await BookingPermissions._allowCreate(booking, user.id, user.tenant))
@@ -446,12 +469,18 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const booking = Object.assign(new Booking(), request.body);
+      const booking = new Booking(request.body);
 
       if (
         await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
       ) {
         await BookingService.updateBooking(tenant, booking);
+
+        await WorkflowService.updateTask(
+          tenant,
+          booking.id,
+          request.body._populated?.workflowStatus,
+        );
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );
@@ -481,6 +510,7 @@ class BookingController {
           await BookingPermissions._allowDelete(booking, user.id, user.tenant)
         ) {
           await BookingService.cancelBooking(tenant, id);
+          await WorkflowService.removeTask(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
           response.sendStatus(200);
         } else {
