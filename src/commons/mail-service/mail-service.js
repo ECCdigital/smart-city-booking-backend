@@ -64,7 +64,7 @@ class MailerService {
       TenantManager.getTenant(tenantId).then((tenant) => {
         MailerService.processTemplate(mailTemplate, model)
           .then((output) => {
-            var message = {
+            const message = {
               from: tenant.noreplyDisplayName + " <" + tenant.noreplyMail + ">",
               to: address,
               subject: subject,
@@ -82,11 +82,14 @@ class MailerService {
                 pool: true,
                 host: tenant.noreplyHost,
                 port: tenant.noreplyPort,
-                secure: true, // use TLS
+                secure: !tenant.noreplyStarttls,
                 auth: {
                   user: tenant.noreplyUser,
                   pass: tenant.noreplyPassword,
                 },
+                tls: !!tenant.noreplyStarttls
+                  ? { ciphers: "SSLv3", rejectUnauthorized: false }
+                  : null,
               };
 
               const logConfig = {
