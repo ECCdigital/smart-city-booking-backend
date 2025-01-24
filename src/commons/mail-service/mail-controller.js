@@ -240,20 +240,59 @@ class MailController {
     address,
     bookingId,
     tenantId,
+    reason,
     attachments = undefined,
   ) {
     const tenant = await TenantManager.getTenant(tenantId);
+
+    // remove any html or script tags from the reason
+    reason = reason.replace(/<[^>]*>?/gm, "");
+
+    let message = `<p>Die nachfolgende Buchung wurde storniert:</p>`;
+    if (reason) {
+      message += `<p><strong>Hinweis zur Stornierung</strong>: ${reason}</p>`;
+    }
 
     await this._sendBookingMail({
       address,
       bookingId,
       tenantId,
-      subject: `Ihre Buchung im ${tenant.name} wurde storniert`,
+      subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
       title: `Ihre Buchung im ${tenant.name} wurde storniert`,
-      message: `<p>Die nachfolgende Buchung wurde storniert.</p><br>`,
+      message: message,
       includeQRCode: false,
       attachments,
       sendBCC: true,
+    });
+  }
+
+  static async sendVerifyBookingRejection(
+    address,
+    bookingId,
+    tenantId,
+    reason,
+    hookId,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    // remove any html or script tags from the reason
+    reason = reason.replace(/<[^>]*>?/gm, "");
+
+    let message = `<p>Für die nachfolgende Buchung wurde eine Stornierung vorgemerkt. Wenn Sie diese Stornierung bestätigen möchten, klicken Sie bitte auf den nachfolgenden Link.</p><p>Sollten Sie die Stornierung nicht veranlasst haben, können Sie diese Nachricht ignorieren.</p>`;
+
+    message += `<p><a href="${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}">Stornierung bestätigen</a></p>`;
+
+    await this._sendBookingMail({
+      address,
+      bookingId,
+      tenantId,
+      subject: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
+      title: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
+      message: message,
+      includeQRCode: false,
+      attachments,
+      sendBCC: false,
     });
   }
 
