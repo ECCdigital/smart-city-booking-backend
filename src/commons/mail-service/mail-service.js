@@ -162,7 +162,9 @@ class MailerService {
 
           const toRecipients = MailerService._normalizeRecipients(mailData.to);
           const ccRecipients = MailerService._normalizeRecipients(mailData.cc);
-          const bccRecipients = MailerService._normalizeRecipients(mailData.bcc);
+          const bccRecipients = MailerService._normalizeRecipients(
+            mailData.bcc,
+          );
           const attachments = MailerService._base64Attachment(
             mailData.attachments,
           );
