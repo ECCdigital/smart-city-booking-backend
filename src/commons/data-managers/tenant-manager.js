@@ -10,6 +10,7 @@ const TENANT_ENCRYPT_KEYS = [
   "paymentSecret",
   "noreplyPassword",
   "password",
+  "noreplyGraphClientSecret",
 ];
 
 /**
