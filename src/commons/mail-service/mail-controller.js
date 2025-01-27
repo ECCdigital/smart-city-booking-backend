@@ -245,8 +245,6 @@ class MailController {
   ) {
     const tenant = await TenantManager.getTenant(tenantId);
 
-
-
     let message = `<p>Die nachfolgende Buchung wurde storniert:</p>`;
     if (reason) {
       reason = sanitizeReason(reason);
@@ -284,7 +282,6 @@ class MailController {
     }
 
     message += `<p><a href="${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}">Stornierung bestätigen</a></p>`;
-
 
     await this._sendBookingMail({
       address,
@@ -510,7 +507,7 @@ class MailController {
 }
 
 function sanitizeReason(reason) {
-  if (typeof reason === 'string' && reason.trim() !== '') {
+  if (typeof reason === "string" && reason.trim() !== "") {
     return reason.replace(/<[^>]*>?/gm, "");
   }
   return reason;
