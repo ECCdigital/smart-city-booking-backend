@@ -17,7 +17,7 @@ class PaymentController {
 
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
-    if(!booking?.id) {
+    if (!booking?.id) {
       response.status(400).send({ message: "Booking not found", code: 0 });
       return;
     }
@@ -27,7 +27,7 @@ class PaymentController {
       return;
     }
 
-    if(booking.isPayed ) {
+    if (booking.isPayed) {
       response.status(400).send({ message: "Booking already payed", code: 2 });
       return;
     }
