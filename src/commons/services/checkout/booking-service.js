@@ -309,8 +309,8 @@ class BookingService {
         booking.mail,
         booking.id,
         booking.tenant,
-        reason,
         hook.id,
+        reason,
       );
       logger.info(
         `${tenant} -- booking ${booking.id} rejection requested and sent booking reject verification to ${booking.mail}`,

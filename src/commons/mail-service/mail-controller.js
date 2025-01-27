@@ -245,11 +245,11 @@ class MailController {
   ) {
     const tenant = await TenantManager.getTenant(tenantId);
 
-    // remove any html or script tags from the reason
-    reason = reason.replace(/<[^>]*>?/gm, "");
+
 
     let message = `<p>Die nachfolgende Buchung wurde storniert:</p>`;
     if (reason) {
+      reason = sanitizeReason(reason);
       message += `<p><strong>Hinweis zur Stornierung</strong>: ${reason}</p>`;
     }
 
@@ -270,18 +270,21 @@ class MailController {
     address,
     bookingId,
     tenantId,
-    reason,
     hookId,
+    reason,
     attachments = undefined,
   ) {
     const tenant = await TenantManager.getTenant(tenantId);
 
-    // remove any html or script tags from the reason
-    reason = reason.replace(/<[^>]*>?/gm, "");
-
     let message = `<p>Für die nachfolgende Buchung wurde eine Stornierung vorgemerkt. Wenn Sie diese Stornierung bestätigen möchten, klicken Sie bitte auf den nachfolgenden Link.</p><p>Sollten Sie die Stornierung nicht veranlasst haben, können Sie diese Nachricht ignorieren.</p>`;
 
+    if (reason) {
+      reason = sanitizeReason(reason);
+      message += `<p><strong>Hinweis zur Stornierung</strong>: ${reason}</p>`;
+    }
+
     message += `<p><a href="${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}">Stornierung bestätigen</a></p>`;
+
 
     await this._sendBookingMail({
       address,
@@ -504,6 +507,13 @@ class MailController {
       },
     );
   }
+}
+
+function sanitizeReason(reason) {
+  if (typeof reason === 'string' && reason.trim() !== '') {
+    return reason.replace(/<[^>]*>?/gm, "");
+  }
+  return reason;
 }
 
 module.exports = MailController;
