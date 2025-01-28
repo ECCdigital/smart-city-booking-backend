@@ -1,5 +1,6 @@
 const {
   GiroCockpitPaymentService,
+  PmPaymentService,
   InvoicePaymentService,
 } = require("../services/payment/payment-service");
 const TenantManager = require("../data-managers/tenant-manager");
@@ -8,6 +9,7 @@ class PaymentUtils {
   static async getPaymentService(tenantId, bookingId, paymentMethod) {
     const paymentMethods = {
       giroCockpit: GiroCockpitPaymentService,
+      pmPayment: PmPaymentService,
       invoice: InvoicePaymentService,
     };
     const serviceClass = paymentMethods[paymentMethod];

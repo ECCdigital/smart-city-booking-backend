@@ -253,6 +253,76 @@ class GiroCockpitPaymentService extends PaymentService {
   }
 }
 
+class PmPaymentService extends PaymentService {
+  async createPayment() {
+    const booking = await getBooking(this.bookingId, this.tenantId);
+    const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
+
+    try {
+      const PM_CHECKOUT_URL = "https://www.payment.govconnect.de/payment/secure";
+
+
+      const txid = this.bookingId;
+
+      const amount = (booking.priceEur * 100 || 0).toString();
+      const desc = `${this.bookingId} ${
+        paymentApp.paymentPurposeSuffix || ""
+      }`;
+      const AGS = paymentApp.paymentMerchantId;
+      const PROCEDURE = paymentApp.paymentProjectId;
+
+      const PAYMENT_SALT = paymentApp.paymentSalt;
+
+      const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?id=${this.bookingId}`;
+
+      const hash = crypto
+        .createHmac("sha256", PAYMENT_SALT)
+        .update(
+          `${AGS}|${amount}|${PROCEDURE}|${desc}|${txid}|${notifyUrl}`,
+        )
+        .digest("hex");
+
+
+      const data = qs.stringify({
+        ags: AGS,
+        amount: amount,
+        procedure: PROCEDURE,
+        desc: desc,
+        txid: txid,
+        notifyUrl: notifyUrl,
+        hash: hash,
+      });
+
+      const config = {
+        method: "post",
+        url: PM_CHECKOUT_URL,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data: data,
+      };
+
+      const response = await axios(config);
+
+      console.log(response);
+
+      if (response.data?.url) {
+        logger.info(
+          `Payment URL requested for booking ${txid}: ${response.data?.url}`,
+        );
+        return response.data?.url;
+      } else {
+        logger.warn("could not get payment url.", response.data);
+        throw new Error("could not get payment url.");
+      }
+
+
+    } catch (error) {
+      throw new Error(error);
+    }
+  }
+}
+
 class InvoicePaymentService extends PaymentService {
   constructor(tenantId, bookingId) {
     super(tenantId, bookingId);
@@ -332,5 +402,6 @@ class InvoicePaymentService extends PaymentService {
 
 module.exports = {
   GiroCockpitPaymentService,
+  PmPaymentService,
   InvoicePaymentService,
 };
