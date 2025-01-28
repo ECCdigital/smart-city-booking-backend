@@ -209,13 +209,6 @@ class MailerService {
             },
           });
 
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(
-              `Graph sendMail failed: ${response.status} - ${errText}`,
-            );
-          }
-
           callback(null, {
             accepted: toRecipients,
             rejected: [],
