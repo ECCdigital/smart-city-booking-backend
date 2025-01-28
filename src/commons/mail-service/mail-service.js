@@ -2,7 +2,7 @@ const nodemailer = require("nodemailer");
 const Mustache = require("mustache");
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
-const fetch = require("cross-fetch");
+const axios = require("axios");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
 
 const logger = bunyan.createLogger({
@@ -202,13 +202,11 @@ class MailerService {
           };
 
           const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from.address)}/sendMail`;
-          const response = await fetch(url, {
-            method: "POST",
+          const response = await axios.post(url, JSON.stringify(graphBody), {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(graphBody),
           });
 
           if (!response.ok) {
