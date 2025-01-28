@@ -68,6 +68,7 @@ class MailController {
     includeQRCode = false,
     attachments = [],
     sendBCC = false,
+    addRejectionLink = false,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
@@ -77,6 +78,10 @@ class MailController {
     }
 
     let content = `${message}<br>${bookingDetails}`;
+
+    if (addRejectionLink) {
+      content += `<br /><br /><a href="${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}">Buchung stornieren</a>`;
+    }
 
     if (includeQRCode) {
       const { content: qrContent, attachment: qrAttachment } =
@@ -233,6 +238,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -261,6 +267,7 @@ class MailController {
       includeQRCode: false,
       attachments,
       sendBCC: true,
+      addRejectionLink: false,
     });
   }
 
@@ -293,6 +300,7 @@ class MailController {
       includeQRCode: false,
       attachments,
       sendBCC: false,
+      addRejectionLink: false,
     });
   }
 
@@ -310,6 +318,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments: undefined,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -327,6 +336,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments: undefined,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -349,6 +359,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -370,6 +381,7 @@ class MailController {
       message: `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte nutzen Sie den folgenden Link, um Ihre Buchung abzuschließen.</p><br><p><a href="${paymentLink}">${paymentLink}</a></p>`,
       includeQRCode: includeQRCode,
       sendBCC: false,
+      addRejectionLink: true,
     });
   }
 
@@ -392,6 +404,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: false,
+      addRejectionLink: true,
     });
   }
 
@@ -431,6 +444,7 @@ class MailController {
       title: `Eine neue Buchungsanfrage liegt vor`,
       message: `<p>Es liegt eine neue Buchungsanfrage vor.</p><br>`,
       sendBCC: false,
+      addRejectionLink: false,
     });
   }
 
