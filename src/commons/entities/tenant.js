@@ -51,7 +51,7 @@ class Tenant {
     this.noreplyUser = noreplyUser;
     this.noreplyPassword = noreplyPassword;
     this.noreplyStarttls = noreplyStarttls;
-    this.noreplyUseGraphApi = noreplyUseGraphApi;
+    this.noreplyUseGraphApi = noreplyUseGraphApi || false;
     this.noreplyGraphTenantId = noreplyGraphTenantId;
     this.noreplyGraphClientId = noreplyGraphClientId;
     this.noreplyGraphClientSecret = noreplyGraphClientSecret;
