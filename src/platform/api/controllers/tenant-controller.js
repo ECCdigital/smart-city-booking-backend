@@ -197,7 +197,7 @@ class TenantController {
   }
 
   static async storeTenant(request, response) {
-    const tenant = Object.assign(new Tenant(), request.body);
+    const tenant = new Tenant(request.body);
     let isUpdate = false;
 
     try {
@@ -218,7 +218,7 @@ class TenantController {
   static async createTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = Object.assign(new Tenant(), request.body);
+      const tenant = new Tenant(request.body);
 
       tenant.ownerUserId = user.id;
 
@@ -271,7 +271,7 @@ class TenantController {
   static async updateTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = Object.assign(new Tenant(), request.body);
+      const tenant = new Tenant(request.body);
       if (await TenantPermissions._allowUpdate(tenant, user.id, user.tenant)) {
         await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);

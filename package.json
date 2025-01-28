@@ -1,6 +1,6 @@
 {
   "name": "smart-city-booking-backend",
-  "version": "2.14.1",
+  "version": "2.14.2",
   "description": "An open-source backend system for booking and managing resources in smart cities and regions.",
   "main": "src/server.js",
   "scripts": {
@@ -24,6 +24,7 @@
   "author": "Eisenschmidt Consulting Crew GmbH",
   "license": "GPL-3.0",
   "dependencies": {
+    "@azure/msal-node": "^3.1.0",
     "axios": "^1.6.2",
     "bunyan": "^1.8.15",
     "cheerio": "^1.0.0-rc.12",

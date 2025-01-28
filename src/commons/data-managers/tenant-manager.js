@@ -10,6 +10,7 @@ const TENANT_ENCRYPT_KEYS = [
   "paymentSecret",
   "noreplyPassword",
   "password",
+  "noreplyGraphClientSecret",
 ];
 
 /**
@@ -40,7 +41,7 @@ class TenantManager {
         .toArray()
         .then((rawTenants) => {
           const tenants = rawTenants.map((rt) => {
-            const tenant = Object.assign(new Tenant(), rt);
+            const tenant = new Tenant(rt);
             tenant.applications = tenant.applications.map((app) => {
               return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
             });
@@ -65,11 +66,11 @@ class TenantManager {
         .get()
         .collection("tenants")
         .findOne({ id: id })
-        .then((rawTenant) => {
-          if (!rawTenant) {
+        .then((rt) => {
+          if (!rt) {
             return reject(new Error(`No tenant found with ID: ${id}`));
           }
-          const tenant = Object.assign(new Tenant(), rawTenant);
+          const tenant = new Tenant(rt);
           tenant.applications = tenant.applications.map((app) => {
             return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
           });
