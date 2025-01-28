@@ -807,6 +807,38 @@ class BookingController {
         .send("Could not get public booking status");
     }
   }
+
+  static async verifyBookingOwnership(request, response) {
+    const {
+      params: { tenant, id },
+      query: { name },
+    } = request;
+
+    if (!tenant || !id || !name) {
+      logger.warn(`${tenant} -- Missing required parameters.`);
+      return response.status(400).send("Missing required parameters.");
+    }
+
+    try {
+      const status = await BookingService.verifyBookingOwnership(
+        tenant,
+        id,
+        name,
+      );
+
+      logger.info(`${tenant} -- sending booking ownership status to user`);
+      if (status === true) {
+        return response.sendStatus(200);
+      } else {
+        return response.sendStatus(401);
+      }
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.code || 500)
+        .send("Could not check booking ownership");
+    }
+  }
 }
 
 module.exports = { BookingController, BookingPermissions };

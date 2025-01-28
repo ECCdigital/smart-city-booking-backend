@@ -161,6 +161,10 @@ router.post(
   BookingController.requestRejectBooking,
 );
 router.get(
+  "/bookings/:id/verify-ownership",
+  BookingController.verifyBookingOwnership,
+);
+router.get(
   "/bookings/:id/hooks/:hookId/release",
   BookingController.releaseBookingHook,
 );

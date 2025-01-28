@@ -366,6 +366,16 @@ class BookingService {
       comment: booking.comment,
     };
   }
+
+  static async verifyBookingOwnership(tenantId, bookingId, name) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking.id) {
+      throw { message: "Booking not found", code: 404 };
+    }
+
+    return booking.name.toLowerCase() === name.toLowerCase();
+  }
 }
 
 module.exports = BookingService;
