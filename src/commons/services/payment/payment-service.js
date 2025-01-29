@@ -355,7 +355,7 @@ class PmPaymentService extends PaymentService {
   }
 
   async paymentNotification(body) {
-    const { ags, txid, payment_method: paymentMethod } = body;
+    const { ags, txid, payment_method: paymentProvider } = body;
 
     try {
       if (!this.bookingId || !this.tenantId) {
@@ -367,7 +367,7 @@ class PmPaymentService extends PaymentService {
 
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_STATUS_URL;
-      if (paymentApp.paymentMode === "prod") {
+      if (paymentApp.paymentProvider === "prod") {
         PM_STATUS_URL = "https://payment.govconnect.de/payment/status";
       } else {
         PM_STATUS_URL = "https://payment-test.govconnect.de/payment/status";
@@ -400,7 +400,7 @@ class PmPaymentService extends PaymentService {
         await this.handleSuccessfulPayment({
           bookingId: this.bookingId,
           tenantId: this.tenantId,
-          payedWith: paymentMapping[paymentMethod] || "OTHER",
+          payedWith: paymentMapping[paymentProvider] || "OTHER",
         });
 
         logger.info(

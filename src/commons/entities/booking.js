@@ -20,7 +20,7 @@ class Booking {
    * @param {Array} params.lockerInfo - The locker information for the booking.
    * @param {string} params.mail - The email address associated with the booking.
    * @param {string} params.name - The name associated with the booking.
-   * @param {string} params.paymentMethod - The payment provider used for the booking.
+   * @param {string} params.paymentProvider - The payment provider used for the booking.
    * @param {string} params.payedWith - The payment method used for the booking.
    * @param {string} params.phone - The phone number associated with the booking.
    * @param {number} params.priceEur - The price of the booking in euros.
@@ -46,7 +46,7 @@ class Booking {
     lockerInfo,
     mail,
     name,
-    paymentMethod,
+    paymentProvider,
     payedWith,
     phone,
     priceEur,
@@ -71,7 +71,7 @@ class Booking {
     this.lockerInfo = lockerInfo;
     this.mail = mail;
     this.name = name;
-    this.paymentMethod = paymentMethod;
+    this.paymentProvider = paymentProvider;
     this.payedWith = payedWith;
     this.phone = phone;
     this.priceEur = priceEur;

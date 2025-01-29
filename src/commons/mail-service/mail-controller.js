@@ -372,7 +372,7 @@ class MailController {
       const paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
         attachments,
       );
 

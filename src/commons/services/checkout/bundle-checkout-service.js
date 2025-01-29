@@ -25,7 +25,7 @@ class BundleCheckoutService {
    * @param {string} phone - The phone number of the user.
    * @param {string} comment - The comment of the user.
    * @param {Array} attachmentStatus - The attachments of the user.
-   * @param {string} paymentMethod - The payment method.
+   * @param {string} paymentProvider - The payment method.
    */
   constructor(
     user,
@@ -43,7 +43,7 @@ class BundleCheckoutService {
     phone,
     comment,
     attachmentStatus,
-    paymentMethod,
+    paymentProvider,
   ) {
     this.user = user;
     this.tenant = tenant;
@@ -60,7 +60,7 @@ class BundleCheckoutService {
     this.phone = phone;
     this.comment = comment;
     this.attachmentStatus = attachmentStatus;
-    this.paymentMethod = paymentMethod;
+    this.paymentProvider = paymentProvider;
   }
 
   async generateBookingReference(
@@ -275,7 +275,7 @@ class BundleCheckoutService {
       vatIncludedEur: await this.vatIncludedEur(),
       isCommitted: await this.isAutoCommit(),
       isPayed: await this.isPaymentComplete(),
-      paymentMethod: this.paymentMethod,
+      paymentProvider: this.paymentProvider,
       lockerInfo: await this.getLockerInfo(),
     };
 
@@ -316,7 +316,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {boolean} isCommit - The commit status.
    * @param {boolean} isPayed - The payment status.
    * @param {Array} attachmentStatus - The attachments of the user.
-   * @param {string} paymentMethod - The payment method.
+   * @param {string} paymentProvider - The payment method.
    */
   constructor(
     user,
@@ -337,7 +337,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     isCommit,
     isPayed,
     attachmentStatus,
-    paymentMethod,
+    paymentProvider,
   ) {
     super(
       user,
@@ -355,7 +355,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       phone,
       comment,
       attachmentStatus,
-      paymentMethod,
+      paymentProvider,
     );
     this.priceEur = priceEur;
     this.isCommitted = isCommit;

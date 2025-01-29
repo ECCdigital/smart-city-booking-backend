@@ -48,7 +48,7 @@ class BookingService {
       phone,
       comment,
       attachmentStatus,
-      paymentMethod,
+      paymentProvider,
     } = request.body;
 
     logger.info(
@@ -88,7 +88,7 @@ class BookingService {
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
         attachmentStatus,
-        paymentMethod,
+        paymentProvider,
       );
     } else {
       bundleCheckoutService = new BundleCheckoutService(
@@ -107,7 +107,7 @@ class BookingService {
         phone,
         comment,
         attachmentStatus,
-        paymentMethod,
+        paymentProvider,
       );
     }
 

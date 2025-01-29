@@ -21,7 +21,7 @@ class PaymentController {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
       );
 
       const data = await paymentService?.createPayment();
@@ -43,7 +43,7 @@ class PaymentController {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
       );
 
       await paymentService.paymentNotification(request.query);
@@ -75,7 +75,7 @@ class PaymentController {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
       );
 
       await paymentService.paymentNotification(request.body);
@@ -114,7 +114,7 @@ class PaymentController {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
       );
 
       const url = paymentService.paymentResponse();
