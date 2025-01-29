@@ -38,8 +38,6 @@ class PaymentController {
       query: { id: bookingId },
     } = request;
 
-    console.log("request", request);
-
     const booking = await BookingManager.getBooking(bookingId, tenantId);
     try {
       let paymentService = await PaymentUtils.getPaymentService(
@@ -71,8 +69,6 @@ class PaymentController {
       params: { tenant: tenantId },
       query: { id: bookingId },
     } = request;
-
-    console.log("request", request);
 
     const booking = await BookingManager.getBooking(bookingId, tenantId);
     try {

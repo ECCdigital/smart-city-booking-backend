@@ -337,6 +337,10 @@ class PmPaymentService extends PaymentService {
     const MailController = () => require("../../mail-service/mail-controller");
     const { ags, txid, payment_method: paymentMethod } = body;
 
+    console.log("ags", ags);
+    console.log("txid", txid);
+    console.log("payment_method", paymentMethod);
+
     try {
       if (!this.bookingId || !this.tenantId) {
         logger.warn(
