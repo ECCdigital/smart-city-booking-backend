@@ -111,22 +111,20 @@ class GiroCockpitPaymentService extends PaymentService {
     }
   }
 
-  async paymentNotification(args) {
+  async paymentNotification(query) {
     const MailController = () => require("../../mail-service/mail-controller");
     const {
-      query: {
-        gcMerchantTxId,
-        gcResultPayment,
-        gcPaymethod,
-        gcType,
-        gcProjectId,
-        gcReference,
-        gcBackendTxId,
-        gcAmount,
-        gcCurrency,
-        gcHash,
-      },
-    } = args;
+      gcMerchantTxId,
+      gcResultPayment,
+      gcPaymethod,
+      gcType,
+      gcProjectId,
+      gcReference,
+      gcBackendTxId,
+      gcAmount,
+      gcCurrency,
+      gcHash,
+    } = query;
 
     try {
       if (!this.bookingId || !this.tenantId) {
@@ -335,11 +333,9 @@ class PmPaymentService extends PaymentService {
     );
   }
 
-  async paymentNotification(args) {
+  async paymentNotification(body) {
     const MailController = () => require("../../mail-service/mail-controller");
-    const {
-      query: { ags, txid, payment_method: paymentMethod },
-    } = args;
+    const { ags, txid, payment_method: paymentMethod } = body;
 
     try {
       if (!this.bookingId || !this.tenantId) {
