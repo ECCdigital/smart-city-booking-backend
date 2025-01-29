@@ -273,7 +273,7 @@ class PmPaymentService extends PaymentService {
       const PAYMENT_SALT = paymentApp.paymentSecret;
 
       const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?id=${this.bookingId}`;
-      const redirectURL = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${this.bookingId}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}`;
+      const redirectUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${this.bookingId}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}`;
 
       const hash = crypto
         .createHmac("sha256", PAYMENT_SALT)
@@ -287,8 +287,8 @@ class PmPaymentService extends PaymentService {
         amount: amount,
         procedure: PROCEDURE,
         desc: desc,
-        notifyUrl: notifyUrl,
-        redirectURL: redirectURL,
+        notifyURL: notifyUrl,
+        redirectURL: redirectUrl,
         hash: hash,
       });
 
