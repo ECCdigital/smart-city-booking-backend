@@ -259,37 +259,34 @@ class PmPaymentService extends PaymentService {
     const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
 
     try {
-      const PM_CHECKOUT_URL = "https://www.payment.govconnect.de/payment/secure";
-
-
-      const txid = this.bookingId;
+      let PM_CHECKOUT_URL;
+      if (paymentApp.paymentMode === "prod") {
+        PM_CHECKOUT_URL = "https://payment.govconnect.de/payment/secure";
+      } else {
+        PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
+      }
 
       const amount = (booking.priceEur * 100 || 0).toString();
-      const desc = `${this.bookingId} ${
-        paymentApp.paymentPurposeSuffix || ""
-      }`;
+      const desc = `${this.bookingId} ${paymentApp.paymentPurposeSuffix || ""}`;
       const AGS = paymentApp.paymentMerchantId;
       const PROCEDURE = paymentApp.paymentProjectId;
-
-      const PAYMENT_SALT = paymentApp.paymentSalt;
+      const PAYMENT_SALT = paymentApp.paymentSecret;
 
       const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?id=${this.bookingId}`;
+      const redirectURL = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${this.bookingId}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}`;
 
       const hash = crypto
         .createHmac("sha256", PAYMENT_SALT)
-        .update(
-          `${AGS}|${amount}|${PROCEDURE}|${desc}|${txid}|${notifyUrl}`,
-        )
+        .update(`${AGS}|${amount}|${PROCEDURE}|${desc}|${notifyUrl}|${redirectURL}`)
         .digest("hex");
-
 
       const data = qs.stringify({
         ags: AGS,
         amount: amount,
         procedure: PROCEDURE,
         desc: desc,
-        txid: txid,
         notifyUrl: notifyUrl,
+        redirectURL: redirectURL,
         hash: hash,
       });
 
@@ -304,21 +301,147 @@ class PmPaymentService extends PaymentService {
 
       const response = await axios(config);
 
-      console.log(response);
-
       if (response.data?.url) {
         logger.info(
-          `Payment URL requested for booking ${txid}: ${response.data?.url}`,
+          `Payment URL requested for booking ${this.bookingId}: ${response.data?.url}`,
         );
         return response.data?.url;
       } else {
         logger.warn("could not get payment url.", response.data);
         throw new Error("could not get payment url.");
       }
-
-
     } catch (error) {
       throw new Error(error);
+    }
+  }
+
+  paymentResponse() {
+    return `${process.env.FRONTEND_URL}/checkout/status?id=${this.bookingId}&tenant=${this.tenantId}`;
+  }
+
+  async paymentRequest() {
+    const MailController = () => require("../../mail-service/mail-controller");
+    const booking = await BookingManager.getBooking(
+      this.bookingId,
+      this.tenantId,
+    );
+
+    await MailController().sendPaymentLinkAfterBookingApproval(
+      booking.mail,
+      this.bookingId,
+      this.tenantId,
+    );
+  }
+
+  async paymentNotification(args) {
+    const MailController = () => require("../../mail-service/mail-controller");
+    const {
+      query: {
+        ags,
+        txid,
+      },
+    } = args;
+
+    try {
+      if (!this.bookingId || !this.tenantId) {
+        logger.warn(
+          `${this.tenantId} -- could not validate payment notification. Missing parameters. For Booking ${this.bookingId}`,
+        );
+        throw new Error("Missing parameters");
+      }
+
+      const booking = await BookingManager.getBooking(
+        this.bookingId,
+        this.tenantId,
+      );
+      const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
+      let PM_STATUS_URL;
+      if (paymentApp.paymentMode === "prod") {
+        PM_STATUS_URL = "https://payment.govconnect.de/payment/status";
+      } else {
+        PM_STATUS_URL = "https://payment-test.govconnect.de/payment/status";
+      }
+
+        const config = {
+          method: "get",
+          url: `${PM_STATUS_URL}/${ags}/${txid}`,
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        };
+
+
+      const response = await axios(config);
+
+      console.log(response.data);
+
+
+      if (response.data.status === 1) {
+        logger.info(
+          `${this.tenantId} -- pmPayment responds with status 1 / successfully payed for booking ${this.bookingId} .`,
+        );
+        booking.isPayed = true;
+        booking.payMethod = "pmPayment";
+        await BookingManager.setBookingPayedStatus(booking);
+
+        if (booking.isCommitted && booking.isPayed) {
+          let attachments = [];
+          try {
+            if (booking.priceEur > 0) {
+              const pdfData = await ReceiptService.createReceipt(
+                this.tenantId,
+                this.bookingId,
+              );
+              attachments = [
+                {
+                  filename: pdfData.name,
+                  content: pdfData.buffer,
+                  contentType: "application/pdf",
+                },
+              ];
+            }
+          } catch (err) {
+            logger.error(err);
+          }
+
+          try {
+            await MailController().sendBookingConfirmation(
+              booking.mail,
+              booking.id,
+              this.tenantId,
+              attachments,
+            );
+          } catch (err) {
+            logger.error(err);
+          }
+
+          try {
+            const tenant = await TenantManager.getTenant(this.tenantId);
+            await MailController().sendIncomingBooking(
+              tenant.mail,
+              this.bookingId,
+              this.tenantId,
+            );
+          } catch (err) {
+            logger.error(err);
+          }
+        }
+
+        logger.info(
+          `${this.tenantId} -- booking ${this.bookingId} successfully payed and updated.`,
+        );
+
+        return true;
+      } else {
+        // TODO: remove booking?
+        logger.warn(
+          `${this.tenantId} -- booking ${this.bookingId} could not be payed.`,
+        );
+        return true;
+      }
+    } catch (error) {
+      logger.error(`${this.tenantId} -- payment notification error. For Booking ${this.bookingId}`);
+      throw error;
     }
   }
 }
