@@ -277,7 +277,9 @@ class PmPaymentService extends PaymentService {
 
       const hash = crypto
         .createHmac("sha256", PAYMENT_SALT)
-        .update(`${AGS}|${amount}|${PROCEDURE}|${desc}|${notifyUrl}|${redirectURL}`)
+        .update(
+          `${AGS}|${amount}|${PROCEDURE}|${desc}|${notifyUrl}|${redirectURL}`,
+        )
         .digest("hex");
 
       const data = qs.stringify({
@@ -336,10 +338,7 @@ class PmPaymentService extends PaymentService {
   async paymentNotification(args) {
     const MailController = () => require("../../mail-service/mail-controller");
     const {
-      query: {
-        ags,
-        txid,
-      },
+      query: { ags, txid, payment_method: paymentMethod },
     } = args;
 
     try {
@@ -362,26 +361,24 @@ class PmPaymentService extends PaymentService {
         PM_STATUS_URL = "https://payment-test.govconnect.de/payment/status";
       }
 
-        const config = {
-          method: "get",
-          url: `${PM_STATUS_URL}/${ags}/${txid}`,
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-        };
-
+      const config = {
+        method: "get",
+        url: `${PM_STATUS_URL}/${ags}/${txid}`,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      };
 
       const response = await axios(config);
 
       console.log(response.data);
-
 
       if (response.data.status === 1) {
         logger.info(
           `${this.tenantId} -- pmPayment responds with status 1 / successfully payed for booking ${this.bookingId} .`,
         );
         booking.isPayed = true;
-        booking.payMethod = "pmPayment";
+        booking.payMethod = paymentMethod;
         await BookingManager.setBookingPayedStatus(booking);
 
         if (booking.isCommitted && booking.isPayed) {
@@ -440,7 +437,9 @@ class PmPaymentService extends PaymentService {
         return true;
       }
     } catch (error) {
-      logger.error(`${this.tenantId} -- payment notification error. For Booking ${this.bookingId}`);
+      logger.error(
+        `${this.tenantId} -- payment notification error. For Booking ${this.bookingId}`,
+      );
       throw error;
     }
   }
