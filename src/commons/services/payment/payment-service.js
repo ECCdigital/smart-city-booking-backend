@@ -344,6 +344,10 @@ class PmPaymentService extends PaymentService {
   async paymentNotification(body) {
     const { ags, txid, payment_method: paymentMethod } = body;
 
+    console.log("paymentNotification");
+    console.log({ ags, txid, paymentMethod });
+    console.log("body", body);
+
     try {
       if (!this.bookingId || !this.tenantId) {
         logger.warn(
