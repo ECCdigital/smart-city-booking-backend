@@ -278,7 +278,7 @@ class PmPaymentService extends PaymentService {
       const hash = crypto
         .createHmac("sha256", PAYMENT_SALT)
         .update(
-          `${AGS}|${amount}|${PROCEDURE}|${desc}|${notifyUrl}|${redirectURL}`,
+          `${AGS}|${amount}|${PROCEDURE}|${desc}|${notifyUrl}|${redirectUrl}`,
         )
         .digest("hex");
 
