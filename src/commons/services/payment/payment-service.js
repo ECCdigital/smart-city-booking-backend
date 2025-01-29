@@ -39,6 +39,9 @@ class PaymentService {
   async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
+    console.log("handleSuccessfulPayment");
+    console.log({ bookingId, tenantId, payedWith });
+
     booking.isPayed = true;
     booking.payedWith = payedWith;
     await BookingManager.setBookingPayedStatus(booking);
