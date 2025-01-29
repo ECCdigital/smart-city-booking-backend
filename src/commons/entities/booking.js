@@ -20,7 +20,8 @@ class Booking {
    * @param {Array} params.lockerInfo - The locker information for the booking.
    * @param {string} params.mail - The email address associated with the booking.
    * @param {string} params.name - The name associated with the booking.
-   * @param {string} params.paymentMethod - The payment method used for the booking.
+   * @param {string} params.paymentMethod - The payment provider used for the booking.
+   * @param {string} params.payedWith - The payment method used for the booking.
    * @param {string} params.phone - The phone number associated with the booking.
    * @param {number} params.priceEur - The price of the booking in euros.
    * @param {string} params.street - The street address associated with the booking.
