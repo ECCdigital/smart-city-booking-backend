@@ -107,8 +107,8 @@ class BookingManager {
         .collection("bookings")
         .findOne({ id: id, tenant: tenant })
         .then((rb) => {
-          if(!rb) {
-            resolve (new Booking({}));
+          if (!rb) {
+            resolve(new Booking({}));
           }
           const booking = new Booking(rb);
           resolve(booking);
