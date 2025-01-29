@@ -78,10 +78,6 @@ class PaymentController {
         booking.paymentMethod,
       );
 
-      console.log('request', request);
-
-      console.log('request.body', request.body);
-
       await paymentService.paymentNotification(request.body);
       try {
         const lockerServiceInstance = LockerService.getInstance();

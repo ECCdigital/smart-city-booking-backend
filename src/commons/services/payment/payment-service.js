@@ -39,9 +39,6 @@ class PaymentService {
   async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
-    console.log("handleSuccessfulPayment2");
-    console.log({ bookingId, tenantId, payedWith });
-
     booking.isPayed = true;
     booking.payedWith = payedWith;
     await BookingManager.setBookingPayedStatus(booking);
@@ -414,10 +411,8 @@ class PmPaymentService extends PaymentService {
     }
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, payMethod }) {
-    console.log("handleSuccessfulPayment");
-    console.log({ bookingId, tenantId, payMethod });
-    await super.handleSuccessfulPayment({ bookingId, tenantId, payMethod });
+  async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, payedWith });
   }
 }
 
