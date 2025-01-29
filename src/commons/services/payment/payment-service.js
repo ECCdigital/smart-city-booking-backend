@@ -35,9 +35,54 @@ class PaymentService {
   paymentRequest() {
     throw new Error("paymentRequest not implemented");
   }
+
+  async handleSuccessfulPayment({ bookingId, tenantId, payMethod }) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    booking.isPayed = true;
+    booking.payMethod = payMethod;
+    await BookingManager.setBookingPayedStatus(booking);
+
+    if (booking.isCommitted && booking.isPayed) {
+      let attachments = [];
+      if (booking.priceEur > 0) {
+        const pdfData = await ReceiptService.createReceipt(tenantId, bookingId);
+        attachments = [
+          {
+            filename: pdfData.name,
+            content: pdfData.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+      }
+
+      try {
+        const MailController = require("../../mail-service/mail-controller");
+        await MailController.sendBookingConfirmation(
+          booking.mail,
+          booking.id,
+          tenantId,
+          attachments,
+        );
+
+        const tenant = await TenantManager.getTenant(tenantId);
+        await MailController.sendIncomingBooking(
+          tenant.mail,
+          bookingId,
+          tenantId,
+        );
+      } catch (err) {
+        logger.error(err);
+      }
+    }
+
+    return booking;
+  }
 }
 
 class GiroCockpitPaymentService extends PaymentService {
+  static GIRO_SUCCESS_CODE = "4000";
+
   async createPayment() {
     const booking = await getBooking(this.bookingId, this.tenantId);
     const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
@@ -107,12 +152,11 @@ class GiroCockpitPaymentService extends PaymentService {
         throw new Error("could not get payment url.");
       }
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
   }
 
   async paymentNotification(query) {
-    const MailController = () => require("../../mail-service/mail-controller");
     const {
       gcMerchantTxId,
       gcResultPayment,
@@ -133,11 +177,6 @@ class GiroCockpitPaymentService extends PaymentService {
         );
         throw new Error("Missing parameters");
       }
-
-      const booking = await BookingManager.getBooking(
-        this.bookingId,
-        this.tenantId,
-      );
       const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
       const PROJECT_SECRET = paymentApp.paymentSecret;
 
@@ -164,56 +203,16 @@ class GiroCockpitPaymentService extends PaymentService {
         throw new Error("Hash mismatch");
       }
 
-      if (gcResultPayment === "4000") {
+      if (gcResultPayment === GiroCockpitPaymentService.GIRO_SUCCESS_CODE) {
         logger.info(
-          `${this.tenantId} -- GiroCockpit responds with status 4000 / successfully payed for booking ${this.bookingId} .`,
+          `${this.tenantId} -- GiroCockpit responds with status ${GiroCockpitPaymentService.GIRO_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
         );
-        booking.isPayed = true;
-        booking.payMethod = gcPaymethod;
-        await BookingManager.setBookingPayedStatus(booking);
 
-        if (booking.isCommitted && booking.isPayed) {
-          let attachments = [];
-          try {
-            if (booking.priceEur > 0) {
-              const pdfData = await ReceiptService.createReceipt(
-                this.tenantId,
-                this.bookingId,
-              );
-              attachments = [
-                {
-                  filename: pdfData.name,
-                  content: pdfData.buffer,
-                  contentType: "application/pdf",
-                },
-              ];
-            }
-          } catch (err) {
-            logger.error(err);
-          }
-
-          try {
-            await MailController().sendBookingConfirmation(
-              booking.mail,
-              booking.id,
-              this.tenantId,
-              attachments,
-            );
-          } catch (err) {
-            logger.error(err);
-          }
-
-          try {
-            const tenant = await TenantManager.getTenant(this.tenantId);
-            await MailController().sendIncomingBooking(
-              tenant.mail,
-              this.bookingId,
-              this.tenantId,
-            );
-          } catch (err) {
-            logger.error(err);
-          }
-        }
+        await this.handleSuccessfulPayment({
+          bookingId: this.bookingId,
+          tenantId: this.tenantId,
+          payMethod: gcPaymethod,
+        });
 
         logger.info(
           `${this.tenantId} -- booking ${this.bookingId} successfully payed and updated.`,
@@ -228,7 +227,7 @@ class GiroCockpitPaymentService extends PaymentService {
         return true;
       }
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
   }
 
@@ -249,9 +248,15 @@ class GiroCockpitPaymentService extends PaymentService {
       this.tenantId,
     );
   }
+
+  async handleSuccessfulPayment({ bookingId, tenantId, payMethod }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, payMethod });
+  }
 }
 
 class PmPaymentService extends PaymentService {
+  static PM_SUCCESS_CODE = 1;
+
   async createPayment() {
     const booking = await getBooking(this.bookingId, this.tenantId);
     const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
@@ -311,7 +316,7 @@ class PmPaymentService extends PaymentService {
         throw new Error("could not get payment url.");
       }
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
   }
 
@@ -334,12 +339,7 @@ class PmPaymentService extends PaymentService {
   }
 
   async paymentNotification(body) {
-    const MailController = () => require("../../mail-service/mail-controller");
     const { ags, txid, payment_method: paymentMethod } = body;
-
-    console.log("ags", ags);
-    console.log("txid", txid);
-    console.log("payment_method", paymentMethod);
 
     try {
       if (!this.bookingId || !this.tenantId) {
@@ -349,10 +349,6 @@ class PmPaymentService extends PaymentService {
         throw new Error("Missing parameters");
       }
 
-      const booking = await BookingManager.getBooking(
-        this.bookingId,
-        this.tenantId,
-      );
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_STATUS_URL;
       if (paymentApp.paymentMode === "prod") {
@@ -371,58 +367,25 @@ class PmPaymentService extends PaymentService {
 
       const response = await axios(config);
 
-      console.log(response.data);
-
-      if (response.data.status === 1) {
+      if (response.data.status === PmPaymentService.PM_SUCCESS_CODE) {
         logger.info(
-          `${this.tenantId} -- pmPayment responds with status 1 / successfully payed for booking ${this.bookingId} .`,
+          `${this.tenantId} -- pmPayment responds with status ${PmPaymentService.PM_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
         );
-        booking.isPayed = true;
-        booking.payMethod = paymentMethod;
-        await BookingManager.setBookingPayedStatus(booking);
 
-        if (booking.isCommitted && booking.isPayed) {
-          let attachments = [];
-          try {
-            if (booking.priceEur > 0) {
-              const pdfData = await ReceiptService.createReceipt(
-                this.tenantId,
-                this.bookingId,
-              );
-              attachments = [
-                {
-                  filename: pdfData.name,
-                  content: pdfData.buffer,
-                  contentType: "application/pdf",
-                },
-              ];
-            }
-          } catch (err) {
-            logger.error(err);
-          }
+        const paymentMapping = {
+          giropay: "GIROPAY",
+          sepa: "TRANSFER",
+          creditCard: "CREDIT_CARD",
+          paypal: "PAYPAL",
+          applePay: "APPLE_PAY",
+          googlePay: "GOOGLE_PAY",
+        };
 
-          try {
-            await MailController().sendBookingConfirmation(
-              booking.mail,
-              booking.id,
-              this.tenantId,
-              attachments,
-            );
-          } catch (err) {
-            logger.error(err);
-          }
-
-          try {
-            const tenant = await TenantManager.getTenant(this.tenantId);
-            await MailController().sendIncomingBooking(
-              tenant.mail,
-              this.bookingId,
-              this.tenantId,
-            );
-          } catch (err) {
-            logger.error(err);
-          }
-        }
+        await this.handleSuccessfulPayment({
+          bookingId: this.bookingId,
+          tenantId: this.tenantId,
+          payMethod: paymentMapping[paymentMethod] || "OTHER",
+        });
 
         logger.info(
           `${this.tenantId} -- booking ${this.bookingId} successfully payed and updated.`,
@@ -442,6 +405,10 @@ class PmPaymentService extends PaymentService {
       );
       throw error;
     }
+  }
+
+  async handleSuccessfulPayment({ bookingId, tenantId, payMethod }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, payMethod });
   }
 }
 
@@ -468,7 +435,7 @@ class InvoicePaymentService extends PaymentService {
         },
       ];
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
 
     try {
@@ -517,7 +484,7 @@ class InvoicePaymentService extends PaymentService {
         attachments,
       );
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
   }
 }
