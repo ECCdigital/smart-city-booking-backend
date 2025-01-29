@@ -72,7 +72,15 @@ class PaymentController {
       query: { id: bookingId, tenant: tenantId },
     } = request;
 
+
     const booking = await BookingManager.getBooking(bookingId, tenantId);
+    if (!booking.id) {
+      logger.warn(
+        `${tenantId} -- could not get booking for bookingId ${bookingId}.`,
+      );
+      response.sendStatus(404);
+      return;
+    }
     try {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
