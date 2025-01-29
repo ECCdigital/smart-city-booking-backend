@@ -39,9 +39,6 @@ class PaymentService {
   async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
-    console.log("handleSuccessfulPayment");
-    console.log({ bookingId, tenantId, payedWith });
-
     booking.isPayed = true;
     booking.payedWith = payedWith;
     await BookingManager.setBookingPayedStatus(booking);
@@ -211,10 +208,26 @@ class GiroCockpitPaymentService extends PaymentService {
           `${this.tenantId} -- GiroCockpit responds with status ${GiroCockpitPaymentService.GIRO_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
         );
 
+        const paymentMapping = {
+          1: "GIROPAY",
+          17: "GIROPAY",
+          18: "GIROPAY",
+          2: "EPS",
+          12: "IDEAL",
+          11: "CREDIT_CARD",
+          6: "TRANSFER",
+          7: "TRANSFER",
+          26: "BLUECODE",
+          33: "MAESTRO",
+          14: "PAYPAL",
+          23: "PAYDIRECT",
+          27: "SOFORT",
+        };
+
         await this.handleSuccessfulPayment({
           bookingId: this.bookingId,
           tenantId: this.tenantId,
-          payedWith: gcPaymethod,
+          payedWith: paymentMapping[gcPaymethod] || "OTHER",
         });
 
         logger.info(
@@ -343,10 +356,6 @@ class PmPaymentService extends PaymentService {
 
   async paymentNotification(body) {
     const { ags, txid, payment_method: paymentMethod } = body;
-
-    console.log("paymentNotification");
-    console.log({ ags, txid, paymentMethod });
-    console.log("body", body);
 
     try {
       if (!this.bookingId || !this.tenantId) {
