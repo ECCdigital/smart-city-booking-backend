@@ -15,8 +15,6 @@ class PaymentUtils {
     const serviceClass = paymentMethods[paymentMethod];
     if (!serviceClass) return null;
 
-    console.log("serviceClass", serviceClass);
-
     const paymentApp = await TenantManager.getTenantApp(
       tenantId,
       paymentMethod,
