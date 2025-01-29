@@ -46,6 +46,7 @@ class Booking {
     mail,
     name,
     paymentMethod,
+    payedWith,
     phone,
     priceEur,
     street,
@@ -55,7 +56,7 @@ class Booking {
     vatIncludedEur,
     zipCode,
   }) {
-    this.id = id;
+    this.id = id || "";
     this.tenant = tenant;
     this.assignedUserId = assignedUserId;
     this.attachments = attachments;
@@ -70,6 +71,7 @@ class Booking {
     this.mail = mail;
     this.name = name;
     this.paymentMethod = paymentMethod;
+    this.payedWith = payedWith;
     this.phone = phone;
     this.priceEur = priceEur;
     this.street = street;

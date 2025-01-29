@@ -86,7 +86,7 @@ class BundleCheckoutService {
     }
 
     if (ensureUnique) {
-      if (!!(await BookingManager.getBooking(text, this.tenant)._id)) {
+      if (!!(await BookingManager.getBooking(text, this.tenant).id)) {
         return await this.generateBookingReference(
           length,
           chunkLength,

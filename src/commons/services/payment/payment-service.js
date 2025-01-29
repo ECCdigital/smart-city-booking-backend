@@ -36,11 +36,11 @@ class PaymentService {
     throw new Error("paymentRequest not implemented");
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, payMethod }) {
+  async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
     booking.isPayed = true;
-    booking.payMethod = payMethod;
+    booking.payedWith = payedWith;
     await BookingManager.setBookingPayedStatus(booking);
 
     if (booking.isCommitted && booking.isPayed) {
@@ -211,7 +211,7 @@ class GiroCockpitPaymentService extends PaymentService {
         await this.handleSuccessfulPayment({
           bookingId: this.bookingId,
           tenantId: this.tenantId,
-          payMethod: gcPaymethod,
+          payedWith: gcPaymethod,
         });
 
         logger.info(
@@ -249,8 +249,8 @@ class GiroCockpitPaymentService extends PaymentService {
     );
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, payMethod }) {
-    await super.handleSuccessfulPayment({ bookingId, tenantId, payMethod });
+  async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, payedWith });
   }
 }
 
@@ -384,7 +384,7 @@ class PmPaymentService extends PaymentService {
         await this.handleSuccessfulPayment({
           bookingId: this.bookingId,
           tenantId: this.tenantId,
-          payMethod: paymentMapping[paymentMethod] || "OTHER",
+          payedWith: paymentMapping[paymentMethod] || "OTHER",
         });
 
         logger.info(
