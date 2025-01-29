@@ -404,7 +404,7 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async storeBooking(request, response) {
-    const booking = Object.assign(new Booking(), request.body);
+    const booking = new Booking(request.body);
 
     let isUpdate =
       !!(await BookingManager.getBooking(booking.id, booking.tenant)) &&
@@ -419,7 +419,7 @@ class BookingController {
 
   static async createBooking(request, response) {
     const user = request.user;
-    const booking = Object.assign(new Booking(), request.body);
+    const booking = new Booking(request.body);
 
     if (
       !(await BookingPermissions._allowCreate(booking, user.id, user.tenant))
@@ -446,7 +446,7 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const booking = Object.assign(new Booking(), request.body);
+      const booking = new Booking(request.body);
 
       if (
         await BookingPermissions._allowUpdate(booking, user.id, user.tenant)

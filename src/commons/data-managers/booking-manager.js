@@ -33,8 +33,8 @@ class BookingManager {
         .find({ tenant: tenant })
         .toArray()
         .then((rawBookings) => {
-          var bookings = rawBookings.map((rb) => {
-            return Object.assign(new Booking(), rb);
+          const bookings = rawBookings.map((rb) => {
+            return new Booking(rb);
           });
 
           resolve(bookings);
@@ -59,8 +59,8 @@ class BookingManager {
         .find({ tenant: tenant, "bookableItems.bookableId": bookableId })
         .toArray()
         .then((rawBookings) => {
-          var bookings = rawBookings.map((rb) => {
-            return Object.assign(new Booking(), rb);
+          const bookings = rawBookings.map((rb) => {
+            return new Booking(rb);
           });
 
           resolve(bookings);
@@ -83,8 +83,8 @@ class BookingManager {
         .find({ tenant: tenant, assignedUserId: userId })
         .toArray()
         .then((rawBookings) => {
-          var bookings = rawBookings.map((rb) => {
-            return Object.assign(new Booking(), rb);
+          const bookings = rawBookings.map((rb) => {
+            return new Booking(rb);
           });
 
           resolve(bookings);
@@ -106,8 +106,8 @@ class BookingManager {
         .get()
         .collection("bookings")
         .findOne({ id: id, tenant: tenant })
-        .then((rawBooking) => {
-          var booking = Object.assign(new Booking(), rawBooking);
+        .then((rb) => {
+          const booking = new Booking(rb);
           resolve(booking);
         })
         .catch((err) => reject(err));
@@ -127,8 +127,8 @@ class BookingManager {
         .get()
         .collection("bookings")
         .findOne({ tenant: tenant, id: bookingId })
-        .then((rawBooking) => {
-          const booking = Object.assign(new Booking(), rawBooking);
+        .then((rb) => {
+          const booking = new Booking(rb);
           const bookingStatus = {
             isCommitted: booking.isCommitted,
             isPayed: booking.isPayed,
@@ -223,8 +223,8 @@ class BookingManager {
         })
         .toArray()
         .then((rawBookings) => {
-          var bookings = rawBookings.map((rb) => {
-            return Object.assign(new Booking(), rb);
+          const bookings = rawBookings.map((rb) => {
+            return new Booking(rb);
           });
 
           resolve(bookings);
@@ -275,9 +275,7 @@ class BookingManager {
             })
             .toArray()
             .then((rawBookings) => {
-              let bookings = rawBookings.map((rb) =>
-                Object.assign(new Booking(), rb),
-              );
+              const bookings = rawBookings.map((rb) => new Booking(rb));
               resolve(bookings);
             })
             .catch((err) => reject(err));
