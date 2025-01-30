@@ -36,11 +36,11 @@ class PaymentService {
     throw new Error("paymentRequest not implemented");
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
+  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
     booking.isPayed = true;
-    booking.payedWith = payedWith;
+    booking.paymentMethod = paymentMethod;
     await BookingManager.setBookingPayedStatus(booking);
 
     if (booking.isCommitted && booking.isPayed) {
@@ -227,7 +227,7 @@ class GiroCockpitPaymentService extends PaymentService {
         await this.handleSuccessfulPayment({
           bookingId: this.bookingId,
           tenantId: this.tenantId,
-          payedWith: paymentMapping[gcPaymethod] || "OTHER",
+          paymentMethod: paymentMapping[gcPaymethod] || "OTHER",
         });
 
         logger.info(
@@ -265,8 +265,8 @@ class GiroCockpitPaymentService extends PaymentService {
     );
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
-    await super.handleSuccessfulPayment({ bookingId, tenantId, payedWith });
+  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, paymentMethod });
   }
 }
 
@@ -400,7 +400,7 @@ class PmPaymentService extends PaymentService {
         await this.handleSuccessfulPayment({
           bookingId: this.bookingId,
           tenantId: this.tenantId,
-          payedWith: paymentMapping[paymentProvider] || "OTHER",
+          paymentMethod: paymentMapping[paymentProvider] || "OTHER",
         });
 
         logger.info(
@@ -423,8 +423,8 @@ class PmPaymentService extends PaymentService {
     }
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, payedWith }) {
-    await super.handleSuccessfulPayment({ bookingId, tenantId, payedWith });
+  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, paymentMethod });
   }
 }
 
