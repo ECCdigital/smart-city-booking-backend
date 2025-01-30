@@ -1,4 +1,7 @@
-const ItemCheckoutService = require("./item-checkout-service");
+const {
+  ItemCheckoutService,
+  ManualItemCheckoutService,
+} = require("./item-checkout-service");
 const BookableManager = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
@@ -10,7 +13,7 @@ const LockerService = require("../locker/locker-service");
 class BundleCheckoutService {
   /**
    * Create a bundle checkout service.
-   * @param {string} user - The user ID.
+   * @param {Object} user - The user Object.
    * @param {string} tenant - The tenant ID.
    * @param {Date} timeBegin - The start time.
    * @param {Date} timeEnd - The end time.
@@ -63,6 +66,21 @@ class BundleCheckoutService {
     this.paymentMethod = paymentMethod;
   }
 
+  async createItemCheckoutService(bookableItem) {
+    const itemCheckoutService = new ItemCheckoutService(
+      this.user,
+      this.tenant,
+      this.timeBegin,
+      this.timeEnd,
+      bookableItem.bookableId,
+      bookableItem.amount,
+      this.couponCode,
+    );
+    await itemCheckoutService.init();
+
+    return itemCheckoutService;
+  }
+
   async generateBookingReference(
     length = 8,
     chunkLength = 4,
@@ -101,7 +119,7 @@ class BundleCheckoutService {
   }
   async checkAll() {
     for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService = new ItemCheckoutService(
+      const itemCheckoutService = await this.createItemCheckoutService(
         this.user,
         this.tenant,
         this.timeBegin,
@@ -119,17 +137,7 @@ class BundleCheckoutService {
   async userPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService = new ItemCheckoutService(
-        this.user,
-        this.tenant,
-        this.timeBegin,
-        this.timeEnd,
-        bookableItem.bookableId,
-        bookableItem.amount,
-        this.couponCode,
-      );
-
-      total += await itemCheckoutService.userPriceEur();
+      total += bookableItem.userPriceEur * bookableItem.amount;
     }
 
     return Math.round(total * 100) / 100;
@@ -138,19 +146,8 @@ class BundleCheckoutService {
   async userGrossPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService = new ItemCheckoutService(
-        this.user,
-        this.tenant,
-        this.timeBegin,
-        this.timeEnd,
-        bookableItem.bookableId,
-        bookableItem.amount,
-        this.couponCode,
-      );
-
-      total += await itemCheckoutService.userGrossPriceEur();
+      total += bookableItem.userGrossPriceEur * bookableItem.amount;
     }
-
     return Math.round(total * 100) / 100;
   }
 
@@ -225,15 +222,8 @@ class BundleCheckoutService {
     await this.checkAll();
 
     for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService = new ItemCheckoutService(
-        this.user,
-        this.tenant,
-        this.timeBegin,
-        this.timeEnd,
-        bookableItem.bookableId,
-        bookableItem.amount,
-        this.couponCode,
-      );
+      const itemCheckoutService =
+        await this.createItemCheckoutService(bookableItem);
 
       bookableItem.regularPriceEur =
         await itemCheckoutService.regularPriceEur();
@@ -243,10 +233,7 @@ class BundleCheckoutService {
       bookableItem.userGrossPriceEur =
         await itemCheckoutService.userGrossPriceEur();
 
-      bookableItem._bookableUsed = await BookableManager.getBookable(
-        bookableItem.bookableId,
-        this.tenant,
-      );
+      bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
       delete bookableItem._bookableUsed._id;
     }
 
@@ -312,7 +299,6 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} email - The email of the user.
    * @param {string} phone - The phone number of the user.
    * @param {string} comment - The comment of the user.
-   * @param {number} priceEur - The price in Euros.
    * @param {boolean} isCommit - The commit status.
    * @param {boolean} isPayed - The payment status.
    * @param {Array} attachmentStatus - The attachments of the user.
@@ -333,7 +319,6 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     email,
     phone,
     comment,
-    priceEur,
     isCommit,
     isPayed,
     attachmentStatus,
@@ -357,22 +342,28 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachmentStatus,
       paymentMethod,
     );
-    this.priceEur = priceEur;
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
   }
 
-  checkAll() {
-    return true;
+  async createItemCheckoutService(bookableItem) {
+    const itemCheckoutService = new ManualItemCheckoutService(
+      this.user,
+      this.tenant,
+      this.timeBegin,
+      this.timeEnd,
+      bookableItem.bookableId,
+      bookableItem.amount,
+      this.couponCode,
+    );
+
+    await itemCheckoutService.init(bookableItem._bookableUsed);
+
+    return itemCheckoutService;
   }
 
-  async userPriceEur() {
-    const priceEur = Number(this.priceEur);
-    if (isNaN(priceEur) || priceEur < 0) {
-      await super.userPriceEur();
-    } else {
-      return priceEur;
-    }
+  checkAll() {
+    return true;
   }
 
   async isAutoCommit() {

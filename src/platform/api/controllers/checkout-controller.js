@@ -1,4 +1,6 @@
-const ItemCheckoutService = require("../../../commons/services/checkout/item-checkout-service");
+const {
+  ItemCheckoutService,
+} = require("../../../commons/services/checkout/item-checkout-service");
 const bunyan = require("bunyan");
 const {
   createBooking,
@@ -31,6 +33,8 @@ class CheckoutController {
       parseInt(amount),
       couponCode,
     );
+
+    await itemCheckoutService.init();
 
     try {
       await itemCheckoutService.checkAll();

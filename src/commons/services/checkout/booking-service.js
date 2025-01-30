@@ -84,7 +84,6 @@ class BookingService {
         mail,
         phone,
         comment,
-        Number(request.body.priceEur),
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
         attachmentStatus,

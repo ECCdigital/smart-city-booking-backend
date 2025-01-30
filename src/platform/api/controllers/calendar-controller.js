@@ -3,7 +3,9 @@ const path = require("path");
 const bunyan = require("bunyan");
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const ItemCheckoutService = require("../../../commons/services/checkout/item-checkout-service");
+const {
+  ItemCheckoutService,
+} = require("../../../commons/services/checkout/item-checkout-service");
 
 const logger = bunyan.createLogger({
   name: "calendar-controller.js",
@@ -191,6 +193,8 @@ class CalendarController {
           Number(amount),
           null,
         );
+
+        await ics.init();
 
         try {
           // in order to check calendar availability, we generally need to perform all checks of the checkout service.
@@ -417,6 +421,8 @@ class CalendarController {
         Number(amount),
         null,
       );
+
+      await itemCheckoutService.init()
 
       try {
         // in order to check calendar availability, we generally need to perform all checks of the checkout service.
