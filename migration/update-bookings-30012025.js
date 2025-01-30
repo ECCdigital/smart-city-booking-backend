@@ -2,8 +2,7 @@ require("dotenv").config();
 
 const MongoClient = require("mongodb").MongoClient;
 
-
-const [,, dbURI, dbName] = process.argv;
+const [, , dbURI, dbName] = process.argv;
 
 /**
  * Migrates the bookings collection by updating the paymentProvider field
