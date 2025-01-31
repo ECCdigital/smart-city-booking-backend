@@ -194,8 +194,7 @@ class ItemCheckoutService {
         multiplier = 1;
     }
 
-    const price =
-      (Number(this.originBookable.priceEur) || 0) * multiplier;
+    const price = (Number(this.originBookable.priceEur) || 0) * multiplier;
     return Math.round(price * 100) / 100;
   }
 

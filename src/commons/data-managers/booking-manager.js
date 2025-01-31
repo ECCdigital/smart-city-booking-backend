@@ -189,7 +189,13 @@ class BookingManager {
    * @param bookingToIgnore ID of a booking that should be ignored
    * @returns
    */
-  static getConcurrentBookings(bookableId, tenant, timeBegin, timeEnd, bookingToIgnore = null) {
+  static getConcurrentBookings(
+    bookableId,
+    tenant,
+    timeBegin,
+    timeEnd,
+    bookingToIgnore = null,
+  ) {
     return new Promise((resolve, reject) => {
       BookingManager.getRelatedBookings(tenant, bookableId)
         .then((bookings) => {
@@ -201,7 +207,9 @@ class BookingManager {
                 timeBegin,
                 timeEnd,
                 true,
-              ) && !b.isRejected && b.id !== bookingToIgnore,
+              ) &&
+              !b.isRejected &&
+              b.id !== bookingToIgnore,
           );
 
           resolve(concurrentBookings);

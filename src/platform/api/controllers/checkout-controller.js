@@ -56,7 +56,9 @@ class CheckoutController {
 
   static async checkout(request, response) {
     try {
-      return response.status(200).send(await BookingService.createBooking(request));
+      return response
+        .status(200)
+        .send(await BookingService.createBooking(request));
     } catch (err) {
       logger.error(err);
       response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);

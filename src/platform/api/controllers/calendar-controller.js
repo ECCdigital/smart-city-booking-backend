@@ -422,7 +422,7 @@ class CalendarController {
         null,
       );
 
-      await itemCheckoutService.init()
+      await itemCheckoutService.init();
 
       try {
         // in order to check calendar availability, we generally need to perform all checks of the checkout service.
