@@ -91,7 +91,15 @@ class ItemCheckoutService {
     this.originBookable = null;
   }
 
-  async init() {
+  /**
+   * Asynchronously initializes the instance by fetching the bookable data.
+   *
+   * @async
+   * @function init
+   * @param {Object} [originBookable={}] - The bookable object to initialize with.
+   * @returns {Promise<void>} - A promise that resolves when the initialization is complete.
+   */
+  async init(originBookable = {}) {
     this.originBookable = await this.getBookable();
   }
 
@@ -187,7 +195,7 @@ class ItemCheckoutService {
     }
 
     const price =
-      (Number(this.originBookable.priceEur) || 0) * multiplier * this.amount;
+      (Number(this.originBookable.priceEur) || 0) * multiplier;
     return Math.round(price * 100) / 100;
   }
 
@@ -210,11 +218,11 @@ class ItemCheckoutService {
 
     if (
       !!this.user &&
-      freeBookingUsers.includes(this.user?.id) &&
-      this.originBookable.tenant === this.user?.tenant
+      freeBookingUsers.includes(this.user) &&
+      this.originBookable.tenant === this.tenantId
     ) {
       logger.info(
-        `User ${this.user?.id} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
+        `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
       );
       return 0;
     }
@@ -244,7 +252,7 @@ class ItemCheckoutService {
     if (
       !(await CheckoutPermissions._allowCheckout(
         this.originBookable,
-        this.user?.id,
+        this.user,
         this.tenantId,
       ))
     ) {
@@ -475,7 +483,7 @@ class ManualItemCheckoutService extends ItemCheckoutService {
 
   async init(originBookable) {
     this.originBookable =
-      structuredClone(originBookable) ?? (await super.getBookable());
+      JSON.parse(JSON.stringify(originBookable)) ?? (await super.getBookable());
   }
 }
 

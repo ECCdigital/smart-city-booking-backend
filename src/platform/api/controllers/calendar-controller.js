@@ -413,7 +413,7 @@ class CalendarController {
     );
     for (const p of periods) {
       const itemCheckoutService = new ItemCheckoutService(
-        user,
+        user?.id,
         tenant,
         new Date(p.timeBegin),
         new Date(p.timeEnd),

@@ -186,13 +186,14 @@ class BookingManager {
    * @param {string} tenant Identifier of the tenant
    * @param {number} timeBegin Begin Timestamp
    * @param {number} timeEnd End Timestamp
+   * @param bookingToIgnore ID of a booking that should be ignored
    * @returns
    */
-  static getConcurrentBookings(bookableId, tenant, timeBegin, timeEnd) {
+  static getConcurrentBookings(bookableId, tenant, timeBegin, timeEnd, bookingToIgnore = null) {
     return new Promise((resolve, reject) => {
       BookingManager.getRelatedBookings(tenant, bookableId)
         .then((bookings) => {
-          var concurrentBookings = bookings.filter(
+          const concurrentBookings = bookings.filter(
             (b) =>
               isRangeOverlap(
                 b.timeBegin,
@@ -200,7 +201,7 @@ class BookingManager {
                 timeBegin,
                 timeEnd,
                 true,
-              ) && !b.isRejected,
+              ) && !b.isRejected && b.id !== bookingToIgnore,
           );
 
           resolve(concurrentBookings);

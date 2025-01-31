@@ -2,9 +2,7 @@ const {
   ItemCheckoutService,
 } = require("../../../commons/services/checkout/item-checkout-service");
 const bunyan = require("bunyan");
-const {
-  createBooking,
-} = require("../../../commons/services/checkout/booking-service");
+const BookingService = require("../../../commons/services/checkout/booking-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -25,7 +23,7 @@ class CheckoutController {
     }
 
     const itemCheckoutService = new ItemCheckoutService(
-      user,
+      user?.id,
       tenantId,
       timeBegin,
       timeEnd,
@@ -58,7 +56,7 @@ class CheckoutController {
 
   static async checkout(request, response) {
     try {
-      return response.status(200).send(await createBooking(request));
+      return response.status(200).send(await BookingService.createBooking(request));
     } catch (err) {
       logger.error(err);
       response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);

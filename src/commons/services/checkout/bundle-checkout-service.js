@@ -16,7 +16,8 @@ class BundleCheckoutService {
    * @param {Object} user - The user Object.
    * @param {string} tenant - The tenant ID.
    * @param {Date} timeBegin - The start time.
-   * @param {Date} timeEnd - The end time.
+   * @param {Date} timeEnd - The end time,
+   * @param {Date} timeCreated - The creation time.
    * @param {Array} bookableItems - The items to be booked.
    * @param {string} couponCode - The coupon code.
    * @param {string} name - The name of the user.
@@ -35,6 +36,7 @@ class BundleCheckoutService {
     tenant,
     timeBegin,
     timeEnd,
+    timeCreated,
     bookableItems,
     couponCode,
     name,
@@ -52,6 +54,7 @@ class BundleCheckoutService {
     this.tenant = tenant;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
+    this.timeCreated = timeCreated || Date.now();
     this.bookableItems = bookableItems;
     this.couponCode = couponCode;
     this.name = name;
@@ -119,14 +122,8 @@ class BundleCheckoutService {
   }
   async checkAll() {
     for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService = await this.createItemCheckoutService(
-        this.user,
-        this.tenant,
-        this.timeBegin,
-        this.timeEnd,
-        bookableItem.bookableId,
-        bookableItem.amount,
-      );
+      const itemCheckoutService =
+        await this.createItemCheckoutService(bookableItem);
 
       await itemCheckoutService.checkAll();
     }
@@ -170,6 +167,10 @@ class BundleCheckoutService {
       if (!bookable.autoCommitBooking) return false;
     }
     return true;
+  }
+
+  performRejected() {
+    return false;
   }
 
   async getLockerInfo() {
@@ -218,7 +219,17 @@ class BundleCheckoutService {
     });
   }
 
-  async prepareBooking() {
+  /**
+   * Prepares a booking by checking all bookable items and generating a booking reference.
+   *
+   * @async
+   * @function prepareBooking
+   * @param {Object} [options={}] - The options for preparing the booking.
+   * @param {boolean} [options.keepExistingId=false] - Whether to keep the existing booking ID.
+   * @param {string|null} [options.existingId=null] - The existing booking ID to keep, if any.
+   * @returns {Promise<Booking>} - A promise that resolves to the prepared booking object.
+   */
+  async prepareBooking({ keepExistingId = false, existingId = null } = {}) {
     await this.checkAll();
 
     for (const bookableItem of this.bookableItems) {
@@ -238,12 +249,15 @@ class BundleCheckoutService {
     }
 
     const booking = {
-      id: await this.generateBookingReference(),
+      id:
+        keepExistingId && existingId
+          ? existingId
+          : await this.generateBookingReference(),
       tenant: this.tenant,
-      assignedUserId: this.user?.id,
+      assignedUserId: this.user,
       timeBegin: this.timeBegin,
       timeEnd: this.timeEnd,
-      timeCreated: Date.now(),
+      timeCreated: this.timeCreated,
       bookableItems: this.bookableItems,
       couponCode: this.couponCode,
       name: this.name,
@@ -262,6 +276,7 @@ class BundleCheckoutService {
       vatIncludedEur: await this.vatIncludedEur(),
       isCommitted: await this.isAutoCommit(),
       isPayed: await this.isPaymentComplete(),
+      isRejected: this.performRejected(),
       paymentMethod: this.paymentMethod,
       lockerInfo: await this.getLockerInfo(),
     };
@@ -289,6 +304,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} tenant - The tenant ID.
    * @param {Date} timeBegin - The start time.
    * @param {Date} timeEnd - The end time.
+   * @param timeCreated - The creation time.
    * @param {Array} bookableItems - The items to be booked.
    * @param {string} couponCode - The coupon code.
    * @param {string} name - The name of the user.
@@ -301,6 +317,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} comment - The comment of the user.
    * @param {boolean} isCommit - The commit status.
    * @param {boolean} isPayed - The payment status.
+   * @param {boolean} isRejected - The reject status.
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentMethod - The payment method.
    */
@@ -309,6 +326,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     tenant,
     timeBegin,
     timeEnd,
+    timeCreated,
     bookableItems,
     couponCode,
     name,
@@ -321,6 +339,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     comment,
     isCommit,
     isPayed,
+    isRejected,
     attachmentStatus,
     paymentMethod,
   ) {
@@ -329,6 +348,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       tenant,
       timeBegin,
       timeEnd,
+      timeCreated,
       bookableItems,
       couponCode,
       name,
@@ -344,6 +364,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     );
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
+    this.isRejected = isRejected;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -383,6 +404,10 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     } else {
       return await super.isPaymentComplete();
     }
+  }
+
+  performRejected() {
+    return this.isRejected;
   }
 }
 
