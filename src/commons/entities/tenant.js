@@ -17,6 +17,10 @@ class Tenant {
     noreplyUser,
     noreplyPassword,
     noreplyStarttls,
+    noreplyUseGraphApi,
+    noreplyGraphTenantId,
+    noreplyGraphClientId,
+    noreplyGraphClientSecret,
     receiptTemplate,
     receiptNumberPrefix,
     receiptCount,
@@ -47,6 +51,10 @@ class Tenant {
     this.noreplyUser = noreplyUser;
     this.noreplyPassword = noreplyPassword;
     this.noreplyStarttls = noreplyStarttls;
+    this.noreplyUseGraphApi = noreplyUseGraphApi || false;
+    this.noreplyGraphTenantId = noreplyGraphTenantId;
+    this.noreplyGraphClientId = noreplyGraphClientId;
+    this.noreplyGraphClientSecret = noreplyGraphClientSecret;
     this.receiptTemplate = receiptTemplate;
     this.receiptNumberPrefix = receiptNumberPrefix;
     this.receiptCount = receiptCount;

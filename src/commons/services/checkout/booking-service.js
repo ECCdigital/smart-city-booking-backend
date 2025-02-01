@@ -11,6 +11,7 @@ const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
+const { BOOKING_HOOK_TYPES } = require("../../entities/booking");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -273,8 +274,10 @@ class BookingService {
     }
   }
 
-  static async rejectBooking(tenant, booking) {
+  static async rejectBooking(tenant, bookingId, reason = "") {
     try {
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+
       booking.isRejected = true;
       await BookingService.updateBooking(tenant, booking);
 
@@ -282,12 +285,38 @@ class BookingService {
         booking.mail,
         booking.id,
         booking.tenant,
+        reason,
       );
       logger.info(
         `${tenant} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
       );
     } catch (error) {
-      throw new Error(`Error committing booking: ${error.message}`);
+      throw new Error(`Error rejecting booking: ${error.message}`);
+    }
+  }
+
+  static async requestRejectBooking(tenant, bookingId, reason = "") {
+    try {
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+
+      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, {
+        reason: reason,
+      });
+
+      await BookingService.updateBooking(tenant, booking);
+
+      await MailController.sendVerifyBookingRejection(
+        booking.mail,
+        booking.id,
+        booking.tenant,
+        hook.id,
+        reason,
+      );
+      logger.info(
+        `${tenant} -- booking ${booking.id} rejection requested and sent booking reject verification to ${booking.mail}`,
+      );
+    } catch (error) {
+      throw new Error(`Error requesting booking rejection: ${error.message}`);
     }
   }
 
@@ -336,6 +365,16 @@ class BookingService {
       timeCreated: booking.timeCreated,
       comment: booking.comment,
     };
+  }
+
+  static async verifyBookingOwnership(tenantId, bookingId, name) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking.id) {
+      throw { message: "Booking not found", code: 404 };
+    }
+
+    return booking.name.toLowerCase() === name.toLowerCase();
   }
 }
 
