@@ -166,7 +166,7 @@ class UserController {
    */
   static async storeUser(request, response) {
     const tenant = request.params.tenant;
-    const userObject = Object.assign(new User(), request.body);
+    const userObject = new User(request.body);
 
     const isUpdate = !!(await UserManager.getUser(userObject.id, tenant))._id;
 
@@ -181,7 +181,7 @@ class UserController {
     try {
       const user = request.user;
 
-      const userObject = Object.assign(new User(), request.body);
+      const userObject = new User(request.body);
 
       if (
         await UserPermissions._allowCreate(userObject, user.id, user.tenant)
@@ -207,7 +207,7 @@ class UserController {
     try {
       const user = request.user;
 
-      const userObject = Object.assign(new User(), request.body);
+      const userObject = new User(request.body);
 
       if (
         await UserPermissions._allowUpdate(userObject, user.id, user.tenant)
@@ -264,7 +264,7 @@ class UserController {
 
   // Allows only to change the display name
   static updateMe(request, response) {
-    const user = Object.assign(new User(), request.user);
+    const user = new User(request.user);
     // get user from db
     UserManager.getUser(user.id, user.tenant)
       .then((userFromDb) => {

@@ -22,10 +22,11 @@ class Role {
    * @param {boolean} manageTenants allow users to manage tenants
    * @param {boolean} manageBookings allow users to manage events
    * @param {boolean} manageRoles allow users to manage roles
+   * @param {boolean} manageCoupons allow users to manage coupons
    * @param {boolean} freeBookings allow users to book without paying
    *
    */
-  constructor(
+  constructor({
     id,
     name,
     manageBookables,
@@ -35,7 +36,7 @@ class Role {
     manageRoles,
     manageCoupons,
     freeBookings,
-  ) {
+  }) {
     this.id = id;
     this.name = name;
     this.manageBookables = manageBookables;
@@ -45,6 +46,20 @@ class Role {
     this.manageRoles = manageRoles;
     this.manageCoupons = manageCoupons;
     this.freeBookings = freeBookings;
+  }
+
+  static schema() {
+    return {
+      id: String,
+      name: String,
+      manageBookables: Boolean,
+      manageUsers: Boolean,
+      manageTenants: Boolean,
+      manageBookings: Boolean,
+      manageRoles: Boolean,
+      manageCoupons: Boolean,
+      freeBookings: Boolean,
+    };
   }
 }
 

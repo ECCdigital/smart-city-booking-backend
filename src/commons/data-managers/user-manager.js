@@ -1,6 +1,14 @@
 const { User, HookTypes } = require("../entities/user");
-var dbm = require("../utilities/database-manager");
 const bunyan = require("bunyan");
+const { RoleModel } = require("../data-managers/role-manager");
+
+const mongoose = require("mongoose");
+const MailController = require("../mail-service/mail-controller");
+
+const { Schema } = mongoose;
+
+const UserSchema = new Schema(User.schema());
+const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
 
 const logger = bunyan.createLogger({
   name: "user-manager.js",
@@ -8,185 +16,114 @@ const logger = bunyan.createLogger({
 });
 
 class UserManager {
-  static getUser(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .findOne({ id: id, tenant: tenant })
-        .then((user) => {
-          if (!user) {
-            resolve(undefined);
-          } else {
-            const u = new User(
-              user.id,
-              user.secret,
-              user.tenant,
-              user.firstName,
-              user.lastName,
-              user.phone,
-              user.address,
-              user.zipCode,
-              user.city,
-              user.hooks,
-              user.isVerified,
-              user.created,
-              user.roles,
-              user.company,
-            );
-            resolve(u);
-          }
-        })
-        .catch((err) => reject(err));
-    });
+  static async getUser(id, tenant) {
+    const rawUser = await UserModel.findOne({ id: id, tenant: tenant });
+    if (!rawUser) {
+      return undefined;
+    } else {
+      return new User(rawUser);
+    }
   }
 
-  static signupUser(user) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .insertOne(user)
-        .then(() => {
-          UserManager.requestVerification(user)
-            .then(() => {
-              resolve();
-            })
-            .catch((err) => reject(err));
-        })
-        .catch((err) => reject(err));
-    });
+  static async signupUser(user) {
+    try {
+      const newUser = await UserModel.create(user);
+      await UserManager.requestVerification(newUser);
+    } catch (err) {
+      throw err;
+    }
   }
 
-  static storeUser(user) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .replaceOne({ id: user.id, tenant: user.tenant }, user, {
+  static async storeUser(user) {
+    try {
+      return await UserModel.replaceOne(
+        { id: user.id, tenant: user.tenant },
+        user,
+        {
           upsert: true,
-        })
-        .then(() => {
-          resolve();
-        })
-        .catch((err) => reject(err));
-    });
+        },
+      );
+    } catch (err) {
+      throw err;
+    }
   }
 
-  static getUsers(tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .find({ tenant: tenant })
-        .toArray()
-        .then((users) => {
-          resolve(users);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getUsers(tenant) {
+    try {
+      const rawUsers = await UserModel.find({ tenant: tenant });
+      return rawUsers.map((ru) => new User(ru));
+    } catch (err) {
+      throw err;
+    }
   }
 
-  static deleteUser(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .deleteOne({ id: id, tenant: tenant })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async deleteUser(id, tenant) {
+    try {
+      return await UserModel.deleteOne({ id: id, tenant: tenant });
+    } catch (err) {
+      throw err;
+    }
   }
 
-  static updateUser(user) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .replaceOne({ id: user.id, tenant: user.tenant }, user)
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async updateUser(user) {
+    try {
+      const updatedUser = await UserModel.replaceOne(
+        { id: user.id, tenant: user.tenant },
+        user,
+      );
+      return new User(updatedUser);
+    } catch (err) {
+      throw err;
+    }
   }
 
-  static requestVerification(user) {
-    return new Promise((resolve, reject) => {
-      var hook = user.addHook(HookTypes.VERIFY);
-
-      const MailController = require("../mail-service/mail-controller");
-
-      UserManager.updateUser(user)
-        .then(() => {
-          MailController.sendVerificationRequest(user.id, hook.id, user.tenant)
-            .then(() => {
-              resolve();
-            })
-            .catch((err) => reject(err));
-        })
-        .catch((err) => reject(err));
-    });
+  static async requestVerification(user) {
+    const MailController = require("../mail-service/mail-controller");
+    try {
+      const hook = user.addHook(HookTypes.VERIFY);
+      await UserManager.updateUser(user);
+      await MailController.sendVerificationRequest(
+        user.id,
+        hook.id,
+        user.tenant,
+      );
+      return hook;
+    } catch (err) {
+      throw err;
+    }
   }
 
-  static resetPassword(user, password) {
-    return new Promise((resolve, reject) => {
+  static async resetPassword(user, password) {
+    try {
       const hook = user.addPasswordResetHook(password);
-
-      const MailController = require("../mail-service/mail-controller");
-
-      UserManager.updateUser(user)
-        .then(() => {
-          MailController.sendPasswordResetRequest(user.id, hook.id, user.tenant)
-            .then(() => {
-              resolve();
-            })
-            .catch((err) => reject(err));
-        })
-        .catch((err) => reject(err));
-    });
+      await UserManager.updateUser(user);
+      await MailController.sendPasswordResetRequest(
+        user.id,
+        hook.id,
+        user.tenant,
+      );
+    } catch (err) {
+      throw err;
+    }
   }
 
-  static releaseHook(hookId) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .findOne({ "hooks.id": hookId })
-        .then((user) => {
-          if (user) {
-            const u = new User(
-              user.id,
-              user.secret,
-              user.tenant,
-              user.firstName,
-              user.lastName,
-              user.phone,
-              user.address,
-              user.zipCode,
-              user.city,
-              user.hooks,
-              user.isVerified,
-              user.created,
-              user.roles,
-              user.company,
-            );
-            //find hook by id
-            const hookType = u.hooks.find((h) => h.id === hookId).type;
-
-            if (u.releaseHook(hookId)) {
-              UserManager.updateUser(u)
-                .then(() => {
-                  resolve(hookType);
-                })
-                .catch((err) => reject(err));
-            } else {
-              reject(new Error("Hook does not exist."));
-            }
-          } else {
-            reject(new Error("No User found with this hook."));
-          }
-        })
-        .catch((err) => reject(err));
-    });
+  static async releaseHook(hookId) {
+    try {
+      const user = await UserModel.findOne({ "hooks.id": hookId });
+      if (!user) {
+        throw new Error("No User found with this hook.");
+      }
+      const u = new User(user);
+      const hookType = u.hooks.find((h) => h.id === hookId).type;
+      if (u.releaseHook(hookId)) {
+        await UserManager.updateUser(u);
+        return hookType;
+      } else {
+        throw new Error("Hook does not exist.");
+      }
+    } catch (err) {
+      throw err;
+    }
   }
 
   /**
@@ -196,21 +133,18 @@ class UserManager {
    * @param {string} tenant The users tenant identifier
    * @returns Promise<Array of roles>
    */
-  static getUserRoles(userId, tenant) {
-    return new Promise((resolve, reject) => {
-      UserManager.getUser(userId, tenant)
-        .then((user) => {
-          dbm
-            .get()
-            .collection("roles")
-            .find({ id: { $in: user.roles } })
-            .toArray()
-            .then((roles) => {
-              resolve(roles);
-            });
-        })
-        .catch((err) => reject(err));
-    });
+  static async getUserRoles(userId, tenant) {
+    try {
+      const user = await UserManager.getUser(userId, tenant);
+      if (!user) {
+        throw new Error(`User ${userId} not found.`);
+      }
+      //TODO: Mapping
+      const roles = await RoleModel.find({ id: { $in: user.roles } });
+      return roles;
+    } catch (err) {
+      throw err;
+    }
   }
 
   /**
@@ -373,18 +307,13 @@ class UserManager {
     }
   }
 
-  static getUsersWithRoles(tenant, roles) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("users")
-        .find({ tenant: tenant, roles: { $in: roles } })
-        .toArray()
-        .then((users) => {
-          resolve(users);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getUsersWithRoles(tenant, roles) {
+    try {
+      //TODO: Mapping
+      return await UserModel.find({ tenant: tenant, roles: { $in: roles } });
+    } catch (err) {
+      throw err;
+    }
   }
 }
 

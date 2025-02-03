@@ -1,6 +1,11 @@
-const dbm = require("../utilities/database-manager");
-const { validate } = require("jsonschema");
 const { Role } = require("../entities/role");
+
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+const RoleSchema = new Schema(Role.schema());
+const RoleModel = mongoose.models.Role || mongoose.model("Role", RoleSchema);
+
 
 /**
  * Data Manager for role objects. Role objects determine the permissions for users.
@@ -9,35 +14,13 @@ const { Role } = require("../entities/role");
  */
 class RoleManager {
   /**
-   * Check if an object is a valid Role.
-   *
-   * @param {object} role A role object
-   * @returns true, if the object is a valid role object
-   */
-  static validateRole(role) {
-    var schema = require("../schemas/role.schema.json");
-    return validate(role, schema).errors.length === 0;
-  }
-
-  /**
    * Get all roles
    * @returns List of bookings
    */
-  static getRoles() {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("roles")
-        .find({})
-        .toArray()
-        .then((rawRoles) => {
-          var roles = rawRoles.map((rr) => {
-            return Object.assign(new Role(), rr);
-          });
-
-          resolve(roles);
-        })
-        .catch((err) => reject(err));
+  static async getRoles() {
+    const rawRoles = await RoleModel.find();
+    return rawRoles.map((rr) => {
+      return new Role(rr);
     });
   }
 
@@ -47,18 +30,9 @@ class RoleManager {
    * @param {string} id Logical identifier of the role object
    * @returns A single role object
    */
-  static getRole(id) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("roles")
-        .findOne({ id: id })
-        .then((rawRole) => {
-          var role = Object.assign(new Role(), rawRole);
-          resolve(role);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getRole(id) {
+    const rawRole = await RoleModel.findOne({ id: id });
+    return new Role(rawRole);
   }
 
   /**
@@ -68,36 +42,19 @@ class RoleManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeRole(role, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("roles")
-        .replaceOne({ id: role.id }, role, {
-          upsert: upsert,
-        })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async storeRole(role, upsert = true) {
+    await RoleModel.findOneAndUpdate({ id: role.id }, role, { upsert: upsert, setDefaultsOnInsert: true });
   }
 
   /**
    * Remove a role object from the database.
    *
-   * @param {Role} role The role object to be stored.
-   * @param {boolean} upsert true, if new object should be inserted. Default: true
+   * @param {string} id Logical identifier of the role object
    * @returns Promise<>
    */
-  static removeRole(id) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("roles")
-        .deleteOne({ id: id })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async removeRole(id) {
+    await RoleModel.deleteOne({ id: id });
   }
 }
 
-module.exports = RoleManager;
+module.exports = { RoleManager, RoleModel };

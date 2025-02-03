@@ -1,4 +1,4 @@
-const RoleManager = require("../../../commons/data-managers/role-manager");
+const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const { Role, RolePermission } = require("../../../commons/entities/role");
 const { v4: uuidv4 } = require("uuid");
 const UserManager = require("../../../commons/data-managers/user-manager");

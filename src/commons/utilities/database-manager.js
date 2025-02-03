@@ -1,57 +1,100 @@
-const MongoClient = require("mongodb").MongoClient;
+const mongoose = require("mongoose");
 
-var db;
-var dbClient;
-
-/**
- * The Database Manager handles and manages the database connection.
- *
- * @author Lennard Scheffler, lennard.scheffler@e-c-crew.de
- */
 class DatabaseManager {
+  static instance = null;
+
+  static getInstance() {
+    if (!this.instance) {
+      this.instance = new DatabaseManager();
+    }
+    return this.instance;
+  }
+
+  constructor() {
+    this.dbClient = null;
+  }
+
   /**
    * Connect to the application database.
    *
-   * @param {String} databaseUrl The Connection URI to the mongodb Database.
-   * @param {String} databaseName Name of the Database.
    * @returns the Database object.
    */
-  static connect(databaseUrl = undefined, databaseName = undefined) {
-    const dbUrl = databaseUrl || process.env.DB_URL;
-    const dbName = databaseName || process.env.DB_NAME;
+  async connect(dbName = process.env.DB_NAME) {
+    if (this.dbClient) {
+      return this.dbClient;
+    }
 
-    return new Promise((resolve, reject) => {
-      MongoClient.connect(dbUrl)
-        .then((client) => {
-          dbClient = client;
-          db = client.db(dbName);
-          resolve(db);
-        })
-        .catch((err) => {
-          console.error("Could not establish connection to database.", err);
-          reject(err);
-        });
-    });
+    try {
+
+      if(!process.env.DB_URL){
+        throw new Error("Database connection parameters are missing.");
+      }
+
+      const uri = process.env.DB_URL;
+
+
+      this.dbClient = await mongoose.connect(uri, {
+        authSource: "admin",
+        dbName: dbName,
+      });
+
+      if (process.env.NODE_ENV === "development") {
+        mongoose.set("debug", true);
+      }
+
+      mongoose.connection.on("connected", () => {
+      });
+
+      mongoose.connection.on("error", (err) => {
+      });
+
+      mongoose.connection.on("disconnected", () => {
+      });
+
+      return this.dbClient;
+    } catch (err) {
+      throw err;
+    }
   }
 
   /**
-   * Returns the current database object when a connection has been established.
+   * Returns the current database object for a specific database.
    *
+   * @param {string} dbName - The name of the database.
    * @returns Get the current database object.
    */
-  static get() {
-    return db;
-  }
-
-  static getClient() {
-    return dbClient;
+  get(dbName = process.env.DB_NAME) {
+    if (!this.dbClient) {
+    }
+    return this.dbClient;
   }
 
   /**
-   * Close the current database connection.
+   * Close the current database connection for a specific database.
+   *
+   * @param {string} dbName - The name of the database to disconnect.
    */
-  static close() {
-    dbClient.close();
+  async close(dbName = process.env.DB_NAME) {
+    if (!this.dbClient) {
+      return;
+    }
+
+    try {
+      await mongoose.connection.close();
+    } catch (err) {
+      throw err;
+    } finally {
+      this.dbClient = null;
+    }
+  }
+
+  /**
+   * Close all database connections.
+   */
+  async closeAll() {
+    if (this.dbClient) {
+      await this.close();
+    }
   }
 }
 

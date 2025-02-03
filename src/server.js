@@ -10,8 +10,10 @@ const passport = require("passport");
 const LocalStrategy = require("passport-local");
 const bunyan = require("bunyan");
 
-const dbm = require("./commons/utilities/database-manager.js");
+const DatabaseManager = require("./commons/utilities/database-manager.js");
 const UserManager = require("./commons/data-managers/user-manager");
+
+const dbm = DatabaseManager.getInstance();
 
 const logger = bunyan.createLogger({
   name: "server.js",
@@ -51,10 +53,7 @@ app.use((req, res, next) => {
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
-    store: MongoStore.create({
-      client: dbm.getClient(),
-      dbName: process.env.DB_NAME,
-    }),
+    store: new MongoStore({ client: dbm.dbClient.connection.getClient() }),
     cookie: {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 48,

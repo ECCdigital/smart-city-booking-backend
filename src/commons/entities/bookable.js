@@ -165,6 +165,39 @@ class Bookable {
 
     return Math.round(this.priceEur * 100) / 100;
   }
+
+
+  static schema() {
+    return {
+      tenant: String,
+      type: String,
+      enabled: Boolean,
+      parent: String,
+      title: String,
+      description: String,
+      flags: [String],
+      priceEur: Number,
+      priceValueAddedTax: Number,
+      amount: Number,
+      autoCommitBooking: Boolean,
+      location: String,
+      tags: [String],
+      isScheduleRelated: Boolean,
+      isTimePeriodRelated: Boolean,
+      timePeriods: [Object],
+      isOpeningHoursRelated: Boolean,
+      openingHours: [Object],
+      eventId: String,
+      attachments: [Object],
+      priceCategory: String,
+      relatedBookableIds: [String],
+      isBookable: Boolean,
+      isPublic: Boolean,
+      lockerDetails: [Object],
+      requiredFields: [String],
+      bookingNotes: String,
+    };
+  }
 }
 
 module.exports = {

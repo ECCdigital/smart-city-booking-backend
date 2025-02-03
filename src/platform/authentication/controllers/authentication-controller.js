@@ -50,7 +50,7 @@ class AuthenticationController {
           if (user) {
             response.sendStatus(409);
           } else {
-            const user = Object.assign(new User(), {
+            const user = new User({
               id: request.body.id,
               secret: undefined,
               tenant: request.params.tenant,
@@ -96,7 +96,7 @@ class AuthenticationController {
   }
 
   static me(request, response) {
-    var user = Object.assign(new User(), request.user);
+    var user = new User(request.user);
     var userPublic = user.exportPublic();
 
     if (request.query.populatePermissions === "1") {

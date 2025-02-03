@@ -7,7 +7,7 @@ const HookTypes = Object.freeze({
 });
 
 class User {
-  constructor(
+  constructor({
     id,
     secret,
     tenant,
@@ -22,7 +22,7 @@ class User {
     created,
     roles,
     company,
-  ) {
+  }) {
     this.id = id;
     this.secret = secret;
     this.tenant = tenant;
@@ -100,6 +100,25 @@ class User {
       tenant: this.tenant,
       created: this.created,
       isVerified: this.isVerified,
+    };
+  }
+
+  static schema() {
+    return {
+      id: { type: String, required: true },
+      firstName: { type: String, required: true },
+      lastName: { type: String, required: true },
+      phone: { type: String, required: true },
+      address: { type: String, required: true },
+      zipCode: { type: String, required: true },
+      city: { type: String, required: true },
+      tenant: { type: String, required: true },
+      secret: { type: String, required: true },
+      hooks: { type: Array, default: [] },
+      isVerified: { type: Boolean, default: false },
+      created: { type: Date, default: Date.now },
+      roles: { type: Array, default: [] },
+      company: { type: String },
     };
   }
 }
