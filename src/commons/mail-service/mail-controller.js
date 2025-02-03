@@ -68,6 +68,7 @@ class MailController {
     includeQRCode = false,
     attachments = [],
     sendBCC = false,
+    addRejectionLink = false,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
@@ -77,6 +78,10 @@ class MailController {
     }
 
     let content = `${message}<br>${bookingDetails}`;
+
+    if (addRejectionLink) {
+      content += `<br /><br /><a href="${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}">Buchung stornieren</a>`;
+    }
 
     if (includeQRCode) {
       const { content: qrContent, attachment: qrAttachment } =
@@ -233,6 +238,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -240,20 +246,61 @@ class MailController {
     address,
     bookingId,
     tenantId,
+    reason,
     attachments = undefined,
   ) {
     const tenant = await TenantManager.getTenant(tenantId);
+
+    let message = `<p>Die nachfolgende Buchung wurde storniert:</p>`;
+    if (reason) {
+      reason = sanitizeReason(reason);
+      message += `<p><strong>Hinweis zur Stornierung</strong>: ${reason}</p>`;
+    }
 
     await this._sendBookingMail({
       address,
       bookingId,
       tenantId,
-      subject: `Ihre Buchung im ${tenant.name} wurde storniert`,
+      subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
       title: `Ihre Buchung im ${tenant.name} wurde storniert`,
-      message: `<p>Die nachfolgende Buchung wurde storniert.</p><br>`,
+      message: message,
       includeQRCode: false,
       attachments,
       sendBCC: true,
+      addRejectionLink: false,
+    });
+  }
+
+  static async sendVerifyBookingRejection(
+    address,
+    bookingId,
+    tenantId,
+    hookId,
+    reason,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    let message = `<p>Für die nachfolgende Buchung wurde eine Stornierung vorgemerkt. Wenn Sie diese Stornierung bestätigen möchten, klicken Sie bitte auf den nachfolgenden Link.</p><p>Sollten Sie die Stornierung nicht veranlasst haben, können Sie diese Nachricht ignorieren.</p>`;
+
+    if (reason) {
+      reason = sanitizeReason(reason);
+      message += `<p><strong>Hinweis zur Stornierung</strong>: ${reason}</p>`;
+    }
+
+    message += `<p><a href="${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}">Stornierung bestätigen</a></p>`;
+
+    await this._sendBookingMail({
+      address,
+      bookingId,
+      tenantId,
+      subject: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
+      title: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
+      message: message,
+      includeQRCode: false,
+      attachments,
+      sendBCC: false,
+      addRejectionLink: false,
     });
   }
 
@@ -271,6 +318,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments: undefined,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -288,6 +336,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments: undefined,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -310,6 +359,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -331,6 +381,7 @@ class MailController {
       message: `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte nutzen Sie den folgenden Link, um Ihre Buchung abzuschließen.</p><br><p><a href="${paymentLink}">${paymentLink}</a></p>`,
       includeQRCode: includeQRCode,
       sendBCC: false,
+      addRejectionLink: true,
     });
   }
 
@@ -353,6 +404,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: false,
+      addRejectionLink: true,
     });
   }
 
@@ -372,7 +424,7 @@ class MailController {
       const paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
         attachments,
       );
 
@@ -392,6 +444,7 @@ class MailController {
       title: `Eine neue Buchungsanfrage liegt vor`,
       message: `<p>Es liegt eine neue Buchungsanfrage vor.</p><br>`,
       sendBCC: false,
+      addRejectionLink: false,
     });
   }
 
@@ -465,6 +518,13 @@ class MailController {
       },
     );
   }
+}
+
+function sanitizeReason(reason) {
+  if (typeof reason === "string" && reason.trim() !== "") {
+    return reason.replace(/<[^>]*>?/gm, "");
+  }
+  return reason;
 }
 
 module.exports = MailController;

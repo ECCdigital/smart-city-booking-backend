@@ -100,37 +100,61 @@ class BookableManager {
     });
   }
 
-  static async getRelatedBookables(id, tenant, d) {
-    let bookable = await BookableManager.getBookable(id, tenant);
+  /**
+   * Get all related bookables for a given bookable ID and tenant.
+   *
+   * @param {string} id - The ID of the bookable.
+   * @param {string} tenant - The tenant identifier.
+   * @returns {Promise<Bookable[]>} - A promise that resolves to an array of related bookable objects.
+   */
+  static async getRelatedBookables(id, tenant) {
+    const pipeline = [
+      {
+        $match: {
+          id: id,
+          tenant: tenant,
+        },
+      },
+      {
+        $graphLookup: {
+          from: "bookables",
+          startWith: "$relatedBookableIds",
+          connectFromField: "relatedBookableIds",
+          connectToField: "id",
+          as: "allRelatedBookables",
+          maxDepth: 100,
+        },
+      },
+      {
+        $project: {
+          rootBookable: "$$ROOT",
+          allRelatedBookables: 1,
+          _id: 0,
+        },
+      },
+    ];
 
-    let relatedBookables = await dbm
+    const results = await dbm
       .get()
       .collection("bookables")
-      .find({ id: { $in: bookable.relatedBookableIds || [] } })
+      .aggregate(pipeline)
       .toArray();
 
-    if (d < 100) {
-      for (const b of relatedBookables) {
-        relatedBookables = relatedBookables.concat(
-          await BookableManager.getRelatedBookables(
-            b.id,
-            b.tenant,
-            (d || 0) + 1,
-          ),
-        );
-      }
+    if (!results || results.length === 0) {
+      return [];
     }
-    // remove duplicates from related bookables
-    relatedBookables = relatedBookables.filter((b, i) => {
-      return relatedBookables.findIndex((b2) => b2.id === b.id) === i;
-    });
 
-    // cast bookables to Bookable objects
-    relatedBookables = relatedBookables.map((b) => {
-      return Object.assign(new Bookable(), b);
-    });
+    const doc = results[0];
 
-    return relatedBookables;
+    let combined = [doc.rootBookable, ...doc.allRelatedBookables];
+
+    const uniqueMap = new Map();
+    for (const b of combined) {
+      uniqueMap.set(b.id, b);
+    }
+    combined = [...uniqueMap.values()];
+
+    return combined.map((b) => Object.assign(new Bookable(), b));
   }
 
   static async getParentBookables(id, tenant) {

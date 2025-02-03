@@ -29,7 +29,7 @@ class BundleCheckoutService {
    * @param {string} phone - The phone number of the user.
    * @param {string} comment - The comment of the user.
    * @param {Array} attachmentStatus - The attachments of the user.
-   * @param {string} paymentMethod - The payment method.
+   * @param {string} paymentProvider - The payment method.
    */
   constructor(
     user,
@@ -48,7 +48,7 @@ class BundleCheckoutService {
     phone,
     comment,
     attachmentStatus,
-    paymentMethod,
+    paymentProvider,
   ) {
     this.user = user;
     this.tenant = tenant;
@@ -66,7 +66,7 @@ class BundleCheckoutService {
     this.phone = phone;
     this.comment = comment;
     this.attachmentStatus = attachmentStatus;
-    this.paymentMethod = paymentMethod;
+    this.paymentProvider = paymentProvider;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -107,7 +107,7 @@ class BundleCheckoutService {
     }
 
     if (ensureUnique) {
-      if (!!(await BookingManager.getBooking(text, this.tenant)._id)) {
+      if (!!(await BookingManager.getBooking(text, this.tenant).id)) {
         return await this.generateBookingReference(
           length,
           chunkLength,
@@ -278,6 +278,7 @@ class BundleCheckoutService {
       isPayed: await this.isPaymentComplete(),
       isRejected: this.performRejected(),
       paymentMethod: this.paymentMethod,
+      paymentProvider: this.paymentProvider,
       lockerInfo: await this.getLockerInfo(),
     };
 
@@ -319,7 +320,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {boolean} isPayed - The payment status.
    * @param {boolean} isRejected - The reject status.
    * @param {Array} attachmentStatus - The attachments of the user.
-   * @param {string} paymentMethod - The payment method.
+   * @param {string} paymentProvider - The payment method.
    */
   constructor(
     user,
@@ -341,7 +342,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     isPayed,
     isRejected,
     attachmentStatus,
-    paymentMethod,
+    paymentProvider,
   ) {
     super(
       user,
@@ -360,7 +361,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       phone,
       comment,
       attachmentStatus,
-      paymentMethod,
+      paymentProvider,
     );
     this.isCommitted = isCommit;
     this.isPayed = isPayed;

@@ -35,9 +35,54 @@ class PaymentService {
   paymentRequest() {
     throw new Error("paymentRequest not implemented");
   }
+
+  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    booking.isPayed = true;
+    booking.paymentMethod = paymentMethod;
+    await BookingManager.setBookingPayedStatus(booking);
+
+    if (booking.isCommitted && booking.isPayed) {
+      let attachments = [];
+      if (booking.priceEur > 0) {
+        const pdfData = await ReceiptService.createReceipt(tenantId, bookingId);
+        attachments = [
+          {
+            filename: pdfData.name,
+            content: pdfData.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+      }
+
+      try {
+        const MailController = require("../../mail-service/mail-controller");
+        await MailController.sendBookingConfirmation(
+          booking.mail,
+          booking.id,
+          tenantId,
+          attachments,
+        );
+
+        const tenant = await TenantManager.getTenant(tenantId);
+        await MailController.sendIncomingBooking(
+          tenant.mail,
+          bookingId,
+          tenantId,
+        );
+      } catch (err) {
+        logger.error(err);
+      }
+    }
+
+    return booking;
+  }
 }
 
 class GiroCockpitPaymentService extends PaymentService {
+  static GIRO_SUCCESS_CODE = "4000";
+
   async createPayment() {
     const booking = await getBooking(this.bookingId, this.tenantId);
     const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
@@ -107,26 +152,23 @@ class GiroCockpitPaymentService extends PaymentService {
         throw new Error("could not get payment url.");
       }
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
   }
 
-  async paymentNotification(args) {
-    const MailController = () => require("../../mail-service/mail-controller");
+  async paymentNotification(query) {
     const {
-      query: {
-        gcMerchantTxId,
-        gcResultPayment,
-        gcPaymethod,
-        gcType,
-        gcProjectId,
-        gcReference,
-        gcBackendTxId,
-        gcAmount,
-        gcCurrency,
-        gcHash,
-      },
-    } = args;
+      gcMerchantTxId,
+      gcResultPayment,
+      gcPaymethod,
+      gcType,
+      gcProjectId,
+      gcReference,
+      gcBackendTxId,
+      gcAmount,
+      gcCurrency,
+      gcHash,
+    } = query;
 
     try {
       if (!this.bookingId || !this.tenantId) {
@@ -135,11 +177,6 @@ class GiroCockpitPaymentService extends PaymentService {
         );
         throw new Error("Missing parameters");
       }
-
-      const booking = await BookingManager.getBooking(
-        this.bookingId,
-        this.tenantId,
-      );
       const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
       const PROJECT_SECRET = paymentApp.paymentSecret;
 
@@ -166,56 +203,32 @@ class GiroCockpitPaymentService extends PaymentService {
         throw new Error("Hash mismatch");
       }
 
-      if (gcResultPayment === "4000") {
+      if (gcResultPayment === GiroCockpitPaymentService.GIRO_SUCCESS_CODE) {
         logger.info(
-          `${this.tenantId} -- GiroCockpit responds with status 4000 / successfully payed for booking ${this.bookingId} .`,
+          `${this.tenantId} -- GiroCockpit responds with status ${GiroCockpitPaymentService.GIRO_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
         );
-        booking.isPayed = true;
-        booking.payMethod = gcPaymethod;
-        await BookingManager.setBookingPayedStatus(booking);
 
-        if (booking.isCommitted && booking.isPayed) {
-          let attachments = [];
-          try {
-            if (booking.priceEur > 0) {
-              const pdfData = await ReceiptService.createReceipt(
-                this.tenantId,
-                this.bookingId,
-              );
-              attachments = [
-                {
-                  filename: pdfData.name,
-                  content: pdfData.buffer,
-                  contentType: "application/pdf",
-                },
-              ];
-            }
-          } catch (err) {
-            logger.error(err);
-          }
+        const paymentMapping = {
+          1: "GIROPAY",
+          17: "GIROPAY",
+          18: "GIROPAY",
+          2: "EPS",
+          12: "IDEAL",
+          11: "CREDIT_CARD",
+          6: "TRANSFER",
+          7: "TRANSFER",
+          26: "BLUECODE",
+          33: "MAESTRO",
+          14: "PAYPAL",
+          23: "PAYDIRECT",
+          27: "SOFORT",
+        };
 
-          try {
-            await MailController().sendBookingConfirmation(
-              booking.mail,
-              booking.id,
-              this.tenantId,
-              attachments,
-            );
-          } catch (err) {
-            logger.error(err);
-          }
-
-          try {
-            const tenant = await TenantManager.getTenant(this.tenantId);
-            await MailController().sendIncomingBooking(
-              tenant.mail,
-              this.bookingId,
-              this.tenantId,
-            );
-          } catch (err) {
-            logger.error(err);
-          }
-        }
+        await this.handleSuccessfulPayment({
+          bookingId: this.bookingId,
+          tenantId: this.tenantId,
+          paymentMethod: paymentMapping[gcPaymethod] || "OTHER",
+        });
 
         logger.info(
           `${this.tenantId} -- booking ${this.bookingId} successfully payed and updated.`,
@@ -230,7 +243,7 @@ class GiroCockpitPaymentService extends PaymentService {
         return true;
       }
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
   }
 
@@ -250,6 +263,168 @@ class GiroCockpitPaymentService extends PaymentService {
       this.bookingId,
       this.tenantId,
     );
+  }
+
+  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, paymentMethod });
+  }
+}
+
+class PmPaymentService extends PaymentService {
+  static PM_SUCCESS_CODE = 1;
+
+  async createPayment() {
+    const booking = await getBooking(this.bookingId, this.tenantId);
+    const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
+
+    try {
+      let PM_CHECKOUT_URL;
+      if (paymentApp.paymentMode === "prod") {
+        PM_CHECKOUT_URL = "https://payment.govconnect.de/payment/secure";
+      } else {
+        PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
+      }
+
+      const amount = (booking.priceEur * 100 || 0).toString();
+      const desc = `${this.bookingId} ${paymentApp.paymentPurposeSuffix || ""}`;
+      const AGS = paymentApp.paymentMerchantId;
+      const PROCEDURE = paymentApp.paymentProjectId;
+      const PAYMENT_SALT = paymentApp.paymentSecret;
+
+      const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?id=${this.bookingId}`;
+      const redirectUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${this.bookingId}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}`;
+
+      const hash = crypto
+        .createHmac("sha256", PAYMENT_SALT)
+        .update(
+          `${AGS}|${amount}|${PROCEDURE}|${desc}|${notifyUrl}|${redirectUrl}`,
+        )
+        .digest("hex");
+
+      const data = qs.stringify({
+        ags: AGS,
+        amount: amount,
+        procedure: PROCEDURE,
+        desc: desc,
+        notifyURL: notifyUrl,
+        redirectURL: redirectUrl,
+        hash: hash,
+      });
+
+      const config = {
+        method: "post",
+        url: PM_CHECKOUT_URL,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data: data,
+      };
+
+      const response = await axios(config);
+
+      if (response.data?.url) {
+        logger.info(
+          `Payment URL requested for booking ${this.bookingId}: ${response.data?.url}`,
+        );
+        return response.data?.url;
+      } else {
+        logger.warn("could not get payment url.", response.data);
+        throw new Error("could not get payment url.");
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  paymentResponse() {
+    return `${process.env.FRONTEND_URL}/checkout/status?id=${this.bookingId}&tenant=${this.tenantId}`;
+  }
+
+  async paymentRequest() {
+    const MailController = () => require("../../mail-service/mail-controller");
+    const booking = await BookingManager.getBooking(
+      this.bookingId,
+      this.tenantId,
+    );
+
+    await MailController().sendPaymentLinkAfterBookingApproval(
+      booking.mail,
+      this.bookingId,
+      this.tenantId,
+    );
+  }
+
+  async paymentNotification(body) {
+    const { ags, txid, payment_method: paymentProvider } = body;
+
+    try {
+      if (!this.bookingId || !this.tenantId) {
+        logger.warn(
+          `${this.tenantId} -- could not validate payment notification. Missing parameters. For Booking ${this.bookingId}`,
+        );
+        throw new Error("Missing parameters");
+      }
+
+      const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
+      let PM_STATUS_URL;
+      if (paymentApp.paymentProvider === "prod") {
+        PM_STATUS_URL = "https://payment.govconnect.de/payment/status";
+      } else {
+        PM_STATUS_URL = "https://payment-test.govconnect.de/payment/status";
+      }
+
+      const config = {
+        method: "get",
+        url: `${PM_STATUS_URL}/${ags}/${txid}`,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      };
+
+      const response = await axios(config);
+
+      if (response.data.status === PmPaymentService.PM_SUCCESS_CODE) {
+        logger.info(
+          `${this.tenantId} -- pmPayment responds with status ${PmPaymentService.PM_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
+        );
+
+        const paymentMapping = {
+          giropay: "GIROPAY",
+          sepa: "TRANSFER",
+          creditCard: "CREDIT_CARD",
+          paypal: "PAYPAL",
+          applePay: "APPLE_PAY",
+          googlePay: "GOOGLE_PAY",
+        };
+
+        await this.handleSuccessfulPayment({
+          bookingId: this.bookingId,
+          tenantId: this.tenantId,
+          paymentMethod: paymentMapping[paymentProvider] || "OTHER",
+        });
+
+        logger.info(
+          `${this.tenantId} -- booking ${this.bookingId} successfully payed and updated.`,
+        );
+
+        return true;
+      } else {
+        // TODO: remove booking?
+        logger.warn(
+          `${this.tenantId} -- booking ${this.bookingId} could not be payed.`,
+        );
+        return true;
+      }
+    } catch (error) {
+      logger.error(
+        `${this.tenantId} -- payment notification error. For Booking ${this.bookingId}`,
+      );
+      throw error;
+    }
+  }
+
+  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
+    await super.handleSuccessfulPayment({ bookingId, tenantId, paymentMethod });
   }
 }
 
@@ -276,7 +451,7 @@ class InvoicePaymentService extends PaymentService {
         },
       ];
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
 
     try {
@@ -325,12 +500,13 @@ class InvoicePaymentService extends PaymentService {
         attachments,
       );
     } catch (error) {
-      throw new Error(error);
+      throw error;
     }
   }
 }
 
 module.exports = {
   GiroCockpitPaymentService,
+  PmPaymentService,
   InvoicePaymentService,
 };

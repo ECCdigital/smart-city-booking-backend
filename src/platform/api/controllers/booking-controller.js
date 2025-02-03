@@ -1,6 +1,9 @@
 const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const { Booking } = require("../../../commons/entities/booking");
+const {
+  Booking,
+  BOOKING_HOOK_TYPES,
+} = require("../../../commons/entities/booking");
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
@@ -404,7 +407,7 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async storeBooking(request, response) {
-    const booking = Object.assign(new Booking(), request.body);
+    const booking = new Booking(request.body);
 
     let isUpdate =
       !!(await BookingManager.getBooking(booking.id, booking.tenant)) &&
@@ -419,7 +422,7 @@ class BookingController {
 
   static async createBooking(request, response) {
     const user = request.user;
-    const booking = Object.assign(new Booking(), request.body);
+    const booking = new Booking(request.body);
 
     if (
       !(await BookingPermissions._allowCreate(booking, user.id, user.tenant))
@@ -446,7 +449,7 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const booking = Object.assign(new Booking(), request.body);
+      const booking = new Booking(request.body);
 
       if (
         await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
@@ -539,6 +542,7 @@ class BookingController {
       const tenant = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
+      const { reason } = request.body;
       if (!id) {
         return response.sendStatus(400);
       }
@@ -551,7 +555,7 @@ class BookingController {
         logger.info(
           `${tenant} -- rejected booking ${booking.id} by user ${user?.id}`,
         );
-        await BookingService.rejectBooking(tenant, booking);
+        await BookingService.rejectBooking(tenant, id, reason);
         return response.sendStatus(200);
       } else {
         logger.warn(
@@ -559,6 +563,62 @@ class BookingController {
         );
         return response.sendStatus(403);
       }
+    } catch (err) {
+      logger.error(err);
+      if (!response.headersSent) {
+        response.status(500).send("Could not reject booking");
+      }
+    }
+  }
+
+  static async requestRejectBooking(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const id = request.params.id;
+      const reason = request.body.reason;
+      if (!id) {
+        return response.sendStatus(400);
+      }
+
+      await BookingService.requestRejectBooking(tenant, id, reason);
+
+      response.sendStatus(201);
+    } catch (err) {
+      logger.error(err);
+      if (!response.headersSent) {
+        response.status(500).send("Could not reject booking");
+      }
+    }
+  }
+
+  static async releaseBookingHook(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const id = request.params.id;
+      const hookId = request.params.hookId;
+      if (!id || !hookId) {
+        return response.sendStatus(400);
+      }
+
+      const booking = await BookingManager.getBooking(id, tenant);
+
+      if (!booking.hooks || booking.hooks.length === 0) {
+        return response.sendStatus(404);
+      }
+
+      const hook = booking.hooks.find((h) => h.id === hookId);
+      if (hook) {
+        if (hook.type === BOOKING_HOOK_TYPES.REJECT) {
+          const { reason } = hook.payload;
+          await BookingService.rejectBooking(tenant, id, reason);
+        } else {
+          return response.sendStatus(400);
+        }
+      } else {
+        return response.sendStatus(404);
+      }
+
+      response.sendStatus(200);
     } catch (err) {
       logger.error(err);
       if (!response.headersSent) {
@@ -717,6 +777,66 @@ class BookingController {
       return response
         .status(err.code || 500)
         .send("Could not get public booking status");
+    }
+  }
+
+  static async getPublicBookingStatus(request, response) {
+    const {
+      params: { tenant, id },
+      query: { lastname },
+    } = request;
+
+    if (!tenant || !id || !lastname) {
+      logger.warn(`${tenant} -- Missing required parameters.`);
+      return response.status(400).send("Missing required parameters.");
+    }
+
+    try {
+      const status = await BookingService.checkBookingStatus(
+        id,
+        lastname,
+        tenant,
+      );
+
+      logger.info(`${tenant} -- sending public booking status to user`);
+      return response.status(200).send(status);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.code || 500)
+        .send("Could not get public booking status");
+    }
+  }
+
+  static async verifyBookingOwnership(request, response) {
+    const {
+      params: { tenant, id },
+      query: { name },
+    } = request;
+
+    if (!tenant || !id || !name) {
+      logger.warn(`${tenant} -- Missing required parameters.`);
+      return response.status(400).send("Missing required parameters.");
+    }
+
+    try {
+      const status = await BookingService.verifyBookingOwnership(
+        tenant,
+        id,
+        name,
+      );
+
+      logger.info(`${tenant} -- sending booking ownership status to user`);
+      if (status === true) {
+        return response.sendStatus(200);
+      } else {
+        return response.sendStatus(401);
+      }
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.code || 500)
+        .send("Could not check booking ownership");
     }
   }
 }
