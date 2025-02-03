@@ -30,6 +30,9 @@ class BookableManager {
    */
   static async getBookable(id, tenant) {
     const rawBookable = await BookableModel.findOne({ id: id, tenant: tenant });
+    if (!rawBookable) {
+      return null;
+    }
     return new Bookable(rawBookable);
   }
 

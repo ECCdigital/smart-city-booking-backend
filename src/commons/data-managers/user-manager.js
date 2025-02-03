@@ -4,6 +4,7 @@ const { RoleModel } = require("../data-managers/role-manager");
 
 const mongoose = require("mongoose");
 const MailController = require("../mail-service/mail-controller");
+const { Role } = require("../entities/role");
 
 const { Schema } = mongoose;
 
@@ -139,9 +140,10 @@ class UserManager {
       if (!user) {
         throw new Error(`User ${userId} not found.`);
       }
-      //TODO: Mapping
-      const roles = await RoleModel.find({ id: { $in: user.roles } });
-      return roles;
+      const rawRoles = await RoleModel.find({ id: { $in: user.roles } });
+      return rawRoles.map((rr) => {
+        return new Role(rr);
+      });
     } catch (err) {
       throw err;
     }
@@ -159,6 +161,7 @@ class UserManager {
     return new Promise((resolve, reject) => {
       UserManager.getUserRoles(userId, tenant)
         .then((roles) => {
+          console.log(roles);
           // Combine role permissions to specific user permissions
           if (roles.length === 0) {
             logger.warn(`${tenant} -- User ${userId} has no roles assigned.}`);
@@ -292,7 +295,6 @@ class UserManager {
     if (!userId || !tenant || !permissionName || !accessLevel) {
       return false;
     }
-
     try {
       const permissions = await UserManager.getUserPermissions(userId, tenant);
 

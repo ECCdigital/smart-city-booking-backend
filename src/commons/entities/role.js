@@ -17,48 +17,107 @@ class Role {
    *
    * @param {string} id Identifier of the Role
    * @param {string} name Name of the Role
-   * @param {boolean} manageBookables Allow users to manage bookable object
-   * @param {boolean} manageUsers allow users to manage users
-   * @param {boolean} manageTenants allow users to manage tenants
-   * @param {boolean} manageBookings allow users to manage events
-   * @param {boolean} manageRoles allow users to manage roles
-   * @param {boolean} manageCoupons allow users to manage coupons
-   * @param {boolean} freeBookings allow users to book without paying
-   *
+   * @param {Array} adminInterface Access to the admin interface
+   * @param {Object} manageBookables Permission to manage bookables
+   * @param {Object} manageBookings Permission to manage bookings
+   * @param {Object} manageCoupons Permission to manage coupons
+   * @param {Object} manageRoles Permission to manage roles
+   * @param {Object} manageTenants Permission to manage tenants
+   * @param {Object} manageUsers Permission to manage users
+   * @param {string} ownerTenant The tenant of the owner
+   * @param {string} ownerUserId The user id of the owner
+   * @param {boolean} freeBookings Permission to book for free
    */
   constructor({
     id,
     name,
+    adminInterface,
     manageBookables,
-    manageUsers,
-    manageTenants,
     manageBookings,
-    manageRoles,
     manageCoupons,
+    manageRoles,
+    manageTenants,
+    manageUsers,
+    ownerTenant,
+    ownerUserId,
     freeBookings,
   }) {
     this.id = id;
     this.name = name;
+    this.adminInterface = adminInterface;
     this.manageBookables = manageBookables;
-    this.manageUsers = manageUsers;
-    this.manageTenants = manageTenants;
     this.manageBookings = manageBookings;
-    this.manageRoles = manageRoles;
     this.manageCoupons = manageCoupons;
+    this.manageRoles = manageRoles;
+    this.manageTenants = manageTenants;
+    this.manageUsers = manageUsers;
+    this.ownerTenant = ownerTenant;
+    this.ownerUserId = ownerUserId;
     this.freeBookings = freeBookings;
   }
 
   static schema() {
     return {
-      id: String,
-      name: String,
-      manageBookables: Boolean,
-      manageUsers: Boolean,
-      manageTenants: Boolean,
-      manageBookings: Boolean,
-      manageRoles: Boolean,
-      manageCoupons: Boolean,
-      freeBookings: Boolean,
+      id: { type: String, required: true },
+      name: { type: String, required: true },
+      adminInterface: { type: Array, default: [] },
+      manageBookables: {
+        create: { type: Boolean, default: false },
+        readAny: { type: Boolean, default: false },
+        readOwn: { type: Boolean, default: false },
+        updateAny: { type: Boolean, default: false },
+        updateOwn: { type: Boolean, default: false },
+        deleteAny: { type: Boolean, default: false },
+        deleteOwn: { type: Boolean, default: false },
+      },
+      manageBookings: {
+        create: { type: Boolean, default: false },
+        readAny: { type: Boolean, default: false },
+        readOwn: { type: Boolean, default: false },
+        updateAny: { type: Boolean, default: false },
+        updateOwn: { type: Boolean, default: false },
+        deleteAny: { type: Boolean, default: false },
+        deleteOwn: { type: Boolean, default: false },
+      },
+      manageCoupons: {
+        create: { type: Boolean, default: false },
+        readAny: { type: Boolean, default: false },
+        readOwn: { type: Boolean, default: false },
+        updateAny: { type: Boolean, default: false },
+        updateOwn: { type: Boolean, default: false },
+        deleteAny: { type: Boolean, default: false },
+        deleteOwn: { type: Boolean, default: false },
+      },
+      manageRoles: {
+        create: { type: Boolean, default: false },
+        readAny: { type: Boolean, default: false },
+        readOwn: { type: Boolean, default: false },
+        updateAny: { type: Boolean, default: false },
+        updateOwn: { type: Boolean, default: false },
+        deleteAny: { type: Boolean, default: false },
+        deleteOwn: { type: Boolean, default: false },
+      },
+      manageTenants: {
+        create: { type: Boolean, default: false },
+        readAny: { type: Boolean, default: false },
+        readOwn: { type: Boolean, default: false },
+        updateAny: { type: Boolean, default: false },
+        updateOwn: { type: Boolean, default: false },
+        deleteAny: { type: Boolean, default: false },
+        deleteOwn: { type: Boolean, default: false },
+      },
+      manageUsers: {
+        create: { type: Boolean, default: false },
+        readAny: { type: Boolean, default: false },
+        readOwn: { type: Boolean, default: false },
+        updateAny: { type: Boolean, default: false },
+        updateOwn: { type: Boolean, default: false },
+        deleteAny: { type: Boolean, default: false },
+        deleteOwn: { type: Boolean, default: false },
+      },
+      ownerTenant: { type: String, required: true },
+      ownerUserId: { type: String, required: true },
+      freeBookings: { type: Boolean, default: false },
     };
   }
 }
