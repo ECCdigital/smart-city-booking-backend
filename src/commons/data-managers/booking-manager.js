@@ -69,6 +69,20 @@ class BookingManager {
     });
   }
 
+  static getRelatedBookingsBatch(tenant, bookableIds) {
+    return dbm
+      .get()
+      .collection("bookings")
+      .find({
+        tenant: tenant,
+        "bookableItems.bookableId": { $in: bookableIds },
+      })
+      .toArray()
+      .then((rawBookings) => {
+        return rawBookings.map((rb) => Object.assign(new Booking(), rb));
+      });
+  }
+
   /**
    * Get all bookings related to a user
    *
