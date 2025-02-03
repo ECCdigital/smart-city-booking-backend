@@ -1,6 +1,18 @@
-/**
- * A Booking object represents a single reservation of a resource by exactly one user.
- */
+const { v4: uuidv4 } = require("uuid");
+
+const BOOKING_HOOK_TYPES = Object.freeze({
+  REJECT: "REJECT",
+});
+
+class BookingHook {
+  constructor({ id, type, timeCreated, payload }) {
+    this.id = id;
+    this.type = type;
+    this.timeCreated = timeCreated || Date.now();
+    this.payload = payload;
+  }
+}
+
 class Booking {
   /**
    * Constructs a new Booking object.
@@ -30,6 +42,28 @@ class Booking {
    * @param {Date} params.timeEnd - The end time of the booking.
    * @param {number} params.vatIncludedEur - The VAT included in the price in euros.
    * @param {string} params.zipCode - The zip code associated with the booking.
+   * @param {string} id Identifier of the booking
+   * @param {string} tenant Identifier of the tenant
+   * @param {string} assignedUserId The foreign identifier of the user related to this booking
+   * @param {string} mail e-mail address in case no user is assigned to the booking
+   * @param {string} comment A free text comment by the user
+   * @param {integer} timeBegin Timestamp for begin date/time of the booking
+   * @param {integer} timeEnd Timestamp for end date/time of the booking
+   * @param {integer} timeCreated Timestamp when the booking was initially created
+   * @param {array<object>} bookableItems List of bookable items
+   * @param {boolean} isCommitted true, if the booking is committed
+   * @param {string} couponCode Coupon code used for the booking
+   * @param {string} name Name of the person who made the booking
+   * @param {string} company Company name
+   * @param {string} street Street address
+   * @param {string} zipCode Zip code
+   * @param {string} location Location
+   * @param {string} phone Phone number
+   * @param {number} priceEur Price in Euros
+   * @param {boolean} isPayed true, if the booking is paid
+   * @param {object} couponUsed Details of the coupon used
+   * @param {string} payMethod Payment method
+   * @param {array<object>} hooks List of hooks
    */
   constructor({
     id,
@@ -56,8 +90,12 @@ class Booking {
     timeEnd,
     vatIncludedEur,
     zipCode,
-  }) {
-    this.id = id || "";
+    street,
+    couponUsed,
+//    payMethod, 
+    hooks,
+  } = {}) {
+    this.id = id;
     this.tenant = tenant;
     this.assignedUserId = assignedUserId;
     this.attachments = attachments;
@@ -65,8 +103,6 @@ class Booking {
     this.comment = comment;
     this.company = company;
     this.couponCode = couponCode;
-    this.isCommitted = isCommitted;
-    this.isPayed = isPayed;
     this.location = location;
     this.lockerInfo = lockerInfo;
     this.mail = mail;
@@ -78,20 +114,37 @@ class Booking {
     this.street = street;
     this.tenant = tenant;
     this.timeBegin = timeBegin;
-    this.timeCreated = timeCreated;
-    this.timeEnd = timeEnd;
+    this.timeEnd = timeEnd;  
     this.vatIncludedEur = vatIncludedEur;
     this.zipCode = zipCode;
+    this.timeCreated = timeCreated || Date.now();
+    this.isCommitted = isCommitted || false;
+    this.isPayed = isPayed || false;
+    this.couponUsed = couponUsed || {};
+// TODO: Is PayMethod still used or do we use paymentMethod?
+//    this.payMethod = payMethod;
+    this.hooks = hooks || [];
   }
 
-  /**
-   * Commit this booking.
-   */
-  commit() {
-    this.isCommitted = true;
+  addHook(type, payload) {
+    if (!Object.values(BOOKING_HOOK_TYPES).includes(type)) {
+      throw new Error(`Invalid hook type: ${type}`);
+    }
+
+    const hook = new BookingHook({
+      id: uuidv4(),
+      type: type,
+      payload: payload,
+    });
+
+    this.hooks.push(hook);
+
+    return hook;
   }
 }
 
 module.exports = {
   Booking: Booking,
+  BookingHook: BookingHook,
+  BOOKING_HOOK_TYPES: BOOKING_HOOK_TYPES,
 };
