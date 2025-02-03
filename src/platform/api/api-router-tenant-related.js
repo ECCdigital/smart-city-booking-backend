@@ -190,8 +190,10 @@ router.post("/checkout/validateItem", CheckoutController.validateItem);
 
 // Public
 router.post("/payments", PaymentController.createPayment);
-router.get("/payments/notify", PaymentController.paymentNotification);
+router.get("/payments/notify", PaymentController.paymentNotificationGET);
+router.post("/payments/notify", PaymentController.paymentNotificationPOST);
 router.post("/payments/response", PaymentController.paymentResponse);
+router.get("/payments/response", PaymentController.paymentResponse);
 
 // CALENDAR
 // ========
