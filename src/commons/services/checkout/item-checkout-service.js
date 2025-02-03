@@ -64,11 +64,11 @@ class ItemCheckoutService {
   /**
    * Creates an instance of CheckoutManager.
    *
-   * @param {User} user The user object
+   * @param {Object} user The user object
    * @param {string} tenantId The tenant ID
    * @param {Date} timeBegin The timestamp of the beginning of the booking
    * @param {Date} timeEnd The timestamp of the end of the booking
-   * @param {Array} bookableId The ID of the bookable
+   * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string} couponCode The coupon code
    */
@@ -88,6 +88,23 @@ class ItemCheckoutService {
     this.bookableId = bookableId;
     this.amount = Number(amount);
     this.couponCode = couponCode;
+    this.originBookable = null;
+  }
+
+  /**
+   * Asynchronously initializes the instance by fetching the bookable data.
+   *
+   * @async
+   * @function init
+   * @param {Object} [originBookable={}] - The bookable object to initialize with.
+   * @returns {Promise<void>} - A promise that resolves when the initialization is complete.
+   */
+  async init(originBookable = {}) {
+    this.originBookable = await this.getBookable();
+  }
+
+  get bookableUsed() {
+    return this.originBookable;
   }
 
   async calculateAmountBooked(bookable) {
@@ -146,29 +163,24 @@ class ItemCheckoutService {
   }
 
   async isTimeRelated() {
-    const bookable = await this.getBookable();
     return (
-      bookable.isScheduleRelated === true ||
-      bookable.isTimePeriodRelated === true ||
-      bookable.isLongRange === true
+      this.originBookable.isScheduleRelated === true ||
+      this.originBookable.isTimePeriodRelated === true ||
+      this.originBookable.isLongRange === true
     );
   }
 
   async _isLongRange() {
-    const bookable = await this.getBookable();
-    return bookable.isLongRange === true;
+    return this.originBookable.isLongRange === true;
   }
 
   async priceValueAddedTax() {
-    const bookable = await this.getBookable();
-    return (bookable.priceValueAddedTax || 0) / 100;
+    return (this.originBookable.priceValueAddedTax || 0) / 100;
   }
 
   async regularPriceEur() {
-    const bookable = await this.getBookable();
-
     let multiplier;
-    switch (bookable.priceCategory) {
+    switch (this.originBookable.priceCategory) {
       case "per-item":
         multiplier = 1;
         break;
@@ -182,7 +194,7 @@ class ItemCheckoutService {
         multiplier = 1;
     }
 
-    const price = (bookable.priceEur || 0) * multiplier * this.amount;
+    const price = (Number(this.originBookable.priceEur) || 0) * multiplier;
     return Math.round(price * 100) / 100;
   }
 
@@ -193,25 +205,23 @@ class ItemCheckoutService {
   }
 
   async userPriceEur() {
-    const bookable = await this.getBookable();
-
     const freeBookingUsers = [
-      ...(bookable.freeBookingUsers || []),
+      ...(this.originBookable.freeBookingUsers || []),
       ...(
         await UserManager.getUsersWithRoles(
           this.tenantId,
-          bookable.freeBookingRoles || [],
+          this.originBookable.freeBookingRoles || [],
         )
       ).map((u) => u.id),
     ];
 
     if (
       !!this.user &&
-      freeBookingUsers.includes(this.user?.id) &&
-      bookable.tenant === this.user?.tenant
+      freeBookingUsers.includes(this.user) &&
+      this.originBookable.tenant === this.tenantId
     ) {
       logger.info(
-        `User ${this.user?.id} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
+        `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
       );
       return 0;
     }
@@ -232,20 +242,21 @@ class ItemCheckoutService {
   }
 
   async checkPermissions() {
-    const bookable = await this.getBookable();
-    if (bookable.isBookable !== true) {
-      throw new Error(`Bookable with ID ${bookable.id} is not bookable.`);
+    if (this.originBookable.isBookable !== true) {
+      throw new Error(
+        `Bookable with ID ${this.originBookable.id} is not bookable.`,
+      );
     }
 
     if (
       !(await CheckoutPermissions._allowCheckout(
-        bookable,
-        this.user?.id,
+        this.originBookable,
+        this.user,
         this.tenantId,
       ))
     ) {
       throw new Error(
-        `Sie sind nicht berechtigt, das Objekt ${bookable.title} zu buchen.`,
+        `Sie sind nicht berechtigt, das Objekt ${this.originBookable.title} zu buchen.`,
       );
     }
   }
@@ -253,19 +264,19 @@ class ItemCheckoutService {
   /**
    * The method returns all concurrent bookings for the affected bookables.
    *
-   * @returns {Promise<Booking[]>} An array of concurrent bookings
+   * @returns {Promise<Boolean>}
    */
   async checkAvailability() {
-    const bookable = await this.getBookable();
-    const amountBooked = await this.calculateAmountBooked(bookable);
+    const amountBooked = await this.calculateAmountBooked(this.originBookable);
 
     const isAvailable =
-      !bookable.amount || amountBooked + this.amount <= bookable.amount;
+      !this.originBookable.amount ||
+      amountBooked + this.amount <= this.originBookable.amount;
 
     if (!isAvailable) {
       throw new Error(
-        `Das Objekt ${bookable.title} ist nur noch ${
-          bookable.amount - amountBooked
+        `Das Objekt ${this.originBookable.title} ist nur noch ${
+          this.originBookable.amount - amountBooked
         } mal verfügbar.`,
       );
     }
@@ -274,10 +285,9 @@ class ItemCheckoutService {
   }
 
   async checkParentAvailability() {
-    const bookable = await this.getBookable();
     const parentBookables = await BookableManager.getParentBookables(
-      bookable.id,
-      bookable.tenant,
+      this.originBookable.id,
+      this.originBookable.tenant,
     );
 
     for (const parentBookable of parentBookables) {
@@ -285,7 +295,7 @@ class ItemCheckoutService {
         await this.calculateAmountBooked(parentBookable);
 
       let isAvailable;
-      if (bookable.type === "ticket") {
+      if (this.originBookable.type === "ticket") {
         const amountBooked =
           await this.calculateAmountBookedTicketsByParent(parentBookable);
         isAvailable =
@@ -308,10 +318,9 @@ class ItemCheckoutService {
   }
 
   async checkChildBookings() {
-    const bookable = await this.getBookable();
     const childBookables = await BookableManager.getRelatedBookables(
-      bookable.id,
-      bookable.tenant,
+      this.originBookable.id,
+      this.originBookable.tenant,
     );
 
     for (const childBookable of childBookables) {
@@ -328,16 +337,18 @@ class ItemCheckoutService {
   }
 
   async checkEventSeats() {
-    const bookable = await this.getBookable();
-    if (bookable.type === "ticket" && !!bookable.eventId) {
+    if (
+      this.originBookable.type === "ticket" &&
+      !!this.originBookable.eventId
+    ) {
       const event = await EventManager.getEvent(
-        bookable.eventId,
-        bookable.tenant,
+        this.originBookable.eventId,
+        this.originBookable.tenant,
       );
 
       const eventBookings = await BookingManager.getEventBookings(
-        bookable.tenant,
-        bookable.eventId,
+        this.originBookable.tenant,
+        this.originBookable.eventId,
       );
 
       const amountBooked = eventBookings
@@ -345,8 +356,8 @@ class ItemCheckoutService {
         .flat()
         .filter(
           (bi) =>
-            bi._bookableUsed.eventId === bookable.eventId &&
-            bi._bookableUsed.tenant === bookable.tenant,
+            bi._bookableUsed.eventId === this.originBookable.eventId &&
+            bi._bookableUsed.tenant === this.originBookable.tenant,
         )
         .reduce((acc, bi) => acc + bi.amount, 0);
 
@@ -364,22 +375,27 @@ class ItemCheckoutService {
   }
 
   async checkBookingDuration() {
-    const bookable = await this.getBookable();
     const hours = this.getBookingDuration() / 60;
 
-    if (!bookable.isScheduleRelated) {
+    if (!this.originBookable.isScheduleRelated) {
       return true;
     }
 
-    if (bookable.minBookingDuration && hours < bookable.minBookingDuration) {
+    if (
+      this.originBookable.minBookingDuration &&
+      hours < this.originBookable.minBookingDuration
+    ) {
       throw new Error(
-        `Die Buchungsdauer für das Objekt muss mindestens ${bookable.minBookingDuration} Stunden betragen.`,
+        `Die Buchungsdauer für das Objekt muss mindestens ${this.originBookable.minBookingDuration} Stunden betragen.`,
       );
     }
 
-    if (bookable.maxBookingDuration && hours > bookable.maxBookingDuration) {
+    if (
+      this.originBookable.maxBookingDuration &&
+      hours > this.originBookable.maxBookingDuration
+    ) {
       throw new Error(
-        `Die Buchungsdauer für das Objekt darf ${bookable.maxBookingDuration} Stunden nicht überschreiten.`,
+        `Die Buchungsdauer für das Objekt darf ${this.originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
       );
     }
 
@@ -391,18 +407,16 @@ class ItemCheckoutService {
       return true;
     }
 
-    const bookable = await this.getBookable();
-
-    if (bookable.isLongRange === true) {
+    if (this.originBookable.isLongRange === true) {
       return true;
     }
 
     const parentBookables = await BookableManager.getParentBookables(
-      bookable.id,
-      bookable.tenant,
+      this.originBookable.id,
+      this.originBookable.tenant,
     );
 
-    for (const b of [bookable, ...parentBookables]) {
+    for (const b of [this.originBookable, ...parentBookables]) {
       if (
         await OpeningHoursManager.hasOpeningHoursConflict(
           b,
@@ -453,4 +467,23 @@ class ItemCheckoutService {
   }
 }
 
-module.exports = ItemCheckoutService;
+class ManualItemCheckoutService extends ItemCheckoutService {
+  constructor(
+    user,
+    tenantId,
+    timeBegin,
+    timeEnd,
+    bookableId,
+    amount,
+    couponCode,
+  ) {
+    super(user, tenantId, timeBegin, timeEnd, bookableId, amount, couponCode);
+  }
+
+  async init(originBookable) {
+    this.originBookable =
+      JSON.parse(JSON.stringify(originBookable)) ?? (await super.getBookable());
+  }
+}
+
+module.exports = { ItemCheckoutService, ManualItemCheckoutService };
