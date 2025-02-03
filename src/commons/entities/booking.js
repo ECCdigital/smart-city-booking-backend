@@ -84,7 +84,6 @@ class Booking {
     paymentMethod,
     phone,
     priceEur,
-    street,
     timeBegin,
     timeCreated,
     timeEnd,
