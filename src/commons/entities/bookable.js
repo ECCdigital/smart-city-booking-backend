@@ -40,7 +40,7 @@ class Bookable {
    * @param {array<string>} requiredFields List of required fields for the bookable object
    * @param {string} bookingNotes Notes for the booking
    */
-  constructor(
+  constructor({
     id,
     tenant,
     type,
@@ -69,7 +69,7 @@ class Bookable {
     lockerDetails,
     requiredFields,
     bookingNotes,
-  ) {
+  }) {
     this.id = id;
     this.tenant = tenant;
     this.type = type;

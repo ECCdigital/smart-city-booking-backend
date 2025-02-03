@@ -1,7 +1,7 @@
 const puppeteer = require("puppeteer");
 const Mustache = require("mustache");
 const BookingManager = require("../data-managers/booking-manager");
-const BookableManager = require("../data-managers/bookable-manager");
+const { BookableManager } = require("../data-managers/bookable-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 

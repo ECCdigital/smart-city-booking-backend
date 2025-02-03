@@ -36,6 +36,19 @@ class Coupon {
       (!this.validTo || this.validTo >= today)
     );
   }
+
+  static schema() {
+    return {
+      description: { type: String, required: true },
+      type: { type: String, required: true },
+      discount: { type: Number, required: true },
+      maxAmount: { type: Number, required: false },
+      usedAmount: { type: Number, required: false },
+      validFrom: { type: Date, required: false },
+      validTo: { type: Date, required: false },
+      tenant: { type: String, required: true },
+    };
+  }
 }
 
 module.exports = {

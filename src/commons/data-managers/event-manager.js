@@ -1,45 +1,26 @@
-var validate = require("jsonschema").validate;
-
 const { Event } = require("../entities/event");
-var dbm = require("../utilities/database-manager");
+
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+const EventSchema = new Schema(Event.schema());
+const EventModel =
+  mongoose.models.Event || mongoose.model("Event", EventSchema);
 
 /**
  * Data Manager for Event objects.
  */
 class EventManager {
   /**
-   * Check if an object is a valid Event.
-   *
-   * @param {object} event A event object
-   * @returns true, if the object is a valid event object
-   */
-  static validateEvent(event) {
-    var schema = require("../schemas/event.schema.json");
-    return validate(event, schema).errors.length == 0;
-  }
-
-  /**
    * Get all events related to a tenant
    * @param {string} tenant Identifier of the tenant
    * @returns List of bookings
    */
-  static getEvents(tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("events")
-        .find({ tenant: tenant })
-        .toArray()
-        .then((rawEvents) => {
-          var events = rawEvents.map((rb) => {
-            var event = Object.assign(new Event(), rb);
-            return event;
-          });
-
-          resolve(events);
-        })
-        .catch((err) => reject(err));
+  static async getEvents(tenant) {
+    const rawEvents = await EventModel.find({
+      tenant: tenant,
     });
+    return rawEvents.map((re) => new Event(re));
   }
 
   /**
@@ -49,18 +30,9 @@ class EventManager {
    * @param {string} tenant Identifier of the tenant
    * @returns A single event object
    */
-  static getEvent(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("events")
-        .findOne({ id: id, tenant: tenant })
-        .then((rawEvent) => {
-          var event = Object.assign(new Event(), rawEvent);
-          resolve(event);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getEvent(id, tenant) {
+    const rawEvent = await EventModel.findOne({ id: id, tenant: tenant });
+    return new Event(rawEvent);
   }
 
   /**
@@ -71,37 +43,20 @@ class EventManager {
    * @returns Promise<>
    */
   static async storeEvent(event, upsert = true) {
-    try {
-      const eventsCollection = dbm.get().collection("events");
-
-      await eventsCollection.replaceOne(
-        { id: event.id, tenant: event.tenant },
-        event,
-        {
-          upsert: upsert,
-        },
-      );
-    } catch (err) {
-      throw new Error(`Error storing event: ${err.message}`);
-    }
+    await EventModel.updateOne({ id: event.id, tenant: event.tenant }, event, {
+      upsert: upsert,
+    });
   }
 
   /**
    * Remove an event object from the database.
    *
-   * @param {Event} event The event object to be stored.
-   * @param {boolean} upsert true, if new object should be inserted. Default: true
+   * @param {string} id The id of the event to remove
+   * @param {string} tenant The tenant of the event to remove
    * @returns Promise<>
    */
-  static removeEvent(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("events")
-        .deleteOne({ id: id, tenant: tenant })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async removeEvent(id, tenant) {
+    await EventModel.deleteOne({ id: id, tenant: tenant });
   }
 
   /**
@@ -116,10 +71,10 @@ class EventManager {
    */
   static async checkPublicEventCount(tenant) {
     const maxEvents = parseInt(process.env.MAX_EVENTS, 10);
-    const count = await dbm
-      .get()
-      .collection("events")
-      .countDocuments({ tenant: tenant, isPublic: true });
+    const count = await EventModel.countDocuments({
+      tenant: tenant,
+      isPublic: true,
+    });
     return !(maxEvents && count >= maxEvents);
   }
 }

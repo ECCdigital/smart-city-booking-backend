@@ -1,4 +1,6 @@
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
 const { Bookable } = require("../../../commons/entities/bookable");
 const { v4: uuidv4 } = require("uuid");

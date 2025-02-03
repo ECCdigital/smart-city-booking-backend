@@ -67,9 +67,13 @@ class TenantManager {
     const rawTenant = await TenantModel.updateOne(
       { id: tenant.id },
       SecurityUtils.encryptObject(newTenant, TENANT_ENCRYPT_KEYS),
+      {
+        upsert: upsert,
+        setDefaultsOnInsert: true,
+      },
     );
 
-    return rawTenant;
+    return new Tenant(rawTenant);
   }
 
   //TODO: create Tenant

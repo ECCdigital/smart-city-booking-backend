@@ -17,21 +17,44 @@ class Event {
    * @param tags {array} Tags used for internal filtering
    * @param flags {array} Flags used for user information
    */
-  /*constructor(id, tenant, title, timeBegin, timeEnd, hostUserId,
-                description, location, tags, flags) {
-        this.id = id;
-        this.tenant = tenant;
-        this.title = title;
-        this.timeBegin = timeBegin;
-        this.timeEnd = timeEnd;
-        this.hostUserId = hostUserId;
-        this.description = description;
-        this.location = location;
-        this.tags = tags;
-        this.flags = flags;
-    }*/
+  constructor({
+    id,
+    tenant,
+    title,
+    timeBegin,
+    timeEnd,
+    hostUserId,
+    description,
+    location,
+    tags,
+    flags,
+  }) {
+    this.id = id;
+    this.tenant = tenant;
+    this.title = title;
+    this.timeBegin = timeBegin;
+    this.timeEnd = timeEnd;
+    this.hostUserId = hostUserId;
+    this.description = description;
+    this.location = location;
+    this.tags = tags;
+    this.flags = flags;
+  }
+
+  static schema() {
+    return {
+      id: String,
+      tenant: String,
+      title: String,
+      timeBegin: Date,
+      timeEnd: Date,
+      hostUserId: String,
+      description: String,
+      location: String,
+      tags: [String],
+      flags: [String],
+    };
+  }
 }
 
-module.exports = {
-  Event,
-};
+module.exports = { Event };

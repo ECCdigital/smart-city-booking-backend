@@ -2,7 +2,7 @@ const {
   ItemCheckoutService,
   ManualItemCheckoutService,
 } = require("./item-checkout-service");
-const BookableManager = require("../../data-managers/bookable-manager");
+const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
 const LockerService = require("../locker/locker-service");

@@ -1,4 +1,4 @@
-const BookableManager = require("../../data-managers/bookable-manager");
+const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");

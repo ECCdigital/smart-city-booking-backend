@@ -1,4 +1,6 @@
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../../../commons/data-managers/bookable-manager");
 const HtmlEngine = require("../html-engine");
 const EventManager = require("../../../commons/data-managers/event-manager");
 

@@ -1,43 +1,24 @@
-const validate = require("jsonschema").validate;
-
 const { Bookable } = require("../entities/bookable");
-const dbm = require("../utilities/database-manager");
+
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+const BookableSchema = new Schema(Bookable.schema());
+const BookableModel =
+  mongoose.models.Bookable || mongoose.model("Bookable", BookableSchema);
 
 /**
  * Data Manager for Bookable objects.
  */
 class BookableManager {
   /**
-   * Check if an object is a valid Bookable.
-   *
-   * @param {object} bookable A bookable object
-   * @returns true, if the object is a valid bookable object
-   */
-  static validateBookable(bookable) {
-    const schema = require("../schemas/bookable.schema.json");
-    return validate(bookable, schema).errors.length === 0;
-  }
-
-  /**
    * Get all bookables related to a tenant
    * @param {string} tenant Identifier of the tenant
    * @returns List of bookings
    */
-  static getBookables(tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookables")
-        .find({ tenant: tenant })
-        .toArray()
-        .then((rawBookables) => {
-          const bookables = rawBookables.map((rb) => {
-            return Object.assign(new Bookable(), rb);
-          });
-          resolve(bookables);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getBookables(tenant) {
+    const rawBookables = await BookableModel.find({ tenant: tenant });
+    return rawBookables.map((rb) => new Bookable(rb));
   }
 
   /**
@@ -47,18 +28,9 @@ class BookableManager {
    * @param {string} tenant Identifier of the tenant
    * @returns A single bookable object
    */
-  static getBookable(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookables")
-        .findOne({ id: id, tenant: tenant })
-        .then((rawBookable) => {
-          const bookable = Object.assign(new Bookable(), rawBookable);
-          resolve(bookable);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getBookable(id, tenant) {
+    const rawBookable = await BookableModel.findOne({ id: id, tenant: tenant });
+    return new Bookable(rawBookable);
   }
 
   /**
@@ -69,17 +41,11 @@ class BookableManager {
    * @returns Promise<>
    */
   static async storeBookable(bookable, upsert = true) {
-    try {
-      const bookablesCollection = dbm.get().collection("bookables");
-
-      await bookablesCollection.replaceOne(
-        { id: bookable.id, tenant: bookable.tenant },
-        bookable,
-        { upsert: upsert },
-      );
-    } catch (err) {
-      throw new Error(`Error storing bookable: ${err.message}`);
-    }
+    await BookableModel.updateOne(
+      { id: bookable.id, tenant: bookable.tenant },
+      bookable,
+      { upsert: upsert },
+    );
   }
 
   /**
@@ -89,15 +55,8 @@ class BookableManager {
    * @param id The id of the bookable to remove
    * @param tenant The tenant of the bookable to remove
    */
-  static removeBookable(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookables")
-        .deleteOne({ id: id, tenant: tenant })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async removeBookable(id, tenant) {
+    await BookableModel.deleteOne({ id: id, tenant: tenant });
   }
 
   /**
@@ -134,11 +93,7 @@ class BookableManager {
       },
     ];
 
-    const results = await dbm
-      .get()
-      .collection("bookables")
-      .aggregate(pipeline)
-      .toArray();
+    const results = await BookableModel.aggregate(pipeline).exec();
 
     if (!results || results.length === 0) {
       return [];
@@ -154,7 +109,7 @@ class BookableManager {
     }
     combined = [...uniqueMap.values()];
 
-    return combined.map((b) => Object.assign(new Bookable(), b));
+    return combined.map((b) => new Bookable(b));
   }
 
   static async getParentBookables(id, tenant) {
@@ -171,26 +126,25 @@ class BookableManager {
 
   static async checkPublicBookableCount(tenant) {
     const maxBookables = parseInt(process.env.MAX_BOOKABLES, 10);
-    const count = await dbm
-      .get()
-      .collection("bookables")
-      .countDocuments({ tenant: tenant, isPublic: true });
+    const count = await BookableModel.countDocuments({
+      tenant: tenant,
+      isPublic: true,
+    });
     return !(maxBookables && count >= maxBookables);
   }
 }
 
 async function getAllParents(id, tenant, parentBookables, depth) {
   if (depth < 5) {
-    let bookables = await dbm
-      .get()
-      .collection("bookables")
-      .find({ relatedBookableIds: { $in: [id] }, tenant: tenant })
-      .toArray();
+    const rawBookables = await BookableModel.find({
+      relatedBookableIds: { $in: [id] },
+      tenant: tenant,
+    });
 
-    for (const b of bookables) {
-      parentBookables.push(Object.assign(new Bookable(), b));
+    for (const rb of rawBookables) {
+      parentBookables.push(new Bookable(rb));
       parentBookables = parentBookables.concat(
-        await getAllParents(b.id, b.tenant, parentBookables, depth + 1),
+        await getAllParents(rb.id, rb.tenant, parentBookables, depth + 1),
       );
     }
 
@@ -202,4 +156,4 @@ async function getAllParents(id, tenant, parentBookables, depth) {
   return parentBookables;
 }
 
-module.exports = BookableManager;
+module.exports = { BookableManager, BookableModel };

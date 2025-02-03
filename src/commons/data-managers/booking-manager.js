@@ -2,7 +2,14 @@ const validate = require("jsonschema").validate;
 
 const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking");
-const dbm = require("../utilities/database-manager");
+
+const mongoose = require("mongoose");
+const { BookableModel } = require("./bookable-manager");
+const { Schema } = mongoose;
+
+const BookingSchema = new Schema(Booking.schema());
+const BookingModel =
+  mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
 
 /**
  * Data Manager for Booking objects.
@@ -25,22 +32,9 @@ class BookingManager {
    * @param {string} tenant Identifier of the tenant
    * @returns List of bookings
    */
-  static getBookings(tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .find({ tenant: tenant })
-        .toArray()
-        .then((rawBookings) => {
-          const bookings = rawBookings.map((rb) => {
-            return new Booking(rb);
-          });
-
-          resolve(bookings);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getBookings(tenant) {
+    const rawBookings = await BookingModel.find({ tenant: tenant });
+    return rawBookings.map((rb) => new Booking(rb));
   }
 
   /**
@@ -51,60 +45,35 @@ class BookingManager {
    * @returns List of bookings
    * @returns
    */
-  static getRelatedBookings(tenant, bookableId) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .find({ tenant: tenant, "bookableItems.bookableId": bookableId })
-        .toArray()
-        .then((rawBookings) => {
-          const bookings = rawBookings.map((rb) => {
-            return new Booking(rb);
-          });
-
-          resolve(bookings);
-        })
-        .catch((err) => reject(err));
+  static async getRelatedBookings(tenant, bookableId) {
+    const rawBookings = await BookingModel.find({
+      tenant: tenant,
+      "bookableItems.bookableId": bookableId,
     });
+    return rawBookings.map((rb) => new Booking(rb));
   }
 
-  static getRelatedBookingsBatch(tenant, bookableIds) {
-    return dbm
-      .get()
-      .collection("bookings")
-      .find({
-        tenant: tenant,
-        "bookableItems.bookableId": { $in: bookableIds },
-      })
-      .toArray()
-      .then((rawBookings) => {
-        return rawBookings.map((rb) => Object.assign(new Booking(), rb));
-      });
+  static async getRelatedBookingsBatch(tenant, bookableIds) {
+    const rawBookings = await BookingModel.find({
+      tenant: tenant,
+      "bookableItems.bookableId": { $in: bookableIds },
+    });
+    return rawBookings.map((rb) => new Booking(rb));
   }
 
   /**
    * Get all bookings related to a user
    *
    * @param {string} tenant Identifier of the tenant
+   * @param {string} userId Identifier of the user
    * @returns List of bookings
    */
-  static getAssignedBookings(tenant, userId) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .find({ tenant: tenant, assignedUserId: userId })
-        .toArray()
-        .then((rawBookings) => {
-          const bookings = rawBookings.map((rb) => {
-            return new Booking(rb);
-          });
-
-          resolve(bookings);
-        })
-        .catch((err) => reject(err));
+  static async getAssignedBookings(tenant, userId) {
+    const rawBookings = await BookingModel.find({
+      tenant: tenant,
+      assignedUserId: userId,
     });
+    return rawBookings.map((rb) => new Booking(rb));
   }
 
   /**
@@ -114,21 +83,9 @@ class BookingManager {
    * @param {string} tenant Identifier of the tenant
    * @returns A single bookable object
    */
-  static getBooking(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .findOne({ id: id, tenant: tenant })
-        .then((rb) => {
-          if (!rb) {
-            resolve(new Booking({}));
-          }
-          const booking = new Booking(rb);
-          resolve(booking);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getBooking(id, tenant) {
+    const rawBooking = await BookingModel.findOne({ id: id, tenant: tenant });
+    return new Booking(rawBooking);
   }
 
   /**
@@ -139,23 +96,16 @@ class BookingManager {
    * @returns {Promise<>} status of the booking
    */
   static async getBookingStatus(tenant, bookingId) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .findOne({ tenant: tenant, id: bookingId })
-        .then((rb) => {
-          const booking = new Booking(rb);
-          const bookingStatus = {
-            isCommitted: booking.isCommitted,
-            isPayed: booking.isPayed,
-            bookingId: booking.id,
-          };
-
-          resolve(bookingStatus);
-        })
-        .catch((err) => reject(err));
+    const rawBooking = await BookingModel.findOne({
+      id: bookingId,
+      tenant: tenant,
     });
+    const booking = new Booking(rawBooking);
+    return {
+      isCommitted: booking.isCommitted,
+      isPayed: booking.isPayed,
+      bookingId: booking.id,
+    };
   }
 
   /**
@@ -165,17 +115,12 @@ class BookingManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static storeBooking(booking, upsert = true) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .replaceOne({ id: booking.id, tenant: booking.tenant }, booking, {
-          upsert: upsert,
-        })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async storeBooking(booking, upsert = true) {
+    await BookingModel.updateOne(
+      { id: booking.id, tenant: booking.tenant },
+      booking,
+      { upsert: upsert },
+    );
   }
 
   /**
@@ -185,15 +130,8 @@ class BookingManager {
    * @param {string} tenant Identifier of the tenant
    * @returns Promise<>
    */
-  static removeBooking(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .deleteOne({ id: id, tenant: tenant })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async removeBooking(id, tenant) {
+    await BookingModel.deleteOne({ id: id, tenant: tenant });
   }
 
   /**
@@ -206,57 +144,36 @@ class BookingManager {
    * @param bookingToIgnore ID of a booking that should be ignored
    * @returns
    */
-  static getConcurrentBookings(
+  static async getConcurrentBookings(
     bookableId,
     tenant,
     timeBegin,
     timeEnd,
     bookingToIgnore = null,
   ) {
-    return new Promise((resolve, reject) => {
-      BookingManager.getRelatedBookings(tenant, bookableId)
-        .then((bookings) => {
-          const concurrentBookings = bookings.filter(
-            (b) =>
-              isRangeOverlap(
-                b.timeBegin,
-                b.timeEnd,
-                timeBegin,
-                timeEnd,
-                true,
-              ) &&
-              !b.isRejected &&
-              b.id !== bookingToIgnore,
-          );
+    const rawBookings = await BookingManager.getRelatedBookings(
+      tenant,
+      bookableId,
+    );
+    const concurrentBookings = rawBookings.filter(
+      (b) =>
+        isRangeOverlap(b.timeBegin, b.timeEnd, timeBegin, timeEnd, true) &&
+        !b.isRejected &&
+        b.id !== bookingToIgnore,
+    );
 
-          resolve(concurrentBookings);
-        })
-        .catch((err) => reject(err));
-    });
+    return concurrentBookings.map((cb) => new Booking(cb));
   }
 
   static getBookingsByTimeRange(tenant, timeBegin, timeEnd) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .find({
-          tenant: tenant,
-          $or: [
-            { timeBegin: { $gte: timeBegin, $lt: timeEnd } },
-            { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
-          ],
-        })
-        .toArray()
-        .then((rawBookings) => {
-          const bookings = rawBookings.map((rb) => {
-            return new Booking(rb);
-          });
-
-          resolve(bookings);
-        })
-        .catch((err) => reject(err));
+    const rawBookings = BookingModel.find({
+      tenant: tenant,
+      $or: [
+        { timeBegin: { $gte: timeBegin, $lt: timeEnd } },
+        { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
+      ],
     });
+    return rawBookings.map((rb) => new Booking(rb));
   }
 
   /**
@@ -265,15 +182,11 @@ class BookingManager {
    * @param {Booking} booking The booking object to be updated.
    * @returns Promise<>
    */
-  static setBookingPayedStatus(booking) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookings")
-        .replaceOne({ id: booking.id, tenant: booking.tenant }, booking)
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async setBookingPayedStatus(booking) {
+    await BookingModel.updateOne(
+      { id: booking.id, tenant: booking.tenant },
+      { isPayed: booking.isPayed },
+    );
   }
 
   /**
@@ -283,31 +196,18 @@ class BookingManager {
    * @param {string} eventId Identifier of the event
    * @returns {Promise<>} List of bookings
    */
-  static getEventBookings(tenant, eventId) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("bookables")
-        .find({ tenant: tenant, eventId: eventId, type: "ticket" })
-        .toArray()
-        .then((rawBookables) => {
-          let bookableIds = rawBookables.map((rb) => rb.id);
-          dbm
-            .get()
-            .collection("bookings")
-            .find({
-              tenant: tenant,
-              "bookableItems.bookableId": { $in: bookableIds },
-            })
-            .toArray()
-            .then((rawBookings) => {
-              const bookings = rawBookings.map((rb) => new Booking(rb));
-              resolve(bookings);
-            })
-            .catch((err) => reject(err));
-        })
-        .catch((err) => reject(err));
+  static async getEventBookings(tenant, eventId) {
+    const bookables = await BookableModel.find({
+      tenant: tenant,
+      eventId: eventId,
+      type: "ticket",
     });
+    const bookableIds = bookables.map((b) => b.id);
+    const rawBookings = await BookingModel.find({
+      tenant: tenant,
+      "bookableItems.bookableId": { $in: bookableIds },
+    });
+    return rawBookings.map((rb) => new Booking(rb));
   }
 }
 

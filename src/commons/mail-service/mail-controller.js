@@ -1,6 +1,6 @@
 const MailerService = require("./mail-service");
 const BookingManager = require("../data-managers/booking-manager");
-const BookableManager = require("../data-managers/bookable-manager");
+const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const bunyan = require("bunyan");
