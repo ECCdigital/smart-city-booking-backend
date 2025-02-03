@@ -6,7 +6,6 @@ const { Schema } = mongoose;
 const RoleSchema = new Schema(Role.schema());
 const RoleModel = mongoose.models.Role || mongoose.model("Role", RoleSchema);
 
-
 /**
  * Data Manager for role objects. Role objects determine the permissions for users.
  *
@@ -43,7 +42,10 @@ class RoleManager {
    * @returns Promise<>
    */
   static async storeRole(role, upsert = true) {
-    await RoleModel.findOneAndUpdate({ id: role.id }, role, { upsert: upsert, setDefaultsOnInsert: true });
+    await RoleModel.findOneAndUpdate({ id: role.id }, role, {
+      upsert: upsert,
+      setDefaultsOnInsert: true,
+    });
   }
 
   /**

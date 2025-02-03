@@ -62,7 +62,6 @@ class Booking {
    * @param {number} priceEur Price in Euros
    * @param {boolean} isPayed true, if the booking is paid
    * @param {object} couponUsed Details of the coupon used
-   * @param {string} payMethod Payment method
    * @param {array<object>} hooks List of hooks
    */
   constructor({
@@ -91,7 +90,6 @@ class Booking {
     zipCode,
     street,
     couponUsed,
-//    payMethod, 
     hooks,
   } = {}) {
     this.id = id;
@@ -113,15 +111,13 @@ class Booking {
     this.street = street;
     this.tenant = tenant;
     this.timeBegin = timeBegin;
-    this.timeEnd = timeEnd;  
+    this.timeEnd = timeEnd;
     this.vatIncludedEur = vatIncludedEur;
     this.zipCode = zipCode;
     this.timeCreated = timeCreated || Date.now();
     this.isCommitted = isCommitted || false;
     this.isPayed = isPayed || false;
     this.couponUsed = couponUsed || {};
-// TODO: Is PayMethod still used or do we use paymentMethod?
-//    this.payMethod = payMethod;
     this.hooks = hooks || [];
   }
 
@@ -139,6 +135,36 @@ class Booking {
     this.hooks.push(hook);
 
     return hook;
+  }
+
+  static schema() {
+    return {
+      tenant: String,
+      assignedUserId: String,
+      attachments: [Object],
+      bookableItems: [Object],
+      comment: String,
+      company: String,
+      couponCode: String,
+      isCommitted: Boolean,
+      isPayed: Boolean,
+      location: String,
+      lockerInfo: [Object],
+      mail: String,
+      name: String,
+      paymentProvider: String,
+      paymentMethod: String,
+      phone: String,
+      priceEur: Number,
+      street: String,
+      timeBegin: Date,
+      timeCreated: Date,
+      timeEnd: Date,
+      vatIncludedEur: Number,
+      zipCode: String,
+      couponUsed: Object,
+      hooks: [Object],
+    };
   }
 }
 

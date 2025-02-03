@@ -25,13 +25,11 @@ class DatabaseManager {
     }
 
     try {
-
-      if(!process.env.DB_URL){
+      if (!process.env.DB_URL) {
         throw new Error("Database connection parameters are missing.");
       }
 
       const uri = process.env.DB_URL;
-
 
       this.dbClient = await mongoose.connect(uri, {
         authSource: "admin",
@@ -42,14 +40,11 @@ class DatabaseManager {
         mongoose.set("debug", true);
       }
 
-      mongoose.connection.on("connected", () => {
-      });
+      mongoose.connection.on("connected", () => {});
 
-      mongoose.connection.on("error", (err) => {
-      });
+      mongoose.connection.on("error", (err) => {});
 
-      mongoose.connection.on("disconnected", () => {
-      });
+      mongoose.connection.on("disconnected", () => {});
 
       return this.dbClient;
     } catch (err) {
@@ -65,6 +60,7 @@ class DatabaseManager {
    */
   get(dbName = process.env.DB_NAME) {
     if (!this.dbClient) {
+      throw new Error("Database connection is not established.");
     }
     return this.dbClient;
   }

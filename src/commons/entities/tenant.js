@@ -69,7 +69,6 @@ class Tenant {
     this.ownerUserId = ownerUserId;
   }
 
-
   static schema() {
     return {
       id: { type: String, required: true },

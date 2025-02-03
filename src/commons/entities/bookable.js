@@ -166,7 +166,6 @@ class Bookable {
     return Math.round(this.priceEur * 100) / 100;
   }
 
-
   static schema() {
     return {
       tenant: String,

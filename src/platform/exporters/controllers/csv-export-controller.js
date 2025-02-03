@@ -92,7 +92,7 @@ class CsvExportController {
           isCommitted: b.isCommitted ? "Ja" : "Nein",
           isPayed: b.isPayed ? "Ja" : "Nein",
           priceEur: Formatters.formatCurrency(b.priceEur),
-          payMethod: Formatters.translatePayMethod(b.payMethod),
+          paymentMethod: Formatters.translatePayMethod(b.paymentMethod),
         };
       });
 
@@ -117,7 +117,7 @@ class CsvExportController {
           isCommitted: "Buchung bestätigt",
           isPayed: "Buchung bezahlt",
           priceEur: "Preis",
-          payMethod: "Zahlungsart",
+          paymentMethod: "Zahlungsart",
         });
 
       response.setHeader("Content-Type", "text/csv");
