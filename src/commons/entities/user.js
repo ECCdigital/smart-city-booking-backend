@@ -19,7 +19,6 @@ class User {
     hooks,
     isVerified,
     created,
-    roles,
     company,
   }) {
     this.id = id;
@@ -33,7 +32,6 @@ class User {
     this.hooks = hooks || [];
     this.isVerified = isVerified || false;
     this.created = created || Date.now();
-    this.roles = roles || [];
     this.company = company;
   }
 
@@ -77,14 +75,6 @@ class User {
     return true;
   }
 
-  addRole(role) {
-    this.roles.push(role);
-  }
-
-  removeRole(role) {
-    this.roles = this.roles.filter((r) => r !== role);
-  }
-
   exportPublic() {
     return {
       id: this.id,
@@ -114,7 +104,6 @@ class User {
       hooks: { type: Array, default: [] },
       isVerified: { type: Boolean, default: false },
       created: { type: Date, default: Date.now },
-      roles: { type: Array, default: [] },
       company: { type: String },
     };
   }

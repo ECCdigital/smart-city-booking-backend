@@ -3,6 +3,7 @@ var { User, HookTypes } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const MailController = require("../../../commons/mail-service/mail-controller");
+const { RoleManager } = require("../../../commons/data-managers/role-manager");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -23,19 +24,15 @@ class AuthenticationController {
     }
   }
 
-  static signin(request, response) {
-    const user = request.user;
-
-    UserManager.getUserPermissions(user.id, user.tenant)
-      .then((permissions) => {
-        user.permissions = permissions;
-        logger.info(`User ${user.id} signed in.`);
-        response.status(200).send(user);
-      })
-      .catch((err) => {
-        logger.error(err);
-        response.sendStatus(500);
-      });
+  static async signin(request, response) {
+    try {
+      const user = request.user;
+      const permissions = await UserManager.getUserPermissions(user.id);
+      logger.info(`User ${user.id} signed in.`);
+      response.status(200).send({ user, permissions });
+    } catch (error) {
+      response.sendStatus(500);
+    }
   }
 
   static signup(request, response) {
@@ -95,19 +92,18 @@ class AuthenticationController {
     response.sendStatus(200);
   }
 
-  static me(request, response) {
-    var user = new User(request.user);
-    var userPublic = user.exportPublic();
+  static async me(request, response) {
+    try {
+      const user = request.user;
+      if (!user) {
+        response.status(401);
+        return;
+      }
 
-    if (request.query.populatePermissions === "1") {
-      UserManager.getUserPermissions(user.id, user.tenant).then(
-        (permissions) => {
-          userPublic.permissions = permissions;
-          response.status(200).send(userPublic);
-        },
-      );
-    } else {
-      response.status(200).send(userPublic);
+      const permissions = await UserManager.getUserPermissions(user.id);
+      response.status(200).send({ user, permissions });
+    } catch (error) {
+      response.sendStatus(500);
     }
   }
 

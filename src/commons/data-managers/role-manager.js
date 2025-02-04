@@ -16,8 +16,8 @@ class RoleManager {
    * Get all roles
    * @returns List of bookings
    */
-  static async getRoles() {
-    const rawRoles = await RoleModel.find();
+  static async getRoles(tenantId) {
+    const rawRoles = await RoleModel.find({ tenantId: tenantId });
     return rawRoles.map((rr) => {
       return new Role(rr);
     });
@@ -29,8 +29,9 @@ class RoleManager {
    * @param {string} id Logical identifier of the role object
    * @returns A single role object
    */
-  static async getRole(id) {
-    const rawRole = await RoleModel.findOne({ id: id });
+  static async getRole(id, tenantId) {
+    const rawRole = await RoleModel.findOne({ id: id, tenant: tenantId });
+    if (!rawRole) return null;
     return new Role(rawRole);
   }
 
@@ -41,11 +42,15 @@ class RoleManager {
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
-  static async storeRole(role, upsert = true) {
-    await RoleModel.findOneAndUpdate({ id: role.id }, role, {
-      upsert: upsert,
-      setDefaultsOnInsert: true,
-    });
+  static async storeRole(role, tenantId, upsert = true) {
+    await RoleModel.findOneAndUpdate(
+      { id: role.id, tenantId: tenantId },
+      role,
+      {
+        upsert: upsert,
+        setDefaultsOnInsert: true,
+      },
+    );
   }
 
   /**
@@ -54,8 +59,8 @@ class RoleManager {
    * @param {string} id Logical identifier of the role object
    * @returns Promise<>
    */
-  static async removeRole(id) {
-    await RoleModel.deleteOne({ id: id });
+  static async removeRole(id, tenantId) {
+    await RoleModel.deleteOne({ id: id, tenantId: tenantId });
   }
 }
 

@@ -16,7 +16,16 @@ TenantSchema.pre("save", async function (next) {
   next();
 });
 
-TenantSchema.post("init",  function (doc) {
+TenantSchema.post("init", function (doc) {
+  if (doc.paymentMerchantId) {
+    doc.paymentMerchantId = SecurityUtils.decrypt(doc.paymentMerchantId);
+  }
+  if (doc.paymentProjectId) {
+    doc.paymentProjectId = SecurityUtils.decrypt(doc.paymentProjectId);
+  }
+  if (doc.paymentSecret) {
+    doc.paymentSecret = SecurityUtils.decrypt(doc.paymentSecret);
+  }
   if (doc.noreplyPassword) {
     doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
   }
