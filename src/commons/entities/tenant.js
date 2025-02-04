@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+
 class Tenant {
   constructor({
     id,
@@ -33,6 +35,7 @@ class Tenant {
     defaultEventCreationMode,
     enablePublicStatusView,
     ownerUserId,
+    users,
   }) {
     this.id = id;
     this.name = name;
@@ -67,11 +70,12 @@ class Tenant {
     this.defaultEventCreationMode = defaultEventCreationMode || "";
     this.enablePublicStatusView = enablePublicStatusView;
     this.ownerUserId = ownerUserId;
+    this.users = users || [];
   }
 
   static schema() {
     return {
-      id: { type: String, required: true },
+      id: { type: String, required: true, unique: true },
       name: { type: String, required: true },
       contactName: { type: String, required: true },
       location: { type: String, required: true },
@@ -104,6 +108,24 @@ class Tenant {
       defaultEventCreationMode: { type: String, required: true },
       enablePublicStatusView: { type: Boolean, required: true },
       ownerUserId: { type: String, required: true },
+      users: [
+        {
+          userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+          },
+          roles: {
+            type: [
+              {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Role",
+              },
+            ],
+            default: [],
+          },
+        },
+      ],
     };
   }
 }

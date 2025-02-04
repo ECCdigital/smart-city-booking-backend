@@ -5,6 +5,49 @@ const mongoose = require("mongoose");
 
 const { Schema } = mongoose;
 const TenantSchema = new Schema(Tenant.schema());
+
+TenantSchema.pre("save", async function (next) {
+  if (this.isModified("paymentMerchantId"))
+    this.paymentMerchantId = SecurityUtils.encrypt(this.paymentMerchantId);
+  if (this.isModified("paymentProjectId"))
+    this.paymentProjectId = SecurityUtils.encrypt(this.paymentProjectId);
+  if (this.isModified("paymentSecret"))
+    this.paymentSecret = SecurityUtils.encrypt(this.paymentSecret);
+  if (this.isModified("noreplyPassword"))
+    this.noreplyPassword = SecurityUtils.encrypt(this.noreplyPassword);
+  if (this.isModified("password"))
+    this.password = SecurityUtils.encrypt(this.password);
+  if (this.isModified("noreplyGraphClientSecret"))
+    this.noreplyGraphClientSecret = SecurityUtils.encrypt(
+      this.noreplyGraphClientSecret,
+    );
+  next();
+});
+
+TenantSchema.post("init",  function (doc) {
+  if (doc.paymentMerchantId) {
+    doc.paymentMerchantId = SecurityUtils.decrypt(doc.paymentMerchantId);
+    console.log(doc.paymentMerchantId);
+  }
+  if (doc.paymentProjectId) {
+    doc.paymentProjectId = SecurityUtils.decrypt(doc.paymentProjectId);
+  }
+  if (doc.paymentSecret) {
+    doc.paymentSecret = SecurityUtils.decrypt(doc.paymentSecret);
+  }
+  if (doc.noreplyPassword) {
+    doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
+  }
+  if (doc.password) {
+    doc.password = SecurityUtils.decrypt(doc.password);
+  }
+  if (doc.noreplyGraphClientSecret) {
+    doc.noreplyGraphClientSecret = SecurityUtils.decrypt(
+      doc.noreplyGraphClientSecret,
+    );
+  }
+});
+
 const TenantModel =
   mongoose.models.Tenant || mongoose.model("Tenant", TenantSchema);
 
@@ -26,13 +69,14 @@ class TenantManager {
    * @returns List of tenants
    */
   static async getTenants() {
-    const rawTenant = await TenantModel.find();
-    return rawTenant.map((rt) => {
+    const rawTenants = await TenantModel.find();
+    return rawTenants.map((rt) => {
+      console.log(rt.noreplyPassword);
       const tenant = new Tenant(rt);
       tenant.applications = tenant.applications.map((app) => {
         return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
       });
-      return SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS);
+      return tenant;
     });
   }
 

@@ -10,7 +10,6 @@ class User {
   constructor({
     id,
     secret,
-    tenant,
     firstName,
     lastName,
     phone,
@@ -25,7 +24,6 @@ class User {
   }) {
     this.id = id;
     this.secret = secret;
-    this.tenant = tenant;
     this.firstName = firstName;
     this.lastName = lastName;
     this.phone = phone;
@@ -112,7 +110,6 @@ class User {
       address: { type: String, required: true },
       zipCode: { type: String, required: true },
       city: { type: String, required: true },
-      tenant: { type: String, required: true },
       secret: { type: String, required: true },
       hooks: { type: Array, default: [] },
       isVerified: { type: Boolean, default: false },

@@ -24,7 +24,7 @@ class Role {
    * @param {Object} manageRoles Permission to manage roles
    * @param {Object} manageTenants Permission to manage tenants
    * @param {Object} manageUsers Permission to manage users
-   * @param {string} ownerTenant The tenant of the owner
+   * @param {string} tenant The tenant id
    * @param {string} ownerUserId The user id of the owner
    * @param {boolean} freeBookings Permission to book for free
    */
@@ -38,7 +38,7 @@ class Role {
     manageRoles,
     manageTenants,
     manageUsers,
-    ownerTenant,
+    tenant,
     ownerUserId,
     freeBookings,
   }) {
@@ -51,14 +51,14 @@ class Role {
     this.manageRoles = manageRoles;
     this.manageTenants = manageTenants;
     this.manageUsers = manageUsers;
-    this.ownerTenant = ownerTenant;
+    this.tenant = tenant;
     this.ownerUserId = ownerUserId;
     this.freeBookings = freeBookings;
   }
 
   static schema() {
     return {
-      id: { type: String, required: true },
+      id: { type: String, required: true, unique: true },
       name: { type: String, required: true },
       adminInterfaces: { type: Array, default: [] },
       manageBookables: {
@@ -115,7 +115,7 @@ class Role {
         deleteAny: { type: Boolean, default: false },
         deleteOwn: { type: Boolean, default: false },
       },
-      ownerTenant: { type: String, required: true },
+      tenant: { type: String, ref: "Tenant", required: true },
       ownerUserId: { type: String, required: true },
       freeBookings: { type: Boolean, default: false },
     };
