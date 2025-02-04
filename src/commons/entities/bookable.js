@@ -12,7 +12,7 @@ class Bookable {
   /**
    *
    * @param {string} id Logical identifier of the bookable object
-   * @param {string} tenant Tenant identifier
+   * @param {string} tenantId Tenant identifier
    * @param {String} type Type class of the bookable object, determines whether object is a room, location, ticket or similar. NOTE: Please use BookableTypes!
    * @param {boolean} enabled true, if the object is enabled
    * @param {string} parent Logical identifier of a parent bookable object, undefined if there is no parent
@@ -42,7 +42,7 @@ class Bookable {
    */
   constructor({
     id,
-    tenant,
+    tenantId,
     type,
     enabled,
     parent,
@@ -71,7 +71,7 @@ class Bookable {
     bookingNotes,
   }) {
     this.id = id;
-    this.tenant = tenant;
+    this.tenantId = tenantId;
     this.type = type;
     this.enabled = enabled;
     this.parent = parent;
@@ -168,7 +168,11 @@ class Bookable {
 
   static schema() {
     return {
-      tenant: String,
+      tenantId: {
+        type: String,
+        required: true,
+        ref: "Tenant",
+      },
       type: String,
       enabled: Boolean,
       parent: String,

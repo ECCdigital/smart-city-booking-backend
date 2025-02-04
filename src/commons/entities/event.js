@@ -19,7 +19,7 @@ class Event {
    */
   constructor({
     id,
-    tenant,
+                tenantId,
     title,
     timeBegin,
     timeEnd,
@@ -30,7 +30,7 @@ class Event {
     flags,
   }) {
     this.id = id;
-    this.tenant = tenant;
+    this.tenantId = tenantId;
     this.title = title;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
@@ -44,7 +44,7 @@ class Event {
   static schema() {
     return {
       id: String,
-      tenant: String,
+      tenantId: { type: String, required: true, ref: "Tenant" },
       title: String,
       timeBegin: Date,
       timeEnd: Date,

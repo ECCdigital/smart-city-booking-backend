@@ -18,7 +18,7 @@ class Coupon {
     this.usedAmount = usedAmount;
     this.validFrom = validFrom;
     this.validTo = validTo;
-    this.tenant = tenant;
+    this.tenantId = tenantId;
   }
 
   static COUPON_TYPE = {
@@ -46,7 +46,7 @@ class Coupon {
       usedAmount: { type: Number, required: false },
       validFrom: { type: Date, required: false },
       validTo: { type: Date, required: false },
-      tenant: { type: String, required: true },
+      tenantId: { type: String, required: true, ref: "Tenant" },
     };
   }
 }

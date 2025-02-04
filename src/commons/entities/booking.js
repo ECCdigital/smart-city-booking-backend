@@ -19,7 +19,7 @@ class Booking {
    *
    * @param {Object} params - The parameters for the booking.
    * @param {string} params.id - The unique identifier for the booking.
-   * @param {string} params.tenant - The tenant identifier.
+   * @param {string} params.tenantId - The tenant identifier.
    * @param {string} params.assignedUserId - The ID of the user assigned to the booking.
    * @param {Array} params.attachments - The attachments associated with the booking.
    * @param {Array} params.bookableItems - The items that can be booked.
@@ -43,7 +43,6 @@ class Booking {
    * @param {number} params.vatIncludedEur - The VAT included in the price in euros.
    * @param {string} params.zipCode - The zip code associated with the booking.
    * @param {string} id Identifier of the booking
-   * @param {string} tenant Identifier of the tenant
    * @param {string} assignedUserId The foreign identifier of the user related to this booking
    * @param {string} mail e-mail address in case no user is assigned to the booking
    * @param {string} comment A free text comment by the user
@@ -66,7 +65,7 @@ class Booking {
    */
   constructor({
     id,
-    tenant,
+    tenantId,
     assignedUserId,
     attachments,
     bookableItems,
@@ -93,7 +92,7 @@ class Booking {
     hooks,
   } = {}) {
     this.id = id;
-    this.tenant = tenant;
+    this.tenantId = tenantId;
     this.assignedUserId = assignedUserId;
     this.attachments = attachments;
     this.bookableItems = bookableItems;
@@ -109,7 +108,6 @@ class Booking {
     this.phone = phone;
     this.priceEur = priceEur;
     this.street = street;
-    this.tenant = tenant;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
     this.vatIncludedEur = vatIncludedEur;
@@ -139,8 +137,15 @@ class Booking {
 
   static schema() {
     return {
-      tenant: String,
-      assignedUserId: String,
+      tenantId: {
+        type: String,
+        required: true,
+        ref: "Tenant",
+      },
+      assignedUserId: {
+        type: String,
+        ref: "User",
+      },
       attachments: [Object],
       bookableItems: [Object],
       comment: String,
