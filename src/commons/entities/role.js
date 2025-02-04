@@ -31,7 +31,7 @@ class Role {
   constructor({
     id,
     name,
-    adminInterface,
+    adminInterfaces,
     manageBookables,
     manageBookings,
     manageCoupons,
@@ -44,7 +44,7 @@ class Role {
   }) {
     this.id = id;
     this.name = name;
-    this.adminInterface = adminInterface;
+    this.adminInterfaces = adminInterfaces;
     this.manageBookables = manageBookables;
     this.manageBookings = manageBookings;
     this.manageCoupons = manageCoupons;
@@ -60,7 +60,7 @@ class Role {
     return {
       id: { type: String, required: true },
       name: { type: String, required: true },
-      adminInterface: { type: Array, default: [] },
+      adminInterfaces: { type: Array, default: [] },
       manageBookables: {
         create: { type: Boolean, default: false },
         readAny: { type: Boolean, default: false },

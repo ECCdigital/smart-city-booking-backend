@@ -161,7 +161,6 @@ class UserManager {
     return new Promise((resolve, reject) => {
       UserManager.getUserRoles(userId, tenant)
         .then((roles) => {
-          console.log(roles);
           // Combine role permissions to specific user permissions
           if (roles.length === 0) {
             logger.warn(`${tenant} -- User ${userId} has no roles assigned.}`);
