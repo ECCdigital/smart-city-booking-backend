@@ -144,11 +144,7 @@ class UserManager {
     const permissions = [];
     const tenants = await TenantManager.getTenants();
 
-    // console.log(
-    //   tenants.map((t) => {
-    //     return { id: t.id, users: t.users };
-    //   }),
-    // );
+    // TODO: Could be that a user gets a role without any permissions (all permissions = false). This tenant would still be part of the permission object.
 
     for (const tenant of tenants) {
       // In the tenant, get the user reference that contains the roles.
