@@ -2,8 +2,27 @@ var express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const TenantController = require("./controllers/tenant-controller");
 const RoleController = require("./controllers/role-controller");
+const InstanceController = require("./controllers/instance-controller");
 
 var router = express.Router({ mergeParams: true });
+
+// INSTANCES
+// =========
+
+// Public
+router.get("/instances/public", InstanceController.getPublicInstance);
+
+// Protected
+router.get(
+  "/instances",
+  AuthenticationController.isSignedIn,
+  InstanceController.getInstance,
+);
+router.put(
+  "/instances",
+  AuthenticationController.isSignedIn,
+  InstanceController.storeInstance,
+);
 
 // TENANTS
 // =======

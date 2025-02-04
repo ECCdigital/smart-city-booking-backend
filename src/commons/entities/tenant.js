@@ -1,5 +1,3 @@
-const mongoose = require("mongoose");
-
 class Tenant {
   constructor({
     id,
