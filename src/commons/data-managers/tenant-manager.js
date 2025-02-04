@@ -7,16 +7,8 @@ const { Schema } = mongoose;
 const TenantSchema = new Schema(Tenant.schema());
 
 TenantSchema.pre("save", async function (next) {
-  if (this.isModified("paymentMerchantId"))
-    this.paymentMerchantId = SecurityUtils.encrypt(this.paymentMerchantId);
-  if (this.isModified("paymentProjectId"))
-    this.paymentProjectId = SecurityUtils.encrypt(this.paymentProjectId);
-  if (this.isModified("paymentSecret"))
-    this.paymentSecret = SecurityUtils.encrypt(this.paymentSecret);
   if (this.isModified("noreplyPassword"))
     this.noreplyPassword = SecurityUtils.encrypt(this.noreplyPassword);
-  if (this.isModified("password"))
-    this.password = SecurityUtils.encrypt(this.password);
   if (this.isModified("noreplyGraphClientSecret"))
     this.noreplyGraphClientSecret = SecurityUtils.encrypt(
       this.noreplyGraphClientSecret,
@@ -25,21 +17,8 @@ TenantSchema.pre("save", async function (next) {
 });
 
 TenantSchema.post("init",  function (doc) {
-  if (doc.paymentMerchantId) {
-    doc.paymentMerchantId = SecurityUtils.decrypt(doc.paymentMerchantId);
-    console.log(doc.paymentMerchantId);
-  }
-  if (doc.paymentProjectId) {
-    doc.paymentProjectId = SecurityUtils.decrypt(doc.paymentProjectId);
-  }
-  if (doc.paymentSecret) {
-    doc.paymentSecret = SecurityUtils.decrypt(doc.paymentSecret);
-  }
   if (doc.noreplyPassword) {
     doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
-  }
-  if (doc.password) {
-    doc.password = SecurityUtils.decrypt(doc.password);
   }
   if (doc.noreplyGraphClientSecret) {
     doc.noreplyGraphClientSecret = SecurityUtils.decrypt(
@@ -71,7 +50,6 @@ class TenantManager {
   static async getTenants() {
     const rawTenants = await TenantModel.find();
     return rawTenants.map((rt) => {
-      console.log(rt.noreplyPassword);
       const tenant = new Tenant(rt);
       tenant.applications = tenant.applications.map((app) => {
         return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
@@ -92,7 +70,7 @@ class TenantManager {
     tenant.applications = tenant.applications.map((app) => {
       return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
     });
-    return SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS);
+    return tenant;
   }
 
   /**
@@ -110,7 +88,7 @@ class TenantManager {
 
     const rawTenant = await TenantModel.updateOne(
       { id: tenant.id },
-      SecurityUtils.encryptObject(newTenant, TENANT_ENCRYPT_KEYS),
+      newTenant,
       {
         upsert: upsert,
         setDefaultsOnInsert: true,
@@ -119,8 +97,6 @@ class TenantManager {
 
     return new Tenant(rawTenant);
   }
-
-  //TODO: create Tenant
 
   /**
    * Remove a tenant object from the database.

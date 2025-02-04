@@ -90,18 +90,18 @@ class Tenant {
       noreplyHost: { type: String, required: true },
       noreplyPort: { type: Number, required: true },
       noreplyUser: { type: String, required: true },
-      noreplyPassword: { type: String, required: true },
+      noreplyPassword: { type: Object, required: true },
       noreplyStarttls: { type: Boolean, required: true },
       noreplyUseGraphApi: { type: Boolean, required: true },
       noreplyGraphTenantId: { type: String, required: true },
       noreplyGraphClientId: { type: String, required: true },
-      noreplyGraphClientSecret: { type: String, required: true },
+      noreplyGraphClientSecret: { type: Object, required: true },
       receiptTemplate: { type: String, required: true },
       receiptNumberPrefix: { type: String, required: true },
-      receiptCount: { type: Number, required: true },
+      receiptCount: { type: Object, required: true },
       invoiceTemplate: { type: String, required: true },
       invoiceNumberPrefix: { type: String, required: true },
-      invoiceCount: { type: Number, required: true },
+      invoiceCount: { type: Object, required: true },
       paymentPurposeSuffix: { type: String, required: true },
       applications: { type: Array, required: true },
       maxBookingAdvanceInMonths: { type: Number, required: true },
@@ -111,14 +111,14 @@ class Tenant {
       users: [
         {
           userId: {
-            type: mongoose.Schema.Types.ObjectId,
+            type: String,
             ref: "User",
             required: true,
           },
           roles: {
             type: [
               {
-                type: mongoose.Schema.Types.ObjectId,
+                type: String,
                 ref: "Role",
               },
             ],
