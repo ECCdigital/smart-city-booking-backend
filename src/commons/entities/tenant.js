@@ -34,7 +34,7 @@ class Tenant {
     maxBookingAdvanceInMonths,
     defaultEventCreationMode,
     enablePublicStatusView,
-    ownerUserId,
+    ownerUserIds,
     users,
   }) {
     this.id = id;
@@ -69,7 +69,7 @@ class Tenant {
     this.maxBookingAdvanceInMonths = maxBookingAdvanceInMonths;
     this.defaultEventCreationMode = defaultEventCreationMode || "";
     this.enablePublicStatusView = enablePublicStatusView;
-    this.ownerUserId = ownerUserId;
+    this.ownerUserIds = ownerUserIds;
     this.users = users || [];
   }
 
@@ -107,18 +107,18 @@ class Tenant {
       maxBookingAdvanceInMonths: { type: Number, required: true },
       defaultEventCreationMode: { type: String, required: true },
       enablePublicStatusView: { type: Boolean, required: true },
-      ownerUserId: { type: String, required: true },
+      ownerUserIds: { type: Array, required: true },
       users: [
         {
           userId: {
-            type: mongoose.Schema.Types.ObjectId,
+            type: String,
             ref: "User",
             required: true,
           },
           roles: {
             type: [
               {
-                type: mongoose.Schema.Types.ObjectId,
+                type: String,
                 ref: "Role",
               },
             ],

@@ -24,10 +24,9 @@ TenantSchema.pre("save", async function (next) {
   next();
 });
 
-TenantSchema.post("init",  function (doc) {
+TenantSchema.post("init", function (doc) {
   if (doc.paymentMerchantId) {
     doc.paymentMerchantId = SecurityUtils.decrypt(doc.paymentMerchantId);
-    console.log(doc.paymentMerchantId);
   }
   if (doc.paymentProjectId) {
     doc.paymentProjectId = SecurityUtils.decrypt(doc.paymentProjectId);

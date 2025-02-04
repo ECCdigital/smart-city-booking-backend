@@ -461,12 +461,11 @@ class MailController {
     });
   }
 
-  static async sendVerificationRequest(address, hookId, tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}">${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}</a>`;
+  static async sendVerificationRequest(address, hookId) {
+    let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/verify/${hookId}">${process.env.BACKEND_URL}/auth/verify/${hookId}</a>`;
 
     await MailerService.send(
-      tenantId,
+      null,
       address,
       "Bestätigen Sie Ihre E-Mail-Adresse",
       tenant.genericMailTemplate,
@@ -477,12 +476,11 @@ class MailController {
     );
   }
 
-  static async sendPasswordResetRequest(address, hookId, tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    let content = `<p>Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Link.<br>Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}">${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}</a>`;
+  static async sendPasswordResetRequest(address, hookId) {
+    let content = `<p>Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Link.<br>Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.</p><a href="${process.env.BACKEND_URL}/auth/reset/${hookId}">${process.env.BACKEND_URL}/auth/reset/${hookId}</a>`;
 
     await MailerService.send(
-      tenantId,
+      null,
       address,
       "Bestätigen Sie die Änderung Ihres Passworts",
       tenant.genericMailTemplate,
