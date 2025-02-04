@@ -104,7 +104,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 const userManagementRouter = require("./platform/authentication/authentication-router");
-app.use("/auth/:tenant", userManagementRouter);
+app.use("/auth", userManagementRouter);
 
 const apiRouter = require("./platform/api/api-router");
 app.use("/api", apiRouter);
