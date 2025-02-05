@@ -12,6 +12,7 @@ const bunyan = require("bunyan");
 
 const DatabaseManager = require("./commons/utilities/database-manager.js");
 const UserManager = require("./commons/data-managers/user-manager");
+const { runMigrations } = require("../migrations/migrationsManager");
 
 const dbm = DatabaseManager.getInstance();
 
@@ -118,9 +119,14 @@ app.use("/csv/:tenant", exportersRouterTenantRelated);
 
 dbm.connect().then(() => {
   const port = process.env.PORT;
-  app.listen(port, () => {
+  app.listen(port, async () => {
     logger.info(`App listening at ${port}`);
     app.emit("app_started");
+    try {
+      await runMigrations(dbm.dbClient.connection);
+    } catch (err) {
+      logger.error("Error running migrations", err);
+    }
   });
 });
 
