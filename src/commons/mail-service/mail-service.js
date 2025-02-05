@@ -2,6 +2,7 @@ const nodemailer = require("nodemailer");
 const Mustache = require("mustache");
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
+const InstanceManger = require("../data-managers/instance-manager");
 const axios = require("axios");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
 
@@ -38,52 +39,105 @@ class MailerService {
   /**
    * Sends an email using the specified template and model.
    *
-   * @param {string} tenantId - The ID of the tenant.
+   * @param {null} tenantId - The ID of the tenant.
    * @param {string} address - The recipient's email address.
    * @param {string} subject - The subject of the email.
    * @param {string} mailTemplate - The HTML file containing the mail template.
    * @param {Object} model - An object containing attributes that should be replaced in the mail template.
    * @param {Array} attachments - An array of attachments to include in the email.
-   * @param {string} bcc - Blind carbon copy recipients.
+   * @param {null} bcc - Blind carbon copy recipients.
    * @returns {Promise<void>} - A promise that resolves when the email is sent.
    * @throws {Error} - Throws an error if sending the email fails.
    */
-  static async send(
-    tenantId,
+  static async send({
+    tenantId = null,
     address,
     subject,
     mailTemplate,
     model,
-    attachments,
-    bcc,
-  ) {
+    attachments = [],
+    bcc = null,
+  }) {
     try {
-      const tenant = await TenantManager.getTenant(tenantId);
-      const output = await MailerService.processTemplate(mailTemplate, model);
+      const instance = await InstanceManger.getInstance(false);
 
-      if (process.env.MAIL_ENABLED !== "true") {
+      if (instance.mailEnabled === false) {
         return;
       }
 
+      const mailConfig = {
+        noreplyUseGraphApi: instance.noreplyUseGraphApi,
+        noreplyHost: instance.noreplyHost,
+        noreplyPort: instance.noreplyPort,
+        noreplyUser: instance.noreplyUser,
+        noreplyPassword: instance.noreplyPassword,
+        noreplyStarttls: instance.noreplyStarttls,
+        noreplyMail: instance.noreplyMail,
+        noreplyDisplayName: instance.noreplyDisplayName,
+        noreplyGraphTenantId: instance.noreplyGraphTenantId,
+        noreplyGraphClientId: instance.noreplyGraphClientId,
+        noreplyGraphClientSecret: instance.noreplyGraphClientSecret,
+      };
+      if (tenantId) {
+        const tenant = await TenantManager.getTenant(tenantId);
+        if (
+          tenant.noreplyUseGraphApi &&
+          tenant.noreplyGraphTenantId &&
+          tenant.noreplyGraphClientId &&
+          tenant.noreplyGraphClientSecret &&
+          tenant.noreplyDisplayName &&
+          tenant.noreplyMail
+        ) {
+          mailConfig.noreplyUseGraphApi = tenant.noreplyUseGraphApi;
+          mailConfig.noreplyGraphTenantId = tenant.noreplyGraphTenantId;
+          mailConfig.noreplyGraphClientId = tenant.noreplyGraphClientId;
+          mailConfig.noreplyGraphClientSecret = tenant.noreplyGraphClientSecret;
+          mailConfig.noreplyDisplayName = tenant.noreplyDisplayName;
+          mailConfig.noreplyMail = tenant.noreplyMail;
+        } else if (
+          !tenant.noreplyUseGraphApi &&
+          tenant.noreplyHost &&
+          tenant.noreplyPort &&
+          tenant.noreplyUser &&
+          tenant.noreplyPassword &&
+          tenant.noreplyStarttls &&
+          tenant.noreplyDisplayName &&
+          tenant.noreplyMail
+        ) {
+          mailConfig.noreplyUseGraphApi = tenant.noreplyUseGraphApi;
+          mailConfig.noreplyHost = tenant.noreplyHost;
+          mailConfig.noreplyPort = tenant.noreplyPort;
+          mailConfig.noreplyUser = tenant.noreplyUser;
+          mailConfig.noreplyPassword = tenant.noreplyPassword;
+          mailConfig.noreplyStarttls = tenant.noreplyStarttls;
+          mailConfig.noreplyDisplayName = tenant.noreplyDisplayName;
+          mailConfig.noreplyMail = tenant.noreplyMail;
+        }
+      }
+
+      const output = await MailerService.processTemplate(mailTemplate, model);
+
+      const context = tenantId ? ` for tenant ${tenantId}` : "Instance";
+
       logger.info(
-        `${tenantId} -- sending mail to ${address} with subject ${subject}`,
+        `${context} -- sending mail to ${address} with subject ${subject}`,
       );
 
       let transporterConfig;
-      if (!tenant.noreplyUseGraphApi) {
+      if (!mailConfig.noreplyUseGraphApi) {
         // SMTP Transport
         transporterConfig = {
           pool: true,
-          host: tenant.noreplyHost,
-          port: tenant.noreplyPort,
-          secure: !tenant.noreplyStarttls,
+          host: mailConfig.noreplyHost,
+          port: mailConfig.noreplyPort,
+          secure: !mailConfig.noreplyStarttls,
           auth: {
-            user: tenant.noreplyUser,
-            pass: tenant.noreplyPassword,
+            user: mailConfig.noreplyUser,
+            pass: mailConfig.noreplyPassword,
           },
         };
 
-        if (tenant.noreplyStarttls) {
+        if (mailConfig.noreplyStarttls) {
           transporterConfig.tls = {
             ciphers: "SSLv3",
             rejectUnauthorized: false,
@@ -92,12 +146,12 @@ class MailerService {
       } else {
         // Graph Transport
         transporterConfig = this.createGraphTransport({
-          tenantId: tenant.noreplyGraphTenantId,
-          clientId: tenant.noreplyGraphClientId,
-          clientSecret: tenant.noreplyGraphClientSecret,
+          tenantId: mailConfig.noreplyGraphTenantId,
+          clientId: mailConfig.noreplyGraphClientId,
+          clientSecret: mailConfig.noreplyGraphClientSecret,
           from: {
-            name: tenant.noreplyDisplayName,
-            address: tenant.noreplyMail,
+            name: mailConfig.noreplyDisplayName,
+            address: mailConfig.noreplyMail,
           },
         });
       }
@@ -106,14 +160,15 @@ class MailerService {
       if (safeLogConfig.auth && safeLogConfig.auth.pass) {
         safeLogConfig.auth.pass = "********";
       }
+
       logger.debug(
-        `${tenantId} -- using mail configuration ${JSON.stringify(safeLogConfig)}`,
+        `${context} -- using mail configuration ${JSON.stringify(safeLogConfig)}`,
       );
 
       const transporter = nodemailer.createTransport(transporterConfig);
 
       const mailOptions = {
-        from: `${tenant.noreplyDisplayName} <${tenant.noreplyMail}>`,
+        from: `${mailConfig.noreplyDisplayName} <${mailConfig.noreplyMail}>`,
         to: address,
         subject: subject,
         html: output,
@@ -122,7 +177,7 @@ class MailerService {
       };
 
       await transporter.sendMail(mailOptions);
-      logger.info(`${tenantId} -- Mail sent successfully to ${address}`);
+      logger.info(`${context} -- Mail sent successfully to ${address}`);
     } catch (error) {
       logger.error(error);
       throw error;

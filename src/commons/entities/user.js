@@ -1,5 +1,6 @@
 const passwordHash = require("password-hash");
 const { v4: uuidv4 } = require("uuid");
+const { Double } = require("mongodb");
 
 const HookTypes = Object.freeze({
   VERIFY: "verify",
@@ -94,17 +95,17 @@ class User {
   static schema() {
     return {
       id: { type: String, required: true },
-      firstName: { type: String, required: true },
-      lastName: { type: String, required: true },
-      phone: { type: String, required: true },
-      address: { type: String, required: true },
-      zipCode: { type: String, required: true },
-      city: { type: String, required: true },
+      firstName: { type: String, default: "" },
+      lastName: { type: String, default: "" },
+      phone: { type: String, default: "" },
+      address: { type: String, default: "" },
+      zipCode: { type: String, default: "" },
+      city: { type: String, default: "" },
       secret: { type: String, required: true },
       hooks: { type: Array, default: [] },
       isVerified: { type: Boolean, default: false },
-      created: { type: Date, default: Date.now },
-      company: { type: String },
+      created: { type: Double, default: Date.now() },
+      company: { type: String, default: "" },
     };
   }
 }
