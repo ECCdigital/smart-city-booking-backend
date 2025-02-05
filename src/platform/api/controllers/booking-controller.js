@@ -22,24 +22,24 @@ class BookingPermissions {
     return booking.assignedUserId === userId && booking.tenant === tenant;
   }
 
-  static async _allowCreate(booking, userId, tenant) {
+  static async _allowCreate(booking, userId, tenantId) {
     return (
-      tenant === booking.tenant &&
+      tenantId === booking.tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKINGS,
         "create",
       ))
     );
   }
 
-  static async _allowRead(booking, userId, tenant) {
+  static async _allowRead(booking, userId, tenantId) {
     if (
-      tenant === booking.tenant &&
+      tenantId === booking.tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKINGS,
         "readAny",
       ))
@@ -47,11 +47,11 @@ class BookingPermissions {
       return true;
 
     if (
-      tenant === booking.tenant &&
-      BookingPermissions._isOwner(booking, userId, tenant) &&
+      tenantId === booking.tenantId &&
+      BookingPermissions._isOwner(booking, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKINGS,
         "readOwn",
       ))
@@ -61,12 +61,12 @@ class BookingPermissions {
     return false;
   }
 
-  static async _allowUpdate(booking, userId, tenant) {
+  static async _allowUpdate(booking, userId, tenantId) {
     if (
-      tenant === booking.tenant &&
+      tenantId === booking.tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKINGS,
         "updateAny",
       ))
@@ -74,10 +74,10 @@ class BookingPermissions {
       return true;
 
     if (
-      BookingPermissions._isOwner(booking, userId, tenant) &&
+      BookingPermissions._isOwner(booking, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKINGS,
         "updateOwn",
       ))
@@ -87,12 +87,12 @@ class BookingPermissions {
     return false;
   }
 
-  static async _allowDelete(booking, userId, tenant) {
+  static async _allowDelete(booking, userId, tenantId) {
     if (
-      tenant === booking.tenant &&
+      tenantId === booking.tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKINGS,
         "deleteAny",
       ))
@@ -100,11 +100,11 @@ class BookingPermissions {
       return true;
 
     if (
-      tenant === booking.tenant &&
-      BookingPermissions._isOwner(booking, userId, tenant) &&
+      tenantId === booking.tenantId &&
+      BookingPermissions._isOwner(booking, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKINGS,
         "deleteOwn",
       ))
@@ -124,7 +124,7 @@ class BookingController {
       booking._populated = {
         bookable: await BookableManager.getBookable(
           booking.bookableId,
-          booking.tenant,
+          booking.tenantId,
         ),
       };
     }
@@ -133,7 +133,7 @@ class BookingController {
   static anonymizeBooking(booking) {
     return {
       id: booking.id,
-      tenant: booking.tenant,
+      tenantId: booking.tenantId,
       bookableIds: booking.bookableIds,
       timeBegin: booking.timeBegin,
       timeEnd: booking.timeEnd,
@@ -289,7 +289,7 @@ class BookingController {
         const anonymizedBookings = bookings.map((b) => {
           return {
             id: b.id,
-            tenant: b.tenant,
+            tenantId: b.tenantId,
             bookableId: b.bookableId,
             timeBegin: b.timeBegin,
             timeEnd: b.timeEnd,

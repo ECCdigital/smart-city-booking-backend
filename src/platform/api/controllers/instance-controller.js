@@ -23,7 +23,6 @@ class InstanceController {
   static async storeInstance(request, response) {
     try {
       const updatedInstance = await InstanceManger.updateInstance(request.body);
-      console.log("Instance:", updatedInstance);
       response.status(200).send(updatedInstance);
     } catch (error) {
       console.log("Error:", error);

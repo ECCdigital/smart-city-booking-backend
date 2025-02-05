@@ -8,7 +8,7 @@ class Coupon {
     usedAmount,
     validFrom,
     validTo,
-    tenant,
+    tenantId,
   ) {
     this.id = id;
     this.description = description;

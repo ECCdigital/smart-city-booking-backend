@@ -67,6 +67,9 @@ class TenantManager {
    */
   static async getTenant(id) {
     const rawTenant = await TenantModel.findOne({ id: id });
+    if (!rawTenant) {
+      return null;
+    }
     const tenant = new Tenant(rawTenant);
     tenant.applications = tenant.applications.map((app) => {
       return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);

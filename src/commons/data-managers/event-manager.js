@@ -13,12 +13,12 @@ const EventModel =
 class EventManager {
   /**
    * Get all events related to a tenant
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns List of bookings
    */
-  static async getEvents(tenant) {
+  static async getEvents(tenantId) {
     const rawEvents = await EventModel.find({
-      tenant: tenant,
+      tenantId: tenantId,
     });
     return rawEvents.map((re) => new Event(re));
   }
@@ -27,11 +27,14 @@ class EventManager {
    * Get a specific event object from the database.
    *
    * @param {string} id Logical identifier of the event object
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns A single event object
    */
-  static async getEvent(id, tenant) {
-    const rawEvent = await EventModel.findOne({ id: id, tenant: tenant });
+  static async getEvent(id, tenantId) {
+    const rawEvent = await EventModel.findOne({ id: id, tenantId: tenantId });
+    if(!rawEvent) {
+      return null;
+    }
     return new Event(rawEvent);
   }
 
@@ -43,7 +46,7 @@ class EventManager {
    * @returns Promise<>
    */
   static async storeEvent(event, upsert = true) {
-    await EventModel.updateOne({ id: event.id, tenant: event.tenant }, event, {
+    await EventModel.updateOne({ id: event.id, tenantId: event.tenantId }, event, {
       upsert: upsert,
     });
   }
@@ -52,11 +55,11 @@ class EventManager {
    * Remove an event object from the database.
    *
    * @param {string} id The id of the event to remove
-   * @param {string} tenant The tenant of the event to remove
+   * @param {string} tenantId The tenant of the event to remove
    * @returns Promise<>
    */
-  static async removeEvent(id, tenant) {
-    await EventModel.deleteOne({ id: id, tenant: tenant });
+  static async removeEvent(id, tenantId) {
+    await EventModel.deleteOne({ id: id, tenantId: tenantId });
   }
 
   /**
@@ -66,13 +69,13 @@ class EventManager {
    * If the current count of events is less than the maximum allowed events, or if MAX_EVENTS is not defined, it returns true.
    *
    * @async
-   * @param {string} tenant - The identifier of the tenant.
+   * @param {string} tenantId - The identifier of the tenant.
    * @returns {Promise<boolean>} A promise that resolves to a boolean indicating whether the tenant can create more events.
    */
-  static async checkPublicEventCount(tenant) {
+  static async checkPublicEventCount(tenantId) {
     const maxEvents = parseInt(process.env.MAX_EVENTS, 10);
     const count = await EventModel.countDocuments({
-      tenant: tenant,
+      tenantId: tenantId,
       isPublic: true,
     });
     return !(maxEvents && count >= maxEvents);

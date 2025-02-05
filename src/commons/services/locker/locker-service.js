@@ -1,4 +1,4 @@
-const { getBookable } = require("../../data-managers/bookable-manager");
+const { getBookable, BookableManager } = require("../../data-managers/bookable-manager");
 const { getTenantAppByType } = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const {
@@ -70,7 +70,7 @@ class LockerService {
    */
   async getAvailableLocker(bookableId, tenantId, timeBegin, timeEnd, amount) {
     try {
-      const bookable = await getBookable(bookableId, tenantId);
+      const bookable = await BookableManager.getBookable(bookableId, tenantId);
       if (!bookable) {
         throw new Error("Bookable resource not found");
       }

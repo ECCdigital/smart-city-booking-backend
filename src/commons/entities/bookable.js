@@ -168,6 +168,10 @@ class Bookable {
 
   static schema() {
     return {
+      id: {
+        type: String,
+        required: true,
+      },
       tenantId: {
         type: String,
         required: true,

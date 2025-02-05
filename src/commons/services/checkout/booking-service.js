@@ -133,7 +133,7 @@ class BookingService {
           await MailController.sendBookingRequestConfirmation(
             booking.mail,
             booking.id,
-            booking.tenant,
+            booking.tenantId,
           );
         } catch (err) {
           logger.error(err);
@@ -190,7 +190,7 @@ class BookingService {
         await MailController.sendIncomingBooking(
           tenant.mail,
           booking.id,
-          booking.tenant,
+          booking.tenantId,
         );
       } catch (err) {
         logger.error(err);
@@ -209,8 +209,8 @@ class BookingService {
       }
 
       const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.handleCancel(booking.tenant, booking.id);
-      await BookingManager.removeBooking(booking.id, booking.tenant);
+      await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+      await BookingManager.removeBooking(booking.id, booking.tenantId);
     } catch (error) {
       throw new Error(`Error cancelling booking: ${error.message}`);
     }
@@ -280,7 +280,7 @@ class BookingService {
         await MailController.sendFreeBookingConfirmation(
           originBooking.mail,
           originBooking.id,
-          originBooking.tenant,
+          originBooking.tenantId,
         );
         logger.info(
           `${tenant} -- booking ${originBooking.id} committed and sent free booking confirmation to ${originBooking.mail}`,
@@ -289,7 +289,7 @@ class BookingService {
         await MailController.sendPaymentRequest(
           originBooking.mail,
           originBooking.id,
-          originBooking.tenant,
+          originBooking.tenantId,
         );
         logger.info(
           `${tenant} -- booking ${originBooking.id} committed and sent payment request to ${originBooking.mail}`,
@@ -317,11 +317,11 @@ class BookingService {
       await MailController.sendBookingRejection(
         booking.mail,
         booking.id,
-        booking.tenant,
+        booking.tenantId,
         reason,
       );
       logger.info(
-        `${tenant} -- booking ${originBooking.id} rejected and sent booking rejection to ${originBooking.mail}`,
+        `${tenant} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
       );
     } catch (error) {
       throw new Error(`Error rejecting booking: ${error.message}`);
@@ -341,7 +341,7 @@ class BookingService {
       await MailController.sendVerifyBookingRejection(
         booking.mail,
         booking.id,
-        booking.tenant,
+        booking.tenantId,
         hook.id,
         reason,
       );
@@ -447,7 +447,7 @@ async function sendEmailToOrganizer(eventIds, tenantId, booking) {
         await MailController.sendNewBooking(
           organizerMail,
           booking.id,
-          booking.tenant,
+          booking.tenantId,
         );
         logger.info(
           `Successfully send mail to organizer ${organizerMail} for booking ${booking.id}.`,

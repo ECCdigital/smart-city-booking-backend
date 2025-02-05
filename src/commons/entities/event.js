@@ -19,7 +19,7 @@ class Event {
    */
   constructor({
     id,
-                tenantId,
+    tenantId,
     title,
     timeBegin,
     timeEnd,
