@@ -1,6 +1,7 @@
 class Instance {
   constructor({
     mailTemplate,
+    mailAddress,
     noreplyMail,
     noreplyDisplayName,
     noreplyHost,
@@ -12,6 +13,7 @@ class Instance {
     noreplyGraphTenantId,
     noreplyGraphClientId,
     noreplyGraphClientSecret,
+    mailEnabled,
     contactAddress,
     contactUrl,
     dataProtectionUrl,
@@ -19,6 +21,7 @@ class Instance {
     users,
   }) {
     this.mailTemplate = mailTemplate;
+    this.mailAddress = mailAddress;
     this.noreplyMail = noreplyMail;
     this.noreplyDisplayName = noreplyDisplayName;
     this.noreplyHost = noreplyHost;
@@ -30,6 +33,7 @@ class Instance {
     this.noreplyGraphTenantId = noreplyGraphTenantId;
     this.noreplyGraphClientId = noreplyGraphClientId;
     this.noreplyGraphClientSecret = noreplyGraphClientSecret;
+    this.mailEnabled = mailEnabled;
     this.contactAddress = contactAddress;
     this.contactUrl = contactUrl;
     this.dataProtectionUrl = dataProtectionUrl;
@@ -39,7 +43,8 @@ class Instance {
 
   publicInstance() {
     delete this.mailTemplate;
-    delete this.noreplyMail
+    delete this.mailAddress;
+    delete this.noreplyMail;
     delete this.noreplyDisplayName;
     delete this.noreplyHost;
     delete this.noreplyPort;
@@ -50,11 +55,14 @@ class Instance {
     delete this.noreplyGraphTenantId;
     delete this.noreplyGraphClientId;
     delete this.noreplyGraphClientSecret;
+    delete this.users;
+    delete this.mailEnabled;
   }
 
   static schema() {
     return {
       mailTemplate: { type: String, required: true },
+      mailAddress: { type: String, required: true },
       noreplyMail: { type: String, default: "" },
       noreplyDisplayName: { type: String, default: "" },
       noreplyHost: { type: String, default: "" },
@@ -66,6 +74,7 @@ class Instance {
       noreplyGraphTenantId: { type: String, default: "" },
       noreplyGraphClientId: { type: String, default: "" },
       noreplyGraphClientSecret: { type: Object },
+      mailEnabled: { type: Boolean, default: false },
       contactAddress: { type: String, default: "" },
       contactUrl: { type: String, default: "" },
       dataProtectionUrl: { type: String, default: "" },

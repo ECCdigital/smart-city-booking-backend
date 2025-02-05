@@ -62,15 +62,11 @@ class AuthenticationController {
               .then(async () => {
                 logger.info(`User ${user.id} signed up.`);
 
-                const tenant = await TenantManager.getTenant(user.tenant);
-
                 await MailController.sendUserCreated(
-                  tenant.mail,
-                  user.tenant,
                   user.id,
                 );
 
-                response.status(201).send({ tenantId: request.params.tenant });
+                response.sendStatus(201);
               })
               .catch((err) => {
                 logger.error(err);

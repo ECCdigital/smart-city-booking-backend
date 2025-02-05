@@ -3,6 +3,7 @@ const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
+const InstanceManager = require("../data-managers/instance-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../utilities/payment-utils");
 const UserManager = require("../data-managers/user-manager");
@@ -99,15 +100,15 @@ class MailController {
 
     const bccEmail = sendBCC ? tenant.mail : undefined;
 
-    await MailerService.send(
+    await MailerService.send({
       tenantId,
       address,
       subject,
-      tenant.genericMailTemplate,
+      mailTemplate: tenant.genericMailTemplate,
       model,
       attachments,
-      bccEmail,
-    );
+      bcc: bccEmail,
+    });
   }
 
   static async generateBookingDetails(bookingId, tenantId) {
@@ -463,58 +464,56 @@ class MailController {
 
   static async sendVerificationRequest(address, hookId) {
     let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/verify/${hookId}">${process.env.BACKEND_URL}/auth/verify/${hookId}</a>`;
+    const instance = await InstanceManager.getInstance(false);
 
-    await MailerService.send(
-      null,
+    await MailerService.send({
       address,
-      "Bestätigen Sie Ihre E-Mail-Adresse",
-      tenant.genericMailTemplate,
-      {
+      subject: "Bestätigen Sie Ihre E-Mail-Adresse",
+      mailTemplate: instance.mailTemplate,
+      model: {
         title: "Bestätigen Sie Ihre E-Mail-Adresse",
         content: content,
       },
-    );
+    });
   }
 
   static async sendPasswordResetRequest(address, hookId) {
     let content = `<p>Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Link.<br>Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.</p><a href="${process.env.BACKEND_URL}/auth/reset/${hookId}">${process.env.BACKEND_URL}/auth/reset/${hookId}</a>`;
+    const instance = await InstanceManager.getInstance(false);
 
-    await MailerService.send(
-      null,
+    await MailerService.send({
       address,
-      "Bestätigen Sie die Änderung Ihres Passworts",
-      tenant.genericMailTemplate,
-      {
-        title: "Bestätigen Sie die Änderung Ihres Passworts",
+      subject: "Bestätigen Sie die Änderung Ihres Kennworts",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Bestätigen Sie die Änderung Ihres Kennworts",
         content: content,
       },
-    );
+    });
   }
 
-  static async sendUserCreated(address, tenantId, userId) {
-    const tenant = await TenantManager.getTenant(tenantId);
+  static async sendUserCreated(userId) {
+    const instance = await InstanceManager.getInstance(false);
 
-    const user = await UserManager.getUser(userId, tenant.id);
+    const user = await UserManager.getUser(userId);
 
     let content = `<p>Ein neuer Benutzer wurde erstellt.</p><br>`;
     content += `<p>Vorname: ${user.firstName}</p>`;
     content += `<p>Nachname: ${user.lastName}</p>`;
     content += `<p>Firma: ${user.company}</p>`;
     content += `<p>E-Mail: ${user.id}</p>`;
-    content += `<p>Mandant: ${user.tenant}</p>`;
     content += `<br>`;
     content += `<p> Registrierungsdatum: ${MailController.formatDateTime(user.created)}</p>`;
 
-    await MailerService.send(
-      tenantId,
-      address,
-      "Ein neuer Benutzer wurde erstellt",
-      tenant.genericMailTemplate,
-      {
+    await MailerService.send({
+      address: instance.mailAddress,
+      subject: "Ein neuer Benutzer wurde erstellt",
+      mailTemplate: instance.mailTemplate,
+      model: {
         title: "Ein neuer Benutzer wurde erstellt",
         content: content,
       },
-    );
+    });
   }
 }
 

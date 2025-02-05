@@ -1,9 +1,5 @@
 const { User, HookTypes } = require("../entities/user");
-const bunyan = require("bunyan");
-const { RoleModel } = require("../data-managers/role-manager");
-
 const mongoose = require("mongoose");
-const MailController = require("../mail-service/mail-controller");
 const { RoleManager } = require("./role-manager");
 const TenantManager = require("./tenant-manager");
 
@@ -12,10 +8,6 @@ const { Schema } = mongoose;
 const UserSchema = new Schema(User.schema());
 const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
 
-const logger = bunyan.createLogger({
-  name: "user-manager.js",
-  level: process.env.LOG_LEVEL,
-});
 
 class UserManager {
   static async getUser(id) {
@@ -30,7 +22,7 @@ class UserManager {
   static async signupUser(user) {
     try {
       const newUser = await UserModel.create(user);
-      await UserManager.requestVerification(newUser);
+      await UserManager.requestVerification(new User(newUser));
     } catch (err) {
       throw err;
     }
@@ -65,7 +57,7 @@ class UserManager {
 
   static async updateUser(user) {
     try {
-      const updatedUser = await UserModel.replaceOne({ id: user.id }, user);
+      const updatedUser = await UserModel.updateOne({ id: user.id }, user, {upsert: true});
       return new User(updatedUser);
     } catch (err) {
       throw err;
@@ -85,6 +77,7 @@ class UserManager {
   }
 
   static async resetPassword(user, password) {
+    const MailController = require("../mail-service/mail-controller");
     try {
       const hook = user.addPasswordResetHook(password);
       await UserManager.updateUser(user);
