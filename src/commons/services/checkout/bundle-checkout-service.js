@@ -253,7 +253,7 @@ class BundleCheckoutService {
         keepExistingId && existingId
           ? existingId
           : await this.generateBookingReference(),
-      tenant: this.tenant,
+      tenantId: this.tenant,
       assignedUserId: this.user,
       timeBegin: this.timeBegin,
       timeEnd: this.timeEnd,
@@ -277,7 +277,6 @@ class BundleCheckoutService {
       isCommitted: await this.isAutoCommit(),
       isPayed: await this.isPaymentComplete(),
       isRejected: this.performRejected(),
-      paymentMethod: this.paymentMethod,
       paymentProvider: this.paymentProvider,
       lockerInfo: await this.getLockerInfo(),
     };

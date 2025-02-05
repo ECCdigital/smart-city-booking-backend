@@ -13,11 +13,11 @@ const BookableModel =
 class BookableManager {
   /**
    * Get all bookables related to a tenant
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns List of bookings
    */
-  static async getBookables(tenant) {
-    const rawBookables = await BookableModel.find({ tenant: tenant });
+  static async getBookables(tenantId) {
+    const rawBookables = await BookableModel.find({ tenantId: tenantId });
     return rawBookables.map((rb) => new Bookable(rb));
   }
 
@@ -25,11 +25,11 @@ class BookableManager {
    * Get a specific bookable object from the database.
    *
    * @param {string} id Logical identifier of the bookable object
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns A single bookable object
    */
-  static async getBookable(id, tenant) {
-    const rawBookable = await BookableModel.findOne({ id: id, tenant: tenant });
+  static async getBookable(id, tenantId) {
+    const rawBookable = await BookableModel.findOne({ id: id, tenantId: tenantId });
     if (!rawBookable) {
       return null;
     }
@@ -45,7 +45,7 @@ class BookableManager {
    */
   static async storeBookable(bookable, upsert = true) {
     await BookableModel.updateOne(
-      { id: bookable.id, tenant: bookable.tenant },
+      { id: bookable.id, tenantId: bookable.tenant },
       bookable,
       { upsert: upsert },
     );
@@ -56,25 +56,25 @@ class BookableManager {
    *
    * @returns Promise<>
    * @param id The id of the bookable to remove
-   * @param tenant The tenant of the bookable to remove
+   * @param tenantId The tenant of the bookable to remove
    */
-  static async removeBookable(id, tenant) {
-    await BookableModel.deleteOne({ id: id, tenant: tenant });
+  static async removeBookable(id, tenantId) {
+    await BookableModel.deleteOne({ id: id, tenantId: tenantId });
   }
 
   /**
    * Get all related bookables for a given bookable ID and tenant.
    *
    * @param {string} id - The ID of the bookable.
-   * @param {string} tenant - The tenant identifier.
+   * @param {string} tenantId - The tenant identifier.
    * @returns {Promise<Bookable[]>} - A promise that resolves to an array of related bookable objects.
    */
-  static async getRelatedBookables(id, tenant) {
+  static async getRelatedBookables(id, tenantId) {
     const pipeline = [
       {
         $match: {
           id: id,
-          tenant: tenant,
+          tenantId: tenantId,
         },
       },
       {
@@ -115,8 +115,8 @@ class BookableManager {
     return combined.map((b) => new Bookable(b));
   }
 
-  static async getParentBookables(id, tenant) {
-    let pBookables = await getAllParents(id, tenant, [], 0);
+  static async getParentBookables(id, tenantId) {
+    let pBookables = await getAllParents(id, tenantId, [], 0);
     pBookables = pBookables.flat(Infinity);
 
     // remove duplicates from related bookables
@@ -127,21 +127,21 @@ class BookableManager {
     return pBookables;
   }
 
-  static async checkPublicBookableCount(tenant) {
+  static async checkPublicBookableCount(tenantId) {
     const maxBookables = parseInt(process.env.MAX_BOOKABLES, 10);
     const count = await BookableModel.countDocuments({
-      tenant: tenant,
+      tenantId: tenantId,
       isPublic: true,
     });
     return !(maxBookables && count >= maxBookables);
   }
 }
 
-async function getAllParents(id, tenant, parentBookables, depth) {
+async function getAllParents(id, tenantId, parentBookables, depth) {
   if (depth < 5) {
     const rawBookables = await BookableModel.find({
       relatedBookableIds: { $in: [id] },
-      tenant: tenant,
+      tenantId: tenantId,
     });
 
     for (const rb of rawBookables) {

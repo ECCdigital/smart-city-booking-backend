@@ -80,25 +80,28 @@ class BookingManager {
    * Get a specific booking object from the database.
    *
    * @param {string} id Logical identifier of the booking object
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns A single bookable object
    */
-  static async getBooking(id, tenant) {
-    const rawBooking = await BookingModel.findOne({ id: id, tenant: tenant });
+  static async getBooking(id, tenantId) {
+    const rawBooking = await BookingModel.findOne({ id: id, tenantId: tenantId });
+    if(!rawBooking) {
+      return null;
+    }
     return new Booking(rawBooking);
   }
 
   /**
    * Get the status of a booking.
    *
-   * @param tenant
+   * @param tenantId
    * @param bookingId
    * @returns {Promise<>} status of the booking
    */
-  static async getBookingStatus(tenant, bookingId) {
+  static async getBookingStatus(tenantId, bookingId) {
     const rawBooking = await BookingModel.findOne({
       id: bookingId,
-      tenant: tenant,
+      tenantId: tenantId,
     });
     const booking = new Booking(rawBooking);
     return {
@@ -117,7 +120,7 @@ class BookingManager {
    */
   static async storeBooking(booking, upsert = true) {
     await BookingModel.updateOne(
-      { id: booking.id, tenant: booking.tenant },
+      { id: booking.id, tenantId: booking.tenantId },
       booking,
       { upsert: upsert },
     );
@@ -127,18 +130,18 @@ class BookingManager {
    * Remove a booking object from the database.
    *
    * @param {string} id Id of the booking
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns Promise<>
    */
-  static async removeBooking(id, tenant) {
-    await BookingModel.deleteOne({ id: id, tenant: tenant });
+  static async removeBooking(id, tenantId) {
+    await BookingModel.deleteOne({ id: id, tenantId: tenantId });
   }
 
   /**
    * Get all bookings related to a Bookable that conflict with a certain time window.
    *
    * @param {integer} bookableId ID of the related Bookable
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @param {number} timeBegin Begin Timestamp
    * @param {number} timeEnd End Timestamp
    * @param bookingToIgnore ID of a booking that should be ignored
@@ -146,13 +149,13 @@ class BookingManager {
    */
   static async getConcurrentBookings(
     bookableId,
-    tenant,
+    tenantId,
     timeBegin,
     timeEnd,
     bookingToIgnore = null,
   ) {
     const rawBookings = await BookingManager.getRelatedBookings(
-      tenant,
+      tenantId,
       bookableId,
     );
     const concurrentBookings = rawBookings.filter(
@@ -165,9 +168,9 @@ class BookingManager {
     return concurrentBookings.map((cb) => new Booking(cb));
   }
 
-  static getBookingsByTimeRange(tenant, timeBegin, timeEnd) {
+  static getBookingsByTimeRange(tenantId, timeBegin, timeEnd) {
     const rawBookings = BookingModel.find({
-      tenant: tenant,
+      tenantId: tenantId,
       $or: [
         { timeBegin: { $gte: timeBegin, $lt: timeEnd } },
         { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
@@ -184,7 +187,7 @@ class BookingManager {
    */
   static async setBookingPayedStatus(booking) {
     await BookingModel.updateOne(
-      { id: booking.id, tenant: booking.tenant },
+      { id: booking.id, tenantId: booking.tenantId },
       { isPayed: booking.isPayed },
     );
   }
@@ -192,19 +195,19 @@ class BookingManager {
   /**
    * Get all bookings related to an event.
    *
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @param {string} eventId Identifier of the event
    * @returns {Promise<>} List of bookings
    */
-  static async getEventBookings(tenant, eventId) {
+  static async getEventBookings(tenantId, eventId) {
     const bookables = await BookableModel.find({
-      tenant: tenant,
+      tenantId: tenantId,
       eventId: eventId,
       type: "ticket",
     });
     const bookableIds = bookables.map((b) => b.id);
     const rawBookings = await BookingModel.find({
-      tenant: tenant,
+      tenantId: tenantId,
       "bookableItems.bookableId": { $in: bookableIds },
     });
     return rawBookings.map((rb) => new Booking(rb));
