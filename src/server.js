@@ -74,20 +74,18 @@ passport.use(
       passwordField: "password",
       passReqToCallback: true,
     },
-    (request, id, password, done) => {
-      var tenant = request.params.tenant;
+    async (request, id, password, done) => {
+      const user = await UserManager.getUser(id);
 
-      UserManager.getUser(id, tenant).then((user) => {
-        if (
-          user !== undefined &&
-          user.isVerified &&
-          user.verifyPassword(password)
-        ) {
-          done(null, user);
-        } else {
-          done(null, false);
-        }
-      });
+      if (
+        user !== undefined &&
+        user.isVerified &&
+        user.verifyPassword(password)
+      ) {
+        done(null, user);
+      } else {
+        done(null, false);
+      }
     },
   ),
 );

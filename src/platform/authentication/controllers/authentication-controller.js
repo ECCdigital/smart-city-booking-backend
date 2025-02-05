@@ -25,12 +25,13 @@ class AuthenticationController {
   }
 
   static async signin(request, response) {
+    const user = request.user;
     try {
-      const user = request.user;
       const permissions = await UserManager.getUserPermissions(user.id);
       logger.info(`User ${user.id} signed in.`);
       response.status(200).send({ user, permissions });
     } catch (error) {
+      logger.error(`could not sign in ${user?.id}`, error);
       response.sendStatus(500);
     }
   }

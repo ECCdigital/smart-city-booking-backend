@@ -6,26 +6,18 @@ const mongoose = require("mongoose");
 const { Schema } = mongoose;
 const TenantSchema = new Schema(Tenant.schema());
 
-TenantSchema.pre("save", async function (next) {
-  if (this.isModified("noreplyPassword"))
-    this.noreplyPassword = SecurityUtils.encrypt(this.noreplyPassword);
-  if (this.isModified("noreplyGraphClientSecret"))
-    this.noreplyGraphClientSecret = SecurityUtils.encrypt(
-      this.noreplyGraphClientSecret,
-    );
+TenantSchema.pre("updateOne", async function (next) {
+  const update = this.getUpdate();
+
+  update.noreplyPassword = SecurityUtils.encrypt(update.noreplyPassword);
+
+  update.noreplyGraphClientSecret = SecurityUtils.encrypt(
+    update.noreplyGraphClientSecret,
+  );
   next();
 });
 
 TenantSchema.post("init", function (doc) {
-  if (doc.paymentMerchantId) {
-    doc.paymentMerchantId = SecurityUtils.decrypt(doc.paymentMerchantId);
-  }
-  if (doc.paymentProjectId) {
-    doc.paymentProjectId = SecurityUtils.decrypt(doc.paymentProjectId);
-  }
-  if (doc.paymentSecret) {
-    doc.paymentSecret = SecurityUtils.decrypt(doc.paymentSecret);
-  }
   if (doc.noreplyPassword) {
     doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
   }
@@ -95,16 +87,12 @@ class TenantManager {
       return SecurityUtils.encryptObject(app, TENANT_ENCRYPT_KEYS);
     });
 
-    const rawTenant = await TenantModel.updateOne(
-      { id: tenant.id },
-      newTenant,
-      {
-        upsert: upsert,
-        setDefaultsOnInsert: true,
-      },
-    );
+    await TenantModel.updateOne({ id: tenant.id }, newTenant, {
+      upsert: upsert,
+      setDefaultsOnInsert: true,
+    });
 
-    return new Tenant(rawTenant);
+    return newTenant;
   }
 
   /**
