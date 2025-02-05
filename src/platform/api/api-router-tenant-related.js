@@ -9,6 +9,7 @@ const CouponController = require("./controllers/coupon-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
+const RoleController = require("./controllers/role-controller");
 
 var router = express.Router({ mergeParams: true });
 
@@ -214,6 +215,31 @@ router.post(
   "/files",
   AuthenticationController.isSignedIn,
   FileController.createFile,
+);
+
+// ROLES
+// =====
+
+// Protected
+router.get(
+  "/roles",
+  AuthenticationController.isSignedIn,
+  RoleController.getRoles,
+);
+router.put(
+  "/roles",
+  AuthenticationController.isSignedIn,
+  RoleController.storeRole,
+);
+router.get(
+  "/roles/:id",
+  AuthenticationController.isSignedIn,
+  RoleController.getRole,
+);
+router.delete(
+  "/roles/:id",
+  AuthenticationController.isSignedIn,
+  RoleController.removeRole,
 );
 
 module.exports = router;

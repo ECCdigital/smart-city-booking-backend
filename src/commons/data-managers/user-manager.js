@@ -113,18 +113,22 @@ class UserManager {
     }
   }
 
-  static async hasPermission(userId, tenant, permissionName, accessLevel) {
-    if (!userId || !tenant || !permissionName || !accessLevel) {
+  static async hasPermission(userId, tenantId, permissionName, accessLevel) {
+    if (!userId || !tenantId || !permissionName || !accessLevel) {
       return false;
     }
     try {
-      const permissions = await UserManager.getUserPermissions(userId, tenant);
+      const userPermissions = await UserManager.getUserPermissions(userId);
 
-      if (!permissions[permissionName]) {
+      const userTenantPermissions = userPermissions.find(
+        (p) => p.tenantId === tenantId,
+      );
+
+      if (!userTenantPermissions || !userTenantPermissions[permissionName]) {
         return false;
       }
 
-      return permissions[permissionName][accessLevel] === true;
+      return userTenantPermissions[permissionName][accessLevel] === true;
     } catch (err) {
       console.error(err);
       return false;

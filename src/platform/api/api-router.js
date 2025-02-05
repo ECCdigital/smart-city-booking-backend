@@ -1,7 +1,6 @@
 var express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const TenantController = require("./controllers/tenant-controller");
-const RoleController = require("./controllers/role-controller");
 const InstanceController = require("./controllers/instance-controller");
 
 var router = express.Router({ mergeParams: true });
@@ -55,31 +54,6 @@ router.get(
   "/tenants/count/check",
   AuthenticationController.isSignedIn,
   TenantController.countCheck,
-);
-
-// ROLES
-// =====
-
-// Protected
-router.get(
-  "/roles",
-  AuthenticationController.isSignedIn,
-  RoleController.getRoles,
-);
-router.put(
-  "/roles",
-  AuthenticationController.isSignedIn,
-  RoleController.storeRole,
-);
-router.get(
-  "/roles/:id",
-  AuthenticationController.isSignedIn,
-  RoleController.getRole,
-);
-router.delete(
-  "/roles/:id",
-  AuthenticationController.isSignedIn,
-  RoleController.removeRole,
 );
 
 module.exports = router;

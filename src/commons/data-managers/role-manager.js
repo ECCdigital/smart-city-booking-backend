@@ -17,7 +17,7 @@ class RoleManager {
    * @returns List of bookings
    */
   static async getRoles(tenantId) {
-    const rawRoles = await RoleModel.find({ tenantId: tenantId });
+    const rawRoles = await RoleModel.find({ tenant: tenantId });
     return rawRoles.map((rr) => {
       return new Role(rr);
     });
