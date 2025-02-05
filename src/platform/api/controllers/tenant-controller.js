@@ -1,12 +1,9 @@
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const Tenant = require("../../../commons/entities/tenant");
-const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
-const { parseBoolean } = require("../../../commons/utilities/parser");
-const { RoleManager } = require("../../../commons/data-managers/role-manager");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",

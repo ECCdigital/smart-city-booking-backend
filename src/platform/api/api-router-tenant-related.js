@@ -3,7 +3,6 @@ const AuthenticationController = require("../authentication/controllers/authenti
 const BookableController = require("./controllers/bookable-controller");
 const EventController = require("./controllers/event-controller");
 const PaymentController = require("./controllers/payment-controller");
-const UserController = require("./controllers/user-controller");
 const CalendarController = require("./controllers/calendar-controller");
 const CouponController = require("./controllers/coupon-controller");
 const { BookingController } = require("./controllers/booking-controller");
@@ -77,41 +76,6 @@ router.get(
   "/events/count/check",
   AuthenticationController.isSignedIn,
   EventController.countCheck,
-);
-
-// USERS
-// =====
-
-// Protected
-router.get(
-  "/users",
-  AuthenticationController.isSignedIn,
-  UserController.getUsers,
-);
-router.get(
-  "/users/ids",
-  AuthenticationController.isSignedIn,
-  UserController.getUserIds,
-);
-router.get(
-  "/users/:id",
-  AuthenticationController.isSignedIn,
-  UserController.getUser,
-);
-router.put(
-  "/users",
-  AuthenticationController.isSignedIn,
-  UserController.storeUser,
-);
-router.put(
-  "/user",
-  AuthenticationController.isSignedIn,
-  UserController.updateMe,
-);
-router.delete(
-  "/users/:id",
-  AuthenticationController.isSignedIn,
-  UserController.removeUser,
 );
 
 // BOOKINGS

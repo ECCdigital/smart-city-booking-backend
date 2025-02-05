@@ -2,6 +2,7 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user");
 const { RolePermission } = require("../../../commons/entities/role");
 const bunyan = require("bunyan");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -9,94 +10,26 @@ const logger = bunyan.createLogger({
 });
 
 class UserPermissions {
-  static _isSelf(user, userId, userTenant) {
-    return user.id === userId && user.tenant === userTenant;
+  static _isSelf(user, userId) {
+    return user.id === userId;
   }
 
-  static async _allowCreate(user, userId, tenant) {
-    return await UserManager.hasPermission(
-      userId,
-      tenant,
-      RolePermission.MANAGE_USERS,
-      "create",
-    );
-  }
-
-  static async _allowRead(user, userId, tenant) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_USERS,
-        "readAny",
-      )
-    ) {
-      return true;
-    }
-
-    if (
-      UserPermissions._isSelf(user, userId, tenant) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_USERS,
-        "readOwn",
-      ))
-    ) {
-      return true;
-    }
-
+  static async _allowCreate(user, userId, tenantId) {
+    //TODO: Permissions for user creation is instance level
     return false;
   }
 
-  static async _allowUpdate(user, userId, tenant) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_USERS,
-        "updateAny",
-      )
-    )
-      return true;
+  static async _allowRead(user, userId, tenantId) {
+    // TODO: I am allowed to read users, if I am tenant owner - but only public?
+    return true;
+  }
 
-    if (
-      UserPermissions._isSelf(user, userId, tenant) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_USERS,
-        "updateOwn",
-      ))
-    )
-      return true;
-
-    return false;
+  static async _allowUpdate(user, userId, tenantId) {
+    return this._isSelf(user, userId);
   }
 
   static async _allowDelete(user, userId, tenant) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_USERS,
-        "deleteAny",
-      )
-    )
-      return true;
-
-    if (
-      UserPermissions._isSelf(user, userId, tenant) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_USERS,
-        "deleteOwn",
-      ))
-    )
-      return true;
-
-    return false;
+    return this._isSelf(user, userId);
   }
 }
 
@@ -106,22 +39,20 @@ class UserPermissions {
 class UserController {
   static async getUsers(request, response) {
     try {
-      const tenant = request.params.tenant;
+      const tenantId = request.params.tenant;
       const user = request.user;
 
-      const userObjects = await UserManager.getUsers(tenant);
+      const userObjects = await UserManager.getUsers(tenantId);
 
       const allowedUserObjects = [];
       for (const userObject of userObjects) {
-        if (
-          await UserPermissions._allowRead(userObject, user.id, user.tenant)
-        ) {
+        if (await UserPermissions._allowRead(userObject, user.id, tenantId)) {
           allowedUserObjects.push(userObject);
         }
       }
 
       logger.info(
-        `${tenant} -- sending ${allowedUserObjects.length} users to user ${user?.id}`,
+        `${tenantId} -- sending ${allowedUserObjects.length} users to user ${user?.id}`,
       );
       response.status(200).send(allowedUserObjects);
     } catch (error) {
@@ -132,20 +63,20 @@ class UserController {
 
   static async getUser(request, response) {
     try {
-      const tenant = request.params.tenant;
+      const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
 
       if (id) {
         if (await UserPermissions._allowRead(user, user.id, user.tenant)) {
-          const userObject = await UserManager.getUser(id, tenant);
+          const userObject = await UserManager.getUser(id, tenantId);
           logger.info(
-            `${tenant} -- Sending user ${userObject.id} to user ${user?.id}`,
+            `${tenantId} -- Sending user ${userObject.id} to user ${user?.id}`,
           );
           response.status(200).send(userObject);
         } else {
           logger.warn(
-            `${tenant} -- User ${user?.id} is not allowed to read user ${id}`,
+            `${tenantId} -- User ${user?.id} is not allowed to read user ${id}`,
           );
           response.sendStatus(403);
         }
@@ -180,12 +111,11 @@ class UserController {
   static async createUser(request, response) {
     try {
       const user = request.user;
+      const tenantId = request.params.tenant;
 
       const userObject = new User(request.body);
 
-      if (
-        await UserPermissions._allowCreate(userObject, user.id, user.tenant)
-      ) {
+      if (await UserPermissions._allowCreate(user.id, tenantId)) {
         await UserManager.storeUser(userObject);
         logger.info(
           `${user?.tenant} -- created user ${userObject.id} by user ${user?.id}`,
@@ -266,7 +196,7 @@ class UserController {
   static updateMe(request, response) {
     const user = new User(request.user);
     // get user from db
-    UserManager.getUser(user.id, user.tenant)
+    UserManager.getUser(user.id)
       .then((userFromDb) => {
         //check if user exists
         if (userFromDb) {
