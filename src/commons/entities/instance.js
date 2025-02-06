@@ -22,7 +22,7 @@ class Instance {
     contactUrl,
     dataProtectionUrl,
     legalNoticeUrl,
-    users,
+                ownerUserIds,
   }) {
     this.mailTemplate = mailTemplate;
     this.mailAddress = mailAddress;
@@ -42,7 +42,7 @@ class Instance {
     this.contactUrl = contactUrl;
     this.dataProtectionUrl = dataProtectionUrl;
     this.legalNoticeUrl = legalNoticeUrl;
-    this.users = users;
+    this.ownerUserIds = ownerUserIds;
   }
 
   publicInstance() {
@@ -59,7 +59,7 @@ class Instance {
     delete this.noreplyGraphTenantId;
     delete this.noreplyGraphClientId;
     delete this.noreplyGraphClientSecret;
-    delete this.users;
+    delete this.ownerUserIds;
     delete this.mailEnabled;
   }
 
@@ -83,7 +83,7 @@ class Instance {
       contactUrl: { type: String, default: "" },
       dataProtectionUrl: { type: String, default: "" },
       legalNoticeUrl: { type: String, default: "" },
-      ownerIds: { type: Array, ref: "User", default: [] },
+      ownerUserIds: { type: Array, ref: "User", default: [] },
     };
   }
 }
