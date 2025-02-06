@@ -92,6 +92,11 @@ class User {
     };
   }
 
+  removeSensitive() {
+    delete this.secret;
+    delete this.hooks;
+  }
+
   static schema() {
     return {
       id: { type: String, required: true },

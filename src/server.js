@@ -76,7 +76,9 @@ passport.use(
       passReqToCallback: true,
     },
     async (request, id, password, done) => {
-      const user = await UserManager.getUser(id);
+      const user = await UserManager.getUser(id, true);
+
+      console.log("user", user);
 
       if (
         user !== undefined &&

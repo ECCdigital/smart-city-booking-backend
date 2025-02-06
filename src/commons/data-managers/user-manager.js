@@ -10,12 +10,18 @@ const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
 
 
 class UserManager {
-  static async getUser(id) {
+  static async getUser(id, withSensitive = false) {
     const rawUser = await UserModel.findOne({ id: id });
     if (!rawUser) {
-      return undefined;
+      return null;
     } else {
-      return new User(rawUser);
+      const user = new User(rawUser);
+      if (!withSensitive) {
+       user.removeSensitive();
+       return user;
+      } else {
+        return user;
+      }
     }
   }
 
@@ -38,10 +44,16 @@ class UserManager {
     }
   }
 
-  static async getUsers() {
+  static async getUsers(withSensitive = false) {
     try {
       const rawUsers = await UserModel.find({});
-      return rawUsers.map((ru) => new User(ru));
+      return rawUsers.map((ru) => {
+        const user = new User(ru);
+        if (!withSensitive) {
+          user.removeSensitive();
+        }
+        return user;
+      });
     } catch (err) {
       throw err;
     }
