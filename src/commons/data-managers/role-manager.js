@@ -17,7 +17,7 @@ class RoleManager {
    * @returns List of bookings
    */
   static async getRoles(tenantId) {
-    const rawRoles = await RoleModel.find({ tenant: tenantId });
+    const rawRoles = await RoleModel.find({ tenantId: tenantId });
     return rawRoles.map((rr) => {
       return new Role(rr);
     });
@@ -27,10 +27,11 @@ class RoleManager {
    * Get a specific role object from the database.
    *
    * @param {string} id Logical identifier of the role object
+   * @param {string} tenantId The tenant id
    * @returns A single role object
    */
   static async getRole(id, tenantId) {
-    const rawRole = await RoleModel.findOne({ id: id, tenant: tenantId });
+    const rawRole = await RoleModel.findOne({ id: id, tenantId: tenantId });
     if (!rawRole) return null;
     return new Role(rawRole);
   }
@@ -39,6 +40,7 @@ class RoleManager {
    * Insert a role object into the database or update it.
    *
    * @param {Role} role The role object to be stored.
+   * @param {string} tenantId The tenant id
    * @param {boolean} upsert true, if new object should be inserted. Default: true
    * @returns Promise<>
    */
@@ -48,7 +50,6 @@ class RoleManager {
       role,
       {
         upsert: upsert,
-        setDefaultsOnInsert: true,
       },
     );
   }
@@ -57,6 +58,7 @@ class RoleManager {
    * Remove a role object from the database.
    *
    * @param {string} id Logical identifier of the role object
+   * @param {string} tenantId The tenant id
    * @returns Promise<>
    */
   static async removeRole(id, tenantId) {

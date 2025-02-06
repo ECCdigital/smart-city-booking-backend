@@ -22,9 +22,7 @@ class Role {
    * @param {Object} manageBookings Permission to manage bookings
    * @param {Object} manageCoupons Permission to manage coupons
    * @param {Object} manageRoles Permission to manage roles
-   * @param {Object} manageTenants Permission to manage tenants
-   * @param {Object} manageUsers Permission to manage users
-   * @param {string} tenant The tenant id
+   * @param {string} tenantId The tenant id
    * @param {string} ownerUserId The user id of the owner
    * @param {boolean} freeBookings Permission to book for free
    */
@@ -36,9 +34,7 @@ class Role {
     manageBookings,
     manageCoupons,
     manageRoles,
-    manageTenants,
-    manageUsers,
-    tenant,
+    tenantId,
     ownerUserId,
     freeBookings,
   }) {
@@ -49,9 +45,7 @@ class Role {
     this.manageBookings = manageBookings;
     this.manageCoupons = manageCoupons;
     this.manageRoles = manageRoles;
-    this.manageTenants = manageTenants;
-    this.manageUsers = manageUsers;
-    this.tenant = tenant;
+    this.tenantId = tenantId;
     this.ownerUserId = ownerUserId;
     this.freeBookings = freeBookings;
   }
@@ -60,7 +54,20 @@ class Role {
     return {
       id: { type: String, required: true, unique: true },
       name: { type: String, required: true },
-      adminInterfaces: { type: Array, default: [] },
+      adminInterfaces: {
+        type: [String],
+        default: [String],
+        enum: [
+          "locations",
+          "roles",
+          "bookings",
+          "coupons",
+          "rooms",
+          "resources",
+          "tickets",
+          "events",
+        ],
+      },
       manageBookables: {
         create: { type: Boolean, default: false },
         readAny: { type: Boolean, default: false },
@@ -97,26 +104,8 @@ class Role {
         deleteAny: { type: Boolean, default: false },
         deleteOwn: { type: Boolean, default: false },
       },
-      manageTenants: {
-        create: { type: Boolean, default: false },
-        readAny: { type: Boolean, default: false },
-        readOwn: { type: Boolean, default: false },
-        updateAny: { type: Boolean, default: false },
-        updateOwn: { type: Boolean, default: false },
-        deleteAny: { type: Boolean, default: false },
-        deleteOwn: { type: Boolean, default: false },
-      },
-      manageUsers: {
-        create: { type: Boolean, default: false },
-        readAny: { type: Boolean, default: false },
-        readOwn: { type: Boolean, default: false },
-        updateAny: { type: Boolean, default: false },
-        updateOwn: { type: Boolean, default: false },
-        deleteAny: { type: Boolean, default: false },
-        deleteOwn: { type: Boolean, default: false },
-      },
-      tenant: { type: String, ref: "Tenant", required: true },
-      ownerUserId: { type: String, required: true },
+      tenantId: { type: String, ref: "Tenant", required: true },
+      ownerUserId: { type: String, default: null },
       freeBookings: { type: Boolean, default: false },
     };
   }

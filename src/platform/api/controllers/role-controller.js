@@ -10,24 +10,24 @@ const logger = bunyan.createLogger({
 });
 
 class RolePermissions {
-  static _isOwner(role, userId, tenant) {
-    return role.ownerUserId === userId && role.ownerTenant === tenant;
+  static _isOwner(role, userId, tenantId) {
+    return role.ownerUserId === userId && role.ownerTenant === tenantId;
   }
 
-  static async _allowCreate(role, userId, tenant) {
+  static async _allowCreate(role, userId, tenantId) {
     return await UserManager.hasPermission(
       userId,
-      tenant,
+      tenantId,
       RolePermission.MANAGE_ROLES,
       "create",
     );
   }
 
-  static async _allowRead(role, userId, tenant) {
+  static async _allowRead(role, userId, tenantId) {
     if (
       await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_ROLES,
         "readAny",
       )
@@ -35,10 +35,10 @@ class RolePermissions {
       return true;
 
     if (
-      RolePermissions._isOwner(role, userId, tenant) &&
+      RolePermissions._isOwner(role, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_ROLES,
         "readOwn",
       ))
@@ -48,11 +48,11 @@ class RolePermissions {
     return false;
   }
 
-  static async _allowUpdate(role, userId, tenant) {
+  static async _allowUpdate(role, userId, tenantId) {
     if (
       await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_ROLES,
         "updateAny",
       )
@@ -61,10 +61,10 @@ class RolePermissions {
     }
 
     if (
-      RolePermissions._isOwner(role, userId, tenant) &&
+      RolePermissions._isOwner(role, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_ROLES,
         "updateOwn",
       ))
@@ -75,11 +75,11 @@ class RolePermissions {
     return false;
   }
 
-  static async _allowDelete(role, userId, tenant) {
+  static async _allowDelete(role, userId, tenantId) {
     if (
       await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_ROLES,
         "deleteAny",
       )
@@ -87,10 +87,10 @@ class RolePermissions {
       return true;
 
     if (
-      RolePermissions._isOwner(role, userId, tenant) &&
+      RolePermissions._isOwner(role, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_ROLES,
         "deleteOwn",
       ))
@@ -164,11 +164,10 @@ class RoleController {
    */
   static async storeRole(request, response) {
     const roleId = request.body.id;
-    const tenantId = request.params.tenantId;
+    const tenantId = request.params.tenant;
     const role = await RoleManager.getRole(roleId, tenantId);
 
-    //TODO: Does this still work with Mongoose
-    const isUpdate = !!role._id;
+    const isUpdate = !!role;
 
     if (isUpdate) {
       await RoleController.updateRole(request, response);
@@ -185,10 +184,10 @@ class RoleController {
 
       role.id = uuidv4();
       role.ownerUserId = user.id;
-      role.tenant = tenantId;
+      role.tenantId = tenantId;
 
       if (await RolePermissions._allowCreate(role, user.id, tenantId)) {
-        await RoleManager.storeRole(role);
+        await RoleManager.storeRole(role, tenantId);
         logger.info(`Created role ${role.id} by user ${user?.id}`);
         response.sendStatus(201);
       } else {
@@ -208,7 +207,7 @@ class RoleController {
       const role = new Role(request.body);
 
       if (await RolePermissions._allowUpdate(role, user.id, tenantId)) {
-        await RoleManager.storeRole(role);
+        await RoleManager.storeRole(role, tenantId);
         logger.info(`Updated role ${role.id} by user ${user?.id}`);
         response.sendStatus(201);
       } else {
