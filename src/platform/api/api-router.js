@@ -57,6 +57,36 @@ router.get(
   TenantController.countCheck,
 );
 
+router.post(
+  "/tenants/:id/add-user",
+  AuthenticationController.isSignedIn,
+  TenantController.addUser,
+);
+
+router.post(
+  "/tenants/:id/remove-user",
+  AuthenticationController.isSignedIn,
+  TenantController.removeUser,
+);
+
+router.post(
+  "/tenants/:id/remove-user-role",
+  AuthenticationController.isSignedIn,
+  TenantController.removeUserRole,
+);
+
+router.post(
+  "/tenants/:id/add-owner",
+  AuthenticationController.isSignedIn,
+  TenantController.addOwner,
+);
+
+router.post(
+  "/tenants/:id/remove-owner",
+  AuthenticationController.isSignedIn,
+  TenantController.removeOwner,
+);
+
 // USERS
 // =====
 

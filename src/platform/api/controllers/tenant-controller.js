@@ -238,6 +238,119 @@ class TenantController {
       response.status(500).send("Could not check if creation is possible");
     }
   }
+
+  static async addUser(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const body = request.body;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (
+        tenant.users.some(
+          (userReference) => userReference.userId === body.userId,
+        )
+      ) {
+        tenant.users
+          .filter((userReference) => userReference.userId === body.userId)
+          .forEach(
+            (user) =>
+              (user.roles = [...new Set([...user.roles, ...body.roles])]),
+          );
+      } else {
+        tenant.users.push({
+          userId: body.userId,
+          roles: [...new Set(body.roles)],
+        });
+      }
+
+      const updatedTenant = await TenantManager.storeTenant(tenant);
+
+      response.status(201).send(updatedTenant);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not add user to tenant");
+    }
+  }
+
+  static async removeUser(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId } = request.body;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      tenant.users = tenant.users.filter(
+        (userRef) => userRef.userId !== userId,
+      );
+
+      tenant.ownerUserIds = tenant.ownerUserIds.filter((u) => u !== userId);
+
+      const updatedTenant = await TenantManager.storeTenant(tenant);
+
+      response.status(200).send(updatedTenant);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not remove user from tenant");
+    }
+  }
+
+  static async removeUserRole(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId, roleId } = request.body;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      const userRef = tenant.users.find((userRef) => userRef.userId === userId);
+      userRef.roles = userRef.roles.filter((r) => r !== roleId);
+
+      const updatedTenant = await TenantManager.storeTenant(tenant);
+
+      response.status(200).send(updatedTenant);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not remove user from tenant");
+    }
+  }
+
+  static async addOwner(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId } = request.body;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (!tenant.ownerUserIds.includes(userId)) {
+        tenant.ownerUserIds.push(userId);
+      }
+
+      const updatedTenant = await TenantManager.storeTenant(tenant);
+
+      response.status(200).send(updatedTenant);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not add owner to tenant");
+    }
+  }
+
+  static async removeOwner(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId } = request.body;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      tenant.ownerUserIds = tenant.ownerUserIds.filter((uid) => uid !== userId);
+
+      const updatedTenant = await TenantManager.storeTenant(tenant);
+
+      response.status(200).send(updatedTenant);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not remove owner from tenant");
+    }
+  }
 }
 
 module.exports = TenantController;
