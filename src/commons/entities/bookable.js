@@ -171,6 +171,7 @@ class Bookable {
       id: {
         type: String,
         required: true,
+        unique: true,
       },
       tenantId: {
         type: String,

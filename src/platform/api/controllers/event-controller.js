@@ -11,25 +11,25 @@ const logger = bunyan.createLogger({
 });
 
 class EventPermissions {
-  static _isOwner(event, userId, tenant) {
-    return event.ownerUserId === userId && event.tenant === tenant;
+  static _isOwner(event, userId, tenantId) {
+    return event.ownerUserId === userId && event.tenantId === tenantId;
   }
 
-  static async _allowCreate(event, userId, tenant) {
+  static async _allowCreate(event, userId, tenantId) {
     return (
-      event.tenant === tenant &&
+      event.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "create",
       ))
     );
   }
 
-  static async _allowRead(event, userId, tenant) {
+  static async _allowRead(event, userId, tenantId) {
     if (
-      event.tenant === tenant &&
+      event.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
         tenant,
@@ -40,11 +40,11 @@ class EventPermissions {
       return true;
 
     if (
-      event.tenant === tenant &&
-      EventPermissions._isOwner(event, userId, tenant) &&
+      event.tenantId === tenantId &&
+      EventPermissions._isOwner(event, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "readOwn",
       ))
@@ -54,12 +54,12 @@ class EventPermissions {
     return false;
   }
 
-  static async _allowUpdate(event, userId, tenant) {
+  static async _allowUpdate(event, userId, tenantId) {
     if (
-      event.tenant === tenant &&
+      event.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "updateAny",
       ))
@@ -67,11 +67,11 @@ class EventPermissions {
       return true;
 
     if (
-      event.tenant === tenant &&
-      EventPermissions._isOwner(event, userId, tenant) &&
+      event.tenantId === tenantId &&
+      EventPermissions._isOwner(event, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "updateOwn",
       ))
@@ -81,12 +81,12 @@ class EventPermissions {
     return false;
   }
 
-  static async _allowDelete(event, userId, tenant) {
+  static async _allowDelete(event, userId, tenantId) {
     if (
-      event.tenant === tenant &&
+      event.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "deleteAny",
       ))
@@ -94,11 +94,11 @@ class EventPermissions {
       return true;
 
     if (
-      event.tenant === tenant &&
-      EventPermissions._isOwner(event, userId, tenant) &&
+      event.tenantId === tenantId &&
+      EventPermissions._isOwner(event, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "deleteOwn",
       ))
@@ -156,7 +156,7 @@ class EventController {
    * @returns {Promise<void>}
    */
   static async storeEvent(request, response) {
-    const event = Object.assign(new Event(), request.body);
+    const event = new Event(request.body);
 
     const isUpdate = !!event.id;
 
@@ -206,7 +206,7 @@ class EventController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const event = Object.assign(new Event(), request.body);
+      const event = new Event(request.body);
 
       const existingEvents = await EventManager.getEvent(event.id, tenant);
 
@@ -216,7 +216,7 @@ class EventController {
         }
       }
 
-      if (await EventPermissions._allowUpdate(event, user.id, user.tenant)) {
+      if (await EventPermissions._allowUpdate(event, user.id, tenant)) {
         await EventManager.storeEvent(event);
         logger.info(
           `${tenant} -- updated event ${event.id} by user ${user?.id}`,
@@ -241,7 +241,7 @@ class EventController {
       if (id) {
         const event = await EventManager.getEvent(id, tenant);
 
-        if (await EventPermissions._allowDelete(event, user.id, user.tenant)) {
+        if (await EventPermissions._allowDelete(event, user.id, tenant)) {
           await EventManager.removeEvent(id, tenant);
           logger.info(`${tenant} -- removed event ${id} by user ${user?.id}`);
           response.sendStatus(200);
