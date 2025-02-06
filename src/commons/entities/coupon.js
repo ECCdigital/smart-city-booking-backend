@@ -1,24 +1,30 @@
+const { Double } = require("mongodb");
+
 class Coupon {
-  constructor(
+  constructor({
     id,
+    amount,
     description,
-    type,
     discount,
     maxAmount,
+    tenantId,
+    type,
     usedAmount,
     validFrom,
     validTo,
-    tenantId,
-  ) {
+    ownerUserId,
+  }) {
     this.id = id;
+    this.amount = amount;
     this.description = description;
-    this.type = type;
     this.discount = discount;
     this.maxAmount = maxAmount;
+    this.tenantId = tenantId;
+    this.type = type;
     this.usedAmount = usedAmount;
     this.validFrom = validFrom;
     this.validTo = validTo;
-    this.tenantId = tenantId;
+    this.ownerUserId = ownerUserId;
   }
 
   static COUPON_TYPE = {
@@ -39,14 +45,17 @@ class Coupon {
 
   static schema() {
     return {
-      description: { type: String, required: true },
+      id: { type: String, required: true },
+      amount: { type: Double, default: 0 },
+      description: { type: String, default: "" },
+      discount: { type: Double, default: 0 },
+      maxAmount: { type: Double, default: null },
+      tenantId: { type: String, required: true },
       type: { type: String, required: true },
-      discount: { type: Number, required: true },
-      maxAmount: { type: Number, required: false },
-      usedAmount: { type: Number, required: false },
-      validFrom: { type: Date, required: false },
-      validTo: { type: Date, required: false },
-      tenantId: { type: String, required: true, ref: "Tenant" },
+      usedAmount: { type: Double, default: 0 },
+      validFrom: { type: Double, default: null },
+      validTo: { type: Double, default: null },
+      ownerUserId: { type: String, required: true },
     };
   }
 }

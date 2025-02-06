@@ -21,24 +21,24 @@ class BookablePermissions {
     return bookable.ownerUserId === userId && bookable.tenant === tenant;
   }
 
-  static async _allowCreate(bookable, userId, tenant) {
+  static async _allowCreate(bookable, userId, tenantId) {
     return (
-      bookable.tenant === tenant &&
+      bookable.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "create",
       ))
     );
   }
 
-  static async _allowRead(bookable, userId, tenant) {
+  static async _allowRead(bookable, userId, tenantId) {
     if (
-      bookable.tenant === tenant &&
+      bookable.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "readAny",
       ))
@@ -46,11 +46,11 @@ class BookablePermissions {
       return true;
 
     if (
-      bookable.tenant === tenant &&
-      BookablePermissions._isOwner(bookable, userId, tenant) &&
+      bookable.tenantId === tenantId &&
+      BookablePermissions._isOwner(bookable, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "readOwn",
       ))
@@ -61,7 +61,7 @@ class BookablePermissions {
       ...(bookable.permittedUsers || []),
       ...(
         await UserManager.getUsersWithRoles(
-          tenant,
+          tenantId,
           bookable.permittedRoles || [],
         )
       ).map((u) => u.id),
@@ -74,12 +74,12 @@ class BookablePermissions {
     return true;
   }
 
-  static async _allowUpdate(bookable, userId, tenant) {
+  static async _allowUpdate(bookable, userId, tenantId) {
     if (
-      bookable.tenant === tenant &&
+      bookable.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "updateAny",
       ))
@@ -87,11 +87,11 @@ class BookablePermissions {
       return true;
 
     if (
-      bookable.tenant === tenant &&
-      BookablePermissions._isOwner(bookable, userId, tenant) &&
+      bookable.tenantId === tenantId &&
+      BookablePermissions._isOwner(bookable, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "updateOwn",
       ))
@@ -101,12 +101,12 @@ class BookablePermissions {
     return false;
   }
 
-  static async _allowDelete(bookable, userId, tenant) {
+  static async _allowDelete(bookable, userId, tenantId) {
     if (
-      bookable.tenant === tenant &&
+      bookable.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "deleteAny",
       ))
@@ -114,11 +114,11 @@ class BookablePermissions {
       return true;
 
     if (
-      bookable.tenant === tenant &&
-      BookablePermissions._isOwner(bookable, userId, tenant) &&
+      bookable.tenantId === tenantId &&
+      BookablePermissions._isOwner(bookable, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_BOOKABLES,
         "deleteOwn",
       ))
@@ -156,11 +156,11 @@ class BookableController {
           bookable._populated = {
             event: await EventManager.getEvent(
               bookable.eventId,
-              bookable.tenant,
+              bookable.tenantId,
             ),
             relatedBookables: await BookableManager.getRelatedBookables(
               bookable.id,
-              bookable.tenant,
+              bookable.tenantId,
             ),
           };
         }
@@ -248,10 +248,10 @@ class BookableController {
 
       if (request.query.populate === "true") {
         bookable._populated = {
-          event: await EventManager.getEvent(bookable.eventId, bookable.tenant),
+          event: await EventManager.getEvent(bookable.eventId, bookable.tenantId),
           relatedBookables: await BookableManager.getRelatedBookables(
             bookable.id,
-            bookable.tenant,
+            bookable.tenantId,
           ),
         };
       }
@@ -273,7 +273,7 @@ class BookableController {
    * @returns {Promise<void>}
    */
   static async storeBookable(request, response) {
-    const bookable = Object.assign(new Bookable(), request.body);
+    const bookable = new Bookable(request.body);
     const isUpdate = !!bookable.id;
 
     if (isUpdate) {
@@ -302,12 +302,12 @@ class BookableController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const bookable = Object.assign(new Bookable(), request.body);
+      const bookable = new Bookable(request.body);
       bookable.id = uuidv4();
       bookable.ownerUserId = user.id;
 
       if (
-        (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+        (await BookableManager.checkPublicBookableCount(bookable.tenantId)) ===
           false &&
         bookable.isPublic
       ) {
@@ -315,7 +315,7 @@ class BookableController {
       }
 
       if (
-        await BookablePermissions._allowCreate(bookable, user.id, user.tenant)
+        await BookablePermissions._allowCreate(bookable, user.id, tenant)
       ) {
         await BookableManager.storeBookable(bookable);
         logger.info(
@@ -353,7 +353,7 @@ class BookableController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const bookable = Object.assign(new Bookable(), request.body);
+      const bookable = new Bookable(request.body);
 
       const existingBookable = await BookableManager.getBookable(
         bookable.id,
@@ -362,7 +362,7 @@ class BookableController {
 
       if (!existingBookable.isPublic && bookable.isPublic) {
         if (
-          (await BookableManager.checkPublicBookableCount(bookable.tenant)) ===
+          (await BookableManager.checkPublicBookableCount(bookable.tenantId)) ===
           false
         ) {
           throw new Error(`Maximum number of public bookables reached.`);
@@ -370,7 +370,7 @@ class BookableController {
       }
 
       if (
-        await BookablePermissions._allowUpdate(bookable, user.id, user.tenant)
+        await BookablePermissions._allowUpdate(bookable, user.id, tenant)
       ) {
         await BookableManager.storeBookable(bookable);
         logger.info(

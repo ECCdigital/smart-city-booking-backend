@@ -10,28 +10,28 @@ const logger = bunyan.createLogger({
 });
 
 class CouponPermissions {
-  static _isOwner(coupon, userId, tenant) {
-    return coupon.ownerUserId === userId && coupon.tenant === tenant;
+  static _isOwner(coupon, userId, tenantId) {
+    return coupon.ownerUserId === userId && coupon.tenantId === tenantId;
   }
 
-  static async _allowCreate(coupon, userId, tenant) {
+  static async _allowCreate(coupon, userId, tenantId) {
     return (
-      coupon.tenant === tenant &&
+      coupon.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_COUPONS,
         "create",
       ))
     );
   }
 
-  static async _allowRead(coupon, userId, tenant) {
+  static async _allowRead(coupon, userId, tenantId) {
     if (
-      coupon.tenant === tenant &&
+      coupon.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_COUPONS,
         "readAny",
       ))
@@ -39,11 +39,11 @@ class CouponPermissions {
       return true;
 
     if (
-      coupon.tenant === tenant &&
-      CouponPermissions._isOwner(coupon, userId, tenant) &&
+      coupon.tenant === tenantId &&
+      CouponPermissions._isOwner(coupon, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_COUPONS,
         "readOwn",
       ))
@@ -53,12 +53,12 @@ class CouponPermissions {
     return false;
   }
 
-  static async _allowUpdate(coupon, userId, tenant) {
+  static async _allowUpdate(coupon, userId, tenantId) {
     if (
-      coupon.tenant === tenant &&
+      coupon.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_COUPONS,
         "updateAny",
       ))
@@ -66,11 +66,11 @@ class CouponPermissions {
       return true;
 
     if (
-      coupon.tenant === tenant &&
-      CouponPermissions._isOwner(coupon, userId, tenant) &&
+      coupon.tenantId === tenantId &&
+      CouponPermissions._isOwner(coupon, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_COUPONS,
         "updateOwn",
       ))
@@ -80,12 +80,12 @@ class CouponPermissions {
     return false;
   }
 
-  static async _allowDelete(coupon, userId, tenant) {
+  static async _allowDelete(coupon, userId, tenantId) {
     if (
-      coupon.tenant === tenant &&
+      coupon.tenantId === tenantId &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_COUPONS,
         "deleteAny",
       ))
@@ -93,11 +93,11 @@ class CouponPermissions {
       return true;
 
     if (
-      coupon.tenant === tenant &&
-      CouponPermissions._isOwner(coupon, userId, tenant) &&
+      coupon.tenantId === tenantId &&
+      CouponPermissions._isOwner(coupon, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,
-        tenant,
+        tenantId,
         RolePermission.MANAGE_COUPONS,
         "deleteOwn",
       ))
@@ -111,13 +111,18 @@ class CouponPermissions {
 class CouponController {
   static async storeCoupon(request, response) {
     const tenant = request.params.tenant;
-    const coupon = Object.assign(new Coupon(), request.body);
+    const coupon = new Coupon(request.body);
 
     if (!coupon) {
       return response.status(400).send("Coupon is required");
     }
 
-    const isUpdate = !!CouponManager.getCoupon(coupon.id, tenant)._id;
+    let isUpdate = false;
+    const existingCoupon = await CouponManager.getCoupon(coupon.id, tenant);
+
+    if(existingCoupon) {
+      isUpdate = true;
+    }
 
     if (isUpdate) {
       await CouponController.updateCoupon(request, response);
@@ -127,51 +132,61 @@ class CouponController {
   }
 
   static async createCoupon(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const coupon = Object.assign(new Coupon(), request.body);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const coupon = new Coupon(request.body);
 
-    if (await CouponPermissions._allowCreate(coupon, user.id, tenant)) {
-      try {
-        coupon.ownerUserId = user.id;
-        const updatedCoupon = await CouponManager.storeCoupon(coupon);
-        logger.info(
-          `${tenant} -- created coupon ${coupon.id} by user ${user?.id}`,
+      if (await CouponPermissions._allowCreate(coupon, user.id, tenant)) {
+        try {
+          coupon.ownerUserId = user.id;
+          const updatedCoupon = await CouponManager.storeCoupon(coupon);
+          logger.info(
+            `${tenant} -- created coupon ${coupon.id} by user ${user?.id}`,
+          );
+          response.status(201).send(updatedCoupon);
+        } catch (err) {
+          logger.error(err);
+          return response.status(400).send(err.message);
+        }
+      } else {
+        logger.warn(
+          `User ${user?.id} not allowed to create coupons ${coupon?.id}`,
         );
-        response.status(201).send(updatedCoupon);
-      } catch (err) {
-        logger.error(err);
-        return response.status(400).send(err.message);
+        response.status(403).send("You are not allowed to create coupons");
       }
-    } else {
-      logger.warn(
-        `User ${user?.id} not allowed to create coupons ${coupon?.id}`,
-      );
-      response.status(403).send("You are not allowed to create coupons");
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not create coupon");
     }
   }
 
   static async updateCoupon(request, response) {
-    const tenant = request.params.tenant;
-    const user = request.user;
-    const coupon = Object.assign(new Coupon(), request.body);
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const coupon = new Coupon(request.body);
 
-    if (await CouponPermissions._allowUpdate(coupon, user.id, tenant)) {
-      try {
-        const updatedCoupon = await CouponManager.storeCoupon(coupon);
-        logger.info(
-          `${tenant} -- updated coupon ${coupon.id} by user ${user?.id}`,
+      if (await CouponPermissions._allowUpdate(coupon, user.id, tenant)) {
+        try {
+          const updatedCoupon = await CouponManager.storeCoupon(coupon);
+          logger.info(
+            `${tenant} -- updated coupon ${coupon.id} by user ${user?.id}`,
+          );
+          response.status(201).send(updatedCoupon);
+        } catch (err) {
+          logger.error(err);
+          return response.status(400).send(err.message);
+        }
+      } else {
+        logger.warn(
+          `User ${user?.id} is not allowed to update coupons ${coupon?.id}`,
         );
-        response.status(201).send(updatedCoupon);
-      } catch (err) {
-        logger.error(err);
-        return response.status(400).send(err.message);
+        response.status(403).send("You are not allowed to update this coupon");
       }
-    } else {
-      logger.warn(
-        `User ${user?.id} is not allowed to update coupons ${coupon?.id}`,
-      );
-      response.status(403).send("You are not allowed to update this coupon");
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not update coupon");
     }
   }
 

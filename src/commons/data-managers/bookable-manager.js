@@ -45,7 +45,7 @@ class BookableManager {
    */
   static async storeBookable(bookable, upsert = true) {
     await BookableModel.updateOne(
-      { id: bookable.id, tenantId: bookable.tenant },
+      { id: bookable.id, tenantId: bookable.tenantId },
       bookable,
       { upsert: upsert },
     );

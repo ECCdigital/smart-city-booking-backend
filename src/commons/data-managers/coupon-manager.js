@@ -15,23 +15,26 @@ class CouponManager {
    * Get a specific coupon
    *
    * @param couponId
-   * @param tenant
+   * @param tenantId
    */
-  static async getCoupon(couponId, tenant) {
+  static async getCoupon(couponId, tenantId) {
     const rawCoupon = await CouponModel.findOne({
       id: couponId,
-      tenant: tenant,
+      tenantId: tenantId,
     });
+    if(!rawCoupon) {
+      return null;
+    }
     return new Coupon(rawCoupon);
   }
 
   /**
    * Get all coupons related to a tenant.
    *
-   * @param tenant
+   * @param tenantId
    */
-  static async getCoupons(tenant) {
-    const rawCoupons = await CouponModel.find({ tenant: tenant });
+  static async getCoupons(tenantId) {
+    const rawCoupons = await CouponModel.find({ tenantId: tenantId });
     return rawCoupons.map((rc) => new Coupon(rc));
   }
 
@@ -50,59 +53,57 @@ class CouponManager {
         coupon.id = Math.random().toString(36).substring(2, 10);
         isUnique = await CouponModel.findOne({
           id: coupon.id,
-          tenant: coupon.tenant,
+          tenantId: coupon.tenantId,
         });
       }
     }
 
-    if (!coupon._id) {
+    if (!coupon.id) {
       coupon.usedAmount = 0;
       const rawCoupon = await CouponModel.findOne({
         id: coupon.id,
-        tenant: coupon.tenant,
+        tenantId: coupon.tenantId,
       });
       if (rawCoupon) {
         throw new Error("Coupon id already exists");
       }
     }
 
-    if (coupon._id) delete coupon._id;
-
     if (coupon.maxAmount && !Number.isInteger(coupon.maxAmount)) {
       coupon.maxAmount = parseInt(coupon.maxAmount);
     }
 
     await CouponModel.replaceOne(
-      { id: coupon.id, tenant: coupon.tenant },
+      { id: coupon.id, tenantId: coupon.tenantId },
       coupon,
       {
         upsert: upsert,
       },
     );
 
-    return await CouponManager.getCoupon(coupon.id, coupon.tenant);
+    return await CouponManager.getCoupon(coupon.id, coupon.tenantId);
   }
 
   /**
    * Remove a coupon.
    *
    * @param couponId
-   * @param tenant
+   * @param tenantId
    */
-  static async removeCoupon(couponId, tenant) {
-    await CouponModel.deleteOne({ id: couponId, tenant: tenant });
+  static async removeCoupon(couponId, tenantId) {
+    await CouponModel.deleteOne({ id: couponId, tenantId: tenantId });
   }
 
   /**
    * Use a coupon and return the new price.
    *
    * @param couponId
-   * @param tenant
+   * @param tenantId
    * @param bookingPrice
    * @returns {Promise<number>}
    */
-  static async applyCoupon(couponId, tenant, bookingPrice) {
-    const coupon = await CouponManager.getCoupon(couponId, tenant);
+  static async applyCoupon(couponId, tenantId, bookingPrice) {
+    const coupon = await CouponManager.getCoupon(couponId, tenantId);
     let discountedPrice = bookingPrice;
 
     switch (coupon.type) {

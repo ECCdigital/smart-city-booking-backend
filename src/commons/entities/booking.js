@@ -137,7 +137,7 @@ class Booking {
 
   static schema() {
     return {
-      id: String,
+      id: { type: String, required: true, unique: true },
       tenantId: {
         type: String,
         required: true,
