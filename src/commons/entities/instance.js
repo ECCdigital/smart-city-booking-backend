@@ -1,3 +1,7 @@
+const fs = require('fs');
+const path = require('path');
+const defaultMailTemplate = fs.readFileSync(path.join(__dirname, '../mail-service/templates/default-generic-mail-template.temp.html'), 'utf8');
+
 class Instance {
   constructor({
     mailTemplate,
@@ -61,25 +65,25 @@ class Instance {
 
   static schema() {
     return {
-      mailTemplate: { type: String, required: true },
-      mailAddress: { type: String, required: true },
+      mailTemplate: { type: String, default: defaultMailTemplate },
+      mailAddress: { type: String, default: "" },
       noreplyMail: { type: String, default: "" },
       noreplyDisplayName: { type: String, default: "" },
       noreplyHost: { type: String, default: "" },
       noreplyPort: { type: Number, default: null },
       noreplyUser: { type: String, default: "" },
-      noreplyPassword: { type: Object },
+      noreplyPassword: { type: Object, default: {} },
       noreplyStarttls: { type: Boolean, default: false },
       noreplyUseGraphApi: { type: Boolean, default: false },
       noreplyGraphTenantId: { type: String, default: "" },
       noreplyGraphClientId: { type: String, default: "" },
-      noreplyGraphClientSecret: { type: Object },
+      noreplyGraphClientSecret: { type: Object, default: {} },
       mailEnabled: { type: Boolean, default: false },
       contactAddress: { type: String, default: "" },
       contactUrl: { type: String, default: "" },
       dataProtectionUrl: { type: String, default: "" },
       legalNoticeUrl: { type: String, default: "" },
-      users: { type: Array, required: true, ref: "User" },
+      ownerIds: { type: Array, ref: "User", default: [] },
     };
   }
 }
