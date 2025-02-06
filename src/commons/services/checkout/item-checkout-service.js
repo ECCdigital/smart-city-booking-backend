@@ -218,7 +218,7 @@ class ItemCheckoutService {
     if (
       !!this.user &&
       freeBookingUsers.includes(this.user) &&
-      this.originBookable.tenant === this.tenantId
+      this.originBookable.tenantId === this.tenantId
     ) {
       logger.info(
         `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,

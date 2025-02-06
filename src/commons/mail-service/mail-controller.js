@@ -324,14 +324,8 @@ class MailController {
   }
 
   static async sendBookingRequestConfirmation(address, bookingId, tenantId) {
-    console.log("sendBookingRequestConfirmation");
-    console.log("address", address);
-    console.log("bookingId", bookingId);
-    console.log("tenantId", tenantId);
-
     const tenant = await TenantManager.getTenant(tenantId);
 
-    console.log("tenant", tenant);
     const includeQRCode = tenant.enablePublicStatusView;
 
     await this._sendBookingMail({

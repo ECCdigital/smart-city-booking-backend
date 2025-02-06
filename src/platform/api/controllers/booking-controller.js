@@ -18,8 +18,8 @@ const logger = bunyan.createLogger({
 });
 
 class BookingPermissions {
-  static _isOwner(booking, userId, tenant) {
-    return booking.assignedUserId === userId && booking.tenant === tenant;
+  static _isOwner(booking, userId, tenantId) {
+    return booking.assignedUserId === userId && booking.tenantId === tenantId;
   }
 
   static async _allowCreate(booking, userId, tenantId) {
@@ -171,7 +171,7 @@ class BookingController {
         for (const booking of bookings) {
           if (
             user &&
-            (await BookingPermissions._allowRead(booking, user.id, user.tenant))
+            (await BookingPermissions._allowRead(booking, user.id, tenant))
           ) {
             allowedBookings.push(booking);
           }
@@ -204,6 +204,7 @@ class BookingController {
       const tenant = request.params.tenant;
       const user = request.user;
 
+      //TODO: Check if user is authenticated
       const hasPermission = user.tenant === tenant;
 
       if (hasPermission) {
@@ -298,14 +299,12 @@ class BookingController {
 
         response.status(200).send(anonymizedBookings);
       } else if (user) {
-        const hasPermission =
-          user.tenant === tenant &&
-          (await UserManager.hasPermission(
-            user.id,
-            user.tenant,
-            RolePermission.MANAGE_BOOKINGS,
-            "readAny",
-          ));
+        const hasPermission = await UserManager.hasPermission(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+          "readAny",
+        );
 
         if (hasPermission) {
           response.status(200).send(bookings);
@@ -337,14 +336,12 @@ class BookingController {
         const booking = await BookingManager.getBooking(id, tenantId);
 
         const hasPermission =
-          (user.tenant === tenantId &&
-            (await UserManager.hasPermission(
-              user.id,
-              user.tenant,
-              RolePermission.MANAGE_BOOKINGS,
-              "readAny",
-            ))) ||
-          BookingPermissions._isOwner(booking, user.id, user.tenant);
+          (await UserManager.hasPermission(
+            user.id,
+            tenantId,
+            RolePermission.MANAGE_BOOKINGS,
+            "readAny",
+          )) || BookingPermissions._isOwner(booking, user.id, tenantId);
 
         if (hasPermission) {
           await BookingController._populate([booking]);
@@ -412,7 +409,7 @@ class BookingController {
     const booking = new Booking(request.body);
 
     let isUpdate =
-      !!(await BookingManager.getBooking(booking.id, booking.tenant)) &&
+      !!(await BookingManager.getBooking(booking.id, booking.tenantId)) &&
       !!booking.id;
 
     if (isUpdate) {
@@ -427,10 +424,14 @@ class BookingController {
     const booking = new Booking(request.body);
 
     if (
-      !(await BookingPermissions._allowCreate(booking, user.id, user.tenant))
+      !(await BookingPermissions._allowCreate(
+        booking,
+        user.id,
+        booking.tenantId,
+      ))
     ) {
       logger.warn(
-        `${booking.tenant} -- User ${user?.id} is not allowed to create booking.`,
+        `${booking.tenantId} -- User ${user?.id} is not allowed to create booking.`,
       );
       return response.sendStatus(403);
     }
@@ -453,9 +454,7 @@ class BookingController {
       const user = request.user;
       const booking = new Booking(request.body);
 
-      if (
-        await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
-      ) {
+      if (await BookingPermissions._allowUpdate(booking, user.id, tenant)) {
         await BookingService.updateBooking(tenant, booking);
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
@@ -482,9 +481,7 @@ class BookingController {
       if (id) {
         const booking = await BookingManager.getBooking(id, tenant);
 
-        if (
-          await BookingPermissions._allowDelete(booking, user.id, user.tenant)
-        ) {
+        if (await BookingPermissions._allowDelete(booking, user.id, tenant)) {
           await BookingService.cancelBooking(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
           response.sendStatus(200);
@@ -517,9 +514,7 @@ class BookingController {
 
       const booking = await BookingManager.getBooking(id, tenant);
 
-      if (
-        await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
-      ) {
+      if (await BookingPermissions._allowUpdate(booking, user.id, tenant)) {
         logger.info(
           `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
         );
@@ -541,7 +536,7 @@ class BookingController {
 
   static async rejectBooking(request, response) {
     try {
-      const tenant = request.params.tenant;
+      const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
       const { reason } = request.body;
@@ -549,19 +544,17 @@ class BookingController {
         return response.sendStatus(400);
       }
 
-      const booking = await BookingManager.getBooking(id, tenant);
+      const booking = await BookingManager.getBooking(id, tenantId);
 
-      if (
-        await BookingPermissions._allowUpdate(booking, user.id, user.tenant)
-      ) {
+      if (await BookingPermissions._allowUpdate(booking, user.id, tenantId)) {
         logger.info(
-          `${tenant} -- rejected booking ${booking.id} by user ${user?.id}`,
+          `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
         );
-        await BookingService.rejectBooking(tenant, id, reason);
+        await BookingService.rejectBooking(tenantId, id, reason);
         return response.sendStatus(200);
       } else {
         logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to reject booking.`,
+          `${tenantId} -- User ${user?.id} is not allowed to reject booking.`,
         );
         return response.sendStatus(403);
       }
@@ -649,7 +642,7 @@ class BookingController {
       for (const booking of eventBookings) {
         if (
           user &&
-          (await BookingPermissions._allowRead(booking, user.id, user.tenant))
+          (await BookingPermissions._allowRead(booking, user.id, tenantId))
         ) {
           allowedBookings.push(booking);
         }
@@ -680,14 +673,12 @@ class BookingController {
       const booking = await BookingManager.getBooking(bookingId, tenant);
 
       const hasPermission =
-        (user.tenant === tenant &&
-          (await UserManager.hasPermission(
-            user.id,
-            user.tenant,
-            RolePermission.MANAGE_BOOKINGS,
-            "readAny",
-          ))) ||
-        BookingPermissions._isOwner(booking, user.id, user.tenant);
+        (await UserManager.hasPermission(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+          "readAny",
+        )) || BookingPermissions._isOwner(booking, user.id, tenant);
 
       if (!hasPermission) {
         logger.warn(
@@ -729,14 +720,12 @@ class BookingController {
       const booking = await BookingManager.getBooking(bookingId, tenant);
 
       const hasPermission =
-        (user.tenant === tenant &&
-          (await UserManager.hasPermission(
-            user.id,
-            user.tenant,
-            RolePermission.MANAGE_BOOKINGS,
-            "updateAny",
-          ))) ||
-        BookingPermissions._isOwner(booking, user.id, user.tenant);
+        (await UserManager.hasPermission(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+          "updateAny",
+        )) || BookingPermissions._isOwner(booking, user.id, tenant);
 
       if (!hasPermission) {
         logger.warn(

@@ -221,7 +221,6 @@ class BookingService {
       updatedBooking.id,
       tenantId,
     );
-
     try {
       const bundleCheckoutService = new ManualBundleCheckoutService(
         updatedBooking.assignedUserId,
@@ -243,6 +242,7 @@ class BookingService {
         Boolean(updatedBooking.isPayed),
         Boolean(updatedBooking.isRejected),
         updatedBooking.attachmentStatus,
+        updatedBooking.paymentProvider,
         updatedBooking.paymentMethod,
       );
 
@@ -254,7 +254,7 @@ class BookingService {
       await BookingManager.storeBooking(booking);
       const lockerServiceInstance = LockerService.getInstance();
       await lockerServiceInstance.handleUpdate(
-        updatedBooking.tenant,
+        updatedBooking.tenantId,
         oldBooking,
         booking,
       );
@@ -307,12 +307,12 @@ class BookingService {
     }
   }
 
-  static async rejectBooking(tenant, bookingId, reason = "") {
+  static async rejectBooking(tenantId, bookingId, reason = "") {
     try {
-      const booking = await BookingManager.getBooking(bookingId, tenant);
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
 
       booking.isRejected = true;
-      await BookingService.updateBooking(tenant, booking);
+      await BookingService.updateBooking(tenantId, booking);
 
       await MailController.sendBookingRejection(
         booking.mail,
@@ -321,7 +321,7 @@ class BookingService {
         reason,
       );
       logger.info(
-        `${tenant} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
+        `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
       );
     } catch (error) {
       throw new Error(`Error rejecting booking: ${error.message}`);

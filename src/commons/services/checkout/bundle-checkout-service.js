@@ -173,6 +173,10 @@ class BundleCheckoutService {
     return false;
   }
 
+  setPaymentMethod() {
+    return ""
+  }
+
   async getLockerInfo() {
     let lockerInfo = [];
     try {
@@ -235,7 +239,6 @@ class BundleCheckoutService {
     for (const bookableItem of this.bookableItems) {
       const itemCheckoutService =
         await this.createItemCheckoutService(bookableItem);
-
       bookableItem.regularPriceEur =
         await itemCheckoutService.regularPriceEur();
       bookableItem.regularGrossPriceEur =
@@ -278,6 +281,7 @@ class BundleCheckoutService {
       isPayed: await this.isPaymentComplete(),
       isRejected: this.performRejected(),
       paymentProvider: this.paymentProvider,
+      paymentMethod: this.setPaymentMethod(),
       lockerInfo: await this.getLockerInfo(),
     };
 
@@ -320,6 +324,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {boolean} isRejected - The reject status.
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
+   * @param {string} paymentMethod - The payment method.
    */
   constructor(
     user,
@@ -342,6 +347,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     isRejected,
     attachmentStatus,
     paymentProvider,
+    paymentMethod,
   ) {
     super(
       user,
@@ -365,6 +371,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
     this.isRejected = isRejected;
+    this.paymentMethod = paymentMethod;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -408,6 +415,10 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
 
   performRejected() {
     return this.isRejected;
+  }
+
+  setPaymentMethod() {
+    return this.paymentMethod;
   }
 }
 

@@ -104,6 +104,11 @@ class CouponManager {
    */
   static async applyCoupon(couponId, tenantId, bookingPrice) {
     const coupon = await CouponManager.getCoupon(couponId, tenantId);
+
+    if(!coupon) {
+      return bookingPrice;
+    }
+
     let discountedPrice = bookingPrice;
 
     switch (coupon.type) {

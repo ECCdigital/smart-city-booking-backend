@@ -16,46 +16,35 @@ const BookingModel =
  */
 class BookingManager {
   /**
-   * Check if an object is a valid Booking.
-   *
-   * @param {object} booking A booking object
-   * @returns true, if the object is a valid booking object
-   */
-  static validateBooking(booking) {
-    var schema = require("../schemas/booking.schema.json");
-    return validate(booking, schema).errors.length === 0;
-  }
-
-  /**
    * Get all bookings related to a tenant
    *
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns List of bookings
    */
-  static async getBookings(tenant) {
-    const rawBookings = await BookingModel.find({ tenant: tenant });
+  static async getBookings(tenantId) {
+    const rawBookings = await BookingModel.find({ tenantId: tenantId });
     return rawBookings.map((rb) => new Booking(rb));
   }
 
   /**
    * Get all bookings related to a bookable object.
    *
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @param bookableId
    * @returns List of bookings
    * @returns
    */
-  static async getRelatedBookings(tenant, bookableId) {
+  static async getRelatedBookings(tenantId, bookableId) {
     const rawBookings = await BookingModel.find({
-      tenant: tenant,
+      tenantId: tenantId,
       "bookableItems.bookableId": bookableId,
     });
     return rawBookings.map((rb) => new Booking(rb));
   }
 
-  static async getRelatedBookingsBatch(tenant, bookableIds) {
+  static async getRelatedBookingsBatch(tenantId, bookableIds) {
     const rawBookings = await BookingModel.find({
-      tenant: tenant,
+      tenantId: tenantId,
       "bookableItems.bookableId": { $in: bookableIds },
     });
     return rawBookings.map((rb) => new Booking(rb));
@@ -64,13 +53,13 @@ class BookingManager {
   /**
    * Get all bookings related to a user
    *
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @param {string} userId Identifier of the user
    * @returns List of bookings
    */
-  static async getAssignedBookings(tenant, userId) {
+  static async getAssignedBookings(tenantId, userId) {
     const rawBookings = await BookingModel.find({
-      tenant: tenant,
+      tenantId: tenantId,
       assignedUserId: userId,
     });
     return rawBookings.map((rb) => new Booking(rb));

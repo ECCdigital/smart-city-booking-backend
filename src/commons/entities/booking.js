@@ -28,6 +28,7 @@ class Booking {
    * @param {string} params.couponCode - The coupon code used for the booking.
    * @param {boolean} params.isCommitted - Whether the booking is committed.
    * @param {boolean} params.isPayed - Whether the booking is paid.
+   * @param {string} params.isRejected - Whether the booking is rejected.
    * @param {string} params.location - The location of the booking.
    * @param {Array} params.lockerInfo - The locker information for the booking.
    * @param {string} params.mail - The email address associated with the booking.
@@ -74,6 +75,7 @@ class Booking {
     couponCode,
     isCommitted,
     isPayed,
+    isRejected,
     location,
     lockerInfo,
     mail,
@@ -115,6 +117,7 @@ class Booking {
     this.timeCreated = timeCreated || Date.now();
     this.isCommitted = isCommitted || false;
     this.isPayed = isPayed || false;
+    this.isRejected = isRejected || false;
     this.couponUsed = couponUsed || {};
     this.hooks = hooks || [];
   }
@@ -154,6 +157,7 @@ class Booking {
       couponCode: String,
       isCommitted: Boolean,
       isPayed: Boolean,
+      isRejected: Boolean,
       location: String,
       lockerInfo: [Object],
       mail: String,
