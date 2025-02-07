@@ -164,7 +164,7 @@ class BookingService {
           await MailController.sendBookingConfirmation(
             booking.mail,
             booking.id,
-            booking.tenant,
+            booking.tenantId,
             attachments,
           );
         } catch (err) {
@@ -173,7 +173,10 @@ class BookingService {
 
         try {
           const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
+          await lockerServiceInstance.handleCreate(
+            booking.tenantId,
+            booking.id,
+          );
         } catch (err) {
           logger.error(err);
         }
