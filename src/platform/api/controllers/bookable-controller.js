@@ -34,43 +34,6 @@ class BookablePermissions {
   }
 
   static async _allowRead(bookable, userId, tenantId) {
-    if (
-      bookable.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "readAny",
-      ))
-    )
-      return true;
-
-    if (
-      bookable.tenantId === tenantId &&
-      BookablePermissions._isOwner(bookable, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "readOwn",
-      ))
-    )
-      return true;
-
-    const permittedUsers = [
-      ...(bookable.permittedUsers || []),
-      ...(
-        await UserManager.getUsersWithRoles(
-          tenantId,
-          bookable.permittedRoles || [],
-        )
-      ).map((u) => u.id),
-    ];
-
-    if (permittedUsers.length > 0 && !permittedUsers.includes(userId)) {
-      return false;
-    }
-
     return true;
   }
 

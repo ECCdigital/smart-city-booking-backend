@@ -28,30 +28,7 @@ class EventPermissions {
   }
 
   static async _allowRead(event, userId, tenantId) {
-    if (
-      event.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_BOOKABLES,
-        "readAny",
-      ))
-    )
-      return true;
-
-    if (
-      event.tenantId === tenantId &&
-      EventPermissions._isOwner(event, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "readOwn",
-      ))
-    )
-      return true;
-
-    return false;
+    return true;
   }
 
   static async _allowUpdate(event, userId, tenantId) {
@@ -118,10 +95,14 @@ class EventController {
       const tenant = request.params.tenant;
       const user = request.user;
       const events = await EventManager.getEvents(tenant);
+      const allowedEvents = events.filter((event) =>
+        EventPermissions._allowRead(event, user.id, tenant),
+      ) || [];
+
       logger.info(
-        `${tenant} -- sending ${events.length} events to user ${user?.id}`,
+        `${tenant} -- sending ${allowedEvents.length} events to user ${user?.id}`,
       );
-      response.status(200).send(events);
+      response.status(200).send(allowedEvents);
     } catch (err) {
       logger.warn(err);
       response.status(500).send("could not get events");
@@ -135,10 +116,11 @@ class EventController {
       const id = request.params.id;
       if (id) {
         const event = await EventManager.getEvent(id, tenant);
+        const allowedEvent = EventPermissions._allowRead(event, user.id, tenant)
         logger.info(
-          `${tenant} -- sending event ${event.id} to user ${user?.id}`,
+          `${tenant} -- sending event ${allowedEvent.id} to user ${user?.id}`,
         );
-        response.status(200).send(event);
+        response.status(200).send(allowedEvent);
       } else {
         logger.warn(`Could not get event. Missing ID.`);
         response.sendStatus(400);

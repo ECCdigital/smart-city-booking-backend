@@ -78,8 +78,6 @@ passport.use(
     async (request, id, password, done) => {
       const user = await UserManager.getUser(id, true);
 
-      console.log("user", user);
-
       if (
         user !== undefined &&
         user.isVerified &&

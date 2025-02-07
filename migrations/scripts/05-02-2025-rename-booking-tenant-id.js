@@ -7,16 +7,17 @@ module.exports = {
     const allDocs = await Booking.find({});
 
     for (const doc of allDocs) {
+      const obj = doc.toObject();
       let modified = false;
 
-      if (doc.tenant) {
-        doc.tenantId = doc.tenant;
+      if (obj.tenant) {
+        obj.tenantId = obj.tenant;
         doc.tenant = undefined;
         modified = true;
       }
 
-      if (Array.isArray(doc.bookableItems)) {
-        doc.bookableItems.forEach((item) => {
+      if (Array.isArray(obj.bookableItems)) {
+        obj.bookableItems.forEach((item) => {
           if (item.tenant) {
             item.tenantId = item.tenant;
             delete item.tenant;
@@ -31,18 +32,18 @@ module.exports = {
         });
       }
 
-      if (!doc.priceEur) {
-        doc.priceEur = 0;
+      if (!obj.priceEur) {
+        obj.priceEur = 0;
         modified = true;
       }
 
-      if (!doc.vatIncludedEur) {
-        doc.vatIncludedEur = 0;
+      if (!obj.vatIncludedEur) {
+        obj.vatIncludedEur = 0;
         modified = true;
       }
 
       if (modified) {
-        await doc.save();
+        await Booking.replaceOne({ _id: doc._id }, obj);
       }
     }
   },

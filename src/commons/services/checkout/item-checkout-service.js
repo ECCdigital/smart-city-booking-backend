@@ -2,8 +2,7 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
-const UserManager = require("../../data-managers/user-manager");
-const { RolePermission } = require("../../entities/role");
+const TenantManger = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
@@ -18,38 +17,15 @@ class CheckoutPermissions {
     return bookable.ownerUserId === userId && bookable.tenant === tenant;
   }
 
-  static async _allowCheckout(bookable, userId, tenant) {
-    if (
-      bookable.tenant === tenant &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_BOOKABLES,
-        "readAny",
-      ))
-    )
-      return true;
-
-    if (
-      bookable.tenant === tenant &&
-      CheckoutPermissions._isOwner(bookable, userId, tenant) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_BOOKABLES,
-        "readOwn",
-      ))
-    )
-      return true;
-
+  static async _allowCheckout(bookable, userId, tenantId) {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await UserManager.getUsersWithRoles(
-          tenant,
+        await TenantManger.getTenantUsersByRoles(
+          tenantId,
           bookable.permittedRoles || [],
         )
-      ).map((u) => u.id),
+      ).map((u) => u.userId),
     ];
 
     if (permittedUsers.length > 0 && !permittedUsers.includes(userId)) {
@@ -208,11 +184,11 @@ class ItemCheckoutService {
     const freeBookingUsers = [
       ...(this.originBookable.freeBookingUsers || []),
       ...(
-        await UserManager.getUsersWithRoles(
+        await TenantManger.getTenantUsersByRoles(
           this.tenantId,
           this.originBookable.freeBookingRoles || [],
         )
-      ).map((u) => u.id),
+      ).map((u) => u.userId),
     ];
 
     if (

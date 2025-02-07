@@ -59,6 +59,8 @@ class Bookable {
     isTimePeriodRelated,
     timePeriods,
     isOpeningHoursRelated,
+    permittedUsers,
+    permittedRoles,
     openingHours,
     eventId,
     attachments,
@@ -88,6 +90,8 @@ class Bookable {
     this.isTimePeriodRelated = isTimePeriodRelated || false;
     this.timePeriods = timePeriods || [];
     this.isOpeningHoursRelated = isOpeningHoursRelated || false;
+    this.permittedUsers = permittedUsers || [];
+    this.permittedRoles = permittedRoles || [];
     this.openingHours = openingHours || [];
     this.eventId = eventId;
     this.attachments = attachments || [];
@@ -194,6 +198,8 @@ class Bookable {
       isTimePeriodRelated: Boolean,
       timePeriods: [Object],
       isOpeningHoursRelated: Boolean,
+      permittedUsers: [String],
+      permittedRoles: [String],
       openingHours: [Object],
       eventId: String,
       attachments: [Object],

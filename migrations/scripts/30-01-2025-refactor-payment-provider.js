@@ -4,15 +4,10 @@ module.exports = {
   up: async function (mongoose) {
     const Booking = mongoose.model("Booking");
 
-    let count = 0;
-
-
-    const cursor1 = Booking.find({
+    const bookings = await Booking.find({
       paymentMethod: { $in: ["giroCockpit", "invoice"] },
     });
-    while (await cursor1.hasNext()) {
-      count++;
-      const booking = await cursor1.next();
+    for (const booking of bookings) {
       await Booking.updateOne(
         { _id: booking._id },
         {
@@ -20,28 +15,25 @@ module.exports = {
         },
       );
     }
-    return count;
   },
 
   down: async function (mongoose) {
     const Booking = mongoose.model("Booking");
 
-    let count = 0;
-
-
-    const cursor1 = Booking.find({
+    const bookings = await Booking.find({
       paymentProvider: { $in: ["giroCockpit", "invoice"] },
     });
-    while (await cursor1.hasNext()) {
-      count++;
-      const booking = await cursor1.next();
+
+    for (const booking of bookings) {
       await Booking.updateOne(
         { _id: booking._id },
         {
-          $set: { paymentMethod: booking.paymentProvider, paymentProvider: null },
+          $set: {
+            paymentMethod: booking.paymentProvider,
+            paymentProvider: null,
+          },
         },
       );
     }
-    return count;
   },
 };

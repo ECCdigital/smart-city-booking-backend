@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
+const { Double } = require("mongodb");
 
 const BOOKING_HOOK_TYPES = Object.freeze({
   REJECT: "REJECT",
@@ -167,9 +168,9 @@ class Booking {
       phone: String,
       priceEur: Number,
       street: String,
-      timeBegin: Date,
-      timeCreated: Date,
-      timeEnd: Date,
+      timeBegin: Double,
+      timeCreated: Double,
+      timeEnd: Double,
       vatIncludedEur: Number,
       zipCode: String,
       couponUsed: Object,

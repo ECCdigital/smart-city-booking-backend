@@ -140,15 +140,6 @@ class UserManager {
     }
   }
 
-  static async getUsersWithRoles(tenant, roles) {
-    try {
-      //TODO: Mapping
-      return await UserModel.find({ tenant: tenant, roles: { $in: roles } });
-    } catch (err) {
-      throw err;
-    }
-  }
-
   static async getUserPermissions(userId) {
     const permissions = [];
     const tenants = await TenantManager.getTenants();

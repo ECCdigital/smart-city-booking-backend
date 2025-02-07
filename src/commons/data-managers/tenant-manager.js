@@ -143,6 +143,24 @@ class TenantManager {
     const count = await TenantModel.countDocuments({});
     return !(maxTenants && count >= maxTenants);
   }
+
+  static async getTenantUsers(tenantId) {
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    if(!rawTenant) {
+      return null;
+    }
+    const tenant = new Tenant(rawTenant);
+    return tenant.users;
+  }
+
+  static async getTenantUsersByRoles(tenantId, roles) {
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    if(!rawTenant) {
+      return [];
+    }
+    const tenant = new Tenant(rawTenant);
+    return tenant.users.filter(user => user.roles.some(role => roles.includes(role)));
+  }
 }
 
 module.exports = TenantManager;
