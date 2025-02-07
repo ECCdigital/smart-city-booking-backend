@@ -100,7 +100,6 @@ class MailerService {
           tenant.noreplyPort &&
           tenant.noreplyUser &&
           tenant.noreplyPassword &&
-          tenant.noreplyStarttls &&
           tenant.noreplyDisplayName &&
           tenant.noreplyMail
         ) {
