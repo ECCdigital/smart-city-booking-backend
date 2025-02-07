@@ -1,8 +1,12 @@
 const {
   ItemCheckoutService,
+  CheckoutPermissions,
 } = require("../../../commons/services/checkout/item-checkout-service");
 const bunyan = require("bunyan");
 const BookingService = require("../../../commons/services/checkout/booking-service");
+const {
+  BookableManager,
+} = require("../../../commons/data-managers/bookable-manager");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -62,6 +66,43 @@ class CheckoutController {
     } catch (err) {
       logger.error(err);
       response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);
+    }
+  }
+
+  static async checkoutPermissions(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
+
+      const bookable = await BookableManager.getBookable(id, tenantId);
+
+      if (!bookable) {
+        return response.status(404).send("Bookable not found");
+      }
+
+      if (
+        bookable.permittedUsers.length > 0 ||
+        bookable.permittedRoles.length > 0
+      ) {
+        if (!user) {
+          return response.status(401).send("Unauthorized");
+        }
+        if (
+          !(await CheckoutPermissions._allowCheckout(
+            bookable,
+            user.id,
+            tenantId,
+          ))
+        ) {
+          return response.status(403).send("Forbidden");
+        }
+      }
+
+      return response.status(200).send("OK");
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Internal server error");
     }
   }
 }

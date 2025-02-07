@@ -78,6 +78,10 @@ passport.use(
     async (request, id, password, done) => {
       const user = await UserManager.getUser(id, true);
 
+      if(user === null) {
+        return done(null, false);
+      }
+
       if (
         user !== undefined &&
         user.isVerified &&

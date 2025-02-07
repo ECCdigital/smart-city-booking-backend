@@ -149,6 +149,7 @@ router.get(
 // ========
 router.post("/checkout", CheckoutController.checkout);
 router.post("/checkout/validateItem", CheckoutController.validateItem);
+router.get("/checkout/permissions/:id", CheckoutController.checkoutPermissions);
 
 // PAYMENTS
 // ========

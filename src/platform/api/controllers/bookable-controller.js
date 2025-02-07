@@ -179,24 +179,6 @@ class BookableController {
         return response.status(404).send(`Bookable with id ${id} not found`);
       }
 
-      const hasPermittedUsers =
-        bookable.permittedUsers && bookable.permittedUsers.length > 0;
-      if (hasPermittedUsers && !user?.id) {
-        logger.warn(
-          `${tenant} -- Authentication required to access bookable ${id}`,
-        );
-        return response.status(401).send("Authentication required");
-      }
-
-      const hasPermittedRoles =
-        bookable.permittedRoles && bookable.permittedRoles.length > 0;
-      if (hasPermittedRoles && !user?.id) {
-        logger.warn(
-          `${tenant} -- Authentication required to access bookable ${id}`,
-        );
-        return response.status(401).send("Authentication required");
-      }
-
       const isAllowed = await BookablePermissions._allowRead(
         bookable,
         user?.id,
