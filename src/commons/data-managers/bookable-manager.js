@@ -147,7 +147,7 @@ async function getAllParents(id, tenantId, parentBookables, depth) {
     for (const rb of rawBookables) {
       parentBookables.push(new Bookable(rb));
       parentBookables = parentBookables.concat(
-        await getAllParents(rb.id, rb.tenant, parentBookables, depth + 1),
+        await getAllParents(rb.id, rb.tenantId, parentBookables, depth + 1),
       );
     }
 

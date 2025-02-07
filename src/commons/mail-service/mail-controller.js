@@ -52,7 +52,7 @@ class MailController {
 
     for (const bookable of bookables) {
       bookable._populated = {
-        event: await EventManager.getEvent(bookable.eventId, bookable.tenant),
+        event: await EventManager.getEvent(bookable.eventId, bookable.tenantId),
       };
     }
 

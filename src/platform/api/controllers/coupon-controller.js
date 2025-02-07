@@ -39,7 +39,7 @@ class CouponPermissions {
       return true;
 
     if (
-      coupon.tenant === tenantId &&
+      coupon.tenantId === tenantId &&
       CouponPermissions._isOwner(coupon, userId, tenantId) &&
       (await UserManager.hasPermission(
         userId,

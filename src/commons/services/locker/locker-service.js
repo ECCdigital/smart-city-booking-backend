@@ -213,7 +213,7 @@ class LockerService {
         let locker;
         switch (unit.lockerSystem) {
           case LOCKER_TYPE.PAREVA:
-            locker = new ParevaLocker(booking.tenant, booking.id, unit.id);
+            locker = new ParevaLocker(booking.tenantId, booking.id, unit.id);
             break;
           default:
             throw new Error("Unsupported locker type");
@@ -229,7 +229,7 @@ class LockerService {
           return locker;
         });
         LockerService.freeReservedLocker(
-          booking.tenant,
+          booking.tenantId,
           unit.id,
           unit.lockerSystem,
           booking.timeBegin,

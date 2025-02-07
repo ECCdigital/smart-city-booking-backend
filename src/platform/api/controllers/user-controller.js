@@ -3,6 +3,7 @@ const { User } = require("../../../commons/entities/user");
 const { RolePermission } = require("../../../commons/entities/role");
 const bunyan = require("bunyan");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const InstanceManager = require("../../../commons/data-managers/instance-manager");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -14,9 +15,10 @@ class UserPermissions {
     return user.id === userId;
   }
 
-  static async _allowCreate(user, userId, tenantId) {
-    //TODO: Permissions for user creation is instance level
-    return false;
+  static async _allowCreate(userId) {
+    const instance = await InstanceManager.getInstance();
+
+    return !!(instance && instance.ownerUserIds.includes(userId));
   }
 
   static async _allowRead(user, userId, tenantId) {
@@ -24,11 +26,11 @@ class UserPermissions {
     return true;
   }
 
-  static async _allowUpdate(user, userId, tenantId) {
+  static async _allowUpdate(user, userId) {
     return this._isSelf(user, userId);
   }
 
-  static async _allowDelete(user, userId, tenant) {
+  static async _allowDelete(user, userId) {
     return this._isSelf(user, userId);
   }
 }
@@ -68,8 +70,8 @@ class UserController {
       const id = request.params.id;
 
       if (id) {
-        if (await UserPermissions._allowRead(user, user.id, user.tenant)) {
-          const userObject = await UserManager.getUser(id, tenantId);
+        if (await UserPermissions._allowRead(user, user.id, tenantId)) {
+          const userObject = await UserManager.getUser(id);
           logger.info(
             `${tenantId} -- Sending user ${userObject.id} to user ${user?.id}`,
           );
@@ -96,10 +98,9 @@ class UserController {
    * @returns {Promise<void>}
    */
   static async storeUser(request, response) {
-    const tenant = request.params.tenant;
     const userObject = new User(request.body);
 
-    const isUpdate = !!(await UserManager.getUser(userObject.id, tenant))._id;
+    const isUpdate = !!(await UserManager.getUser(userObject.id)).id;
 
     if (isUpdate) {
       await UserController.updateUser(request, response);
@@ -115,15 +116,15 @@ class UserController {
 
       const userObject = new User(request.body);
 
-      if (await UserPermissions._allowCreate(user.id, tenantId)) {
+      if (await UserPermissions._allowCreate(user.id)) {
         await UserManager.storeUser(userObject);
         logger.info(
-          `${user?.tenant} -- created user ${userObject.id} by user ${user?.id}`,
+          `${tenantId} -- created user ${userObject.id} by user ${user?.id}`,
         );
         response.sendStatus(201);
       } else {
         logger.warn(
-          `${user?.tenant} -- User ${user?.id} not allowed to create user`,
+          `${tenantId} -- User ${user?.id} not allowed to create user`,
         );
         response.sendStatus(403);
       }
@@ -138,18 +139,17 @@ class UserController {
       const user = request.user;
 
       const userObject = new User(request.body);
-
       if (
-        await UserPermissions._allowUpdate(userObject, user.id, user.tenant)
+        await UserPermissions._allowUpdate(userObject, user.id)
       ) {
         await UserManager.storeUser(userObject);
         logger.info(
-          `${user.tenant} -- updated user ${userObject.id} by user ${user?.id}`,
+          `updated user ${userObject.id} by user ${user?.id}`,
         );
         response.sendStatus(200);
       } else {
         logger.warn(
-          `${user?.tenant} -- User ${user?.id} not allowed to update user`,
+          `User ${user?.id} not allowed to update user`,
         );
         response.sendStatus(403);
       }
@@ -161,28 +161,27 @@ class UserController {
 
   static async removeUser(request, response) {
     try {
-      const tenant = request.params.tenant;
+      const tenantId = request.params.tenant;
       const user = request.user;
 
       const id = request.params.id;
       if (id) {
-        const userObject = await UserManager.getUser(id, tenant);
-
+        const userObject = await UserManager.getUser(id);
         if (
-          await UserPermissions._allowDelete(userObject, user.id, user.tenant)
+          await UserPermissions._allowDelete(userObject, user.id)
         ) {
-          await UserManager.deleteUser(id, tenant);
-          logger.info(`${tenant} -- removed user ${id} by user ${user?.id}`);
+          await UserManager.deleteUser(id);
+          logger.info(`${tenantId} -- removed user ${id} by user ${user?.id}`);
           response.sendStatus(200);
         } else {
           logger.warn(
-            `${tenant} -- User ${user?.id} not allowed to remove user`,
+            `${tenantId} -- User ${user?.id} not allowed to remove user`,
           );
           response.sendStatus(403);
         }
       } else {
         logger.warn(
-          `${tenant} -- Could not remove user by user ${user?.id}. Missing required parameters.`,
+          `${tenantId} -- Could not remove user by user ${user?.id}. Missing required parameters.`,
         );
         response.sendStatus(400);
       }
@@ -195,10 +194,8 @@ class UserController {
   // Allows only to change the display name
   static updateMe(request, response) {
     const user = new User(request.user);
-    // get user from db
     UserManager.getUser(user.id)
       .then((userFromDb) => {
-        //check if user exists
         if (userFromDb) {
           if (user.id === userFromDb.id) {
             if (request.body.firstName && request.body.lastName) {
@@ -220,8 +217,7 @@ class UserController {
                   request.session.passport.user.city = userFromDb.city;
                   request.session.save();
                   UserManager.getUserPermissions(
-                    userFromDb.id,
-                    userFromDb.tenant,
+                    userFromDb.id
                   )
                     .then((permissions) => {
                       userFromDb.permissions = permissions;
@@ -258,10 +254,14 @@ class UserController {
         ? request.query.roles.split(",")
         : [];
 
-      const userObjects = await UserManager.getUsers(tenant);
+      const userObjects = await UserManager.getUsers();
+      const tenantObject = await TenantManager.getTenant(tenant);
+
       const filteredUserObjects = userObjects.filter((userObject) => {
         if (filterRoles) {
-          return filterRoles.some((role) => userObject.roles.includes(role));
+          return tenantObject.users.some((tenantUser) => {
+            return tenantUser.userId === userObject.id && tenantUser.roles.some((role) => filterRoles.includes(role));
+          });
         } else {
           return true;
         }

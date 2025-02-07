@@ -64,7 +64,7 @@ class PaymentController {
       await paymentService.paymentNotification(request.query);
       try {
         const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
+        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
       }
@@ -96,7 +96,7 @@ class PaymentController {
       await paymentService.paymentNotification(request.body);
       try {
         const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
+        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
       }

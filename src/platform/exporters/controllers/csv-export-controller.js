@@ -25,7 +25,7 @@ class CsvExportController {
 
   static async _hasPermission(event, userId, tenant) {
     if (
-      event.tenant === tenant &&
+      event.tenantId === tenant &&
       (await UserManager.hasPermission(
         userId,
         tenant,
@@ -36,9 +36,8 @@ class CsvExportController {
       return true;
 
     if (
-      event.tenant === tenant &&
-      event.ownerUserId === userId &&
-      event.tenant === tenant &&
+      event.tenantId === tenant &&
+      event.ownerUserId === userId
       (await UserManager.hasPermission(
         userId,
         tenant,

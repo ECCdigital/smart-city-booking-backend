@@ -13,8 +13,8 @@ const logger = bunyan.createLogger({
 });
 
 class CheckoutPermissions {
-  static _isOwner(bookable, userId, tenant) {
-    return bookable.ownerUserId === userId && bookable.tenant === tenant;
+  static _isOwner(bookable, userId, tenantId) {
+    return bookable.ownerUserId === userId && bookable.tenantId === tenantId;
   }
 
   static async _allowCheckout(bookable, userId, tenantId) {
@@ -44,8 +44,8 @@ class ItemCheckoutService {
    *
    * @param {Object} user The user object
    * @param {string} tenantId The tenant ID
-   * @param {Date} timeBegin The timestamp of the beginning of the booking
-   * @param {Date} timeEnd The timestamp of the end of the booking
+   * @param {string} timeBegin The timestamp of the beginning of the booking
+   * @param {string} timeEnd The timestamp of the end of the booking
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string} couponCode The coupon code
@@ -97,14 +97,14 @@ class ItemCheckoutService {
 
       concurrentBookings = await BookingManager.getConcurrentBookings(
         bookable.id,
-        bookable.tenant,
+        bookable.tenantId,
         this.timeBegin,
         this.timeEnd,
       );
     } else {
       concurrentBookings = await BookingManager.getRelatedBookings(
         bookable.id,
-        bookable.tenant,
+        bookable.tenantId,
       );
     }
 
@@ -118,7 +118,7 @@ class ItemCheckoutService {
   async calculateAmountBookedTicketsByParent(parentBookable) {
     const childBookables = await BookableManager.getRelatedBookables(
       parentBookable.id,
-      parentBookable.tenant,
+      parentBookable.tenantId,
     );
 
     let amountBooked = 0;
@@ -265,7 +265,7 @@ class ItemCheckoutService {
   async checkParentAvailability() {
     const parentBookables = await BookableManager.getParentBookables(
       this.originBookable.id,
-      this.originBookable.tenant,
+      this.originBookable.tenantId,
     );
 
     for (const parentBookable of parentBookables) {
@@ -298,7 +298,7 @@ class ItemCheckoutService {
   async checkChildBookings() {
     const childBookables = await BookableManager.getRelatedBookables(
       this.originBookable.id,
-      this.originBookable.tenant,
+      this.originBookable.tenantId,
     );
 
     for (const childBookable of childBookables) {
@@ -321,11 +321,11 @@ class ItemCheckoutService {
     ) {
       const event = await EventManager.getEvent(
         this.originBookable.eventId,
-        this.originBookable.tenant,
+        this.originBookable.tenantId,
       );
 
       const eventBookings = await BookingManager.getEventBookings(
-        this.originBookable.tenant,
+        this.originBookable.tenantId,
         this.originBookable.eventId,
       );
 
@@ -335,7 +335,7 @@ class ItemCheckoutService {
         .filter(
           (bi) =>
             bi._bookableUsed.eventId === this.originBookable.eventId &&
-            bi._bookableUsed.tenant === this.originBookable.tenant,
+            bi._bookableUsed.tenantId === this.originBookable.tenantId,
         )
         .reduce((acc, bi) => acc + bi.amount, 0);
 
@@ -391,7 +391,7 @@ class ItemCheckoutService {
 
     const parentBookables = await BookableManager.getParentBookables(
       this.originBookable.id,
-      this.originBookable.tenant,
+      this.originBookable.tenantId,
     );
 
     for (const b of [this.originBookable, ...parentBookables]) {

@@ -86,7 +86,6 @@ class User {
       address: this.address,
       zipCode: this.zipCode,
       city: this.city,
-      tenant: this.tenant,
       created: this.created,
       isVerified: this.isVerified,
     };
