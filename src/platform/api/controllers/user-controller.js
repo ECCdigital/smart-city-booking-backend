@@ -3,7 +3,6 @@ const { User } = require("../../../commons/entities/user");
 const { RolePermission } = require("../../../commons/entities/role");
 const bunyan = require("bunyan");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const InstanceManager = require("../../../commons/data-managers/instance-manager");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -16,9 +15,7 @@ class UserPermissions {
   }
 
   static async _allowCreate(userId) {
-    const instance = await InstanceManager.getInstance();
-
-    return !!(instance && instance.ownerUserIds.includes(userId));
+    return false;
   }
 
   static async _allowRead(user, userId, tenantId) {
@@ -255,13 +252,10 @@ class UserController {
         : [];
 
       const userObjects = await UserManager.getUsers();
-      const tenantObject = await TenantManager.getTenant(tenant);
 
       const filteredUserObjects = userObjects.filter((userObject) => {
         if (filterRoles) {
-          return tenantObject.users.some((tenantUser) => {
-            return tenantUser.userId === userObject.id && tenantUser.roles.some((role) => filterRoles.includes(role));
-          });
+          return filterRoles.some((role) => userObject.roles.includes(role));
         } else {
           return true;
         }
