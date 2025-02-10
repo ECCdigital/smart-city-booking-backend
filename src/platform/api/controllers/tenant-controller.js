@@ -44,6 +44,7 @@ class TenantController {
   static async getTenants(request, response) {
     try {
       const { user } = request;
+      const publicTenants = request.query.publicTenants === "true";
 
       const permissions = await UserManager.getUserPermissions(user.id);
       const tenantIds = permissions.map((p) => p.tenantId);
@@ -51,9 +52,13 @@ class TenantController {
       const allowedTenants = [];
       for (const tenantId of tenantIds) {
         const tenant = await TenantManager.getTenant(tenantId);
-        allowedTenants.push(tenant);
+        if (publicTenants) {
+          tenant.removePrivateData();
+          allowedTenants.push(tenant);
+        } else if (await TenantPermissions._isOwner(tenant, user.id)) {
+          allowedTenants.push(tenant);
+        }
       }
-
       response.status(200).send(allowedTenants);
     } catch (error) {
       logger.error(error);
@@ -69,7 +74,7 @@ class TenantController {
       if (id) {
         const tenant = await TenantManager.getTenant(id);
 
-        if (user && (await TenantPermissions._allowRead(tenant, user.id))) {
+        if (user && (await TenantPermissions._isOwner(tenant, user.id))) {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );

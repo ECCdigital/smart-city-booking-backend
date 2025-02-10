@@ -30,18 +30,13 @@ const InstanceModel =
   mongoose.models.Instance || mongoose.model("Instance", InstanceSchema);
 
 class InstanceManager {
-  static async getInstance(publicInstance = true) {
+  static async getInstance() {
     const rawInstance = await InstanceModel.findOne();
     if (!rawInstance) {
       return null;
     }
-    if (publicInstance) {
-      const instance = new Instance(rawInstance);
-      instance.publicInstance();
-      return instance;
-    } else {
-      return new Instance(rawInstance);
-    }
+
+    return new Instance(rawInstance);
   }
 
   static async updateInstance(instance) {

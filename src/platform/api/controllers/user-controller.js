@@ -1,8 +1,7 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user");
-const { RolePermission } = require("../../../commons/entities/role");
 const bunyan = require("bunyan");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const InstanceManager = require("../../../commons/data-managers/instance-manager");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -10,25 +9,36 @@ const logger = bunyan.createLogger({
 });
 
 class UserPermissions {
-  static _isSelf(user, userId) {
-    return user.id === userId;
+  static _isSelf(affectedUser, userId) {
+    return affectedUser.id === userId;
   }
 
   static async _allowCreate(userId) {
     return false;
   }
 
-  static async _allowRead(user, userId, tenantId) {
-    // TODO: I am allowed to read users, if I am tenant owner - but only public?
-    return true;
+  static async _allowRead(user, userId) {
+    const instance = await InstanceManager.getInstance();
+    const permissions = await UserManager.getUserPermissions(userId);
+    if (instance.ownerUserIds.includes(userId) || permissions.some((p) => p.isOwner)) {
+      return true;
+    } else {
+      return this._isSelf(user, userId);
+    }
   }
 
-  static async _allowUpdate(user, userId) {
-    return this._isSelf(user, userId);
+  static async _allowUpdate(affectedUser, userId) {
+    const instance = await InstanceManager.getInstance();
+    return !!(
+      instance.ownerUserIds.includes(userId) || this._isSelf(affectedUser, userId)
+    );
   }
 
-  static async _allowDelete(user, userId) {
-    return this._isSelf(user, userId);
+  static async _allowDelete(affectedUser, userId) {
+    const instance = await InstanceManager.getInstance();
+    return !!(
+      instance.ownerUserIds.includes(userId) || this._isSelf(affectedUser, userId)
+    );
   }
 }
 
@@ -41,11 +51,11 @@ class UserController {
       const tenantId = request.params.tenant;
       const user = request.user;
 
-      const userObjects = await UserManager.getUsers(tenantId);
+      const userObjects = await UserManager.getUsers();
 
       const allowedUserObjects = [];
       for (const userObject of userObjects) {
-        if (await UserPermissions._allowRead(userObject, user.id, tenantId)) {
+        if (await UserPermissions._allowRead(userObject, user.id)) {
           allowedUserObjects.push(userObject);
         }
       }
@@ -136,18 +146,12 @@ class UserController {
       const user = request.user;
 
       const userObject = new User(request.body);
-      if (
-        await UserPermissions._allowUpdate(userObject, user.id)
-      ) {
+      if (await UserPermissions._allowUpdate(userObject, user.id)) {
         await UserManager.storeUser(userObject);
-        logger.info(
-          `updated user ${userObject.id} by user ${user?.id}`,
-        );
+        logger.info(`updated user ${userObject.id} by user ${user?.id}`);
         response.sendStatus(200);
       } else {
-        logger.warn(
-          `User ${user?.id} not allowed to update user`,
-        );
+        logger.warn(`User ${user?.id} not allowed to update user`);
         response.sendStatus(403);
       }
     } catch (error) {
@@ -164,9 +168,7 @@ class UserController {
       const id = request.params.id;
       if (id) {
         const userObject = await UserManager.getUser(id);
-        if (
-          await UserPermissions._allowDelete(userObject, user.id)
-        ) {
+        if (await UserPermissions._allowDelete(userObject, user.id)) {
           await UserManager.deleteUser(id);
           logger.info(`${tenantId} -- removed user ${id} by user ${user?.id}`);
           response.sendStatus(200);
@@ -213,9 +215,7 @@ class UserController {
                   request.session.passport.user.zipCode = userFromDb.zipCode;
                   request.session.passport.user.city = userFromDb.city;
                   request.session.save();
-                  UserManager.getUserPermissions(
-                    userFromDb.id
-                  )
+                  UserManager.getUserPermissions(userFromDb.id)
                     .then((permissions) => {
                       userFromDb.permissions = permissions;
                       response.status(200).send(userFromDb);

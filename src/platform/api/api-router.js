@@ -9,13 +9,9 @@ var router = express.Router({ mergeParams: true });
 // INSTANCES
 // =========
 
-// Public
-router.get("/instances/public", InstanceController.getPublicInstance);
-
 // Protected
 router.get(
   "/instances",
-  AuthenticationController.isSignedIn,
   InstanceController.getInstance,
 );
 router.put(

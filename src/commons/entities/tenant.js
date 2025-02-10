@@ -71,6 +71,32 @@ class Tenant {
     this.users = users || [];
   }
 
+  removePrivateData() {
+    delete this.genericMailTemplate;
+    delete this.noreplyMail;
+    delete this.noreplyDisplayName;
+    delete this.noreplyHost;
+    delete this.noreplyPort;
+    delete this.noreplyUser;
+    delete this.noreplyPassword;
+    delete this.noreplyStarttls;
+    delete this.noreplyUseGraphApi;
+    delete this.noreplyGraphTenantId;
+    delete this.noreplyGraphClientId;
+    delete this.noreplyGraphClientSecret;
+    delete this.receiptTemplate;
+    delete this.receiptNumberPrefix;
+    delete this.receiptCount;
+    delete this.invoiceTemplate;
+    delete this.invoiceNumberPrefix;
+    delete this.invoiceCount;
+    delete this.paymentPurposeSuffix;
+    delete this.applications;
+    delete this.maxBookingAdvanceInMonths;
+    delete this.ownerUserIds;
+    delete this.users;
+  }
+
   static schema() {
     return {
       id: { type: String, required: true, unique: true },

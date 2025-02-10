@@ -45,7 +45,7 @@ class Instance {
     this.ownerUserIds = ownerUserIds;
   }
 
-  publicInstance() {
+  removePrivateData() {
     delete this.mailTemplate;
     delete this.mailAddress;
     delete this.noreplyMail;

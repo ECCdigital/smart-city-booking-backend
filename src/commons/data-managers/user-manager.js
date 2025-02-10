@@ -2,12 +2,12 @@ const { User, HookTypes } = require("../entities/user");
 const mongoose = require("mongoose");
 const { RoleManager } = require("./role-manager");
 const TenantManager = require("./tenant-manager");
+const InstanceManager = require("./instance-manager");
 
 const { Schema } = mongoose;
 
 const UserSchema = new Schema(User.schema());
 const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
-
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
@@ -17,8 +17,8 @@ class UserManager {
     } else {
       const user = new User(rawUser);
       if (!withSensitive) {
-       user.removeSensitive();
-       return user;
+        user.removeSensitive();
+        return user;
       } else {
         return user;
       }
@@ -69,7 +69,9 @@ class UserManager {
 
   static async updateUser(user) {
     try {
-      const updatedUser = await UserModel.updateOne({ id: user.id }, user, {upsert: true});
+      const updatedUser = await UserModel.updateOne({ id: user.id }, user, {
+        upsert: true,
+      });
       return new User(updatedUser);
     } catch (err) {
       throw err;
@@ -143,76 +145,101 @@ class UserManager {
   static async getUserPermissions(userId) {
     const permissions = [];
     const tenants = await TenantManager.getTenants();
-
-    // TODO: Could be that a user gets a role without any permissions (all permissions = false). This tenant would still be part of the permission object.
+    const instance = await InstanceManager.getInstance(false);
 
     for (const tenant of tenants) {
-      // In the tenant, get the user reference that contains the roles.
       const tenantUserRef = tenant.users.find(
         (userRef) => userRef.userId === userId,
       );
+      if (!tenantUserRef) {
+        continue;
+      }
 
-      if (tenantUserRef) {
-        const roleIds = tenantUserRef.roles;
+      let workingPermission = permissions.find((p) => p.tenantId === tenant.id);
+      if (!workingPermission) {
+        workingPermission = {
+          tenantId: tenant.id,
+          isOwner: tenant.ownerUserIds.includes(userId),
+          adminInterfaces: [],
+          freeBookings: false,
+          manageRoles: {},
+          manageBookables: {},
+          manageBookings: {},
+          manageCoupons: {},
+        };
+        permissions.push(workingPermission);
+      }
 
-        for (const roleId of roleIds) {
-          const role = await RoleManager.getRole(roleId, tenant.id);
+      const roles = await Promise.all(
+        tenantUserRef.roles.map((roleId) =>
+          RoleManager.getRole(roleId, tenant.id),
+        ),
+      );
 
-          if (role) {
-            const workingPermission = permissions.find(
-              (p) => p.tenantId === tenant.id,
-            );
-
-            if (!workingPermission) {
-              permissions.push({
-                tenantId: tenant.id,
-                isOwner: tenant.ownerUserIds.includes(userId),
-                adminInterfaces: role.adminInterfaces,
-                freeBookings: role.freeBookings,
-                manageRoles: role.manageRoles,
-                manageBookables: role.manageBookables,
-                manageBookings: role.manageBookings,
-                manageCoupons: role.manageCoupons,
-              });
-            } else {
-              workingPermission.adminInterfaces = [
-                ...new Set([
-                  ...workingPermission.adminInterfaces,
-                  ...role.adminInterfaces,
-                ]),
-              ];
-
-              workingPermission.freeBookings ||= role.freeBookings;
-
-              const dimensions = [
-                "manageRoles",
-                "manageBookables",
-                "manageBookings",
-                "manageCoupons",
-              ];
-              const actions = [
-                "create",
-                "readAny",
-                "readOwn",
-                "updateAny",
-                "updateOwn",
-                "deleteAny",
-                "deleteOwn",
-              ];
-
-              for (const dimension of dimensions) {
-                for (const action of actions) {
-                  workingPermission[dimension][action] ||=
-                    role[dimension][action];
-                }
-              }
-            }
-          }
+      for (const role of roles) {
+        if (role) {
+          mergeRoleIntoPermission(workingPermission, role);
         }
+      }
+
+      if (workingPermission.isOwner) {
+        workingPermission.adminInterfaces = [
+          ...new Set([
+            ...workingPermission.adminInterfaces,
+            "tenants",
+            "users",
+          ]),
+        ];
+      }
+
+      if (instance.ownerUserIds.includes(userId)) {
+        workingPermission.adminInterfaces = [
+          ...new Set([
+            ...workingPermission.adminInterfaces,
+            "instance",
+          ]),
+        ];
       }
     }
 
     return permissions;
+  }
+}
+
+function mergeRoleIntoPermission(workingPermission, role) {
+  workingPermission.adminInterfaces = [
+    ...new Set([...workingPermission.adminInterfaces, ...role.adminInterfaces]),
+  ];
+
+  workingPermission.freeBookings ||= role.freeBookings;
+
+  const dimensions = [
+    "manageRoles",
+    "manageBookables",
+    "manageBookings",
+    "manageCoupons",
+  ];
+  const actions = [
+    "create",
+    "readAny",
+    "readOwn",
+    "updateAny",
+    "updateOwn",
+    "deleteAny",
+    "deleteOwn",
+  ];
+
+  for (const dimension of dimensions) {
+    if (!workingPermission[dimension]) {
+      workingPermission[dimension] = {};
+    }
+    if (!role[dimension]) {
+      continue;
+    }
+
+    for (const action of actions) {
+      workingPermission[dimension][action] ||= role[dimension][action];
+    }
   }
 }
 
