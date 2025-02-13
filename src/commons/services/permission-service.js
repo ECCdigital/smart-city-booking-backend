@@ -50,7 +50,11 @@ class PermissionService {
   }
 
   /**
-   * A service class for handling permission checks.
+   * Checks if the affected user is the same as the given user.
+   *
+   * @param {Object} affectedUser - The user object to check.
+   * @param {string} userId - The ID of the user to compare against.
+   * @returns {boolean} - Returns true if the affected user is the same as the given user, otherwise false.
    */
   static _isSelf(affectedUser, userId) {
     return affectedUser.id === userId;

@@ -49,7 +49,10 @@ class TenantController {
       if (id) {
         const tenant = await TenantManager.getTenant(id);
 
-        if (user && (await PermissionService._isTenantOwner(user.id, tenant.id))) {
+        if (
+          user &&
+          (await PermissionService._isTenantOwner(user.id, tenant.id))
+        ) {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );
@@ -225,30 +228,35 @@ class TenantController {
     try {
       const tenantId = request.params.id;
       const body = request.body;
+      const user = request.user;
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      if (
-        tenant.users.some(
-          (userReference) => userReference.userId === body.userId,
-        )
-      ) {
-        tenant.users
-          .filter((userReference) => userReference.userId === body.userId)
-          .forEach(
-            (user) =>
-              (user.roles = [...new Set([...user.roles, ...body.roles])]),
-          );
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        if (
+          tenant.users.some(
+            (userReference) => userReference.userId === body.userId,
+          )
+        ) {
+          tenant.users
+            .filter((userReference) => userReference.userId === body.userId)
+            .forEach(
+              (user) =>
+                (user.roles = [...new Set([...user.roles, ...body.roles])]),
+            );
+        } else {
+          tenant.users.push({
+            userId: body.userId,
+            roles: [...new Set(body.roles)],
+          });
+        }
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(201).send(updatedTenant);
       } else {
-        tenant.users.push({
-          userId: body.userId,
-          roles: [...new Set(body.roles)],
-        });
+        response.sendStatus(403);
       }
-
-      const updatedTenant = await TenantManager.storeTenant(tenant);
-
-      response.status(201).send(updatedTenant);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not add user to tenant");
@@ -259,18 +267,27 @@ class TenantController {
     try {
       const tenantId = request.params.id;
       const { userId } = request.body;
+      const user = request.user;
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      tenant.users = tenant.users.filter(
-        (userRef) => userRef.userId !== userId,
-      );
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        tenant.users = tenant.users.filter(
+          (userRef) => userRef.userId !== userId,
+        );
 
-      tenant.ownerUserIds = tenant.ownerUserIds.filter((u) => u !== userId);
+        tenant.ownerUserIds = tenant.ownerUserIds.filter((u) => u !== userId);
 
-      const updatedTenant = await TenantManager.storeTenant(tenant);
+        if (tenant.ownerUserIds.length === 0) {
+          throw new Error("Cannot remove last owner from tenant");
+        }
 
-      response.status(200).send(updatedTenant);
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove user from tenant");
@@ -281,15 +298,21 @@ class TenantController {
     try {
       const tenantId = request.params.id;
       const { userId, roleId } = request.body;
+      const user = request.user;
 
       const tenant = await TenantManager.getTenant(tenantId);
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        const userRef = tenant.users.find(
+          (userRef) => userRef.userId === userId,
+        );
+        userRef.roles = userRef.roles.filter((r) => r !== roleId);
 
-      const userRef = tenant.users.find((userRef) => userRef.userId === userId);
-      userRef.roles = userRef.roles.filter((r) => r !== roleId);
+        const updatedTenant = await TenantManager.storeTenant(tenant);
 
-      const updatedTenant = await TenantManager.storeTenant(tenant);
-
-      response.status(200).send(updatedTenant);
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove user from tenant");
@@ -300,16 +323,21 @@ class TenantController {
     try {
       const tenantId = request.params.id;
       const { userId } = request.body;
+      const user = request.user;
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      if (!tenant.ownerUserIds.includes(userId)) {
-        tenant.ownerUserIds.push(userId);
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        if (!tenant.ownerUserIds.includes(userId)) {
+          tenant.ownerUserIds.push(userId);
+        }
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
       }
-
-      const updatedTenant = await TenantManager.storeTenant(tenant);
-
-      response.status(200).send(updatedTenant);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not add owner to tenant");
@@ -320,14 +348,25 @@ class TenantController {
     try {
       const tenantId = request.params.id;
       const { userId } = request.body;
+      const user = request.user;
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      tenant.ownerUserIds = tenant.ownerUserIds.filter((uid) => uid !== userId);
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        tenant.ownerUserIds = tenant.ownerUserIds.filter(
+          (uid) => uid !== userId,
+        );
 
-      const updatedTenant = await TenantManager.storeTenant(tenant);
+        if (tenant.ownerUserIds.length === 0) {
+          throw new Error("Cannot remove last owner from tenant");
+        }
 
-      response.status(200).send(updatedTenant);
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove owner from tenant");
