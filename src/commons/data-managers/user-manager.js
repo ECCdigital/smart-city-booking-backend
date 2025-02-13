@@ -152,12 +152,12 @@ class UserManager {
         (userRef) => userRef.userId === userId,
       );
       if (!tenantUserRef) {
-        if(tenant.ownerUserIds.includes(userId)) {
+        if (tenant.ownerUserIds.includes(userId)) {
           tenantUserRef = {
             userId: userId,
             roles: [],
-          }
-        }else {
+          };
+        } else {
           continue;
         }
       }
@@ -195,16 +195,21 @@ class UserManager {
             ...workingPermission.adminInterfaces,
             "tenants",
             "users",
+            "locations",
+            "roles",
+            "bookings",
+            "coupons",
+            "rooms",
+            "resources",
+            "tickets",
+            "events",
           ]),
         ];
       }
 
       if (instance.ownerUserIds.includes(userId)) {
         workingPermission.adminInterfaces = [
-          ...new Set([
-            ...workingPermission.adminInterfaces,
-            "instance",
-          ]),
+          ...new Set([...workingPermission.adminInterfaces, "instance"]),
         ];
       }
     }

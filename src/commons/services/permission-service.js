@@ -13,7 +13,6 @@ const actions = {
  * A service class for handling permission checks.
  */
 class PermissionService {
-
   /**
    * Checks if the user is the owner of the instance.
    *
@@ -61,6 +60,11 @@ class PermissionService {
   }
 
   static async _allowAction(object, userId, tenantId, resource, actionType) {
+    const anyAction =
+      actionType === actions.CREATE ? "create" : `${actionType}Any`;
+    const ownAction =
+      actionType === actions.CREATE ? "create" : `${actionType}Own`;
+
     if (await PermissionService._isTenantOwner(userId, tenantId)) {
       return true;
     }
@@ -71,8 +75,9 @@ class PermissionService {
       userId,
       tenantId,
       resource,
-      `${actionType}Any`,
+      anyAction,
     );
+
     if (hasAny) {
       return true;
     }
@@ -81,7 +86,7 @@ class PermissionService {
         userId,
         tenantId,
         resource,
-        `${actionType}Own`,
+        ownAction,
       );
     }
     return false;
