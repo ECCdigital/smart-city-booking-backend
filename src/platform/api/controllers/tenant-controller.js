@@ -1,41 +1,16 @@
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const Tenant = require("../../../commons/entities/tenant");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const PermissionService = require("../../../commons/services/permission-service");
 const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
+const { v4: uuidv4 } = require("uuid");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
   level: process.env.LOG_LEVEL,
 });
-
-class TenantPermissions {
-  static _isOwner(affectedTenant, userId) {
-    return affectedTenant.ownerUserIds.includes(userId);
-  }
-
-  static async _allowCreate(affectedTenant, userId) {
-    return true;
-  }
-
-  static async _allowRead(affectedTenant, userId) {
-    // A user is allowed to read a tenant if the marked as owner or has any kind of permissions in the tenant
-    const permissions = await UserManager.getUserPermissions(userId);
-    return (
-      TenantPermissions._isOwner(affectedTenant, userId) ||
-      permissions.some((p) => p.tenantId === affectedTenant.id)
-    );
-  }
-
-  static async _allowUpdate(affectedTenant, userId) {
-    return TenantPermissions._isOwner();
-  }
-
-  static async _allowDelete(affectedTenant, userId) {
-    return TenantPermissions._isOwner(affectedTenant, userId);
-  }
-}
 
 /**
  * Web Controller for Bookables.
@@ -55,7 +30,7 @@ class TenantController {
         if (publicTenants) {
           tenant.removePrivateData();
           allowedTenants.push(tenant);
-        } else if (await TenantPermissions._isOwner(tenant, user.id)) {
+        } else if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
           allowedTenants.push(tenant);
         }
       }
@@ -74,7 +49,7 @@ class TenantController {
       if (id) {
         const tenant = await TenantManager.getTenant(id);
 
-        if (user && (await TenantPermissions._isOwner(tenant, user.id))) {
+        if (user && (await PermissionService._isTenantOwner(user.id, tenant.id))) {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );
@@ -96,11 +71,11 @@ class TenantController {
 
   static async storeTenant(request, response) {
     const tenant = new Tenant(request.body);
-    let isUpdate = false;
+    let isUpdate;
 
     try {
       const existingTenant = await TenantManager.getTenant(tenant.id);
-      isUpdate = existingTenant && existingTenant._id;
+      isUpdate = !!(existingTenant && existingTenant.id);
     } catch (error) {
       logger.error(error);
       isUpdate = false;
@@ -117,6 +92,7 @@ class TenantController {
     try {
       const user = request.user;
       const tenant = new Tenant(request.body);
+      tenant.id = uuidv4();
 
       tenant.ownerUserId = user.id;
 
@@ -124,7 +100,8 @@ class TenantController {
         throw new Error(`Maximum number of tenants reached.`);
       }
 
-      if (await TenantPermissions._allowCreate(tenant, user.id)) {
+      //TODO: Check if user is allowed to create tenant depending on Instance settings
+      if (true) {
         if (!tenant.ownerUserIds.includes(user.id)) {
           tenant.ownerUserIds.push(user.id);
         }
@@ -165,7 +142,7 @@ class TenantController {
     try {
       const user = request.user;
       const tenant = new Tenant(request.body);
-      if (await TenantPermissions._allowUpdate(tenant, user.id)) {
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
         await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
         response.sendStatus(200);
@@ -187,7 +164,7 @@ class TenantController {
       const tenant = await TenantManager.getTenant(id);
 
       if (id) {
-        if (await TenantPermissions._allowDelete(tenant, user.id)) {
+        if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
           await TenantManager.removeTenant(id);
           logger.info(`removed tenant ${id} by user ${user?.id}`);
           response.sendStatus(200);

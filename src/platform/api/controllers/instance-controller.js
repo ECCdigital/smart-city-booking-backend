@@ -1,26 +1,5 @@
 const InstanceManger = require("../../../commons/data-managers/instance-manager");
-
-class InstancePermissions {
-  static _isOwner(affectedInstance, userId) {
-    return affectedInstance.ownerUserIds.includes(userId);
-  }
-
-  static async _allowCreate(affectedInstance, userId) {
-    return false;
-  }
-
-  static async _allowRead(affectedInstance, userId) {
-    return InstancePermissions._isOwner(affectedInstance, userId);
-  }
-
-  static async _allowUpdate(affectedInstance, userId) {
-    return InstancePermissions._isOwner(affectedInstance, userId);
-  }
-
-  static async _allowDelete(affectedInstance, userId) {
-    return InstancePermissions._isOwner(affectedInstance, userId);
-  }
-}
+const PermissionService = require("../../../commons/services/permission-service");
 
 class InstanceController {
   static async getInstance(request, response) {
@@ -34,7 +13,7 @@ class InstanceController {
         return response.status(200).send(instance);
       }
 
-      const hasPermission = await InstancePermissions._allowRead(instance, user.id);
+      const hasPermission = await PermissionService._isInstanceOwner(user.id);
       if (!hasPermission) {
         return response.status(403).send({ message: "Permission denied" });
       }
@@ -50,7 +29,7 @@ class InstanceController {
     try {
       const { user, body } = request;
       const instance = await InstanceManger.getInstance();
-      const hasPermission = await InstancePermissions._allowUpdate(instance, user.id);
+      const hasPermission = await PermissionService._isInstanceOwner(user.id);
 
       if (!hasPermission) {
         return response.status(403).send({ message: "Permission denied" });

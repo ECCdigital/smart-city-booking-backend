@@ -1,7 +1,7 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
-const InstanceManager = require("../../../commons/data-managers/instance-manager");
+const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -9,35 +9,28 @@ const logger = bunyan.createLogger({
 });
 
 class UserPermissions {
-  static _isSelf(affectedUser, userId) {
-    return affectedUser.id === userId;
-  }
-
-  static async _allowCreate(userId) {
+  static async _allowCreate() {
     return false;
   }
 
   static async _allowRead(user, userId) {
-    const instance = await InstanceManager.getInstance();
     const permissions = await UserManager.getUserPermissions(userId);
-    if (instance.ownerUserIds.includes(userId) || permissions.some((p) => p.isOwner)) {
+    if (await PermissionService._isInstanceOwner(userId)  || permissions.some((p) => p.isOwner)) {
       return true;
     } else {
-      return this._isSelf(user, userId);
+      return PermissionService._isSelf(user, userId);
     }
   }
 
   static async _allowUpdate(affectedUser, userId) {
-    const instance = await InstanceManager.getInstance();
     return !!(
-      instance.ownerUserIds.includes(userId) || this._isSelf(affectedUser, userId)
+      await PermissionService._isInstanceOwner(userId)  || PermissionService._isSelf(affectedUser, userId)
     );
   }
 
   static async _allowDelete(affectedUser, userId) {
-    const instance = await InstanceManager.getInstance();
     return !!(
-      instance.ownerUserIds.includes(userId) || this._isSelf(affectedUser, userId)
+      await PermissionService._isInstanceOwner(userId) || PermissionService._isSelf(affectedUser, userId)
     );
   }
 }

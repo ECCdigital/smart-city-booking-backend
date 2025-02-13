@@ -23,7 +23,7 @@ class Role {
    * @param {Object} manageCoupons Permission to manage coupons
    * @param {Object} manageRoles Permission to manage roles
    * @param {string} tenantId The tenant id
-   * @param {string} ownerUserId The user id of the owner
+   * @param {string} assignedUserId The user id of the owner
    * @param {boolean} freeBookings Permission to book for free
    */
   constructor({
@@ -35,7 +35,7 @@ class Role {
     manageCoupons,
     manageRoles,
     tenantId,
-    ownerUserId,
+    assignedUserId,
     freeBookings,
   }) {
     this.id = id;
@@ -46,7 +46,7 @@ class Role {
     this.manageCoupons = manageCoupons;
     this.manageRoles = manageRoles;
     this.tenantId = tenantId;
-    this.ownerUserId = ownerUserId;
+    this.assignedUserId = assignedUserId;
     this.freeBookings = freeBookings;
   }
 
@@ -105,7 +105,7 @@ class Role {
         deleteOwn: { type: Boolean, default: false },
       },
       tenantId: { type: String, ref: "Tenant", required: true },
-      ownerUserId: { type: String, default: null },
+      assignedUserId: { type: String, default: null },
       freeBookings: { type: Boolean, default: false },
     };
   }

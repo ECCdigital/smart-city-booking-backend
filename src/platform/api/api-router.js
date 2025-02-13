@@ -10,10 +10,7 @@ var router = express.Router({ mergeParams: true });
 // =========
 
 // Protected
-router.get(
-  "/instances",
-  InstanceController.getInstance,
-);
+router.get("/instances", InstanceController.getInstance);
 router.put(
   "/instances",
   AuthenticationController.isSignedIn,
@@ -41,6 +38,11 @@ router.put(
   "/tenants",
   AuthenticationController.isSignedIn,
   TenantController.storeTenant,
+);
+router.post(
+  "/tenants",
+  AuthenticationController.isSignedIn,
+  TenantController.createTenant,
 );
 router.delete(
   "/tenants/:id",

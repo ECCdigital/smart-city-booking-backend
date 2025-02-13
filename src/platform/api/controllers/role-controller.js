@@ -1,105 +1,13 @@
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const { Role, RolePermission } = require("../../../commons/entities/role");
 const { v4: uuidv4 } = require("uuid");
-const UserManager = require("../../../commons/data-managers/user-manager");
+const PermissionService = require("../../../commons/services/permission-service");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
   name: "role-controller.js",
   level: process.env.LOG_LEVEL,
 });
-
-class RolePermissions {
-  static _isOwner(role, userId, tenantId) {
-    return role.ownerUserId === userId && role.ownerTenant === tenantId;
-  }
-
-  static async _allowCreate(role, userId, tenantId) {
-    return await UserManager.hasPermission(
-      userId,
-      tenantId,
-      RolePermission.MANAGE_ROLES,
-      "create",
-    );
-  }
-
-  static async _allowRead(role, userId, tenantId) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_ROLES,
-        "readAny",
-      )
-    )
-      return true;
-
-    if (
-      RolePermissions._isOwner(role, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_ROLES,
-        "readOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowUpdate(role, userId, tenantId) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_ROLES,
-        "updateAny",
-      )
-    ) {
-      return true;
-    }
-
-    if (
-      RolePermissions._isOwner(role, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_ROLES,
-        "updateOwn",
-      ))
-    ) {
-      return true;
-    }
-
-    return false;
-  }
-
-  static async _allowDelete(role, userId, tenantId) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_ROLES,
-        "deleteAny",
-      )
-    )
-      return true;
-
-    if (
-      RolePermissions._isOwner(role, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_ROLES,
-        "deleteOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-}
 
 /**
  * Web Controller for Roles.
@@ -113,7 +21,7 @@ class RoleController {
 
       let allowedRoles = [];
       for (let role of roles) {
-        if (await RolePermissions._allowRead(role, user.id, tenantId)) {
+        if (await PermissionService._allowRead(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
           allowedRoles.push(role);
         }
       }
@@ -135,7 +43,7 @@ class RoleController {
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
         if (role) {
-          if (await RolePermissions._allowRead(role, user.id, tenantId)) {
+          if (await PermissionService._allowRead(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
             logger.info(`Sending role ${role.id} to user ${user?.id}`);
             response.status(200).send(role);
           } else {
@@ -186,7 +94,7 @@ class RoleController {
       role.ownerUserId = user.id;
       role.tenantId = tenantId;
 
-      if (await RolePermissions._allowCreate(role, user.id, tenantId)) {
+      if (await PermissionService._allowCreate(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
         await RoleManager.storeRole(role, tenantId);
         logger.info(`Created role ${role.id} by user ${user?.id}`);
         response.sendStatus(201);
@@ -206,7 +114,7 @@ class RoleController {
       const tenantId = request.params.tenant;
       const role = new Role(request.body);
 
-      if (await RolePermissions._allowUpdate(role, user.id, tenantId)) {
+      if (await PermissionService._allowUpdate(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
         await RoleManager.storeRole(role, tenantId);
         logger.info(`Updated role ${role.id} by user ${user?.id}`);
         response.sendStatus(201);
@@ -228,7 +136,7 @@ class RoleController {
 
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
-        if (await RolePermissions._allowDelete(role, user.id, tenantId)) {
+        if (await PermissionService._allowDelete(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
           await RoleManager.removeRole(roleId, tenantId);
           logger.info(`Removed role ${role.id} by user ${user?.id}`);
           response.sendStatus(200);

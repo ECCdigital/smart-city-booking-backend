@@ -148,11 +148,18 @@ class UserManager {
     const instance = await InstanceManager.getInstance(false);
 
     for (const tenant of tenants) {
-      const tenantUserRef = tenant.users.find(
+      let tenantUserRef = tenant.users.find(
         (userRef) => userRef.userId === userId,
       );
       if (!tenantUserRef) {
-        continue;
+        if(tenant.ownerUserIds.includes(userId)) {
+          tenantUserRef = {
+            userId: userId,
+            roles: [],
+          }
+        }else {
+          continue;
+        }
       }
 
       let workingPermission = permissions.find((p) => p.tenantId === tenant.id);

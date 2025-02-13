@@ -1,112 +1,13 @@
 const { RolePermission } = require("../../../commons/entities/role");
 const CouponManager = require("../../../commons/data-managers/coupon-manager");
 const { Coupon } = require("../../../commons/entities/coupon");
-const UserManager = require("../../../commons/data-managers/user-manager");
+const PermissionService = require("../../../commons/services/permission-service");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
   name: "coupon-controller.js",
   level: process.env.LOG_LEVEL,
 });
-
-class CouponPermissions {
-  static _isOwner(coupon, userId, tenantId) {
-    return coupon.ownerUserId === userId && coupon.tenantId === tenantId;
-  }
-
-  static async _allowCreate(coupon, userId, tenantId) {
-    return (
-      coupon.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_COUPONS,
-        "create",
-      ))
-    );
-  }
-
-  static async _allowRead(coupon, userId, tenantId) {
-    if (
-      coupon.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_COUPONS,
-        "readAny",
-      ))
-    )
-      return true;
-
-    if (
-      coupon.tenantId === tenantId &&
-      CouponPermissions._isOwner(coupon, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_COUPONS,
-        "readOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowUpdate(coupon, userId, tenantId) {
-    if (
-      coupon.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_COUPONS,
-        "updateAny",
-      ))
-    )
-      return true;
-
-    if (
-      coupon.tenantId === tenantId &&
-      CouponPermissions._isOwner(coupon, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_COUPONS,
-        "updateOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowDelete(coupon, userId, tenantId) {
-    if (
-      coupon.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_COUPONS,
-        "deleteAny",
-      ))
-    )
-      return true;
-
-    if (
-      coupon.tenantId === tenantId &&
-      CouponPermissions._isOwner(coupon, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_COUPONS,
-        "deleteOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-}
 
 class CouponController {
   static async storeCoupon(request, response) {
@@ -137,7 +38,7 @@ class CouponController {
       const user = request.user;
       const coupon = new Coupon(request.body);
 
-      if (await CouponPermissions._allowCreate(coupon, user.id, tenant)) {
+      if (await PermissionService._allowCreate(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
         try {
           coupon.ownerUserId = user.id;
           const updatedCoupon = await CouponManager.storeCoupon(coupon);
@@ -167,7 +68,7 @@ class CouponController {
       const user = request.user;
       const coupon = new Coupon(request.body);
 
-      if (await CouponPermissions._allowUpdate(coupon, user.id, tenant)) {
+      if (await PermissionService._allowUpdate(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
         try {
           const updatedCoupon = await CouponManager.storeCoupon(coupon);
           logger.info(
@@ -199,7 +100,7 @@ class CouponController {
 
       let allowedCoupons = [];
       for (let coupon of coupons) {
-        if (await CouponPermissions._allowRead(coupon, user.id, tenant)) {
+        if (await PermissionService._allowRead(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
           allowedCoupons.push(coupon);
         }
       }
@@ -243,7 +144,7 @@ class CouponController {
 
       const coupon = await CouponManager.getCoupon(id, tenant);
 
-      if (await CouponPermissions._allowDelete(coupon, user.id, tenant)) {
+      if (await PermissionService._allowDelete(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
         const removedCoupon = await CouponManager.removeCoupon(id, tenant);
         logger.info(
           `${tenant} -- removed coupon ${coupon.id} by user ${user?.id}`,

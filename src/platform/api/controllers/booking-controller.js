@@ -11,109 +11,13 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
+const PermissionsService = require("../../../commons/services/permission-service");
+
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
   level: process.env.LOG_LEVEL,
 });
-
-class BookingPermissions {
-  static _isOwner(booking, userId, tenantId) {
-    return booking.assignedUserId === userId && booking.tenantId === tenantId;
-  }
-
-  static async _allowCreate(booking, userId, tenantId) {
-    return (
-      tenantId === booking.tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "create",
-      ))
-    );
-  }
-
-  static async _allowRead(booking, userId, tenantId) {
-    if (
-      tenantId === booking.tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "readAny",
-      ))
-    )
-      return true;
-
-    if (
-      tenantId === booking.tenantId &&
-      BookingPermissions._isOwner(booking, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "readOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowUpdate(booking, userId, tenantId) {
-    if (
-      tenantId === booking.tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "updateAny",
-      ))
-    )
-      return true;
-
-    if (
-      BookingPermissions._isOwner(booking, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "updateOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowDelete(booking, userId, tenantId) {
-    if (
-      tenantId === booking.tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "deleteAny",
-      ))
-    )
-      return true;
-
-    if (
-      tenantId === booking.tenantId &&
-      BookingPermissions._isOwner(booking, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "deleteOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-}
 
 /**
  * Web Controller for Bookings.
@@ -171,7 +75,7 @@ class BookingController {
         for (const booking of bookings) {
           if (
             user &&
-            (await BookingPermissions._allowRead(booking, user.id, tenant))
+            (await PermissionsService._allowRead(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS))
           ) {
             allowedBookings.push(booking);
           }
@@ -341,7 +245,7 @@ class BookingController {
             tenantId,
             RolePermission.MANAGE_BOOKINGS,
             "readAny",
-          )) || BookingPermissions._isOwner(booking, user.id, tenantId);
+          )) || PermissionsService._isOwner(booking, user.id, tenantId);
 
         if (hasPermission) {
           await BookingController._populate([booking]);
@@ -424,10 +328,11 @@ class BookingController {
     const booking = new Booking(request.body);
 
     if (
-      !(await BookingPermissions._allowCreate(
+      !(await PermissionsService._allowCreate(
         booking,
         user.id,
         booking.tenantId,
+        RolePermission.MANAGE_BOOKINGS
       ))
     ) {
       logger.warn(
@@ -454,7 +359,7 @@ class BookingController {
       const user = request.user;
       const booking = new Booking(request.body);
 
-      if (await BookingPermissions._allowUpdate(booking, user.id, tenant)) {
+      if (await PermissionsService._allowUpdate(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
         await BookingService.updateBooking(tenant, booking);
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
@@ -481,7 +386,7 @@ class BookingController {
       if (id) {
         const booking = await BookingManager.getBooking(id, tenant);
 
-        if (await BookingPermissions._allowDelete(booking, user.id, tenant)) {
+        if (await PermissionsService._allowDelete(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
           await BookingService.cancelBooking(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
           response.sendStatus(200);
@@ -514,7 +419,7 @@ class BookingController {
 
       const booking = await BookingManager.getBooking(id, tenant);
 
-      if (await BookingPermissions._allowUpdate(booking, user.id, tenant)) {
+      if (await PermissionsService._allowUpdate(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
         logger.info(
           `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
         );
@@ -546,7 +451,7 @@ class BookingController {
 
       const booking = await BookingManager.getBooking(id, tenantId);
 
-      if (await BookingPermissions._allowUpdate(booking, user.id, tenantId)) {
+      if (await PermissionsService._allowUpdate(booking, user.id, tenantId, RolePermission.MANAGE_BOOKINGS)) {
         logger.info(
           `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
         );
@@ -642,7 +547,7 @@ class BookingController {
       for (const booking of eventBookings) {
         if (
           user &&
-          (await BookingPermissions._allowRead(booking, user.id, tenantId))
+          (await PermissionsService._allowRead(booking, user.id, tenantId, RolePermission.MANAGE_BOOKINGS))
         ) {
           allowedBookings.push(booking);
         }
@@ -678,7 +583,7 @@ class BookingController {
           tenant,
           RolePermission.MANAGE_BOOKINGS,
           "readAny",
-        )) || BookingPermissions._isOwner(booking, user.id, tenant);
+        )) || PermissionsService._isOwner(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS);
 
       if (!hasPermission) {
         logger.warn(
@@ -725,7 +630,7 @@ class BookingController {
           tenant,
           RolePermission.MANAGE_BOOKINGS,
           "updateAny",
-        )) || BookingPermissions._isOwner(booking, user.id, tenant);
+        )) || PermissionsService._isOwner(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS);
 
       if (!hasPermission) {
         logger.warn(
@@ -740,34 +645,6 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response.status(500).send("Could not create receipt");
-    }
-  }
-
-  static async getPublicBookingStatus(request, response) {
-    const {
-      params: { tenant, id },
-      query: { lastname },
-    } = request;
-
-    if (!tenant || !id || !lastname) {
-      logger.warn(`${tenant} -- Missing required parameters.`);
-      return response.status(400).send("Missing required parameters.");
-    }
-
-    try {
-      const status = await BookingService.checkBookingStatus(
-        id,
-        lastname,
-        tenant,
-      );
-
-      logger.info(`${tenant} -- sending public booking status to user`);
-      return response.status(200).send(status);
-    } catch (err) {
-      logger.error(err);
-      return response
-        .status(err.code || 500)
-        .send("Could not get public booking status");
     }
   }
 
@@ -832,4 +709,4 @@ class BookingController {
   }
 }
 
-module.exports = { BookingController, BookingPermissions };
+module.exports = { BookingController };

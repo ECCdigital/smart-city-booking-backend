@@ -1,6 +1,12 @@
-const fs = require('fs');
-const path = require('path');
-const defaultMailTemplate = fs.readFileSync(path.join(__dirname, '../mail-service/templates/default-generic-mail-template.temp.html'), 'utf8');
+const fs = require("fs");
+const path = require("path");
+const defaultMailTemplate = fs.readFileSync(
+  path.join(
+    __dirname,
+    "../mail-service/templates/default-generic-mail-template.temp.html",
+  ),
+  "utf8",
+);
 
 class Instance {
   constructor({
@@ -22,7 +28,9 @@ class Instance {
     contactUrl,
     dataProtectionUrl,
     legalNoticeUrl,
-                ownerUserIds,
+    allowAllUsersToCreateTenant,
+    allowedUsersToCreateTenant,
+    ownerUserIds,
   }) {
     this.mailTemplate = mailTemplate;
     this.mailAddress = mailAddress;
@@ -42,6 +50,8 @@ class Instance {
     this.contactUrl = contactUrl;
     this.dataProtectionUrl = dataProtectionUrl;
     this.legalNoticeUrl = legalNoticeUrl;
+    this.allowAllUsersToCreateTenant = allowAllUsersToCreateTenant;
+    this.allowedUsersToCreateTenant = allowedUsersToCreateTenant;
     this.ownerUserIds = ownerUserIds;
   }
 
@@ -83,6 +93,8 @@ class Instance {
       contactUrl: { type: String, default: "" },
       dataProtectionUrl: { type: String, default: "" },
       legalNoticeUrl: { type: String, default: "" },
+      allowAllUsersToCreateTenant: { type: Boolean, default: false },
+      allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
       ownerUserIds: { type: Array, ref: "User", default: [] },
     };
   }

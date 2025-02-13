@@ -1,90 +1,14 @@
 const EventManager = require("../../../commons/data-managers/event-manager");
 const { Event } = require("../../../commons/entities/event");
 const { RolePermission } = require("../../../commons/entities/role");
-const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const EventService = require("../../../commons/services/event-service");
+const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
   level: process.env.LOG_LEVEL,
 });
-
-class EventPermissions {
-  static _isOwner(event, userId, tenantId) {
-    return event.ownerUserId === userId && event.tenantId === tenantId;
-  }
-
-  static async _allowCreate(event, userId, tenantId) {
-    return (
-      event.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "create",
-      ))
-    );
-  }
-
-  static async _allowRead(event, userId, tenantId) {
-    return true;
-  }
-
-  static async _allowUpdate(event, userId, tenantId) {
-    if (
-      event.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "updateAny",
-      ))
-    )
-      return true;
-
-    if (
-      event.tenantId === tenantId &&
-      EventPermissions._isOwner(event, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "updateOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowDelete(event, userId, tenantId) {
-    if (
-      event.tenantId === tenantId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "deleteAny",
-      ))
-    )
-      return true;
-
-    if (
-      event.tenantId === tenantId &&
-      EventPermissions._isOwner(event, userId, tenantId) &&
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKABLES,
-        "deleteOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-}
 
 /**
  * Web Controller for Events.
@@ -95,14 +19,13 @@ class EventController {
       const tenant = request.params.tenant;
       const user = request.user;
       const events = await EventManager.getEvents(tenant);
-      const allowedEvents = events.filter((event) =>
-        EventPermissions._allowRead(event, user.id, tenant),
-      ) || [];
+
+      //TODO: Add Public version of events
 
       logger.info(
-        `${tenant} -- sending ${allowedEvents.length} events to user ${user?.id}`,
+        `${tenant} -- sending ${events.length} events to user ${user?.id}`,
       );
-      response.status(200).send(allowedEvents);
+      response.status(200).send(events);
     } catch (err) {
       logger.warn(err);
       response.status(500).send("could not get events");
@@ -112,15 +35,13 @@ class EventController {
   static async getEvent(request, response) {
     try {
       const tenant = request.params.tenant;
-      const user = request.user;
       const id = request.params.id;
       if (id) {
         const event = await EventManager.getEvent(id, tenant);
-        const allowedEvent = EventPermissions._allowRead(event, user.id, tenant)
-        logger.info(
-          `${tenant} -- sending event ${allowedEvent.id} to user ${user?.id}`,
-        );
-        response.status(200).send(allowedEvent);
+
+        //TODO: Add Public version of event
+
+        response.status(200).send(event);
       } else {
         logger.warn(`Could not get event. Missing ID.`);
         response.sendStatus(400);
@@ -167,7 +88,7 @@ class EventController {
         throw new Error(`Maximum number of  public  events reached.`);
       }
 
-      if (await EventPermissions._allowCreate(event, user.id, tenant)) {
+      if (await PermissionService._allowCreate(event, user.id, tenant, RolePermission.MANAGE_BOOKABLES)) {
         await EventService.createEvent(tenant, event, user, withTicketsBoolean);
 
         logger.info(
@@ -198,7 +119,7 @@ class EventController {
         }
       }
 
-      if (await EventPermissions._allowUpdate(event, user.id, tenant)) {
+      if (await PermissionService._allowUpdate(event, user.id, tenant, RolePermission.MANAGE_BOOKABLES)) {
         await EventManager.storeEvent(event);
         logger.info(
           `${tenant} -- updated event ${event.id} by user ${user?.id}`,
@@ -223,7 +144,7 @@ class EventController {
       if (id) {
         const event = await EventManager.getEvent(id, tenant);
 
-        if (await EventPermissions._allowDelete(event, user.id, tenant)) {
+        if (await PermissionService._allowDelete(event, user.id, tenant, RolePermission.MANAGE_BOOKABLES)) {
           await EventManager.removeEvent(id, tenant);
           logger.info(`${tenant} -- removed event ${id} by user ${user?.id}`);
           response.sendStatus(200);
