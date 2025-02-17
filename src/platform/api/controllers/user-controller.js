@@ -15,7 +15,7 @@ class UserPermissions {
 
   static async _allowRead(user, userId) {
     const permissions = await UserManager.getUserPermissions(userId);
-    if (await PermissionService._isInstanceOwner(userId)  || permissions.some((p) => p.isOwner)) {
+    if (await PermissionService._isInstanceOwner(userId)  || permissions.tenants.some((p) => p.isOwner)) {
       return true;
     } else {
       return PermissionService._isSelf(user, userId);

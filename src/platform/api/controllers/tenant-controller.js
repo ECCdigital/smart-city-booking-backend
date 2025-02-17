@@ -22,7 +22,7 @@ class TenantController {
       const { user } = request;
       const publicTenants = request.query.publicTenants === "true";
       const permissions = await UserManager.getUserPermissions(user.id);
-      const tenantIds = permissions.map((p) => p.tenantId);
+      const tenantIds = permissions.tenants.map((p) => p.tenantId);
 
       const tenants = await TenantManager.getTenants();
 

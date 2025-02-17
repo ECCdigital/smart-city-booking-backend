@@ -127,7 +127,7 @@ class UserManager {
     try {
       const userPermissions = await UserManager.getUserPermissions(userId);
 
-      const userTenantPermissions = userPermissions.find(
+      const userTenantPermissions = userPermissions.tenants.find(
         (p) => p.tenantId === tenantId,
       );
 
@@ -143,7 +143,7 @@ class UserManager {
   }
 
   static async getUserPermissions(userId) {
-    const permissions = [];
+    const tenantPermissions = [];
     const tenants = await TenantManager.getTenants();
     const instance = await InstanceManager.getInstance(false);
 
@@ -162,7 +162,9 @@ class UserManager {
         }
       }
 
-      let workingPermission = permissions.find((p) => p.tenantId === tenant.id);
+      let workingPermission = tenantPermissions.find(
+        (p) => p.tenantId === tenant.id,
+      );
       if (!workingPermission) {
         workingPermission = {
           tenantId: tenant.id,
@@ -174,7 +176,7 @@ class UserManager {
           manageBookings: {},
           manageCoupons: {},
         };
-        permissions.push(workingPermission);
+        tenantPermissions.push(workingPermission);
       }
 
       const roles = await Promise.all(
@@ -212,6 +214,18 @@ class UserManager {
           ...new Set([...workingPermission.adminInterfaces, "instance"]),
         ];
       }
+    }
+
+    const permissions = {
+      tenants: tenantPermissions,
+      allowCreateTenant: false,
+    };
+    if (
+      instance.allowAllUsersToCreateTenant ||
+      instance.allowedUsersToCreateTenant.includes(userId) ||
+      instance.ownerUserIds.includes(userId)
+    ) {
+      permissions.allowCreateTenant = true;
     }
 
     return permissions;
