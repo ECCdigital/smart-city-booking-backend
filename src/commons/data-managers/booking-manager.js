@@ -202,17 +202,9 @@ class BookingManager {
     return rawBookings.map((rb) => new Booking(rb));
   }
 
-  static async getBookingsCustomFilter(tenant, filter) {
-    try {
-      const bookings = await dbm
-        .get()
-        .collection("bookings")
-        .find({ tenant: tenant, ...filter })
-        .toArray();
-      return bookings.map((b) => Object.assign(new Booking(b)));
-    } catch {
-      return null;
-    }
+  static async getBookingsCustomFilter(tenantId, filter) {
+    const rawBookings = await BookingModel.find({ tenantId: tenantId, ...filter });
+    return rawBookings.map((rb) => new Booking(rb));
   }
 }
 

@@ -537,16 +537,15 @@ class MailController {
     content += `</ul>`;
     content += `<p>Aufgrund dieser Änderung ist ggf. eine Prüfung oder weitere Bearbeitung erforderlich.</p>`;
 
-    await MailerService.send(
-      tenantId,
-      sendTo,
-      `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
-      tenant.genericMailTemplate,
-      {
+    await MailerService.send({
+      address: sendTo,
+      subject: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
+      mailTemplate: tenant.genericMailTemplate,
+      model: {
         title: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
         content: content,
       },
-    );
+    });
   }
 }
 

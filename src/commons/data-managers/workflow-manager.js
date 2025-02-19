@@ -1,133 +1,78 @@
-const dbm = require("../utilities/database-manager");
 const Workflow = require("../entities/Workflow");
 const BookingManager = require("./booking-manager");
 
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+const WorkflowSchema = new Schema(Workflow.schema());
+const WorkflowModel =
+  mongoose.models.Workflow || mongoose.model("Workflow", WorkflowSchema);
+
 class WorkflowManager {
   static async getWorkflow(tenantId) {
-    try {
-      const workflowModel = await dbm
-        .get()
-        .collection("workflows")
-        .findOne({ tenant: tenantId });
-      if (!workflowModel) return null;
-      return await createWorkflowFromModel(workflowModel);
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
+    const rawWorkflow = await WorkflowModel.findOne({ tenantId: tenantId });
+    if (!rawWorkflow) return null;
+    return await createWorkflowFromModel(rawWorkflow);
   }
 
   static async getWorkflowStates(tenantId) {
-    try {
-      const workflowModel = await dbm
-        .get()
-        .collection("workflows")
-        .findOne({ tenant: tenantId });
-      if (!workflowModel) return null;
-      return await createWorkflowFromModel(workflowModel);
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
+    const rawWorkflow = await WorkflowModel.findOne({ tenantId: tenantId });
+    if (!rawWorkflow) return null;
+    return await createWorkflowFromModel(rawWorkflow, false);
   }
 
   static async getTasks(tenantId, populate = false) {
-    try {
-      const workflowModel = await dbm
-        .get()
-        .collection("workflows")
-        .findOne({ tenant: tenantId });
-      if (!workflowModel) return null;
-      return await createStatusFromModel(
-        workflowModel.states,
-        tenantId,
-        populate,
-      );
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
+    const rawWorkflow = await WorkflowModel.findOne({ tenantId: tenantId });
+    if (!rawWorkflow) return null;
+    return await createStatusFromModel(rawWorkflow.states, tenantId, populate);
   }
 
   static async createWorkflow({
-    tenant,
+    tenantId,
     name,
     description,
     states,
     archive,
     active,
   }) {
-    try {
-      await dbm
-        .get()
-        .collection("workflows")
-        .insertOne({ tenant, name, description, states, archive, active });
-      return await WorkflowManager.getWorkflow(tenant);
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
+    await WorkflowModel.create({
+      tenantId,
+      name,
+      description,
+      states,
+      archive,
+      active,
+    });
+    return await WorkflowManager.getWorkflow(tenantId);
   }
 
-  static async updateWorkflow(
-    tenantId,
-    { tenant, name, description, states, archive, active },
-  ) {
-    try {
-      await dbm
-        .get()
-        .collection("workflows")
-        .updateOne(
-          { tenant: tenantId },
-          { $set: { tenant, name, description, states, archive, active } },
-          { upsert: true },
-        );
-      return await WorkflowManager.getWorkflow(tenantId);
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
+  static async updateWorkflow(tenantId, workflow) {
+    await WorkflowModel.updateOne({ tenantId }, workflow);
+
+    return await WorkflowManager.getWorkflow(tenantId);
   }
 
   static async updateTasks(tenantId, workflowId, tasks) {
-    try {
-      await dbm
-        .get()
-        .collection("workflows")
-        .updateOne(
-          { tenant: tenantId, _id: workflowId },
-          { $set: { states: tasks } },
-        );
-    } catch (error) {
-      console.error(error);
-    }
+    await WorkflowModel.updateOne(
+      { tenantId, _id: workflowId },
+      { states: tasks },
+    );
   }
 
   static async archiveTask(tenantId, workflowId, archive) {
-    try {
-      await dbm
-        .get()
-        .collection("workflows")
-        .updateOne(
-          { tenant: tenantId, _id: workflowId },
-          { $set: { archive: archive } },
-        );
-    } catch (error) {
-      console.error(error);
-    }
+    await WorkflowModel.updateOne({ tenantId, _id: workflowId }, { archive });
   }
 }
 
 async function createWorkflowFromModel(workflowModel, metaData = true) {
   const id = workflowModel._id.valueOf();
-  const workflow = new Workflow({ id, ...workflowModel });
+  const workflow = new Workflow({ id, ...workflowModel._doc });
   if (!metaData) {
     delete workflow.id;
     delete workflow.name;
     delete workflow.description;
-    delete workflow.tenant;
+    delete workflow.tenantId;
   }
-
   return workflow;
 }
 

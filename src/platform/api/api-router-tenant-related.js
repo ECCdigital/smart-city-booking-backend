@@ -220,6 +220,7 @@ router.get(
   "/workflow/backlog",
   AuthenticationController.isSignedIn,
   WorkflowController.getBacklog,
+);
 // ROLES
 // =====
 

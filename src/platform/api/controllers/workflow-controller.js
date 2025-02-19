@@ -1,8 +1,9 @@
 const WorkflowManager = require("../../../commons/data-managers/workflow-manager");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const bunyan = require("bunyan");
-const { BookingPermissions } = require("./booking-controller");
-const { TenantPermissions } = require("./tenant-controller");
+const PermissionsService = require("../../../commons/services/permission-service");
+const { RolePermission } = require("../../../commons/entities/role");
+const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -15,7 +16,9 @@ class WorkflowController {
     const user = req.user;
 
     try {
-      if (await TenantPermissions._allowRead(tenantId, user.id, user.tenant)) {
+      if (
+        await PermissionService._isTenantOwner(user.id, tenantId)
+      ) {
         const workflow = await WorkflowManager.getWorkflow(tenantId);
 
         logger.info(`${tenantId} -- sending workflow to user ${user?.id}`);
@@ -40,7 +43,7 @@ class WorkflowController {
 
     try {
       if (
-        await TenantPermissions._allowCreate(tenantId, user.id, user.tenant)
+        await PermissionService._isTenantOwner(user.id, tenantId)
       ) {
         const createdWorkflow = await WorkflowManager.createWorkflow(workflow);
 
@@ -65,7 +68,7 @@ class WorkflowController {
 
     try {
       if (
-        await TenantPermissions._allowUpdate(tenantId, user.id, user.tenant)
+        await PermissionService._isTenantOwner(user.id, tenantId)
       ) {
         const updatedWorkflow = await WorkflowService.updateWorkflow(
           tenantId,
@@ -91,13 +94,19 @@ class WorkflowController {
     const user = req.user;
 
     try {
-      if (await BookingPermissions._allowReadAny(user.id, tenantId)) {
-        const workflow = await WorkflowManager.getWorkflowStates(tenantId);
+      if (
+        await PermissionsService._allowReadAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
+        const states = await WorkflowManager.getWorkflowStates(tenantId);
 
         logger.info(
           `${tenantId} -- sending workflow, inclusive bookings to user ${user?.id}`,
         );
-        res.status(200).send(workflow);
+        res.status(200).send(states);
       } else {
         logger.error(
           `${tenantId} -- User ${user?.id} does not have permission to get workflow`,
@@ -118,7 +127,13 @@ class WorkflowController {
         user,
       } = req;
 
-      if (await BookingPermissions._allowUpdateAny(user.id, tenantId)) {
+      if (
+        await PermissionsService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
         const updatedWorkflow = await WorkflowService.updateTask(
           tenantId,
           taskId,
@@ -151,7 +166,13 @@ class WorkflowController {
     } = req;
 
     try {
-      if (await BookingPermissions._allowUpdateAny(user.id, tenantId)) {
+      if (
+        await PermissionsService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
         const updatedWorkflow = await WorkflowService.archiveTask(
           tenantId,
           taskId,
@@ -179,7 +200,13 @@ class WorkflowController {
     } = req;
 
     try {
-      if (await BookingPermissions._allowReadAny(user.id, tenantId)) {
+      if (
+        await PermissionsService._allowReadAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
         const backlog = await WorkflowService.getBacklog(tenantId);
 
         logger.info(`${tenantId} -- sending backlog to user ${user?.id}`);

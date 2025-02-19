@@ -112,6 +112,18 @@ class PermissionService {
   }
 
   /**
+   * Checks if the user has read permissions for any object.
+   *
+   * @param {string} userId - The ID of the user.
+   * @param {string} tenantId - The ID of the tenant.
+   * @param {string} resource - The resource type.
+   * @returns {Promise<boolean>} - A promise that resolves to true if the user has read permissions for any object, otherwise false.
+   */
+  static async _allowReadAny(userId, tenantId, resource) {
+    return await UserManager.hasPermission(userId, tenantId, resource, "readAny");
+  }
+
+  /**
    * Checks if the user has create permissions for the given object.
    *
    * @param {Object} object - The object to check permissions for.
@@ -147,6 +159,10 @@ class PermissionService {
       resource,
       actions.UPDATE,
     );
+  }
+
+  static async _allowUpdateAny(userId, tenantId, resource) {
+    return await UserManager.hasPermission(userId, tenantId, resource, "updateAny");
   }
 
   /**
