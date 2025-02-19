@@ -36,7 +36,16 @@ function loadMigrations() {
     };
   });
 
-  migrations.sort((a, b) => (a.name < b.name ? -1 : 1));
+
+  migrations.sort((a, b) => {
+    const [dayA, monthA, yearA] = a.name.split('-');
+    const [dayB, monthB, yearB] = b.name.split('-');
+
+    const dateA = new Date(+yearA, +monthA - 1, +dayA);
+    const dateB = new Date(+yearB, +monthB - 1, +dayB);
+
+    return dateA - dateB;
+  });
 
   return migrations;
 }

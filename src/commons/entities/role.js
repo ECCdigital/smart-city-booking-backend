@@ -52,11 +52,11 @@ class Role {
 
   static schema() {
     return {
-      id: { type: String, required: true, unique: true },
+      id: { type: String, required: true },
       name: { type: String, required: true },
+      tenantId: { type: String, required: true },
       adminInterfaces: {
         type: [String],
-        default: [String],
         enum: [
           "locations",
           "roles",
@@ -67,6 +67,7 @@ class Role {
           "tickets",
           "events",
         ],
+        default: [],
       },
       manageBookables: {
         create: { type: Boolean, default: false },
@@ -104,7 +105,6 @@ class Role {
         deleteAny: { type: Boolean, default: false },
         deleteOwn: { type: Boolean, default: false },
       },
-      tenantId: { type: String, ref: "Tenant", required: true },
       assignedUserId: { type: String, default: null },
       freeBookings: { type: Boolean, default: false },
     };

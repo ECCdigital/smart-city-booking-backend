@@ -17,6 +17,25 @@ TenantSchema.pre("updateOne", async function (next) {
   next();
 });
 
+TenantSchema.pre("replaceOne", async function (next) {
+  const update = this.getUpdate();
+
+  update.noreplyPassword = SecurityUtils.encrypt(update.noreplyPassword);
+
+  update.noreplyGraphClientSecret = SecurityUtils.encrypt(
+    update.noreplyGraphClientSecret,
+  );
+  next();
+});
+
+TenantSchema.pre("save", async function (next) {
+  this.noreplyPassword = SecurityUtils.encrypt(this.noreplyPassword);
+  this.noreplyGraphClientSecret = SecurityUtils.encrypt(
+    this.noreplyGraphClientSecret,
+  );
+  next();
+});
+
 TenantSchema.post("init", function (doc) {
   if (doc.noreplyPassword) {
     doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
