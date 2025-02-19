@@ -31,7 +31,7 @@ class BookingController {
           booking.tenantId,
         ),
         workflowStatus: await WorkflowService.getWorkflowStatus(
-          booking.tenant,
+          booking.tenantId,
           booking.id,
         ),
       };

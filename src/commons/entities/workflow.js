@@ -11,7 +11,6 @@ class Workflow {
 
   static schema() {
     return {
-      id: { type: String, required: true },
       tenantId: { type: String, required: true },
       name: { type: String, default: "" },
       description: { type: String, default: "" },

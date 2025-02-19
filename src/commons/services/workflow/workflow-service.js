@@ -108,7 +108,7 @@ class WorkflowService {
 
   static async getWorkflowStatus(tenantId, bookingID) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
-    const status = workflow.states.find((status) =>
+    const status = workflow?.states.find((status) =>
       status.tasks.some((task) => task.id === bookingID),
     );
     return status?.id || null;
