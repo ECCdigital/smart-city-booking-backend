@@ -11,6 +11,7 @@ const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
+const { BOOKING_HOOK_TYPES } = require("../../entities/booking");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -48,7 +49,7 @@ class BookingService {
       phone,
       comment,
       attachmentStatus,
-      paymentMethod,
+      paymentProvider,
     } = request.body;
 
     logger.info(
@@ -70,10 +71,11 @@ class BookingService {
 
     if (manualBooking) {
       bundleCheckoutService = new ManualBundleCheckoutService(
-        user,
+        user?.id,
         tenantId,
         timeBegin,
         timeEnd,
+        null,
         bookableItems,
         couponCode,
         name,
@@ -84,18 +86,19 @@ class BookingService {
         mail,
         phone,
         comment,
-        Number(request.body.priceEur),
         Boolean(request.body.isCommitted),
         Boolean(request.body.isPayed),
+        Boolean(request.body.isRejected),
         attachmentStatus,
-        paymentMethod,
+        paymentProvider,
       );
     } else {
       bundleCheckoutService = new BundleCheckoutService(
-        user,
+        user?.id,
         tenantId,
         timeBegin,
         timeEnd,
+        null,
         bookableItems,
         couponCode,
         name,
@@ -107,7 +110,7 @@ class BookingService {
         phone,
         comment,
         attachmentStatus,
-        paymentMethod,
+        paymentProvider,
       );
     }
 
@@ -130,7 +133,7 @@ class BookingService {
           await MailController.sendBookingRequestConfirmation(
             booking.mail,
             booking.id,
-            booking.tenant,
+            booking.tenantId,
           );
         } catch (err) {
           logger.error(err);
@@ -161,7 +164,7 @@ class BookingService {
           await MailController.sendBookingConfirmation(
             booking.mail,
             booking.id,
-            booking.tenant,
+            booking.tenantId,
             attachments,
           );
         } catch (err) {
@@ -170,7 +173,10 @@ class BookingService {
 
         try {
           const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
+          await lockerServiceInstance.handleCreate(
+            booking.tenantId,
+            booking.id,
+          );
         } catch (err) {
           logger.error(err);
         }
@@ -187,7 +193,7 @@ class BookingService {
         await MailController.sendIncomingBooking(
           tenant.mail,
           booking.id,
-          booking.tenant,
+          booking.tenantId,
         );
       } catch (err) {
         logger.error(err);
@@ -206,8 +212,8 @@ class BookingService {
       }
 
       const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.handleCancel(booking.tenant, booking.id);
-      await BookingManager.removeBooking(booking.id, booking.tenant);
+      await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+      await BookingManager.removeBooking(booking.id, booking.tenantId);
     } catch (error) {
       throw new Error(`Error cancelling booking: ${error.message}`);
     }
@@ -218,76 +224,135 @@ class BookingService {
       updatedBooking.id,
       tenantId,
     );
-
     try {
-      await BookingManager.storeBooking(updatedBooking);
+      const bundleCheckoutService = new ManualBundleCheckoutService(
+        updatedBooking.assignedUserId,
+        tenantId,
+        updatedBooking.timeBegin,
+        updatedBooking.timeEnd,
+        oldBooking.timeCreated,
+        updatedBooking.bookableItems,
+        updatedBooking.couponCode,
+        updatedBooking.name,
+        updatedBooking.company,
+        updatedBooking.street,
+        updatedBooking.zipCode,
+        updatedBooking.location,
+        updatedBooking.mail,
+        updatedBooking.phone,
+        updatedBooking.comment,
+        Boolean(updatedBooking.isCommitted),
+        Boolean(updatedBooking.isPayed),
+        Boolean(updatedBooking.isRejected),
+        updatedBooking.attachmentStatus,
+        updatedBooking.paymentProvider,
+        updatedBooking.paymentMethod,
+      );
+
+      const booking = await bundleCheckoutService.prepareBooking({
+        keepExistingId: true,
+        existingId: oldBooking.id,
+      });
+
+      await BookingManager.storeBooking(booking);
       const lockerServiceInstance = LockerService.getInstance();
       await lockerServiceInstance.handleUpdate(
-        updatedBooking.tenant,
+        updatedBooking.tenantId,
         oldBooking,
-        updatedBooking,
+        booking,
       );
     } catch (error) {
       await BookingManager.storeBooking(oldBooking);
       throw new Error(`Error updating booking: ${error.message}`);
     }
-    return updatedBooking;
+
+    return BookingManager.getBooking(updatedBooking.id, tenantId);
   }
 
   static async commitBooking(tenant, booking) {
     try {
-      booking.isCommitted = true;
-      await BookingService.updateBooking(tenant, booking);
+      const originBooking = await BookingManager.getBooking(booking.id, tenant);
+      originBooking.isCommitted = true;
+      originBooking.isRejected = false;
+      await BookingManager.storeBooking(originBooking);
       if (
-        booking.isPayed === true ||
-        !booking.priceEur ||
-        booking.priceEur === 0
+        originBooking.isPayed === true ||
+        !originBooking.priceEur ||
+        originBooking.priceEur === 0
       ) {
         await MailController.sendFreeBookingConfirmation(
-          booking.mail,
-          booking.id,
-          booking.tenant,
+          originBooking.mail,
+          originBooking.id,
+          originBooking.tenantId,
         );
         logger.info(
-          `${tenant} -- booking ${booking.id} committed and sent free booking confirmation to ${booking.mail}`,
+          `${tenant} -- booking ${originBooking.id} committed and sent free booking confirmation to ${originBooking.mail}`,
         );
       } else {
         await MailController.sendPaymentRequest(
-          booking.mail,
-          booking.id,
-          booking.tenant,
+          originBooking.mail,
+          originBooking.id,
+          originBooking.tenantId,
         );
         logger.info(
-          `${tenant} -- booking ${booking.id} committed and sent payment request to ${booking.mail}`,
+          `${tenant} -- booking ${originBooking.id} committed and sent payment request to ${originBooking.mail}`,
         );
       }
-      const bookableItems = booking.bookableItems;
+      const bookableItems = originBooking.bookableItems;
       const isTicketBooking = bookableItems.some(isTicket);
 
       if (isTicketBooking) {
         const eventIds = bookableItems.map(getEventForTicket);
-        await sendEmailToOrganizer(eventIds, tenant, booking);
+        await sendEmailToOrganizer(eventIds, tenant, originBooking);
       }
     } catch (error) {
       throw new Error(`Error committing booking: ${error.message}`);
     }
   }
 
-  static async rejectBooking(tenant, booking) {
+  static async rejectBooking(tenantId, bookingId, reason = "") {
     try {
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
+
       booking.isRejected = true;
-      await BookingService.updateBooking(tenant, booking);
+      await BookingService.updateBooking(tenantId, booking);
 
       await MailController.sendBookingRejection(
         booking.mail,
         booking.id,
-        booking.tenant,
+        booking.tenantId,
+        reason,
       );
       logger.info(
-        `${tenant} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
+        `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
       );
     } catch (error) {
-      throw new Error(`Error committing booking: ${error.message}`);
+      throw new Error(`Error rejecting booking: ${error.message}`);
+    }
+  }
+
+  static async requestRejectBooking(tenant, bookingId, reason = "") {
+    try {
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+
+      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, {
+        reason: reason,
+      });
+
+      await BookingService.updateBooking(tenant, booking);
+
+      await MailController.sendVerifyBookingRejection(
+        booking.mail,
+        booking.id,
+        booking.tenantId,
+        hook.id,
+        reason,
+      );
+      logger.info(
+        `${tenant} -- booking ${booking.id} rejection requested and sent booking reject verification to ${booking.mail}`,
+      );
+    } catch (error) {
+      throw new Error(`Error requesting booking rejection: ${error.message}`);
     }
   }
 
@@ -337,6 +402,16 @@ class BookingService {
       comment: booking.comment,
     };
   }
+
+  static async verifyBookingOwnership(tenantId, bookingId, name) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking.id) {
+      throw { message: "Booking not found", code: 404 };
+    }
+
+    return booking.name.toLowerCase() === name.toLowerCase();
+  }
 }
 
 module.exports = BookingService;
@@ -375,7 +450,7 @@ async function sendEmailToOrganizer(eventIds, tenantId, booking) {
         await MailController.sendNewBooking(
           organizerMail,
           booking.id,
-          booking.tenant,
+          booking.tenantId,
         );
         logger.info(
           `Successfully send mail to organizer ${organizerMail} for booking ${booking.id}.`,

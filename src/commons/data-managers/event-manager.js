@@ -1,66 +1,41 @@
-var validate = require("jsonschema").validate;
-
 const { Event } = require("../entities/event");
-var dbm = require("../utilities/database-manager");
+
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+const EventSchema = new Schema(Event.schema());
+const EventModel =
+  mongoose.models.Event || mongoose.model("Event", EventSchema);
 
 /**
  * Data Manager for Event objects.
  */
 class EventManager {
   /**
-   * Check if an object is a valid Event.
-   *
-   * @param {object} event A event object
-   * @returns true, if the object is a valid event object
-   */
-  static validateEvent(event) {
-    var schema = require("../schemas/event.schema.json");
-    return validate(event, schema).errors.length == 0;
-  }
-
-  /**
    * Get all events related to a tenant
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns List of bookings
    */
-  static getEvents(tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("events")
-        .find({ tenant: tenant })
-        .toArray()
-        .then((rawEvents) => {
-          var events = rawEvents.map((rb) => {
-            var event = Object.assign(new Event(), rb);
-            return event;
-          });
-
-          resolve(events);
-        })
-        .catch((err) => reject(err));
+  static async getEvents(tenantId) {
+    const rawEvents = await EventModel.find({
+      tenantId: tenantId,
     });
+    return rawEvents.map((re) => new Event(re));
   }
 
   /**
    * Get a specific event object from the database.
    *
    * @param {string} id Logical identifier of the event object
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId Identifier of the tenant
    * @returns A single event object
    */
-  static getEvent(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("events")
-        .findOne({ id: id, tenant: tenant })
-        .then((rawEvent) => {
-          var event = Object.assign(new Event(), rawEvent);
-          resolve(event);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getEvent(id, tenantId) {
+    const rawEvent = await EventModel.findOne({ id: id, tenantId: tenantId });
+    if(!rawEvent) {
+      return null;
+    }
+    return new Event(rawEvent);
   }
 
   /**
@@ -71,37 +46,20 @@ class EventManager {
    * @returns Promise<>
    */
   static async storeEvent(event, upsert = true) {
-    try {
-      const eventsCollection = dbm.get().collection("events");
-
-      await eventsCollection.replaceOne(
-        { id: event.id, tenant: event.tenant },
-        event,
-        {
-          upsert: upsert,
-        },
-      );
-    } catch (err) {
-      throw new Error(`Error storing event: ${err.message}`);
-    }
+    await EventModel.updateOne({ id: event.id, tenantId: event.tenantId }, event, {
+      upsert: upsert,
+    });
   }
 
   /**
    * Remove an event object from the database.
    *
-   * @param {Event} event The event object to be stored.
-   * @param {boolean} upsert true, if new object should be inserted. Default: true
+   * @param {string} id The id of the event to remove
+   * @param {string} tenantId The tenant of the event to remove
    * @returns Promise<>
    */
-  static removeEvent(id, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("events")
-        .deleteOne({ id: id, tenant: tenant })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async removeEvent(id, tenantId) {
+    await EventModel.deleteOne({ id: id, tenantId: tenantId });
   }
 
   /**
@@ -111,15 +69,15 @@ class EventManager {
    * If the current count of events is less than the maximum allowed events, or if MAX_EVENTS is not defined, it returns true.
    *
    * @async
-   * @param {string} tenant - The identifier of the tenant.
+   * @param {string} tenantId - The identifier of the tenant.
    * @returns {Promise<boolean>} A promise that resolves to a boolean indicating whether the tenant can create more events.
    */
-  static async checkPublicEventCount(tenant) {
+  static async checkPublicEventCount(tenantId) {
     const maxEvents = parseInt(process.env.MAX_EVENTS, 10);
-    const count = await dbm
-      .get()
-      .collection("events")
-      .countDocuments({ tenant: tenant, isPublic: true });
+    const count = await EventModel.countDocuments({
+      tenantId: tenantId,
+      isPublic: true,
+    });
     return !(maxEvents && count >= maxEvents);
   }
 }

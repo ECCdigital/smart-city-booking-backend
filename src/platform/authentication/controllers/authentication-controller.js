@@ -1,7 +1,6 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-var { User, HookTypes } = require("../../../commons/entities/user");
+const { User, HookTypes } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const MailController = require("../../../commons/mail-service/mail-controller");
 
 const logger = bunyan.createLogger({
@@ -23,19 +22,16 @@ class AuthenticationController {
     }
   }
 
-  static signin(request, response) {
+  static async signin(request, response) {
     const user = request.user;
-
-    UserManager.getUserPermissions(user.id, user.tenant)
-      .then((permissions) => {
-        user.permissions = permissions;
-        logger.info(`User ${user.id} signed in.`);
-        response.status(200).send(user);
-      })
-      .catch((err) => {
-        logger.error(err);
-        response.sendStatus(500);
-      });
+    try {
+      const permissions = await UserManager.getUserPermissions(user.id);
+      logger.info(`User ${user.id} signed in.`);
+      response.status(200).send({ user, permissions });
+    } catch (error) {
+      logger.error(`could not sign in ${user?.id}`, error);
+      response.sendStatus(500);
+    }
   }
 
   static signup(request, response) {
@@ -50,7 +46,7 @@ class AuthenticationController {
           if (user) {
             response.sendStatus(409);
           } else {
-            const user = Object.assign(new User(), {
+            const user = new User({
               id: request.body.id,
               secret: undefined,
               tenant: request.params.tenant,
@@ -64,15 +60,9 @@ class AuthenticationController {
               .then(async () => {
                 logger.info(`User ${user.id} signed up.`);
 
-                const tenant = await TenantManager.getTenant(user.tenant);
+                await MailController.sendUserCreated(user.id);
 
-                await MailController.sendUserCreated(
-                  tenant.mail,
-                  user.tenant,
-                  user.id,
-                );
-
-                response.status(201).send({ tenantId: request.params.tenant });
+                response.sendStatus(201);
               })
               .catch((err) => {
                 logger.error(err);
@@ -95,19 +85,19 @@ class AuthenticationController {
     response.sendStatus(200);
   }
 
-  static me(request, response) {
-    var user = Object.assign(new User(), request.user);
-    var userPublic = user.exportPublic();
+  static async me(request, response) {
+    try {
+      const user = request.user;
+      if (!user) {
+        response.status(401);
+        return;
+      }
 
-    if (request.query.populatePermissions === "1") {
-      UserManager.getUserPermissions(user.id, user.tenant).then(
-        (permissions) => {
-          userPublic.permissions = permissions;
-          response.status(200).send(userPublic);
-        },
-      );
-    } else {
-      response.status(200).send(userPublic);
+      const permissions = await UserManager.getUserPermissions(user.id);
+
+      response.status(200).send({ user, permissions });
+    } catch (error) {
+      response.sendStatus(500);
     }
   }
 

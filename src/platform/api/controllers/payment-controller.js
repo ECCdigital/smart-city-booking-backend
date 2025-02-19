@@ -17,11 +17,26 @@ class PaymentController {
 
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
+    if (!booking?.id) {
+      response.status(400).send({ message: "Booking not found", code: 0 });
+      return;
+    }
+
+    if (!booking.isCommitted) {
+      response.status(400).send({ message: "Booking not committed", code: 1 });
+      return;
+    }
+
+    if (booking.isPayed) {
+      response.status(400).send({ message: "Booking already payed", code: 2 });
+      return;
+    }
+
     try {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
       );
 
       const data = await paymentService?.createPayment();
@@ -32,7 +47,7 @@ class PaymentController {
     }
   }
 
-  static async paymentNotification(request, response) {
+  static async paymentNotificationGET(request, response) {
     const {
       params: { tenant: tenantId },
       query: { id: bookingId },
@@ -43,13 +58,45 @@ class PaymentController {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
       );
 
-      await paymentService.paymentNotification(request);
+      await paymentService.paymentNotification(request.query);
       try {
         const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCreate(booking.tenant, booking.id);
+        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
+      } catch (err) {
+        logger.error(err);
+      }
+      logger.info(
+        `${tenantId} -- booking ${bookingId} successfully payed and updated.`,
+      );
+      response.sendStatus(200);
+    } catch {
+      logger.warn(
+        `${tenantId} -- could not get payment result for booking ${bookingId}.`,
+      );
+      response.sendStatus(400);
+    }
+  }
+  static async paymentNotificationPOST(request, response) {
+    const {
+      params: { tenant: tenantId },
+      query: { id: bookingId },
+    } = request;
+
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    try {
+      let paymentService = await PaymentUtils.getPaymentService(
+        tenantId,
+        bookingId,
+        booking.paymentProvider,
+      );
+
+      await paymentService.paymentNotification(request.body);
+      try {
+        const lockerServiceInstance = LockerService.getInstance();
+        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
       }
@@ -71,11 +118,18 @@ class PaymentController {
     } = request;
 
     const booking = await BookingManager.getBooking(bookingId, tenantId);
+    if (!booking.id) {
+      logger.warn(
+        `${tenantId} -- could not get booking for bookingId ${bookingId}.`,
+      );
+      response.sendStatus(404);
+      return;
+    }
     try {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
       );
 
       const url = paymentService.paymentResponse();

@@ -1,8 +1,54 @@
-const validate = require("jsonschema").validate;
-
 const Tenant = require("../entities/tenant");
-const dbm = require("../utilities/database-manager");
 const SecurityUtils = require("../utilities/security-utils");
+
+const mongoose = require("mongoose");
+
+const { Schema } = mongoose;
+const TenantSchema = new Schema(Tenant.schema());
+
+TenantSchema.pre("updateOne", async function (next) {
+  const update = this.getUpdate();
+
+  update.noreplyPassword = SecurityUtils.encrypt(update.noreplyPassword);
+
+  update.noreplyGraphClientSecret = SecurityUtils.encrypt(
+    update.noreplyGraphClientSecret,
+  );
+  next();
+});
+
+TenantSchema.pre("replaceOne", async function (next) {
+  const update = this.getUpdate();
+
+  update.noreplyPassword = SecurityUtils.encrypt(update.noreplyPassword);
+
+  update.noreplyGraphClientSecret = SecurityUtils.encrypt(
+    update.noreplyGraphClientSecret,
+  );
+  next();
+});
+
+TenantSchema.pre("save", async function (next) {
+  this.noreplyPassword = SecurityUtils.encrypt(this.noreplyPassword);
+  this.noreplyGraphClientSecret = SecurityUtils.encrypt(
+    this.noreplyGraphClientSecret,
+  );
+  next();
+});
+
+TenantSchema.post("init", function (doc) {
+  if (doc.noreplyPassword) {
+    doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
+  }
+  if (doc.noreplyGraphClientSecret) {
+    doc.noreplyGraphClientSecret = SecurityUtils.decrypt(
+      doc.noreplyGraphClientSecret,
+    );
+  }
+});
+
+const TenantModel =
+  mongoose.models.Tenant || mongoose.model("Tenant", TenantSchema);
 
 const TENANT_ENCRYPT_KEYS = [
   "paymentMerchantId",
@@ -10,6 +56,7 @@ const TENANT_ENCRYPT_KEYS = [
   "paymentSecret",
   "noreplyPassword",
   "password",
+  "noreplyGraphClientSecret",
 ];
 
 /**
@@ -17,39 +64,17 @@ const TENANT_ENCRYPT_KEYS = [
  */
 class TenantManager {
   /**
-   * Check if an object is a valid Tenant.
-   *
-   * @param {object} tenant A tenant object
-   * @returns true, if the object is a valid tenant object
-   */
-  static validateTenant(tenant) {
-    const schema = require("../schemas/tenant.schema.json");
-    return validate(tenant, schema).errors.length === 0;
-  }
-
-  /**
    * Get all tenants
    * @returns List of tenants
    */
-  static getTenants() {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("tenants")
-        .find({})
-        .toArray()
-        .then((rawTenants) => {
-          const tenants = rawTenants.map((rt) => {
-            const tenant = Object.assign(new Tenant(), rt);
-            tenant.applications = tenant.applications.map((app) => {
-              return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-            });
-            return SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS);
-          });
-
-          resolve(tenants);
-        })
-        .catch((err) => reject(err));
+  static async getTenants() {
+    const rawTenants = await TenantModel.find();
+    return rawTenants.map((rt) => {
+      const tenant = new Tenant(rt);
+      tenant.applications = tenant.applications.map((app) => {
+        return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+      });
+      return tenant;
     });
   }
 
@@ -59,24 +84,16 @@ class TenantManager {
    * @param {string} id Logical identifier of the bookable object
    * @returns A single bookable object
    */
-  static getTenant(id) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("tenants")
-        .findOne({ id: id })
-        .then((rawTenant) => {
-          if (!rawTenant) {
-            return reject(new Error(`No tenant found with ID: ${id}`));
-          }
-          const tenant = Object.assign(new Tenant(), rawTenant);
-          tenant.applications = tenant.applications.map((app) => {
-            return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-          });
-          resolve(SecurityUtils.decryptObject(tenant, TENANT_ENCRYPT_KEYS));
-        })
-        .catch((err) => reject(err));
+  static async getTenant(id) {
+    const rawTenant = await TenantModel.findOne({ id: id });
+    if (!rawTenant) {
+      return null;
+    }
+    const tenant = new Tenant(rawTenant);
+    tenant.applications = tenant.applications.map((app) => {
+      return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
     });
+    return tenant;
   }
 
   /**
@@ -87,20 +104,17 @@ class TenantManager {
    * @returns Promise<>
    */
   static async storeTenant(tenant, upsert = true) {
-    try {
-      const tenantsCollection = dbm.get().collection("tenants");
-      tenant.applications = tenant.applications.map((app) => {
-        return SecurityUtils.encryptObject(app, TENANT_ENCRYPT_KEYS);
-      });
+    const newTenant = new Tenant(tenant);
+    newTenant.applications = newTenant.applications.map((app) => {
+      return SecurityUtils.encryptObject(app, TENANT_ENCRYPT_KEYS);
+    });
 
-      await tenantsCollection.replaceOne(
-        { id: tenant.id },
-        SecurityUtils.encryptObject(tenant, TENANT_ENCRYPT_KEYS),
-        { upsert: upsert },
-      );
-    } catch (err) {
-      throw new Error(`Error storing tenant: ${err.message}`);
-    }
+    await TenantModel.updateOne({ id: tenant.id }, newTenant, {
+      upsert: upsert,
+      setDefaultsOnInsert: true,
+    });
+
+    return newTenant;
   }
 
   /**
@@ -109,63 +123,62 @@ class TenantManager {
    * @param {string} id The identifier of the tenant
    * @returns Promise<>
    */
-  static removeTenant(id) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("tenants")
-        .deleteOne({ id: id })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async removeTenant(id) {
+    await TenantModel.deleteOne({ id: id });
   }
 
   static async getTenantApps(tenantId) {
-    try {
-      const tenant = await dbm.get().collection("tenants").findOne({
-        id: tenantId,
-      });
-      const applications = tenant.applications;
-      return applications.map((app) => {
-        return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-      });
-    } catch {
-      throw new Error(`No tenant found with ID: ${tenantId}`);
-    }
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    const tenant = new Tenant(rawTenant);
+    tenant.applications = tenant.applications.map((app) => {
+      return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+    });
+    return tenant.applications;
   }
 
   static async getTenantApp(tenantId, appId) {
-    try {
-      const tenant = await dbm.get().collection("tenants").findOne({
-        id: tenantId,
-      });
-      const application = tenant.applications.find((app) => app.id === appId);
-      return SecurityUtils.decryptObject(application, TENANT_ENCRYPT_KEYS);
-    } catch {
-      throw new Error(`No tenant found with ID: ${tenantId}`);
-    }
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+
+    const tenant = new Tenant(rawTenant);
+    const application = tenant.applications.find((app) => app.id === appId);
+    return SecurityUtils.decryptObject(application, TENANT_ENCRYPT_KEYS);
   }
 
   static async getTenantAppByType(tenantId, appType) {
-    try {
-      const tenant = await dbm.get().collection("tenants").findOne({
-        id: tenantId,
-      });
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
 
-      const applications = tenant.applications.filter(
-        (app) => app.type === appType,
-      );
-      return applications.map((app) => {
-        return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-      });
-    } catch {
-      throw new Error(`No tenant found with ID: ${tenantId}`);
-    }
+    const tenant = new Tenant(rawTenant);
+    const applications = tenant.applications.filter(
+      (app) => app.type === appType,
+    );
+
+    return applications.map((app) => {
+      return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
+    });
   }
+
   static async checkTenantCount() {
     const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
-    const count = await dbm.get().collection("tenants").countDocuments({});
+    const count = await TenantModel.countDocuments({});
     return !(maxTenants && count >= maxTenants);
+  }
+
+  static async getTenantUsers(tenantId) {
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    if(!rawTenant) {
+      return null;
+    }
+    const tenant = new Tenant(rawTenant);
+    return tenant.users;
+  }
+
+  static async getTenantUsersByRoles(tenantId, roles) {
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    if(!rawTenant) {
+      return [];
+    }
+    const tenant = new Tenant(rawTenant);
+    return tenant.users.filter(user => user.roles.some(role => roles.includes(role)));
   }
 }
 

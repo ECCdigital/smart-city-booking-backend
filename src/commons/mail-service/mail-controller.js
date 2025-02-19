@@ -1,8 +1,9 @@
 const MailerService = require("./mail-service");
 const BookingManager = require("../data-managers/booking-manager");
-const BookableManager = require("../data-managers/bookable-manager");
+const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
+const InstanceManager = require("../data-managers/instance-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../utilities/payment-utils");
 const UserManager = require("../data-managers/user-manager");
@@ -51,7 +52,7 @@ class MailController {
 
     for (const bookable of bookables) {
       bookable._populated = {
-        event: await EventManager.getEvent(bookable.eventId, bookable.tenant),
+        event: await EventManager.getEvent(bookable.eventId, bookable.tenantId),
       };
     }
 
@@ -68,6 +69,7 @@ class MailController {
     includeQRCode = false,
     attachments = [],
     sendBCC = false,
+    addRejectionLink = false,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
@@ -77,6 +79,10 @@ class MailController {
     }
 
     let content = `${message}<br>${bookingDetails}`;
+
+    if (addRejectionLink) {
+      content += `<br /><br /><a href="${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}">Buchung stornieren</a>`;
+    }
 
     if (includeQRCode) {
       const { content: qrContent, attachment: qrAttachment } =
@@ -94,15 +100,15 @@ class MailController {
 
     const bccEmail = sendBCC ? tenant.mail : undefined;
 
-    await MailerService.send(
+    await MailerService.send({
       tenantId,
       address,
       subject,
-      tenant.genericMailTemplate,
+      mailTemplate: tenant.genericMailTemplate,
       model,
       attachments,
-      bccEmail,
-    );
+      bcc: bccEmail,
+    });
   }
 
   static async generateBookingDetails(bookingId, tenantId) {
@@ -233,6 +239,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -240,20 +247,61 @@ class MailController {
     address,
     bookingId,
     tenantId,
+    reason,
     attachments = undefined,
   ) {
     const tenant = await TenantManager.getTenant(tenantId);
+
+    let message = `<p>Die nachfolgende Buchung wurde storniert:</p>`;
+    if (reason) {
+      reason = sanitizeReason(reason);
+      message += `<p><strong>Hinweis zur Stornierung</strong>: ${reason}</p>`;
+    }
 
     await this._sendBookingMail({
       address,
       bookingId,
       tenantId,
-      subject: `Ihre Buchung im ${tenant.name} wurde storniert`,
+      subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
       title: `Ihre Buchung im ${tenant.name} wurde storniert`,
-      message: `<p>Die nachfolgende Buchung wurde storniert.</p><br>`,
+      message: message,
       includeQRCode: false,
       attachments,
       sendBCC: true,
+      addRejectionLink: false,
+    });
+  }
+
+  static async sendVerifyBookingRejection(
+    address,
+    bookingId,
+    tenantId,
+    hookId,
+    reason,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    let message = `<p>Für die nachfolgende Buchung wurde eine Stornierung vorgemerkt. Wenn Sie diese Stornierung bestätigen möchten, klicken Sie bitte auf den nachfolgenden Link.</p><p>Sollten Sie die Stornierung nicht veranlasst haben, können Sie diese Nachricht ignorieren.</p>`;
+
+    if (reason) {
+      reason = sanitizeReason(reason);
+      message += `<p><strong>Hinweis zur Stornierung</strong>: ${reason}</p>`;
+    }
+
+    message += `<p><a href="${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}">Stornierung bestätigen</a></p>`;
+
+    await this._sendBookingMail({
+      address,
+      bookingId,
+      tenantId,
+      subject: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
+      title: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
+      message: message,
+      includeQRCode: false,
+      attachments,
+      sendBCC: false,
+      addRejectionLink: false,
     });
   }
 
@@ -271,11 +319,13 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments: undefined,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
   static async sendBookingRequestConfirmation(address, bookingId, tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
+
     const includeQRCode = tenant.enablePublicStatusView;
 
     await this._sendBookingMail({
@@ -288,6 +338,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments: undefined,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -310,6 +361,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: true,
+      addRejectionLink: true,
     });
   }
 
@@ -331,6 +383,7 @@ class MailController {
       message: `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben diese erfolgreich geprüft und freigegeben. Bitte nutzen Sie den folgenden Link, um Ihre Buchung abzuschließen.</p><br><p><a href="${paymentLink}">${paymentLink}</a></p>`,
       includeQRCode: includeQRCode,
       sendBCC: false,
+      addRejectionLink: true,
     });
   }
 
@@ -353,6 +406,7 @@ class MailController {
       includeQRCode: includeQRCode,
       attachments,
       sendBCC: false,
+      addRejectionLink: true,
     });
   }
 
@@ -372,7 +426,7 @@ class MailController {
       const paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingId,
-        booking.paymentMethod,
+        booking.paymentProvider,
         attachments,
       );
 
@@ -392,6 +446,7 @@ class MailController {
       title: `Eine neue Buchungsanfrage liegt vor`,
       message: `<p>Es liegt eine neue Buchungsanfrage vor.</p><br>`,
       sendBCC: false,
+      addRejectionLink: false,
     });
   }
 
@@ -400,6 +455,7 @@ class MailController {
 
     await this._sendBookingMail({
       address,
+      bookingId,
       tenantId,
       subject: "Eine neue Buchung liegt vor",
       title: "Eine neue Buchung liegt vor",
@@ -408,62 +464,58 @@ class MailController {
     });
   }
 
-  static async sendVerificationRequest(address, hookId, tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}">${process.env.BACKEND_URL}/auth/${tenantId}/verify/${hookId}</a>`;
+  static async sendVerificationRequest(address, hookId) {
+    let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/verify/${hookId}">${process.env.BACKEND_URL}/auth/verify/${hookId}</a>`;
+    const instance = await InstanceManager.getInstance(false);
 
-    await MailerService.send(
-      tenantId,
+    await MailerService.send({
       address,
-      "Bestätigen Sie Ihre E-Mail-Adresse",
-      tenant.genericMailTemplate,
-      {
+      subject: "Bestätigen Sie Ihre E-Mail-Adresse",
+      mailTemplate: instance.mailTemplate,
+      model: {
         title: "Bestätigen Sie Ihre E-Mail-Adresse",
         content: content,
       },
-    );
+    });
   }
 
-  static async sendPasswordResetRequest(address, hookId, tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    let content = `<p>Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Link.<br>Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.</p><a href="${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}">${process.env.BACKEND_URL}/auth/${tenantId}/reset/${hookId}</a>`;
+  static async sendPasswordResetRequest(address, hookId) {
+    let content = `<p>Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Link.<br>Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.</p><a href="${process.env.BACKEND_URL}/auth/reset/${hookId}">${process.env.BACKEND_URL}/auth/reset/${hookId}</a>`;
+    const instance = await InstanceManager.getInstance(false);
 
-    await MailerService.send(
-      tenantId,
+    await MailerService.send({
       address,
-      "Bestätigen Sie die Änderung Ihres Passworts",
-      tenant.genericMailTemplate,
-      {
-        title: "Bestätigen Sie die Änderung Ihres Passworts",
+      subject: "Bestätigen Sie die Änderung Ihres Kennworts",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Bestätigen Sie die Änderung Ihres Kennworts",
         content: content,
       },
-    );
+    });
   }
 
-  static async sendUserCreated(address, tenantId, userId) {
-    const tenant = await TenantManager.getTenant(tenantId);
+  static async sendUserCreated(userId) {
+    const instance = await InstanceManager.getInstance(false);
 
-    const user = await UserManager.getUser(userId, tenant.id);
+    const user = await UserManager.getUser(userId);
 
     let content = `<p>Ein neuer Benutzer wurde erstellt.</p><br>`;
     content += `<p>Vorname: ${user.firstName}</p>`;
     content += `<p>Nachname: ${user.lastName}</p>`;
     content += `<p>Firma: ${user.company}</p>`;
     content += `<p>E-Mail: ${user.id}</p>`;
-    content += `<p>Mandant: ${user.tenant}</p>`;
     content += `<br>`;
     content += `<p> Registrierungsdatum: ${MailController.formatDateTime(user.created)}</p>`;
 
-    await MailerService.send(
-      tenantId,
-      address,
-      "Ein neuer Benutzer wurde erstellt",
-      tenant.genericMailTemplate,
-      {
+    await MailerService.send({
+      address: instance.mailAddress,
+      subject: "Ein neuer Benutzer wurde erstellt",
+      mailTemplate: instance.mailTemplate,
+      model: {
         title: "Ein neuer Benutzer wurde erstellt",
         content: content,
       },
-    );
+    });
   }
 
   static async sendWorkflowNotification({
@@ -496,6 +548,13 @@ class MailController {
       },
     );
   }
+}
+
+function sanitizeReason(reason) {
+  if (typeof reason === "string" && reason.trim() !== "") {
+    return reason.replace(/<[^>]*>?/gm, "");
+  }
+  return reason;
 }
 
 module.exports = MailController;

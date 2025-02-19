@@ -12,7 +12,7 @@ class Bookable {
   /**
    *
    * @param {string} id Logical identifier of the bookable object
-   * @param {string} tenant Tenant identifier
+   * @param {string} tenantId Tenant identifier
    * @param {String} type Type class of the bookable object, determines whether object is a room, location, ticket or similar. NOTE: Please use BookableTypes!
    * @param {boolean} enabled true, if the object is enabled
    * @param {string} parent Logical identifier of a parent bookable object, undefined if there is no parent
@@ -40,9 +40,9 @@ class Bookable {
    * @param {array<string>} requiredFields List of required fields for the bookable object
    * @param {string} bookingNotes Notes for the booking
    */
-  constructor(
+  constructor({
     id,
-    tenant,
+    tenantId,
     type,
     enabled,
     parent,
@@ -59,6 +59,8 @@ class Bookable {
     isTimePeriodRelated,
     timePeriods,
     isOpeningHoursRelated,
+    permittedUsers,
+    permittedRoles,
     openingHours,
     eventId,
     attachments,
@@ -69,9 +71,9 @@ class Bookable {
     lockerDetails,
     requiredFields,
     bookingNotes,
-  ) {
+  }) {
     this.id = id;
-    this.tenant = tenant;
+    this.tenantId = tenantId;
     this.type = type;
     this.enabled = enabled;
     this.parent = parent;
@@ -88,6 +90,8 @@ class Bookable {
     this.isTimePeriodRelated = isTimePeriodRelated || false;
     this.timePeriods = timePeriods || [];
     this.isOpeningHoursRelated = isOpeningHoursRelated || false;
+    this.permittedUsers = permittedUsers || [];
+    this.permittedRoles = permittedRoles || [];
     this.openingHours = openingHours || [];
     this.eventId = eventId;
     this.attachments = attachments || [];
@@ -164,6 +168,49 @@ class Bookable {
     }
 
     return Math.round(this.priceEur * 100) / 100;
+  }
+
+  static schema() {
+    return {
+      id: {
+        type: String,
+        required: true,
+        unique: true,
+      },
+      tenantId: {
+        type: String,
+        required: true,
+        ref: "Tenant",
+      },
+      type: String,
+      enabled: Boolean,
+      parent: String,
+      title: String,
+      description: String,
+      flags: [String],
+      priceEur: Number,
+      priceValueAddedTax: Number,
+      amount: Number,
+      autoCommitBooking: Boolean,
+      location: String,
+      tags: [String],
+      isScheduleRelated: Boolean,
+      isTimePeriodRelated: Boolean,
+      timePeriods: [Object],
+      isOpeningHoursRelated: Boolean,
+      permittedUsers: [String],
+      permittedRoles: [String],
+      openingHours: [Object],
+      eventId: String,
+      attachments: [Object],
+      priceCategory: String,
+      relatedBookableIds: [String],
+      isBookable: Boolean,
+      isPublic: Boolean,
+      lockerDetails: [Object],
+      requiredFields: [String],
+      bookingNotes: String,
+    };
   }
 }
 

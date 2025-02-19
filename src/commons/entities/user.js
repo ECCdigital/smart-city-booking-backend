@@ -1,5 +1,6 @@
 const passwordHash = require("password-hash");
 const { v4: uuidv4 } = require("uuid");
+const { Double } = require("mongodb");
 
 const HookTypes = Object.freeze({
   VERIFY: "verify",
@@ -7,10 +8,9 @@ const HookTypes = Object.freeze({
 });
 
 class User {
-  constructor(
+  constructor({
     id,
     secret,
-    tenant,
     firstName,
     lastName,
     phone,
@@ -20,12 +20,10 @@ class User {
     hooks,
     isVerified,
     created,
-    roles,
     company,
-  ) {
+  }) {
     this.id = id;
     this.secret = secret;
-    this.tenant = tenant;
     this.firstName = firstName;
     this.lastName = lastName;
     this.phone = phone;
@@ -35,7 +33,6 @@ class User {
     this.hooks = hooks || [];
     this.isVerified = isVerified || false;
     this.created = created || Date.now();
-    this.roles = roles || [];
     this.company = company;
   }
 
@@ -79,14 +76,6 @@ class User {
     return true;
   }
 
-  addRole(role) {
-    this.roles.push(role);
-  }
-
-  removeRole(role) {
-    this.roles = this.roles.filter((r) => r !== role);
-  }
-
   exportPublic() {
     return {
       id: this.id,
@@ -97,9 +86,30 @@ class User {
       address: this.address,
       zipCode: this.zipCode,
       city: this.city,
-      tenant: this.tenant,
       created: this.created,
       isVerified: this.isVerified,
+    };
+  }
+
+  removeSensitive() {
+    delete this.secret;
+    delete this.hooks;
+  }
+
+  static schema() {
+    return {
+      id: { type: String, required: true },
+      firstName: { type: String, default: "" },
+      lastName: { type: String, default: "" },
+      phone: { type: String, default: "" },
+      address: { type: String, default: "" },
+      zipCode: { type: String, default: "" },
+      city: { type: String, default: "" },
+      secret: { type: String, required: true },
+      hooks: { type: Array, default: [] },
+      isVerified: { type: Boolean, default: false },
+      created: { type: Double, default: Date.now() },
+      company: { type: String, default: "" },
     };
   }
 }

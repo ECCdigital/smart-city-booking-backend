@@ -1,4 +1,4 @@
-const { getBookable } = require("../../data-managers/bookable-manager");
+const { getBookable, BookableManager } = require("../../data-managers/bookable-manager");
 const { getTenantAppByType } = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const {
@@ -70,7 +70,7 @@ class LockerService {
    */
   async getAvailableLocker(bookableId, tenantId, timeBegin, timeEnd, amount) {
     try {
-      const bookable = await getBookable(bookableId, tenantId);
+      const bookable = await BookableManager.getBookable(bookableId, tenantId);
       if (!bookable) {
         throw new Error("Bookable resource not found");
       }
@@ -213,7 +213,7 @@ class LockerService {
         let locker;
         switch (unit.lockerSystem) {
           case LOCKER_TYPE.PAREVA:
-            locker = new ParevaLocker(booking.tenant, booking.id, unit.id);
+            locker = new ParevaLocker(booking.tenantId, booking.id, unit.id);
             break;
           default:
             throw new Error("Unsupported locker type");
@@ -229,7 +229,7 @@ class LockerService {
           return locker;
         });
         LockerService.freeReservedLocker(
-          booking.tenant,
+          booking.tenantId,
           unit.id,
           unit.lockerSystem,
           booking.timeBegin,
@@ -328,7 +328,7 @@ class LockerService {
       const processLocker = async (
         unit,
         action,
-        tenant,
+        tenantId,
         bookingId,
         timeBegin,
         timeEnd,
@@ -336,7 +336,7 @@ class LockerService {
         let locker;
         switch (unit.lockerSystem) {
           case LOCKER_TYPE.PAREVA:
-            locker = new ParevaLocker(tenant, bookingId, unit.id);
+            locker = new ParevaLocker(tenantId, bookingId, unit.id);
             break;
           default:
             throw new Error("Unsupported locker type");
@@ -364,7 +364,7 @@ class LockerService {
                 await processLocker(
                   unit,
                   "cancel",
-                  oldBooking.tenant,
+                  oldBooking.tenantId,
                   oldBooking.id,
                 );
                 updatedBooking.lockerInfo = updatedBooking.lockerInfo.filter(
@@ -385,7 +385,7 @@ class LockerService {
       const assignLockers = async (item, booking, quantity) => {
         const lockerUnitsToBeAssigned = await this.getAvailableLocker(
           item.bookableId,
-          booking.tenant,
+          booking.tenantId,
           booking.timeBegin,
           booking.timeEnd,
           quantity,
@@ -404,7 +404,7 @@ class LockerService {
             return processLocker(
               unit,
               "start",
-              booking.tenant,
+              booking.tenantId,
               booking.id,
               booking.timeBegin,
               booking.timeEnd,
@@ -421,7 +421,7 @@ class LockerService {
         await Promise.all(
           lockerUnitsToBeAssigned.map((unit) => {
             return LockerService.freeReservedLocker(
-              booking.tenant,
+              booking.tenantId,
               unit.id,
               unit.lockerSystem,
               booking.timeBegin,
@@ -444,7 +444,7 @@ class LockerService {
                   await processLocker(
                     unit,
                     "cancel",
-                    oldBooking.tenant,
+                    oldBooking.tenantId,
                     oldBooking.id,
                   );
                   booking.lockerInfo = booking.lockerInfo.filter(
@@ -497,7 +497,7 @@ class LockerService {
             const updatedLockerInfo = await processLocker(
               unit,
               "update",
-              oldBooking.tenant,
+              oldBooking.tenantId,
               oldBooking.id,
               updatedBooking.timeBegin,
               updatedBooking.timeEnd,
@@ -527,7 +527,7 @@ class LockerService {
               const updatedLockerInfo = await processLocker(
                 unit,
                 "start",
-                booking.tenant,
+                booking.tenantId,
                 booking.id,
                 booking.timeBegin,
                 booking.timeEnd,

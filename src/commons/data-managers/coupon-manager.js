@@ -1,5 +1,11 @@
-const dbm = require("../utilities/database-manager");
 const { Coupon } = require("../entities/coupon");
+
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+const CouponSchema = new Schema(Coupon.schema());
+const CouponModel =
+  mongoose.models.Coupon || mongoose.model("Coupon", CouponSchema);
 
 /**
  * Data Manager for coupon objects.
@@ -9,42 +15,27 @@ class CouponManager {
    * Get a specific coupon
    *
    * @param couponId
-   * @param tenant
+   * @param tenantId
    */
-  static getCoupon(couponId, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("coupons")
-        .findOne({ id: couponId, tenant: tenant })
-        .then((rawCoupon) => {
-          const coupon = Object.assign(new Coupon(), rawCoupon);
-          resolve(coupon);
-        })
-        .catch((err) => reject(err));
+  static async getCoupon(couponId, tenantId) {
+    const rawCoupon = await CouponModel.findOne({
+      id: couponId,
+      tenantId: tenantId,
     });
+    if(!rawCoupon) {
+      return null;
+    }
+    return new Coupon(rawCoupon);
   }
 
   /**
    * Get all coupons related to a tenant.
    *
-   * @param tenant
+   * @param tenantId
    */
-  static getCoupons(tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("coupons")
-        .find({ tenant: tenant })
-        .toArray()
-        .then((rawCoupons) => {
-          const coupons = rawCoupons.map((rc) => {
-            return Object.assign(new Coupon(), rc);
-          });
-          resolve(coupons);
-        })
-        .catch((err) => reject(err));
-    });
+  static async getCoupons(tenantId) {
+    const rawCoupons = await CouponModel.find({ tenantId: tenantId });
+    return rawCoupons.map((rc) => new Coupon(rc));
   }
 
   /**
@@ -56,76 +47,68 @@ class CouponManager {
   static async storeCoupon(coupon, upsert = true) {
     if (coupon.id === undefined) {
       let isUnique = false;
+
+      //TODO: Check if this is the correct way to generate a unique id
       while (!isUnique) {
         coupon.id = Math.random().toString(36).substring(2, 10);
-        isUnique = dbm
-          .get()
-          .collection("coupons")
-          .findOne({ id: coupon.id, tenant: coupon.tenant })
-          .then((rawCoupon) => {
-            return rawCoupon === null;
-          });
+        isUnique = await CouponModel.findOne({
+          id: coupon.id,
+          tenantId: coupon.tenantId,
+        });
       }
     }
 
-    if (!coupon._id) {
+    if (!coupon.id) {
       coupon.usedAmount = 0;
-      const rawCoupon = await dbm
-        .get()
-        .collection("coupons")
-        .findOne({ id: coupon.id, tenant: coupon.tenant });
+      const rawCoupon = await CouponModel.findOne({
+        id: coupon.id,
+        tenantId: coupon.tenantId,
+      });
       if (rawCoupon) {
         throw new Error("Coupon id already exists");
       }
     }
 
-    if (coupon._id) delete coupon._id;
-
     if (coupon.maxAmount && !Number.isInteger(coupon.maxAmount)) {
       coupon.maxAmount = parseInt(coupon.maxAmount);
     }
 
-    try {
-      await dbm
-        .get()
-        .collection("coupons")
-        .replaceOne({ id: coupon.id, tenant: coupon.tenant }, coupon, {
-          upsert: upsert,
-        });
-      return await this.getCoupon(coupon.id, coupon.tenant);
-    } catch (err) {
-      logger.error(err);
-      return err;
-    }
+    await CouponModel.replaceOne(
+      { id: coupon.id, tenantId: coupon.tenantId },
+      coupon,
+      {
+        upsert: upsert,
+      },
+    );
+
+    return await CouponManager.getCoupon(coupon.id, coupon.tenantId);
   }
 
   /**
    * Remove a coupon.
    *
    * @param couponId
-   * @param tenant
+   * @param tenantId
    */
-  static removeCoupon(couponId, tenant) {
-    return new Promise((resolve, reject) => {
-      dbm
-        .get()
-        .collection("coupons")
-        .deleteOne({ id: couponId, tenant: tenant })
-        .then(() => resolve())
-        .catch((err) => reject(err));
-    });
+  static async removeCoupon(couponId, tenantId) {
+    await CouponModel.deleteOne({ id: couponId, tenantId: tenantId });
   }
 
   /**
    * Use a coupon and return the new price.
    *
    * @param couponId
-   * @param tenant
+   * @param tenantId
    * @param bookingPrice
    * @returns {Promise<number>}
    */
-  static async applyCoupon(couponId, tenant, bookingPrice) {
-    const coupon = await this.getCoupon(couponId, tenant);
+  static async applyCoupon(couponId, tenantId, bookingPrice) {
+    const coupon = await CouponManager.getCoupon(couponId, tenantId);
+
+    if(!coupon) {
+      return bookingPrice;
+    }
+
     let discountedPrice = bookingPrice;
 
     switch (coupon.type) {
@@ -141,7 +124,7 @@ class CouponManager {
     }
 
     coupon.usedAmount++;
-    await this.storeCoupon(coupon, false);
+    await CouponManager.storeCoupon(coupon, false);
 
     return discountedPrice;
   }

@@ -1,108 +1,17 @@
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const Tenant = require("../../../commons/entities/tenant");
-const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const PermissionService = require("../../../commons/services/permission-service");
+const InstanceManger = require("../../../commons/data-managers/instance-manager");
 const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
-const { parseBoolean } = require("../../../commons/utilities/parser");
+const { v4: uuidv4 } = require("uuid");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
   level: process.env.LOG_LEVEL,
 });
-
-class TenantPermissions {
-  static _isOwner(affectedTenant, userId, userTenant) {
-    return (
-      affectedTenant.ownerUserId === userId && affectedTenant.id === userTenant
-    );
-  }
-
-  static async _allowCreate(affectedTenant, userId, userTenant) {
-    return await UserManager.hasPermission(
-      userId,
-      userTenant,
-      RolePermission.MANAGE_TENANTS,
-      "create",
-    );
-  }
-
-  static async _allowRead(affectedTenant, userId, userTenant) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        userTenant,
-        RolePermission.MANAGE_TENANTS,
-        "readAny",
-      )
-    )
-      return true;
-
-    if (
-      TenantPermissions._isOwner(affectedTenant, userId, userTenant) &&
-      (await UserManager.hasPermission(
-        userId,
-        userTenant,
-        RolePermission.MANAGE_TENANTS,
-        "readOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowUpdate(affectedTenant, userId, userTenant) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        userTenant,
-        RolePermission.MANAGE_TENANTS,
-        "updateAny",
-      )
-    )
-      return true;
-
-    if (
-      TenantPermissions._isOwner(affectedTenant, userId, userTenant) &&
-      (await UserManager.hasPermission(
-        userId,
-        userTenant,
-        RolePermission.MANAGE_TENANTS,
-        "updateOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
-  static async _allowDelete(affectedTenant, userId, userTenant) {
-    if (
-      await UserManager.hasPermission(
-        userId,
-        userTenant,
-        RolePermission.MANAGE_TENANTS,
-        "deleteAny",
-      )
-    )
-      return true;
-
-    if (
-      TenantPermissions._isOwner(affectedTenant, userId, userTenant) &&
-      (await UserManager.hasPermission(
-        userId,
-        userTenant,
-        RolePermission.MANAGE_TENANTS,
-        "deleteOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-}
 
 /**
  * Web Controller for Bookables.
@@ -110,46 +19,31 @@ class TenantPermissions {
 class TenantController {
   static async getTenants(request, response) {
     try {
-      const {
-        user,
-        query: { publicTenants = "false" },
-      } = request;
-      const isPublicTenants = parseBoolean(publicTenants);
+      const { user } = request;
+      const publicTenants = request.query.publicTenants === "true";
+      const permissions = await UserManager.getUserPermissions(user.id);
+      const tenantIds = permissions.tenants.map((p) => p.tenantId);
+
       const tenants = await TenantManager.getTenants();
-      const isAuthenticated = request.isAuthenticated();
 
-      if (isAuthenticated && user && !isPublicTenants) {
-        const checkPermissions = tenants.map((tenant) =>
-          TenantPermissions._allowRead(tenant, user.id, user.tenant).then(
-            (allowed) => (allowed ? tenant : null),
-          ),
-        );
-        const results = await Promise.all(checkPermissions);
-        const allowedTenants = results.filter((tenant) => tenant !== null);
-
-        logger.info(
-          `Sending ${allowedTenants.length} allowed tenants to user ${user.id} (incl. details)`,
-        );
-        response.status(200).send(allowedTenants);
-      } else {
-        const publicTenants = tenants.map((tenant) => ({
-          id: tenant.id,
-          name: tenant.name,
-          contactName: tenant.contactName,
-          location: tenant.location,
-          mail: tenant.mail,
-          phone: tenant.phone,
-          defaultEventCreationMode: tenant.defaultEventCreationMode,
-        }));
-
-        logger.info(
-          `Sending ${publicTenants.length} public tenants to anonymous user`,
-        );
-        response.status(200).send(publicTenants);
+      const allowedTenants = [];
+      for (const tenant of tenants) {
+        if (publicTenants) {
+          tenant.removePrivateData();
+          if (tenantIds.includes(tenant.id)) {
+            allowedTenants.push(tenant);
+          }
+        } else if (
+          (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+          (await PermissionService._isInstanceOwner(user.id))
+        ) {
+          allowedTenants.push(tenant);
+        }
       }
-    } catch (err) {
-      logger.error(err);
-      response.status(500).send("Could not get tenants");
+      response.status(200).send(allowedTenants);
+    } catch (error) {
+      logger.error(error);
+      response.sendStatus(500);
     }
   }
 
@@ -163,26 +57,14 @@ class TenantController {
 
         if (
           user &&
-          (await TenantPermissions._allowRead(tenant, user.id, user.tenant))
+          (await PermissionService._isTenantOwner(user.id, tenant.id))
         ) {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );
           response.status(200).send(tenant);
         } else {
-          logger.info(
-            `sending tenant ${tenant.id} to user ${user?.id} without details`,
-          );
-          response.status(200).send({
-            id: tenant.id,
-            name: tenant.name,
-            contactName: tenant.contactName,
-            location: tenant.location,
-            mail: tenant.mail,
-            phone: tenant.phone,
-            website: tenant.website,
-            enablePublicStatusView: tenant.enablePublicStatusView,
-          });
+          response.sendStatus(403);
         }
       } else {
         logger.warn(
@@ -197,12 +79,12 @@ class TenantController {
   }
 
   static async storeTenant(request, response) {
-    const tenant = Object.assign(new Tenant(), request.body);
-    let isUpdate = false;
+    const tenant = new Tenant(request.body);
+    let isUpdate;
 
     try {
       const existingTenant = await TenantManager.getTenant(tenant.id);
-      isUpdate = existingTenant && existingTenant._id;
+      isUpdate = !!(existingTenant && existingTenant.id);
     } catch (error) {
       logger.error(error);
       isUpdate = false;
@@ -218,7 +100,8 @@ class TenantController {
   static async createTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = Object.assign(new Tenant(), request.body);
+      const tenant = new Tenant(request.body);
+      tenant.id = uuidv4();
 
       tenant.ownerUserId = user.id;
 
@@ -226,15 +109,18 @@ class TenantController {
         throw new Error(`Maximum number of tenants reached.`);
       }
 
-      if (await TenantPermissions._allowCreate(tenant, user.id, user.tenant)) {
-        const tenantAdmin = Object.assign(new Object(), user);
-        tenantAdmin.tenant = tenant.id;
-        tenantAdmin.roles = ["super-admin"];
-        await UserManager.storeUser(tenantAdmin);
+      const instance = await InstanceManger.getInstance();
 
-        logger.info(
-          `created tenant admin ${tenantAdmin.id} for new tenant ${tenant.id}`,
-        );
+      const hasPermission =
+        instance.allowAllUsersToCreateTenant ||
+        instance.allowedUsersToCreateTenant.includes(user.id);
+
+      console.log("hasPermission", hasPermission);
+
+      if (hasPermission) {
+        if (!tenant.ownerUserIds.includes(user.id)) {
+          tenant.ownerUserIds.push(user.id);
+        }
 
         const emailTemplate = readFileSync(
           join(
@@ -271,8 +157,8 @@ class TenantController {
   static async updateTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = Object.assign(new Tenant(), request.body);
-      if (await TenantPermissions._allowUpdate(tenant, user.id, user.tenant)) {
+      const tenant = new Tenant(request.body);
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
         await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
         response.sendStatus(200);
@@ -295,7 +181,8 @@ class TenantController {
 
       if (id) {
         if (
-          await TenantPermissions._allowDelete(tenant, user.id, user.tenant)
+          (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+          (await PermissionService._isInstanceOwner(user.id))
         ) {
           await TenantManager.removeTenant(id);
           logger.info(`removed tenant ${id} by user ${user?.id}`);
@@ -350,6 +237,155 @@ class TenantController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not check if creation is possible");
+    }
+  }
+
+  static async addUser(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const body = request.body;
+      const user = request.user;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        if (
+          tenant.users.some(
+            (userReference) => userReference.userId === body.userId,
+          )
+        ) {
+          tenant.users
+            .filter((userReference) => userReference.userId === body.userId)
+            .forEach(
+              (user) =>
+                (user.roles = [...new Set([...user.roles, ...body.roles])]),
+            );
+        } else {
+          tenant.users.push({
+            userId: body.userId,
+            roles: [...new Set(body.roles)],
+          });
+        }
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(201).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not add user to tenant");
+    }
+  }
+
+  static async removeUser(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId } = request.body;
+      const user = request.user;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        tenant.users = tenant.users.filter(
+          (userRef) => userRef.userId !== userId,
+        );
+
+        tenant.ownerUserIds = tenant.ownerUserIds.filter((u) => u !== userId);
+
+        if (tenant.ownerUserIds.length === 0) {
+          throw new Error("Cannot remove last owner from tenant");
+        }
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not remove user from tenant");
+    }
+  }
+
+  static async removeUserRole(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId, roleId } = request.body;
+      const user = request.user;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        const userRef = tenant.users.find(
+          (userRef) => userRef.userId === userId,
+        );
+        userRef.roles = userRef.roles.filter((r) => r !== roleId);
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not remove user from tenant");
+    }
+  }
+
+  static async addOwner(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId } = request.body;
+      const user = request.user;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        if (!tenant.ownerUserIds.includes(userId)) {
+          tenant.ownerUserIds.push(userId);
+        }
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not add owner to tenant");
+    }
+  }
+
+  static async removeOwner(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId } = request.body;
+      const user = request.user;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+        tenant.ownerUserIds = tenant.ownerUserIds.filter(
+          (uid) => uid !== userId,
+        );
+
+        if (tenant.ownerUserIds.length === 0) {
+          throw new Error("Cannot remove last owner from tenant");
+        }
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
+
+        response.status(200).send(updatedTenant);
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not remove owner from tenant");
     }
   }
 }
