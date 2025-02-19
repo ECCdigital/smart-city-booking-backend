@@ -1,4 +1,4 @@
-const Workflow = require("../entities/Workflow");
+const Workflow = require("../entities/workflow");
 const BookingManager = require("./booking-manager");
 
 const mongoose = require("mongoose");
