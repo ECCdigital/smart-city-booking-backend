@@ -8,9 +8,10 @@ const CouponController = require("./controllers/coupon-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
+const WorkflowController = require("./controllers/workflow-controller");
 const RoleController = require("./controllers/role-controller");
 
-var router = express.Router({ mergeParams: true });
+const router = express.Router({ mergeParams: true });
 
 // BOOKABLES
 // =========
@@ -182,6 +183,43 @@ router.post(
   FileController.createFile,
 );
 
+// WORKFLOW
+// ========
+// Protected
+router.get(
+  "/workflow/",
+  AuthenticationController.isSignedIn,
+  WorkflowController.getWorkflow,
+);
+router.post(
+  "/workflow/",
+  AuthenticationController.isSignedIn,
+  WorkflowController.createWorkflow,
+);
+router.put(
+  "/workflow/",
+  AuthenticationController.isSignedIn,
+  WorkflowController.updateWorkflow,
+);
+router.get(
+  "/workflow/states",
+  AuthenticationController.isSignedIn,
+  WorkflowController.getWorkflowStates,
+);
+router.put(
+  "/workflow/task",
+  AuthenticationController.isSignedIn,
+  WorkflowController.updateTask,
+);
+router.put(
+  "/workflow/archive",
+  AuthenticationController.isSignedIn,
+  WorkflowController.archiveTask,
+);
+router.get(
+  "/workflow/backlog",
+  AuthenticationController.isSignedIn,
+  WorkflowController.getBacklog,
 // ROLES
 // =====
 

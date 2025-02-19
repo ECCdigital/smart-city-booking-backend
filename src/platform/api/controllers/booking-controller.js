@@ -11,8 +11,8 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
+const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
-
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -29,6 +29,10 @@ class BookingController {
         bookable: await BookableManager.getBookable(
           booking.bookableId,
           booking.tenantId,
+        ),
+        workflowStatus: await WorkflowService.getWorkflowStatus(
+          booking.tenant,
+          booking.id,
         ),
       };
     }
@@ -361,6 +365,12 @@ class BookingController {
 
       if (await PermissionsService._allowUpdate(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
         await BookingService.updateBooking(tenant, booking);
+
+        await WorkflowService.updateTask(
+          tenant,
+          booking.id,
+          request.body._populated?.workflowStatus,
+        );
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );
@@ -388,6 +398,7 @@ class BookingController {
 
         if (await PermissionsService._allowDelete(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
           await BookingService.cancelBooking(tenant, id);
+          await WorkflowService.removeTask(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
           response.sendStatus(200);
         } else {
