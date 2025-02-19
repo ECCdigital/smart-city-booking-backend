@@ -32,8 +32,6 @@ class CheckoutPermissions {
       return false;
     }
 
-
-
     return true;
   }
 }
@@ -464,4 +462,8 @@ class ManualItemCheckoutService extends ItemCheckoutService {
   }
 }
 
-module.exports = { ItemCheckoutService, ManualItemCheckoutService, CheckoutPermissions };
+module.exports = {
+  ItemCheckoutService,
+  ManualItemCheckoutService,
+  CheckoutPermissions,
+};

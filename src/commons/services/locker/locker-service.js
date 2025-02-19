@@ -1,4 +1,4 @@
-const { getBookable, BookableManager } = require("../../data-managers/bookable-manager");
+const { BookableManager } = require("../../data-managers/bookable-manager");
 const { getTenantAppByType } = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const {

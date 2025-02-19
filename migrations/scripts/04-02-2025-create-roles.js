@@ -102,9 +102,7 @@ module.exports = {
 
       for (const user of assignments) {
         const isOwner = user.roles.some((roleId) => {
-          const roleDoc = existingRoles.find(
-            (r) => r.id === roleId
-          );
+          const roleDoc = existingRoles.find((r) => r.id === roleId);
           if (!roleDoc) return false;
 
           return roleDoc.manageTenants?.readAny === true;

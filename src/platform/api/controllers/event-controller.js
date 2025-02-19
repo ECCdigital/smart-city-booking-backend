@@ -88,7 +88,14 @@ class EventController {
         throw new Error(`Maximum number of  public  events reached.`);
       }
 
-      if (await PermissionService._allowCreate(event, user.id, tenant, RolePermission.MANAGE_BOOKABLES)) {
+      if (
+        await PermissionService._allowCreate(
+          event,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKABLES,
+        )
+      ) {
         await EventService.createEvent(tenant, event, user, withTicketsBoolean);
 
         logger.info(
@@ -119,7 +126,14 @@ class EventController {
         }
       }
 
-      if (await PermissionService._allowUpdate(event, user.id, tenant, RolePermission.MANAGE_BOOKABLES)) {
+      if (
+        await PermissionService._allowUpdate(
+          event,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKABLES,
+        )
+      ) {
         await EventManager.storeEvent(event);
         logger.info(
           `${tenant} -- updated event ${event.id} by user ${user?.id}`,
@@ -144,7 +158,14 @@ class EventController {
       if (id) {
         const event = await EventManager.getEvent(id, tenant);
 
-        if (await PermissionService._allowDelete(event, user.id, tenant, RolePermission.MANAGE_BOOKABLES)) {
+        if (
+          await PermissionService._allowDelete(
+            event,
+            user.id,
+            tenant,
+            RolePermission.MANAGE_BOOKABLES,
+          )
+        ) {
           await EventManager.removeEvent(id, tenant);
           logger.info(`${tenant} -- removed event ${id} by user ${user?.id}`);
           response.sendStatus(200);

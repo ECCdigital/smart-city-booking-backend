@@ -78,7 +78,7 @@ passport.use(
     async (request, id, password, done) => {
       const user = await UserManager.getUser(id, true);
 
-      if(user === null) {
+      if (user === null) {
         return done(null, false);
       }
 

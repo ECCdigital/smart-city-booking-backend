@@ -4,18 +4,12 @@ module.exports = {
   up: async function (mongoose) {
     const Role = mongoose.model("Role");
 
-    await Role.collection.updateMany(
-      {},
-      { $rename: { tenant: "tenantId" } },
-    );
+    await Role.collection.updateMany({}, { $rename: { tenant: "tenantId" } });
   },
 
   down: async function (mongoose) {
     const Role = mongoose.model("Role");
 
-    await Role.collection.updateMany(
-      {},
-      { $rename: { tenantId: "tenant" } },
-    );
+    await Role.collection.updateMany({}, { $rename: { tenantId: "tenant" } });
   },
 };

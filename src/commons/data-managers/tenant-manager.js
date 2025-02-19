@@ -165,7 +165,7 @@ class TenantManager {
 
   static async getTenantUsers(tenantId) {
     const rawTenant = await TenantModel.findOne({ id: tenantId });
-    if(!rawTenant) {
+    if (!rawTenant) {
       return null;
     }
     const tenant = new Tenant(rawTenant);
@@ -174,11 +174,13 @@ class TenantManager {
 
   static async getTenantUsersByRoles(tenantId, roles) {
     const rawTenant = await TenantModel.findOne({ id: tenantId });
-    if(!rawTenant) {
+    if (!rawTenant) {
       return [];
     }
     const tenant = new Tenant(rawTenant);
-    return tenant.users.filter(user => user.roles.some(role => roles.includes(role)));
+    return tenant.users.filter((user) =>
+      user.roles.some((role) => roles.includes(role)),
+    );
   }
 }
 

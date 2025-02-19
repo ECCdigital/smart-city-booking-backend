@@ -79,7 +79,12 @@ class BookingController {
         for (const booking of bookings) {
           if (
             user &&
-            (await PermissionsService._allowRead(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS))
+            (await PermissionsService._allowRead(
+              booking,
+              user.id,
+              tenant,
+              RolePermission.MANAGE_BOOKINGS,
+            ))
           ) {
             allowedBookings.push(booking);
           }
@@ -336,7 +341,7 @@ class BookingController {
         booking,
         user.id,
         booking.tenantId,
-        RolePermission.MANAGE_BOOKINGS
+        RolePermission.MANAGE_BOOKINGS,
       ))
     ) {
       logger.warn(
@@ -363,7 +368,14 @@ class BookingController {
       const user = request.user;
       const booking = new Booking(request.body);
 
-      if (await PermissionsService._allowUpdate(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
+      if (
+        await PermissionsService._allowUpdate(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
         await BookingService.updateBooking(tenant, booking);
 
         await WorkflowService.updateTask(
@@ -396,7 +408,14 @@ class BookingController {
       if (id) {
         const booking = await BookingManager.getBooking(id, tenant);
 
-        if (await PermissionsService._allowDelete(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
+        if (
+          await PermissionsService._allowDelete(
+            booking,
+            user.id,
+            tenant,
+            RolePermission.MANAGE_BOOKINGS,
+          )
+        ) {
           await BookingService.cancelBooking(tenant, id);
           await WorkflowService.removeTask(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
@@ -430,7 +449,14 @@ class BookingController {
 
       const booking = await BookingManager.getBooking(id, tenant);
 
-      if (await PermissionsService._allowUpdate(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS)) {
+      if (
+        await PermissionsService._allowUpdate(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
         logger.info(
           `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
         );
@@ -462,7 +488,14 @@ class BookingController {
 
       const booking = await BookingManager.getBooking(id, tenantId);
 
-      if (await PermissionsService._allowUpdate(booking, user.id, tenantId, RolePermission.MANAGE_BOOKINGS)) {
+      if (
+        await PermissionsService._allowUpdate(
+          booking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
         logger.info(
           `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
         );
@@ -558,7 +591,12 @@ class BookingController {
       for (const booking of eventBookings) {
         if (
           user &&
-          (await PermissionsService._allowRead(booking, user.id, tenantId, RolePermission.MANAGE_BOOKINGS))
+          (await PermissionsService._allowRead(
+            booking,
+            user.id,
+            tenantId,
+            RolePermission.MANAGE_BOOKINGS,
+          ))
         ) {
           allowedBookings.push(booking);
         }
@@ -594,7 +632,13 @@ class BookingController {
           tenant,
           RolePermission.MANAGE_BOOKINGS,
           "readAny",
-        )) || PermissionsService._isOwner(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS);
+        )) ||
+        PermissionsService._isOwner(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        );
 
       if (!hasPermission) {
         logger.warn(
@@ -641,7 +685,13 @@ class BookingController {
           tenant,
           RolePermission.MANAGE_BOOKINGS,
           "updateAny",
-        )) || PermissionsService._isOwner(booking, user.id, tenant, RolePermission.MANAGE_BOOKINGS);
+        )) ||
+        PermissionsService._isOwner(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        );
 
       if (!hasPermission) {
         logger.warn(

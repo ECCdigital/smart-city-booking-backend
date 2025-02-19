@@ -1,5 +1,3 @@
-const validate = require("jsonschema").validate;
-
 const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking");
 
@@ -73,8 +71,11 @@ class BookingManager {
    * @returns A single bookable object
    */
   static async getBooking(id, tenantId) {
-    const rawBooking = await BookingModel.findOne({ id: id, tenantId: tenantId });
-    if(!rawBooking) {
+    const rawBooking = await BookingModel.findOne({
+      id: id,
+      tenantId: tenantId,
+    });
+    if (!rawBooking) {
       return null;
     }
     return new Booking(rawBooking);
@@ -203,7 +204,10 @@ class BookingManager {
   }
 
   static async getBookingsCustomFilter(tenantId, filter) {
-    const rawBookings = await BookingModel.find({ tenantId: tenantId, ...filter });
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      ...filter,
+    });
     return rawBookings.map((rb) => new Booking(rb));
   }
 }

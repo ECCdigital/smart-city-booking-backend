@@ -174,7 +174,7 @@ class BundleCheckoutService {
   }
 
   setPaymentMethod() {
-    return ""
+    return "";
   }
 
   async getLockerInfo() {

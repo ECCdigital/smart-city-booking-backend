@@ -9,6 +9,6 @@ module.exports = {
       return;
     }
 
-    Instance.create({})
+    Instance.create({});
   },
 };
