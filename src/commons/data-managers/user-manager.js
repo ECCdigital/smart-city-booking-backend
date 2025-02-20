@@ -7,6 +7,12 @@ const InstanceManager = require("./instance-manager");
 const { Schema } = mongoose;
 
 const UserSchema = new Schema(User.schema());
+
+UserSchema.pre("updateOne", function (next) {
+  //
+
+});
+
 const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
 
 class UserManager {
@@ -35,6 +41,7 @@ class UserManager {
   }
 
   static async storeUser(user) {
+    console.log("Storing user", user);
     try {
       return await UserModel.replaceOne({ id: user.id }, user, {
         upsert: true,
@@ -68,6 +75,7 @@ class UserManager {
   }
 
   static async updateUser(user) {
+    console.log("Updating user", user);
     try {
       const updatedUser = await UserModel.updateOne({ id: user.id }, user, {
         upsert: true,
@@ -208,17 +216,12 @@ class UserManager {
           ]),
         ];
       }
-
-      if (instance.ownerUserIds.includes(userId)) {
-        workingPermission.adminInterfaces = [
-          ...new Set([...workingPermission.adminInterfaces, "instance"]),
-        ];
-      }
     }
 
     const permissions = {
       tenants: tenantPermissions,
       allowCreateTenant: false,
+      instanceOwner: instance.ownerUserIds.includes(userId),
     };
     if (
       instance.allowAllUsersToCreateTenant ||

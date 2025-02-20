@@ -57,7 +57,7 @@ class TenantController {
 
         if (
           user &&
-          (await PermissionService._isTenantOwner(user.id, tenant.id))
+          (await PermissionService._isTenantOwner(user.id, tenant.id) || await PermissionService._isInstanceOwner(user.id))
         ) {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
