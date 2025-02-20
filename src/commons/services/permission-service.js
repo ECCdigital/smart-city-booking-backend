@@ -120,11 +120,13 @@ class PermissionService {
    * @returns {Promise<boolean>} - A promise that resolves to true if the user has read permissions for any object, otherwise false.
    */
   static async _allowReadAny(userId, tenantId, resource) {
-    return await UserManager.hasPermission(
-      userId,
-      tenantId,
-      resource,
-      "readAny",
+    return (
+      (await UserManager.hasPermission(
+        userId,
+        tenantId,
+        resource,
+        "readAny",
+      )) || (await PermissionService._isTenantOwner(userId, tenantId))
     );
   }
 
@@ -167,11 +169,13 @@ class PermissionService {
   }
 
   static async _allowUpdateAny(userId, tenantId, resource) {
-    return await UserManager.hasPermission(
-      userId,
-      tenantId,
-      resource,
-      "updateAny",
+    return (
+      (await UserManager.hasPermission(
+        userId,
+        tenantId,
+        resource,
+        "updateAny",
+      )) || (await PermissionService._isTenantOwner(userId, tenantId))
     );
   }
 

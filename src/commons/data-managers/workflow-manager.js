@@ -11,13 +11,13 @@ const WorkflowModel =
 class WorkflowManager {
   static async getWorkflow(tenantId) {
     const rawWorkflow = await WorkflowModel.findOne({ tenantId: tenantId });
-    if (!rawWorkflow) return null;
+    if (!rawWorkflow) return {};
     return await createWorkflowFromModel(rawWorkflow);
   }
 
   static async getWorkflowStates(tenantId) {
     const rawWorkflow = await WorkflowModel.findOne({ tenantId: tenantId });
-    if (!rawWorkflow) return null;
+    if (!rawWorkflow) return {};
     return await createWorkflowFromModel(rawWorkflow, false);
   }
 

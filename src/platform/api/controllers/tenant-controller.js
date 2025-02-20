@@ -113,9 +113,8 @@ class TenantController {
 
       const hasPermission =
         instance.allowAllUsersToCreateTenant ||
-        instance.allowedUsersToCreateTenant.includes(user.id);
-
-      console.log("hasPermission", hasPermission);
+        instance.allowedUsersToCreateTenant.includes(user.id) ||
+        instance.ownerUserIds.includes(user.id);
 
       if (hasPermission) {
         if (!tenant.ownerUserIds.includes(user.id)) {

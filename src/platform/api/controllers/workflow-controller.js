@@ -14,7 +14,6 @@ class WorkflowController {
   static async getWorkflow(req, res) {
     const tenantId = req.params.tenant;
     const user = req.user;
-
     try {
       if (await PermissionService._isTenantOwner(user.id, tenantId)) {
         const workflow = await WorkflowManager.getWorkflow(tenantId);
