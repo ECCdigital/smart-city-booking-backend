@@ -20,6 +20,7 @@ class EmailAction extends WorkflowAction {
   }
 
   async execute() {
+    if (!this._action.sendTo) return;
     await MailController.sendWorkflowNotification({
       sendTo: this._action.sendTo,
       tenantId: this.tenantId,
