@@ -11,16 +11,16 @@ async function seed(mongoose) {
   const InstanceModel = mongoose.model("Instance");
   const UserModel = mongoose.model("User");
 
-  const { INIT_ADMIN_ID, INIT_ADMIN_SECRET } = process.env;
+  const { INIT_ADMIN, INIT_ADMIN_SECRET } = process.env;
 
   try {
     let instance = await InstanceModel.findOne();
 
     async function getOrCreateAdminUser() {
-      let adminUser = await UserModel.findOne({ id: INIT_ADMIN_ID || "admin" });
+      let adminUser = await UserModel.findOne({ id: INIT_ADMIN || "admin" });
       if (!adminUser) {
         const newAdminUser = new UserEntity({
-          id: INIT_ADMIN_ID || "admin",
+          id: INIT_ADMIN || "admin",
           isVerified: true,
         });
         newAdminUser.setPassword(INIT_ADMIN_SECRET || "admin");
