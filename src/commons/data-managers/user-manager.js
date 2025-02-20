@@ -8,11 +8,6 @@ const { Schema } = mongoose;
 
 const UserSchema = new Schema(User.schema());
 
-UserSchema.pre("updateOne", function (next) {
-  //
-
-});
-
 const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
 
 class UserManager {
@@ -41,9 +36,8 @@ class UserManager {
   }
 
   static async storeUser(user) {
-    console.log("Storing user", user);
     try {
-      return await UserModel.replaceOne({ id: user.id }, user, {
+      return await UserModel.updateOne({ id: user.id }, user, {
         upsert: true,
       });
     } catch (err) {
@@ -75,7 +69,6 @@ class UserManager {
   }
 
   static async updateUser(user) {
-    console.log("Updating user", user);
     try {
       const updatedUser = await UserModel.updateOne({ id: user.id }, user, {
         upsert: true,
