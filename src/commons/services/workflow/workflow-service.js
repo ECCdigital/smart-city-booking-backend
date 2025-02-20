@@ -34,6 +34,10 @@ class WorkflowService {
       status.tasks.some((task) => task.id === taskId),
     );
 
+    if (destination === "archive") {
+      return await WorkflowService.archiveTask(tenantId, taskId);
+    }
+
     if (fromStatus) {
       moveTask(workflow.states, fromStatus.id, destination, taskId, newIndex);
       await WorkflowManager.updateTasks(tenantId, workflow.id, workflow.states);
@@ -47,6 +51,11 @@ class WorkflowService {
       }
       addTask(workflow.states, destination, taskId, newIndex);
       await WorkflowManager.updateTasks(tenantId, workflow.id, workflow.states);
+      await WorkflowManager.removeTaskFromArchive(
+        tenantId,
+        workflow.id,
+        taskId,
+      );
       action(workflow.states, fromStatus?.id, destination, taskId, tenantId);
     }
     return await WorkflowManager.getWorkflow(tenantId, true);
@@ -111,7 +120,13 @@ class WorkflowService {
     const status = workflow?.states.find((status) =>
       status.tasks.some((task) => task.id === bookingID),
     );
-    return status?.id || null;
+    let archive;
+    if (!status) {
+      archive = workflow?.archive.some((task) => task.id === bookingID)
+        ? "archive"
+        : "";
+    }
+    return status?.id || archive || null;
   }
 }
 
@@ -222,6 +237,10 @@ function archiveTask(statusList, archive, sourceStatusId, taskId) {
     }
 
     sourceStatus.tasks.splice(taskIndex, 1);
+  }
+
+  if (archive.find((task) => task.id === taskId)) {
+    return;
   }
 
   archive.push({ id: taskId, added: Date.now() });

@@ -62,6 +62,13 @@ class WorkflowManager {
   static async archiveTask(tenantId, workflowId, archive) {
     await WorkflowModel.updateOne({ tenantId, _id: workflowId }, { archive });
   }
+
+  static async removeTaskFromArchive(tenantId, workflowId, taskId) {
+    const workflow = await WorkflowModel.updateOne(
+      { tenantId, _id: workflowId },
+      { $pull: { archive: { id: taskId } } },
+    );
+  }
 }
 
 async function createWorkflowFromModel(workflowModel, metaData = true) {
