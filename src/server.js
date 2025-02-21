@@ -86,6 +86,7 @@ passport.use(
       if (
         user !== undefined &&
         user.isVerified &&
+        !user.isSuspended &&
         user.verifyPassword(password)
       ) {
         done(null, user);
@@ -128,7 +129,7 @@ dbm.connect().then(() => {
     logger.info(`App listening at ${port}`);
     app.emit("app_started");
     try {
-      await seed(dbm.dbClient.connection)
+      await seed(dbm.dbClient.connection);
       await runMigrations(dbm.dbClient.connection);
     } catch (err) {
       logger.error("Error running migrations", err);

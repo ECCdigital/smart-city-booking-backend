@@ -21,6 +21,7 @@ class User {
     isVerified,
     created,
     company,
+    isSuspended,
   }) {
     this.id = id;
     this.secret = secret;
@@ -34,6 +35,7 @@ class User {
     this.isVerified = isVerified || false;
     this.created = created || Date.now();
     this.company = company;
+    this.isSuspended = isSuspended || false;
   }
 
   verifyPassword(password) {
@@ -110,6 +112,7 @@ class User {
       isVerified: { type: Boolean, default: false },
       created: { type: Double, default: Date.now() },
       company: { type: String, default: "" },
+      isSuspended: { type: Boolean, default: false },
     };
   }
 }

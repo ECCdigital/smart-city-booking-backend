@@ -176,6 +176,7 @@ class UserController {
         "zipCode",
         "city",
         "isVerified",
+        "isSuspended",
       ];
 
       fields.forEach((field) => {
