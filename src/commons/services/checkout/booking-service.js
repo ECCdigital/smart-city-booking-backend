@@ -255,6 +255,11 @@ class BookingService {
       });
 
       await BookingManager.storeBooking(booking);
+
+      if(!oldBooking.isCommitted && booking.isCommitted) {
+        await BookingService.commitBooking(tenantId, booking);
+      }
+
       const lockerServiceInstance = LockerService.getInstance();
       await lockerServiceInstance.handleUpdate(
         updatedBooking.tenantId,
