@@ -139,6 +139,16 @@ class Booking {
     return hook;
   }
 
+  removeHook(hookId) {
+    const hookIndex = this.hooks.findIndex((hook) => hook.id === hookId);
+
+    if (hookIndex === -1) {
+      throw new Error(`Hook with ID ${hookId} not found`);
+    }
+
+    this.hooks.splice(hookIndex, 1);
+  }
+
   static schema() {
     return {
       id: { type: String, required: true, unique: true },

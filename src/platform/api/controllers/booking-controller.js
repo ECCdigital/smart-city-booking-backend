@@ -554,7 +554,7 @@ class BookingController {
       if (hook) {
         if (hook.type === BOOKING_HOOK_TYPES.REJECT) {
           const { reason } = hook.payload;
-          await BookingService.rejectBooking(tenant, id, reason);
+          await BookingService.rejectBooking(tenant, id, reason, hookId);
         } else {
           return response.sendStatus(400);
         }
