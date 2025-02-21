@@ -117,12 +117,16 @@ class WorkflowService {
 
   static async getWorkflowStatus(tenantId, bookingID) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
-    const status = workflow?.states.find((status) =>
+
+    if (!workflow || !workflow.active) return null;
+
+    const status = workflow.states.find((status) =>
       status.tasks.some((task) => task.id === bookingID),
     );
+
     let archive;
     if (!status) {
-      archive = workflow?.archive.some((task) => task.id === bookingID)
+      archive = workflow.archive.some((task) => task.id === bookingID)
         ? "archive"
         : "";
     }
