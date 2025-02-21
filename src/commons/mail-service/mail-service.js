@@ -61,7 +61,7 @@ class MailerService {
     try {
       const instance = await InstanceManger.getInstance(false);
 
-      if (instance.mailEnabled === false) {
+      if (instance.mailEnabled === false && address) {
         return;
       }
 
