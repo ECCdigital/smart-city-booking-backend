@@ -32,7 +32,7 @@ class EventManager {
    */
   static async getEvent(id, tenantId) {
     const rawEvent = await EventModel.findOne({ id: id, tenantId: tenantId });
-    if(!rawEvent) {
+    if (!rawEvent) {
       return null;
     }
     return new Event(rawEvent);
@@ -46,9 +46,13 @@ class EventManager {
    * @returns Promise<>
    */
   static async storeEvent(event, upsert = true) {
-    await EventModel.updateOne({ id: event.id, tenantId: event.tenantId }, event, {
-      upsert: upsert,
-    });
+    await EventModel.updateOne(
+      { id: event.id, tenantId: event.tenantId },
+      event,
+      {
+        upsert: upsert,
+      },
+    );
   }
 
   /**

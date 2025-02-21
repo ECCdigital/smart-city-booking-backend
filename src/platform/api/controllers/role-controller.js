@@ -21,7 +21,14 @@ class RoleController {
 
       let allowedRoles = [];
       for (let role of roles) {
-        if (await PermissionService._allowRead(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
+        if (
+          await PermissionService._allowRead(
+            role,
+            user.id,
+            tenantId,
+            RolePermission.MANAGE_ROLES,
+          )
+        ) {
           allowedRoles.push(role);
         }
       }
@@ -43,7 +50,14 @@ class RoleController {
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
         if (role) {
-          if (await PermissionService._allowRead(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
+          if (
+            await PermissionService._allowRead(
+              role,
+              user.id,
+              tenantId,
+              RolePermission.MANAGE_ROLES,
+            )
+          ) {
             logger.info(`Sending role ${role.id} to user ${user?.id}`);
             response.status(200).send(role);
           } else {
@@ -94,7 +108,14 @@ class RoleController {
       role.ownerUserId = user.id;
       role.tenantId = tenantId;
 
-      if (await PermissionService._allowCreate(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
+      if (
+        await PermissionService._allowCreate(
+          role,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_ROLES,
+        )
+      ) {
         await RoleManager.storeRole(role, tenantId);
         logger.info(`Created role ${role.id} by user ${user?.id}`);
         response.sendStatus(201);
@@ -114,7 +135,14 @@ class RoleController {
       const tenantId = request.params.tenant;
       const role = new Role(request.body);
 
-      if (await PermissionService._allowUpdate(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
+      if (
+        await PermissionService._allowUpdate(
+          role,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_ROLES,
+        )
+      ) {
         await RoleManager.storeRole(role, tenantId);
         logger.info(`Updated role ${role.id} by user ${user?.id}`);
         response.sendStatus(201);
@@ -136,7 +164,14 @@ class RoleController {
 
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
-        if (await PermissionService._allowDelete(role, user.id, tenantId, RolePermission.MANAGE_ROLES)) {
+        if (
+          await PermissionService._allowDelete(
+            role,
+            user.id,
+            tenantId,
+            RolePermission.MANAGE_ROLES,
+          )
+        ) {
           await RoleManager.removeRole(roleId, tenantId);
           logger.info(`Removed role ${role.id} by user ${user?.id}`);
           response.sendStatus(200);

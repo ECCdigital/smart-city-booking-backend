@@ -13,6 +13,7 @@ const bunyan = require("bunyan");
 const DatabaseManager = require("./commons/utilities/database-manager.js");
 const UserManager = require("./commons/data-managers/user-manager");
 const { runMigrations } = require("../migrations/migrationsManager");
+const seed = require("../seeder/seeder");
 
 const dbm = DatabaseManager.getInstance();
 
@@ -78,7 +79,7 @@ passport.use(
     async (request, id, password, done) => {
       const user = await UserManager.getUser(id, true);
 
-      if(user === null) {
+      if (user === null) {
         return done(null, false);
       }
 
@@ -127,6 +128,7 @@ dbm.connect().then(() => {
     logger.info(`App listening at ${port}`);
     app.emit("app_started");
     try {
+      await seed(dbm.dbClient.connection)
       await runMigrations(dbm.dbClient.connection);
     } catch (err) {
       logger.error("Error running migrations", err);

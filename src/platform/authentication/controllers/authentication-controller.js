@@ -96,7 +96,7 @@ class AuthenticationController {
       const permissions = await UserManager.getUserPermissions(user.id);
 
       response.status(200).send({ user, permissions });
-    } catch (error) {
+    } catch {
       response.sendStatus(500);
     }
   }

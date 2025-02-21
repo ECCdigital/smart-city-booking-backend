@@ -28,7 +28,6 @@ class InstanceController {
   static async storeInstance(request, response) {
     try {
       const { user, body } = request;
-      const instance = await InstanceManger.getInstance();
       const hasPermission = await PermissionService._isInstanceOwner(user.id);
 
       if (!hasPermission) {

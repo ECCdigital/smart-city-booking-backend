@@ -31,6 +31,7 @@ class Instance {
     allowAllUsersToCreateTenant,
     allowedUsersToCreateTenant,
     ownerUserIds,
+    isInitialized,
   }) {
     this.mailTemplate = mailTemplate;
     this.mailAddress = mailAddress;
@@ -53,6 +54,7 @@ class Instance {
     this.allowAllUsersToCreateTenant = allowAllUsersToCreateTenant;
     this.allowedUsersToCreateTenant = allowedUsersToCreateTenant;
     this.ownerUserIds = ownerUserIds;
+    this.isInitialized = isInitialized;
   }
 
   removePrivateData() {
@@ -71,6 +73,7 @@ class Instance {
     delete this.noreplyGraphClientSecret;
     delete this.ownerUserIds;
     delete this.mailEnabled;
+    delete this.isInitialized;
   }
 
   static schema() {
@@ -96,6 +99,7 @@ class Instance {
       allowAllUsersToCreateTenant: { type: Boolean, default: false },
       allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
       ownerUserIds: { type: Array, ref: "User", default: [] },
+      isInitialized: { type: Boolean, default: false },
     };
   }
 }

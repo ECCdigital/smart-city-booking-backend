@@ -1,6 +1,6 @@
 var express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
-const TenantController = require("./controllers/tenant-controller");
+const { TenantController } = require("./controllers/tenant-controller");
 const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 

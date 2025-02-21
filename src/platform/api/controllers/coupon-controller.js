@@ -21,7 +21,7 @@ class CouponController {
     let isUpdate = false;
     const existingCoupon = await CouponManager.getCoupon(coupon.id, tenant);
 
-    if(existingCoupon) {
+    if (existingCoupon) {
       isUpdate = true;
     }
 
@@ -38,7 +38,14 @@ class CouponController {
       const user = request.user;
       const coupon = new Coupon(request.body);
 
-      if (await PermissionService._allowCreate(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
+      if (
+        await PermissionService._allowCreate(
+          coupon,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_COUPONS,
+        )
+      ) {
         try {
           coupon.ownerUserId = user.id;
           const updatedCoupon = await CouponManager.storeCoupon(coupon);
@@ -68,7 +75,14 @@ class CouponController {
       const user = request.user;
       const coupon = new Coupon(request.body);
 
-      if (await PermissionService._allowUpdate(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
+      if (
+        await PermissionService._allowUpdate(
+          coupon,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_COUPONS,
+        )
+      ) {
         try {
           const updatedCoupon = await CouponManager.storeCoupon(coupon);
           logger.info(
@@ -100,7 +114,14 @@ class CouponController {
 
       let allowedCoupons = [];
       for (let coupon of coupons) {
-        if (await PermissionService._allowRead(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
+        if (
+          await PermissionService._allowRead(
+            coupon,
+            user.id,
+            tenant,
+            RolePermission.MANAGE_COUPONS,
+          )
+        ) {
           allowedCoupons.push(coupon);
         }
       }
@@ -144,7 +165,14 @@ class CouponController {
 
       const coupon = await CouponManager.getCoupon(id, tenant);
 
-      if (await PermissionService._allowDelete(coupon, user.id, tenant, RolePermission.MANAGE_COUPONS)) {
+      if (
+        await PermissionService._allowDelete(
+          coupon,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_COUPONS,
+        )
+      ) {
         const removedCoupon = await CouponManager.removeCoupon(id, tenant);
         logger.info(
           `${tenant} -- removed coupon ${coupon.id} by user ${user?.id}`,

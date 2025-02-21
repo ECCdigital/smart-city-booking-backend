@@ -517,6 +517,36 @@ class MailController {
       },
     });
   }
+
+  static async sendWorkflowNotification({
+    sendTo,
+    tenantId,
+    bookingId,
+    oldStatus,
+    newStatus,
+  }) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    let content = `<p>Guten Tag</p><br>`;
+    content += `<p>bitte beachten Sie, dass sich der Status der folgenden Buchung geändert hat:</p>`;
+    content += `<ul>`;
+    content += `<li><strong>Buchungsnummer:</strong> ${bookingId}</li>`;
+    content += `<li><strong>Mandant:</strong> ${tenant.name}</li>`;
+    content += `<li><strong>Alter Status:</strong> ${oldStatus}</li>`;
+    content += `<li><strong>Neuer Status:</strong> ${newStatus}</li>`;
+    content += `</ul>`;
+    content += `<p>Aufgrund dieser Änderung ist ggf. eine Prüfung oder weitere Bearbeitung erforderlich.</p>`;
+
+    await MailerService.send({
+      address: sendTo,
+      subject: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
+      mailTemplate: tenant.genericMailTemplate,
+      model: {
+        title: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
+        content: content,
+      },
+    });
+  }
 }
 
 function sanitizeReason(reason) {

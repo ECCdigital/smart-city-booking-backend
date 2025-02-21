@@ -13,7 +13,6 @@ const actions = {
  * A service class for handling permission checks.
  */
 class PermissionService {
-
   /**
    * Checks if the user is the owner of the instance.
    *
@@ -50,13 +49,22 @@ class PermissionService {
   }
 
   /**
-   * A service class for handling permission checks.
+   * Checks if the affected user is the same as the given user.
+   *
+   * @param {Object} affectedUser - The user object to check.
+   * @param {string} userId - The ID of the user to compare against.
+   * @returns {boolean} - Returns true if the affected user is the same as the given user, otherwise false.
    */
   static _isSelf(affectedUser, userId) {
     return affectedUser.id === userId;
   }
 
   static async _allowAction(object, userId, tenantId, resource, actionType) {
+    const anyAction =
+      actionType === actions.CREATE ? "create" : `${actionType}Any`;
+    const ownAction =
+      actionType === actions.CREATE ? "create" : `${actionType}Own`;
+
     if (await PermissionService._isTenantOwner(userId, tenantId)) {
       return true;
     }
@@ -67,8 +75,9 @@ class PermissionService {
       userId,
       tenantId,
       resource,
-      `${actionType}Any`,
+      anyAction,
     );
+
     if (hasAny) {
       return true;
     }
@@ -77,7 +86,7 @@ class PermissionService {
         userId,
         tenantId,
         resource,
-        `${actionType}Own`,
+        ownAction,
       );
     }
     return false;
@@ -99,6 +108,25 @@ class PermissionService {
       tenantId,
       resource,
       actions.READ,
+    );
+  }
+
+  /**
+   * Checks if the user has read permissions for any object.
+   *
+   * @param {string} userId - The ID of the user.
+   * @param {string} tenantId - The ID of the tenant.
+   * @param {string} resource - The resource type.
+   * @returns {Promise<boolean>} - A promise that resolves to true if the user has read permissions for any object, otherwise false.
+   */
+  static async _allowReadAny(userId, tenantId, resource) {
+    return (
+      (await UserManager.hasPermission(
+        userId,
+        tenantId,
+        resource,
+        "readAny",
+      )) || (await PermissionService._isTenantOwner(userId, tenantId))
     );
   }
 
@@ -137,6 +165,17 @@ class PermissionService {
       tenantId,
       resource,
       actions.UPDATE,
+    );
+  }
+
+  static async _allowUpdateAny(userId, tenantId, resource) {
+    return (
+      (await UserManager.hasPermission(
+        userId,
+        tenantId,
+        resource,
+        "updateAny",
+      )) || (await PermissionService._isTenantOwner(userId, tenantId))
     );
   }
 

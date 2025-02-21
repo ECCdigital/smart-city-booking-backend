@@ -38,6 +38,8 @@ class BookableController {
 
       const bookables = await BookableManager.getBookables(tenant);
 
+      console.log("tenant", tenant);
+
       if (request.query.populate === "true") {
         for (const bookable of bookables) {
           bookable._populated = {

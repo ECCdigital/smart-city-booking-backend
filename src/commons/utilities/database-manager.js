@@ -42,7 +42,7 @@ class DatabaseManager {
 
       mongoose.connection.on("connected", () => {});
 
-      mongoose.connection.on("error", (err) => {});
+      mongoose.connection.on("error", () => {});
 
       mongoose.connection.on("disconnected", () => {});
 
@@ -58,7 +58,7 @@ class DatabaseManager {
    * @param {string} dbName - The name of the database.
    * @returns Get the current database object.
    */
-  get(dbName = process.env.DB_NAME) {
+  get() {
     if (!this.dbClient) {
       throw new Error("Database connection is not established.");
     }
@@ -70,7 +70,7 @@ class DatabaseManager {
    *
    * @param {string} dbName - The name of the database to disconnect.
    */
-  async close(dbName = process.env.DB_NAME) {
+  async close() {
     if (!this.dbClient) {
       return;
     }

@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const migrationSchema = new mongoose.Schema({
   name: {
@@ -12,18 +12,16 @@ const migrationSchema = new mongoose.Schema({
   executedAt: {
     type: Date,
     default: Date.now,
-  }
+  },
 });
 
-const Migration = mongoose.model('Migration', migrationSchema);
-
+const Migration = mongoose.model("Migration", migrationSchema);
 
 function loadMigrations() {
-  const migrationsDir = path.join(__dirname, '/scripts');
+  const migrationsDir = path.join(__dirname, "/scripts");
   const files = fs.readdirSync(migrationsDir);
 
-  const migrationFiles = files.filter((file) => file.endsWith('.js'));
-
+  const migrationFiles = files.filter((file) => file.endsWith(".js"));
 
   const migrations = migrationFiles.map((file) => {
     const migrationPath = path.join(migrationsDir, file);
@@ -36,7 +34,15 @@ function loadMigrations() {
     };
   });
 
-  migrations.sort((a, b) => (a.name < b.name ? -1 : 1));
+  migrations.sort((a, b) => {
+    const [dayA, monthA, yearA] = a.name.split("-");
+    const [dayB, monthB, yearB] = b.name.split("-");
+
+    const dateA = new Date(+yearA, +monthA - 1, +dayA);
+    const dateB = new Date(+yearB, +monthB - 1, +dayB);
+
+    return dateA - dateB;
+  });
 
   return migrations;
 }
@@ -57,9 +63,8 @@ async function runMigrations(mongoose) {
     }
   }
 
-  console.log('All migrations completed');
+  console.log("All migrations completed");
 }
-
 
 async function rollbackMigrations(mongoose, name) {
   const allMigrations = loadMigrations().reverse();

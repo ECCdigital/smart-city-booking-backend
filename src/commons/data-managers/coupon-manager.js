@@ -22,7 +22,7 @@ class CouponManager {
       id: couponId,
       tenantId: tenantId,
     });
-    if(!rawCoupon) {
+    if (!rawCoupon) {
       return null;
     }
     return new Coupon(rawCoupon);
@@ -105,7 +105,7 @@ class CouponManager {
   static async applyCoupon(couponId, tenantId, bookingPrice) {
     const coupon = await CouponManager.getCoupon(couponId, tenantId);
 
-    if(!coupon) {
+    if (!coupon) {
       return bookingPrice;
     }
 
