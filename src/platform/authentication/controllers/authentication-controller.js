@@ -41,7 +41,7 @@ class AuthenticationController {
       request.body.firstName &&
       request.body.lastName
     ) {
-      UserManager.getUser(request.body.id, request.params.tenant).then(
+      UserManager.getUser(request.body.id).then(
         (user) => {
           if (user) {
             response.sendStatus(409);
@@ -76,7 +76,7 @@ class AuthenticationController {
     }
   }
 
-  static signout(request, response) {
+  static signout(request, response, next) {
     request.logout(function (err) {
       if (err) {
         return next(err);
@@ -128,10 +128,9 @@ class AuthenticationController {
   static resetPassword(request, response) {
     var id = request.body.id;
     var password = request.body.password;
-    var tenant = request.params.tenant;
 
     if (id && password) {
-      UserManager.getUser(id, tenant)
+      UserManager.getUser(id, true)
         .then((user) => {
           if (user) {
             UserManager.resetPassword(user, password)

@@ -9,8 +9,8 @@ const logger = bunyan.createLogger({
 });
 
 class UserPermissions {
-  static async _allowCreate() {
-    return false;
+  static async _allowCreate(userId) {
+    return !!(await PermissionService._isInstanceOwner(userId));
   }
 
   static async _allowRead(user, userId) {
@@ -26,10 +26,7 @@ class UserPermissions {
   }
 
   static async _allowUpdate(affectedUser, userId) {
-    return !!(
-      (await PermissionService._isInstanceOwner(userId)) ||
-      PermissionService._isSelf(affectedUser, userId)
-    );
+    return !!(await PermissionService._isInstanceOwner(userId));
   }
 
   static async _allowDelete(affectedUser, userId) {
@@ -44,6 +41,14 @@ class UserPermissions {
  * Web Controller for Events.
  */
 class UserController {
+
+  /**
+   * Retrieves a list of users that the current user is allowed to read.
+   *
+   * @param {Object} request - The request object.
+   * @param {Object} response - The response object.
+   * @returns {Promise<void>} - A promise that resolves when the users are retrieved and sent in the response.
+   */
   static async getUsers(request, response) {
     try {
       const tenantId = request.params.tenant;
@@ -68,6 +73,13 @@ class UserController {
     }
   }
 
+  /**
+   * Retrieves a specific user that the current user is allowed to read.
+   *
+   * @param {Object} request - The request object.
+   * @param {Object} response - The response object.
+   * @returns {Promise<void>} - A promise that resolves when the user is retrieved and sent in the response.
+   */
   static async getUser(request, response) {
     try {
       const tenantId = request.params.tenant;
@@ -105,7 +117,7 @@ class UserController {
   static async storeUser(request, response) {
     const userObject = new User(request.body);
 
-    const isUpdate = !!(await UserManager.getUser(userObject.id)).id;
+    const isUpdate = !!(await UserManager.getUser(userObject.id));
 
     if (isUpdate) {
       await UserController.updateUser(request, response);
@@ -114,23 +126,26 @@ class UserController {
     }
   }
 
+  /**
+   * Creates a new user.
+   *
+   * @param {Object} request - The request object.
+   * @param {Object} response - The response object.
+   * @returns {Promise<void>} - A promise that resolves when the user is created.
+   */
   static async createUser(request, response) {
     try {
       const user = request.user;
-      const tenantId = request.params.tenant;
-
-      const userObject = new User(request.body);
-
       if (await UserPermissions._allowCreate(user.id)) {
-        await UserManager.storeUser(userObject);
+        const userObject = new User(request.body);
+        userObject.setPassword(userObject.secret);
+        const newUser = await UserManager.storeUser(userObject);
         logger.info(
-          `${tenantId} -- created user ${userObject.id} by user ${user?.id}`,
+          ` Instance -- created user ${userObject.id} by user ${user?.id}`,
         );
-        response.sendStatus(201);
+        response.status(200).send(newUser);
       } else {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} not allowed to create user`,
-        );
+        logger.warn(`Instance -- User ${user?.id} not allowed to create user`);
         response.sendStatus(403);
       }
     } catch (error) {
@@ -139,14 +154,39 @@ class UserController {
     }
   }
 
+  /**
+   * Updates a user's information.
+   *
+   * @param {Object} request - The request object.
+   * @param {Object} response - The response object.
+   * @returns {Promise<void>} - A promise that resolves when the user is updated.
+   */
   static async updateUser(request, response) {
     try {
       const user = request.user;
 
-      const userObject = new User(request.body);
-      if (await UserPermissions._allowUpdate(userObject, user.id)) {
-        await UserManager.storeUser(userObject);
-        logger.info(`updated user ${userObject.id} by user ${user?.id}`);
+      const newInfos = { id: request.body.id };
+
+      const fields = [
+        "firstName",
+        "lastName",
+        "company",
+        "phone",
+        "address",
+        "zipCode",
+        "city",
+        "isVerified",
+      ];
+
+      fields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(request.body, field)) {
+          newInfos[field] = request.body[field];
+        }
+      });
+
+      if (await UserPermissions._allowUpdate(newInfos, user.id)) {
+        await UserManager.storeUser(newInfos);
+        logger.info(`updated user ${newInfos.id} by user ${user?.id}`);
         response.sendStatus(200);
       } else {
         logger.warn(`User ${user?.id} not allowed to update user`);
@@ -158,6 +198,13 @@ class UserController {
     }
   }
 
+  /**
+   * Removes a user.
+   *
+   * @param {Object} request - The request object.
+   * @param {Object} response - The response object.
+   * @returns {Promise<void>} - A promise that resolves when the user is removed.
+   */
   static async removeUser(request, response) {
     try {
       const tenantId = request.params.tenant;
@@ -188,59 +235,57 @@ class UserController {
     }
   }
 
-  // Allows only to change the display name
-  static updateMe(request, response) {
-    const user = new User(request.user);
-    UserManager.getUser(user.id)
-      .then((userFromDb) => {
-        if (userFromDb) {
-          if (user.id === userFromDb.id) {
-            if (request.body.firstName && request.body.lastName) {
-              userFromDb.firstName = request.body.firstName;
-              userFromDb.lastName = request.body.lastName;
-              userFromDb.company = request.body.company;
-              userFromDb.phone = request.body.phone;
-              userFromDb.address = request.body.address;
-              userFromDb.zipCode = request.body.zipCode;
-              userFromDb.city = request.body.city;
-              UserManager.updateUser(userFromDb)
-                .then(() => {
-                  request.session.passport.user.firstName =
-                    userFromDb.firstName;
-                  request.session.passport.user.lastName = userFromDb.lastName;
-                  request.session.passport.user.phone = userFromDb.phone;
-                  request.session.passport.user.address = userFromDb.address;
-                  request.session.passport.user.zipCode = userFromDb.zipCode;
-                  request.session.passport.user.city = userFromDb.city;
-                  request.session.save();
-                  UserManager.getUserPermissions(userFromDb.id)
-                    .then((permissions) => {
-                      userFromDb.permissions = permissions;
-                      response.status(200).send(userFromDb);
-                    })
-                    .catch((err) => {
-                      console.error(err);
-                      response.sendStatus(500);
-                    });
-                })
-                .catch((error) => {
-                  response.status(500).send(error);
-                });
-            } else {
-              response.sendStatus(200);
-            }
-          } else {
-            response.sendStatus(403);
-          }
-        } else {
-          response.sendStatus(404);
+  /**
+   * Updates the current user's information.
+   *
+   * @param {Object} request - The request object.
+   * @param {Object} response - The response object.
+   * @returns {Promise<void>} - A promise that resolves when the update is complete.
+   */
+  static async updateMe(request, response) {
+    try {
+      const user = new User(request.user);
+      const newInfos = { id: user.id };
+
+      const fields = [
+        "firstName",
+        "lastName",
+        "company",
+        "phone",
+        "address",
+        "zipCode",
+        "city",
+      ];
+
+      fields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(request.body, field)) {
+          newInfos[field] = request.body[field];
         }
-      })
-      .catch((error) => {
-        response.status(500).send(error);
       });
+      const updatedUser = await UserManager.storeUser(newInfos);
+
+      request.session.passport.user.firstName = updatedUser.firstName;
+      request.session.passport.user.lastName = updatedUser.lastName;
+      request.session.passport.user.phone = updatedUser.phone;
+      request.session.passport.user.address = updatedUser.address;
+      request.session.passport.user.zipCode = updatedUser.zipCode;
+      request.session.passport.user.city = updatedUser.city;
+      request.session.save();
+
+      response.status(200).send(updatedUser);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("could not update user");
+    }
   }
 
+  /**
+   * Retrieves a list of user IDs based on the specified roles.
+   *
+   * @param {Object} request - The request object.
+   * @param {Object} response - The response object.
+   * @returns {Promise<void>} - A promise that resolves when the user IDs are retrieved and sent in the response.
+   */
   static async getUserIds(request, response) {
     try {
       const user = request.user;

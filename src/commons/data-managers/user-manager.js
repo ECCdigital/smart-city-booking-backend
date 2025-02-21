@@ -29,6 +29,7 @@ class UserManager {
   static async signupUser(user) {
     try {
       const newUser = await UserModel.create(user);
+      console.log("User created", newUser);
       await UserManager.requestVerification(new User(newUser));
     } catch (err) {
       throw err;
@@ -37,9 +38,10 @@ class UserManager {
 
   static async storeUser(user) {
     try {
-      return await UserModel.updateOne({ id: user.id }, user, {
+      await UserModel.updateOne({ id: user.id }, user, {
         upsert: true,
       });
+      return await UserManager.getUser(user.id);
     } catch (err) {
       throw err;
     }
@@ -68,22 +70,11 @@ class UserManager {
     }
   }
 
-  static async updateUser(user) {
-    try {
-      const updatedUser = await UserModel.updateOne({ id: user.id }, user, {
-        upsert: true,
-      });
-      return new User(updatedUser);
-    } catch (err) {
-      throw err;
-    }
-  }
-
   static async requestVerification(user) {
     const MailController = require("../mail-service/mail-controller");
     try {
       const hook = user.addHook(HookTypes.VERIFY);
-      await UserManager.updateUser(user);
+      await UserManager.storeUser(user);
       await MailController.sendVerificationRequest(user.id, hook.id);
       return hook;
     } catch (err) {
@@ -95,7 +86,7 @@ class UserManager {
     const MailController = require("../mail-service/mail-controller");
     try {
       const hook = user.addPasswordResetHook(password);
-      await UserManager.updateUser(user);
+      await UserManager.storeUser(user);
       await MailController.sendPasswordResetRequest(user.id, hook.id);
     } catch (err) {
       throw err;
@@ -111,7 +102,7 @@ class UserManager {
       const u = new User(user);
       const hookType = u.hooks.find((h) => h.id === hookId).type;
       if (u.releaseHook(hookId)) {
-        await UserManager.updateUser(u);
+        await UserManager.storeUser(u);
         return hookType;
       } else {
         throw new Error("Hook does not exist.");
