@@ -310,12 +310,17 @@ class BookingService {
     }
   }
 
-  static async rejectBooking(tenantId, bookingId, reason = "") {
+  static async rejectBooking(tenantId, bookingId, reason = "", hookId = null) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
 
       booking.isRejected = true;
-      await BookingService.updateBooking(tenantId, booking);
+
+      if (hookId) {
+        booking.removeHook(hookId);
+      }
+
+      await BookingManager.storeBooking(booking);
 
       await MailController.sendBookingRejection(
         booking.mail,
@@ -339,7 +344,7 @@ class BookingService {
         reason: reason,
       });
 
-      await BookingService.updateBooking(tenant, booking);
+      await BookingManager.storeBooking(booking);
 
       await MailController.sendVerifyBookingRejection(
         booking.mail,
