@@ -108,6 +108,7 @@ class MailController {
       model,
       attachments,
       bcc: bccEmail,
+      useInstanceMail: tenant.useInstanceMail,
     });
   }
 
@@ -545,6 +546,7 @@ class MailController {
         title: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
         content: content,
       },
+      useInstanceMail: tenant.useInstanceMail,
     });
   }
 }

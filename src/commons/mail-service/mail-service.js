@@ -46,6 +46,7 @@ class MailerService {
    * @param {Object} model - An object containing attributes that should be replaced in the mail template.
    * @param {Array} attachments - An array of attachments to include in the email.
    * @param {null} bcc - Blind carbon copy recipients.
+   * @param {boolean} useInstanceMail - Whether to use the instance mail configuration.
    * @returns {Promise<void>} - A promise that resolves when the email is sent.
    * @throws {Error} - Throws an error if sending the email fails.
    */
@@ -57,6 +58,7 @@ class MailerService {
     model,
     attachments = [],
     bcc = null,
+    useInstanceMail = false,
   }) {
     try {
       const instance = await InstanceManger.getInstance(false);
@@ -78,7 +80,7 @@ class MailerService {
         noreplyGraphClientId: instance.noreplyGraphClientId,
         noreplyGraphClientSecret: instance.noreplyGraphClientSecret,
       };
-      if (tenantId) {
+      if (tenantId && !useInstanceMail) {
         const tenant = await TenantManager.getTenant(tenantId);
         if (
           tenant.noreplyUseGraphApi &&

@@ -10,6 +10,7 @@ class Tenant {
     bookableDetailLink,
     eventDetailLink,
     genericMailTemplate,
+    useInstanceMail,
     noreplyMail,
     noreplyDisplayName,
     noreplyHost,
@@ -45,6 +46,7 @@ class Tenant {
     this.bookableDetailLink = bookableDetailLink;
     this.eventDetailLink = eventDetailLink;
     this.genericMailTemplate = genericMailTemplate;
+    this.useInstanceMail = useInstanceMail;
     this.noreplyMail = noreplyMail;
     this.noreplyDisplayName = noreplyDisplayName;
     this.noreplyHost = noreplyHost;
@@ -73,6 +75,7 @@ class Tenant {
 
   removePrivateData() {
     delete this.genericMailTemplate;
+    delete this.useInstanceMail;
     delete this.noreplyMail;
     delete this.noreplyDisplayName;
     delete this.noreplyHost;
@@ -109,6 +112,7 @@ class Tenant {
       bookableDetailLink: { type: String, default: "" },
       eventDetailLink: { type: String, default: "" },
       genericMailTemplate: { type: String, default: "" },
+      useInstanceMail: { type: Boolean, default: false },
       noreplyMail: { type: String, default: "" },
       noreplyDisplayName: { type: String, default: "" },
       noreplyHost: { type: String, default: "" },
