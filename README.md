@@ -290,7 +290,7 @@ Input:
 
 ---
 
-### GET /api/:tenant/bookables (Public)
+### GET /api/:tenant/bookables/public (Public)
 
 Returns a list of all bookables for the specified tenant.
 
@@ -298,7 +298,25 @@ Input:
 
 - tenant: The tenant ID
 
-### GET /api/:tenant/bookables/:id (Public)
+
+### GET /api/:tenant/bookables (Protected)
+
+Returns a list of all bookables for the specified tenant.
+
+Input:
+
+- tenant: The tenant ID
+
+### GET /api/:tenant/bookables/public/:id (Public)
+
+Returns the bookable with the specified ID.
+
+Input:
+
+- tenant: The tenant ID
+- id: The ID of the bookable
+- 
+### GET /api/:tenant/bookables/:id (Protected)
 
 Returns the bookable with the specified ID.
 

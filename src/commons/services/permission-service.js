@@ -45,7 +45,7 @@ class PermissionService {
    * @returns {boolean} - Returns true if the user is the owner of the object, otherwise false.
    */
   static _isOwner(object, userId, tenantId) {
-    return object.assignedUserId === userId && object.tenantId === tenantId;
+    return object.ownerUserId === userId && object.tenantId === tenantId;
   }
 
   /**
@@ -81,6 +81,7 @@ class PermissionService {
     if (hasAny) {
       return true;
     }
+
     if (PermissionService._isOwner(object, userId, tenantId)) {
       return await UserManager.hasPermission(
         userId,

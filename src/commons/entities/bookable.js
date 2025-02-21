@@ -71,6 +71,7 @@ class Bookable {
     lockerDetails,
     requiredFields,
     bookingNotes,
+    ownerUserId,
   }) {
     this.id = id;
     this.tenantId = tenantId;
@@ -102,6 +103,7 @@ class Bookable {
     this.lockerDetails = lockerDetails || [];
     this.requiredFields = requiredFields || [];
     this.bookingNotes = bookingNotes || "";
+    this.ownerUserId = ownerUserId || "";
   }
 
   /**
@@ -210,6 +212,7 @@ class Bookable {
       lockerDetails: [Object],
       requiredFields: [String],
       bookingNotes: String,
+      ownerUserId: String,
     };
   }
 }

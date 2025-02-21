@@ -20,6 +20,36 @@ const logger = bunyan.createLogger({
  * Web Controller for Bookables.
  */
 class BookableController {
+  static async getPublicBookables(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const bookables = await BookableManager.getBookables(tenant);
+
+      if (request.query.populate === "true") {
+        for (const bookable of bookables) {
+          bookable._populated = {
+            event: await EventManager.getEvent(
+              bookable.eventId,
+              bookable.tenantId,
+            ),
+            relatedBookables: await BookableManager.getRelatedBookables(
+              bookable.id,
+              bookable.tenantId,
+            ),
+          };
+        }
+      }
+      logger.info(
+        `${tenant} -- Returning ${bookables.length} bookables to user ${user?.id}`,
+      );
+
+      response.status(200).send(bookables);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send(`Could not get bookables`);
+    }
+  }
   /**
    * This method is used to get all bookable objects for a specific tenant.
    * It first fetches all bookables from the database.
@@ -38,10 +68,23 @@ class BookableController {
 
       const bookables = await BookableManager.getBookables(tenant);
 
-      console.log("tenant", tenant);
+      const allowedBookables = [];
+
+      for (const b of bookables) {
+        if (
+          await PermissionService._allowRead(
+            b,
+            user.id,
+            tenant,
+            RolePermission.MANAGE_BOOKABLES,
+          )
+        ) {
+          allowedBookables.push(b);
+        }
+      }
 
       if (request.query.populate === "true") {
-        for (const bookable of bookables) {
+        for (const bookable of allowedBookables) {
           bookable._populated = {
             event: await EventManager.getEvent(
               bookable.eventId,
@@ -54,35 +97,18 @@ class BookableController {
           };
         }
       }
-      //TODO: add a public version of the bookable
-
       logger.info(
-        `${tenant} -- Returning ${bookables.length} bookables to user ${user?.id}`,
+        `${tenant} -- Returning ${allowedBookables.length} bookables to user ${user?.id}`,
       );
 
-      response.status(200).send(bookables);
+      response.status(200).send(allowedBookables);
     } catch (err) {
       logger.error(err);
       response.status(500).send(`Could not get bookables`);
     }
   }
 
-  /**
-   * This method is used to get a specific bookable object.
-   * It first checks if the bookable id is provided in the request.
-   * If not, it sends a 400 status code with an error message.
-   * If the id is provided, it tries to fetch the bookable from the database.
-   * If the bookable is not found, it sends a 404 status code with an error message.
-   * If the bookable is found, it checks if the user is allowed to read the bookable.
-   * If the user is not allowed, it sends a 403 status code.
-   * If the user is allowed, it populates the bookable with related data if requested,
-   * and sends the bookable back with a 200 status code.
-   *
-   * @param {Object} request - The HTTP request object, containing the parameters and body.
-   * @param {Object} response - The HTTP response object, used to send the response back to the client.
-   * @throws {Error} If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
-   */
-  static async getBookable(request, response) {
+  static async getPublicBookable(request, response) {
     const tenant = request.params.tenant;
     try {
       const user = request.user;
@@ -112,7 +138,76 @@ class BookableController {
         };
       }
 
-      //TODO: add a public version of the bookable
+      logger.info(
+        `${tenant} -- Returning bookable ${bookable.id} to user ${user?.id}`,
+      );
+      response.status(200).send(bookable);
+    } catch (err) {
+      logger.error(`${tenant} -- ${err.message}`);
+      response.status(500).send(`Could not get bookable`);
+    }
+  }
+
+  /**
+   * This method is used to get a specific bookable object.
+   * It first checks if the bookable id is provided in the request.
+   * If not, it sends a 400 status code with an error message.
+   * If the id is provided, it tries to fetch the bookable from the database.
+   * If the bookable is not found, it sends a 404 status code with an error message.
+   * If the bookable is found, it checks if the user is allowed to read the bookable.
+   * If the user is not allowed, it sends a 403 status code.
+   * If the user is allowed, it populates the bookable with related data if requested,
+   * and sends the bookable back with a 200 status code.
+   *
+   * @param {Object} request - The HTTP request object, containing the parameters and body.
+   * @param {Object} response - The HTTP response object, used to send the response back to the client.
+   * @throws {Error} If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
+   */
+  static async getBookable(request, response) {
+    const tenant = request.params.tenant;
+    try {
+      const user = request.user;
+      const id = request.params.id;
+
+      console.log("id", id);
+
+      if (!id) {
+        logger.warn(`${tenant} -- Could not get bookable. No id provided.`);
+        return response.status(400).send(`${tenant} -- No id provided`);
+      }
+
+      const bookable = await BookableManager.getBookable(id, tenant);
+      if (!bookable) {
+        logger.warn(`${tenant} -- Bookable with id ${id} not found.`);
+        return response.status(404).send(`Bookable with id ${id} not found`);
+      }
+
+      if (
+        !(await PermissionService._allowRead(
+          bookable,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKABLES,
+        ))
+      ) {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to read bookable ${id}`,
+        );
+        return response.sendStatus(403);
+      }
+
+      if (request.query.populate === "true") {
+        bookable._populated = {
+          event: await EventManager.getEvent(
+            bookable.eventId,
+            bookable.tenantId,
+          ),
+          relatedBookables: await BookableManager.getRelatedBookables(
+            bookable.id,
+            bookable.tenantId,
+          ),
+        };
+      }
 
       logger.info(
         `${tenant} -- Returning bookable ${bookable.id} to user ${user?.id}`,

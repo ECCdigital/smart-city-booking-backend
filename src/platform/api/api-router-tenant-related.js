@@ -17,8 +17,8 @@ const router = express.Router({ mergeParams: true });
 // =========
 
 //Public
-router.get("/bookables", BookableController.getBookables);
-router.get("/bookables/:id", BookableController.getBookable);
+router.get("/bookables/public", BookableController.getPublicBookables);
+router.get("/bookables/public/:id", BookableController.getPublicBookable);
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
@@ -27,6 +27,17 @@ router.get(
 );
 
 // Protected
+router.get(
+  "/bookables",
+  AuthenticationController.isSignedIn,
+  BookableController.getBookables,
+);
+router.get(
+  "/bookables/:id",
+  AuthenticationController.isSignedIn,
+  BookableController.getBookable,
+);
+
 router.put(
   "/bookables",
   AuthenticationController.isSignedIn,
