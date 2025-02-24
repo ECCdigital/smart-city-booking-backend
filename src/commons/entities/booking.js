@@ -18,33 +18,8 @@ class Booking {
   /**
    * Constructs a new Booking object.
    *
-   * @param {Object} params - The parameters for the booking.
-   * @param {string} params.id - The unique identifier for the booking.
-   * @param {string} params.tenantId - The tenant identifier.
-   * @param {string} params.assignedUserId - The ID of the user assigned to the booking.
-   * @param {Array} params.attachments - The attachments associated with the booking.
-   * @param {Array} params.bookableItems - The items that can be booked.
-   * @param {string} params.comment - The comment for the booking.
-   * @param {string} params.company - The company associated with the booking.
-   * @param {string} params.couponCode - The coupon code used for the booking.
-   * @param {boolean} params.isCommitted - Whether the booking is committed.
-   * @param {boolean} params.isPayed - Whether the booking is paid.
-   * @param {string} params.isRejected - Whether the booking is rejected.
-   * @param {string} params.location - The location of the booking.
-   * @param {Array} params.lockerInfo - The locker information for the booking.
-   * @param {string} params.mail - The email address associated with the booking.
-   * @param {string} params.name - The name associated with the booking.
-   * @param {string} params.paymentProvider - The payment provider used for the booking.
-   * @param {string} params.paymentMethod - The payment method used for the booking.
-   * @param {string} params.phone - The phone number associated with the booking.
-   * @param {number} params.priceEur - The price of the booking in euros.
-   * @param {string} params.street - The street address associated with the booking.
-   * @param {Date} params.timeBegin - The start time of the booking.
-   * @param {Date} params.timeCreated - The creation time of the booking.
-   * @param {Date} params.timeEnd - The end time of the booking.
-   * @param {number} params.vatIncludedEur - The VAT included in the price in euros.
-   * @param {string} params.zipCode - The zip code associated with the booking.
    * @param {string} id Identifier of the booking
+   * @param {string} tenantId The foreign identifier of the tenant related to this booking
    * @param {string} assignedUserId The foreign identifier of the user related to this booking
    * @param {string} mail e-mail address in case no user is assigned to the booking
    * @param {string} comment A free text comment by the user
@@ -91,7 +66,7 @@ class Booking {
     vatIncludedEur,
     zipCode,
     street,
-    couponUsed,
+    _couponUsed,
     hooks,
   } = {}) {
     this.id = id;
@@ -119,7 +94,7 @@ class Booking {
     this.isCommitted = isCommitted || false;
     this.isPayed = isPayed || false;
     this.isRejected = isRejected || false;
-    this.couponUsed = couponUsed || {};
+    this._couponUsed = _couponUsed || {};
     this.hooks = hooks || [];
   }
 
@@ -183,7 +158,7 @@ class Booking {
       timeEnd: Double,
       vatIncludedEur: Number,
       zipCode: String,
-      couponUsed: Object,
+      _couponUsed: Object,
       hooks: [Object],
     };
   }

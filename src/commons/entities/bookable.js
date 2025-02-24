@@ -10,103 +10,134 @@ const BookableTypes = Object.freeze({
  */
 class Bookable {
   /**
+   * Constructs a new instance of the Bookable class.
    *
-   * @param {string} id Logical identifier of the bookable object
-   * @param {string} tenantId Tenant identifier
-   * @param {String} type Type class of the bookable object, determines whether object is a room, location, ticket or similar. NOTE: Please use BookableTypes!
-   * @param {boolean} enabled true, if the object is enabled
-   * @param {string} parent Logical identifier of a parent bookable object, undefined if there is no parent
-   * @param {string} title Display Name of the bookable object
-   * @param {string} description Short description of the bookable object
-   * @param {array<string>} flags Set of String used to indicate specific properties such as 'barrier-free'
-   * @param {double} priceEur Price of the resource in Euro
-   * @param {double} priceValueAddedTax Value added tax of the price
-   * @param {integer} amount Number of available bookable resource, e.g. 5 tickets
-   * @param {boolean} autoCommitBooking true, if the resource is bookable without any manual management steps
-   * @param {string} location Location of the object, e.g. city and street
-   * @param {array<string>} tags Set of strings used for internal classification and filtering.
-   * @param {boolean} isScheduleRelated true, if the bookable need to be booked with time schedule
-   * @param {boolean} isTimePeriodRelated true, if the bookable need to be booked with time period
-   * @param {array<Object>} timePeriods Array of time periods, e.g. [ { weekdays: [1,2], startTime: '08:00', endTime: '12:00' }, { weekdays: [3,4], begin: '13:00', end: '17:00' } ]
-   * @param {boolean} isOpeningHoursRelated true, if the bookable need to be booked with time period
-   * @param {array<string>} permittedUsers Array of user ids that are allowed to book the resource
-   * @param {array<string>} permittedRoles Array of role ids that are allowed to book the resource
-   * @param {array<Object>} openingHours Array of time periods, e.g. [ { weekdays: [1,2], startTime: '08:00', endTime: '12:00' }, { weekdays: [3,4], begin: '13:00', end: '17:00' } ]
-   * @param {string} eventId The Id of a related event if applicable, otherwise this field stays undefined.
-   * @param {array<Attachment>} attachments A list of attachments represented by its Urls
-   * @param {string} priceCategory The price category of the resource, e.g. per-hour, per-day
-   * @param {array<string>} relatedBookableIds related bookable objects that have to be checked during booking
-   * @param {boolean} isBookable true, if the bookable object is bookable
-   * @param {boolean} isPublic true, if the bookable object is visible to the public
-   * @param lockerDetails Details about the locker, e.g. locker number, locker size
-   * @param {array<string>} requiredFields List of required fields for the bookable object
-   * @param {string} bookingNotes Notes for the booking
-   * @param {string} ownerUserId The user id of the owner
+   * @param {Object} params The parameters for the bookable object.
+   * @param {string} params.id Logical identifier of the bookable object.
+   * @param {string} params.tenantId Tenant identifier.
+   * @param {string} params.type Type class of the bookable object, determines whether object is a room, location, ticket or similar. NOTE: Please use BookableTypes!
+   * @param {boolean} params.enabled true, if the object is enabled.
+   * @param {string} params.parent Logical identifier of a parent bookable object, undefined if there is no parent.
+   * @param {string} params.title Display Name of the bookable object.
+   * @param {string} params.description Short description of the bookable object.
+   * @param {array<string>} params.flags Set of strings used to indicate specific properties such as 'barrier-free'.
+   * @param {string} params.imgUrl URL of the image representing the bookable object.
+   * @param {double} params.priceEur Price of the resource in Euro.
+   * @param {double} params.priceValueAddedTax Value added tax of the price.
+   * @param {integer} params.amount Number of available bookable resources, e.g. 5 tickets.
+   * @param {integer} params.minBookingDuration Minimum booking duration in minutes.
+   * @param {integer} params.maxBookingDuration Maximum booking duration in minutes.
+   * @param {boolean} params.autoCommitBooking true, if the resource is bookable without any manual management steps.
+   * @param {string} params.location Location of the object, e.g. city and street.
+   * @param {array<string>} params.tags Set of strings used for internal classification and filtering.
+   * @param {boolean} params.isScheduleRelated true, if the bookable needs to be booked with a time schedule.
+   * @param {boolean} params.isTimePeriodRelated true, if the bookable needs to be booked with a time period.
+   * @param {array<Object>} params.timePeriods Array of time periods, e.g. [ { weekdays: [1,2], startTime: '08:00', endTime: '12:00' }, { weekdays: [3,4], begin: '13:00', end: '17:00' } ].
+   * @param {boolean} params.isOpeningHoursRelated true, if the bookable needs to be booked with opening hours.
+   * @param {boolean} params.isSpecialOpeningHoursRelated true, if the bookable needs to be booked with special opening hours.
+   * @param {array<Object>} params.specialOpeningHours Array of special opening hours.
+   * @param {boolean} params.isLongRange true, if the bookable is a long-range resource.
+   * @param {Object} params.longRangeOptions Options for long-range booking.
+   * @param {array<string>} params.permittedUsers Array of user ids that are allowed to book the resource.
+   * @param {array<string>} params.permittedRoles Array of role ids that are allowed to book the resource.
+   * @param {array<string>} params.freeBookingUsers Array of user ids that can book the resource for free.
+   * @param {array<string>} params.freeBookingRoles Array of role ids that can book the resource for free.
+   * @param {array<Object>} params.openingHours Array of opening hours.
+   * @param {string} params.eventId The Id of a related event if applicable, otherwise this field stays undefined.
+   * @param {array<Attachment>} params.attachments A list of attachments represented by their URLs.
+   * @param {string} params.priceCategory The price category of the resource, e.g. per-hour, per-day.
+   * @param {array<string>} params.relatedBookableIds Related bookable objects that have to be checked during booking.
+   * @param {boolean} params.isBookable true, if the bookable object is bookable.
+   * @param {boolean} params.isPublic true, if the bookable object is visible to the public.
+   * @param {array<Object>} params.lockerDetails Details about the locker, e.g. locker number, locker size.
+   * @param {array<string>} params.requiredFields List of required fields for the bookable object.
+   * @param {string} params.bookingNotes Notes for the booking.
+   * @param {array<string>} params.checkoutBookableIds Array of bookable ids required for checkout.
+   * @param {string} params.ownerUserId The user id of the owner.
    */
   constructor({
     id,
     tenantId,
-    type,
-    enabled,
     parent,
+    type,
     title,
     description,
+    enabled,
+    isPublic,
+    imgUrl,
     flags,
-    priceEur,
-    priceValueAddedTax,
-    amount,
-    autoCommitBooking,
-    location,
     tags,
+    location,
+    isBookable,
+    amount,
+    minBookingDuration,
+    maxBookingDuration,
+    autoCommitBooking,
+    bookingNotes,
     isScheduleRelated,
     isTimePeriodRelated,
     timePeriods,
     isOpeningHoursRelated,
+    openingHours,
+    isSpecialOpeningHoursRelated,
+    specialOpeningHours,
+    isLongRange,
+    longRangeOptions,
+    priceEur,
+    priceValueAddedTax,
+    priceCategory,
     permittedUsers,
     permittedRoles,
-    openingHours,
-    eventId,
-    attachments,
-    priceCategory,
+    freeBookingUsers,
+    freeBookingRoles,
     relatedBookableIds,
-    isBookable,
-    isPublic,
+    checkoutBookableIds,
+    attachments,
     lockerDetails,
     requiredFields,
-    bookingNotes,
+    eventId,
     ownerUserId,
   }) {
     this.id = id;
     this.tenantId = tenantId;
-    this.type = type;
-    this.enabled = enabled;
     this.parent = parent;
+    this.type = type;
     this.title = title;
     this.description = description;
+    this.enabled = enabled;
+    this.isPublic = isPublic || false;
+    this.imgUrl = imgUrl;
     this.flags = flags || [];
-    this.priceEur = priceEur;
-    this.priceValueAddedTax = priceValueAddedTax;
-    this.amount = amount;
-    this.autoCommitBooking = autoCommitBooking;
-    this.location = location;
     this.tags = tags || [];
+    this.location = location;
+    this.isBookable = isBookable || false;
+    this.amount = amount;
+    this.minBookingDuration = minBookingDuration;
+    this.maxBookingDuration = maxBookingDuration;
+    this.autoCommitBooking = autoCommitBooking;
+    this.bookingNotes = bookingNotes || "";
     this.isScheduleRelated = isScheduleRelated;
     this.isTimePeriodRelated = isTimePeriodRelated || false;
     this.timePeriods = timePeriods || [];
     this.isOpeningHoursRelated = isOpeningHoursRelated || false;
+    this.openingHours = openingHours || [];
+    this.isSpecialOpeningHoursRelated = isSpecialOpeningHoursRelated || false;
+    this.specialOpeningHours = specialOpeningHours || [];
+    this.isLongRange = isLongRange;
+    this.longRangeOptions = longRangeOptions || null;
+    this.priceEur = priceEur;
+    this.priceValueAddedTax = priceValueAddedTax;
+    this.priceCategory = priceCategory;
     this.permittedUsers = permittedUsers || [];
     this.permittedRoles = permittedRoles || [];
-    this.openingHours = openingHours || [];
-    this.eventId = eventId;
-    this.attachments = attachments || [];
-    this.priceEur = priceEur;
-    this.priceCategory = priceCategory;
+    this.freeBookingUsers = freeBookingUsers;
+    this.freeBookingRoles = freeBookingRoles;
     this.relatedBookableIds = relatedBookableIds || [];
-    this.isBookable = isBookable || false;
-    this.isPublic = isPublic || false;
+    this.checkoutBookableIds = checkoutBookableIds || [];
+    this.attachments = attachments || [];
     this.lockerDetails = lockerDetails || [];
     this.requiredFields = requiredFields || [];
-    this.bookingNotes = bookingNotes || "";
+    this.eventId = eventId;
     this.ownerUserId = ownerUserId || "";
   }
 
@@ -194,9 +225,12 @@ class Bookable {
       title: String,
       description: String,
       flags: [String],
+      imgUrl: String,
       priceEur: Number,
       priceValueAddedTax: Number,
       amount: Number,
+      minBookingDuration: Number,
+      maxBookingDuration: Number,
       autoCommitBooking: Boolean,
       location: String,
       tags: [String],
@@ -204,9 +238,15 @@ class Bookable {
       isTimePeriodRelated: Boolean,
       timePeriods: [Object],
       isOpeningHoursRelated: Boolean,
+      openingHours: [Object],
+      isSpecialOpeningHoursRelated: Boolean,
+      specialOpeningHours: [Object],
+      isLongRange: Boolean,
+      longRangeOptions: Object,
       permittedUsers: [String],
       permittedRoles: [String],
-      openingHours: [Object],
+      freeBookingUsers: [String],
+      freeBookingRoles: [String],
       eventId: String,
       attachments: [Object],
       priceCategory: String,
@@ -216,6 +256,7 @@ class Bookable {
       lockerDetails: [Object],
       requiredFields: [String],
       bookingNotes: String,
+      checkoutBookableIds: [String],
       ownerUserId: String,
     };
   }

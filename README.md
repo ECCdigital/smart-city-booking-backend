@@ -298,7 +298,6 @@ Input:
 
 - tenant: The tenant ID
 
-
 ### GET /api/:tenant/bookables (Protected)
 
 Returns a list of all bookables for the specified tenant.
@@ -315,7 +314,8 @@ Input:
 
 - tenant: The tenant ID
 - id: The ID of the bookable
-- 
+-
+
 ### GET /api/:tenant/bookables/:id (Protected)
 
 Returns the bookable with the specified ID.
@@ -785,25 +785,46 @@ Example:
   "location": "Example Location",
   "mail": "example@example.com",
   "phone": "1234567890",
-  "noreplyHost": "smtp.example.com",
-  "noreplyMail": "noreply@example.com",
-  "noreplyDisplayName": "Example Display Name",
-  "noreplyPort": "465",
-  "noreplyPassword": { },
-  "applications": [],
-  "invoiceTemplate": "<html>...</html>",
-  "genericMailTemplate": "<html>...</html>",
-  "receiptTemplate": "<html>...</html>",
-  "receiptNumberPrefix": "exmp",
-  "paymentPurposeSuffix": "Example 123 4 56",
-  "noreplyUser": "smtp_user",
+  "website": "https://example.com",
   "bookableDetailLink": "https://www.example.com/bookable-detail",
   "eventDetailLink": "https://www.example.com/event-detail",
-  "ownerUserId": "example@example.com",
+  "genericMailTemplate": "<html>...</html>",
+  "useInstanceMail": false,
+  "noreplyMail": "example@example.com",
+  "noreplyDisplayName": "Example Display Name",
+  "noreplyHost": "smtp.example.com",
+  "noreplyPort": "465",
+  "noreplyUser": "smtp_user",
+  "noreplyPassword": {},
+  "noreplyStarttls": false,
+  "noreplyUseGraphApi": false,
+  "noreplyGraphTenantId": "noreplyGraphTenantId",
+  "noreplyGraphClientId": "noreplyGraphClientId",
+  "noreplyGraphClientSecret": "noreplyGraphClientSecret",
+  "receiptTemplate": "<html>...</html>",
+  "receiptNumberPrefix": "exmp",
   "receiptCount": {
     "2024": 1
   },
-  "website": "https://example.com"
+  "invoiceTemplate": "<html>...</html>",
+  "invoiceNumberPrefix": "exmp",
+  "invoiceCount": {
+    "2024": 1
+  },
+  "paymentPurposeSuffix": "Example 123 4 56",
+  "applications": [],
+  "maxBookingAdvanceInMonths": 12,
+  "defaultEventCreationMode": "simple",
+  "enablePublicStatusView": true,
+  "ownerUserIds": [
+    "john.doe@example.com"
+  ],
+  "users": [
+    {
+      "userId": "john.doe@example.com",
+      "roles": ["super-admin"]
+    }
+  ]
 }
 ```
 
@@ -826,35 +847,56 @@ Example:
 {
   "id": "super-admin",
   "name": "Super Admin",
-  "ownerTenant": "default",
+  "tenantId": "default",
   "adminInterfaces": [
-    "locations", "tenants", "users", "roles", "bookings",
-    "coupons", "rooms", "resources", "tickets", "events"
+    "locations",
+    "tenants",
+    "users",
+    "roles",
+    "bookings",
+    "coupons",
+    "rooms",
+    "resources",
+    "tickets",
+    "events"
   ],
-  "manageUsers": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  },
-  "manageTenants": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  },
   "manageBookables": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteOwn": true,
+    "deleteAny": true
   },
   "manageRoles": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteOwn": true,
+    "deleteAny": true
   },
   "manageCoupons": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteOwn": true,
+    "deleteAny": true
   },
   "manageBookings": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  }
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteOwn": true,
+    "deleteAny": true
+  },
+  "freeBookings": true
 }
 ```
 
@@ -867,14 +909,18 @@ Example:
 ```JSON
 {
   "id": "someone@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "phone": "1234567890",
+  "address": "123 Main St",
+  "zipCode": "12345",
+  "city": "Anytown",
+  "company": "Some Corp",
   "secret": "encrypted-password",
-  "tenant": "default",
   "hooks": [],
   "isVerified": true,
-  "created": 1658991377408,
-  "roles": [
-    "super-admin"
-  ]
+  "isSuspended": false,
+  "created": 1658991377408
 }
 ```
 
@@ -1025,7 +1071,7 @@ Example:
 ```JSON
 {
   "id": "BK-1234",
-  "tenant": "default",
+  "tenantId": "default",
   "assignedUserId": "user1",
   "timeBegin":  1707994800000,
   "timeEnd": 1708009200000,
@@ -1056,7 +1102,7 @@ Example:
 ```JSON
 {
   "id": "STUDENT50",
-  "tenant": "default",
+  "tenantId": "default",
   "description": "50% discount for students",
   "type": "percentage",
   "discount": "50",
@@ -1092,7 +1138,7 @@ Example:
 ```JSON
 {
   "id": "event-123",
-  "tenant": "default",
+  "tenantId": "default",
   "attachments": [ ],
   "attendees": {
     "publicEvent": true,
@@ -1157,7 +1203,8 @@ Example:
         "schedules": []
       }
     ]
-  ]
+  ],
+  "ownerUserId": "user1"
 }
 
 ```
