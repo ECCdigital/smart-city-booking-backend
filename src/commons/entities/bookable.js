@@ -29,6 +29,8 @@ class Bookable {
    * @param {boolean} isTimePeriodRelated true, if the bookable need to be booked with time period
    * @param {array<Object>} timePeriods Array of time periods, e.g. [ { weekdays: [1,2], startTime: '08:00', endTime: '12:00' }, { weekdays: [3,4], begin: '13:00', end: '17:00' } ]
    * @param {boolean} isOpeningHoursRelated true, if the bookable need to be booked with time period
+   * @param {array<string>} permittedUsers Array of user ids that are allowed to book the resource
+   * @param {array<string>} permittedRoles Array of role ids that are allowed to book the resource
    * @param {array<Object>} openingHours Array of time periods, e.g. [ { weekdays: [1,2], startTime: '08:00', endTime: '12:00' }, { weekdays: [3,4], begin: '13:00', end: '17:00' } ]
    * @param {string} eventId The Id of a related event if applicable, otherwise this field stays undefined.
    * @param {array<Attachment>} attachments A list of attachments represented by its Urls
@@ -39,6 +41,7 @@ class Bookable {
    * @param lockerDetails Details about the locker, e.g. locker number, locker size
    * @param {array<string>} requiredFields List of required fields for the bookable object
    * @param {string} bookingNotes Notes for the booking
+   * @param {string} ownerUserId The user id of the owner
    */
   constructor({
     id,
@@ -97,6 +100,7 @@ class Bookable {
     this.eventId = eventId;
     this.attachments = attachments || [];
     this.priceEur = priceEur;
+    this.priceCategory = priceCategory;
     this.relatedBookableIds = relatedBookableIds || [];
     this.isBookable = isBookable || false;
     this.isPublic = isPublic || false;

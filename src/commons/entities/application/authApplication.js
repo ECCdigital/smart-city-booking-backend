@@ -1,10 +1,9 @@
-const Application = require('./application');
+const Application = require("./application");
 const SecurityUtils = require("../../utilities/security-utils");
-
 
 class AuthApplication extends Application {
   constructor(params) {
-    super({type: 'auth', ...params});
+    super({ type: "auth", ...params });
     this.serverUrl = params.serverUrl || "";
     this.realm = params.realm || "";
     this.publicClient = params.publicClient || "";
@@ -18,7 +17,9 @@ class AuthApplication extends Application {
    */
   decrypt() {
     if (this.privateClientSecret) {
-      this.privateClientSecret = SecurityUtils.decrypt(this.privateClientSecret);
+      this.privateClientSecret = SecurityUtils.decrypt(
+        this.privateClientSecret,
+      );
     }
   }
 
@@ -27,7 +28,9 @@ class AuthApplication extends Application {
    */
   encrypt() {
     if (this.privateClientSecret) {
-      this.privateClientSecret = SecurityUtils.encrypt(this.privateClientSecret);
+      this.privateClientSecret = SecurityUtils.encrypt(
+        this.privateClientSecret,
+      );
     }
   }
 
@@ -43,6 +46,5 @@ class AuthApplication extends Application {
     };
   }
 }
-
 
 module.exports = AuthApplication;

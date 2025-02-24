@@ -1,9 +1,9 @@
-const Application = require('./application');
+const Application = require("./application");
 const SecurityUtils = require("../../utilities/security-utils");
 
 class PaymentApplication extends Application {
   constructor(params) {
-    super({type: 'payment', ...params});
+    super({ type: "payment", ...params });
     this.bank = params.bank || "";
     this.iban = params.iban || "";
     this.bic = params.bic || "";
@@ -23,10 +23,10 @@ class PaymentApplication extends Application {
     if (this.paymentSecret) {
       this.paymentSecret = SecurityUtils.decrypt(this.paymentSecret);
     }
-    if(this.paymentMerchantId){
+    if (this.paymentMerchantId) {
       this.paymentMerchantId = SecurityUtils.decrypt(this.paymentMerchantId);
     }
-    if(this.paymentProjectId){
+    if (this.paymentProjectId) {
       this.paymentProjectId = SecurityUtils.decrypt(this.paymentProjectId);
     }
   }
@@ -38,10 +38,10 @@ class PaymentApplication extends Application {
     if (this.paymentSecret) {
       this.paymentSecret = SecurityUtils.encrypt(this.paymentSecret);
     }
-    if(this.paymentMerchantId){
+    if (this.paymentMerchantId) {
       this.paymentMerchantId = SecurityUtils.encrypt(this.paymentMerchantId);
     }
-    if(this.paymentProjectId){
+    if (this.paymentProjectId) {
       this.paymentProjectId = SecurityUtils.encrypt(this.paymentProjectId);
     }
   }
@@ -61,7 +61,6 @@ class PaymentApplication extends Application {
       paymentPurposeSuffix: { type: String, default: "" },
     };
   }
-
 }
 
 module.exports = PaymentApplication;

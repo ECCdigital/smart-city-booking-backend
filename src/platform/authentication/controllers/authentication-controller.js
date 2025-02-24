@@ -41,36 +41,34 @@ class AuthenticationController {
       request.body.firstName &&
       request.body.lastName
     ) {
-      UserManager.getUser(request.body.id).then(
-        (user) => {
-          if (user) {
-            response.sendStatus(409);
-          } else {
-            const user = new User({
-              id: request.body.id,
-              secret: undefined,
-              tenant: request.params.tenant,
-              firstName: request.body.firstName,
-              lastName: request.body.lastName,
-              company: request.body.company,
+      UserManager.getUser(request.body.id).then((user) => {
+        if (user) {
+          response.sendStatus(409);
+        } else {
+          const user = new User({
+            id: request.body.id,
+            secret: undefined,
+            tenant: request.params.tenant,
+            firstName: request.body.firstName,
+            lastName: request.body.lastName,
+            company: request.body.company,
+          });
+          user.setPassword(request.body.password);
+
+          UserManager.signupUser(user)
+            .then(async () => {
+              logger.info(`User ${user.id} signed up.`);
+
+              await MailController.sendUserCreated(user.id);
+
+              response.sendStatus(201);
+            })
+            .catch((err) => {
+              logger.error(err);
+              response.status(500).send("could not signup user");
             });
-            user.setPassword(request.body.password);
-
-            UserManager.signupUser(user)
-              .then(async () => {
-                logger.info(`User ${user.id} signed up.`);
-
-                await MailController.sendUserCreated(user.id);
-
-                response.sendStatus(201);
-              })
-              .catch((err) => {
-                logger.error(err);
-                response.status(500).send("could not signup user");
-              });
-          }
-        },
-      );
+        }
+      });
     } else {
       response.sendStatus(400);
     }

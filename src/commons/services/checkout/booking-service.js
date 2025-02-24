@@ -256,7 +256,7 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
-      if(!oldBooking.isCommitted && booking.isCommitted) {
+      if (!oldBooking.isCommitted && booking.isCommitted) {
         await BookingService.commitBooking(tenantId, booking);
       }
 

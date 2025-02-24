@@ -41,7 +41,6 @@ class UserPermissions {
  * Web Controller for Events.
  */
 class UserController {
-
   /**
    * Retrieves a list of users that the current user is allowed to read.
    *
