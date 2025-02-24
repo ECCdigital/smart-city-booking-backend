@@ -43,7 +43,7 @@ class Coupon {
     );
   }
 
-  static schema() {
+  static get schema() {
     return {
       id: { type: String, required: true },
       amount: { type: Double, default: 0 },

@@ -1,63 +1,5 @@
 const Tenant = require("../entities/tenant");
-const SecurityUtils = require("../utilities/security-utils");
-
-const mongoose = require("mongoose");
-
-const { Schema } = mongoose;
-const TenantSchema = new Schema(Tenant.schema());
-
-TenantSchema.pre("updateOne", async function (next) {
-  const update = this.getUpdate();
-
-  update.noreplyPassword = SecurityUtils.encrypt(update.noreplyPassword);
-
-  update.noreplyGraphClientSecret = SecurityUtils.encrypt(
-    update.noreplyGraphClientSecret,
-  );
-  next();
-});
-
-TenantSchema.pre("replaceOne", async function (next) {
-  const update = this.getUpdate();
-
-  update.noreplyPassword = SecurityUtils.encrypt(update.noreplyPassword);
-
-  update.noreplyGraphClientSecret = SecurityUtils.encrypt(
-    update.noreplyGraphClientSecret,
-  );
-  next();
-});
-
-TenantSchema.pre("save", async function (next) {
-  this.noreplyPassword = SecurityUtils.encrypt(this.noreplyPassword);
-  this.noreplyGraphClientSecret = SecurityUtils.encrypt(
-    this.noreplyGraphClientSecret,
-  );
-  next();
-});
-
-TenantSchema.post("init", function (doc) {
-  if (doc.noreplyPassword) {
-    doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
-  }
-  if (doc.noreplyGraphClientSecret) {
-    doc.noreplyGraphClientSecret = SecurityUtils.decrypt(
-      doc.noreplyGraphClientSecret,
-    );
-  }
-});
-
-const TenantModel =
-  mongoose.models.Tenant || mongoose.model("Tenant", TenantSchema);
-
-const TENANT_ENCRYPT_KEYS = [
-  "paymentMerchantId",
-  "paymentProjectId",
-  "paymentSecret",
-  "noreplyPassword",
-  "password",
-  "noreplyGraphClientSecret",
-];
+const TenantModel = require("./models/tenantModel");
 
 /**
  * Data Manager for Tenant objects.
@@ -70,11 +12,7 @@ class TenantManager {
   static async getTenants() {
     const rawTenants = await TenantModel.find();
     return rawTenants.map((rt) => {
-      const tenant = new Tenant(rt);
-      tenant.applications = tenant.applications.map((app) => {
-        return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-      });
-      return tenant;
+      return new Tenant(rt);
     });
   }
 
@@ -89,11 +27,7 @@ class TenantManager {
     if (!rawTenant) {
       return null;
     }
-    const tenant = new Tenant(rawTenant);
-    tenant.applications = tenant.applications.map((app) => {
-      return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-    });
-    return tenant;
+    return new Tenant(rawTenant);
   }
 
   /**
@@ -105,9 +39,6 @@ class TenantManager {
    */
   static async storeTenant(tenant, upsert = true) {
     const newTenant = new Tenant(tenant);
-    newTenant.applications = newTenant.applications.map((app) => {
-      return SecurityUtils.encryptObject(app, TENANT_ENCRYPT_KEYS);
-    });
 
     await TenantModel.updateOne({ id: tenant.id }, newTenant, {
       upsert: upsert,
@@ -130,9 +61,6 @@ class TenantManager {
   static async getTenantApps(tenantId) {
     const rawTenant = await TenantModel.findOne({ id: tenantId });
     const tenant = new Tenant(rawTenant);
-    tenant.applications = tenant.applications.map((app) => {
-      return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-    });
     return tenant.applications;
   }
 
@@ -140,21 +68,14 @@ class TenantManager {
     const rawTenant = await TenantModel.findOne({ id: tenantId });
 
     const tenant = new Tenant(rawTenant);
-    const application = tenant.applications.find((app) => app.id === appId);
-    return SecurityUtils.decryptObject(application, TENANT_ENCRYPT_KEYS);
+    return tenant.applications.find((app) => app.id === appId);
   }
 
   static async getTenantAppByType(tenantId, appType) {
     const rawTenant = await TenantModel.findOne({ id: tenantId });
 
     const tenant = new Tenant(rawTenant);
-    const applications = tenant.applications.filter(
-      (app) => app.type === appType,
-    );
-
-    return applications.map((app) => {
-      return SecurityUtils.decryptObject(app, TENANT_ENCRYPT_KEYS);
-    });
+    return tenant.applications.filter((app) => app.type === appType);
   }
 
   static async checkTenantCount() {

@@ -172,7 +172,7 @@ class Bookable {
     return Math.round(this.priceEur * 100) / 100;
   }
 
-  static schema() {
+  static get schema() {
     return {
       id: {
         type: String,

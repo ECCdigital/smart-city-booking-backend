@@ -50,7 +50,7 @@ class Role {
     this.freeBookings = freeBookings;
   }
 
-  static schema() {
+  static get schema() {
     return {
       id: { type: String, required: true },
       name: { type: String, required: true },

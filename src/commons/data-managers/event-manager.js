@@ -1,11 +1,5 @@
 const { Event } = require("../entities/event");
-
-const mongoose = require("mongoose");
-const { Schema } = mongoose;
-
-const EventSchema = new Schema(Event.schema());
-const EventModel =
-  mongoose.models.Event || mongoose.model("Event", EventSchema);
+const EventModel = require("./models/eventModel");
 
 /**
  * Data Manager for Event objects.

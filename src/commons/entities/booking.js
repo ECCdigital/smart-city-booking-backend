@@ -149,7 +149,7 @@ class Booking {
     this.hooks.splice(hookIndex, 1);
   }
 
-  static schema() {
+  static get schema() {
     return {
       id: { type: String, required: true, unique: true },
       tenantId: {

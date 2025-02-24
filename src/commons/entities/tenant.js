@@ -100,7 +100,7 @@ class Tenant {
     delete this.users;
   }
 
-  static schema() {
+  static get schema() {
     return {
       id: { type: String, required: true, unique: true },
       name: { type: String, required: true },

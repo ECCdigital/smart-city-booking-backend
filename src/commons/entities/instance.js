@@ -76,7 +76,7 @@ class Instance {
     delete this.isInitialized;
   }
 
-  static schema() {
+  static get schema() {
     return {
       mailTemplate: { type: String, default: defaultMailTemplate },
       mailAddress: { type: String, default: "" },

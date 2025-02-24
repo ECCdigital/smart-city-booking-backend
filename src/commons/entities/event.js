@@ -50,7 +50,7 @@ class Event {
     this.ownerUserId = ownerUserId;
   }
 
-  static schema() {
+  static get schema() {
     return {
       id: { type: String, required: true, unique: true },
       tenantId: { type: String, required: true },

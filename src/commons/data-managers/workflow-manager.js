@@ -1,12 +1,6 @@
 const Workflow = require("../entities/workflow");
 const BookingManager = require("./booking-manager");
-
-const mongoose = require("mongoose");
-const { Schema } = mongoose;
-
-const WorkflowSchema = new Schema(Workflow.schema());
-const WorkflowModel =
-  mongoose.models.Workflow || mongoose.model("Workflow", WorkflowSchema);
+const WorkflowModel = require("./models/workflowModel");
 
 class WorkflowManager {
   static async getWorkflow(tenantId) {

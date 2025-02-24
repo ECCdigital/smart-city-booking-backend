@@ -1,13 +1,7 @@
 const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking");
-
-const mongoose = require("mongoose");
-const { BookableModel } = require("./bookable-manager");
-const { Schema } = mongoose;
-
-const BookingSchema = new Schema(Booking.schema());
-const BookingModel =
-  mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
+const BookingModel = require("./models/bookingModel");
+const BookableModel = require("./models/bookableModel");
 
 /**
  * Data Manager for Booking objects.

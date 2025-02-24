@@ -1,11 +1,5 @@
 const { Bookable } = require("../entities/bookable");
-
-const mongoose = require("mongoose");
-const { Schema } = mongoose;
-
-const BookableSchema = new Schema(Bookable.schema());
-const BookableModel =
-  mongoose.models.Bookable || mongoose.model("Bookable", BookableSchema);
+const BookableModel = require("./models/bookableModel");
 
 /**
  * Data Manager for Bookable objects.

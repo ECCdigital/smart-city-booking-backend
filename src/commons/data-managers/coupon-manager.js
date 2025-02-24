@@ -1,11 +1,5 @@
 const { Coupon } = require("../entities/coupon");
-
-const mongoose = require("mongoose");
-const { Schema } = mongoose;
-
-const CouponSchema = new Schema(Coupon.schema());
-const CouponModel =
-  mongoose.models.Coupon || mongoose.model("Coupon", CouponSchema);
+const CouponModel = require("./models/couponModel");
 
 /**
  * Data Manager for coupon objects.

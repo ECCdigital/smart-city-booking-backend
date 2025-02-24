@@ -1,14 +1,8 @@
 const { User, HookTypes } = require("../entities/user");
-const mongoose = require("mongoose");
 const { RoleManager } = require("./role-manager");
 const TenantManager = require("./tenant-manager");
 const InstanceManager = require("./instance-manager");
-
-const { Schema } = mongoose;
-
-const UserSchema = new Schema(User.schema());
-
-const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
+const UserModel = require("./models/userModel");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
