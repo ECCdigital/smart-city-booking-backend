@@ -59,6 +59,7 @@ async function createWorkflowFromModel(workflowModel, metaData = true) {
     delete workflow.name;
     delete workflow.description;
     delete workflow.tenantId;
+    delete workflow.defaultState;
   }
   return workflow;
 }

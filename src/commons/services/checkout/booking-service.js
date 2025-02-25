@@ -12,6 +12,8 @@ const LockerService = require("../locker/locker-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking");
+const WorkflowManager = require("../../data-managers/workflow-manager");
+const WorkflowService = require("../workflow/workflow-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -124,6 +126,16 @@ class BookingService {
 
     if (simulate === false) {
       await BookingManager.storeBooking(booking);
+
+      const workflow = await WorkflowManager.getWorkflow(tenantId);
+      if (workflow && workflow.active && workflow.defaultState) {
+        await WorkflowService.updateTask(
+          tenantId,
+          booking.id,
+          workflow.defaultState,
+          0,
+        );
+      }
 
       logger.info(
         `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
