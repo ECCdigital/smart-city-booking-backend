@@ -74,6 +74,8 @@ class Instance {
     delete this.ownerUserIds;
     delete this.mailEnabled;
     delete this.isInitialized;
+    delete this.allowedUsersToCreateTenant;
+    delete this.allowAllUsersToCreateTenant;
   }
 
   static get schema() {
