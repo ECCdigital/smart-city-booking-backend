@@ -158,7 +158,10 @@ class TenantController {
     try {
       const user = request.user;
       const tenant = new Tenant(request.body);
-      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
         response.sendStatus(200);
@@ -248,7 +251,10 @@ class TenantController {
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         if (
           tenant.users.some(
             (userReference) => userReference.userId === body.userId,
@@ -287,7 +293,10 @@ class TenantController {
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         tenant.users = tenant.users.filter(
           (userRef) => userRef.userId !== userId,
         );
@@ -317,16 +326,25 @@ class TenantController {
       const user = request.user;
 
       const tenant = await TenantManager.getTenant(tenantId);
-      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         const userRef = tenant.users.find(
           (userRef) => userRef.userId === userId,
         );
         userRef.roles = userRef.roles.filter((r) => r !== roleId);
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
+        logger.info(
+          `${tenantId} - User ${user?.id} removed role ${roleId} from user ${userId}`,
+        );
 
         response.status(200).send(updatedTenant);
       } else {
+        logger.warn(
+          `${tenantId} - User ${user?.id} not allowed to remove user role`,
+        );
         response.sendStatus(403);
       }
     } catch (error) {
@@ -343,7 +361,10 @@ class TenantController {
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         if (!tenant.ownerUserIds.includes(userId)) {
           tenant.ownerUserIds.push(userId);
         }
@@ -368,7 +389,10 @@ class TenantController {
 
       const tenant = await TenantManager.getTenant(tenantId);
 
-      if (await PermissionService._isTenantOwner(user.id, tenant.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         tenant.ownerUserIds = tenant.ownerUserIds.filter(
           (uid) => uid !== userId,
         );

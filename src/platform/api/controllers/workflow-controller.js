@@ -4,6 +4,7 @@ const bunyan = require("bunyan");
 const PermissionsService = require("../../../commons/services/permission-service");
 const { RolePermission } = require("../../../commons/entities/role");
 const PermissionService = require("../../../commons/services/permission-service");
+const Workflow = require("../../../commons/entities/workflow");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -15,7 +16,13 @@ class WorkflowController {
     const tenantId = req.params.tenant;
     const user = req.user;
     try {
-      if (await PermissionService._isTenantOwner(user.id, tenantId)) {
+      if (
+        await PermissionsService._allowReadAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
         const workflow = await WorkflowManager.getWorkflow(tenantId);
 
         logger.info(`${tenantId} -- sending workflow to user ${user?.id}`);
@@ -36,10 +43,11 @@ class WorkflowController {
   static async createWorkflow(req, res) {
     const tenantId = req.params.tenant;
     const user = req.user;
-    const workflow = req.body;
 
     try {
-      if (await PermissionService._isTenantOwner(user.id, tenantId)) {
+      if (await PermissionService._isTenantOwner(user.id, tenantId) || await PermissionService._isInstanceOwner(user.id)) {
+        const workflow = new Workflow(req.body);
+        workflow.tenantId = tenantId;
         const createdWorkflow = await WorkflowManager.createWorkflow(workflow);
 
         logger.info(`${tenantId} -- User ${user?.id} created workflow`);
@@ -62,7 +70,7 @@ class WorkflowController {
     const workflow = req.body;
 
     try {
-      if (await PermissionService._isTenantOwner(user.id, tenantId)) {
+      if (await PermissionService._isTenantOwner(user.id, tenantId)|| await PermissionService._isInstanceOwner(user.id)) {
         const updatedWorkflow = await WorkflowService.updateWorkflow(
           tenantId,
           workflow,

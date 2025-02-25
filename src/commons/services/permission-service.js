@@ -65,6 +65,10 @@ class PermissionService {
     const ownAction =
       actionType === actions.CREATE ? "create" : `${actionType}Own`;
 
+    if (await PermissionService._isInstanceOwner(userId)) {
+      return true;
+    }
+
     if (await PermissionService._isTenantOwner(userId, tenantId)) {
       return true;
     }
@@ -121,13 +125,19 @@ class PermissionService {
    * @returns {Promise<boolean>} - A promise that resolves to true if the user has read permissions for any object, otherwise false.
    */
   static async _allowReadAny(userId, tenantId, resource) {
-    return (
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        resource,
-        "readAny",
-      )) || (await PermissionService._isTenantOwner(userId, tenantId))
+    if (await PermissionService._isInstanceOwner(userId)) {
+      return true;
+    }
+
+    if (await PermissionService._isTenantOwner(userId, tenantId)) {
+      return true;
+    }
+
+    return await UserManager.hasPermission(
+      userId,
+      tenantId,
+      resource,
+      "readAny",
     );
   }
 
@@ -170,13 +180,19 @@ class PermissionService {
   }
 
   static async _allowUpdateAny(userId, tenantId, resource) {
-    return (
-      (await UserManager.hasPermission(
-        userId,
-        tenantId,
-        resource,
-        "updateAny",
-      )) || (await PermissionService._isTenantOwner(userId, tenantId))
+    if (await PermissionService._isInstanceOwner(userId)) {
+      return true;
+    }
+
+    if (await PermissionService._isTenantOwner(userId, tenantId)) {
+      return true;
+    }
+
+    return await UserManager.hasPermission(
+      userId,
+      tenantId,
+      resource,
+      "updateAny",
     );
   }
 
