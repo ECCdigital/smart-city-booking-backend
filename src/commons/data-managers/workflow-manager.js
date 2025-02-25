@@ -21,22 +21,8 @@ class WorkflowManager {
     return await createStatusFromModel(rawWorkflow.states, tenantId, populate);
   }
 
-  static async createWorkflow({
-    tenantId,
-    name,
-    description,
-    states,
-    archive,
-    active,
-  }) {
-    await WorkflowModel.create({
-      tenantId,
-      name,
-      description,
-      states,
-      archive,
-      active,
-    });
+  static async createWorkflow(tenantId, workflow) {
+    await WorkflowModel.create(workflow);
     return await WorkflowManager.getWorkflow(tenantId);
   }
 

@@ -19,6 +19,7 @@ class WorkflowService {
     });
 
     Object.assign(currentWorkflow, {
+      defaultState: workflow.defaultState,
       active: workflow.active,
       description: workflow.description,
       name: workflow.name,

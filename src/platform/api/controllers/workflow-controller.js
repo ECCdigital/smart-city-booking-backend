@@ -48,7 +48,7 @@ class WorkflowController {
       if (await PermissionService._isTenantOwner(user.id, tenantId) || await PermissionService._isInstanceOwner(user.id)) {
         const workflow = new Workflow(req.body);
         workflow.tenantId = tenantId;
-        const createdWorkflow = await WorkflowManager.createWorkflow(workflow);
+        const createdWorkflow = await WorkflowManager.createWorkflow(tenantId, workflow);
 
         logger.info(`${tenantId} -- User ${user?.id} created workflow`);
         res.status(200).send(createdWorkflow);
