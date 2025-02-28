@@ -135,7 +135,7 @@ class ItemCheckoutService {
    * @returns {number}
    */
   getBookingDuration() {
-    if(!this.timeEnd || !this.timeBegin) {
+    if (!this.timeEnd || !this.timeBegin) {
       return 0;
     }
     return Math.round((this.timeEnd - this.timeBegin) / 60000);

@@ -258,7 +258,7 @@ class MailerService {
           };
 
           const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from.address)}/sendMail`;
-          const response = await axios.post(url, JSON.stringify(graphBody), {
+          await axios.post(url, JSON.stringify(graphBody), {
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",

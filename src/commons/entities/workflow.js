@@ -1,5 +1,14 @@
 class Workflow {
-  constructor({ id, tenantId, name, description, states, archive, defaultState, active }) {
+  constructor({
+    id,
+    tenantId,
+    name,
+    description,
+    states,
+    archive,
+    defaultState,
+    active,
+  }) {
     this.id = id;
     this.tenantId = tenantId || "";
     this.name = name || "";

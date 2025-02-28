@@ -45,10 +45,16 @@ class WorkflowController {
     const user = req.user;
 
     try {
-      if (await PermissionService._isTenantOwner(user.id, tenantId) || await PermissionService._isInstanceOwner(user.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenantId)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         const workflow = new Workflow(req.body);
         workflow.tenantId = tenantId;
-        const createdWorkflow = await WorkflowManager.createWorkflow(tenantId, workflow);
+        const createdWorkflow = await WorkflowManager.createWorkflow(
+          tenantId,
+          workflow,
+        );
 
         logger.info(`${tenantId} -- User ${user?.id} created workflow`);
         res.status(200).send(createdWorkflow);
@@ -70,7 +76,10 @@ class WorkflowController {
     const workflow = req.body;
 
     try {
-      if (await PermissionService._isTenantOwner(user.id, tenantId)|| await PermissionService._isInstanceOwner(user.id)) {
+      if (
+        (await PermissionService._isTenantOwner(user.id, tenantId)) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
         const updatedWorkflow = await WorkflowService.updateWorkflow(
           tenantId,
           workflow,
