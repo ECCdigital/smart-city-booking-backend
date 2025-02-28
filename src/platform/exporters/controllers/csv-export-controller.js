@@ -1,5 +1,4 @@
 const { RolePermission } = require("../../../commons/entities/role");
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const Formatters = require("../../../commons/utilities/formatters");
 const UserManager = require("../../../commons/data-managers/user-manager");
@@ -26,7 +25,7 @@ class CsvExportController {
 
   static async _hasPermission(event, userId, tenant) {
     if (
-      event.tenant === tenant &&
+      event.tenantId === tenant &&
       (await UserManager.hasPermission(
         userId,
         tenant,
@@ -37,15 +36,16 @@ class CsvExportController {
       return true;
 
     if (
-      event.tenant === tenant &&
-      event.ownerUserId === userId &&
-      event.tenant === tenant &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_BOOKABLES,
-        "updateOwn",
-      ))
+      event.tenantId === tenant &&
+      event.ownerUserId ===
+        userId(
+          await UserManager.hasPermission(
+            userId,
+            tenant,
+            RolePermission.MANAGE_BOOKABLES,
+            "updateOwn",
+          ),
+        )
     )
       return true;
 
@@ -93,7 +93,7 @@ class CsvExportController {
           isCommitted: b.isCommitted ? "Ja" : "Nein",
           isPayed: b.isPayed ? "Ja" : "Nein",
           priceEur: Formatters.formatCurrency(b.priceEur),
-          payMethod: Formatters.translatePayMethod(b.payMethod),
+          paymentMethod: Formatters.translatePayMethod(b.paymentMethod),
         };
       });
 
@@ -118,7 +118,7 @@ class CsvExportController {
           isCommitted: "Buchung bestätigt",
           isPayed: "Buchung bezahlt",
           priceEur: "Preis",
-          payMethod: "Zahlungsart",
+          paymentMethod: "Zahlungsart",
         });
 
       response.setHeader("Content-Type", "text/csv");

@@ -7,10 +7,9 @@ const CommandLineServices = require("./command-line-services");
 const argv = yargs(hideBin(process.argv)).argv;
 
 (async () => {
-  const dbUrl = argv.dburl || process.env.DB_URL;
   const dbName = argv.dbname || process.env.DB_NAME;
 
-  await dbm.connect(dbUrl, dbName);
+  await dbm.getInstance().connect(dbName);
   const tenantId = argv._[0];
   if (!tenantId) {
     process.exit(1);
@@ -36,5 +35,5 @@ const argv = yargs(hideBin(process.argv)).argv;
     console.log(`Receipt generated at ${outputPath}`);
   }
 
-  dbm.close();
+  dbm.getInstance().close();
 })();

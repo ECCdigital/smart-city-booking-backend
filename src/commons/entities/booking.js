@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
+const { Double } = require("mongodb");
 
 const BOOKING_HOOK_TYPES = Object.freeze({
   REJECT: "REJECT",
@@ -15,10 +16,10 @@ class BookingHook {
 
 class Booking {
   /**
-   * Create a new booking object.
+   * Constructs a new Booking object.
    *
    * @param {string} id Identifier of the booking
-   * @param {string} tenant Identifier of the tenant
+   * @param {string} tenantId The foreign identifier of the tenant related to this booking
    * @param {string} assignedUserId The foreign identifier of the user related to this booking
    * @param {string} mail e-mail address in case no user is assigned to the booking
    * @param {string} comment A free text comment by the user
@@ -37,54 +38,63 @@ class Booking {
    * @param {number} priceEur Price in Euros
    * @param {boolean} isPayed true, if the booking is paid
    * @param {object} couponUsed Details of the coupon used
-   * @param {string} payMethod Payment method
    * @param {array<object>} hooks List of hooks
    */
   constructor({
     id,
-    tenant,
+    tenantId,
     assignedUserId,
-    mail,
-    comment,
-    timeBegin,
-    timeEnd,
-    timeCreated,
+    attachments,
     bookableItems,
-    isCommitted,
-    couponCode,
-    name,
+    comment,
     company,
-    street,
-    zipCode,
+    couponCode,
+    isCommitted,
+    isPayed,
+    isRejected,
     location,
+    lockerInfo,
+    mail,
+    name,
+    paymentProvider,
+    paymentMethod,
     phone,
     priceEur,
-    isPayed,
-    couponUsed,
-    payMethod,
+    timeBegin,
+    timeCreated,
+    timeEnd,
+    vatIncludedEur,
+    zipCode,
+    street,
+    _couponUsed,
     hooks,
   } = {}) {
     this.id = id;
-    this.tenant = tenant;
+    this.tenantId = tenantId;
     this.assignedUserId = assignedUserId;
-    this.mail = mail;
+    this.attachments = attachments;
+    this.bookableItems = bookableItems;
     this.comment = comment;
-    this.timeBegin = timeBegin;
-    this.timeEnd = timeEnd;
-    this.timeCreated = timeCreated || Date.now();
-    this.bookableItems = bookableItems || [];
-    this.isCommitted = isCommitted || false;
-    this.couponCode = couponCode;
-    this.name = name;
     this.company = company;
-    this.street = street;
-    this.zipCode = zipCode;
+    this.couponCode = couponCode;
     this.location = location;
+    this.lockerInfo = lockerInfo;
+    this.mail = mail;
+    this.name = name;
+    this.paymentProvider = paymentProvider;
+    this.paymentMethod = paymentMethod;
     this.phone = phone;
     this.priceEur = priceEur;
+    this.street = street;
+    this.timeBegin = timeBegin;
+    this.timeEnd = timeEnd;
+    this.vatIncludedEur = vatIncludedEur;
+    this.zipCode = zipCode;
+    this.timeCreated = timeCreated || Date.now();
+    this.isCommitted = isCommitted || false;
     this.isPayed = isPayed || false;
-    this.couponUsed = couponUsed || {};
-    this.payMethod = payMethod;
+    this.isRejected = isRejected || false;
+    this._couponUsed = _couponUsed || {};
     this.hooks = hooks || [];
   }
 
@@ -102,6 +112,55 @@ class Booking {
     this.hooks.push(hook);
 
     return hook;
+  }
+
+  removeHook(hookId) {
+    const hookIndex = this.hooks.findIndex((hook) => hook.id === hookId);
+
+    if (hookIndex === -1) {
+      throw new Error(`Hook with ID ${hookId} not found`);
+    }
+
+    this.hooks.splice(hookIndex, 1);
+  }
+
+  static get schema() {
+    return {
+      id: { type: String, required: true, unique: true },
+      tenantId: {
+        type: String,
+        required: true,
+        ref: "Tenant",
+      },
+      assignedUserId: {
+        type: String,
+        ref: "User",
+      },
+      attachments: [Object],
+      bookableItems: [Object],
+      comment: String,
+      company: String,
+      couponCode: String,
+      isCommitted: Boolean,
+      isPayed: Boolean,
+      isRejected: Boolean,
+      location: String,
+      lockerInfo: [Object],
+      mail: String,
+      name: String,
+      paymentProvider: String,
+      paymentMethod: String,
+      phone: String,
+      priceEur: Number,
+      street: String,
+      timeBegin: Double,
+      timeCreated: Double,
+      timeEnd: Double,
+      vatIncludedEur: Number,
+      zipCode: String,
+      _couponUsed: Object,
+      hooks: [Object],
+    };
   }
 }
 
