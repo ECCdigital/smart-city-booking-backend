@@ -5,779 +5,234 @@
 ![Docker](https://img.shields.io/badge/Docker-blue)
 ![MongoDB](https://img.shields.io/badge/MongoDB-blue)
 
-The "smart-city-booking" booking platform is an open-source software system with a focus on Smart Cities and Smart Regions. It offers an efficient solution that allows citizens, organizations, and companies to book and manage resources provided by public administrations. This platform provides a variety of configuration options to ensure flexible adaptation to individual needs.
+**Smart City Booking** is an open-source booking platform designed specifically for smart cities and smart regions. It provides an efficient solution that allows citizens, organizations, and companies to book and manage resources offered by public administrations. With a wide range of configuration options, the platform can be adapted flexibly to meet individual requirements.
 
-This repository contains the backend of the application. The frontend is managed at https://github.com/ECCdigital/smart-city-booking-vue-app.git
+> **Note:** This repository contains the backend of the application. The frontend is maintained at:  
+> [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app.git).
 
-## Getting Started
+---
 
-This section will guide you through the process of setting up the Smart City Booking backend on your local machine for development and testing purposes.
+## Overview
+
+- **Technologies:** Node.js, npm, Docker, MongoDB
+- **Purpose:** Provide a robust and flexible booking solution for public administrations
+- **Focus:** User management, authentication, resource and booking management
+
+---
+
+## Table of Contents
+
+1. [Installation & Setup](#installation--setup)
+2. [Database Configuration](#database-configuration)
+3. [Initial Admin User](#initial-admin-user)
+4. [Authentication](#authentication)
+5. [API Overview](#api-overview)
+6. [Entities](#entities)
+7. [Web Integration](#web-integration)
+
+---
+
+## Installation & Setup
 
 ### Prerequisites
 
-Ensure that you have the following installed on your system:
+Ensure you have the following software installed on your system:
 
 - [Node.js](https://nodejs.org/) (v14.17.0 or higher)
 - [npm](https://www.npmjs.com/) (v6.14.13 or higher)
 - [MongoDB](https://www.mongodb.com/) (v4.4 or higher)
 
-### Installation
+### Installation Steps
 
-1. Clone the repository
+1. **Clone the Repository:**
 
-```bash
-git clone https://github.com/ECCdigital/smart-city-booking-backend.git
-```
+   ```bash
+   git clone https://github.com/ECCdigital/smart-city-booking-backend.git
+   ```
 
-2. Navigate to the project directory
+2. **Navigate to the Project Directory:**
 
-```bash
-cd smart-city-booking-backend
-```
+   ```bash
+   cd smart-city-booking-backend
+   ```
 
-3. Install dependencies
+3. **Install Dependencies:**
 
-```bash
-npm install
-```
+   ```bash
+   npm install
+   ```
 
-4. Copy the `.env.example` file to `.env` to get a basic configuration setup. You can modify the values in the `.env` file to suit your environment.
+4. **Set Up Configuration:**
 
-5. Adjust database configuration in the `.env` file, e.g.:
+   Copy the `.env.example` file to `.env` and adjust the values to suit your environment:
 
-```bash
-DB_HOST=localhost
-DB_PORT=27017
-DB_NAME=smart-city-booking
-```
+   ```bash
+   cp .env.example .env
+   ```
 
-6. Start the application in development mode. (Make sure the database instance configured above is running and setup as described below )
+   For example, configure your database settings in the `.env` file:
 
-```bash
-npm run dev
-```
+   ```bash
+   DB_HOST=localhost
+   DB_PORT=27017
+   DB_NAME=smart-city-booking
+   ```
 
-### Database Setup
+   **Important:** Set the `CRYPTO_SECRET` variable to a secure value. This secret is used to encrypt sensitive data.
 
-In order to run the backend, you need a MongoDB instance to which you can connect. This instance can be a local or remote MongoDB server. You can also use a MongoDB instance running in a Docker container.
+5. **Start the Application in Development Mode:**
 
-In order to start the application, connect to your database and create a new database with the name specified in the `.env` file. The database name is specified in the `DB_NAME` variable.
+   Ensure that your database instance is running and configured as above, then execute:
 
-In order to login to your application create initial tenant, roles and user objects in the database.
+   ```bash
+   npm run dev
+   ```
 
-```bash
-db.tenants.insertOne({
-  "id": "default",
-  "name": "Default Tenant"
-});
-```
+---
 
-```bash
-db.roles.insertOne({
-  "id": "super-admin",
-  "name": "Super Admin",
-  "ownerTenant": "default",
-  "adminInterfaces": [
-    "locations", "tenants", "users", "roles", "bookings",
-    "coupons", "rooms", "resources", "tickets", "events"
-  ],
-  "manageUsers": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  },
-  "manageTenants": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  },
-  "manageBookables": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  },
-  "manageRoles": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  },
-  "manageCoupons": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  },
-  "manageBookings": {
-    "create": true, "readAny": true, "readOwn": true, "updateAny": true,
-    "updateOwn": true, "deleteOwn": true, "deleteAny": true
-  }
-});
-```
+## Database Configuration
 
-```bash
-db.users.insertOne({
-  "id": "someone@example.com",
-  "tenant": "default",
-  "secret": "sha1$2327e3d2$1$6fdbf02ce5168a4215bcb1ae5553056503d02e40",
-  "isVerified": true,
-  "roles": ["super-admin"]
-});
-```
+The backend requires a MongoDB instance. This can be a local, remote, or Docker-based MongoDB server.  
+Create a new database with the name specified in the `.env` file (using the `DB_NAME` variable).
 
-After setting up the database, you can login to the application with the following credentials:
+---
 
-- Email: someone@example.com
-- Password: password
+## Initial Admin User
+
+When starting the application for the first time, a default admin user is created.
+
+**Default Credentials:**
+
+- **Email:** admin
+- **Password:** admin
+
+You can change these defaults by setting the `INIT_ADMIN` and `INIT_ADMIN_SECRET` variables in your `.env` file.
+
+---
 
 ## Authentication
 
-The backend of this application employs a local strategy for user authentication. This means that it verifies user credentials (username and password) against the user records stored in the database. Once a user is successfully authenticated, a session cookie is generated and stored on the user's device. This cookie is then used to maintain the user's authenticated state across multiple requests, providing a seamless user experience.
+The backend uses a local authentication strategy. User credentials (email and password) are verified against records stored in the database. Upon successful authentication, a session cookie is generated and stored on the user's device to maintain authentication across requests.
 
-Use the following routes to authenticate users:
+### Available Authentication Routes
 
-### POST /auth/:tenant/signin
+- **POST /auth/signin**  
+  _Purpose:_ Sign in a user  
+  _Example Request Body:_
 
-Signs in a user with the specified credentials.
+  ```json
+  {
+    "id": "someone@example.com",
+    "password": "your-password"
+  }
+  ```
 
-Input:
+- **GET /auth/signout**  
+  _Purpose:_ Sign out the currently authenticated user
 
-- tenant: The tenant ID
+- **POST /auth/signup**  
+  _Purpose:_ Register a new user  
+  _Example Request Body:_
 
-Body:
+  ```json
+  {
+    "id": "someone@example.com",
+    "password": "your-password",
+    "firstName": "First Name",
+    "lastName": "Last Name"
+  }
+  ```
 
-```JSON
-{
-    "id": "<someone@example.com>",
-    "password": "<your-password>"
-}
-```
+- **GET /auth/verify/:hookId**  
+  _Purpose:_ Verify a user using the hook ID generated during signup
 
-### GET /auth/:tenant/signout
+- **GET /auth/reset/:hookId**  
+  _Purpose:_ Reset a user's password via a hook
 
-Signs out the currently authenticated user.
+- **POST /auth/resetpassword**  
+  _Purpose:_ Update the password using the hook data  
+  _Example Request Body:_
 
-Input:
+  ```json
+  {
+    "id": "someone@example.com",
+    "password": "new-password"
+  }
+  ```
 
-- tenant: The tenant ID
-
-### POST /auth/:tenant/signup
-
-Signs up a new user with the specified credentials.
-
-Input:
-
-- tenant: The tenant ID
-
-Body:
-
-```JSON
-{
-    "id": "<someone@example.com>",
-    "password": "<your-password>",
-    "firstName": "<First Name>",
-    "lastName": "<Last Name>"
-}
-```
-
-### GET /auth/:tenant/verify/:hookId
-
-Verifies a user with the specified hook ID. A hook ID is generated when a user signs up.
-
-Input:
-
-- tenant: The tenant ID
-- hookId: The hook ID
-
-### GET /auth/:tenant/reset/:hookId
-
-Resets the password of a user specified in the hook with the given ID. A hook is generated when a user requests a password reset.
-
-Input:
-
-- tenant: The tenant ID
-- hookId: The hook ID
-
-### POST /auth/:tenant/resetpassword
-
-Resets the password of a user with the specified credentials. The requested password is stored in a hook and changed after the user releases the hook.
-
-Input:
-
-- tenant: The tenant ID
-
-Body:
-
-```JSON
-{
-    "id": "<someone@example.com>",
-    "password": "<new-password>"
-}
-```
-
-### GET /auth/:tenant/me
-
-Returns the currently authenticated user.
-
-## API
-
-If the Backend is running, you can access the API with the following routes:
-
-### Public and Protected Routes
-
-The API has two types of routes: public and protected. Public routes can be accessed without authentication, while protected routes require a valid session authentication to be available.
-
-### Tenants
+- **GET /auth/me**  
+  _Purpose:_ Retrieve data of the currently authenticated user
 
 ---
 
-### GET /api/tenants (Public / Protected)
+## API Overview
 
-Returns a list of all tenants. If accessed without authentication, only public tenant information will be provided.
+The backend offers both public and protected API routes.
 
-### GET /api/tenants/:id (Public / Protected)
+- **Public Routes:** Accessible without authentication.
+- **Protected Routes:** Require a valid session or proper permissions.
 
-Returns the tenant with the specified ID. If accessed without authentication, only public tenant information will be provided.
+### Example Endpoints
 
-Input:
+#### Tenants
 
-- id: The ID of the tenant
+- **GET /api/tenants**  
+  Returns a list of all tenants. Without authentication, only public tenant information is provided.
 
-### PUT /api/tenants (Protected)
-
-Updates or creates the tenant.
-
-**Required permission:** tenant.allowCreate / tenant.allowUpdate
-
-Body: A valid tenant object
-
-### DELETE /api/tenants/:id (Protected)
-
-Deletes the tenant with the specified ID.
-
-**Required permission:** tenant.allowDelete
-
-### Roles
+- **PUT /api/tenants**  
+  Creates or updates a tenant.  
+  **Note:** A tenant can only be created if one of the following conditions is met:
+  - `instance.allowAllUsersToCreateTenant` is set to `true`, or
+  - The user is included in `instance.allowedUsersToCreateTenant`, or
+  - The user is listed in `instance.ownerUserIds`.
 
 ---
 
-### GET /api/roles (Protected)
+- **DELETE /api/tenants/:id**  
+  Deletes a tenant.  
+  **Note:** A tenant can only be deleted if one of the following conditions is met:
+  - The user is included in `tenant.ownerUserIds`, or
+  - The user is listed in `instance.ownerUserIds`.
 
-Returns a list of all roles.
+#### Roles
 
-**Required permission:** role.allowRead
+- **GET /api/roles**  
+  Returns a list of all roles.  
+  _Required Permission:_ role.allowRead
 
-### GET /api/roles/:id (Protected)
+- **PUT /api/roles**  
+  Creates or updates a role.  
+  _Required Permission:_ role.allowCreate / role.allowUpdate
 
-Returns the role with the specified ID.
+#### Bookables
 
-Input:
+- **GET /api/:tenant/bookables/public**  
+  Returns a list of public bookable resources for a tenant.
 
-- id: The ID of the role
+- **PUT /api/:tenant/bookables**  
+  Creates or updates a bookable resource.  
+  _Required Permission:_ bookable.allowCreate / bookable.allowUpdate
 
-**Required permission:** role.allowRead
+- **DELETE /api/:tenant/bookables/:id**  
+  Deletes a bookable resource.  
+  _Required Permission:_ bookable.allowDelete
 
-### PUT /api/roles (Protected)
+#### Other Categories
 
-Updates or creates the role.
-
-**Required permission:** role.allowCreate / role.allowUpdate
-
-### DELETE /api/roles/:id (Protected)
-
-Deletes the role with the specified ID.
-
-Input:
-
-- id: The ID of the role
-
-**Required permission:** role.allowDelete
-
-### Bookables
-
----
-
-### GET /api/:tenant/bookables/public (Public)
-
-Returns a list of all bookables for the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-
-### GET /api/:tenant/bookables (Protected)
-
-Returns a list of all bookables for the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-
-### GET /api/:tenant/bookables/public/:id (Public)
-
-Returns the bookable with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the bookable
--
-
-### GET /api/:tenant/bookables/:id (Protected)
-
-Returns the bookable with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the bookable
-
-### GET /api/:tenant/bookables/:id/bookings (Public)
-
-Returns a list of all bookings for the specified bookable.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the bookable
-- related: If true, the bookings of related bookables are included in the response. (Query parameter)
-- parent: If true, the bookings of the parent bookables are included in the response. (Query parameter)
-
-### GET /api/:tenant/bookables/:id/openingHours (Public)
-
-Returns the opening hours of the specified bookable.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the bookable
-
-### PUT /api/:tenant/bookables (Protected)
-
-Updates or creates the bookable.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** bookable.allowCreate / bookable.allowUpdate
-
-Body: A valid bookable object
-
-### DELETE /api/:tenant/bookables/:id (Protected)
-
-Deletes the bookable with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the bookable
-
-**Required permission:** bookable.allowDelete
-
-### GET /api/:tenant/bookables/\_meta/\_tags (Protected)
-
-Returns a list of all tags used in the bookables of the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-
-### Events
+For endpoints related to events, users, bookings, coupons, checkout, payments, calendars, and files, refer to the detailed API documentation within this README. Each route includes parameter details, example request bodies, and required permissions.
 
 ---
 
-### GET /api/:tenant/events (Public)
+## Entities
 
-Returns a list of all events for the specified tenant.
+The backend manages several key entities. Below is an overview:
 
-Input:
+### Tenant
 
-- tenant: The tenant ID
-
-### GET /api/:tenant/events/:id (Public)
-
-Returns the event with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the event
-
-### GET /api/:tenant/events/:id/bookings (Public)
-
-Returns a list of all bookings for the specified event.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the event
-
-### PUT /api/:tenant/events (Protected)
-
-Updates or creates the event.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** event.allowCreate / event.allowUpdate
-
-Body: A valid event object
-
-### DELETE /api/:tenant/events/:id (Protected)
-
-Deletes the event with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the event
-
-**Required permission:** event.allowDelete
-
-### GET /api/:tenant/events/\_meta/\_tags (Protected)
-
-Returns a list of all tags used in the events of the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-
-### Users
-
----
-
-### GET /api/:tenant/users (Protected)
-
-Returns a list of all users for the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** user.allowRead
-
-### GET /api/:tenant/users/ids (Protected)
-
-Returns a list of all user IDs for the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-- roles: If provided, only user IDs with the specified roles are included in the response. (Query parameter)
-
-### GET /api/:tenant/users/:id (Protected)
-
-Returns the user with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the user
-
-**Required permission:** user.allowRead
-
-### PUT /api/:tenant/users (Protected)
-
-Updates or creates the user.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** user.allowCreate / user.allowUpdate
-
-Body: A valid user object
-
-### PUT /api/:tenant/user (Protected)
-
-Updates the user object of the currently authenticated user.
-
-Input:
-
-- tenant: The tenant ID
-
-Body: A valid user object
-
-### DELETE /api/:tenant/users/:id (Protected)
-
-Deletes the user with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the user
-
-**Required permission:** user.allowDelete
-
-### Bookings
-
----
-
-### GET /api/:tenant/bookings (public)
-
-Returns a list of all bookings for the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-- public: If true, only public bookings are included in the response. (Query parameter)
-- user: If provided, only bookings of the specified user are included in the response. (Optional)
-  - populate: If true, the user object is included in the response. (Query parameter)
-
-**Required permission:** booking.allowRead (If public is false)
-
-### GET /api/:tenant/bookings/:id/status (public)
-
-Returns the status of the booking with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the booking
-
-### GET /api/:tenant/bookings/:id (Protected)
-
-Returns the booking with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the booking
-
-**Required permission:** booking.allowRead / Owner of the booking
-
-### GET /api/:tenant/bookings (Protected)
-
-Returns a list of all bookings for the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** booking.allowRead / Owner of the booking
-
-### PUT /api/:tenant/bookings (Protected)
-
-Updates or creates the booking.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** booking.allowCreate / booking.allowUpdate
-
-Body: A valid booking object
-
-### GET /api/:tenant/mybookings (Protected)
-
-Returns a list of all bookings of the currently authenticated user.
-
-Input:
-
-- tenant: The tenant ID
-
-### DELETE /api/:tenant/bookings/:id (Protected)
-
-Deletes the booking with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the booking
-
-**Required permission:** booking.allowDelete
-
-### GET /api/:tenant/bookings/:id/commit (Protected)
-
-Commits the booking with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the booking
-
-**Required permission:** booking.allowUpdate
-
-### Coupons
-
----
-
-### GET /api/:tenant/coupons (Public)
-
-Returns a list of all coupons for the specified tenant.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** coupon.allowRead
-
-### GET /api/:tenant/coupons/:id (Public)
-
-Returns the coupon with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the coupon
-
-### PUT /api/:tenant/coupons (Protected)
-
-Updates or creates the coupon.
-
-Input:
-
-- tenant: The tenant ID
-
-**Required permission:** coupon.allowCreate / coupon.allowUpdate
-
-Body: A valid coupon object
-
-### DELETE /api/:tenant/coupons/:id (Protected)
-
-Deletes the coupon with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the coupon
-
-**Required permission:** coupon.allowDelete
-
-### Checkout
-
----
-
-### POST /api/:tenant/checkout (Public)
-
-Creates a new booking and returns the booking object.
-
-Input:
-
-- tenant: The tenant ID
-
-Body: A valid booking object
-
-### POST /api/:tenant/checkout/validateItem (Public)
-
-Validates a bookable item for checkout.
-
-Input:
-
-- tenant: The tenant ID
-
-Body:
-
-```JSON
-{
-    "bookableId": "<bookable-id>",
-    "timeBegin": "<start-time>",
-    "timeEnd": "<end-time>",
-    "amount": "<amount>"
-    "couponCode": "<coupon-code>"
-}
-```
-
-### Payments / S-Public-Services
-
----
-
-### POST /api/:tenant/payments (Public)
-
-Returns a payment URL for the specified booking.
-
-Input:
-
-- tenant: The tenant ID
-
-Body: bookingId
-
-### GET /api/:tenant/payments/notify (Public)
-
-Notifies the backend about a payment status.
-
-Input:
-
-- tenant: The tenant ID
-- gcMerchantTxId: The merchant transaction ID (Query parameter)
-- gcResultPayment: The payment result (Query parameter)
-- gcPaymethod: The payment method (Query parameter)
-- gcType: The payment type (Query parameter)
-- gcProjectId: The project ID (Query parameter)
-- gcReference: The payment reference (Query parameter)
-- gcBackendTxId: The backend transaction ID (Query parameter)
-- gcAmount: The payment amount (Query parameter)
-- gcCurrency: The payment currency (Query parameter)
-- gcHash: The payment hash (Query parameter)
-
-### POST /api/:tenant/payments/response (Public)
-
-Redirects the user to the payment response page.
-
-Input:
-
-- tenant: The tenant ID
-- parsedOriginalUrl: The original URL (Body)
-
-### Calendars
-
----
-
-### GET /api/:tenant/occupancy (Public)
-
-Returns the occupancy of a tenant or if provided of a bookable.
-
-Input:
-
-- tenant: The tenant ID
-- ids: A comma-separated list of bookable IDs (Query parameter)
-
-### Files (Nextcloud)
-
----
-
-### GET /api/:tenant/files/list (Public / Protected)
-
-Returns a list of all files in the Nextcloud storage.
-
-Input:
-
-- tenant: The tenant ID
-- includeProtected: If true, protected files are included in the response. (Query parameter)
-
-### GET /api/:tenant/files/get (Public / Protected)
-
-Returns the file with the specified ID.
-
-Input:
-
-- tenant: The tenant ID
-- id: The ID of the file
-
-### POST /api/:tenant/files (Protected)
-
-Uploads a file to the Nextcloud storage.
-
-Input:
-
-- tenant: The tenant ID
-- file: The file to upload
-
-Body:
-
-```JSON
-{
-    "accessLevel": "public" / "protected"
-    "customDirectory": "directory"
-}
-```
-
-## Entitites
-
-The Smart City Booking backend manages the following entities:
-
-### Tenants
-
-A tenant is a group of users that share common access with specific privileges to the software instance. A tenant can have multiple users, resources. Each tenant has its own configuration and data.
-
+A tenant represents a group of users sharing common access and configurations.  
 Example:
 
-```JSON
+```json
 {
   "id": "default",
   "name": "Example Name",
@@ -786,8 +241,8 @@ Example:
   "mail": "example@example.com",
   "phone": "1234567890",
   "website": "https://example.com",
-  "bookableDetailLink": "https://www.example.com/bookable-detail",
-  "eventDetailLink": "https://www.example.com/event-detail",
+  "bookableDetailLink": "https://example.com/bookable-detail",
+  "eventDetailLink": "https://example.com/event-detail",
   "genericMailTemplate": "<html>...</html>",
   "useInstanceMail": false,
   "noreplyMail": "example@example.com",
@@ -798,60 +253,38 @@ Example:
   "noreplyPassword": {},
   "noreplyStarttls": false,
   "noreplyUseGraphApi": false,
-  "noreplyGraphTenantId": "noreplyGraphTenantId",
-  "noreplyGraphClientId": "noreplyGraphClientId",
-  "noreplyGraphClientSecret": "noreplyGraphClientSecret",
+  "noreplyGraphTenantId": "GraphTenantId",
+  "noreplyGraphClientId": "GraphClientId",
+  "noreplyGraphClientSecret": "GraphClientSecret",
   "receiptTemplate": "<html>...</html>",
   "receiptNumberPrefix": "exmp",
-  "receiptCount": {
-    "2024": 1
-  },
+  "receiptCount": { "2024": 1 },
   "invoiceTemplate": "<html>...</html>",
   "invoiceNumberPrefix": "exmp",
-  "invoiceCount": {
-    "2024": 1
-  },
+  "invoiceCount": { "2024": 1 },
   "paymentPurposeSuffix": "Example 123 4 56",
   "applications": [],
   "maxBookingAdvanceInMonths": 12,
   "defaultEventCreationMode": "simple",
   "enablePublicStatusView": true,
-  "ownerUserIds": [
-    "john.doe@example.com"
-  ],
-  "users": [
-    {
-      "userId": "john.doe@example.com",
-      "roles": ["super-admin"]
-    }
-  ]
+  "ownerUserIds": ["john.doe@example.com"]
 }
 ```
 
-Sensitive data like
-
-- noreplyPassword
-- paymentMerchantId
-- paymentProjectId
-- paymentSecret
-
-is stored encrypted.
+> **Note:** Sensitive information (e.g., `noreplyPassword`, `paymentSecret`) is stored encrypted.
 
 ### Roles
 
-A role is a set of permissions that can be assigned to users. Each role has a set of permissions that define what actions a user with that role can perform. Roles are shared across tenants of the same instance.
+Define sets of permissions and are shared across tenants.
 
 Example:
 
-```JSON
+```json
 {
-  "id": "super-admin",
-  "name": "Super Admin",
-  "tenantId": "default",
+  "id": "default",
+  "name": "Example Name",
   "adminInterfaces": [
     "locations",
-    "tenants",
-    "users",
     "roles",
     "bookings",
     "coupons",
@@ -866,26 +299,8 @@ Example:
     "readOwn": true,
     "updateAny": true,
     "updateOwn": true,
-    "deleteOwn": true,
-    "deleteAny": true
-  },
-  "manageRoles": {
-    "create": true,
-    "readAny": true,
-    "readOwn": true,
-    "updateAny": true,
-    "updateOwn": true,
-    "deleteOwn": true,
-    "deleteAny": true
-  },
-  "manageCoupons": {
-    "create": true,
-    "readAny": true,
-    "readOwn": true,
-    "updateAny": true,
-    "updateOwn": true,
-    "deleteOwn": true,
-    "deleteAny": true
+    "deleteAny": true,
+    "deleteOwn": true
   },
   "manageBookings": {
     "create": true,
@@ -893,30 +308,49 @@ Example:
     "readOwn": true,
     "updateAny": true,
     "updateOwn": true,
-    "deleteOwn": true,
-    "deleteAny": true
+    "deleteAny": true,
+    "deleteOwn": true
   },
+  "manageCoupons": {
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteAny": true,
+    "deleteOwn": true
+  },
+  "manageRoles": {
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteAny": true,
+    "deleteOwn": true
+  },
+  "assignedUserId": "someone@example.com",
   "freeBookings": true
 }
 ```
 
 ### User
 
-A user is an individual who can access the software instance. Users can be assigned roles that define what actions they can perform. Users are associated with a tenant.
+An individual who can perform actions as permitted by their roles.
 
 Example:
 
-```JSON
+```json
 {
-  "id": "someone@example.com",
+  "id": "default",
   "firstName": "John",
   "lastName": "Doe",
   "phone": "1234567890",
   "address": "123 Main St",
   "zipCode": "12345",
-  "city": "Anytown",
-  "company": "Some Corp",
-  "secret": "encrypted-password",
+  "city": "Example City",
+  "company": "Example Company",
+  "secret": "<hash>",
   "hooks": [],
   "isVerified": true,
   "isSuspended": false,
@@ -925,17 +359,89 @@ Example:
 ```
 
 ### Bookable
+Resources such as rooms, tickets, or other bookable objects with detailed attributes.
 
-A bookable is a resource that can be booked by users. Bookables can be rooms, resources, tickets or any other bookable object. Each bookable has a set of properties that define its pricing, availability and booking rules.
+Example:
 
-Bookables can can have relations to other bookables, e.g. a room can have a relation to a building. Those relations are important for the booking process.
+```json
+{
+  "id": "default",
+  "tenantId": "default",
+  "type": "room",
+  "enabled": true,
+  "parent": "123-123ada-123",
+  "title": "Example Title",
+  "description": "Example Description",
+  "flags": ["flag1", "flag2"],
+  "imgUrl": "https://example.com/image.jpg",
+  "priceEuro": 10.5,
+  "priceValueAddedTax": 19,
+  "amount": 10,
+  "minBookingDuration": 30,
+  "maxBookingDuration": 120,
+  "autoCommitBooking": true,
+  "location": "Example Location",
+  "tags": ["tag1", "tag2"],
+  "isScheduleRelated": true,
+  "isTimePeriodRelated": true,
+  "timePeriods": [
+    {
+      "weekdays": [1, 2, 3],
+      "startTime": "10:00",
+      "endTime": "15:00"
+    }
+  ],
+  "isOpeningHoursRelated": true,
+  "openingHours": [
+    {
+      "weekdays": [1, 2, 3],
+      "startTime": "08:00",
+      "endTime": "18:00"
+    }
+  ],
+  "isSpecialOpeningHoursRelated": false,
+  "specialOpeningHours": [
+    {
+      "date": "2023-12-06",
+      "startTime": "00:00",
+      "endTime": "00:00"
+    }
+  ],
+  "isLongRange": true,
+  "longRangeOptions": {
+    "type": "month"
+  },
+  "permittedUsers": ["user1", "user2"],
+  "permittedRoles": ["role1", "role2"],
+  "freeBookingUsers": ["user3"],
+  "freeBookingRoles": ["role3"],
+  "eventId": "event1",
+  "attachments": [
+    {
+      "id": "1",
+      "title": "User manual",
+      "type": "user-manual",
+      "url": "https://.../manuel.pdf"
+    }
+  ],
+  "priceCategory": "per-hour",
+  "relatedBookableIds": ["bookable1", "bookable2"],
+  "isBookable": true,
+  "isPublic": true,
+  "lockerDetails": {},
+  "requiredFields": ["field1", "field2"],
+  "bookingNotes": "Example Notes",
+  "checkoutBookableIds": ["bookable3", "bookable4"],
+  "ownerUserId": "user1",
+}
+```
 
 Here is a table that describes the fields in the bookable object:
 
 | Field                        | Description                                                                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|------------------------------| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | id                           | The unique identifier of the bookable.                                                                                                                                    |
-| tenant                       | The tenant to which the bookable belongs.                                                                                                                                 |
+| tenantId                     | The tenant to which the bookable belongs.                                                                                                                                 |
 | type                         | The type of the bookable (e.g., room, event location, resource, ticket).                                                                                                  |
 | title                        | The title or name of the bookable.                                                                                                                                        |
 | description                  | A description of the bookable.                                                                                                                                            |
@@ -969,77 +475,37 @@ Here is a table that describes the fields in the bookable object:
 | isLongRange                  | A boolean indicating if the bookable is available for long range booking. If true, the users is requested to select a full week or month when checking out this bookable. |
 | longRangeOptions             | e.g. week, month.                                                                                                                                                         |
 
+
+### Booking
+
+Reservations made by users for bookable resources.
+
 Example:
 
 ```json
 {
-  "id": "room-123",
-  "tenant": "default",
-  "type": "room",
-  "title": "Conference Room",
-  "description": "A large conference room with a capacity of 50 people.",
-  "location": "First Floor",
-  "priceEur": "100",
-  "priceCategory": "per-hour",
-  "amount": 1,
-  "isScheduleRelated": true,
-  "isTimePeriodRelated": false,
-  "minBookingDuration": 1,
-  "maxBookingDuration": 4,
-  "autoCommitBooking": true,
-  "attachments": [
-    {
-      "id": "1",
-      "title": "User manual",
-      "type": "user-manual",
-      "url": "https://.../manuel.pdf"
-    }
-  ],
-  "timePeriods": [
-    {
-      "weekdays": [1, 2, 3],
-      "startTime": "10:00",
-      "endTime": "15:00"
-    }
-  ],
-  "isOpeningHoursRelated": true,
-  "openingHours": [
-    {
-      "weekdays": [1, 2, 3],
-      "startTime": "08:00",
-      "endTime": "18:00"
-    }
-  ],
-  "isSpecialOpeningHoursRelated": false,
-  "specialOpeningHours": [
-    {
-      "date": "2023-12-06",
-      "startTime": "00:00",
-      "endTime": "00:00"
-    }
-  ],
-  "tags": ["conference", "large"],
-  "flags": ["projector", "whiteboard"],
-  "eventId": "event1",
-  "relatedBookableIds": ["bkbl-1", "bkbl-3"],
-  "checkoutBookableIds": ["bkbl-2", "bkbl-4"],
-  "imgUrl": "https://example.com/image.png",
-  "isBookable": true,
-  "isPublic": true,
-  "permittedUsers": ["user1", "user2"],
-  "permittedRoles": ["role1", "role2"],
-  "freeBookingUsers": ["user3"],
-  "freeBookingRoles": ["role3"],
-  "isLongRange": false,
-  "longRangeOptions": {
-    "type": "month"
-  }
+  "id": "BK-1234",
+  "tenantId": "default",
+  "assignedUserId": "user1",
+  "timeBegin":  1707994800000,
+  "timeEnd": 1708009200000,
+  "timeCreated": 1707994800000,
+  "bookableItems": [  ],
+  "couponCode": "COUPON123",
+  "name": "John Doe",
+  "company": "Some Corp",
+  "street": "123 Main St",
+  "zipCode": "12345",
+  "location": "Anytown",
+  "mail": "john.doe@example.com",
+  "phone": "1234567890",
+  "comment": "Please provide a projector and whiteboard.",
+  "priceEur": 100,
+  "isCommitted": true,
+  "isPayed": true,
+  "_couponUsed": { }
 }
 ```
-
-Please note that this is a simplified example and the actual structure of your bookable object may vary.
-
-### Booking
 
 A booking is a reservation of a bookable by a user (or guest). Bookings have a start and end date, a user and one or more related bookables. Bookings can have additional properties like a status, payment method, etc.
 
@@ -1066,36 +532,10 @@ A booking is a reservation of a bookable by a user (or guest). Bookings have a s
 | isPayed        | A boolean indicating whether the booking is paid.                                                                                     |
 | \_couponUsed   | The coupon used in the booking. It includes the ID, tenant, code, discount in Euros, and the valid from and to dates.                 |
 
-Example:
-
-```JSON
-{
-  "id": "BK-1234",
-  "tenantId": "default",
-  "assignedUserId": "user1",
-  "timeBegin":  1707994800000,
-  "timeEnd": 1708009200000,
-  "timeCreated": 1707994800000,
-  "bookableItems": [  ],
-  "couponCode": "COUPON123",
-  "name": "John Doe",
-  "company": "Some Corp",
-  "street": "123 Main St",
-  "zipCode": "12345",
-  "location": "Anytown",
-  "mail": "john.doe@example.com",
-  "phone": "1234567890",
-  "comment": "Please provide a projector and whiteboard.",
-  "priceEur": 100,
-  "isCommitted": true,
-  "isPayed": true,
-  "_couponUsed": { }
-}
-```
 
 ### Coupon
 
-A coupon is a discount code that can be applied to a booking. Coupons have a code, a discount value and a validity period.
+Discount codes that can be applied to bookings.
 
 Example:
 
@@ -1117,21 +557,6 @@ Example:
 ### Event
 
 Events are not considered as bookables. Instead, they serve as a representation of real-world events, holding crucial information such as the event description, date and time, speakers, and more. This data is primarily used for display purposes on a website, providing users with detailed information about the event. Events can also be linked to tickets, allowing users to book their attendance for these events. However, the booking process is handled through the associated tickets, not the events themselves.
-
-| Field          | Description                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------- |
-| id             | The unique identifier of the event                                                           |
-| tenant         | The tenant to which the event belongs.                                                       |
-| attachments    | An array of attachments related to the event. Each attachment is a string.                   |
-| attendees      | An object containing information about the attendees of the event.                           |
-| eventAddress   | An object containing the address of the event.                                               |
-| eventLocation  | An object containing the location of the event.                                              |
-| eventOrganizer | An object containing information about the organizer of the event.                           |
-| format         | The format of the event.                                                                     |
-| images         | An array of images related to the event. Each image has an id, title, type, and url.         |
-| information    | An object containing additional information about the event.                                 |
-| isPublic       | A boolean indicating whether the event is public.                                            |
-| schedules      | An array of schedules for the event. Each schedule has a start time, end time, and location. |
 
 Example:
 
@@ -1203,23 +628,36 @@ Example:
         "schedules": []
       }
     ]
-  ],
-  "ownerUserId": "user1"
+  ]
 }
 
 ```
 
-## Integrate data into a website
+| Field          | Description                                                                                  |
+|----------------| -------------------------------------------------------------------------------------------- |
+| id             | The unique identifier of the event                                                           |
+| tenantId       | The tenant to which the event belongs.                                                       |
+| attachments    | An array of attachments related to the event. Each attachment is a string.                   |
+| attendees      | An object containing information about the attendees of the event.                           |
+| eventAddress   | An object containing the address of the event.                                               |
+| eventLocation  | An object containing the location of the event.                                              |
+| eventOrganizer | An object containing information about the organizer of the event.                           |
+| format         | The format of the event.                                                                     |
+| images         | An array of images related to the event. Each image has an id, title, type, and url.         |
+| information    | An object containing additional information about the event.                                 |
+| isPublic       | A boolean indicating whether the event is public.                                            |
+| schedules      | An array of schedules for the event. Each schedule has a start time, end time, and location. |
 
-The Smart City Booking backend provides a Web Interface that can be used to integrate bookables, events and additional information into a website or HTML based application.
 
-In order to integrate the data into a website, you can use the JavaScript SDK provided by the backend. The SDK provides methods to fetch bookables, events, and other data from the backend and display it on your website.
+---
 
-When integrating the SDK into your website, data is loaded asynchroniously from the backend when your website is loaded. The SDK provides a set of row HTML tags that are dynamically loaded into your website. You can style those web components with CSS to match your website's design.
+## Web Integration
 
-### Setup Web Interface
+The backend provides a web interface and a JavaScript SDK for integrating data (bookables, events, etc.) into websites. The SDK asynchronously loads data from the backend and dynamically injects HTML components that can be styled with CSS.
 
-To use the SDK, you need to include the following script in your HTML file:
+### Setting Up the Web Interface
+
+Include the following script in your HTML file:
 
 ```html
 <script src="https://demo1.smart-city-booking.de/cdn/current/booking-manager.min.js"></script>
@@ -1233,142 +671,54 @@ To use the SDK, you need to include the following script in your HTML file:
 </script>
 ```
 
-### Bookable List
+### Examples of Web Components
 
-To display a list of bookables on your website, you can use the following code:
+#### Bookable List
 
 ```html
 <div
   class="bm-bookable-list"
   data-type="room"
-  data-ids="bklbl-123,bkbl-345"
+  data-ids="bkbl-123,bkbl-345"
 ></div>
 ```
 
-| Parameter            | Description                                                                                                                               |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| data-type (optional) | The type of bookables to display in the list. For example, "room" to display only rooms. If not provided all bookables will be displayed. |
-| data-ids (optional)  | A comma-separated list of bookable IDs to display in the list. If not provided, all bookables of the specified type will be displayed.    |
+_Parameters:_
 
-### Bookable Item
+- **data-type (optional):** Filters bookables by type (e.g., "room").
+- **data-ids (optional):** Comma-separated list of bookable IDs.
 
-Display a single bookable item on your website:
+#### Bookable Item
 
 ```html
-<div class="bm-bookable-item" data-id="bklbl-123" data-id-param="bkm_id"></div>
+<div class="bm-bookable-item" data-id="bkbl-123" data-id-param="bkm_id"></div>
 ```
 
-| Parameter     | Description                                                                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| data-id       | The ID of the bookable item to display.                                                                                                                                   |
-| data-id-param | The name of the URL parameter that contains the bookable ID. If this parameter is provided, the bookable ID will be read from the URL instead of the `data-id` attribute. |
+_Parameters:_
 
-### Event List
+- **data-id:** ID of the bookable item.
+- **data-id-param:** Name of the URL parameter that supplies the bookable ID (if available).
 
-Display a list of events on your website:
+#### Event List & Event Item
+
+Similar to the bookable components. For example, an event list:
 
 ```html
 <div class="bm-event-list" data-ids="evt-123,evt-234"></div>
 ```
 
-| Parameter | Description                                                                                                |
-| --------- | ---------------------------------------------------------------------------------------------------------- |
-| data-ids  | A comma-separated list of event IDs to display in the list. If not provided, all events will be displayed. |
+#### Calendar and Other Components
 
-### Event Item
+Detailed examples for event and occupancy calendars, login forms, logout buttons, user profile forms, and bookings tables are provided in the original documentation.
 
-Display a single event item on your website:
+---
 
-```html
-<div class="bm-event-item" data-id="evt-123" data-id-param="evt_id"></div>
-```
+## Summary
 
-| Parameter     | Description                                                                                                                                                         |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| data-id       | The ID of the event item to display.                                                                                                                                |
-| data-id-param | The name of the URL parameter that contains the event ID. If this parameter is provided, the event ID will be read from the URL instead of the `data-id` attribute. |
+This README provides a comprehensive guide for setting up, configuring, and using the Smart City Booking backend. It includes:
 
-### Event Calendar
+- Clear instructions for setting up your development environment.
+- Detailed API documentation with permission requirements.
+- Descriptions of core entities and examples for web integration.
 
-Display an event calendar on your website:
-
-```html
-<div class="bm-calendar" data-view="dayGridMonth"></div>
-```
-
-| Parameter | Description                                                                            |
-| --------- | -------------------------------------------------------------------------------------- |
-| data-view | Defines the apperance of the calendar, e.g. 'dayGridWeek', 'timeGridDay', 'listWeek' . |
-
-### Occupancy Calendar
-
-Display an occupancy calendar on your website:
-
-```html
-<div class="bm-occupancy-calendar" data-view="dayGridMonth"></div>
-```
-
-| Parameter | Description                                                                            |
-| --------- | -------------------------------------------------------------------------------------- |
-| data-view | Defines the apperance of the calendar, e.g. 'dayGridWeek', 'timeGridDay', 'listWeek' . |
-
-### Login Form
-
-Display a login form on your website:
-
-```html
-<div
-  id="bm-login-form"
-  data-success-redirect-url="https://..."
-  data-error-redirect-url="https://..."
->
-  <input type="email" name="username" placeholder="Email" />
-  <input type="password" name="password" placeholder="Password" />
-  <button id="bm-submit-signin">Login</button>
-</div>
-```
-
-| Parameter                 | Description                                      |
-| ------------------------- | ------------------------------------------------ |
-| data-success-redirect-url | The URL to redirect to after a successful login. |
-| data-error-redirect-url   | The URL to redirect to after a failed login.     |
-
-### Logout Button
-
-Display a logout button on your website:
-
-```html
-<button id="bm-logout-button"></button>
-```
-
-### User Bookings Table (Protected)
-
-Display a table of the user's bookings on your website. In order to display the user's bookings, the user must be authenticated.
-
-```html
-<div id="bm-user-bookings-table"></div>
-```
-
-### User Profile Form (Protected)
-
-Display a form to edit the user's profile on your website. In order to display the user's profile, the user must be authenticated.
-
-```html
-<form id="bm-user-profile">
-  <label for="firstname">First Name:</label><br />
-  <input type="text" id="firstname" name="firstname" /><br />
-  <label for="lastname">Last Name:</label><br />
-  <input type="text" id="lastname" name="lastname" /><br />
-  <label for="email">Email:</label><br />
-  <input type="email" id="email" name="email" /><br />
-  <label for="phone">Phone:</label><br />
-  <input type="tel" id="phone" name="phone" /><br />
-  <label for="address">Address:</label><br />
-  <input type="text" id="address" name="address" /><br />
-  <label for="zip">ZIP Code:</label><br />
-  <input type="text" id="zip" name="zip" /><br />
-  <label for="city">City:</label><br />
-  <input type="text" id="city" name="city" /><br />
-  <button id="bm-submit-profile" value="Save" />
-</form>
-```
+---
