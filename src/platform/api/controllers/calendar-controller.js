@@ -66,7 +66,10 @@ class CalendarController {
 
       occupancies.push(
         ...uniqueBookings
-          .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
+          .filter(
+            (booking) =>
+              !!booking.timeBegin && !!booking.timeEnd && !booking.isRejected,
+          )
           .map((booking) => ({
             bookableId: bookable.id,
             title: bookable.title,
