@@ -43,7 +43,7 @@ async function fetchOccupancies(bookable, tenant) {
     }
 
     return bookings
-      .filter((booking) => !!booking.timeBegin && !!booking.timeEnd)
+      .filter((booking) => !!booking.timeBegin && !!booking.timeEnd && !booking.isRejected)
       .filter(
         (booking, index, self) =>
           self.findIndex((b) => b.id === booking.id) === index,
