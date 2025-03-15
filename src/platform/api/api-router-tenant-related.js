@@ -25,6 +25,8 @@ router.get(
   "/bookables/:id/availability",
   CalendarController.getBookableAvailabilityFixed,
 );
+router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
+
 
 // Protected
 router.get(
