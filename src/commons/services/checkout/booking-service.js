@@ -327,6 +327,19 @@ class BookingService {
     }
   }
 
+  static async setBookingPayed(tenantId, bookingId) {
+    try {
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      booking.isPayed = true;
+      await BookingManager.storeBooking(booking);
+      logger.info(
+        `${tenantId} -- booking ${booking.id} set to payed and sent payment confirmation to ${booking.mail}`,
+      );
+    } catch (error) {
+      throw new Error(`Error setting booking to payed: ${error.message}`);
+    }
+  }
+
   static async rejectBooking(tenantId, bookingId, reason = "", hookId = null) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
