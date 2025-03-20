@@ -1,4 +1,6 @@
 const MailController = require("../../mail-service/mail-controller");
+const TenantManager = require("../../data-managers/tenant-manager");
+const BookingManager = require("../../data-managers/booking-manager");
 
 class WorkflowAction {
   constructor(action) {
@@ -21,14 +23,72 @@ class EmailAction extends WorkflowAction {
 
   async execute() {
     if (!this._action.sendTo) return;
-    await MailController.sendWorkflowNotification({
-      sendTo: this._action.sendTo,
-      tenantId: this.tenantId,
-      bookingId: this.taskId,
-      oldStatus: this.sourceStatus,
-      newStatus: this.destinationStatus,
-    });
+
+    const receivers = new Set();
+
+    if (this._action.receiverType === "user") {
+      for (const user of this._action.sendTo) {
+        receivers.add(user);
+      }
+    }
+
+    if (this._action.receiverType === "role") {
+      for (const role of this._action.sendTo) {
+        const users = await TenantManager.getTenantUsersByRoles(
+          this.tenantId,
+          role,
+        );
+        for (const user of users) {
+          receivers.add(user.userId);
+        }
+      }
+    }
+
+    for (const receiver of receivers) {
+      await MailController.sendWorkflowNotification({
+        sendTo: receiver,
+        tenantId: this.tenantId,
+        bookingId: this.taskId,
+        oldStatus: this.sourceStatus,
+        newStatus: this.destinationStatus,
+      });
+    }
   }
 }
 
-module.exports = { WorkflowAction, EmailAction };
+class BookingStatusAction extends WorkflowAction {
+  constructor(action, bookingId, tenantId) {
+    super(action);
+    this.bookingId = bookingId;
+    this.tenantId = tenantId;
+  }
+
+  async execute() {
+    if (!this._action.bookingStatus) return;
+
+    const booking = await BookingManager.getBooking(
+      this.bookingId,
+      this.tenantId,
+    );
+
+    if (!booking) return;
+
+    const bookingService = require("../../services/checkout/booking-service");
+
+    for (const bs of this._action.bookingStatus) {
+      if (bs === "commit") {
+        await bookingService.commitBooking(this.tenantId, {
+          id: this.bookingId,
+        });
+      }
+      if (bs === "paid") {
+        await bookingService.setBookingPayed(this.tenantId, this.bookingId);
+      }
+      if (bs === "reject") {
+        await bookingService.rejectBooking(this.tenantId, this.bookingId);
+      }
+    }
+  }
+}
+
+module.exports = { WorkflowAction, EmailAction, BookingStatusAction };
