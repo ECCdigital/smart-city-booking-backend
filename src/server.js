@@ -69,34 +69,6 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));
 
-passport.use(
-  new LocalStrategy(
-    {
-      usernameField: "id",
-      passwordField: "password",
-      passReqToCallback: true,
-    },
-    async (request, id, password, done) => {
-      const user = await UserManager.getUser(id, true);
-
-      if (user === null) {
-        return done(null, false);
-      }
-
-      if (
-        user !== undefined &&
-        user.isVerified &&
-        !user.isSuspended &&
-        user.verifyPassword(password)
-      ) {
-        done(null, user);
-      } else {
-        done(null, false);
-      }
-    },
-  ),
-);
-
 passport.serializeUser(function (user, done) {
   done(null, user);
 });
