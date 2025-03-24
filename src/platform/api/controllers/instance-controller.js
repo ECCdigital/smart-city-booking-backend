@@ -20,7 +20,6 @@ class InstanceController {
 
       response.status(200).send(instance);
     } catch (error) {
-      console.log("Error:", error);
       response.status(500).send({ message: error.message });
     }
   }

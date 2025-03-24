@@ -1,4 +1,4 @@
-class Application {
+class InstanceApplication {
   constructor({ type, id, active = false, title = "" }) {
     this.type = type;
     this.id = id;
@@ -10,12 +10,14 @@ class Application {
 
   encrypt() {}
 
+  removePrivateData() {}
+
   static get Schema() {
     return {
       type: {
         type: String,
         required: true,
-        enum: ["auth", "payment", "locker"],
+        enum: ["auth"],
       },
       id: {
         type: String,
@@ -33,4 +35,4 @@ class Application {
   }
 }
 
-module.exports = Application;
+module.exports = InstanceApplication;

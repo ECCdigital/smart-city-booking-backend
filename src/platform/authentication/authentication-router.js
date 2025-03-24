@@ -1,6 +1,7 @@
-var express = require("express");
-var router = express.Router({ mergeParams: true });
+const express = require("express");
+const router = express.Router({ mergeParams: true });
 const passport = require("passport");
+require("./auth-initialization");
 
 const AuthenticationController = require("./controllers/authentication-controller");
 
@@ -12,9 +13,11 @@ router.post("/resetpassword", AuthenticationController.resetPassword);
 
 router.post(
   "/signin",
-  passport.authenticate("local"),
+  passport.authenticate("local-signin"),
   AuthenticationController.signin,
 );
+router.post("/sso/signin", AuthenticationController.ssoLogin);
+router.post("/sso/signup", AuthenticationController.ssoSignup);
 router.get(
   "/me",
   AuthenticationController.isSignedIn,

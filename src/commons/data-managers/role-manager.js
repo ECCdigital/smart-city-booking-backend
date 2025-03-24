@@ -9,9 +9,20 @@ const RoleModel = require("./models/roleModel");
 class RoleManager {
   /**
    * Get all roles
-   * @returns List of bookings
+   * @returns {Promise<*>}
    */
-  static async getRoles(tenantId) {
+  static async getRoles() {
+    const rawRoles = await RoleModel.find();
+    return rawRoles.map((rr) => {
+      return new Role(rr);
+    });
+  }
+
+  /**
+   * Get all tenant roles
+   * @returns List of roles
+   */
+  static async getTenantRoles(tenantId) {
     const rawRoles = await RoleModel.find({ tenantId: tenantId });
     return rawRoles.map((rr) => {
       return new Role(rr);

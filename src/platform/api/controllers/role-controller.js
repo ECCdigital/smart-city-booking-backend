@@ -17,7 +17,14 @@ class RoleController {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const roles = await RoleManager.getRoles(tenantId);
+
+      let roles;
+
+      if (tenantId) {
+        roles = await RoleManager.getTenantRoles(tenantId);
+      } else {
+        roles = await RoleManager.getRoles();
+      }
 
       let allowedRoles = [];
       for (let role of roles) {
