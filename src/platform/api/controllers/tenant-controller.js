@@ -7,6 +7,8 @@ const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
 const { v4: uuidv4 } = require("uuid");
+const { RolePermission } = require("../../../commons/entities/role");
+const { RoleManager } = require("../../../commons/data-managers/role-manager");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -243,6 +245,32 @@ class TenantController {
     }
   }
 
+  static async getUsers(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+
+      const tenant = await TenantManager.getTenant(tenantId);
+
+      if (
+        await PermissionService._allowReadAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_USERS,
+        )
+      ) {
+        response
+          .status(200)
+          .send({ users: tenant.users, owner: tenant.ownerUserIds });
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get users");
+    }
+  }
+
   static async addUser(request, response) {
     try {
       const tenantId = request.params.id;
@@ -252,21 +280,26 @@ class TenantController {
       const tenant = await TenantManager.getTenant(tenantId);
 
       if (
-        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-        (await PermissionService._isInstanceOwner(user.id))
+        await PermissionService._allowUpdateAny(
+          user.id,
+          tenant.id,
+          RolePermission.MANAGE_USERS,
+        )
       ) {
-        if (
-          tenant.users.some(
-            (userReference) => userReference.userId === body.userId,
-          )
-        ) {
+        if (tenant.users.some((userRef) => userRef.userId === body.userId)) {
           tenant.users
-            .filter((userReference) => userReference.userId === body.userId)
+            .filter((userRef) => userRef.userId === body.userId)
             .forEach(
-              (user) =>
-                (user.roles = [...new Set([...user.roles, ...body.roles])]),
+              (userRef) =>
+                (userRef.roles = [
+                  ...new Set([...userRef.roles, ...body.roles]),
+                ]),
             );
         } else {
+          const dbUser = await UserManager.getUser(body.userId);
+          if (!dbUser) {
+            return response.status(404).send("User not found");
+          }
           tenant.users.push({
             userId: body.userId,
             roles: [...new Set(body.roles)],
@@ -275,7 +308,10 @@ class TenantController {
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
 
-        response.status(201).send(updatedTenant);
+        response.status(201).send({
+          users: updatedTenant.users,
+          owner: updatedTenant.ownerUserIds,
+        });
       } else {
         response.sendStatus(403);
       }
@@ -294,8 +330,11 @@ class TenantController {
       const tenant = await TenantManager.getTenant(tenantId);
 
       if (
-        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-        (await PermissionService._isInstanceOwner(user.id))
+        await PermissionService._allowUpdateAny(
+          user.id,
+          tenant.id,
+          RolePermission.MANAGE_USERS,
+        )
       ) {
         tenant.users = tenant.users.filter(
           (userRef) => userRef.userId !== userId,
@@ -309,7 +348,10 @@ class TenantController {
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
 
-        response.status(200).send(updatedTenant);
+        response.status(200).send({
+          users: updatedTenant.users,
+          owner: updatedTenant.ownerUserIds,
+        });
       } else {
         response.sendStatus(403);
       }
@@ -319,28 +361,41 @@ class TenantController {
     }
   }
 
-  static async removeUserRole(request, response) {
+  static async editUserRole(request, response) {
     try {
       const tenantId = request.params.id;
-      const { userId, roleId } = request.body;
+      const { userId, roles } = request.body;
       const user = request.user;
 
       const tenant = await TenantManager.getTenant(tenantId);
       if (
-        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-        (await PermissionService._isInstanceOwner(user.id))
+        await PermissionService._allowUpdateAny(
+          user.id,
+          tenant.id,
+          RolePermission.MANAGE_USERS,
+        )
       ) {
+        const tenantRoles = await RoleManager.getRoles(tenantId);
+        const mappedRoles = tenantRoles.map((role) => role.id);
+
+        const verifiedRoles = roles.filter((role) =>
+          mappedRoles.includes(role),
+        );
+
         const userRef = tenant.users.find(
           (userRef) => userRef.userId === userId,
         );
-        userRef.roles = userRef.roles.filter((r) => r !== roleId);
+        userRef.roles = verifiedRoles;
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
         logger.info(
-          `${tenantId} - User ${user?.id} removed role ${roleId} from user ${userId}`,
+          `${tenantId} - User ${user?.id} edit roles from user ${userId}`,
         );
 
-        response.status(200).send(updatedTenant);
+        response.status(200).send({
+          users: updatedTenant.users,
+          owner: updatedTenant.ownerUserIds,
+        });
       } else {
         logger.warn(
           `${tenantId} - User ${user?.id} not allowed to remove user role`,
@@ -371,7 +426,10 @@ class TenantController {
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
 
-        response.status(200).send(updatedTenant);
+        response.status(200).send({
+          users: updatedTenant.users,
+          owner: updatedTenant.ownerUserIds,
+        });
       } else {
         response.sendStatus(403);
       }
@@ -403,7 +461,10 @@ class TenantController {
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
 
-        response.status(200).send(updatedTenant);
+        response.status(200).send({
+          users: updatedTenant.users,
+          owner: updatedTenant.ownerUserIds,
+        });
       } else {
         response.sendStatus(403);
       }
