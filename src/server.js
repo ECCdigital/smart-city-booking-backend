@@ -55,6 +55,7 @@ app.use((req, res, next) => {
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
+    rolling: true,
     store: new MongoStore({ client: dbm.dbClient.connection.getClient() }),
     cookie: {
       httpOnly: true,

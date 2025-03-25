@@ -30,6 +30,7 @@ class Role {
     id,
     name,
     adminInterfaces,
+    manageUsers,
     manageBookables,
     manageBookings,
     manageCoupons,
@@ -41,6 +42,7 @@ class Role {
     this.id = id;
     this.name = name;
     this.adminInterfaces = adminInterfaces;
+    this.manageUsers = manageUsers;
     this.manageBookables = manageBookables;
     this.manageBookings = manageBookings;
     this.manageCoupons = manageCoupons;
@@ -59,6 +61,7 @@ class Role {
         type: [String],
         enum: [
           "locations",
+          "users",
           "roles",
           "bookings",
           "coupons",
@@ -68,6 +71,15 @@ class Role {
           "events",
         ],
         default: [],
+      },
+      manageUsers: {
+        create: { type: Boolean, default: false },
+        readAny: { type: Boolean, default: false },
+        readOwn: { type: Boolean, default: false },
+        updateAny: { type: Boolean, default: false },
+        updateOwn: { type: Boolean, default: false },
+        deleteAny: { type: Boolean, default: false },
+        deleteOwn: { type: Boolean, default: false },
       },
       manageBookables: {
         create: { type: Boolean, default: false },

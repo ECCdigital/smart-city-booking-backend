@@ -56,6 +56,21 @@ class UserManager {
     }
   }
 
+  static async getUsersById(ids, withSensitive = false) {
+    try {
+      const rawUsers = await UserModel.find({ id: { $in: ids } });
+      return rawUsers.map((ru) => {
+        const user = new User(ru);
+        if (!withSensitive) {
+          user.removeSensitive();
+        }
+        return user;
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
   static async deleteUser(id) {
     try {
       return await UserModel.deleteOne({ id: id });
@@ -157,6 +172,7 @@ class UserManager {
           isOwner: tenant.ownerUserIds.includes(userId),
           adminInterfaces: [],
           freeBookings: false,
+          manageUsers: {},
           manageRoles: {},
           manageBookables: {},
           manageBookings: {},
@@ -221,6 +237,7 @@ function mergeRoleIntoPermission(workingPermission, role) {
   workingPermission.freeBookings ||= role.freeBookings;
 
   const dimensions = [
+    "manageUsers",
     "manageRoles",
     "manageBookables",
     "manageBookings",
