@@ -83,9 +83,9 @@ class Bookable {
     specialOpeningHours,
     isLongRange,
     longRangeOptions,
-    priceEur,
+    priceCategories,
+    priceType,
     priceValueAddedTax,
-    priceCategory,
     permittedUsers,
     permittedRoles,
     freeBookingUsers,
@@ -125,9 +125,9 @@ class Bookable {
     this.specialOpeningHours = specialOpeningHours || [];
     this.isLongRange = isLongRange;
     this.longRangeOptions = longRangeOptions || null;
-    this.priceEur = priceEur;
-    this.priceValueAddedTax = priceValueAddedTax;
-    this.priceCategory = priceCategory;
+    this.priceCategories = priceCategories || [];
+    this.priceType = priceType;
+    this.priceValueAddedTax = priceValueAddedTax || 0;
     this.permittedUsers = permittedUsers || [];
     this.permittedRoles = permittedRoles || [];
     this.freeBookingUsers = freeBookingUsers;
@@ -197,10 +197,10 @@ class Bookable {
    * Calculate the price for the Bookable
    */
   getTotalPrice(timeBegin, timeEnd) {
-    var duration = (timeEnd - timeBegin) / 1000 / 60 / 60; // Hours
-    if (this.priceCategory === "per-hour") {
+    const duration = (timeEnd - timeBegin) / 1000 / 60 / 60; // Hours
+    if (this.priceType === "per-hour") {
       return Math.round(this.priceEur * duration * 100) / 100;
-    } else if (this.priceCategory === "per-day") {
+    } else if (this.priceType === "per-day") {
       return Math.round(((this.priceEur * duration) / 24) * 100) / 100;
     }
 
@@ -226,7 +226,20 @@ class Bookable {
       description: String,
       flags: [String],
       imgUrl: String,
-      priceEur: Number,
+      priceCategories: [{
+        _id: false,
+        priceEur: Number,
+        fixedPrice: Boolean,
+        interval: {
+          start: Number || null,
+          end: Number || null,
+        }
+      }],
+      priceType: {
+        type: String,
+        enum: ["per-hour", "per-day", "per-item"],
+        default: "per-item",
+      },
       priceValueAddedTax: Number,
       amount: Number,
       minBookingDuration: Number,
@@ -249,7 +262,6 @@ class Bookable {
       freeBookingRoles: [String],
       eventId: String,
       attachments: [Object],
-      priceCategory: String,
       relatedBookableIds: [String],
       isBookable: Boolean,
       isPublic: Boolean,

@@ -26,6 +26,8 @@ class CheckoutController {
       return response.status(400).send("Missing parameters");
     }
 
+    //TODO: Move this to a service
+
     const itemCheckoutService = new ItemCheckoutService(
       user?.id,
       tenantId,
@@ -44,11 +46,19 @@ class CheckoutController {
         `${tenantId} -- validated bookable ${bookableId} for user ${user?.id} with amount ${amount} and time ${timeBegin} - ${timeEnd}`,
       );
 
+      let multiplier = parseInt(amount);
+      if (itemCheckoutService.ignoreAmount) {
+        multiplier = 1;
+      }
+
       const payload = {
-        regularPriceEur: await itemCheckoutService.regularPriceEur(),
-        userPriceEur: await itemCheckoutService.userPriceEur(),
-        regularGrossPriceEur: await itemCheckoutService.regularGrossPriceEur(),
-        userGrossPriceEur: await itemCheckoutService.userGrossPriceEur(),
+        regularPriceEur:
+          (await itemCheckoutService.regularPriceEur()) * multiplier,
+        userPriceEur: (await itemCheckoutService.userPriceEur()) * multiplier,
+        regularGrossPriceEur:
+          (await itemCheckoutService.regularGrossPriceEur()) * multiplier,
+        userGrossPriceEur:
+          (await itemCheckoutService.userGrossPriceEur()) * multiplier,
       };
 
       return response.status(200).json(payload);
