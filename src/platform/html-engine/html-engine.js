@@ -4,14 +4,17 @@ const {
 const TenantManager = require("../../commons/data-managers/tenant-manager");
 
 class HtmlEngine {
-  static translatePriceCategory(priceCategory) {
+  static translatePriceCategory(priceCategory, short = false) {
+    let translation = "";
     if (priceCategory === "per-hour") {
-      return "pro Stunde";
+      translation = "Stunde";
     } else if (priceCategory === "per-day") {
-      return "pro Tag";
+      translation = "Tag";
+    } else if (priceCategory === "per-item") {
+      translation = "Stück";
     }
 
-    return "";
+    return short ? translation : "/" + translation;
   }
 
   static generateImageHtml(imgUrl, className, altText) {
@@ -63,15 +66,36 @@ class HtmlEngine {
 
         htmlOutput += '<p class="price">';
 
-        if (bookable.priceEur > 0) {
-          htmlOutput += new Intl.NumberFormat("de-DE", {
-            style: "currency",
-            currency: "EUR",
-          }).format(bookable.priceEur);
-          htmlOutput +=
-            ' <span class="prce-category">' +
-            HtmlEngine.translatePriceCategory(bookable.priceCategory) +
-            "</span>";
+        if (bookable.priceCategories.some((pC) => pC.priceEur) > 0) {
+          htmlOutput += '<ul class="price-category-list">';
+          bookable.priceCategories.forEach((priceCategory) => {
+            htmlOutput += '<li class="price-category-item">';
+            htmlOutput +=
+              ' <span class="price-category-item-price">' +
+              new Intl.NumberFormat("de-DE", {
+                style: "currency",
+                currency: "EUR",
+              }).format(priceCategory.priceEur);
+            htmlOutput +=
+              HtmlEngine.translatePriceCategory(bookable.priceType) + "</span>";
+
+            if (priceCategory.interval.start || priceCategory.interval.end) {
+              htmlOutput +=
+                ' <span class="price-category-interval">' +
+                HtmlEngine.getPriceRange(
+                  priceCategory.interval.start,
+                  priceCategory.interval.end,
+                ) +
+                "</span>";
+              htmlOutput +=
+                ' <span class="price-category">' +
+                HtmlEngine.translatePriceCategory(bookable.priceType, true) +
+                "</span>";
+            }
+
+            htmlOutput += "</li>";
+          });
+          htmlOutput += "</ul>";
         } else {
           htmlOutput += "kostenlos";
         }
@@ -155,15 +179,36 @@ class HtmlEngine {
 
       htmlOutput += '<p class="price">';
 
-      if (bookable.priceEur > 0) {
-        htmlOutput += new Intl.NumberFormat("de-DE", {
-          style: "currency",
-          currency: "EUR",
-        }).format(bookable.priceEur);
-        htmlOutput +=
-          ' <span class="prce-category">' +
-          HtmlEngine.translatePriceCategory(bookable.priceCategory) +
-          "</span>";
+      if (bookable.priceCategories.some((pC) => pC.priceEur) > 0) {
+        htmlOutput += '<ul class="price-category-list">';
+        bookable.priceCategories.forEach((priceCategory) => {
+          htmlOutput += '<li class="price-category-item">';
+          htmlOutput +=
+            ' <span class="price-category-item-price">' +
+            new Intl.NumberFormat("de-DE", {
+              style: "currency",
+              currency: "EUR",
+            }).format(priceCategory.priceEur);
+          htmlOutput +=
+            HtmlEngine.translatePriceCategory(bookable.priceType) + "</span>";
+
+          if (priceCategory.interval.start || priceCategory.interval.end) {
+            htmlOutput +=
+              ' <span class="price-category-interval">' +
+              HtmlEngine.getPriceRange(
+                priceCategory.interval.start,
+                priceCategory.interval.end,
+              ) +
+              "</span>";
+            htmlOutput +=
+              ' <span class="price-category">' +
+              HtmlEngine.translatePriceCategory(bookable.priceType, true) +
+              "</span>";
+          }
+
+          htmlOutput += "</li>";
+        });
+        htmlOutput += "</ul>";
       } else {
         htmlOutput += "kostenlos";
       }
@@ -523,6 +568,20 @@ class HtmlEngine {
     htmlOutput += `</div>`;
 
     return htmlOutput;
+  }
+
+  static getPriceRange(start, end) {
+    let interval = "";
+    if (!start) {
+      interval = `bis ${end}`;
+    }
+    if (!end) {
+      interval = `ab ${start}`;
+    }
+    if (start && end) {
+      interval = `${start} - ${end}`;
+    }
+    return `${interval}`;
   }
 }
 
