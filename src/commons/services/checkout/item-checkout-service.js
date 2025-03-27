@@ -84,7 +84,10 @@ class ItemCheckoutService {
   }
 
   get ignoreAmount() {
-    return this.originBookable.priceType === "per-item" && this.getPriceCategory().fixedPrice;
+    return (
+      this.originBookable.priceType === ("per-item" || "per-square-meter") &&
+      this.getPriceCategory().fixedPrice
+    );
   }
 
   async calculateAmountBooked(bookable) {
@@ -195,13 +198,16 @@ class ItemCheckoutService {
 
     let valueToCheck;
     switch (priceType) {
-      case 'per-hour':
+      case "per-hour":
         valueToCheck = bookingDurationInMinutes / 60;
         break;
-      case 'per-day':
+      case "per-day":
         valueToCheck = bookingDurationInMinutes / 60 / 24;
         break;
-      case 'per-item':
+      case "per-item":
+        valueToCheck = this.amount;
+        break;
+        case "per-square-meter":
         valueToCheck = this.amount;
         break;
       default:
@@ -218,7 +224,6 @@ class ItemCheckoutService {
 
     return category ?? null;
   }
-
 
   async regularGrossPriceEur() {
     const price =

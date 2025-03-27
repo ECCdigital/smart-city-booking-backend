@@ -237,7 +237,7 @@ class Bookable {
       }],
       priceType: {
         type: String,
-        enum: ["per-hour", "per-day", "per-item"],
+        enum: ["per-hour", "per-day", "per-item", "per-square-meter"],
         default: "per-item",
       },
       priceValueAddedTax: Number,

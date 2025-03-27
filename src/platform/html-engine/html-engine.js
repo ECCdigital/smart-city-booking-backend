@@ -12,6 +12,8 @@ class HtmlEngine {
       translation = "Tag";
     } else if (priceCategory === "per-item") {
       translation = "Stück";
+    } else if (priceCategory === "per-quare-meter") {
+      translation = "m²";
     }
 
     return short ? translation : "/" + translation;
