@@ -85,8 +85,9 @@ class ItemCheckoutService {
 
   get ignoreAmount() {
     return (
-      this.originBookable.priceType === ("per-item" || "per-square-meter") &&
-      this.getPriceCategory().fixedPrice
+      this.originBookable.priceType === "per-item" ||
+      (this.originBookable.priceType === "per-square-meter" &&
+        this.getPriceCategory().fixedPrice)
     );
   }
 
@@ -207,7 +208,7 @@ class ItemCheckoutService {
       case "per-item":
         valueToCheck = this.amount;
         break;
-        case "per-square-meter":
+      case "per-square-meter":
         valueToCheck = this.amount;
         break;
       default:
@@ -350,10 +351,19 @@ class ItemCheckoutService {
       this.originBookable.tenantId,
     );
 
-    for (const childBookable of childBookables) {
+    // remove self
+    const filteredChildBookables = childBookables.filter(
+      (cb) => cb.id !== this.originBookable.id,
+    );
+
+    for (const childBookable of filteredChildBookables) {
       const amountBooked = await this.calculateAmountBooked(childBookable);
 
-      if (amountBooked > 0) {
+      const isAvailable =
+        !childBookable.amount ||
+        amountBooked + this.amount <= childBookable.amount;
+
+      if (isAvailable) {
         throw new Error(
           `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
         );

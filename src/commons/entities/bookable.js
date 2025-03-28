@@ -241,7 +241,7 @@ class Bookable {
         default: "per-item",
       },
       priceValueAddedTax: Number,
-      amount: Number,
+      amount: Number || null,
       minBookingDuration: Number,
       maxBookingDuration: Number,
       autoCommitBooking: Boolean,
@@ -268,7 +268,7 @@ class Bookable {
       lockerDetails: [Object],
       requiredFields: [String],
       bookingNotes: String,
-      checkoutBookableIds: [String],
+      checkoutBookableIds: [Object],
       ownerUserId: String,
     };
   }
