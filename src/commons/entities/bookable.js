@@ -226,15 +226,17 @@ class Bookable {
       description: String,
       flags: [String],
       imgUrl: String,
-      priceCategories: [{
-        _id: false,
-        priceEur: Number,
-        fixedPrice: Boolean,
-        interval: {
-          start: Number || null,
-          end: Number || null,
-        }
-      }],
+      priceCategories: [
+        {
+          _id: false,
+          priceEur: Number,
+          fixedPrice: Boolean,
+          interval: {
+            start: Number || null,
+            end: Number || null,
+          },
+        },
+      ],
       priceType: {
         type: String,
         enum: ["per-hour", "per-day", "per-item", "per-square-meter"],

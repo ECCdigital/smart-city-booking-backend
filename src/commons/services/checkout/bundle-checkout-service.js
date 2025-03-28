@@ -134,7 +134,7 @@ class BundleCheckoutService {
   async userPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
-      console.log("bookableItem.ignoreAmount", bookableItem.ignoreAmount)
+      console.log("bookableItem.ignoreAmount", bookableItem.ignoreAmount);
       const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
       total += bookableItem.userPriceEur * multiplier;
     }

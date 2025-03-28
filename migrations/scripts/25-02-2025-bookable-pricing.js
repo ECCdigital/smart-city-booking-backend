@@ -13,15 +13,18 @@ module.exports = {
             start: null,
             end: null,
           },
-        }
-      ]
+        },
+      ];
       bookable.priceType = bookable.priceCategory;
       await Bookable.updateOne({ _id: bookable._id }, bookable);
     }
-    Bookable.collection.updateMany({}, { $unset: { priceEur: 1, priceCategory: 1 } });
+    Bookable.collection.updateMany(
+      {},
+      { $unset: { priceEur: 1, priceCategory: 1 } },
+    );
   },
 
-  down: async function(mongoose) {
+  down: async function (mongoose) {
     const Bookable = mongoose.model("Bookable");
     const bookables = await Bookable.find().lean();
     for (const bookable of bookables) {
@@ -30,6 +33,9 @@ module.exports = {
 
       await Bookable.updateOne({ _id: bookable._id }, bookable);
     }
-    Bookable.collection.updateMany({}, { $unset: { priceCategories: 1, priceType: 1 } });
-  }
+    Bookable.collection.updateMany(
+      {},
+      { $unset: { priceCategories: 1, priceType: 1 } },
+    );
+  },
 };

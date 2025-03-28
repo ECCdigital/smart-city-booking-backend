@@ -71,10 +71,10 @@ class BookingService {
     }
 
     async function validateMandatoryAddons(bookableItems) {
-      const bookableIds = bookableItems.map(item => item.bookableId);
+      const bookableIds = bookableItems.map((item) => item.bookableId);
 
       const bookables = await Promise.all(
-        bookableIds.map(id => BookableManager.getBookable(id, tenantId))
+        bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
       );
 
       const bookableMap = new Map();
@@ -100,7 +100,7 @@ class BookingService {
       const filteredAddons = [];
       for (const mandatoryAddon of mandatoryAddons) {
         const existingAddon = bookableItems.find(
-          item => item.bookableId === mandatoryAddon.bookableId
+          (item) => item.bookableId === mandatoryAddon.bookableId,
         );
 
         if (existingAddon) {
