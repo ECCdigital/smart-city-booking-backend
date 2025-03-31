@@ -339,12 +339,28 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
-      await MailController.sendBookingRejection(
-        booking.mail,
-        booking.id,
-        booking.tenantId,
-        reason,
-      );
+      if (!booking.isCommitted && !hookId) {
+        await MailController.sendBookingRejection(
+          booking.mail,
+          booking.id,
+          booking.tenantId,
+          reason,
+        );
+        logger.info(
+          `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
+        );
+      } else {
+        await MailController.sendBookingCancel(
+          booking.mail,
+          booking.id,
+          booking.tenantId,
+          reason,
+        );
+        logger.info(
+          `${tenantId} -- booking ${booking.id} canceled and sent booking rejection to ${booking.mail}`,
+        );
+      }
+
       logger.info(
         `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
       );
