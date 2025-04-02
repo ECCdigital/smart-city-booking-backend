@@ -253,6 +253,35 @@ class MailController {
   ) {
     const tenant = await TenantManager.getTenant(tenantId);
 
+    let message = `<p>Die nachfolgende Buchung wurde abgelehnt:</p>`;
+    if (reason) {
+      reason = sanitizeReason(reason);
+      message += `<p><strong>Ablehnungsgrund</strong>: ${reason}</p>`;
+    }
+
+    await this._sendBookingMail({
+      address,
+      bookingId,
+      tenantId,
+      subject: `Abgelehnt: Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+      title: `Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+      message: message,
+      includeQRCode: false,
+      attachments,
+      sendBCC: true,
+      addRejectionLink: false,
+    });
+  }
+
+  static async sendBookingCancel(
+    address,
+    bookingId,
+    tenantId,
+    reason,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
     let message = `<p>Die nachfolgende Buchung wurde storniert:</p>`;
     if (reason) {
       reason = sanitizeReason(reason);
