@@ -101,12 +101,12 @@ class MailController {
     const bccEmail = sendBCC ? tenant.mail : undefined;
 
     await MailerService.send({
-      tenantId,
-      address,
-      subject,
+      tenantId: tenantId,
+      address: address,
+      subject: subject,
       mailTemplate: tenant.genericMailTemplate,
-      model,
-      attachments,
+      model: model,
+      attachments: attachments,
       bcc: bccEmail,
       useInstanceMail: tenant.useInstanceMail,
     });
@@ -330,9 +330,9 @@ class MailController {
     const includeQRCode = tenant.enablePublicStatusView;
 
     await this._sendBookingMail({
-      address,
-      bookingId,
-      tenantId,
+      address: address,
+      bookingId: bookingId,
+      tenantId: tenantId,
       subject: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
       title: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
       message: `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben Ihre Anfrage erhalten und bearbeiten diese schnellstmöglich.</p><br>`,

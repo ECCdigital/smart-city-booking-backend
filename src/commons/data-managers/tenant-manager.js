@@ -103,6 +103,30 @@ class TenantManager {
       user.roles.some((role) => roles.includes(role)),
     );
   }
+
+  static async getTenantUserRoles(tenantId, userId) {
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    if (!rawTenant) {
+      return [];
+    }
+    const tenant = new Tenant(rawTenant);
+    const user = tenant.users.find((user) => user.userId === userId);
+    return user ? user.roles : [];
+  }
+
+  static async addUserRole(tenantId, userId, role) {
+    await TenantModel.updateOne(
+      { id: tenantId, "users.userId": userId },
+      { $addToSet: { "users.$.roles": role } },
+    );
+  }
+
+  static async removeUserRole(tenantId, userId, role) {
+    await TenantModel.updateOne(
+      { id: tenantId, "users.userId": userId },
+      { $pull: { "users.$.roles": role } },
+    );
+  }
 }
 
 module.exports = TenantManager;

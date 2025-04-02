@@ -10,6 +10,7 @@ const defaultMailTemplate = fs.readFileSync(
 
 class Instance {
   constructor({
+    applications,
     mailTemplate,
     mailAddress,
     noreplyMail,
@@ -33,6 +34,7 @@ class Instance {
     ownerUserIds,
     isInitialized,
   }) {
+    this.applications = applications;
     this.mailTemplate = mailTemplate;
     this.mailAddress = mailAddress;
     this.noreplyMail = noreplyMail;
@@ -58,6 +60,10 @@ class Instance {
   }
 
   removePrivateData() {
+    this.applications = this.applications.map((a) => {
+      a.removePrivateData();
+      return a;
+    });
     delete this.mailTemplate;
     delete this.mailAddress;
     delete this.noreplyMail;
@@ -80,6 +86,7 @@ class Instance {
 
   static get schema() {
     return {
+      applications: { type: Array, default: [] },
       mailTemplate: { type: String, default: defaultMailTemplate },
       mailAddress: { type: String, default: "" },
       noreplyMail: { type: String, default: "" },

@@ -33,7 +33,7 @@ class PermissionService {
    */
   static async _isTenantOwner(userId, tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
-    return tenant.ownerUserIds.includes(userId);
+    return tenant?.ownerUserIds.includes(userId);
   }
 
   /**

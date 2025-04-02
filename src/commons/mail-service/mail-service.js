@@ -173,15 +173,19 @@ class MailerService {
         to: address,
         subject: subject,
         html: output,
-        bcc,
-        attachments,
+        bcc: bcc,
+        attachments: attachments,
       };
 
-      await transporter.sendMail(mailOptions);
-      logger.info(`${context} -- Mail sent successfully to ${address}`);
+      if (address) {
+        await transporter.sendMail(mailOptions);
+        logger.info(`${context} -- Mail sent successfully to ${address}`);
+      } else {
+        logger.error(`${context} -- No recipient address provided`);
+      }
     } catch (error) {
-      logger.error(error);
       throw error;
+      logger.error(error);
     }
   }
 

@@ -61,7 +61,7 @@ TenantSchema.post("init", function (doc) {
 });
 
 function decryptApps(tenant) {
-  return tenant.applications.map((app) => {
+  return tenant.applications?.map((app) => {
     let appClass;
     if (app.type === "payment") {
       appClass = new PaymentApplication(app);
@@ -76,7 +76,7 @@ function decryptApps(tenant) {
 }
 
 function encryptApps(tenant) {
-  return tenant.applications.map((app) => {
+  return tenant.applications?.map((app) => {
     let appClass;
     if (app.type === "payment") {
       appClass = new PaymentApplication(app);

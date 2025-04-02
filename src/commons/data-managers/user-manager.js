@@ -22,9 +22,7 @@ class UserManager {
 
   static async signupUser(user) {
     try {
-      const newUser = await UserModel.create(user);
-      console.log("User created", newUser);
-      await UserManager.requestVerification(new User(newUser));
+      return await UserModel.create(user);
     } catch (err) {
       throw err;
     }
