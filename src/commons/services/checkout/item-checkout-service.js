@@ -83,6 +83,14 @@ class ItemCheckoutService {
     return this.originBookable;
   }
 
+  get ignoreAmount() {
+    return (
+      this.originBookable.priceType === "per-item" ||
+      (this.originBookable.priceType === "per-square-meter" &&
+        this.getPriceCategory().fixedPrice)
+    );
+  }
+
   async calculateAmountBooked(bookable) {
     let concurrentBookings;
 
@@ -158,23 +166,64 @@ class ItemCheckoutService {
   }
 
   async regularPriceEur() {
+    const priceCategory = this.getPriceCategory();
+
     let multiplier;
-    switch (this.originBookable.priceCategory) {
-      case "per-item":
-        multiplier = 1;
-        break;
-      case "per-hour":
-        multiplier = this.getBookingDuration() / 60;
-        break;
-      case "per-day":
-        multiplier = this.getBookingDuration() / 1440;
-        break;
-      default:
-        multiplier = 1;
+    if (!priceCategory.fixedPrice) {
+      switch (this.originBookable.priceType) {
+        case "per-hour":
+          multiplier = this.getBookingDuration() / 60;
+          break;
+        case "per-day":
+          multiplier = this.getBookingDuration() / 1440;
+          break;
+        default:
+          multiplier = 1;
+      }
+    } else {
+      multiplier = 1;
     }
 
-    const price = (Number(this.originBookable.priceEur) || 0) * multiplier;
+    const price = (Number(priceCategory.priceEur) || 0) * multiplier;
     return Math.round(price * 100) / 100;
+  }
+
+  getPriceCategory() {
+    const { priceCategories, priceType } = this.originBookable;
+
+    if (priceCategories.length === 1) {
+      return priceCategories[0];
+    }
+
+    const bookingDurationInMinutes = this.getBookingDuration();
+
+    let valueToCheck;
+    switch (priceType) {
+      case "per-hour":
+        valueToCheck = bookingDurationInMinutes / 60;
+        break;
+      case "per-day":
+        valueToCheck = bookingDurationInMinutes / 60 / 24;
+        break;
+      case "per-item":
+        valueToCheck = this.amount;
+        break;
+      case "per-square-meter":
+        valueToCheck = this.amount;
+        break;
+      default:
+        return null;
+    }
+
+    const category = priceCategories.find(({ interval }) => {
+      const { start, end } = interval;
+      return (
+        (start === null || start <= valueToCheck) &&
+        (end === null || end >= valueToCheck)
+      );
+    });
+
+    return category ?? null;
   }
 
   async regularGrossPriceEur() {
@@ -302,10 +351,19 @@ class ItemCheckoutService {
       this.originBookable.tenantId,
     );
 
-    for (const childBookable of childBookables) {
+    // remove self
+    const filteredChildBookables = childBookables.filter(
+      (cb) => cb.id !== this.originBookable.id,
+    );
+
+    for (const childBookable of filteredChildBookables) {
       const amountBooked = await this.calculateAmountBooked(childBookable);
 
-      if (amountBooked > 0) {
+      const isAvailable =
+        !childBookable.amount ||
+        amountBooked + this.amount <= childBookable.amount;
+
+      if (isAvailable) {
         throw new Error(
           `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
         );

@@ -14,6 +14,7 @@ const { isEmail } = require("validator");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking");
 const WorkflowManager = require("../../data-managers/workflow-manager");
 const WorkflowService = require("../workflow/workflow-service");
+const { BookableManager } = require("../../data-managers/bookable-manager");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -69,6 +70,55 @@ class BookingService {
       throw new Error("Missing parameters", { cause: { code: 400 } });
     }
 
+    async function validateMandatoryAddons(bookableItems) {
+      const bookableIds = bookableItems.map((item) => item.bookableId);
+
+      const bookables = await Promise.all(
+        bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
+      );
+
+      const bookableMap = new Map();
+      for (let i = 0; i < bookableIds.length; i++) {
+        bookableMap.set(bookableIds[i], bookables[i]);
+      }
+
+      const mandatoryAddons = [];
+      for (const item of bookableItems) {
+        const bookable = bookableMap.get(item.bookableId);
+        if (bookable && Array.isArray(bookable.checkoutBookableIds)) {
+          for (const addon of bookable.checkoutBookableIds) {
+            if (addon.mandatory) {
+              mandatoryAddons.push({
+                bookableId: addon.bookableId,
+                amount: item.amount,
+              });
+            }
+          }
+        }
+      }
+
+      const filteredAddons = [];
+      for (const mandatoryAddon of mandatoryAddons) {
+        const existingAddon = bookableItems.find(
+          (item) => item.bookableId === mandatoryAddon.bookableId,
+        );
+
+        if (existingAddon) {
+          if (existingAddon.amount !== mandatoryAddon.amount) {
+            existingAddon.amount = mandatoryAddon.amount;
+            filteredAddons.push(existingAddon);
+          }
+        } else {
+          filteredAddons.push({
+            bookableId: mandatoryAddon.bookableId,
+            amount: mandatoryAddon.amount,
+          });
+        }
+      }
+
+      return filteredAddons;
+    }
+
     let bundleCheckoutService;
 
     if (manualBooking) {
@@ -95,13 +145,16 @@ class BookingService {
         paymentProvider,
       );
     } else {
+      const filteredAddons = await validateMandatoryAddons(bookableItems);
+      const filteredBookableItems = bookableItems.concat(filteredAddons);
+
       bundleCheckoutService = new BundleCheckoutService(
         user?.id,
         tenantId,
         timeBegin,
         timeEnd,
         null,
-        bookableItems,
+        filteredBookableItems,
         couponCode,
         name,
         company,
