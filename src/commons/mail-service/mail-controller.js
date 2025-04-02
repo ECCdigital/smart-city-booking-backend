@@ -239,7 +239,7 @@ class MailController {
       message: `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`,
       includeQRCode: includeQRCode,
       attachments,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
@@ -268,7 +268,7 @@ class MailController {
       message: message,
       includeQRCode: false,
       attachments,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: false,
     });
   }
@@ -319,7 +319,7 @@ class MailController {
       message: `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`,
       includeQRCode: includeQRCode,
       attachments: undefined,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
@@ -338,7 +338,7 @@ class MailController {
       message: `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben Ihre Anfrage erhalten und bearbeiten diese schnellstmöglich.</p><br>`,
       includeQRCode: includeQRCode,
       attachments: undefined,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
@@ -361,7 +361,7 @@ class MailController {
       message: `<p>Vielen Dank für Ihre Buchung bei ${tenant.name}. Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto.</p><br>`,
       includeQRCode: includeQRCode,
       attachments,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
