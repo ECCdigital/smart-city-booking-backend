@@ -85,7 +85,8 @@ class ItemCheckoutService {
 
   get ignoreAmount() {
     return (
-      this.originBookable.priceType === "per-item" ||
+      (this.originBookable.priceType === "per-item"  &&
+        this.getPriceCategory().fixedPrice) ||
       (this.originBookable.priceType === "per-square-meter" &&
         this.getPriceCategory().fixedPrice)
     );

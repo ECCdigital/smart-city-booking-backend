@@ -143,10 +143,6 @@ class PdfService {
 
       const html = tenant.receiptTemplate;
 
-      if (!PdfService.isValidTemplate(html)) {
-        throw new Error("Invalid receipt template");
-      }
-
       const data = {
         bookingId: bookingId,
         tenant: tenantId,
@@ -218,7 +214,7 @@ class PdfService {
         bookedItems += "</tr>";
       }
 
-      if (booking._couponUsed) {
+      if (Object.keys(booking._couponUsed).length) {
         bookedItems += '<tr class="coupon">';
         bookedItems += `<td class="bi-title" colspan="3">${booking._couponUsed.description}</td>`;
         bookedItems += `<td class="bi-coupon-value">-${booking._couponUsed.discount} ${booking._couponUsed.type === "fixed" ? "€" : "%"}</td>`;
@@ -258,10 +254,6 @@ class PdfService {
       const page = await browser.newPage();
 
       const html = tenant.invoiceTemplate;
-
-      if (!PdfService.isValidTemplate(html)) {
-        throw new Error("Invalid receipt template");
-      }
 
       const data = {
         bookingId: bookingId,
