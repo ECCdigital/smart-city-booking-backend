@@ -431,6 +431,8 @@ class MailController {
         attachments,
       );
 
+      if (!paymentService) return;
+
       await paymentService.paymentRequest();
     } catch (error) {
       logger.error(error);
