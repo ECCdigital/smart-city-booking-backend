@@ -1,4 +1,4 @@
-var express = require("express");
+const express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const BookableController = require("./controllers/bookable-controller");
 const EventController = require("./controllers/event-controller");
@@ -10,6 +10,8 @@ const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
 const RoleController = require("./controllers/role-controller");
+const UserController = require("./controllers/user-controller");
+const { TenantController } = require("./controllers/tenant-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -155,6 +157,14 @@ router.get(
   "/bookings/:id/receipt/:receiptId",
   AuthenticationController.isSignedIn,
   BookingController.getReceipt,
+);
+
+// USERS
+// =====
+router.get(
+  "/users",
+  AuthenticationController.isSignedIn,
+  TenantController.getUsers,
 );
 
 // CHECKOUT

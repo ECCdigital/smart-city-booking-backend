@@ -4,11 +4,34 @@ module.exports = {
   up: async function (mongoose) {
     const Role = mongoose.model("Role");
 
-    await Role.updateMany(
-      {},
-      { $unset: { manageTenants: 1, manageUsers: 1 } },
-      { runValidators: false, strict: false },
-    );
+    const possibleInterfaces = [
+      "locations",
+      "users",
+      "roles",
+      "bookings",
+      "coupons",
+      "rooms",
+      "resources",
+      "tickets",
+      "events",
+    ];
+
+    const roles = await Role.find({});
+    for (const role of roles) {
+      const filteredInterfaces = role.adminInterfaces.filter((adIfce) =>
+        possibleInterfaces.includes(adIfce),
+      );
+      await Role.updateOne(
+        { _id: role._id },
+        {
+          $unset: { manageTenants: 1 },
+          $set: {
+            adminInterfaces: filteredInterfaces,
+          },
+        },
+        { runValidators: false, strict: false },
+      );
+    }
   },
 
   down: async function (mongoose) {
@@ -19,15 +42,6 @@ module.exports = {
       {
         $set: {
           manageTenants: {
-            create: false,
-            readAny: false,
-            readOwn: false,
-            updateAny: false,
-            updateOwn: false,
-            deleteOwn: false,
-            deleteAny: false,
-          },
-          manageUsers: {
             create: false,
             readAny: false,
             readOwn: false,

@@ -2,6 +2,8 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const { RolePermission } = require("../../../commons/entities/role");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -50,7 +52,6 @@ class UserController {
    */
   static async getUsers(request, response) {
     try {
-      const tenantId = request.params.tenant;
       const user = request.user;
 
       const userObjects = await UserManager.getUsers();
@@ -63,9 +64,37 @@ class UserController {
       }
 
       logger.info(
-        `${tenantId} -- sending ${allowedUserObjects.length} users to user ${user?.id}`,
+        `Instance -- sending ${allowedUserObjects.length} users to user ${user?.id}`,
       );
       response.status(200).send(allowedUserObjects);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get Users");
+    }
+  }
+
+  static async getUsersByTenant(request, response) {
+    try {
+      const user = request.user;
+      const tenantId = request.params.tenant;
+
+      if (
+        !(await PermissionService._allowReadAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_USERS,
+        ))
+      ) {
+        logger.warn(`User ${user?.id} not allowed to get tenant users`);
+        response.sendStatus(403);
+        return;
+      }
+      const tenantUsers = await TenantManager.getTenantUsers(tenantId);
+
+      logger.info(
+        `Instance -- sending ${tenantUsers.length} users to user ${user?.id}`,
+      );
+      response.status(200).send(tenantUsers);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get Users");
