@@ -19,6 +19,13 @@ passport.use(
       passReqToCallback: true,
     },
     async (request, id, password, done) => {
+
+      if (typeof id !== "string") {
+        return done(null, false);
+      }
+
+      id = id.toLowerCase();
+
       const user = await UserManager.getUser(id, true);
 
       if (user === null) {
