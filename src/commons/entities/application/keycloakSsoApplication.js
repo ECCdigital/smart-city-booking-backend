@@ -1,4 +1,4 @@
-const SsoApplication = require("./SsoApplication");
+const SsoApplication = require("./ssoApplication");
 const SecurityUtils = require("../../utilities/security-utils");
 
 class KeycloakSsoApplication extends SsoApplication {

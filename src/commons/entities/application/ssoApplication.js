@@ -1,4 +1,4 @@
-const InstanceApplication = require("./InstanceApplication");
+const InstanceApplication = require("./instanceApplication");
 const KeycloakSsoApplication = require("./keycloakSsoApplication");
 
 class SsoApplication extends InstanceApplication {
