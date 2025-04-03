@@ -12,6 +12,9 @@ const WorkflowController = require("./controllers/workflow-controller");
 const RoleController = require("./controllers/role-controller");
 const UserController = require("./controllers/user-controller");
 const { TenantController } = require("./controllers/tenant-controller");
+const {
+  GroupBookingController,
+} = require("./controllers/group-booking-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -110,6 +113,7 @@ router.get(
   AuthenticationController.isSignedIn,
   BookingController.getBooking,
 );
+
 router.put(
   "/bookings",
   AuthenticationController.isSignedIn,
@@ -159,12 +163,30 @@ router.get(
   BookingController.getReceipt,
 );
 
+
 // USERS
 // =====
 router.get(
   "/users",
   AuthenticationController.isSignedIn,
   TenantController.getUsers,
+
+// GROUP BOOKINGS
+// ==============
+router.get(
+  "/group-bookings",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getGroupBookings,
+);
+router.get(
+  "/group-bookings/:id",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getGroupBooking,
+);
+router.get(
+  "/group-bookings/booking/:bookingId",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getGroupBookingByBookingId,
 );
 
 // CHECKOUT
