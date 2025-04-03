@@ -101,12 +101,12 @@ class MailController {
     const bccEmail = sendBCC ? tenant.mail : undefined;
 
     await MailerService.send({
-      tenantId,
-      address,
-      subject,
+      tenantId: tenantId,
+      address: address,
+      subject: subject,
       mailTemplate: tenant.genericMailTemplate,
-      model,
-      attachments,
+      model: model,
+      attachments: attachments,
       bcc: bccEmail,
       useInstanceMail: tenant.useInstanceMail,
     });
@@ -239,12 +239,41 @@ class MailController {
       message: `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`,
       includeQRCode: includeQRCode,
       attachments,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
 
   static async sendBookingRejection(
+    address,
+    bookingId,
+    tenantId,
+    reason,
+    attachments = undefined,
+  ) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    let message = `<p>Die nachfolgende Buchung wurde abgelehnt:</p>`;
+    if (reason) {
+      reason = sanitizeReason(reason);
+      message += `<p><strong>Ablehnungsgrund</strong>: ${reason}</p>`;
+    }
+
+    await this._sendBookingMail({
+      address,
+      bookingId,
+      tenantId,
+      subject: `Abgelehnt: Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+      title: `Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+      message: message,
+      includeQRCode: false,
+      attachments,
+      sendBCC: true,
+      addRejectionLink: false,
+    });
+  }
+
+  static async sendBookingCancel(
     address,
     bookingId,
     tenantId,
@@ -268,7 +297,7 @@ class MailController {
       message: message,
       includeQRCode: false,
       attachments,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: false,
     });
   }
@@ -319,7 +348,7 @@ class MailController {
       message: `<p>Im Folgenden senden wir Ihnen die Details Ihrer Buchung.</p><br>`,
       includeQRCode: includeQRCode,
       attachments: undefined,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
@@ -330,15 +359,15 @@ class MailController {
     const includeQRCode = tenant.enablePublicStatusView;
 
     await this._sendBookingMail({
-      address,
-      bookingId,
-      tenantId,
+      address: address,
+      bookingId: bookingId,
+      tenantId: tenantId,
       subject: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
       title: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
       message: `<p>Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}. Wir haben Ihre Anfrage erhalten und bearbeiten diese schnellstmöglich.</p><br>`,
       includeQRCode: includeQRCode,
       attachments: undefined,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
@@ -361,7 +390,7 @@ class MailController {
       message: `<p>Vielen Dank für Ihre Buchung bei ${tenant.name}. Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto.</p><br>`,
       includeQRCode: includeQRCode,
       attachments,
-      sendBCC: true,
+      sendBCC: false,
       addRejectionLink: true,
     });
   }
@@ -430,6 +459,8 @@ class MailController {
         booking.paymentProvider,
         attachments,
       );
+
+      if (!paymentService) return;
 
       await paymentService.paymentRequest();
     } catch (error) {

@@ -2,6 +2,7 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User, HookTypes } = require("../../../commons/entities/user");
 const bunyan = require("bunyan");
 const MailController = require("../../../commons/mail-service/mail-controller");
+const SsoService = require("../../../commons/services/sso/sso-service");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -34,6 +35,34 @@ class AuthenticationController {
     }
   }
 
+  static async ssoLogin(request, response, next) {
+    try {
+      const {
+        body: { token },
+      } = request;
+      const user = await SsoService.handleLogin(token);
+
+      if (user) {
+        request.login(user, { session: true }, async (err) => {
+          if (err) {
+            return next(err);
+          }
+          request.session.save((err) => {
+            if (err) {
+              return next(err);
+            }
+            response.status(200).send(user);
+          });
+        });
+      } else {
+        response.sendStatus(401);
+      }
+    } catch (error) {
+      response.status(error.status || 500).send(error.message);
+      logger.error(error);
+    }
+  }
+
   static signup(request, response) {
     if (
       request.body.id &&
@@ -56,10 +85,10 @@ class AuthenticationController {
           user.setPassword(request.body.password);
 
           UserManager.signupUser(user)
-            .then(async () => {
-              logger.info(`User ${user.id} signed up.`);
-
-              await MailController.sendUserCreated(user.id);
+            .then(async (createdUser) => {
+              logger.info(`User ${createdUser.id} signed up.`);
+              await UserManager.requestVerification(createdUser);
+              await MailController.sendUserCreated(createdUser.id);
 
               response.sendStatus(201);
             })
@@ -71,6 +100,18 @@ class AuthenticationController {
       });
     } else {
       response.sendStatus(400);
+    }
+  }
+
+  static async ssoSignup(request, response) {
+    try {
+      const {
+        body: { token },
+      } = request;
+      await SsoService.handleSignup(token);
+      response.sendStatus(201);
+    } catch (error) {
+      response.status(error.status).send(error.message);
     }
   }
 

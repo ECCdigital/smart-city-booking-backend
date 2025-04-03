@@ -1,10 +1,11 @@
-var express = require("express");
+const express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
+const RoleController = require("./controllers/role-controller");
 
-var router = express.Router({ mergeParams: true });
+const router = express.Router({ mergeParams: true });
 
 // INSTANCES
 // =========
@@ -68,9 +69,9 @@ router.post(
 );
 
 router.post(
-  "/tenants/:id/remove-user-role",
+  "/tenants/:id/edit-user-roles",
   AuthenticationController.isSignedIn,
-  TenantController.removeUserRole,
+  TenantController.editUserRole,
 );
 
 router.post(
@@ -83,6 +84,12 @@ router.post(
   "/tenants/:id/remove-owner",
   AuthenticationController.isSignedIn,
   TenantController.removeOwner,
+);
+
+router.get(
+  "/tenants/:id/users",
+  AuthenticationController.isSignedIn,
+  TenantController.getUsers,
 );
 
 // USERS
@@ -118,6 +125,12 @@ router.delete(
   "/users/:id",
   AuthenticationController.isSignedIn,
   UserController.removeUser,
+);
+
+router.get(
+  /roles/,
+  AuthenticationController.isSignedIn,
+  RoleController.getRoles,
 );
 
 module.exports = router;

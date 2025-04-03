@@ -22,9 +22,7 @@ class UserManager {
 
   static async signupUser(user) {
     try {
-      const newUser = await UserModel.create(user);
-      console.log("User created", newUser);
-      await UserManager.requestVerification(new User(newUser));
+      return await UserModel.create(user);
     } catch (err) {
       throw err;
     }
@@ -44,6 +42,21 @@ class UserManager {
   static async getUsers(withSensitive = false) {
     try {
       const rawUsers = await UserModel.find({});
+      return rawUsers.map((ru) => {
+        const user = new User(ru);
+        if (!withSensitive) {
+          user.removeSensitive();
+        }
+        return user;
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  static async getUsersById(ids, withSensitive = false) {
+    try {
+      const rawUsers = await UserModel.find({ id: { $in: ids } });
       return rawUsers.map((ru) => {
         const user = new User(ru);
         if (!withSensitive) {
@@ -157,6 +170,7 @@ class UserManager {
           isOwner: tenant.ownerUserIds.includes(userId),
           adminInterfaces: [],
           freeBookings: false,
+          manageUsers: {},
           manageRoles: {},
           manageBookables: {},
           manageBookings: {},
@@ -221,6 +235,7 @@ function mergeRoleIntoPermission(workingPermission, role) {
   workingPermission.freeBookings ||= role.freeBookings;
 
   const dimensions = [
+    "manageUsers",
     "manageRoles",
     "manageBookables",
     "manageBookings",

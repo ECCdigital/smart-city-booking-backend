@@ -1,6 +1,6 @@
 const BookingManager = require("../../data-managers/booking-manager");
 const WorkflowManager = require("../../data-managers/workflow-manager");
-const { EmailAction } = require("./workflow-action");
+const { EmailAction, BookingStatusAction } = require("./workflow-action");
 
 class WorkflowService {
   static async updateWorkflow(tenantId, workflow) {
@@ -221,6 +221,9 @@ function action(
         taskId,
         tenantId,
       );
+    }
+    if (action.type === "bookingStatus") {
+      actionClass = new BookingStatusAction(action, taskId, tenantId);
     }
     actionClass.execute();
   });

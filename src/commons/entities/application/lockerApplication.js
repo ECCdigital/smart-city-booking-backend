@@ -1,7 +1,7 @@
-const Application = require("./application");
+const TenantApplication = require("./tenantApplication");
 const SecurityUtils = require("../../utilities/security-utils");
 
-class LockerApplication extends Application {
+class LockerApplication extends TenantApplication {
   constructor(params) {
     super({ type: "locker", ...params });
     this.version = params.version || 1;
