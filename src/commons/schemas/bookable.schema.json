@@ -3,7 +3,6 @@
   "properties": {
     "id": { "type": "string" },
     "tenant": { "type": "string" },
-    "enabled": { "type": "boolean" },
     "parent": { "type": "string" },
     "title": { "type": "string" },
     "description": { "type": "string" },

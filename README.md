@@ -368,7 +368,6 @@ Example:
   "id": "default",
   "tenantId": "default",
   "type": "room",
-  "enabled": true,
   "parent": "123-123ada-123",
   "title": "Example Title",
   "description": "Example Description",

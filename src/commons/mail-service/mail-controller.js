@@ -496,6 +496,13 @@ class MailController {
     });
   }
 
+  static async sendNewGroupBooking(
+    address,
+    groupBookingId,
+    bookingIds,
+    tenantId,
+  ) {}
+
   static async sendVerificationRequest(address, hookId) {
     let content = `<p>Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den nachfolgenden Link</p><a href="${process.env.BACKEND_URL}/auth/verify/${hookId}">${process.env.BACKEND_URL}/auth/verify/${hookId}</a>`;
     const instance = await InstanceManager.getInstance(false);

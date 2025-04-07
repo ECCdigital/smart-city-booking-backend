@@ -336,6 +336,7 @@ class BookingController {
   static async createBooking(request, response) {
     const user = request.user;
     const booking = new Booking(request.body);
+    const tenantId = request.params.tenant;
 
     if (
       !(await PermissionsService._allowCreate(
@@ -352,7 +353,12 @@ class BookingController {
     }
 
     try {
-      const newBooking = await BookingService.createBooking(request, true);
+      const newBooking = await BookingService.createSingleBooking({
+        tenantId,
+        user,
+        bookingAttempt: request.body,
+        manualBooking: true,
+      });
       return response.status(200).send(newBooking);
     } catch (err) {
       logger.error(err);

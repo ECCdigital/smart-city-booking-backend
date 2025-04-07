@@ -2,6 +2,8 @@ const GroupBookingManager = require("../../../commons/data-managers/group-bookin
 const bunyan = require("bunyan");
 const PermissionsService = require("../../../commons/services/permission-service");
 const { RolePermission } = require("../../../commons/entities/role");
+const BookingService = require("../../../commons/services/checkout/booking-service");
+const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -104,6 +106,129 @@ class GroupBookingController {
         );
         res.status(403).send({
           message: "User not allowed to read group booking",
+        });
+      }
+    } catch (error) {
+      res.status(500).send({ message: error.message });
+    }
+  }
+
+  static async commitGroupBooking(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const user = req.user;
+      const groupBookingId = req.params.id;
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+
+      if (
+        user &&
+        (await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        await BookingService.commitGroupBooking(tenantId, groupBookingId);
+        logger.info(
+          { tenantId: tenantId, user: user.id },
+          "Group booking committed successfully",
+        );
+        res.status(200).send(groupBooking);
+      } else {
+        logger.error(
+          { tenantId: tenantId, user: user.id },
+          "User not allowed to commit group booking",
+        );
+        res.status(403).send({
+          message: "User not allowed to commit group booking",
+        });
+      }
+    } catch (error) {
+      res.status(500).send({ message: error.message });
+    }
+  }
+
+  static async rejectGroupBooking(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const user = req.user;
+      const groupBookingId = req.params.id;
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+
+      if (
+        user &&
+        (await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        await BookingService.rejectGroupBooking(tenantId, groupBookingId);
+        logger.info(
+          { tenantId: tenantId, user: user.id },
+          "Group booking rejected successfully",
+        );
+        res.status(200).send(groupBooking);
+      } else {
+        logger.error(
+          { tenantId: tenantId, user: user.id },
+          "User not allowed to reject group booking",
+        );
+        res.status(403).send({
+          message: "User not allowed to reject group booking",
+        });
+      }
+    } catch (error) {
+      res.status(500).send({ message: error.message });
+    }
+  }
+
+  static async removeGroupBooking(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const user = req.user;
+      const groupBookingId = req.params.id;
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+      if (
+        user &&
+        (await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        for (const bookingId of groupBooking.bookingIds) {
+          console.log("Deleting booking with ID:", bookingId);
+          await BookingService.cancelBooking(tenantId, bookingId);
+          await WorkflowService.removeTask(tenantId, bookingId);
+        }
+        await GroupBookingManager.deleteGroupBooking(
+          tenantId,
+          groupBookingId,
+        );
+        res.status(200).send(groupBooking);
+      } else {
+        logger.error(
+          { tenantId: tenantId, user: user.id },
+          "User not allowed to remove group booking",
+        );
+        res.status(403).send({
+          message: "User not allowed to remove group booking",
         });
       }
     } catch (error) {

@@ -52,6 +52,33 @@ class GroupBookingManager {
 
     return rawGroupBooking ? new GroupBooking(rawGroupBooking) : null;
   }
+
+
+  /**
+   *
+   * @param groupBooking
+   * @returns {Promise<void>}
+   */
+  static async storeGroupBooking(groupBooking) {
+    await GroupBookingModel.updateOne(
+      { id: groupBooking.id, tenantId: groupBooking.tenantId },
+      groupBooking,
+      {
+        upsert: true,
+      },
+    );
+  }
+
+  static async deleteGroupBooking(tenantId, groupBookingId) {
+    const groupBooking = await GroupBookingModel.deleteOne({
+      tenantId: tenantId,
+      id: groupBookingId,
+    });
+
+    if (!groupBooking) {
+      throw new Error("Group booking not found");
+    }
+  }
 }
 
 module.exports = GroupBookingManager;

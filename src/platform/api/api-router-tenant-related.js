@@ -163,13 +163,13 @@ router.get(
   BookingController.getReceipt,
 );
 
-
 // USERS
 // =====
 router.get(
   "/users",
   AuthenticationController.isSignedIn,
   TenantController.getUsers,
+);
 
 // GROUP BOOKINGS
 // ==============
@@ -183,15 +183,34 @@ router.get(
   AuthenticationController.isSignedIn,
   GroupBookingController.getGroupBooking,
 );
+router.post(
+  "/group-bookings/:id/commit",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.commitGroupBooking,
+);
+router.post(
+  "/group-bookings/:id/reject",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.rejectGroupBooking,
+);
 router.get(
   "/group-bookings/booking/:bookingId",
   AuthenticationController.isSignedIn,
   GroupBookingController.getGroupBookingByBookingId,
 );
+router.delete(
+  "/group-bookings/:id",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.removeGroupBooking,
+);
 
 // CHECKOUT
 // ========
 router.post("/checkout", CheckoutController.checkout);
+router.post(
+  "/checkout/group",
+  CheckoutController.groupCheckout,
+);
 router.post("/checkout/validateItem", CheckoutController.validateItem);
 router.get("/checkout/permissions/:id", CheckoutController.checkoutPermissions);
 
