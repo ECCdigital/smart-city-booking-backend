@@ -128,7 +128,7 @@ router.delete(
 );
 
 router.get(
-  /roles/,
+  "/roles",
   AuthenticationController.isSignedIn,
   RoleController.getRoles,
 );
