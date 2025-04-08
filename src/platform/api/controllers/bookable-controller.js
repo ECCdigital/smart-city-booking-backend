@@ -318,7 +318,10 @@ class BookableController {
         tenant,
       );
 
-      if (!existingBookable.isPublic && bookable.isPublic) {
+      if (
+        (!existingBookable || !existingBookable.isPublic) &&
+        bookable.isPublic
+      ) {
         if (
           (await BookableManager.checkPublicBookableCount(
             bookable.tenantId,
