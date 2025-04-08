@@ -364,7 +364,7 @@ class ItemCheckoutService {
         !childBookable.amount ||
         amountBooked + this.amount <= childBookable.amount;
 
-      if (isAvailable) {
+      if (!isAvailable) {
         throw new Error(
           `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
         );
