@@ -1,10 +1,46 @@
 const nodemailer = require("nodemailer");
-const Mustache = require("mustache");
+const Handlebars = require("handlebars");
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
 const InstanceManger = require("../data-managers/instance-manager");
 const axios = require("axios");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
+
+Handlebars.registerHelper("formatDateTime", function (value) {
+  const formatter = new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+  return formatter.format(new Date(value));
+});
+
+Handlebars.registerHelper("formatDate", function (value) {
+  const formatter = new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  return formatter.format(new Date(value));
+});
+
+Handlebars.registerHelper("priceFormatted", function (value) {
+  const formatter = new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+  });
+  return formatter.format(value);
+});
+Handlebars.registerHelper("sanitizeString", function (value) {
+  if (typeof value === "string" && value.trim() !== "") {
+    return value.replace(/<[^>]*>?/gm, "");
+  }
+  return value;
+});
+
 
 const logger = bunyan.createLogger({
   name: "mail-service.js",
@@ -30,7 +66,8 @@ class MailerService {
     );
 
     try {
-      return Mustache.render(emailTemplate, model);
+      const template = Handlebars.compile(emailTemplate);
+      return template(model);
     } catch (err) {
       throw err;
     }
