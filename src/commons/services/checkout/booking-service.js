@@ -18,6 +18,7 @@ const WorkflowService = require("../workflow/workflow-service");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const { GroupBooking } = require("../../entities/groupBooking");
 const TenantManager = require("../../data-managers/tenant-manager");
+const PaymentUtils = require("../../utilities/payment-utils");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -259,15 +260,23 @@ class BookingService {
           let attachments = [];
 
           if (booking.priceEur > 0) {
-            const pdfData = await ReceiptService.createReceipt(
-              tenantId,
-              booking.id,
-            );
+            const { receipt, name, receiptId, revision, timeCreated } =
+              await ReceiptService.createReceipt(tenantId, booking.id);
+
+            booking.attachments.push({
+              type: "receipt",
+              title: name,
+              receiptId: receiptId,
+              revision: revision,
+              timeCreated,
+            });
+
+            await BookingManager.storeBooking(booking);
 
             attachments = [
               {
-                filename: pdfData.name,
-                content: pdfData.buffer,
+                filename: name,
+                content: receipt.buffer,
                 contentType: "application/pdf",
               },
             ];
@@ -311,6 +320,7 @@ class BookingService {
    * Creates a group booking and sends confirmation emails.
    * @param tenantId
    * @param user
+   * @param contactData
    * @param bookingAttempts
    * @param simulate
    * @param manualBooking
@@ -319,6 +329,7 @@ class BookingService {
   static async createGroupBooking({
     tenantId,
     user,
+    contactData,
     bookingAttempts,
     simulate,
     manualBooking = false,
@@ -353,18 +364,55 @@ class BookingService {
       tenantId,
       bookingIds: allBookings.map((booking) => booking.id),
       assignedUserId: user?.id,
+      mail: contactData.mail,
     });
 
-
     await GroupBookingManager.storeGroupBooking(groupBooking);
-    const newGroupBooking = await GroupBookingManager.getGroupBooking(tenantId,uniqueId);
+    const newGroupBooking = await GroupBookingManager.getGroupBooking(
+      tenantId,
+      uniqueId,
+      true,
+    );
 
     if (!simulate) {
       try {
-        //TODO: send group booking confirmation
-        console.log("send group booking confirmation");
+        const allCommitted = newGroupBooking.bookings.every(
+          (booking) => booking.isCommitted,
+        );
+
+        if (!allCommitted) {
+          await MailController.sendBookingRequestConfirmation(
+            newGroupBooking.mail,
+            newGroupBooking.id,
+            newGroupBooking.tenantId,
+            true,
+          );
+        }
+        const allPayed = newGroupBooking.bookings.every(
+          (booking) => booking.isPayed,
+        );
+
+        if (allCommitted && allPayed) {
+          let attachments = [];
+
+          await MailController.sendBookingConfirmation(
+            newGroupBooking.mail,
+            newGroupBooking.id,
+            newGroupBooking.tenantId,
+            attachments,
+            true,
+          );
+        }
+
+        const tenant = await TenantManager.getTenant(newGroupBooking.tenantId);
+        await MailController.sendIncomingBooking(
+          tenant.mail,
+          newGroupBooking.id,
+          newGroupBooking.tenantId,
+          true,
+        );
       } catch (err) {
-        logger.error(`Fehler beim Versand der Sammel-E-Mail: ${err}`);
+        logger.error(`Error while sending email: ${err}`);
       }
     }
 
@@ -441,9 +489,12 @@ class BookingService {
     return BookingManager.getBooking(updatedBooking.id, tenantId);
   }
 
-  static async commitBooking(tenant, booking) {
+  static async commitBooking(tenantId, booking) {
     try {
-      const originBooking = await BookingManager.getBooking(booking.id, tenant);
+      const originBooking = await BookingManager.getBooking(
+        booking.id,
+        tenantId,
+      );
       originBooking.isCommitted = true;
       originBooking.isRejected = false;
       await BookingManager.storeBooking(originBooking);
@@ -454,16 +505,22 @@ class BookingService {
           originBooking.tenantId,
         );
         logger.info(
-          `${tenant} -- booking ${originBooking.id} committed and sent free booking confirmation to ${originBooking.mail}`,
+          `${tenantId} -- booking ${originBooking.id} committed and sent free booking confirmation to ${originBooking.mail}`,
         );
       } else {
-        await MailController.sendPaymentRequest(
-          originBooking.mail,
-          originBooking.id,
-          originBooking.tenantId,
+        const paymentService = await PaymentUtils.getPaymentService(
+          tenantId,
+          booking.id,
+          booking.paymentProvider,
+          { aggregated: false },
         );
+
+        if (!paymentService) return;
+
+        await paymentService.paymentRequest();
+
         logger.info(
-          `${tenant} -- booking ${originBooking.id} committed and sent payment request to ${originBooking.mail}`,
+          `${tenantId} -- booking ${originBooking.id} committed and sent payment request to ${originBooking.mail}`,
         );
       }
       const bookableItems = originBooking.bookableItems;
@@ -471,7 +528,7 @@ class BookingService {
 
       if (isTicketBooking) {
         const eventIds = bookableItems.map(getEventForTicket);
-        await sendEmailToOrganizer(eventIds, tenant, originBooking);
+        await sendEmailToOrganizer(eventIds, tenantId, originBooking);
       }
     } catch (error) {
       throw new Error(`Error committing booking: ${error.message}`);
@@ -490,12 +547,29 @@ class BookingService {
       await BookingManager.storeBooking(booking);
     }
 
-    if (groupBooking.bookings.some((booking) => isNoPaymentRequired(booking))) {
-      //TODO: send free booking confirmation
-      console.log("free booking");
+    if (
+      groupBooking.bookings.every((booking) => isNoPaymentRequired(booking))
+    ) {
+      await MailController.sendFreeBookingConfirmation(
+        groupBooking.mail,
+        groupBooking.id,
+        groupBooking.tenantId,
+        true,
+      );
+      logger.info(
+        `${groupBooking.tenantId} -- group-booking ${groupBooking.id} committed and sent free booking confirmation to ${groupBooking.mail}`,
+      );
     } else {
-      //TODO: send payment request
-      console.log("payment request");
+      const paymentService = await PaymentUtils.getPaymentService(
+        tenantId,
+        groupBooking.bookingIds,
+        groupBooking.bookings[0].paymentProvider,
+        { aggregated: true },
+      );
+
+      if (!paymentService) return;
+
+      await paymentService.paymentRequest();
     }
 
     const hasTicketBooking = groupBooking.bookings.some((booking) =>

@@ -12,35 +12,41 @@ class PaymentController {
   static async createPayment(request, response) {
     const {
       params: { tenant: tenantId },
-      body: { bookingId },
+      body: { bookingIds, aggregated },
     } = request;
 
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    console.log("aggregated", aggregated);
 
-    if (!booking?.id) {
-      response.status(400).send({ message: "Booking not found", code: 0 });
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+
+    if(!bookings) {
+      response.status(400).send({ message: "Bookings not found", code: 0 });
       return;
     }
 
-    if (!booking.isCommitted) {
-      response.status(400).send({ message: "Booking not committed", code: 1 });
+    if(!bookings.every(booking => booking.isCommitted)) {
+      response.status(400).send({ message: "All bookings must be committed", code: 1 });
       return;
     }
 
-    if (booking.isPayed) {
-      response.status(400).send({ message: "Booking already payed", code: 2 });
+    if(bookings.some(booking => booking.isPayed)) {
+      response.status(400).send({ message: "All bookings must not be payed", code: 2 });
       return;
     }
+
+    //TODO: Check if all bookings are in the same tenant and have the same payment provider
 
     try {
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
-        bookingId,
-        booking.paymentProvider,
+        bookingIds,
+        bookings[0].paymentProvider,
+        { aggregated },
       );
 
       const data = await paymentService?.createPayment();
-      response.status(200).send({ paymentData: data, booking });
+
+      response.status(200).send({ paymentData: data, bookings });
     } catch (error) {
       logger.error(error);
       response.sendStatus(400);
@@ -50,31 +56,58 @@ class PaymentController {
   static async paymentNotificationGET(request, response) {
     const {
       params: { tenant: tenantId },
-      query: { id: bookingId },
+      query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-    try {
-      let paymentService = await PaymentUtils.getPaymentService(
-        tenantId,
-        bookingId,
-        booking.paymentProvider,
-      );
+    let aggregatedBookingIds = bookingIds
+      ? bookingIds
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+      : [];
+    if (bookingId) {
+      aggregatedBookingIds.push(bookingId);
+    }
+    aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
-      await paymentService.paymentNotification(request.query);
-      try {
-        const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
-      } catch (err) {
-        logger.error(err);
+    const bookings = await BookingManager.getBookings(tenantId, aggregatedBookingIds);
+
+    try {
+      if(aggregated) {
+        let paymentService = await PaymentUtils.getPaymentService(
+          tenantId,
+          bookings.map(booking => booking.id),
+          bookings[0].paymentProvider,
+          aggregated
+        );
+        await paymentService.paymentNotification(request.query);
+      } else {
+        for (const booking of bookings) {
+          let paymentService = await PaymentUtils.getPaymentService(
+            tenantId,
+            booking.id,
+            booking.paymentProvider,
+          );
+          await paymentService.paymentNotification(request.query);
+        }
       }
+
+      for(const booking of bookings) {
+        try {
+          const lockerServiceInstance = LockerService.getInstance();
+          await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
+        } catch (err) {
+          logger.error(err);
+        }
+      }
+
       logger.info(
-        `${tenantId} -- booking ${bookingId} successfully payed and updated.`,
+        `${tenantId} -- bookings ${aggregatedBookingIds} successfully payed and updated.`,
       );
       response.sendStatus(200);
     } catch {
       logger.warn(
-        `${tenantId} -- could not get payment result for booking ${bookingId}.`,
+        `${tenantId} -- could not get payment result for bookings ${aggregatedBookingIds}.`,
       );
       response.sendStatus(400);
     }

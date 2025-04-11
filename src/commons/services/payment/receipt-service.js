@@ -48,17 +48,7 @@ class ReceiptService {
         "receipts",
       );
 
-      booking.attachments.push({
-        type: "receipt",
-        title: pdfData.name,
-        receiptId: receiptId,
-        revision: revision,
-        timeCreated: Date.now(),
-      });
-
-      await BookingManager.storeBooking(booking);
-
-      return pdfData;
+      return {receipt: pdfData, name: pdfData.name, receiptId, revision, timeCreated: Date.now()};
     } catch (err) {
       throw err;
     }

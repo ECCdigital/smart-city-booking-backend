@@ -40,7 +40,34 @@ Handlebars.registerHelper("sanitizeString", function (value) {
   }
   return value;
 });
+Handlebars.registerHelper("gt", function (a, b, options) {
+  return a > b ? options.fn(this) : options.inverse(this);
+});
 
+Handlebars.registerPartial(
+  "contactSnippet",
+  `
+    <strong>Firma:</strong> {{#if booking.company}}{{booking.company}}{{else}}–{{/if}}<br>
+    <strong>Name:</strong> {{#if booking.name}}{{booking.name}}{{else}}–{{/if}}<br>
+    <strong>Adresse:</strong> 
+      {{#if booking.address}}{{booking.address}}{{else}} – {{/if}},
+      {{#if booking.zip}}{{booking.zip}}{{else}} – {{/if}}
+      {{#if booking.city}}{{booking.city}}{{else}} – {{/if}}<br>
+    <strong>Telefon:</strong> {{#if booking.phone}}{{booking.phone}}{{else}}–{{/if}}<br>
+    <strong>E-Mail:</strong> {{#if booking.mail}}{{booking.mail}}{{else}}–{{/if}}
+`,
+);
+
+Handlebars.registerPartial(
+  "mailFooter",
+  `
+  <hr />
+  <p style="font-size: 0.9em; color: #555;">
+    Falls Sie Fragen haben, können Sie uns gerne 
+    <a href="mailto:{{supportEmail}}">kontaktieren</a>.
+  </p>
+`,
+);
 
 const logger = bunyan.createLogger({
   name: "mail-service.js",

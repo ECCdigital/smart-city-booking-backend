@@ -99,7 +99,8 @@ class CheckoutController {
         .send(await BookingService.createGroupBooking({
           tenantId,
           user,
-          bookingAttempts: request.body,
+          contactData: request.body.contactData,
+          bookingAttempts: request.body.bookingAttempts,
           simulate,
         }));
     } catch (err) {

@@ -8,6 +8,7 @@ const BookingManager = require("../../data-managers/booking-manager");
 const ReceiptService = require("./receipt-service");
 const TenantManager = require("../../data-managers/tenant-manager");
 const InvoiceService = require("./invoice-service");
+const MailController = require("../../mail-service/mail-controller");
 
 const logger = bunyan.createLogger({
   name: "payment-service.js",
@@ -15,13 +16,27 @@ const logger = bunyan.createLogger({
 });
 
 class PaymentService {
-  constructor(tenantId, bookingId) {
+  /**
+   * @param {string} tenantId   - ID des Mandanten.
+   * @param {string|string[]} bookingIds - Entweder eine einzelne Booking-ID oder ein Array von Booking-IDs.
+   * @param {object} [options]  - Zusätzliche Optionen, z.B. { aggregated: true }
+   */
+  constructor(tenantId, bookingIds, options = {}) {
     this.tenantId = tenantId;
-    this.bookingId = bookingId;
+    this.bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
+    this.aggregated = !!options.aggregated;
   }
 
   createPayment() {
     throw new Error("createPayment not implemented");
+  }
+
+  createSeparateInvoices() {
+    throw new Error("createSeparateInvoices not implemented");
+  }
+
+  createAggregatedInvoice() {
+    throw new Error("createAggregatedInvoice not implemented");
   }
 
   paymentNotification() {
@@ -46,18 +61,29 @@ class PaymentService {
     if (booking.isCommitted && booking.isPayed) {
       let attachments = [];
       if (booking.priceEur > 0) {
-        const pdfData = await ReceiptService.createReceipt(tenantId, bookingId);
+        const { receipt, name, receiptId, revision, timeCreated } =
+          await ReceiptService.createReceipt(tenantId, bookingId);
+
+        booking.attachments.push({
+          type: "receipt",
+          title: name,
+          receiptId: receiptId,
+          revision: revision,
+          timeCreated,
+        });
+
+        await BookingManager.storeBooking(booking);
+
         attachments = [
           {
-            filename: pdfData.name,
-            content: pdfData.buffer,
+            filename: name,
+            content: receipt.buffer,
             contentType: "application/pdf",
           },
         ];
       }
 
       try {
-        const MailController = require("../../mail-service/mail-controller");
         await MailController.sendBookingConfirmation(
           booking.mail,
           booking.id,
@@ -252,13 +278,12 @@ class GiroCockpitPaymentService extends PaymentService {
   }
 
   async paymentRequest() {
-    const MailController = () => require("../../mail-service/mail-controller");
     const booking = await BookingManager.getBooking(
       this.bookingId,
       this.tenantId,
     );
 
-    await MailController().sendPaymentLinkAfterBookingApproval(
+    await MailController.sendPaymentLinkAfterBookingApproval(
       booking.mail,
       this.bookingId,
       this.tenantId,
@@ -274,10 +299,18 @@ class PmPaymentService extends PaymentService {
   static PM_SUCCESS_CODE = 1;
 
   async createPayment() {
-    const booking = await getBooking(this.bookingId, this.tenantId);
-    const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
+    if (this.aggregated) {
+      return this.aggregatedPaymentUrl();
+    } else {
+      return this.createSeparatePaymentUrl();
+    }
+  }
 
-    try {
+  async createSeparatePaymentUrl() {
+    const paymentUrls = [];
+    for (const bookingId of this.bookingIds) {
+      const booking = await getBooking(bookingId, this.tenantId);
+      const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_CHECKOUT_URL;
       if (paymentApp.paymentMode === "prod") {
         PM_CHECKOUT_URL = "https://payment.govconnect.de/payment/secure";
@@ -286,13 +319,13 @@ class PmPaymentService extends PaymentService {
       }
 
       const amount = (booking.priceEur * 100 || 0).toString();
-      const desc = `${this.bookingId} ${paymentApp.paymentPurposeSuffix || ""}`;
+      const desc = `${bookingId} ${paymentApp.paymentPurposeSuffix || ""}`;
       const AGS = paymentApp.paymentMerchantId;
       const PROCEDURE = paymentApp.paymentProjectId;
       const PAYMENT_SALT = paymentApp.paymentSecret;
 
-      const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?id=${this.bookingId}`;
-      const redirectUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${this.bookingId}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}`;
+      const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?ids=${bookingId}`;
+      const redirectUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${bookingId}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}`;
 
       const hash = crypto
         .createHmac("sha256", PAYMENT_SALT)
@@ -324,15 +357,81 @@ class PmPaymentService extends PaymentService {
 
       if (response.data?.url) {
         logger.info(
-          `Payment URL requested for booking ${this.bookingId}: ${response.data?.url}`,
+          `Payment URL requested for booking ${bookingId}: ${response.data?.url}`,
         );
-        return response.data?.url;
+        paymentUrls.push({ bookingId, url: response.data?.url });
       } else {
         logger.warn("could not get payment url.", response.data);
         throw new Error("could not get payment url.");
       }
-    } catch (error) {
-      throw error;
+    }
+    return paymentUrls;
+  }
+
+  async aggregatedPaymentUrl() {
+    const bookings = await BookingManager.getBookings(
+      this.tenantId,
+      this.bookingIds,
+    );
+
+    const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
+    let PM_CHECKOUT_URL;
+    if (paymentApp.paymentMode === "prod") {
+      PM_CHECKOUT_URL = "https://payment.govconnect.de/payment/secure";
+    } else {
+      PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
+    }
+
+    const amount = bookings.reduce((acc, booking) => {
+      return acc + booking.priceEur * 100 || 0;
+    }, 0);
+
+    const desc = `${this.bookingIds.join(",")} ${
+      paymentApp.paymentPurposeSuffix || ""
+    }`;
+    const AGS = paymentApp.paymentMerchantId;
+    const PROCEDURE = paymentApp.paymentProjectId;
+    const PAYMENT_SALT = paymentApp.paymentSecret;
+
+    const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?ids=${this.bookingIds.join(",")}?aggregated=true`;
+    const redirectUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}?aggregated=true`;
+
+    const hash = crypto
+      .createHmac("sha256", PAYMENT_SALT)
+      .update(
+        `${AGS}|${amount}|${PROCEDURE}|${desc}|${notifyUrl}|${redirectUrl}`,
+      )
+      .digest("hex");
+
+    const data = qs.stringify({
+      ags: AGS,
+      amount: amount,
+      procedure: PROCEDURE,
+      desc: desc,
+      notifyURL: notifyUrl,
+      redirectURL: redirectUrl,
+      hash: hash,
+    });
+
+    const config = {
+      method: "post",
+      url: PM_CHECKOUT_URL,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      data: data,
+    };
+
+    const response = await axios(config);
+
+    if (response.data?.url) {
+      logger.info(
+        `Payment URL requested for booking ${this.bookingIds}: ${response.data?.url}`,
+      );
+      return [{ bookingIds: this.bookingIds, url: response.data?.url }];
+    } else {
+      logger.warn("could not get payment url.", response.data);
+      throw new Error("could not get payment url.");
     }
   }
 
@@ -341,16 +440,43 @@ class PmPaymentService extends PaymentService {
   }
 
   async paymentRequest() {
-    const MailController = () => require("../../mail-service/mail-controller");
-    const booking = await BookingManager.getBooking(
-      this.bookingId,
+    if (this.aggregated) {
+      return this.aggregatedPaymentLink();
+    } else {
+      return this.separatePaymentLink();
+    }
+  }
+
+  async separatePaymentLink() {
+    try {
+      for (const bookingId of this.bookingIds) {
+        const booking = await BookingManager.getBooking(
+          bookingId,
+          this.tenantId,
+        );
+
+        await MailController.sendPaymentLinkAfterBookingApproval(
+          booking.mail,
+          bookingId,
+          this.tenantId,
+        );
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async aggregatedPaymentLink() {
+    const bookings = await BookingManager.getBookings(
       this.tenantId,
+      this.bookingIds,
     );
 
-    await MailController().sendPaymentLinkAfterBookingApproval(
-      booking.mail,
-      this.bookingId,
+    await MailController.sendPaymentLinkAfterBookingApproval(
+      bookings[0].mail,
+      this.bookingIds,
       this.tenantId,
+      true,
     );
   }
 
@@ -429,44 +555,107 @@ class PmPaymentService extends PaymentService {
 }
 
 class InvoicePaymentService extends PaymentService {
-  constructor(tenantId, bookingId) {
-    super(tenantId, bookingId);
+  constructor(tenantId, bookingIds, options = {}) {
+    super(tenantId, bookingIds, options);
   }
   async createPayment() {
-    const MailController = () => require("../../mail-service/mail-controller");
-    const booking = await getBooking(this.bookingId, this.tenantId);
+    if (this.aggregated) {
+      return this.createAggregatedInvoice();
+    } else {
+      return this.createSeparateInvoices();
+    }
+  }
 
-    let attachments = [];
-    try {
-      const pdfData = await InvoiceService.createInvoice(
-        this.tenantId,
-        this.bookingId,
-      );
+  async createSeparateInvoices() {
+    const createdInvoices = [];
+    for (const bookingId of this.bookingIds) {
+      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
 
-      attachments = [
+      const { invoice, name, invoiceId, revision, timeCreated } =
+        await InvoiceService.createSingleInvoice(this.tenantId, bookingId);
+
+      booking.attachments.push({
+        type: "invoice",
+        name,
+        invoiceId,
+        revision,
+        timeCreated,
+      });
+      await BookingManager.storeBooking(booking);
+
+      const attachments = [
         {
-          filename: pdfData.name,
-          content: pdfData.buffer,
+          filename: name,
+          content: invoice.buffer,
           contentType: "application/pdf",
         },
       ];
-    } catch (error) {
-      throw error;
+
+      try {
+        await MailController.sendInvoice(
+          booking.mail,
+          bookingId,
+          this.tenantId,
+          attachments,
+        );
+      } catch (err) {
+        logger.error("Error while sending invoice:", bookingId, err);
+      }
+
+      createdInvoices.push({
+        bookingId,
+        name,
+        invoiceId,
+        revision,
+      });
     }
+
+    return createdInvoices;
+  }
+
+  async createAggregatedInvoice() {
+    const bookings = [];
+    for (const bookingId of this.bookingIds) {
+      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
+      bookings.push(booking);
+    }
+
+    const { invoice, name, invoiceId, revision, timeCreated } =
+      await InvoiceService.createAggregatedInvoice(this.tenantId, bookings);
+
+    for (const booking of bookings) {
+      booking.attachments.push({
+        type: "invoice",
+        name,
+        invoiceId,
+        revision,
+        timeCreated,
+        aggregated: true,
+      });
+      await BookingManager.storeBooking(booking);
+    }
+
+    const attachments = [
+      {
+        filename: name,
+        content: invoice.buffer,
+        contentType: "application/pdf",
+      },
+    ];
 
     try {
-      await MailController().sendInvoice(
-        booking.mail,
-        this.bookingId,
+      await MailController.sendInvoice(
+        bookings[0].mail,
+        this.bookingIds,
         this.tenantId,
         attachments,
+        true,
       );
     } catch (err) {
-      logger.error(err);
+      logger.error("Fehler beim Versenden der Sammelrechnung:", err);
     }
-
-    return true;
   }
+
   async paymentNotification() {
     console.log("paymentNotification");
   }
@@ -475,33 +664,91 @@ class InvoicePaymentService extends PaymentService {
   }
 
   async paymentRequest() {
-    const MailController = () => require("../../mail-service/mail-controller");
-    try {
-      const booking = await BookingManager.getBooking(
-        this.bookingId,
-        this.tenantId,
-      );
-      const pdfData = await InvoiceService.createInvoice(
-        this.tenantId,
-        this.bookingId,
-      );
+    if (this.aggregated) {
+      return this.aggregatedPaymentRequest();
+    } else {
+      return this.separatePaymentRequest();
+    }
+  }
 
-      const attachments = [
-        {
-          filename: pdfData.name,
-          content: pdfData.buffer,
-          contentType: "application/pdf",
-        },
-      ];
-      await MailController().sendInvoiceAfterBookingApproval(
-        booking.mail,
-        this.bookingId,
-        this.tenantId,
-        attachments,
-      );
+  async separatePaymentRequest() {
+    try {
+      for (const bookingId of this.bookingIds) {
+        const booking = await BookingManager.getBooking(
+          bookingId,
+          this.tenantId,
+        );
+
+        const { invoice, name, invoiceId, revision, timeCreated } =
+          await InvoiceService.createSingleInvoice(this.tenantId, bookingId);
+
+        booking.attachments.push({
+          type: "invoice",
+          name,
+          invoiceId,
+          revision,
+          timeCreated,
+        });
+        await BookingManager.storeBooking(booking);
+
+        const attachments = [
+          {
+            filename: name,
+            content: invoice.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+        await MailController.sendInvoiceAfterBookingApproval(
+          booking.mail,
+          bookingId,
+          this.tenantId,
+          attachments,
+          false,
+        );
+      }
     } catch (error) {
       throw error;
     }
+  }
+
+  async aggregatedPaymentRequest() {
+    const bookings = [];
+    for (const bookingId of this.bookingIds) {
+      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
+      bookings.push(booking);
+    }
+
+    const { invoice, name, invoiceId, revision, timeCreated } =
+      await InvoiceService.createAggregatedInvoice(
+        this.tenantId,
+        this.bookingIds,
+      );
+
+    for (const booking of bookings) {
+      booking.attachments.push({
+        type: "invoice",
+        name,
+        invoiceId,
+        revision,
+        timeCreated,
+      });
+      await BookingManager.storeBooking(booking);
+    }
+
+    const attachments = [
+      {
+        filename: name,
+        content: invoice.buffer,
+        contentType: "application/pdf",
+      },
+    ];
+    await MailController.sendInvoiceAfterBookingApproval(
+      bookings[0].mail,
+      bookings.map((b) => b.id),
+      this.tenantId,
+      attachments,
+      true,
+    );
   }
 }
 

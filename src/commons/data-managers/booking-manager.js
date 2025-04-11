@@ -13,8 +13,16 @@ class BookingManager {
    * @param {string} tenantId Identifier of the tenant
    * @returns List of bookings
    */
-  static async getBookings(tenantId) {
+  static async getTenantBookings(tenantId) {
     const rawBookings = await BookingModel.find({ tenantId: tenantId });
+    return rawBookings.map((rb) => new Booking(rb));
+  }
+
+  static async getBookings(tenantId, bookingIds) {
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      id: { $in: bookingIds },
+    });
     return rawBookings.map((rb) => new Booking(rb));
   }
 

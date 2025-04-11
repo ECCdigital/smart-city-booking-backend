@@ -9,7 +9,8 @@ const {
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
-const ReceiptService = require("../../../commons/services/payment/receipt-service");
+const ReceiptService =
+  require("../../../commons/services/payment/receipt-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
@@ -60,7 +61,7 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const bookings = await BookingManager.getBookings(tenant);
+      const bookings = await BookingManager.getTenantBookings(tenant);
 
       if (request.query.public === "true") {
         const anonymizedBookings = bookings.map((b) => {
@@ -589,7 +590,7 @@ class BookingController {
         (b) => b.type === "ticket" && b.eventId === eventId,
       );
 
-      const bookings = await BookingManager.getBookings(tenantId);
+      const bookings = await BookingManager.getTenantBookings(tenantId);
       const eventBookings = bookings.filter((b) =>
         b.bookableIds.some((id) => eventTickets.some((t) => t.id === id)),
       );
@@ -675,39 +676,50 @@ class BookingController {
   static async createReceipt(request, response) {
     try {
       const {
-        params: { tenant, id: bookingId },
+        params: { tenant: tenantId, id: bookingId },
         user,
       } = request;
 
-      if (!tenant || !bookingId) {
-        logger.warn(`${tenant} -- Missing required parameters.`);
+      if (!tenantId || !bookingId) {
+        logger.warn(`${tenantId} -- Missing required parameters.`);
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
 
       const hasPermission =
         (await UserManager.hasPermission(
           user.id,
-          tenant,
+          tenantId,
           RolePermission.MANAGE_BOOKINGS,
           "updateAny",
         )) ||
         PermissionsService._isOwner(
           booking,
           user.id,
-          tenant,
+          tenantId,
           RolePermission.MANAGE_BOOKINGS,
         );
 
       if (!hasPermission) {
         logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to create receipt.`,
+          `${tenantId} -- User ${user?.id} is not allowed to create receipt.`,
         );
         return response.sendStatus(403);
       }
 
-      await ReceiptService.createReceipt(tenant, bookingId);
+      const { name, receiptId, revision, timeCreated } =
+        await ReceiptService.createReceipt(tenantId, booking.id);
+
+      booking.attachments.push({
+        type: "receipt",
+        title: name,
+        receiptId: receiptId,
+        revision: revision,
+        timeCreated,
+      });
+
+      await BookingManager.storeBooking(booking);
 
       return response.sendStatus(200);
     } catch (err) {

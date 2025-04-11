@@ -8,6 +8,7 @@ class GroupBooking {
     bookingIds,
     bookings,
     assignedUserId,
+    mail,
     timeCreated,
     hooks,
   }) {
@@ -16,6 +17,7 @@ class GroupBooking {
     this.bookingIds = bookingIds;
     this.bookings = (bookings || []).map((b) => new Booking(b));
     this.assignedUserId = assignedUserId;
+    this.mail = mail;
     this.timeCreated = timeCreated || Date.now();
     this.hooks = hooks || [];
   }
@@ -34,6 +36,7 @@ class GroupBooking {
       },
       bookingIds: [String],
       assignedUserId: String,
+      mail: String,
       timeCreated: Double,
       hooks: [Object],
     };
