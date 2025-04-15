@@ -177,14 +177,14 @@ class BookingController {
           tenant,
         );
 
+        let relatedBookings;
         for (let relatedBookable of relatedBookables) {
-          let relatedBookings = await BookingManager.getRelatedBookings(
+          relatedBookings = await BookingManager.getRelatedBookings(
             tenant,
             relatedBookable.id,
           );
-
-          bookings = bookings.concat(relatedBookings);
         }
+        bookings = bookings.concat(relatedBookings || []);
       }
 
       if (includeParentBookings) {
@@ -192,15 +192,14 @@ class BookingController {
           bookableId,
           tenant,
         );
-
+        let parentBookings;
         for (let parentBookable of parentBookables) {
-          let parentBookings = await BookingManager.getRelatedBookings(
+          parentBookings = await BookingManager.getRelatedBookings(
             tenant,
             parentBookable.id,
           );
-
-          bookings = bookings.concat(parentBookings);
         }
+        bookings = bookings.concat(parentBookings || []);
       }
 
       if (request.query.public === "true") {
@@ -231,6 +230,7 @@ class BookingController {
       } else {
         response.sendStatus(403);
       }
+
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get related bookings");
