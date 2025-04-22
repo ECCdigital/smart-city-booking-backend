@@ -401,8 +401,8 @@ class PmPaymentService extends PaymentService {
     const PROCEDURE = paymentApp.paymentProjectId;
     const PAYMENT_SALT = paymentApp.paymentSecret;
 
-    const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?ids=${this.bookingIds.join(",")}?aggregated=true`;
-    const redirectUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}?aggregated=true`;
+    const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?ids=${this.bookingIds.join(",")}&aggregated=true`;
+    const redirectUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}&paymentMethod=${paymentApp.id}&aggregated=true`;
 
     const hash = crypto
       .createHmac("sha256", PAYMENT_SALT)
