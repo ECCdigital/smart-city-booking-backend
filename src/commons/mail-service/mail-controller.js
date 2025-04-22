@@ -4,15 +4,9 @@ const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const InstanceManager = require("../data-managers/instance-manager");
-const bunyan = require("bunyan");
 const UserManager = require("../data-managers/user-manager");
 const QRCode = require("qrcode");
 const Handlebars = require("handlebars");
-
-const logger = bunyan.createLogger({
-  name: "checkout-controller.js",
-  level: process.env.LOG_LEVEL,
-});
 
 class MailController {
   static async getPopulatedBookables(bookingId, tenant) {
@@ -822,15 +816,10 @@ class MailController {
                  display: inline-block;">
               Buchung abschließen
             </a>
-          </p>
-    
-          <p style="margin-top: 20px;">
-            Sollten Sie weitere Fragen haben, können Sie uns jederzeit 
-            <a href="mailto:{{supportEmail}}">kontaktieren</a>.
           </p>`;
 
     if (aggregated) {
-      const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?ids[]=${bookingIds.join(",")}&tenant=${tenantId}?aggregated=${aggregated}`;
+      const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?ids=${bookingIds.join(",")}&tenant=${tenantId}&aggregated=${aggregated}`;
       const snippetHtml = renderSnippet(snippetTemplateString, {
         tenantName: tenant.name,
         paymentUrl: paymentLink,
@@ -848,7 +837,7 @@ class MailController {
       });
     } else {
       for (const booking of bookings) {
-        const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?ids[]=${booking.id}&tenant=${tenantId}?aggregated=${aggregated}`;
+        const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?ids=${booking.id}&tenant=${tenantId}&aggregated=${aggregated}`;
         const snippetHtml = renderSnippet(snippetTemplateString, {
           tenantName: tenant.name,
           paymentUrl: paymentLink,

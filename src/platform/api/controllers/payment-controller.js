@@ -19,18 +19,22 @@ class PaymentController {
 
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
-    if(!bookings) {
+    if (!bookings) {
       response.status(400).send({ message: "Bookings not found", code: 0 });
       return;
     }
 
-    if(!bookings.every(booking => booking.isCommitted)) {
-      response.status(400).send({ message: "All bookings must be committed", code: 1 });
+    if (!bookings.every((booking) => booking.isCommitted)) {
+      response
+        .status(400)
+        .send({ message: "All bookings must be committed", code: 1 });
       return;
     }
 
-    if(bookings.some(booking => booking.isPayed)) {
-      response.status(400).send({ message: "All bookings must not be payed", code: 2 });
+    if (bookings.some((booking) => booking.isPayed)) {
+      response
+        .status(400)
+        .send({ message: "All bookings must not be payed", code: 2 });
       return;
     }
 
@@ -61,24 +65,27 @@ class PaymentController {
 
     let aggregatedBookingIds = bookingIds
       ? bookingIds
-        .split(",")
-        .map((id) => id.trim())
-        .filter(Boolean)
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
       : [];
     if (bookingId) {
       aggregatedBookingIds.push(bookingId);
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
-    const bookings = await BookingManager.getBookings(tenantId, aggregatedBookingIds);
+    const bookings = await BookingManager.getBookings(
+      tenantId,
+      aggregatedBookingIds,
+    );
 
     try {
-      if(aggregated) {
+      if (aggregated) {
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
-          bookings.map(booking => booking.id),
+          bookings.map((booking) => booking.id),
           bookings[0].paymentProvider,
-          aggregated
+          aggregated,
         );
         await paymentService.paymentNotification(request.query);
       } else {
@@ -92,10 +99,13 @@ class PaymentController {
         }
       }
 
-      for(const booking of bookings) {
+      for (const booking of bookings) {
         try {
           const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
+          await lockerServiceInstance.handleCreate(
+            booking.tenantId,
+            booking.id,
+          );
         } catch (err) {
           logger.error(err);
         }
@@ -115,21 +125,53 @@ class PaymentController {
   static async paymentNotificationPOST(request, response) {
     const {
       params: { tenant: tenantId },
-      query: { id: bookingId },
+      query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-    try {
-      let paymentService = await PaymentUtils.getPaymentService(
-        tenantId,
-        bookingId,
-        booking.paymentProvider,
-      );
+    let aggregatedBookingIds = bookingIds
+      ? bookingIds
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : [];
+    if (bookingId) {
+      aggregatedBookingIds.push(bookingId);
+    }
+    aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
-      await paymentService.paymentNotification(request.body);
+    const bookings = await BookingManager.getBookings(
+      tenantId,
+      aggregatedBookingIds,
+    );
+
+    try {
+      if (aggregated) {
+        let paymentService = await PaymentUtils.getPaymentService(
+          tenantId,
+          bookings.map((booking) => booking.id),
+          bookings[0].paymentProvider,
+          aggregated,
+        );
+        await paymentService.paymentNotification(request.body);
+      } else {
+        for (const booking of bookings) {
+          let paymentService = await PaymentUtils.getPaymentService(
+            tenantId,
+            booking.id,
+            booking.paymentProvider,
+          );
+          await paymentService.paymentNotification(request.body);
+        }
+      }
+
       try {
-        const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
+        for (const booking of bookings) {
+          const lockerServiceInstance = LockerService.getInstance();
+          await lockerServiceInstance.handleCreate(
+            booking.tenantId,
+            booking.id,
+          );
+        }
       } catch (err) {
         logger.error(err);
       }
@@ -147,11 +189,25 @@ class PaymentController {
 
   static async paymentResponse(request, response) {
     const {
-      query: { id: bookingId, tenant: tenantId },
+      query: { id: bookingId, ids: bookingIds, tenant: tenantId, aggregated },
     } = request;
 
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-    if (!booking.id) {
+    let aggregatedBookingIds = bookingIds
+      ? bookingIds
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : [];
+    if (bookingId) {
+      aggregatedBookingIds.push(bookingId);
+    }
+    aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
+
+    const bookings = await BookingManager.getBookings(
+      tenantId,
+      aggregatedBookingIds,
+    );
+    if (!bookings.length) {
       logger.warn(
         `${tenantId} -- could not get booking for bookingId ${bookingId}.`,
       );
@@ -159,14 +215,37 @@ class PaymentController {
       return;
     }
     try {
-      let paymentService = await PaymentUtils.getPaymentService(
-        tenantId,
-        bookingId,
-        booking.paymentProvider,
-      );
+      if (aggregated) {
+        let paymentService = await PaymentUtils.getPaymentService(
+          tenantId,
+          bookings.map((booking) => booking.id),
+          bookings[0].paymentProvider,
+          aggregated,
+        );
+        const url = paymentService.paymentResponse();
+        response.redirect(302, url);
+      } else {
+        const urls = [];
+        for (const booking of bookings) {
+          let paymentService = await PaymentUtils.getPaymentService(
+            tenantId,
+            booking.id,
+            booking.paymentProvider,
+          );
+          urls.push({
+            bookingId: booking.id,
+            url: await paymentService.paymentResponse(),
+          });
+        }
 
-      const url = paymentService.paymentResponse();
-      response.redirect(302, url);
+        const firstUrl = urls[0].url;
+        const url = new URL(firstUrl);
+        const params = new URLSearchParams(url.search);
+        const bookingIds = urls.map((booking) => booking.bookingId);
+        params.set("ids", bookingIds.join(","));
+        url.search = params.toString();
+        response.redirect(302, url);
+      }
     } catch (error) {
       logger.error(error);
       response.sendStatus(400);

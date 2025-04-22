@@ -51,58 +51,66 @@ class PaymentService {
     throw new Error("paymentRequest not implemented");
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+  async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
+    const bookings = await BookingManager.getBooking(tenantId, bookingIds);
+    const processedBookings = [];
+    if (this.aggregated) {
+      //TODO: handle aggregated payment
+    } else {
+      for (const booking of bookings) {
+        booking.isPayed = true;
+        booking.paymentMethod = paymentMethod;
+        await BookingManager.setBookingPayedStatus(booking);
 
-    booking.isPayed = true;
-    booking.paymentMethod = paymentMethod;
-    await BookingManager.setBookingPayedStatus(booking);
+        if (booking.isCommitted && booking.isPayed) {
+          let attachments = [];
+          if (booking.priceEur > 0) {
+            const { receipt, name, receiptId, revision, timeCreated } =
+              await ReceiptService.createReceipt(tenantId, booking.id);
 
-    if (booking.isCommitted && booking.isPayed) {
-      let attachments = [];
-      if (booking.priceEur > 0) {
-        const { receipt, name, receiptId, revision, timeCreated } =
-          await ReceiptService.createReceipt(tenantId, bookingId);
+            booking.attachments.push({
+              type: "receipt",
+              title: name,
+              receiptId: receiptId,
+              revision: revision,
+              timeCreated,
+            });
 
-        booking.attachments.push({
-          type: "receipt",
-          title: name,
-          receiptId: receiptId,
-          revision: revision,
-          timeCreated,
-        });
+            await BookingManager.storeBooking(booking);
 
-        await BookingManager.storeBooking(booking);
+            attachments = [
+              {
+                filename: name,
+                content: receipt.buffer,
+                contentType: "application/pdf",
+              },
+            ];
+          }
 
-        attachments = [
-          {
-            filename: name,
-            content: receipt.buffer,
-            contentType: "application/pdf",
-          },
-        ];
-      }
+          try {
+            await MailController.sendBookingConfirmation(
+              booking.mail,
+              booking.id,
+              tenantId,
+              attachments,
+            );
 
-      try {
-        await MailController.sendBookingConfirmation(
-          booking.mail,
-          booking.id,
-          tenantId,
-          attachments,
-        );
+            const tenant = await TenantManager.getTenant(tenantId);
+            await MailController.sendIncomingBooking(
+              tenant.mail,
+              booking.id,
+              tenantId,
+            );
+          } catch (err) {
+            logger.error(err);
+          }
+        }
 
-        const tenant = await TenantManager.getTenant(tenantId);
-        await MailController.sendIncomingBooking(
-          tenant.mail,
-          bookingId,
-          tenantId,
-        );
-      } catch (err) {
-        logger.error(err);
+        processedBookings.push(booking);
       }
     }
 
-    return booking;
+    return processedBookings;
   }
 }
 
@@ -436,7 +444,7 @@ class PmPaymentService extends PaymentService {
   }
 
   paymentResponse() {
-    return `${process.env.FRONTEND_URL}/checkout/status?id=${this.bookingId}&tenant=${this.tenantId}`;
+    return `${process.env.FRONTEND_URL}/checkout/status?ids=${this.bookingId}&tenant=${this.tenantId}`;
   }
 
   async paymentRequest() {
@@ -484,9 +492,9 @@ class PmPaymentService extends PaymentService {
     const { ags, txid, payment_method: paymentProvider } = body;
 
     try {
-      if (!this.bookingId || !this.tenantId) {
+      if (!this.bookingIds || !this.tenantId) {
         logger.warn(
-          `${this.tenantId} -- could not validate payment notification. Missing parameters. For Booking ${this.bookingId}`,
+          `${this.tenantId} -- could not validate payment notification. Missing parameters. For Bookings ${this.bookingIds}`,
         );
         throw new Error("Missing parameters");
       }
@@ -511,7 +519,7 @@ class PmPaymentService extends PaymentService {
 
       if (response.data.status === PmPaymentService.PM_SUCCESS_CODE) {
         logger.info(
-          `${this.tenantId} -- pmPayment responds with status ${PmPaymentService.PM_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
+          `${this.tenantId} -- pmPayment responds with status ${PmPaymentService.PM_SUCCESS_CODE} / successfully payed for bookings ${this.bookingIds} .`,
         );
 
         const paymentMapping = {
@@ -524,7 +532,7 @@ class PmPaymentService extends PaymentService {
         };
 
         await this.handleSuccessfulPayment({
-          bookingId: this.bookingId,
+          bookingIds: this.bookingIds,
           tenantId: this.tenantId,
           paymentMethod: paymentMapping[paymentProvider] || "OTHER",
         });
@@ -549,8 +557,12 @@ class PmPaymentService extends PaymentService {
     }
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
-    await super.handleSuccessfulPayment({ bookingId, tenantId, paymentMethod });
+  async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
+    await super.handleSuccessfulPayment({
+      bookingIds,
+      tenantId,
+      paymentMethod,
+    });
   }
 }
 
