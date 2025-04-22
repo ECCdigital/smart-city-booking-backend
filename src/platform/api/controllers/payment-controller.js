@@ -81,6 +81,8 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
+    console.log("aggregatedBookingIds", aggregatedBookingIds);
+
     const bookings = await BookingManager.getBookings(
       tenantId,
       aggregatedBookingIds,
@@ -153,10 +155,14 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
+    console.log("aggregatedBookingIds", aggregatedBookingIds);
+
     const bookings = await BookingManager.getBookings(
       tenantId,
       aggregatedBookingIds,
     );
+
+    console.log("bookings", bookings);
 
     try {
       if (aggregated) {
