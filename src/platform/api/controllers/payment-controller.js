@@ -63,6 +63,13 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+    console.log("paymentNotificationGET");
+    console.log("id", bookingId);
+    console.log("ids", bookingIds);
+    console.log("tenantId", tenantId);
+    console.log("aggregated", aggregated);
+    console.log("request.query", request.query);
+
     let aggregatedBookingIds = bookingIds
       ? bookingIds
           .split(",")
@@ -127,6 +134,13 @@ class PaymentController {
       params: { tenant: tenantId },
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
+
+    console.log("paymentNotificationPOST");
+    console.log("id", bookingId);
+    console.log("ids", bookingIds);
+    console.log("tenantId", tenantId);
+    console.log("aggregated", aggregated);
+    console.log("request.body", request.body);
 
     let aggregatedBookingIds = bookingIds
       ? bookingIds
