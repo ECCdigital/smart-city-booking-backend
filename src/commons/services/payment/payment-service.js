@@ -61,7 +61,9 @@ class PaymentService {
     }
 
     if (this.aggregated) {
+      console.log("aggregated");
       if (bookings.every((b) => b.isCommitted && b.isPayed)) {
+        console.log("all committed and payed");
         let attachments = [];
         if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
           const { receipt, name, receiptId, revision, timeCreated } =
@@ -88,6 +90,7 @@ class PaymentService {
         }
 
         try {
+          console.log("sendBookingConfirmation");
           await MailController.sendBookingConfirmation(
             bookings[0].mail,
             bookings.map((b) => b.id),
@@ -95,14 +98,17 @@ class PaymentService {
             attachments,
             true,
           );
+          console.log("sendBookingConfirmation done");
 
           const tenant = await TenantManager.getTenant(tenantId);
+          console.log("sendIncomingBooking");
           await MailController.sendIncomingBooking(
             tenant.mail,
             bookings.map((b) => b.id),
             tenantId,
             true,
           );
+          console.log("sendIncomingBooking done");
         } catch (err) {
           logger.error(err);
         }
@@ -110,6 +116,7 @@ class PaymentService {
 
       return bookings;
     } else {
+      console.log("not aggregated");
       for (const booking of bookings) {
         if (booking.isCommitted && booking.isPayed) {
           let attachments = [];
@@ -587,30 +594,31 @@ class PmPaymentService extends PaymentService {
         });
 
         logger.info(
-          `${this.tenantId} -- booking ${this.bookingId} successfully payed and updated.`,
+          `${this.tenantId} -- bookings ${this.bookingIds} successfully payed and updated.`,
         );
 
         return true;
       } else {
         // TODO: remove booking?
         logger.warn(
-          `${this.tenantId} -- booking ${this.bookingId} could not be payed.`,
+          `${this.tenantId} -- bookings ${this.bookingIds} could not be payed.`,
         );
         return true;
       }
     } catch (error) {
       logger.error(
-        `${this.tenantId} -- payment notification error. For Booking ${this.bookingId}`,
+        `${this.tenantId} -- payment notification error. For Bookings ${this.bookingIds}`,
       );
       throw error;
     }
   }
 
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
-    console.log("debug");
+    console.log("debug in payment");
     console.log("bookingIds", bookingIds);
     console.log("tenantId", tenantId);
     console.log("paymentMethod", paymentMethod);
+    console.log("this.aggregated", this.aggregated);
     await super.handleSuccessfulPayment({
       bookingIds,
       tenantId,
