@@ -79,96 +79,172 @@ class PdfService {
     }
   }
 
-  static async generateReceipt(bookingId, tenantId, receiptNumber) {
+  static async generateSingleReceipt(tenantId, bookingId, receiptNumber) {
+    const tenant = await TenantManager.getTenant(tenantId);
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const bookables = (await BookableManager.getBookables(tenantId))
+      .filter(b => booking.bookableItems.some(bi => bi.bookableId === b.id));
+
+    const totalAmount   = PdfService.formatCurrency(booking.priceEur);
+    const bookingPeriod = booking.timeBegin && booking.timeEnd
+      ? `${PdfService.formatDateTime(booking.timeBegin)} – ${PdfService.formatDateTime(booking.timeEnd)}`
+      : '-';
+    const payDate       = PdfService.formatDateTime(booking.timeCreated);
+    const bookingDate   = PdfService.formatDate(new Date());
+    const paymentMethod = PdfService.translatePayMethod(booking.paymentMethod);
+    const receiptAddress = `
+    ${booking.company || ''}${booking.company?'<br/>':''}
+    ${booking.name}<br/>
+    ${booking.street}<br/>
+    ${booking.zipCode} ${booking.location}
+  `;
+
+    let bookedItemsHtml = '';
+    for (const bi of booking.bookableItems) {
+      const b = bookables.find(x => x.id === bi.bookableId);
+      bookedItemsHtml += `<div>${b.title}, Menge: ${bi.amount}</div>`;
+      if (b.bookingNotes) bookedItemsHtml += `<div>${b.bookingNotes}</div>`;
+    }
+    if (booking._couponUsed && Object.keys(booking._couponUsed).length) {
+      const c = booking._couponUsed;
+      bookedItemsHtml += `<div>Gutschein: ${c.description} (–${c.discount}${c.type==='fixed'?'€':'%'})</div>`;
+    }
+
+    const bookingEntries = `
+    <table class="booking-detail">
+      <tr><td>Buchungsnummer</td><td>${booking.id}</td></tr>
+      <tr><td>Gesamtbetrag</td><td>${totalAmount}</td></tr>
+      <tr><td>Zahlungsdatum</td><td>${payDate}</td></tr>
+      <tr><td>Zahlungsmethode</td><td>${paymentMethod}</td></tr>
+      <tr><td>Buchungszeitraum</td><td>${bookingPeriod}</td></tr>
+      <tr><td>Buchungsobjekt</td><td>${bookedItemsHtml}</td></tr>
+    </table>
+  `;
+
+    const data = {
+      isAggregated: false,
+      receiptNumber,
+      bookingDate,
+      receiptAddress,
+      bookingEntries
+    };
+
+    const template     = Handlebars.compile(tenant.receiptTemplate);
+    const renderedHtml = template(data);
+
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const page    = await browser.newPage();
+    await page.setContent(renderedHtml, { waitUntil: 'domcontentloaded' });
+    const buffer  = await page.pdf({ format: 'A4' });
+    await browser.close();
+
+    return { buffer, name: `Zahlungsbeleg-${receiptNumber}.pdf` };
+  }
+
+  static async generateAggregatedReceipt(tenantId, bookingIds, receiptNumber) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
+      const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+      const allBookables = await BookableManager.getBookables(tenantId);
 
-      let booking = await BookingManager.getBooking(bookingId, tenantId);
-      let bookables = (await BookableManager.getBookables(tenantId)).filter(
-        (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
-      );
+      let totalBrutto = 0;
+      let totalNetto = 0;
+      let totalVat = 0;
+      let entriesHtml = `
+      <table class="booking-detail">
+        <thead>
+          <tr>
+            <th style="text-align:start">ID</th>
+            <th>Zeitraum</th>
+            <th>Bezahlmethode</th>
+            <th style="text-align:right">Betrag</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
 
-      const totalAmount = PdfService.formatCurrency(booking.priceEur);
+      for (const bk of bookings) {
+        totalBrutto += bk.priceEur;
+        totalNetto += bk.priceEur - bk.vatIncludedEur;
+        totalVat += bk.vatIncludedEur;
+        const period = bk.timeBegin && bk.timeEnd
+          ? `${PdfService.formatDateTime(bk.timeBegin)} – ${PdfService.formatDateTime(bk.timeEnd)}`
+          : "-";
 
-      let bookingPeriod = "-";
-      if (booking.timeBegin && booking.timeEnd) {
-        bookingPeriod =
-          PdfService.formatDateTime(booking.timeBegin) +
-          " - " +
-          PdfService.formatDateTime(booking.timeEnd);
-      }
-      let bookedItems = "";
-
-      for (const bookableItem of booking.bookableItems) {
-        const bookable = bookables.find(
-          (b) => b.id === bookableItem.bookableId,
-        );
-        bookedItems += `<div>${bookable.title}, Anzahl: ${bookableItem.amount}</div>`;
-        if (bookable.bookingNotes.length > 0) {
-          bookedItems += `<div>${bookable.bookingNotes}</div>`;
+        let bookablesHtml = `<ul style="margin: 0; padding-left: 20px;">`;
+        if (bk.bookableItems && bk.bookableItems.length) {
+          for (const item of bk.bookableItems) {
+            const used = item._bookableUsed || allBookables.find(b => b.id === item.bookableId);
+            const lineTotal = PdfService.formatCurrency(item.userPriceEur);
+            bookablesHtml += `
+            <li>
+              ${used?.title || "Unbekannt"} ×${item.amount} (${lineTotal})
+            </li>`;
+          }
+        } else {
+          bookablesHtml += `<li>Keine Artikel</li>`;
         }
+        bookablesHtml += `</ul>`;
+
+        const paymentMethod = PdfService.translatePayMethod(bk.paymentMethod) || "Unbekannt";
+
+        const netto = bk.priceEur - bk.vatIncludedEur;
+
+        entriesHtml += `
+        <tr>
+          <td style="text-align:start">${bk.id}</td>
+          <td style="text-align:center">${period}</td>
+          <td style="text-align:center">${paymentMethod}</td>
+          <td style="text-align:right">${PdfService.formatCurrency(netto)}</td>
+        </tr>
+        <tr>
+          <td colspan="4">
+            <strong>Details / Artikel:</strong><br/>
+            ${bookablesHtml}
+          </td>
+        </tr>
+      `;
       }
 
-      if (booking._couponUsed) {
-        if (booking._couponUsed.type === "fixed") {
-          bookedItems += `<div>
-                    Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}€)<br>
-                </div>`;
-        } else if (booking._couponUsed.type === "percentage") {
-          bookedItems += `<div>
-                    Gutschein: ${booking._couponUsed.description} (-${booking._couponUsed.discount}%)<br>
-                </div>`;
-        }
-      }
-
-      const payMethodTranslated = PdfService.translatePayMethod(
-        booking.paymentMethod,
-      );
-
-      const payDate = PdfService.formatDateTime(booking.timeCreated);
-
-      const receiptAddress = `${booking.company || ""} 
-            ${booking.company ? "<br />" : ""}
-            ${booking.name}<br />
-            ${booking.street}<br />
-            ${booking.zipCode} ${booking.location}`;
-
-      const currentDate = PdfService.formatDate(new Date());
-
-      const browser = await puppeteer.launch({
-        headless: true,
-        args: ["--no-sandbox"],
-      });
-
-      const page = await browser.newPage();
-
-      const html = tenant.receiptTemplate;
+      entriesHtml += `
+        <tr class="netto" style="border-bottom: 1px solid #eee;">
+          <td colSpan="3">Gesamt (netto)</td>
+          <td style="text-align:right">${PdfService.formatCurrency(totalNetto)}</td>
+        </tr>
+        <tr class="mwst" style="border-bottom: 1px solid #eee;">
+          <td colSpan="3">zzgl. MwSt.</td>
+          <td style="text-align:right">${PdfService.formatCurrency(totalVat)}</td>
+        </tr>
+        <tr class="brutto" style="font-weight: bold;">
+          <td colSpan="3">Gesamt (brutto)</td>
+          <td style="text-align:right">${PdfService.formatCurrency(totalBrutto)}</td>
+        </tr>
+      </tbody>
+    </table>
+    `;
 
       const data = {
-        bookingId: bookingId,
-        tenant: tenantId,
-        totalAmount: totalAmount,
-        bookingPeriod: bookingPeriod,
-        bookedItems: bookedItems,
-        bookingDate: currentDate,
-        receiptNumber: receiptNumber,
-        receiptAddress: receiptAddress,
-        paymentMethod: payMethodTranslated,
-        payDate: payDate,
+        isAggregated: true,
+        receiptNumber,
+        bookingDate: PdfService.formatDate(bookings[0].timeCreated),
+        receiptAddress: `
+        ${bookings[0].name}<br/>
+        ${bookings[0].street}<br/>
+        ${bookings[0].zipCode} ${bookings[0].location}
+      `,
+        bookingEntries: entriesHtml
       };
 
-      const renderedHtml = Mustache.render(html, data);
+      const template = Handlebars.compile(tenant.receiptTemplate);
+      const renderedHtml = template(data);
 
+      const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+      const page = await browser.newPage();
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
-
-      let pdfData = {};
-      pdfData.buffer = await page.pdf({ format: "A4" });
-
-      pdfData.name = `Zahlungsbeleg-${receiptNumber}.pdf`;
-
+      const buffer = await page.pdf({ format: "A4" });
       await browser.close();
 
-      return pdfData;
+      return { buffer, name: `Sammelbeleg-${receiptNumber}.pdf` };
     } catch (err) {
       logger.error(err);
       throw err;

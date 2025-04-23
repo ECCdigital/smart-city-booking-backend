@@ -137,13 +137,6 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
-    console.log("paymentNotificationPOST");
-    console.log("id", bookingId);
-    console.log("ids", bookingIds);
-    console.log("tenantId", tenantId);
-    console.log("aggregated", aggregated);
-    console.log("request.body", request.body);
-
     let aggregatedBookingIds = bookingIds
       ? bookingIds
           .split(",")
@@ -155,14 +148,10 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
-    console.log("aggregatedBookingIds", aggregatedBookingIds);
-
     const bookings = await BookingManager.getBookings(
       tenantId,
       aggregatedBookingIds,
     );
-
-    console.log("bookings", bookings);
 
     try {
       if (aggregated) {

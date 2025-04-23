@@ -19,8 +19,6 @@ class CheckoutController {
     const user = request.user;
     const { bookableId, timeBegin, timeEnd, amount, couponCode } = request.body;
 
-    console.log(timeBegin, timeEnd, bookableId, amount, couponCode);
-
     if (!bookableId || !amount) {
       logger.warn(
         `${tenantId} -- could not validate item by user ${user?.id}. Missing parameters.`,
@@ -93,6 +91,7 @@ class CheckoutController {
     const tenantId = request.params.tenant;
     const user = request.user;
     const simulate = request.query.simulate === "true";
+    console.log("request.body.bookingAttempts", request.body.bookingAttempts);
     try {
       return response
         .status(200)

@@ -4,6 +4,7 @@ const PermissionsService = require("../../../commons/services/permission-service
 const { RolePermission } = require("../../../commons/entities/role");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
+const ReceiptService = require("../../../commons/services/payment/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -186,6 +187,49 @@ class GroupBookingController {
         );
         res.status(403).send({
           message: "User not allowed to reject group booking",
+        });
+      }
+    } catch (error) {
+      res.status(500).send({ message: error.message });
+    }
+  }
+
+  static async createGroupBookingReceipt(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const user = req.user;
+      const groupBookingId = req.params.id;
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+
+      if (
+        user &&
+        (await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        await BookingService.createAggregatedReceipt(
+          tenantId,
+          groupBooking.bookingIds,
+        );
+        logger.info(
+          { tenantId: tenantId, user: user.id },
+          "Group booking receipt created successfully",
+        );
+        res.status(200).send(groupBooking);
+      } else {
+        logger.error(
+          { tenantId: tenantId, user: user.id },
+          "User not allowed to create group booking receipt",
+        );
+        res.status(403).send({
+          message: "User not allowed to create group booking receipt",
         });
       }
     } catch (error) {

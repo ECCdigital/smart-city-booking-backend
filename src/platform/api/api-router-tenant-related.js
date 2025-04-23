@@ -202,6 +202,11 @@ router.delete(
   AuthenticationController.isSignedIn,
   GroupBookingController.removeGroupBooking,
 );
+router.post(
+  "/group-bookings/:id/receipt",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.createGroupBookingReceipt,
+);
 
 // CHECKOUT
 // ========

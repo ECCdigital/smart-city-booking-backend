@@ -14,7 +14,6 @@ const ReceiptService =
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
-const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -708,18 +707,7 @@ class BookingController {
         return response.sendStatus(403);
       }
 
-      const { name, receiptId, revision, timeCreated } =
-        await ReceiptService.createReceipt(tenantId, booking.id);
-
-      booking.attachments.push({
-        type: "receipt",
-        title: name,
-        receiptId: receiptId,
-        revision: revision,
-        timeCreated,
-      });
-
-      await BookingManager.storeBooking(booking);
+      await BookingService.createReceipt(tenantId, booking.id);
 
       return response.sendStatus(200);
     } catch (err) {

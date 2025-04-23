@@ -52,21 +52,70 @@ class PaymentService {
   }
 
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
-    const bookings = await BookingManager.getBooking(tenantId, bookingIds);
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
     const processedBookings = [];
+    for (const booking of bookings) {
+      booking.isPayed = true;
+      booking.paymentMethod = paymentMethod;
+      await BookingManager.setBookingPayedStatus(booking);
+    }
+
     if (this.aggregated) {
-      //TODO: handle aggregated payment
+      if (bookings.every((b) => b.isCommitted && b.isPayed)) {
+        let attachments = [];
+        if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
+          const { receipt, name, receiptId, revision, timeCreated } =
+            await ReceiptService.createAggregatedReceipt(tenantId, bookings);
+
+          for (const booking of bookings) {
+            booking.attachments.push({
+              type: "receipt",
+              title: name,
+              receiptId: receiptId,
+              revision: revision,
+              timeCreated,
+            });
+            await BookingManager.storeBooking(booking);
+          }
+
+          attachments = [
+            {
+              filename: name,
+              content: receipt.buffer,
+              contentType: "application/pdf",
+            },
+          ];
+        }
+
+        try {
+          await MailController.sendBookingConfirmation(
+            bookings[0].mail,
+            bookings.map((b) => b.id),
+            tenantId,
+            attachments,
+            true,
+          );
+
+          const tenant = await TenantManager.getTenant(tenantId);
+          await MailController.sendIncomingBooking(
+            tenant.mail,
+            bookings.map((b) => b.id),
+            tenantId,
+            true,
+          );
+        } catch (err) {
+          logger.error(err);
+        }
+      }
+
+      return bookings;
     } else {
       for (const booking of bookings) {
-        booking.isPayed = true;
-        booking.paymentMethod = paymentMethod;
-        await BookingManager.setBookingPayedStatus(booking);
-
         if (booking.isCommitted && booking.isPayed) {
           let attachments = [];
           if (booking.priceEur > 0) {
             const { receipt, name, receiptId, revision, timeCreated } =
-              await ReceiptService.createReceipt(tenantId, booking.id);
+              await ReceiptService.createSingleReceipt(tenantId, booking.id);
 
             booking.attachments.push({
               type: "receipt",
@@ -558,6 +607,10 @@ class PmPaymentService extends PaymentService {
   }
 
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
+    console.log("debug");
+    console.log("bookingIds", bookingIds);
+    console.log("tenantId", tenantId);
+    console.log("paymentMethod", paymentMethod);
     await super.handleSuccessfulPayment({
       bookingIds,
       tenantId,

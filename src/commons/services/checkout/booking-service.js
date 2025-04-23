@@ -261,7 +261,7 @@ class BookingService {
 
           if (booking.priceEur > 0) {
             const { receipt, name, receiptId, revision, timeCreated } =
-              await ReceiptService.createReceipt(tenantId, booking.id);
+              await ReceiptService.createSingleReceipt(tenantId, booking.id);
 
             booking.attachments.push({
               type: "receipt",
@@ -346,6 +346,14 @@ class BookingService {
     const allBookings = [];
 
     for (const bookingAttempt of bookingAttempts) {
+      bookingAttempt.mail = contactData.mail;
+      bookingAttempt.name = contactData.name;
+      bookingAttempt.company = contactData.company;
+      bookingAttempt.street = contactData.street;
+      bookingAttempt.zipCode = contactData.zipCode;
+      bookingAttempt.location = contactData.location;
+      bookingAttempt.phone = contactData.phone;
+
       const booking = await BookingService.createBooking({
         tenantId,
         user,
@@ -745,6 +753,44 @@ class BookingService {
     }
 
     return booking.name.toLowerCase() === name.toLowerCase();
+  }
+
+  static async createReceipt(tenantId, bookingId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    const { name, receiptId, revision, timeCreated } =
+      await ReceiptService.createSingleReceipt(tenantId, booking.id);
+
+    booking.attachments.push({
+      type: "receipt",
+      title: name,
+      receiptId: receiptId,
+      revision: revision,
+      timeCreated,
+    });
+
+    await BookingManager.storeBooking(booking);
+  }
+
+  static async createAggregatedReceipt(tenantId, bookingIds) {
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+
+    const { name, receiptId, revision, timeCreated } =
+      await ReceiptService.createAggregatedReceipt(
+        tenantId,
+        bookings.map((b) => b.id),
+      );
+
+    for (const booking of bookings) {
+      booking.attachments.push({
+        type: "receipt",
+        title: name,
+        receiptId: receiptId,
+        revision: revision,
+        timeCreated,
+      });
+      await BookingManager.storeBooking(booking);
+    }
   }
 }
 
