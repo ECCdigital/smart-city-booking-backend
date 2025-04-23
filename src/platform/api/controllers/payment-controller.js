@@ -153,13 +153,19 @@ class PaymentController {
       aggregatedBookingIds,
     );
 
+    console.log("paymentNotificationPOST");
+    console.log("id", bookingId);
+    console.log("ids", bookingIds);
+    console.log("tenantId", tenantId);
+    console.log("aggregated", aggregated);
+
     try {
       if (aggregated) {
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           bookings.map((booking) => booking.id),
           bookings[0].paymentProvider,
-          aggregated,
+          { aggregated },
         );
         await paymentService.paymentNotification(request.body);
       } else {
