@@ -470,6 +470,7 @@ class MailController {
         tenantId,
         subject: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
         title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
+        attachments,
         message: snippetHtml,
         sendBCC: false,
         addRejectionLink: true,
