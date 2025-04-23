@@ -66,8 +66,9 @@ class PaymentService {
         console.log("all committed and payed");
         let attachments = [];
         if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
+          console.log("price > 0");
           const { receipt, name, receiptId, revision, timeCreated } =
-            await ReceiptService.createAggregatedReceipt(tenantId, bookings);
+            await ReceiptService.createAggregatedReceipt(tenantId, bookings.map((b) => b.id));
 
           for (const booking of bookings) {
             booking.attachments.push({
