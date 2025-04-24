@@ -15,8 +15,6 @@ class PaymentController {
       body: { bookingIds, aggregated },
     } = request;
 
-    console.log("aggregated", aggregated);
-
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
     if (!bookings) {
@@ -152,12 +150,6 @@ class PaymentController {
       tenantId,
       aggregatedBookingIds,
     );
-
-    console.log("paymentNotificationPOST");
-    console.log("id", bookingId);
-    console.log("ids", bookingIds);
-    console.log("tenantId", tenantId);
-    console.log("aggregated", aggregated);
 
     try {
       if (aggregated) {

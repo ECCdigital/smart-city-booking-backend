@@ -61,12 +61,9 @@ class PaymentService {
     }
 
     if (this.aggregated) {
-      console.log("aggregated");
       if (bookings.every((b) => b.isCommitted && b.isPayed)) {
-        console.log("all committed and payed");
         let attachments = [];
         if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
-          console.log("price > 0");
           const { receipt, name, receiptId, revision, timeCreated } =
             await ReceiptService.createAggregatedReceipt(tenantId, bookings.map((b) => b.id));
 
@@ -91,7 +88,6 @@ class PaymentService {
         }
 
         try {
-          console.log("sendBookingConfirmation");
           await MailController.sendBookingConfirmation(
             bookings[0].mail,
             bookings.map((b) => b.id),
@@ -99,17 +95,6 @@ class PaymentService {
             attachments,
             true,
           );
-          console.log("sendBookingConfirmation done");
-
-          const tenant = await TenantManager.getTenant(tenantId);
-          console.log("sendIncomingBooking");
-          await MailController.sendIncomingBooking(
-            tenant.mail,
-            bookings.map((b) => b.id),
-            tenantId,
-            true,
-          );
-          console.log("sendIncomingBooking done");
         } catch (err) {
           logger.error(err);
         }
@@ -117,7 +102,6 @@ class PaymentService {
 
       return bookings;
     } else {
-      console.log("not aggregated");
       for (const booking of bookings) {
         if (booking.isCommitted && booking.isPayed) {
           let attachments = [];
@@ -151,18 +135,10 @@ class PaymentService {
               tenantId,
               attachments,
             );
-
-            const tenant = await TenantManager.getTenant(tenantId);
-            await MailController.sendIncomingBooking(
-              tenant.mail,
-              booking.id,
-              tenantId,
-            );
           } catch (err) {
             logger.error(err);
           }
         }
-
         processedBookings.push(booking);
       }
     }
@@ -615,11 +591,6 @@ class PmPaymentService extends PaymentService {
   }
 
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
-    console.log("debug in payment");
-    console.log("bookingIds", bookingIds);
-    console.log("tenantId", tenantId);
-    console.log("paymentMethod", paymentMethod);
-    console.log("this.aggregated", this.aggregated);
     await super.handleSuccessfulPayment({
       bookingIds,
       tenantId,
