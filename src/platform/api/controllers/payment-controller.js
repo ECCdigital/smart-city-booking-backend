@@ -61,13 +61,6 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
-    console.log("paymentNotificationGET");
-    console.log("id", bookingId);
-    console.log("ids", bookingIds);
-    console.log("tenantId", tenantId);
-    console.log("aggregated", aggregated);
-    console.log("request.query", request.query);
-
     let aggregatedBookingIds = bookingIds
       ? bookingIds
           .split(",")
@@ -78,8 +71,6 @@ class PaymentController {
       aggregatedBookingIds.push(bookingId);
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
-
-    console.log("aggregatedBookingIds", aggregatedBookingIds);
 
     const bookings = await BookingManager.getBookings(
       tenantId,
