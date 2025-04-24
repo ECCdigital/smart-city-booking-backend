@@ -61,7 +61,7 @@ class Instance {
 
   removePrivateData() {
     this.applications = this.applications.map((a) => {
-      a.removePrivateData();
+      a?.removePrivateData();
       return a;
     });
     delete this.mailTemplate;

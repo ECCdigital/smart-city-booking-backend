@@ -115,9 +115,9 @@ class GroupBookingController {
   }
 
   static async commitGroupBooking(req, res) {
+    const tenantId = req.params.tenant;
+    const user = req.user;
     try {
-      const tenantId = req.params.tenant;
-      const user = req.user;
       const groupBookingId = req.params.id;
 
       const groupBooking = await GroupBookingManager.getGroupBooking(
@@ -150,6 +150,10 @@ class GroupBookingController {
         });
       }
     } catch (error) {
+      logger.error(
+        { tenantId: tenantId, error: error.message },
+        "Error committing group booking",
+      );
       res.status(500).send({ message: error.message });
     }
   }

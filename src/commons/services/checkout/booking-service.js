@@ -391,7 +391,7 @@ class BookingService {
         if (!allCommitted) {
           await MailController.sendBookingRequestConfirmation(
             newGroupBooking.mail,
-            newGroupBooking.id,
+            newGroupBooking.bookingIds,
             newGroupBooking.tenantId,
             true,
           );
@@ -405,7 +405,7 @@ class BookingService {
 
           await MailController.sendBookingConfirmation(
             newGroupBooking.mail,
-            newGroupBooking.id,
+            newGroupBooking.bookingIds,
             newGroupBooking.tenantId,
             attachments,
             true,
@@ -415,7 +415,7 @@ class BookingService {
         const tenant = await TenantManager.getTenant(newGroupBooking.tenantId);
         await MailController.sendIncomingBooking(
           tenant.mail,
-          newGroupBooking.id,
+          newGroupBooking.bookingIds,
           newGroupBooking.tenantId,
           true,
         );
@@ -560,7 +560,7 @@ class BookingService {
     ) {
       await MailController.sendFreeBookingConfirmation(
         groupBooking.mail,
-        groupBooking.id,
+        groupBooking.bookingIds,
         groupBooking.tenantId,
         true,
       );

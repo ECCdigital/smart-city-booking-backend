@@ -65,7 +65,10 @@ class PaymentService {
         let attachments = [];
         if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
           const { receipt, name, receiptId, revision, timeCreated } =
-            await ReceiptService.createAggregatedReceipt(tenantId, bookings.map((b) => b.id));
+            await ReceiptService.createAggregatedReceipt(
+              tenantId,
+              bookings.map((b) => b.id),
+            );
 
           for (const booking of bookings) {
             booking.attachments.push({
@@ -151,19 +154,27 @@ class GiroCockpitPaymentService extends PaymentService {
   static GIRO_SUCCESS_CODE = "4000";
 
   async createPayment() {
-    const booking = await getBooking(this.bookingId, this.tenantId);
-    const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
+    if (this.aggregated) {
+      return this.aggregatedPaymentUrl();
+    } else {
+      return this.createSeparatePaymentUrl();
+    }
+  }
 
-    try {
+  async createSeparatePaymentUrl() {
+    const paymentUrls = [];
+    for (const bookingId of this.bookingIds) {
+      const booking = await getBooking(bookingId, this.tenantId);
+      const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
       const GIRO_CHECKOUT_URL =
         "https://payment.girosolution.de/girocheckout/api/v2/paypage/init";
       const type = "SALE";
       const test = 1;
       const currency = "EUR";
 
-      const merchantTxId = this.bookingId;
+      const merchantTxId = booking.id;
       const amount = (booking.priceEur * 100 || 0).toString();
-      const purpose = `${this.bookingId} ${
+      const purpose = `${booking.id} ${
         paymentApp.paymentPurposeSuffix || ""
       }`;
 
@@ -171,10 +182,10 @@ class GiroCockpitPaymentService extends PaymentService {
       const PROJECT_ID = paymentApp.paymentProjectId;
       const PROJECT_SECRET = paymentApp.paymentSecret;
 
-      const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?id=${this.bookingId}`;
-      const successUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${merchantTxId}&tenant=${this.tenantId}&status=success&paymentMethod=${paymentApp.id}`;
-      const failUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${merchantTxId}&tenant=${this.tenantId}&status=fail&paymentMethod=${paymentApp.id}`;
-      const backUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?id=${merchantTxId}&tenant=${this.tenantId}&status=back&paymentMethod=${paymentApp.id}`;
+      const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?ids=${merchantTxId}&aggregated=false`;
+      const successUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${merchantTxId}&tenant=${this.tenantId}&status=success&paymentMethod=${paymentApp.id}&aggregated=false`;
+      const failUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${merchantTxId}&tenant=${this.tenantId}&status=fail&paymentMethod=${paymentApp.id}&aggregated=false`;
+      const backUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${merchantTxId}&tenant=${this.tenantId}&status=back&paymentMethod=${paymentApp.id}&aggregated=false`;
       const hash = crypto
         .createHmac("md5", PROJECT_SECRET)
         .update(
@@ -213,13 +224,85 @@ class GiroCockpitPaymentService extends PaymentService {
         logger.info(
           `Payment URL requested for booking ${merchantTxId}: ${response.data?.url}`,
         );
-        return response.data?.url;
+        paymentUrls.push({ bookingId, url: response.data?.url });
       } else {
         logger.warn("could not get payment url.", response.data);
         throw new Error("could not get payment url.");
       }
-    } catch (error) {
-      throw error;
+    }
+    return paymentUrls;
+  }
+
+  async aggregatedPaymentUrl() {
+    const bookings = await BookingManager.getBookings(
+      this.tenantId,
+      this.bookingIds,
+    );
+    const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
+    const GIRO_CHECKOUT_URL =
+      "https://payment.girosolution.de/girocheckout/api/v2/paypage/init";
+    const type = "SALE";
+    const test = 1;
+    const currency = "EUR";
+
+    const merchantTxId = this.bookingIds.join(",");
+    const amount = bookings.reduce((acc, booking) => {
+      return acc + booking.priceEur * 100 || 0;
+    }, 0);
+    const purpose = `${this.bookingIds.join(",")} ${
+      paymentApp.paymentPurposeSuffix || ""
+    }`;
+
+    const MERCHANT_ID = paymentApp.paymentMerchantId;
+    const PROJECT_ID = paymentApp.paymentProjectId;
+    const PROJECT_SECRET = paymentApp.paymentSecret;
+
+    const notifyUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/notify?ids=${merchantTxId}&aggregated=true`;
+    const successUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${merchantTxId}&tenant=${this.tenantId}&status=success&paymentMethod=${paymentApp.id}&aggregated=true`;
+    const failUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${merchantTxId}&tenant=${this.tenantId}&status=fail&paymentMethod=${paymentApp.id}&aggregated=true`;
+    const backUrl = `${process.env.BACKEND_URL}/api/${this.tenantId}/payments/response?ids=${merchantTxId}&tenant=${this.tenantId}&status=back&paymentMethod=${paymentApp.id}&aggregated=true`;
+    const hash = crypto
+      .createHmac("md5", PROJECT_SECRET)
+      .update(
+        `${MERCHANT_ID}${PROJECT_ID}${merchantTxId}${amount}${currency}${purpose}${type}${test}${successUrl}${backUrl}${failUrl}${notifyUrl}`,
+      )
+      .digest("hex");
+
+    const data = qs.stringify({
+      merchantId: MERCHANT_ID,
+      projectId: PROJECT_ID,
+      merchantTxId: merchantTxId,
+      amount: amount,
+      currency: currency,
+      purpose: purpose,
+      type: type,
+      test: test,
+      successUrl: successUrl,
+      backUrl: backUrl,
+      failUrl: failUrl,
+      notifyUrl: notifyUrl,
+      hash: hash,
+    });
+
+    const config = {
+      method: "post",
+      url: GIRO_CHECKOUT_URL,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      data: data,
+    };
+
+    const response = await axios(config);
+
+    if (response.data?.url) {
+      logger.info(
+        `Payment URL requested for booking ${merchantTxId}: ${response.data?.url}`,
+      );
+      return  [{ bookingIds: this.bookingIds, url: response.data?.url }];
+    } else {
+      logger.warn("could not get payment url.", response.data);
+      throw new Error("could not get payment url.");
     }
   }
 
@@ -238,7 +321,7 @@ class GiroCockpitPaymentService extends PaymentService {
     } = query;
 
     try {
-      if (!this.bookingId || !this.tenantId) {
+      if (!this.bookingIds  || !this.tenantId) {
         logger.warn(
           `${this.tenantId} -- could not validate payment notification. Missing parameters. For Booking ${this.bookingId}`,
         );
@@ -265,14 +348,14 @@ class GiroCockpitPaymentService extends PaymentService {
 
       if (gcHash !== hash) {
         logger.warn(
-          `${this.tenantId} -- payment notification hash mismatch. For Booking ${this.bookingId}`,
+          `${this.tenantId} -- payment notification hash mismatch. For Bookings ${this.bookingIds}`,
         );
         throw new Error("Hash mismatch");
       }
 
       if (gcResultPayment === GiroCockpitPaymentService.GIRO_SUCCESS_CODE) {
         logger.info(
-          `${this.tenantId} -- GiroCockpit responds with status ${GiroCockpitPaymentService.GIRO_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
+          `${this.tenantId} -- GiroCockpit responds with status ${GiroCockpitPaymentService.GIRO_SUCCESS_CODE} / successfully payed for bookings ${this.bookingIds} .`,
         );
 
         const paymentMapping = {
@@ -292,20 +375,20 @@ class GiroCockpitPaymentService extends PaymentService {
         };
 
         await this.handleSuccessfulPayment({
-          bookingId: this.bookingId,
+          bookingIds: this.bookingIds,
           tenantId: this.tenantId,
           paymentMethod: paymentMapping[gcPaymethod] || "OTHER",
         });
 
         logger.info(
-          `${this.tenantId} -- booking ${this.bookingId} successfully payed and updated.`,
+          `${this.tenantId} -- bookings ${this.bookingIds} successfully payed and updated.`,
         );
 
         return true;
       } else {
         // TODO: remove booking?
         logger.warn(
-          `${this.tenantId} -- booking ${this.bookingId} could not be payed.`,
+          `${this.tenantId} -- bookings ${this.bookingIds} could not be payed.`,
         );
         return true;
       }
@@ -315,24 +398,52 @@ class GiroCockpitPaymentService extends PaymentService {
   }
 
   paymentResponse() {
-    return `${process.env.FRONTEND_URL}/checkout/status?id=${this.bookingId}&tenant=${this.tenantId}`;
+    return `${process.env.FRONTEND_URL}/checkout/status?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}`;
   }
 
   async paymentRequest() {
-    const booking = await BookingManager.getBooking(
-      this.bookingId,
+    if (this.aggregated) {
+      return this.aggregatedPaymentLink();
+    } else {
+      return this.separatePaymentLink();
+    }
+  }
+
+  async separatePaymentLink() {
+    try {
+      for (const bookingId of this.bookingIds) {
+        const booking = await BookingManager.getBooking(
+          bookingId,
+          this.tenantId,
+        );
+
+        await MailController.sendPaymentLinkAfterBookingApproval(
+          booking.mail,
+          bookingId,
+          this.tenantId,
+        );
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async aggregatedPaymentLink() {
+    const bookings = await BookingManager.getBookings(
       this.tenantId,
+      this.bookingIds,
     );
 
     await MailController.sendPaymentLinkAfterBookingApproval(
-      booking.mail,
-      this.bookingId,
+      bookings[0].mail,
+      this.bookingIds,
       this.tenantId,
+      true,
     );
   }
 
-  async handleSuccessfulPayment({ bookingId, tenantId, paymentMethod }) {
-    await super.handleSuccessfulPayment({ bookingId, tenantId, paymentMethod });
+  async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
+    await super.handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod });
   }
 }
 
@@ -477,7 +588,7 @@ class PmPaymentService extends PaymentService {
   }
 
   paymentResponse() {
-    return `${process.env.FRONTEND_URL}/checkout/status?ids=${this.bookingId}&tenant=${this.tenantId}`;
+    return `${process.env.FRONTEND_URL}/checkout/status?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}`;
   }
 
   async paymentRequest() {
