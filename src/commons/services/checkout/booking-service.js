@@ -19,6 +19,13 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const { GroupBooking } = require("../../entities/groupBooking");
 const TenantManager = require("../../data-managers/tenant-manager");
 const PaymentUtils = require("../../utilities/payment-utils");
+const {
+  BookingConsistencyService,
+  checkSameOwner,
+  checkSameStatus,
+  checkSamePaymentProvider,
+  checkPayedStatus,
+} = require("../booking-consitency-service");
 
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
@@ -549,15 +556,31 @@ class BookingService {
       groupBookingId,
       true,
     );
-    for (const booking of groupBooking.bookings) {
+
+    const bookings = groupBooking.bookings;
+
+    const validator = new BookingConsistencyService([
+      checkSameOwner,
+      checkSameStatus,
+      checkSamePaymentProvider,
+    ]);
+    const errors = validator.validate(bookings);
+    if (errors.length > 0) {
+      logger.error(
+        `${tenantId} -- group-booking ${groupBooking.id} cannot be committed: ${JSON.stringify(
+          errors,
+        )}`,
+      );
+      return { success: false, errors };
+    }
+
+    for (const booking of bookings) {
       booking.isCommitted = true;
       booking.isRejected = false;
       await BookingManager.storeBooking(booking);
     }
 
-    if (
-      groupBooking.bookings.every((booking) => isNoPaymentRequired(booking))
-    ) {
+    if (bookings.every((booking) => isNoPaymentRequired(booking))) {
       await MailController.sendFreeBookingConfirmation(
         groupBooking.mail,
         groupBooking.bookingIds,
@@ -595,6 +618,10 @@ class BookingService {
         await sendEmailToOrganizer(eventIds, tenantId, booking);
       }
     }
+    logger.info(
+      `${tenantId} -- group-booking ${groupBooking.id} committed and sent payment request to ${groupBooking.mail}`,
+    );
+    return { success: true };
   }
 
   static async setBookingPayed(tenantId, bookingId) {
@@ -664,9 +691,23 @@ class BookingService {
       true,
     );
 
-    console.log("reason", reason);
+    const bookings = groupBooking.bookings;
 
-    for (const booking of groupBooking.bookings) {
+    const validator = new BookingConsistencyService([
+      checkSameOwner,
+      checkSameStatus,
+    ]);
+    const errors = validator.validate(bookings);
+    if (errors.length > 0) {
+      logger.error(
+        `${tenantId} -- group-booking ${groupBooking.id} cannot be rejected: ${JSON.stringify(
+          errors,
+        )}`,
+      );
+      return { success: false, errors };
+    }
+
+    for (const booking of bookings) {
       booking.isRejected = true;
       await BookingManager.storeBooking(booking);
     }
@@ -802,6 +843,22 @@ class BookingService {
   static async createAggregatedReceipt(tenantId, bookingIds) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
+    const validator = new BookingConsistencyService([
+      checkSameOwner,
+      checkSameStatus,
+      checkPayedStatus,
+    ]);
+
+    const errors = validator.validate(bookings);
+    if (errors.length > 0) {
+      logger.error(
+        `${tenantId} -- bookings ${bookingIds} cannot create receipt: ${JSON.stringify(
+          errors,
+        )}`,
+      );
+      return { success: false, errors };
+    }
+
     const { name, receiptId, revision, timeCreated } =
       await ReceiptService.createAggregatedReceipt(
         tenantId,
@@ -818,6 +875,8 @@ class BookingService {
       });
       await BookingManager.storeBooking(booking);
     }
+
+    return { success: true };
   }
 }
 

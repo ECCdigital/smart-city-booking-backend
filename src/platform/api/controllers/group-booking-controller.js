@@ -134,12 +134,23 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        await BookingService.commitGroupBooking(tenantId, groupBookingId);
-        logger.info(
-          { tenantId: tenantId, user: user.id },
-          "Group booking committed successfully",
-        );
-        res.status(200).send(groupBooking);
+        const result = await BookingService.commitGroupBooking(tenantId, groupBookingId);
+
+        if (!result.success) {
+          return res.status(200).json({
+            success: false,
+            data: null,
+            errors: result.errors,
+          });
+        }
+
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true);
+
+        return res.status(200).json({
+          success: true,
+          data: updatedGroupBooking,
+          errors: [],
+        });
       } else {
         logger.error(
           { tenantId: tenantId, user: user.id },
@@ -179,12 +190,23 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        await BookingService.rejectGroupBooking(tenantId, groupBookingId, reason);
-        logger.info(
-          { tenantId: tenantId, user: user.id },
-          "Group booking rejected successfully",
-        );
-        res.status(200).send(groupBooking);
+        const result = await BookingService.rejectGroupBooking(tenantId, groupBookingId, reason);
+
+        if (!result.success) {
+          return res.status(200).json({
+            success: false,
+            data: null,
+            errors: result.errors,
+          });
+        }
+
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true);
+
+        return res.status(200).json({
+          success: true,
+          data: updatedGroupBooking,
+          errors: [],
+        });
       } else {
         logger.error(
           { tenantId: tenantId, user: user.id },
@@ -219,15 +241,26 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        await BookingService.createAggregatedReceipt(
+        const result = await BookingService.createAggregatedReceipt(
           tenantId,
           groupBooking.bookingIds,
         );
-        logger.info(
-          { tenantId: tenantId, user: user.id },
-          "Group booking receipt created successfully",
-        );
-        res.status(200).send(groupBooking);
+
+        if (!result.success) {
+          return res.status(200).json({
+            success: false,
+            data: null,
+            errors: result.errors,
+          });
+        }
+
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true);
+
+        return res.status(200).json({
+          success: true,
+          data: updatedGroupBooking,
+          errors: [],
+        });
       } else {
         logger.error(
           { tenantId: tenantId, user: user.id },
