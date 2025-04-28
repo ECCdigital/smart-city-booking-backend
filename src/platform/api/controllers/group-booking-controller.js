@@ -163,6 +163,7 @@ class GroupBookingController {
       const tenantId = req.params.tenant;
       const user = req.user;
       const groupBookingId = req.params.id;
+      const { reason } = req.body;
 
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
@@ -178,7 +179,7 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        await BookingService.rejectGroupBooking(tenantId, groupBookingId);
+        await BookingService.rejectGroupBooking(tenantId, groupBookingId, reason);
         logger.info(
           { tenantId: tenantId, user: user.id },
           "Group booking rejected successfully",

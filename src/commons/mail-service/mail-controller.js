@@ -38,7 +38,6 @@ class MailController {
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
-
     let bookingDetails = "";
     if (bookingId) {
       bookingDetails = await this.generateBookingDetails(bookingId, tenantId);
@@ -498,11 +497,13 @@ class MailController {
 
   static async sendBookingRejection(
     address,
-    bookingId,
+    bookingIds,
     tenantId,
     reason,
     attachments = undefined,
+    aggregated = false,
   ) {
+    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
     const tenant = await TenantManager.getTenant(tenantId);
 
     const snippetTemplateString = `
@@ -515,28 +516,49 @@ class MailController {
       rejectionReason: reason,
     });
 
-    await this._sendBookingMail({
-      address,
-      bookingId,
-      tenantId,
-      subject: `Abgelehnt: Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
-      title: `Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
-      message: snippetHtml,
-      includeQRCode: false,
-      attachments,
-      sendBCC: false,
-      addRejectionLink: false,
-    });
+    if (aggregated) {
+      await this._sendGroupBookingMail({
+        address,
+        bookingIds,
+        tenantId,
+        subject: `Abgelehnt: Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+        title: `Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+        message: snippetHtml,
+        includeQRCode: false,
+        attachments,
+        sendBCC: false,
+        addRejectionLink: false,
+      });
+    } else {
+      for (const bookingId of bookingIds) {
+        await this._sendBookingMail({
+          address,
+          bookingId,
+          tenantId,
+          subject: `Abgelehnt: Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+          title: `Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
+          message: snippetHtml,
+          includeQRCode: false,
+          attachments,
+          sendBCC: false,
+          addRejectionLink: false,
+        });
+      }
+    }
   }
 
   static async sendBookingCancel(
     address,
-    bookingId,
+    bookingIds,
     tenantId,
     reason,
     attachments = undefined,
+    aggregated = false,
   ) {
+    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
     const tenant = await TenantManager.getTenant(tenantId);
+
+    console.log("reseon", reason);
 
     const snippetTemplateString = `
     <p>Die nachfolgende Buchung wurde storniert:</p>
@@ -548,18 +570,35 @@ class MailController {
       cancelReason: reason,
     });
 
-    await this._sendBookingMail({
-      address,
-      bookingId,
-      tenantId,
-      subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
-      title: `Ihre Buchung im ${tenant.name} wurde storniert`,
-      message: snippetHtml,
-      includeQRCode: false,
-      attachments,
-      sendBCC: false,
-      addRejectionLink: false,
-    });
+    if (aggregated) {
+      await this._sendGroupBookingMail({
+        address,
+        bookingIds,
+        tenantId,
+        subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
+        title: `Ihre Buchung im ${tenant.name} wurde storniert`,
+        message: snippetHtml,
+        includeQRCode: false,
+        attachments,
+        sendBCC: false,
+        addRejectionLink: false,
+      });
+    } else {
+      for (const bookingId of bookingIds) {
+        await this._sendBookingMail({
+          address,
+          bookingId,
+          tenantId,
+          subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
+          title: `Ihre Buchung im ${tenant.name} wurde storniert`,
+          message: snippetHtml,
+          includeQRCode: false,
+          attachments,
+          sendBCC: false,
+          addRejectionLink: false,
+        });
+      }
+    }
   }
 
   static async sendVerifyBookingRejection(

@@ -664,6 +664,8 @@ class BookingService {
       true,
     );
 
+    console.log("reason", reason);
+
     for (const booking of groupBooking.bookings) {
       booking.isRejected = true;
       await BookingManager.storeBooking(booking);
@@ -672,11 +674,29 @@ class BookingService {
     if (
       groupBooking.bookings.some((booking) => !isRejection(booking, hookId))
     ) {
-      //TODO: send booking rejection
-      console.log("send booking rejection");
+      await MailController.sendBookingRejection(
+        groupBooking.bookings[0].mail,
+        groupBooking.bookingIds,
+        tenantId,
+        reason,
+        undefined,
+        true,
+      );
+      logger.info(
+        `${tenantId} -- bookings ${groupBooking.bookingIds} rejected and sent booking rejection to ${groupBooking.bookings[0].mail}`,
+      );
     } else {
-      //TODO: send booking cancel
-      console.log("send booking cancel");
+      await MailController.sendBookingCancel(
+        groupBooking.bookings[0].mail,
+        groupBooking.bookingIds,
+        tenantId,
+        reason,
+        undefined,
+        true,
+      );
+      logger.info(
+        `${tenantId} -- bookings ${groupBooking.bookingIds} canceled and sent booking rejection to ${groupBooking.bookings[0].mail}`,
+      );
     }
   }
 
