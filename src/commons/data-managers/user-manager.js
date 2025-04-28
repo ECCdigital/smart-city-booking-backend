@@ -22,7 +22,8 @@ class UserManager {
 
   static async signupUser(user) {
     try {
-      return await UserModel.create(user);
+      const rawUser = await UserModel.create(user);
+      return new User(rawUser);
     } catch (err) {
       throw err;
     }

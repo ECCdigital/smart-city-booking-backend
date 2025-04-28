@@ -34,10 +34,10 @@ InstanceSchema.post("init", function (doc) {
 function decryptApps(instance) {
   return instance.applications.map((app) => {
     let appClass;
-    if (app.type === "auth") {
+    if (app?.type === "auth") {
       appClass = SsoApplication.init(app);
     }
-    appClass.decrypt();
+    appClass?.decrypt();
     return appClass;
   });
 }
@@ -45,11 +45,11 @@ function decryptApps(instance) {
 function encryptApps(instance) {
   return instance.applications.map((app) => {
     let appClass;
-    if (app.type === "auth") {
+    if (app?.type === "auth") {
       appClass = SsoApplication.init(app);
     }
 
-    appClass.encrypt();
+    appClass?.encrypt();
     return appClass;
   });
 }
