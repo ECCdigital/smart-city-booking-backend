@@ -87,20 +87,24 @@ class BookingManager {
    * Get the status of a booking.
    *
    * @param tenantId
-   * @param bookingId
+   * @param bookingIds
    * @returns {Promise<>} status of the booking
    */
-  static async getBookingStatus(tenantId, bookingId) {
-    const rawBooking = await BookingModel.findOne({
-      id: bookingId,
+  static async getBookingStatus(tenantId, bookingIds) {
+    const rawBookings = await BookingModel.find({
       tenantId: tenantId,
+      id: { $in: bookingIds },
     });
-    const booking = new Booking(rawBooking);
-    return {
-      isCommitted: booking.isCommitted,
-      isPayed: booking.isPayed,
-      bookingId: booking.id,
-    };
+
+    return rawBookings.map((rb) => ({
+      bookingId: rb.id,
+      priceEur: rb.priceEur,
+      timeBegin: rb.timeBegin,
+      timeEnd: rb.timeEnd,
+      isCommitted: rb.isCommitted,
+      isPayed: rb.isPayed,
+      isRejected: rb.isRejected,
+    }));
   }
 
   /**

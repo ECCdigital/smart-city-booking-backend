@@ -6,7 +6,6 @@ const qs = require("qs");
 const crypto = require("crypto");
 const BookingManager = require("../../data-managers/booking-manager");
 const ReceiptService = require("./receipt-service");
-const TenantManager = require("../../data-managers/tenant-manager");
 const InvoiceService = require("./invoice-service");
 const MailController = require("../../mail-service/mail-controller");
 
@@ -44,7 +43,7 @@ class PaymentService {
   }
 
   paymentResponse() {
-    throw new Error("paymentResponse not implemented");
+    return `${process.env.FRONTEND_URL}/checkout/status?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}`;
   }
 
   paymentRequest() {
@@ -397,10 +396,6 @@ class GiroCockpitPaymentService extends PaymentService {
     }
   }
 
-  paymentResponse() {
-    return `${process.env.FRONTEND_URL}/checkout/status?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}`;
-  }
-
   async paymentRequest() {
     if (this.aggregated) {
       return this.aggregatedPaymentLink();
@@ -585,10 +580,6 @@ class PmPaymentService extends PaymentService {
       logger.warn("could not get payment url.", response.data);
       throw new Error("could not get payment url.");
     }
-  }
-
-  paymentResponse() {
-    return `${process.env.FRONTEND_URL}/checkout/status?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}`;
   }
 
   async paymentRequest() {
@@ -814,9 +805,6 @@ class InvoicePaymentService extends PaymentService {
 
   async paymentNotification() {
     console.log("paymentNotification");
-  }
-  async paymentResponse() {
-    console.log("paymentResponse");
   }
 
   async paymentRequest() {

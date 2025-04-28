@@ -585,8 +585,15 @@ class BookingService {
     );
 
     if (hasTicketBooking) {
-      //TODO: send email to organizer
-      console.log("send email to organizer");
+      const bookingsWithTickets = groupBooking.bookings.filter((booking) =>
+        booking.bookableItems.some(isTicket),
+      );
+
+      for (const booking of bookingsWithTickets) {
+        const eventIds = booking.bookableItems.map(getEventForTicket);
+
+        await sendEmailToOrganizer(eventIds, tenantId, booking);
+      }
     }
   }
 

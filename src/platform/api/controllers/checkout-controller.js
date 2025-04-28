@@ -91,7 +91,6 @@ class CheckoutController {
     const tenantId = request.params.tenant;
     const user = request.user;
     const simulate = request.query.simulate === "true";
-    console.log("request.body.bookingAttempts", request.body.bookingAttempts);
     try {
       return response
         .status(200)

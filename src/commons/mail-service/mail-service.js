@@ -50,9 +50,9 @@ Handlebars.registerPartial(
     <strong>Firma:</strong> {{#if booking.company}}{{booking.company}}{{else}}–{{/if}}<br>
     <strong>Name:</strong> {{#if booking.name}}{{booking.name}}{{else}}–{{/if}}<br>
     <strong>Adresse:</strong> 
-      {{#if booking.address}}{{booking.address}}{{else}} – {{/if}},
-      {{#if booking.zip}}{{booking.zip}}{{else}} – {{/if}}
-      {{#if booking.city}}{{booking.city}}{{else}} – {{/if}}<br>
+      {{#if booking.street}}{{booking.street}}{{else}} – {{/if}},
+      {{#if booking.zipCode}}{{booking.zipCode}}{{else}} – {{/if}}
+      {{#if booking.location}}{{booking.location}}{{else}} – {{/if}}<br>
     <strong>Telefon:</strong> {{#if booking.phone}}{{booking.phone}}{{else}}–{{/if}}<br>
     <strong>E-Mail:</strong> {{#if booking.mail}}{{booking.mail}}{{else}}–{{/if}}
 `,

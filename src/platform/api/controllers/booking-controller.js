@@ -289,18 +289,20 @@ class BookingController {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const id = request.params.id;
+      const ids = request.params.ids;
 
-      if (id) {
-        const bookingStatus = await BookingManager.getBookingStatus(
+      if (ids) {
+        const splitIds = ids.split(",");
+
+        const bookingsStatus = await BookingManager.getBookingStatus(
           tenantId,
-          id,
+          splitIds,
         );
 
         logger.info(
-          `${tenantId} -- sending booking status ${bookingStatus} for booking ${id} to user ${user?.id}`,
+          `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,
         );
-        response.status(200).send(bookingStatus);
+        response.status(200).send(bookingsStatus);
       } else {
         logger.warn(
           `${tenantId} -- could not get booking status. No booking ID provided`,

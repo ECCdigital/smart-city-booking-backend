@@ -38,10 +38,13 @@ class MailController {
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
+
     let bookingDetails = "";
     if (bookingId) {
       bookingDetails = await this.generateBookingDetails(bookingId, tenantId);
     }
+
+    console.log("bookingDetails", bookingDetails);
 
     let qrContent = "";
     let qrAttachment = null;
