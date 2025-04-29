@@ -122,12 +122,11 @@ class BookingService {
     let bundleCheckoutService;
 
     if (manualBooking) {
-      bundleCheckoutService = new ManualBundleCheckoutService(
-        user?.id,
-        tenantId,
+      bundleCheckoutService = new ManualBundleCheckoutService({
+        user: user?.id,
+        tenant: tenantId,
         timeBegin,
         timeEnd,
-        null,
         bookableItems,
         couponCode,
         name,
@@ -135,38 +134,37 @@ class BookingService {
         street,
         zipCode,
         location,
-        mail,
+        email: mail,
         phone,
         comment,
-        Boolean(request.body.isCommitted),
-        Boolean(request.body.isPayed),
-        Boolean(request.body.isRejected),
+        isCommit: Boolean(request.body.isCommitted),
+        isPayed: Boolean(request.body.isPayed),
+        isRejected: Boolean(request.body.isRejected),
         attachmentStatus,
         paymentProvider,
-      );
+      });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
       const filteredBookableItems = bookableItems.concat(filteredAddons);
 
-      bundleCheckoutService = new BundleCheckoutService(
-        user?.id,
-        tenantId,
+      bundleCheckoutService = new BundleCheckoutService({
+        user: user?.id,
+        tenant: tenantId,
         timeBegin,
         timeEnd,
-        null,
-        filteredBookableItems,
+        bookableItems: filteredBookableItems,
         couponCode,
         name,
         company,
         street,
         zipCode,
         location,
-        mail,
+        email: mail,
         phone,
         comment,
         attachmentStatus,
         paymentProvider,
-      );
+      });
     }
 
     const booking = await bundleCheckoutService.prepareBooking();
@@ -290,29 +288,30 @@ class BookingService {
       tenantId,
     );
     try {
-      const bundleCheckoutService = new ManualBundleCheckoutService(
-        updatedBooking.assignedUserId,
-        tenantId,
-        updatedBooking.timeBegin,
-        updatedBooking.timeEnd,
-        oldBooking.timeCreated,
-        updatedBooking.bookableItems,
-        updatedBooking.couponCode,
-        updatedBooking.name,
-        updatedBooking.company,
-        updatedBooking.street,
-        updatedBooking.zipCode,
-        updatedBooking.location,
-        updatedBooking.mail,
-        updatedBooking.phone,
-        updatedBooking.comment,
-        Boolean(updatedBooking.isCommitted),
-        Boolean(updatedBooking.isPayed),
-        Boolean(updatedBooking.isRejected),
-        updatedBooking.attachmentStatus,
-        updatedBooking.paymentProvider,
-        updatedBooking.paymentMethod,
-      );
+      const bundleCheckoutService = new ManualBundleCheckoutService({
+        user: updatedBooking.assignedUserId,
+        tenant: tenantId,
+        timeBegin: updatedBooking.timeBegin,
+        timeEnd: updatedBooking.timeEnd,
+        timeCreated: oldBooking.timeCreated,
+        bookableItems: updatedBooking.bookableItems,
+        couponCode: updatedBooking.couponCode,
+        name: updatedBooking.name,
+        company: updatedBooking.company,
+        street: updatedBooking.street,
+        zipCode: updatedBooking.zipCode,
+        location: updatedBooking.location,
+        email: updatedBooking.mail,
+        phone: updatedBooking.phone,
+        comment: updatedBooking.comment,
+        isCommit: Boolean(updatedBooking.isCommitted),
+        isPayed: Boolean(updatedBooking.isPayed),
+        isRejected: Boolean(updatedBooking.isRejected),
+        attachmentStatus: updatedBooking.attachmentStatus,
+        paymentProvider: updatedBooking.paymentProvider,
+        paymentMethod: updatedBooking.paymentMethod,
+        attachments: oldBooking.attachments,
+      });
 
       const booking = await bundleCheckoutService.prepareBooking({
         keepExistingId: true,

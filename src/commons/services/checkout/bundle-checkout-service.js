@@ -30,8 +30,9 @@ class BundleCheckoutService {
    * @param {string} comment - The comment of the user.
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
+   * @param {Array} attachments - The attachments.
    */
-  constructor(
+  constructor({
     user,
     tenant,
     timeBegin,
@@ -49,7 +50,8 @@ class BundleCheckoutService {
     comment,
     attachmentStatus,
     paymentProvider,
-  ) {
+    attachments,
+  }) {
     this.user = user;
     this.tenant = tenant;
     this.timeBegin = timeBegin;
@@ -67,6 +69,7 @@ class BundleCheckoutService {
     this.comment = comment;
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
+    this.attachments = attachments || [];
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -134,7 +137,6 @@ class BundleCheckoutService {
   async userPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
-      console.log("bookableItem.ignoreAmount", bookableItem.ignoreAmount);
       const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
       total += bookableItem.userPriceEur * multiplier;
     }
@@ -254,6 +256,11 @@ class BundleCheckoutService {
       delete bookableItem._bookableUsed._id;
     }
 
+    const mergedAttachments = mergeAttachments(
+      this.attachments,
+      this.processAttachments(this.bookableItems, this.attachmentStatus),
+    );
+
     const booking = {
       id:
         keepExistingId && existingId
@@ -274,10 +281,7 @@ class BundleCheckoutService {
       mail: this.email,
       phone: this.phone,
       comment: this.comment,
-      attachments: this.processAttachments(
-        this.bookableItems,
-        this.attachmentStatus,
-      ),
+      attachments: mergedAttachments,
       priceEur: await this.userGrossPriceEur(),
       vatIncludedEur: await this.vatIncludedEur(),
       isCommitted: await this.isAutoCommit(),
@@ -329,8 +333,9 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} paymentProvider - The payment method.
    * @param {string} paymentMethod - The payment method.
    * @param {Array} hooks - The hooks.
+   * @param {Array} attachments - The attachments.
    */
-  constructor(
+  constructor({
     user,
     tenant,
     timeBegin,
@@ -353,8 +358,9 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     paymentProvider,
     paymentMethod,
     hooks,
-  ) {
-    super(
+    attachments,
+  }) {
+    super({
       user,
       tenant,
       timeBegin,
@@ -372,7 +378,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       comment,
       attachmentStatus,
       paymentProvider,
-    );
+      attachments,
+    });
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
     this.isRejected = isRejected;
@@ -426,6 +433,32 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
   setPaymentMethod() {
     return this.paymentMethod;
   }
+}
+
+function mergeAttachments(existingAttachments, newAttachments) {
+  function dedupeKey(att) {
+    return `${att.type}::${att.title}`;
+  }
+
+  const existingMap = existingAttachments.reduce((map, att) => {
+    map[dedupeKey(att)] = att;
+    return map;
+  }, {});
+
+  const newMap = newAttachments.reduce((map, att) => {
+    map[dedupeKey(att)] = att;
+    return map;
+  }, {});
+
+  const merged = [...existingAttachments];
+
+  Object.entries(newMap).forEach(([key, att]) => {
+    if (!existingMap[key]) {
+      merged.push(att);
+    }
+  });
+
+  return merged;
 }
 
 module.exports = {
