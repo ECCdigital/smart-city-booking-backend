@@ -826,6 +826,20 @@ class BookingService {
   static async createReceipt(tenantId, bookingId) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
+    const validator = new BookingConsistencyService([
+      checkPayedStatus,
+    ]);
+    const errors = validator.validate([booking]);
+
+    if (errors.length > 0) {
+      logger.error(
+        `${tenantId} -- booking ${booking.id} cannot be rejected: ${JSON.stringify(
+          errors,
+        )}`,
+      );
+      return { success: false, errors };
+    }
+
     const { name, receiptId, revision, timeCreated } =
       await ReceiptService.createSingleReceipt(tenantId, booking.id);
 
@@ -838,6 +852,8 @@ class BookingService {
     });
 
     await BookingManager.storeBooking(booking);
+
+    return {success: true};
   }
 
   static async createAggregatedReceipt(tenantId, bookingIds) {

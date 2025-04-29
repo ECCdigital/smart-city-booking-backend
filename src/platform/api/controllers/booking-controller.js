@@ -9,8 +9,7 @@ const {
 const { RolePermission } = require("../../../commons/entities/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
-const ReceiptService =
-  require("../../../commons/services/payment/receipt-service");
+const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
@@ -699,7 +698,6 @@ class BookingController {
           booking,
           user.id,
           tenantId,
-          RolePermission.MANAGE_BOOKINGS,
         );
 
       if (!hasPermission) {
@@ -709,9 +707,24 @@ class BookingController {
         return response.sendStatus(403);
       }
 
-      await BookingService.createReceipt(tenantId, booking.id);
+      const result = await BookingService.createReceipt(tenantId, booking.id);
 
-      return response.sendStatus(200);
+      if (!result.success) {
+        return response.status(200).json({
+          success: false,
+          data: null,
+          errors: result.errors,
+        });
+      }
+
+      const updatedBooking = await BookingManager.getBooking(
+        booking.id,
+        tenantId,
+      );
+
+      response
+        .status(200)
+        .json({ success: true, data: updatedBooking, errors: [] });
     } catch (err) {
       logger.error(err);
       return response.status(500).send("Could not create receipt");
