@@ -53,7 +53,6 @@ class GroupBookingManager {
     return rawGroupBooking ? new GroupBooking(rawGroupBooking) : null;
   }
 
-
   /**
    *
    * @param groupBooking

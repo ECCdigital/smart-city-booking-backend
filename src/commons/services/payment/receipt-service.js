@@ -10,11 +10,10 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
-
 class ReceiptService {
   static async createSingleReceipt(tenantId, bookingId) {
     try {
-      const {receiptNumber, receiptId, revision } = await _createReceiptNumber(
+      const { receiptNumber, receiptId, revision } = await _createReceiptNumber(
         tenantId,
         bookingId,
       );
@@ -40,8 +39,6 @@ class ReceiptService {
         revision,
         timeCreated: Date.now(),
       };
-
-
     } catch (err) {
       throw err;
     }
@@ -57,18 +54,20 @@ class ReceiptService {
       }
 
       const allAttachments = bookings.flatMap(
-        (b) => b.attachments?.filter((a) => a.type === "receipt") || []
+        (b) => b.attachments?.filter((a) => a.type === "receipt") || [],
       );
 
-      const existingIds = new Set(allAttachments.map((a) => a.receiptId).filter(Boolean));
+      const existingIds = new Set(
+        allAttachments.map((a) => a.receiptId).filter(Boolean),
+      );
 
       if (existingIds.size > 1) {
         logger.error(
           { tenantId: tenantId, bookingIds: bookingIds },
-          "Cannot create aggregated receipt: bookings have different receipt IDs."
+          "Cannot create aggregated receipt: bookings have different receipt IDs.",
         );
         throw new Error(
-          "Cannot create aggregated receipt: bookings have different receipt IDs."
+          "Cannot create aggregated receipt: bookings have different receipt IDs.",
         );
       }
 
@@ -97,8 +96,7 @@ class ReceiptService {
         receiptId,
         revision,
         timeCreated: Date.now(),
-      }
-
+      };
     } catch (err) {
       throw err;
     }

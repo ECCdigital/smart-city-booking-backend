@@ -4,7 +4,6 @@ const PermissionsService = require("../../../commons/services/permission-service
 const { RolePermission } = require("../../../commons/entities/role");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
-const ReceiptService = require("../../../commons/services/payment/receipt-service");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -134,7 +133,10 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        const result = await BookingService.commitGroupBooking(tenantId, groupBookingId);
+        const result = await BookingService.commitGroupBooking(
+          tenantId,
+          groupBookingId,
+        );
 
         if (!result.success) {
           return res.status(200).json({
@@ -144,7 +146,11 @@ class GroupBookingController {
           });
         }
 
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true);
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+          tenantId,
+          groupBookingId,
+          true,
+        );
 
         return res.status(200).json({
           success: true,
@@ -190,7 +196,11 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        const result = await BookingService.rejectGroupBooking(tenantId, groupBookingId, reason);
+        const result = await BookingService.rejectGroupBooking(
+          tenantId,
+          groupBookingId,
+          reason,
+        );
 
         if (!result.success) {
           return res.status(200).json({
@@ -200,7 +210,11 @@ class GroupBookingController {
           });
         }
 
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true);
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+          tenantId,
+          groupBookingId,
+          true,
+        );
 
         return res.status(200).json({
           success: true,
@@ -254,7 +268,11 @@ class GroupBookingController {
           });
         }
 
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true);
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+          tenantId,
+          groupBookingId,
+          true,
+        );
 
         return res.status(200).json({
           success: true,
@@ -299,10 +317,7 @@ class GroupBookingController {
           await BookingService.cancelBooking(tenantId, bookingId);
           await WorkflowService.removeTask(tenantId, bookingId);
         }
-        await GroupBookingManager.deleteGroupBooking(
-          tenantId,
-          groupBookingId,
-        );
+        await GroupBookingManager.deleteGroupBooking(tenantId, groupBookingId);
         res.status(200).send(groupBooking);
       } else {
         logger.error(

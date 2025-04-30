@@ -117,7 +117,7 @@ class MailController {
     });
   }
 
-  static async _sendGroupBookingMail({
+  static async _sendAggregatedBookingMail({
     address,
     bookingIds,
     tenantId,
@@ -129,11 +129,10 @@ class MailController {
     addRejectionLink = false,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
-    let bookingDetails = "";
+    let bookingDetails;
 
-    bookingDetails = await this.generateGroupBookingDetails(
+    bookingDetails = await this.generateAggregatedBookingDetails(
       tenantId,
       bookingIds,
       addRejectionLink,
@@ -347,7 +346,7 @@ class MailController {
     return renderSnippet(snippetTemplateString, snippetData);
   }
 
-  static async generateGroupBookingDetails(
+  static async generateAggregatedBookingDetails(
     tenantId,
     bookingIds,
     addRejectionLink,
@@ -466,7 +465,7 @@ class MailController {
     });
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -517,7 +516,7 @@ class MailController {
     });
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -571,7 +570,7 @@ class MailController {
     });
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -678,7 +677,7 @@ class MailController {
     });
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -738,7 +737,7 @@ class MailController {
     });
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -794,7 +793,7 @@ class MailController {
     });
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -868,7 +867,7 @@ class MailController {
         paymentUrl: paymentLink,
         supportEmail: tenant.mail,
       });
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -932,7 +931,7 @@ class MailController {
     });
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,
@@ -975,7 +974,7 @@ class MailController {
     const snippetHtml = renderSnippet(snippetTemplateString);
 
     if (aggregated) {
-      await this._sendGroupBookingMail({
+      await this._sendAggregatedBookingMail({
         address,
         bookingIds,
         tenantId,

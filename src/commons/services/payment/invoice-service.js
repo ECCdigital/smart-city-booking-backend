@@ -48,13 +48,15 @@ class InvoiceService {
       }
 
       const allAttachments = bookings.flatMap(
-        (b) => b.attachments?.filter((a) => a.type === "invoice") || []
+        (b) => b.attachments?.filter((a) => a.type === "invoice") || [],
       );
-      const existingIds = new Set(allAttachments.map((a) => a.invoiceId).filter(Boolean));
+      const existingIds = new Set(
+        allAttachments.map((a) => a.invoiceId).filter(Boolean),
+      );
 
       if (existingIds.size > 1) {
         throw new Error(
-          "Cannot create aggregated invoice: bookings have different invoice IDs."
+          "Cannot create aggregated invoice: bookings have different invoice IDs.",
         );
       }
 
@@ -122,8 +124,9 @@ async function _createInvoiceNumber(tenantId, bookingId) {
     const sorted = existingInvoices.sort((a, b) => b.revision - a.revision);
     const highestRevisionInvoice = sorted[0];
 
-    invoiceId = highestRevisionInvoice.invoiceId
-      || (await IdGenerator.next(tenantId, 4, "invoice"));
+    invoiceId =
+      highestRevisionInvoice.invoiceId ||
+      (await IdGenerator.next(tenantId, 4, "invoice"));
     revision = highestRevisionInvoice.revision + 1;
   } else {
     invoiceId = await IdGenerator.next(tenantId, 4, "invoice");

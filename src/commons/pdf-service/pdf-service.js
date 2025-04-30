@@ -1,5 +1,4 @@
 const puppeteer = require("puppeteer");
-const Mustache = require("mustache");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const TenantManager = require("../data-managers/tenant-manager");
@@ -82,32 +81,34 @@ class PdfService {
   static async generateSingleReceipt(tenantId, bookingId, receiptNumber) {
     const tenant = await TenantManager.getTenant(tenantId);
     const booking = await BookingManager.getBooking(bookingId, tenantId);
-    const bookables = (await BookableManager.getBookables(tenantId))
-      .filter(b => booking.bookableItems.some(bi => bi.bookableId === b.id));
+    const bookables = (await BookableManager.getBookables(tenantId)).filter(
+      (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
+    );
 
-    const totalAmount   = PdfService.formatCurrency(booking.priceEur);
-    const bookingPeriod = booking.timeBegin && booking.timeEnd
-      ? `${PdfService.formatDateTime(booking.timeBegin)} – ${PdfService.formatDateTime(booking.timeEnd)}`
-      : '-';
-    const payDate       = PdfService.formatDateTime(booking.timeCreated);
-    const bookingDate   = PdfService.formatDate(new Date());
+    const totalAmount = PdfService.formatCurrency(booking.priceEur);
+    const bookingPeriod =
+      booking.timeBegin && booking.timeEnd
+        ? `${PdfService.formatDateTime(booking.timeBegin)} – ${PdfService.formatDateTime(booking.timeEnd)}`
+        : "-";
+    const payDate = PdfService.formatDateTime(booking.timeCreated);
+    const bookingDate = PdfService.formatDate(new Date());
     const paymentMethod = PdfService.translatePayMethod(booking.paymentMethod);
     const receiptAddress = `
-    ${booking.company || ''}${booking.company?'<br/>':''}
+    ${booking.company || ""}${booking.company ? "<br/>" : ""}
     ${booking.name}<br/>
     ${booking.street}<br/>
     ${booking.zipCode} ${booking.location}
   `;
 
-    let bookedItemsHtml = '';
+    let bookedItemsHtml = "";
     for (const bi of booking.bookableItems) {
-      const b = bookables.find(x => x.id === bi.bookableId);
+      const b = bookables.find((x) => x.id === bi.bookableId);
       bookedItemsHtml += `<div>${b.title}, Menge: ${bi.amount}</div>`;
       if (b.bookingNotes) bookedItemsHtml += `<div>${b.bookingNotes}</div>`;
     }
     if (booking._couponUsed && Object.keys(booking._couponUsed).length) {
       const c = booking._couponUsed;
-      bookedItemsHtml += `<div>Gutschein: ${c.description} (–${c.discount}${c.type==='fixed'?'€':'%'})</div>`;
+      bookedItemsHtml += `<div>Gutschein: ${c.description} (–${c.discount}${c.type === "fixed" ? "€" : "%"})</div>`;
     }
 
     const bookingEntries = `
@@ -126,16 +127,19 @@ class PdfService {
       receiptNumber,
       bookingDate,
       receiptAddress,
-      bookingEntries
+      bookingEntries,
     };
 
-    const template     = Handlebars.compile(tenant.receiptTemplate);
+    const template = Handlebars.compile(tenant.receiptTemplate);
     const renderedHtml = template(data);
 
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-    const page    = await browser.newPage();
-    await page.setContent(renderedHtml, { waitUntil: 'domcontentloaded' });
-    const buffer  = await page.pdf({ format: 'A4' });
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox"],
+    });
+    const page = await browser.newPage();
+    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
+    const buffer = await page.pdf({ format: "A4" });
     await browser.close();
 
     return { buffer, name: `Zahlungsbeleg-${receiptNumber}.pdf` };
@@ -167,14 +171,17 @@ class PdfService {
         totalBrutto += bk.priceEur;
         totalNetto += bk.priceEur - bk.vatIncludedEur;
         totalVat += bk.vatIncludedEur;
-        const period = bk.timeBegin && bk.timeEnd
-          ? `${PdfService.formatDateTime(bk.timeBegin)} – ${PdfService.formatDateTime(bk.timeEnd)}`
-          : "-";
+        const period =
+          bk.timeBegin && bk.timeEnd
+            ? `${PdfService.formatDateTime(bk.timeBegin)} – ${PdfService.formatDateTime(bk.timeEnd)}`
+            : "-";
 
         let bookablesHtml = `<ul style="margin: 0; padding-left: 20px;">`;
         if (bk.bookableItems && bk.bookableItems.length) {
           for (const item of bk.bookableItems) {
-            const used = item._bookableUsed || allBookables.find(b => b.id === item.bookableId);
+            const used =
+              item._bookableUsed ||
+              allBookables.find((b) => b.id === item.bookableId);
             const lineTotal = PdfService.formatCurrency(item.userPriceEur);
             bookablesHtml += `
             <li>
@@ -186,7 +193,8 @@ class PdfService {
         }
         bookablesHtml += `</ul>`;
 
-        const paymentMethod = PdfService.translatePayMethod(bk.paymentMethod) || "Unbekannt";
+        const paymentMethod =
+          PdfService.translatePayMethod(bk.paymentMethod) || "Unbekannt";
 
         const netto = bk.priceEur - bk.vatIncludedEur;
 
@@ -232,13 +240,16 @@ class PdfService {
         ${bookings[0].street}<br/>
         ${bookings[0].zipCode} ${bookings[0].location}
       `,
-        bookingEntries: entriesHtml
+        bookingEntries: entriesHtml,
       };
 
       const template = Handlebars.compile(tenant.receiptTemplate);
       const renderedHtml = template(data);
 
-      const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox"],
+      });
       const page = await browser.newPage();
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
       const buffer = await page.pdf({ format: "A4" });

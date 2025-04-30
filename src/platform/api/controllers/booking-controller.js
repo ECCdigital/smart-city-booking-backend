@@ -468,8 +468,21 @@ class BookingController {
         logger.info(
           `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
         );
-        await BookingService.commitBooking(tenant, booking);
-        return response.sendStatus(200);
+        const result = await BookingService.commitBooking(tenant, booking);
+
+        if (!result.success) {
+          return response.status(200).json({
+            success: false,
+            data: null,
+            errors: result.errors,
+          });
+        }
+
+        return response.status(200).json({
+          success: true,
+          data: null,
+          errors: [],
+        });
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
@@ -693,12 +706,7 @@ class BookingController {
           tenantId,
           RolePermission.MANAGE_BOOKINGS,
           "updateAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenantId,
-        );
+        )) || PermissionsService._isOwner(booking, user.id, tenantId);
 
       if (!hasPermission) {
         logger.warn(

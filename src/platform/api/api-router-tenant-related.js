@@ -211,10 +211,7 @@ router.post(
 // CHECKOUT
 // ========
 router.post("/checkout", CheckoutController.checkout);
-router.post(
-  "/checkout/group",
-  CheckoutController.groupCheckout,
-);
+router.post("/checkout/group", CheckoutController.groupCheckout);
 router.post("/checkout/validateItem", CheckoutController.validateItem);
 router.get("/checkout/permissions/:id", CheckoutController.checkoutPermissions);
 

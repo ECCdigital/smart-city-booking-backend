@@ -21,10 +21,11 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const PaymentUtils = require("../../utilities/payment-utils");
 const {
   BookingConsistencyService,
-  checkSameOwner,
+  checkSameContactDetails,
   checkSameStatus,
   checkSamePaymentProvider,
   checkPayedStatus,
+  validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
 
 const logger = bunyan.createLogger({
@@ -510,6 +511,20 @@ class BookingService {
         booking.id,
         tenantId,
       );
+
+      const validator = new BookingConsistencyService([
+        validatePaymentProviderRequirement,
+      ]);
+      const errors = validator.validate([booking]);
+      if (errors.length > 0) {
+        logger.error(
+          `${tenantId} -- booking ${booking.id} cannot be committed: ${JSON.stringify(
+            errors,
+          )}`,
+        );
+        return { success: false, errors };
+      }
+
       originBooking.isCommitted = true;
       originBooking.isRejected = false;
       await BookingManager.storeBooking(originBooking);
@@ -545,6 +560,8 @@ class BookingService {
         const eventIds = bookableItems.map(getEventForTicket);
         await sendEmailToOrganizer(eventIds, tenantId, originBooking);
       }
+
+      return { success: true };
     } catch (error) {
       throw new Error(`Error committing booking: ${error.message}`);
     }
@@ -560,9 +577,10 @@ class BookingService {
     const bookings = groupBooking.bookings;
 
     const validator = new BookingConsistencyService([
-      checkSameOwner,
+      checkSameContactDetails,
       checkSameStatus,
       checkSamePaymentProvider,
+      validatePaymentProviderRequirement,
     ]);
     const errors = validator.validate(bookings);
     if (errors.length > 0) {
@@ -598,9 +616,11 @@ class BookingService {
         { aggregated: true },
       );
 
-      if (!paymentService) return;
+      if (!paymentService) return { success: true };
 
       await paymentService.paymentRequest();
+
+      return { success: true };
     }
 
     const hasTicketBooking = groupBooking.bookings.some((booking) =>
@@ -694,7 +714,7 @@ class BookingService {
     const bookings = groupBooking.bookings;
 
     const validator = new BookingConsistencyService([
-      checkSameOwner,
+      checkSameContactDetails,
       checkSameStatus,
     ]);
     const errors = validator.validate(bookings);
@@ -826,9 +846,7 @@ class BookingService {
   static async createReceipt(tenantId, bookingId) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
-    const validator = new BookingConsistencyService([
-      checkPayedStatus,
-    ]);
+    const validator = new BookingConsistencyService([checkPayedStatus]);
     const errors = validator.validate([booking]);
 
     if (errors.length > 0) {
@@ -853,14 +871,14 @@ class BookingService {
 
     await BookingManager.storeBooking(booking);
 
-    return {success: true};
+    return { success: true };
   }
 
   static async createAggregatedReceipt(tenantId, bookingIds) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
     const validator = new BookingConsistencyService([
-      checkSameOwner,
+      checkSameContactDetails,
       checkSameStatus,
       checkPayedStatus,
     ]);

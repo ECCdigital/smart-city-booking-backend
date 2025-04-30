@@ -6,7 +6,12 @@ const {
 const TenantManager = require("../data-managers/tenant-manager");
 
 class PaymentUtils {
-  static async getPaymentService(tenantId, bookingId, paymentProvider, options) {
+  static async getPaymentService(
+    tenantId,
+    bookingId,
+    paymentProvider,
+    options,
+  ) {
     const paymentProviders = {
       giroCockpit: GiroCockpitPaymentService,
       pmPayment: PmPaymentService,

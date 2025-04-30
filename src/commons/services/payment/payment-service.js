@@ -173,9 +173,7 @@ class GiroCockpitPaymentService extends PaymentService {
 
       const merchantTxId = booking.id;
       const amount = (booking.priceEur * 100 || 0).toString();
-      const purpose = `${booking.id} ${
-        paymentApp.paymentPurposeSuffix || ""
-      }`;
+      const purpose = `${booking.id} ${paymentApp.paymentPurposeSuffix || ""}`;
 
       const MERCHANT_ID = paymentApp.paymentMerchantId;
       const PROJECT_ID = paymentApp.paymentProjectId;
@@ -298,7 +296,7 @@ class GiroCockpitPaymentService extends PaymentService {
       logger.info(
         `Payment URL requested for booking ${merchantTxId}: ${response.data?.url}`,
       );
-      return  [{ bookingIds: this.bookingIds, url: response.data?.url }];
+      return [{ bookingIds: this.bookingIds, url: response.data?.url }];
     } else {
       logger.warn("could not get payment url.", response.data);
       throw new Error("could not get payment url.");
@@ -320,7 +318,7 @@ class GiroCockpitPaymentService extends PaymentService {
     } = query;
 
     try {
-      if (!this.bookingIds  || !this.tenantId) {
+      if (!this.bookingIds || !this.tenantId) {
         logger.warn(
           `${this.tenantId} -- could not validate payment notification. Missing parameters. For Booking ${this.bookingId}`,
         );
@@ -438,7 +436,11 @@ class GiroCockpitPaymentService extends PaymentService {
   }
 
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
-    await super.handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod });
+    await super.handleSuccessfulPayment({
+      bookingIds,
+      tenantId,
+      paymentMethod,
+    });
   }
 }
 

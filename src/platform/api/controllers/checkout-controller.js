@@ -92,15 +92,15 @@ class CheckoutController {
     const user = request.user;
     const simulate = request.query.simulate === "true";
     try {
-      return response
-        .status(200)
-        .send(await BookingService.createGroupBooking({
+      return response.status(200).send(
+        await BookingService.createGroupBooking({
           tenantId,
           user,
           contactData: request.body.contactData,
           bookingAttempts: request.body.bookingAttempts,
           simulate,
-        }));
+        }),
+      );
     } catch (err) {
       logger.error(err);
       response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);
