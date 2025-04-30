@@ -116,34 +116,21 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-
-      const hasPermission = await UserManager.hasPermission(
-        user.id,
+      
+      const bookings = await BookingManager.getAssignedBookings(
         tenant,
-        RolePermission.MANAGE_BOOKINGS,
-        "readAny",
+        user.id,
       );
 
-      if (hasPermission) {
-        const bookings = await BookingManager.getAssignedBookings(
-          tenant,
-          user.id,
-        );
-
-        if (request.query.populate === "true") {
-          await BookingController._populate(bookings);
-        }
-
-        logger.info(
-          `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
-        );
-        response.status(200).send(bookings);
-      } else {
-        logger.warn(
-          `${tenant} -- could not get assigned bookings. User is not authenticated`,
-        );
-        response.sendStatus(403);
+      if (request.query.populate === "true") {
+        await BookingController._populate(bookings);
       }
+
+      logger.info(
+        `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
+      );
+      response.status(200).send(bookings);
+      
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get assigned bookings");
