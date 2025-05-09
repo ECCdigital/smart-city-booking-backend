@@ -9,7 +9,7 @@ class CouponManager {
   /**
    * Check if a coupon exists in the database.
    *
-   * @param {string} couponId - Inique ID of the coupon.
+   * @param {string} couponId - Unique ID of the coupon.
    * @param {string} tenantId - Tenant ID.
    * @returns {Promise<boolean>} - True if the coupon exists, false otherwise.
    */
