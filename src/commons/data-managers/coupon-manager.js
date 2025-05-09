@@ -5,6 +5,19 @@ const CouponModel = require("./models/couponModel");
  * Data Manager for coupon objects.
  */
 class CouponManager {
+
+  /**
+   * Check if a coupon exists in the database.
+   *
+   * @param {string} couponId - Inique ID of the coupon.
+   * @param {string} tenantId - Tenant ID.
+   * @returns {Promise<boolean>} - True if the coupon exists, false otherwise.
+   */
+  static async exists(couponId, tenantId) {
+    const result = await CouponModel.exists({ id: couponId, tenantId });
+    return Boolean(result);
+  }
+
   /**
    * Get a specific coupon
    *
