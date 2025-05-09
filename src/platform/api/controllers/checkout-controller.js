@@ -98,6 +98,7 @@ class CheckoutController {
           user,
           contactData: request.body.contactData,
           bookingAttempts: request.body.bookingAttempts,
+          paymentProvider: request.body.paymentProvider,
           simulate,
         }),
       );

@@ -330,6 +330,7 @@ class BookingService {
    * @param user
    * @param contactData
    * @param bookingAttempts
+   * @param paymentProvider
    * @param simulate
    * @param manualBooking
    * @returns {Promise<GroupBooking>}
@@ -339,6 +340,7 @@ class BookingService {
     user,
     contactData,
     bookingAttempts,
+    paymentProvider,
     simulate,
     manualBooking = false,
   }) {
@@ -361,6 +363,7 @@ class BookingService {
       bookingAttempt.zipCode = contactData.zipCode;
       bookingAttempt.location = contactData.location;
       bookingAttempt.phone = contactData.phone;
+      bookingAttempt.paymentProvider = paymentProvider;
 
       const booking = await BookingService.createBooking({
         tenantId,
