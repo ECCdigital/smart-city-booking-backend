@@ -140,11 +140,12 @@ class CouponController {
     const tenant = request.params.tenant;
     const { id } = request.params;
 
-    const coupon = await CouponManager.getCoupon(id, tenant);
-    if (!coupon._id) {
+    const doesExist = await CouponManager.exists(id, tenant);
+    if (!doesExist) {
       return response.status(404).send("Coupon not found");
     }
 
+    const coupon = await CouponManager.getCoupon(id, tenant);
     try {
       if (!coupon.isValid()) {
         logger.warn(`${tenant} -- Coupon ${coupon.id} is not valid`);

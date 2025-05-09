@@ -416,8 +416,8 @@ class CalendarController {
       const itemCheckoutService = new ItemCheckoutService(
         user?.id,
         tenant,
-        new Date(p.timeBegin),
-        new Date(p.timeEnd),
+        p.timeBegin,
+        p.timeEnd,
         bookableId,
         Number(amount),
         null,
