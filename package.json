@@ -1,6 +1,6 @@
 {
   "name": "smart-city-booking-backend",
-  "version": "3.2.0-rc.0",
+  "version": "3.2.0-rc.1",
   "description": "An open-source backend system for booking and managing resources in smart cities and regions.",
   "main": "src/server.js",
   "scripts": {
@@ -13,7 +13,7 @@
     "release:premajor": "npm version premajor --preid=rc",
     "release:preminor": "npm version preminor --preid=rc",
     "release:prepatch": "npm version prepatch --preid=rc",
-    "release:rc":       "npm version prerelease --preid=rc",
+    "release:rc": "npm version prerelease --preid=rc",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
     "lint:check": "eslint .",
