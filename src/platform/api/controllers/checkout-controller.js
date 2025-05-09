@@ -69,10 +69,39 @@ class CheckoutController {
   }
 
   static async checkout(request, response) {
+    const tenantId = request.params.tenant;
+    const user = request.user;
+    const simulate = request.query.simulate === "true";
     try {
-      return response
-        .status(200)
-        .send(await BookingService.createBooking(request));
+      return response.status(200).send(
+        await BookingService.createSingleBooking({
+          tenantId,
+          user,
+          bookingAttempt: request.body,
+          simulate,
+        }),
+      );
+    } catch (err) {
+      logger.error(err);
+      response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);
+    }
+  }
+
+  static async groupCheckout(request, response) {
+    const tenantId = request.params.tenant;
+    const user = request.user;
+    const simulate = request.query.simulate === "true";
+    try {
+      return response.status(200).send(
+        await BookingService.createGroupBooking({
+          tenantId,
+          user,
+          contactData: request.body.contactData,
+          bookingAttempts: request.body.bookingAttempts,
+          paymentProvider: request.body.paymentProvider,
+          simulate,
+        }),
+      );
     } catch (err) {
       logger.error(err);
       response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);

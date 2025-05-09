@@ -5,36 +5,14 @@ const PdfService = require("../../pdf-service/pdf-service");
 const TenantManager = require("../../data-managers/tenant-manager");
 
 class InvoiceService {
-  static async createInvoice(tenantId, bookingId) {
+  static async createSingleInvoice(tenantId, bookingId) {
     try {
-      const tenant = await TenantManager.getTenant(tenantId);
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      const { invoiceNumber, invoiceId, revision } = await _createInvoiceNumber(
+        tenantId,
+        bookingId,
+      );
 
-      if (!booking || !tenant) {
-        throw new Error("Booking or tenant not found.");
-      }
-
-      const existingInvoices =
-        booking.attachments?.filter(
-          (attachment) => attachment.type === "invoice",
-        ) || [];
-
-      let revision = 1;
-      let invoiceId;
-
-      if (existingInvoices.length > 0) {
-        revision =
-          Math.max(...existingInvoices.map((invoice) => invoice.revision)) + 1;
-        invoiceId =
-          existingInvoices[0].invoiceId ||
-          (await IdGenerator.next(tenantId, 4, "invoice"));
-      } else {
-        invoiceId = await IdGenerator.next(tenantId, 4, "invoice");
-      }
-
-      const invoiceNumber = `${tenant.receiptNumberPrefix}-${invoiceId}-${revision}`;
-
-      const pdfData = await PdfService.generateInvoice(
+      const pdfData = await PdfService.generateSingleInvoice(
         tenantId,
         bookingId,
         invoiceNumber,
@@ -48,16 +26,66 @@ class InvoiceService {
         "invoices",
       );
 
-      booking.attachments.push({
-        type: "invoice",
+      return {
+        invoice: pdfData,
         name: pdfData.name,
-        invoiceId: invoiceId,
-        revision: revision,
+        invoiceId,
+        revision,
         timeCreated: Date.now(),
-      });
-      await BookingManager.storeBooking(booking);
+      };
+    } catch (error) {
+      throw new Error(error);
+    }
+  }
 
-      return pdfData;
+  static async createAggregatedInvoice(tenantId, bookingIds) {
+    try {
+      const tenant = await TenantManager.getTenant(tenantId);
+      const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+
+      if (!bookings || !tenant) {
+        throw new Error("Booking or tenant not found.");
+      }
+
+      const allAttachments = bookings.flatMap(
+        (b) => b.attachments?.filter((a) => a.type === "invoice") || [],
+      );
+      const existingIds = new Set(
+        allAttachments.map((a) => a.invoiceId).filter(Boolean),
+      );
+
+      if (existingIds.size > 1) {
+        throw new Error(
+          "Cannot create aggregated invoice: bookings have different invoice IDs.",
+        );
+      }
+
+      const { invoiceNumber, invoiceId, revision } = await _createInvoiceNumber(
+        tenantId,
+        bookings[0].id,
+      );
+
+      const pdfData = await PdfService.generateAggregatedInvoice(
+        tenantId,
+        bookings.map((b) => b.id),
+        invoiceNumber,
+      );
+
+      await NextcloudManager.createFile(
+        tenantId,
+        pdfData.buffer,
+        pdfData.name,
+        "public",
+        "invoices",
+      );
+
+      return {
+        invoice: pdfData,
+        name: pdfData.name,
+        invoiceId,
+        revision,
+        timeCreated: Date.now(),
+      };
     } catch (error) {
       throw new Error(error);
     }
@@ -76,3 +104,39 @@ class InvoiceService {
 }
 
 module.exports = InvoiceService;
+
+async function _createInvoiceNumber(tenantId, bookingId) {
+  const tenant = await TenantManager.getTenant(tenantId);
+  const booking = await BookingManager.getBooking(bookingId, tenantId);
+  if (!booking || !tenant) {
+    throw new Error("Booking or tenant not found.");
+  }
+
+  const existingInvoices =
+    booking.attachments?.filter(
+      (attachment) => attachment.type === "invoice",
+    ) || [];
+
+  let revision = 1;
+  let invoiceId;
+
+  if (existingInvoices.length > 0) {
+    const sorted = existingInvoices.sort((a, b) => b.revision - a.revision);
+    const highestRevisionInvoice = sorted[0];
+
+    invoiceId =
+      highestRevisionInvoice.invoiceId ||
+      (await IdGenerator.next(tenantId, 4, "invoice"));
+    revision = highestRevisionInvoice.revision + 1;
+  } else {
+    invoiceId = await IdGenerator.next(tenantId, 4, "invoice");
+  }
+
+  const invoiceNumber = `${tenant.receiptNumberPrefix}-${invoiceId}-${revision}`;
+
+  return {
+    invoiceNumber,
+    invoiceId,
+    revision,
+  };
+}

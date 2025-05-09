@@ -1,6 +1,6 @@
 {
   "name": "smart-city-booking-backend",
-  "version": "3.1.6",
+  "version": "3.2.0-rc.0",
   "description": "An open-source backend system for booking and managing resources in smart cities and regions.",
   "main": "src/server.js",
   "scripts": {
@@ -10,6 +10,9 @@
     "release:major": "npm version $(semver $npm_package_version -i major)",
     "release:minor": "npm version $(semver $npm_package_version -i minor)",
     "release:patch": "npm version $(semver $npm_package_version -i patch)",
+    "release:premajor": "npm version premajor --preid=rc",
+    "release:preminor": "npm version preminor --preid=rc",
+    "release:prepatch": "npm version prepatch --preid=rc",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
     "lint:check": "eslint .",
@@ -24,8 +27,8 @@
   "author": "Eisenschmidt Consulting Crew GmbH",
   "license": "GPL-3.0",
   "dependencies": {
-    "@exlinc/keycloak-passport": "^1.0.2",
     "@azure/msal-node": "^3.1.0",
+    "@exlinc/keycloak-passport": "^1.0.2",
     "axios": "^1.6.2",
     "bunyan": "^1.8.15",
     "cheerio": "^1.0.0-rc.12",
@@ -36,6 +39,7 @@
     "express": "^4.18.1",
     "express-fileupload": "^1.4.0",
     "express-session": "^1.17.3",
+    "handlebars": "^4.7.8",
     "helmet": "^7.1.0",
     "jsonschema": "^1.4.1",
     "microinvoice": "^1.0.6",
