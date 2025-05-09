@@ -13,6 +13,7 @@
     "release:premajor": "npm version premajor --preid=rc",
     "release:preminor": "npm version preminor --preid=rc",
     "release:prepatch": "npm version prepatch --preid=rc",
+    "release:rc":       "npm version prerelease --preid=rc",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
     "lint:check": "eslint .",
