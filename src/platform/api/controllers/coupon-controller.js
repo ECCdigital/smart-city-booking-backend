@@ -141,7 +141,7 @@ class CouponController {
     const { id } = request.params;
 
     const coupon = await CouponManager.getCoupon(id, tenant);
-    if (!coupon._id) {
+    if (!coupon) {
       return response.status(404).send("Coupon not found");
     }
 
