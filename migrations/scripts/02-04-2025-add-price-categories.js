@@ -15,7 +15,9 @@ module.exports = {
           continue;
         }
         if (bu.priceEur == null) {
-          console.warn(`Skipping Booking ${booking._id}: priceEur fehlt in _bookableUsed`);
+          console.warn(
+            `Skipping Booking ${booking._id}: priceEur fehlt in _bookableUsed`,
+          );
           continue;
         }
 
@@ -33,7 +35,7 @@ module.exports = {
       if (hasChanges) {
         await Booking.updateOne(
           { _id: booking._id },
-          { $set: { bookableItems: booking.bookableItems } }
+          { $set: { bookableItems: booking.bookableItems } },
         );
       }
     }
@@ -48,7 +50,11 @@ module.exports = {
 
       for (const item of booking.bookableItems) {
         const bu = item._bookableUsed;
-        if (!bu || !Array.isArray(bu.priceCategories) || bu.priceCategories.length === 0) {
+        if (
+          !bu ||
+          !Array.isArray(bu.priceCategories) ||
+          bu.priceCategories.length === 0
+        ) {
           continue;
         }
 
@@ -60,7 +66,7 @@ module.exports = {
       if (hasChanges) {
         await Booking.updateOne(
           { _id: booking._id },
-          { $set: { bookableItems: booking.bookableItems } }
+          { $set: { bookableItems: booking.bookableItems } },
         );
       }
     }
@@ -72,7 +78,7 @@ module.exports = {
           "bookableItems.$[].priceCategories": 1,
           "bookableItems.$[].priceType": 1,
         },
-      }
+      },
     );
   },
 };

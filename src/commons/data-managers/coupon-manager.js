@@ -5,7 +5,6 @@ const CouponModel = require("./models/couponModel");
  * Data Manager for coupon objects.
  */
 class CouponManager {
-
   /**
    * Check if a coupon exists in the database.
    *

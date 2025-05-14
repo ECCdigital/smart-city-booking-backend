@@ -19,7 +19,6 @@ passport.use(
       passReqToCallback: true,
     },
     async (request, id, password, done) => {
-
       if (typeof id !== "string") {
         return done(null, false);
       }
