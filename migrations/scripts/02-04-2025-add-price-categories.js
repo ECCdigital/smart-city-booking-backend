@@ -4,54 +4,75 @@ module.exports = {
   up: async function (mongoose) {
     const Booking = mongoose.model("Booking");
     const bookings = await Booking.find().lean();
+
     for (const booking of bookings) {
-      for (const bookableItem of booking.bookableItems) {
-        bookableItem._bookableUsed.priceCategories = [
+      let hasChanges = false;
+
+      for (const item of booking.bookableItems) {
+        const bu = item._bookableUsed;
+        if (!bu) {
+          console.warn(`Skipping Booking ${booking._id}: _bookableUsed fehlt`);
+          continue;
+        }
+        if (bu.priceEur == null) {
+          console.warn(`Skipping Booking ${booking._id}: priceEur fehlt in _bookableUsed`);
+          continue;
+        }
+
+        bu.priceCategories = [
           {
-            priceEur: bookableItem._bookableUsed.priceEur,
+            priceEur: bu.priceEur,
             fixedPrice: false,
-            interval: {
-              start: null,
-              end: null,
-            },
+            interval: { start: null, end: null },
           },
         ];
-        bookableItem._bookableUsed.priceType =
-          bookableItem._bookableUsed.priceCategory;
+        bu.priceType = bu.priceCategory;
+        hasChanges = true;
       }
-      await Booking.updateOne(
-        { _id: booking._id },
-        {
-          $set: {
-            bookableItems: booking.bookableItems,
-          },
-        },
-      );
+
+      if (hasChanges) {
+        await Booking.updateOne(
+          { _id: booking._id },
+          { $set: { bookableItems: booking.bookableItems } }
+        );
+      }
     }
   },
 
   down: async function (mongoose) {
     const Booking = mongoose.model("Booking");
     const bookings = await Booking.find().lean();
+
     for (const booking of bookings) {
-      for (const bookableItem of booking.bookableItems) {
-        bookableItem._bookableUsed.priceEur =
-          bookableItem._bookableUsed.priceCategories[0].priceEur;
-        bookableItem._bookableUsed.priceCategory =
-          bookableItem._bookableUsed.priceType;
+      let hasChanges = false;
+
+      for (const item of booking.bookableItems) {
+        const bu = item._bookableUsed;
+        if (!bu || !Array.isArray(bu.priceCategories) || bu.priceCategories.length === 0) {
+          continue;
+        }
+
+        bu.priceEur = bu.priceCategories[0].priceEur;
+        bu.priceCategory = bu.priceType;
+        hasChanges = true;
       }
-      await Booking.updateOne(
-        { _id: booking._id },
-        {
-          $set: {
-            bookableItems: booking.bookableItems,
-          },
-        },
-      );
+
+      if (hasChanges) {
+        await Booking.updateOne(
+          { _id: booking._id },
+          { $set: { bookableItems: booking.bookableItems } }
+        );
+      }
     }
-    Booking.collection.updateMany(
+
+    await Booking.collection.updateMany(
       {},
-      { $unset: { priceCategories: 1, priceType: 1 } },
+      {
+        $unset: {
+          "bookableItems.$[].priceCategories": 1,
+          "bookableItems.$[].priceType": 1,
+        },
+      }
     );
   },
 };
