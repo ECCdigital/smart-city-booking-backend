@@ -101,7 +101,7 @@ class BookableManager {
 
     const doc = results[0];
 
-    let combined = [doc.rootBookable, ...doc.allRelatedBookables];
+    let combined = [...doc.allRelatedBookables];
 
     const uniqueMap = new Map();
     for (const b of combined) {
