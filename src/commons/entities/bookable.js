@@ -246,6 +246,28 @@ class Bookable {
             start: Number || null,
             end: Number || null,
           },
+          weekdays: {
+            type: [
+              {
+                type: Number,
+                enum: [0, 1, 2, 3, 4, 5, 6],
+              },
+            ],
+            default: [],
+          },
+          holidays: {
+            type: [
+              {
+                type: Object,
+                default: {
+                  countryCode: String,
+                  stateCode: String,
+                  title: String,
+                }
+              },
+            ],
+            default: [],
+          }
         },
       ],
       priceType: {
