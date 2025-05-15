@@ -35,7 +35,7 @@ class RuleEngine {
       if (!existing || existing.ruleHash !== ruleHash) {
         if (existing) {
           existing.job.cancel();
-        } else {}
+        }
 
         const job = schedule.scheduleJob(rule.schedule, createHandler(rule));
         RuleEngine.jobs.set(id, {
@@ -43,7 +43,7 @@ class RuleEngine {
           schedule: rule.schedule,
           ruleHash,
         });
-      } else {}
+      }
     }
   }
 
@@ -79,7 +79,10 @@ function createHandler(rule) {
           try {
             await handler(doc, act.params);
           } catch (err) {
-            logger.error(`Error executing action "${act.type}" for rule "${rule.name}":`, err);
+            logger.error(
+              `Error executing action "${act.type}" for rule "${rule.name}":`,
+              err,
+            );
           }
         }
       }

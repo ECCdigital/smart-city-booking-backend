@@ -1,6 +1,6 @@
 function transformPlaceholders(obj, now) {
   if (Array.isArray(obj)) {
-    return obj.map(o => transformPlaceholders(o, now));
+    return obj.map((o) => transformPlaceholders(o, now));
   }
   if (obj && typeof obj === "object") {
     if (obj === "$$NOW") return now;
@@ -12,7 +12,6 @@ function transformPlaceholders(obj, now) {
   }
   return obj;
 }
-
 
 function buildFacts(doc, now) {
   const facts = { ...doc, now };

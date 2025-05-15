@@ -10,10 +10,6 @@ module.exports = {
     const tenantId = doc.tenantId;
     const reason = params.reason || "";
 
-    await BookingService.rejectBooking(
-      tenantId,
-      bookingId,
-      reason,
-    );
+    await BookingService.rejectBooking(tenantId, bookingId, reason);
   },
 };
