@@ -8,7 +8,7 @@ const crypto = require("crypto");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
-  name: "server.js",
+  name: "ruleEngine",
   level: process.env.LOG_LEVEL,
 });
 

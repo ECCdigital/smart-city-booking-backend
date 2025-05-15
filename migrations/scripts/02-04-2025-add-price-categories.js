@@ -11,12 +11,12 @@ module.exports = {
       for (const item of booking.bookableItems) {
         const bu = item._bookableUsed;
         if (!bu) {
-          console.warn(`Skipping Booking ${booking._id}: _bookableUsed fehlt`);
+          console.warn(`Skipping Booking ${booking._id}: _bookableUsed missing`);
           continue;
         }
         if (bu.priceEur == null) {
           console.warn(
-            `Skipping Booking ${booking._id}: priceEur fehlt in _bookableUsed`,
+            `Skipping Booking ${booking._id}: priceEur missed in _bookableUsed`,
           );
           continue;
         }
