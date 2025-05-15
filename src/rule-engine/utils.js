@@ -2,8 +2,8 @@ function transformPlaceholders(obj, now) {
   if (Array.isArray(obj)) {
     return obj.map((o) => transformPlaceholders(o, now));
   }
+  if (obj === "$$NOW") return now;
   if (obj && typeof obj === "object") {
-    if (obj === "$$NOW") return now;
     const res = {};
     for (const [key, val] of Object.entries(obj)) {
       res[key] = transformPlaceholders(val, now);

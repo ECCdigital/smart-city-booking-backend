@@ -105,7 +105,7 @@ dbm.connect().then(() => {
       await runMigrations(dbm.dbClient.connection);
       await RuleEngine.initEngine();
     } catch (err) {
-      logger.error(err);
+      logger.error("Error during application initialization steps", err);
     }
   });
 });
