@@ -30,7 +30,7 @@ class Bookable {
    * @param {number} [params.maxBookingDuration] - The maximum booking duration.
    * @param {boolean} [params.autoCommitBooking] - Whether the booking is auto-committed.
    * @param {string} [params.bookingNotes] - Notes related to the booking.
-   * @param {boolean} [params.allowGroupBooking] - Whether recurring bookings are allowed.
+   * @param {Object} [params.groupBooking] - Whether recurring bookings are allowed.
    * @param {boolean} [params.isScheduleRelated] - Whether the bookable is schedule-related.
    * @param {boolean} [params.isTimePeriodRelated] - Whether the bookable is time-period related.
    * @param {Array<Object>} [params.timePeriods] - The time periods for the bookable.
@@ -75,7 +75,7 @@ class Bookable {
     maxBookingDuration,
     autoCommitBooking,
     bookingNotes,
-    allowGroupBooking,
+    groupBooking = { enabled: false, permittedRoles: [] },
 
     isScheduleRelated,
     isTimePeriodRelated,
@@ -123,7 +123,10 @@ class Bookable {
     this.maxBookingDuration = maxBookingDuration;
     this.autoCommitBooking = autoCommitBooking;
     this.bookingNotes = bookingNotes || "";
-    this.allowGroupBooking = allowGroupBooking || false;
+    this.groupBooking = {
+      enabled: groupBooking.enabled,
+      permittedRoles: groupBooking.permittedRoles,
+    };
 
     this.isScheduleRelated = isScheduleRelated;
     this.isTimePeriodRelated = isTimePeriodRelated || false;
@@ -280,7 +283,13 @@ class Bookable {
       isPublic: Boolean,
       lockerDetails: [Object],
       requiredFields: [String],
-      allowGroupBooking: Boolean,
+      groupBooking: {
+        type: Object,
+        default: {
+          enabled: false,
+          permittedRoles: [],
+        },
+      },
       bookingNotes: String,
       checkoutBookableIds: [Object],
       ownerUserId: String,

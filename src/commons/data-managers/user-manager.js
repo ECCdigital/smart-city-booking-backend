@@ -134,7 +134,10 @@ class UserManager {
       if (!userTenantPermissions || !userTenantPermissions[permissionName]) {
         return false;
       }
-      return userTenantPermissions.isOwner || userTenantPermissions[permissionName][accessLevel] === true;
+      return (
+        userTenantPermissions.isOwner ||
+        userTenantPermissions[permissionName][accessLevel] === true
+      );
     } catch (err) {
       return false;
     }

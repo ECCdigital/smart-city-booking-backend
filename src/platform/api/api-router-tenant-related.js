@@ -293,6 +293,11 @@ router.get(
   AuthenticationController.isSignedIn,
   RoleController.getRoles,
 );
+router.get(
+  "/roles/tenant",
+  AuthenticationController.isSignedIn,
+  RoleController.getUserRolesByTenant,
+);
 router.put(
   "/roles",
   AuthenticationController.isSignedIn,
