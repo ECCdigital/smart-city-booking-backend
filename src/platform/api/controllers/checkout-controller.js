@@ -147,7 +147,7 @@ class CheckoutController {
     }
 
     if (!allowed) {
-      console.warn(
+      logger.error(
         `User ${user?.id} not allowed to create group booking for bookable ${bookableItem.id}`,
       );
       return res.status(403).send("User not allowed to create group booking");
