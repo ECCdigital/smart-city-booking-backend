@@ -1,15 +1,22 @@
-const BookableManager = require("../../commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../../commons/data-managers/bookable-manager");
 const TenantManager = require("../../commons/data-managers/tenant-manager");
 
 class HtmlEngine {
-  static translatePriceCategory(priceCategory) {
+  static translatePriceCategory(priceCategory, short = false) {
+    let translation = "";
     if (priceCategory === "per-hour") {
-      return "pro Stunde";
+      translation = "Stunde";
     } else if (priceCategory === "per-day") {
-      return "pro Tag";
+      translation = "Tag";
+    } else if (priceCategory === "per-item") {
+      translation = "Stück";
+    } else if (priceCategory === "per-quare-meter") {
+      translation = "m²";
     }
 
-    return "";
+    return short ? translation : "/" + translation;
   }
 
   static generateImageHtml(imgUrl, className, altText) {
@@ -26,7 +33,7 @@ class HtmlEngine {
     }
 
     for (const bookable of bookables) {
-      const tenantObj = await TenantManager.getTenant(bookable.tenant);
+      const tenantObj = await TenantManager.getTenant(bookable.tenantId);
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
       htmlOutput += this.generateImageHtml(
@@ -61,15 +68,36 @@ class HtmlEngine {
 
         htmlOutput += '<p class="price">';
 
-        if (bookable.priceEur > 0) {
-          htmlOutput += new Intl.NumberFormat("de-DE", {
-            style: "currency",
-            currency: "EUR",
-          }).format(bookable.priceEur);
-          htmlOutput +=
-            ' <span class="prce-category">' +
-            HtmlEngine.translatePriceCategory(bookable.priceCategory) +
-            "</span>";
+        if (bookable.priceCategories.some((pC) => pC.priceEur) > 0) {
+          htmlOutput += '<ul class="price-category-list">';
+          bookable.priceCategories.forEach((priceCategory) => {
+            htmlOutput += '<li class="price-category-item">';
+            htmlOutput +=
+              ' <span class="price-category-item-price">' +
+              new Intl.NumberFormat("de-DE", {
+                style: "currency",
+                currency: "EUR",
+              }).format(priceCategory.priceEur);
+            htmlOutput +=
+              HtmlEngine.translatePriceCategory(bookable.priceType) + "</span>";
+
+            if (priceCategory.interval.start || priceCategory.interval.end) {
+              htmlOutput +=
+                ' <span class="price-category-interval">' +
+                HtmlEngine.getPriceRange(
+                  priceCategory.interval.start,
+                  priceCategory.interval.end,
+                ) +
+                "</span>";
+              htmlOutput +=
+                ' <span class="price-category">' +
+                HtmlEngine.translatePriceCategory(bookable.priceType, true) +
+                "</span>";
+            }
+
+            htmlOutput += "</li>";
+          });
+          htmlOutput += "</ul>";
         } else {
           htmlOutput += "kostenlos";
         }
@@ -85,7 +113,7 @@ class HtmlEngine {
           "/checkout?id=" +
           bookable.id +
           "&tenant=" +
-          bookable.tenant +
+          bookable.tenantId +
           '" class="btn-booking" target="_blank">' +
           buttonText +
           "</a>";
@@ -153,15 +181,36 @@ class HtmlEngine {
 
       htmlOutput += '<p class="price">';
 
-      if (bookable.priceEur > 0) {
-        htmlOutput += new Intl.NumberFormat("de-DE", {
-          style: "currency",
-          currency: "EUR",
-        }).format(bookable.priceEur);
-        htmlOutput +=
-          ' <span class="prce-category">' +
-          HtmlEngine.translatePriceCategory(bookable.priceCategory) +
-          "</span>";
+      if (bookable.priceCategories.some((pC) => pC.priceEur) > 0) {
+        htmlOutput += '<ul class="price-category-list">';
+        bookable.priceCategories.forEach((priceCategory) => {
+          htmlOutput += '<li class="price-category-item">';
+          htmlOutput +=
+            ' <span class="price-category-item-price">' +
+            new Intl.NumberFormat("de-DE", {
+              style: "currency",
+              currency: "EUR",
+            }).format(priceCategory.priceEur);
+          htmlOutput +=
+            HtmlEngine.translatePriceCategory(bookable.priceType) + "</span>";
+
+          if (priceCategory.interval.start || priceCategory.interval.end) {
+            htmlOutput +=
+              ' <span class="price-category-interval">' +
+              HtmlEngine.getPriceRange(
+                priceCategory.interval.start,
+                priceCategory.interval.end,
+              ) +
+              "</span>";
+            htmlOutput +=
+              ' <span class="price-category">' +
+              HtmlEngine.translatePriceCategory(bookable.priceType, true) +
+              "</span>";
+          }
+
+          htmlOutput += "</li>";
+        });
+        htmlOutput += "</ul>";
       } else {
         htmlOutput += "kostenlos";
       }
@@ -177,14 +226,14 @@ class HtmlEngine {
         "/checkout?id=" +
         bookable.id +
         "&tenant=" +
-        bookable.tenant +
+        bookable.tenantId +
         '" class="btn-booking" target="_blank">' +
         buttonText +
         "</a>";
     }
 
     let relatedBookables = (
-      await BookableManager.getRelatedBookables(bookable.id, bookable.tenant)
+      await BookableManager.getRelatedBookables(bookable.id, bookable.tenantId)
     ).filter((bookable) => bookable.isPublic === true);
 
     if (relatedBookables.length > 0) {
@@ -205,7 +254,7 @@ class HtmlEngine {
     var htmlOutput = '<ul class="booking-manager-list">';
 
     for (const event of events) {
-      const tenantObj = await TenantManager.getTenant(event.tenant);
+      const tenantObj = await TenantManager.getTenant(event.tenantId);
 
       let tags = "";
       event.information.tags.forEach((tag) => {
@@ -366,7 +415,7 @@ class HtmlEngine {
     if (event.eventLocation.room) {
       var eventLocationBookable = await BookableManager.getBookable(
         event.eventLocation.room,
-        event.tenant,
+        event.tenantId,
       );
       htmlOutput += `<div class="room">${eventLocationBookable.title}</div>`;
     }
@@ -501,7 +550,7 @@ class HtmlEngine {
     }
 
     let relatedTickets = (
-      await BookableManager.getBookables(event.tenant)
+      await BookableManager.getBookables(event.tenantId)
     ).filter(
       (bookable) =>
         bookable.type === "ticket" &&
@@ -521,6 +570,20 @@ class HtmlEngine {
     htmlOutput += `</div>`;
 
     return htmlOutput;
+  }
+
+  static getPriceRange(start, end) {
+    let interval = "";
+    if (!start) {
+      interval = `bis ${end}`;
+    }
+    if (!end) {
+      interval = `ab ${start}`;
+    }
+    if (start && end) {
+      interval = `${start} - ${end}`;
+    }
+    return `${interval}`;
   }
 }
 

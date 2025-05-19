@@ -34,32 +34,36 @@ class Formatters {
 
   static translatePayMethod(value) {
     switch (value) {
-      case "1":
-        return "Giropay";
-      case "17":
-        return "Giropay";
-      case "18":
-        return "Giropay";
-      case "2":
-        return "eps";
-      case "12":
-        return "iDEAL";
-      case "11":
+      case "CASH":
+        return "Bar";
+      case "TRANSFER":
+        return "Überweisung";
+      case "CREDIT_CARD":
         return "Kreditkarte";
-      case "6":
-        return "Lastschrift";
-      case "7":
-        return "Lastschrift";
-      case "26":
-        return "Bluecode";
-      case "33":
-        return "Maestro";
-      case "14":
+      case "DEBIT_CARD":
+        return "EC-Karte";
+      case "PAYPAL":
         return "PayPal";
-      case "23":
+      case "OTHER":
+        return "Sonstiges";
+      case "GIROPAY":
+        return "Giropay";
+      case "APPLE_PAY":
+        return "Apple Pay";
+      case "GOOGLE_PAY":
+        return "Google Pay";
+      case "EPS":
+        return "EPS";
+      case "IDEAL":
+        return "iDEAL";
+      case "MAESTRO":
+        return "Maestro";
+      case "PAYDIRECT":
         return "paydirekt";
-      case "27":
-        return "Sofortüberweisung";
+      case "SOFORT":
+        return "SOFORT-Überweisung";
+      case "BLUECODE":
+        return "Bluecode";
       default:
         return "Unbekannt";
     }

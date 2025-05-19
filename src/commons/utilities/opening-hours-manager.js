@@ -97,7 +97,7 @@ class OpeningHoursManager {
     );
 
     relatedBookables = relatedBookables.map((b) => {
-      return Object.assign(new Bookable(), b);
+      return new Bookable(b);
     });
 
     relatedBookables.push(bookable);

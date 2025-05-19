@@ -10,8 +10,12 @@ const passport = require("passport");
 const LocalStrategy = require("passport-local");
 const bunyan = require("bunyan");
 
-const dbm = require("./commons/utilities/database-manager.js");
+const DatabaseManager = require("./commons/utilities/database-manager.js");
 const UserManager = require("./commons/data-managers/user-manager");
+const { runMigrations } = require("../migrations/migrationsManager");
+const seed = require("../seeder/seeder");
+
+const dbm = DatabaseManager.getInstance();
 
 const logger = bunyan.createLogger({
   name: "server.js",
@@ -51,10 +55,8 @@ app.use((req, res, next) => {
     secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: false,
-    store: MongoStore.create({
-      client: dbm.getClient(),
-      dbName: process.env.DB_NAME,
-    }),
+    rolling: true,
+    store: new MongoStore({ client: dbm.dbClient.connection.getClient() }),
     cookie: {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 48,
@@ -68,31 +70,6 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));
 
-passport.use(
-  new LocalStrategy(
-    {
-      usernameField: "id",
-      passwordField: "password",
-      passReqToCallback: true,
-    },
-    (request, id, password, done) => {
-      var tenant = request.params.tenant;
-
-      UserManager.getUser(id, tenant).then((user) => {
-        if (
-          user !== undefined &&
-          user.isVerified &&
-          user.verifyPassword(password)
-        ) {
-          done(null, user);
-        } else {
-          done(null, false);
-        }
-      });
-    },
-  ),
-);
-
 passport.serializeUser(function (user, done) {
   done(null, user);
 });
@@ -105,7 +82,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 const userManagementRouter = require("./platform/authentication/authentication-router");
-app.use("/auth/:tenant", userManagementRouter);
+app.use("/auth", userManagementRouter);
 
 const apiRouter = require("./platform/api/api-router");
 app.use("/api", apiRouter);
@@ -121,9 +98,15 @@ app.use("/csv/:tenant", exportersRouterTenantRelated);
 
 dbm.connect().then(() => {
   const port = process.env.PORT;
-  app.listen(port, () => {
+  app.listen(port, async () => {
     logger.info(`App listening at ${port}`);
     app.emit("app_started");
+    try {
+      await seed(dbm.dbClient.connection);
+      await runMigrations(dbm.dbClient.connection);
+    } catch (err) {
+      logger.error("Error running migrations", err);
+    }
   });
 });
 

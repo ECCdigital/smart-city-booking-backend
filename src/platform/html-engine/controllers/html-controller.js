@@ -1,13 +1,15 @@
-const BookableManager = require("../../../commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../../../commons/data-managers/bookable-manager");
 const HtmlEngine = require("../html-engine");
 const EventManager = require("../../../commons/data-managers/event-manager");
 
 class HtmlController {
   static async getBookables(request, response) {
-    const tenant = request.params.tenant;
+    const tenantId = request.params.tenant;
     const type = request.query.type;
     const ids = request.query.ids;
-    let bookables = await BookableManager.getBookables(tenant);
+    let bookables = await BookableManager.getBookables(tenantId);
     bookables = bookables.filter((bookable) => bookable.isPublic);
 
     if (type) {
@@ -29,9 +31,9 @@ class HtmlController {
   }
 
   static async getBookable(request, response) {
-    const tenant = request.params.tenant;
+    const tenantId = request.params.tenant;
     const id = request.params.id;
-    const bookable = await BookableManager.getBookable(id, tenant);
+    const bookable = await BookableManager.getBookable(id, tenantId);
     const htmlOutput = await HtmlEngine.bookable(bookable);
 
     // if bookable is not bookable, return 404
@@ -44,9 +46,9 @@ class HtmlController {
   }
 
   static async getEvents(request, response) {
-    const tenant = request.params.tenant;
+    const tenantId = request.params.tenant;
     const ids = request.query.ids;
-    let events = await EventManager.getEvents(tenant);
+    let events = await EventManager.getEvents(tenantId);
     events = events.filter((event) => event.isPublic);
 
     if (ids) {
@@ -78,9 +80,9 @@ class HtmlController {
 
   static async getEvent(request, response) {
     const user = request.user;
-    const tenant = request.params.tenant;
+    const tenantId = request.params.tenant;
     const id = request.params.id;
-    const event = await EventManager.getEvent(id, tenant);
+    const event = await EventManager.getEvent(id, tenantId);
 
     if (event.id) {
       const htmlOutput = await HtmlEngine.event(event, !!user);

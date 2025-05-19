@@ -14,9 +14,12 @@ class SecurityUtils {
     return { iv: iv.toString("hex"), data: encrypted.toString("hex") };
   }
 
-  static decrypt(text) {
-    let iv = Buffer.from(text.iv, "hex");
-    let encryptedText = Buffer.from(text.data, "hex");
+  static decrypt(encryptedTextObject) {
+    if (!encryptedTextObject || typeof encryptedTextObject !== "object")
+      return null;
+
+    let iv = Buffer.from(encryptedTextObject.iv, "hex");
+    let encryptedText = Buffer.from(encryptedTextObject.data, "hex");
     let decipher = crypto.createDecipheriv(
       ALGORITHM,
       Buffer.from(process.env.CRYPTO_SECRET),
