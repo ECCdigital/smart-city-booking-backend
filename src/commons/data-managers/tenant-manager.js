@@ -115,20 +115,9 @@ class TenantManager {
   }
 
   static async addUserRole(tenantId, userId, role) {
-    // Add role to user if user exists.
-    await TenantModel.updateOne(
+     await TenantModel.updateOne(
       { id: tenantId, "users.userId": userId },
       { $addToSet: { "users.$.roles": role } },
-    );
-    // Add user to tenant if user does not exist.
-    await TenantModel.updateOne(
-      { id: tenantId, "users.userId": { $ne: userId } },
-      { $addToSet: { users: { userId, roles: [role] } } },
-    );
-    // Add users array to tenant if it does not exist.
-    await TenantModel.updateOne(
-      { id: tenantId, users: { $exists: false } },
-      { $set: { users: [{ userId, roles: [role] }] } },
     );
   }
 
