@@ -103,7 +103,9 @@ dbm.connect().then(() => {
     try {
       await seed(dbm.dbClient.connection);
       await runMigrations(dbm.dbClient.connection);
-      await RuleEngine.initEngine();
+      if (process.env.RULE_ENGINE_ENABLED === "true") {
+        await RuleEngine.initEngine();
+      }
     } catch (err) {
       logger.error("Error during application initialization steps", err);
     }
