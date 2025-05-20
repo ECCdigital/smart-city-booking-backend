@@ -203,6 +203,10 @@ class GiroCockpitPaymentService extends PaymentService {
         throw new Error("Hash mismatch");
       }
 
+      console.log("gcResultPayment", gcResultPayment);
+
+      console.log("gcPaymethod", gcPaymethod);
+
       if (gcResultPayment === GiroCockpitPaymentService.GIRO_SUCCESS_CODE) {
         logger.info(
           `${this.tenantId} -- GiroCockpit responds with status ${GiroCockpitPaymentService.GIRO_SUCCESS_CODE} / successfully payed for booking ${this.bookingId} .`,
