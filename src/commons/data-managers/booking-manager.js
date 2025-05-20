@@ -172,7 +172,7 @@ class BookingManager {
   static async setBookingPayedStatus(booking) {
     await BookingModel.updateOne(
       { id: booking.id, tenantId: booking.tenantId },
-      { isPayed: booking.isPayed },
+      { isPayed: booking.isPayed, paymentMethod: booking.paymentMethod },
     );
   }
 

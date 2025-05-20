@@ -20,7 +20,7 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: read
       packages: write

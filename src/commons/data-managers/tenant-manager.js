@@ -84,6 +84,13 @@ class TenantManager {
     return !(maxTenants && count >= maxTenants);
   }
 
+  static addTenantUser(tenantId, userId) {
+    return TenantModel.updateOne(
+      { id: tenantId },
+      { $addToSet: { users: { userId: userId, roles: [] } } },
+    );
+  }
+
   static async getTenantUsers(tenantId) {
     const rawTenant = await TenantModel.findOne({ id: tenantId });
     if (!rawTenant) {
@@ -111,11 +118,11 @@ class TenantManager {
     }
     const tenant = new Tenant(rawTenant);
     const user = tenant.users.find((user) => user.userId === userId);
-    return user ? user.roles : [];
+    return user ? user.roles : null;
   }
 
   static async addUserRole(tenantId, userId, role) {
-    await TenantModel.updateOne(
+     await TenantModel.updateOne(
       { id: tenantId, "users.userId": userId },
       { $addToSet: { "users.$.roles": role } },
     );

@@ -472,8 +472,11 @@ class BookingService {
       throw { message: "Booking not found", code: 404 };
     }
 
-    if (booking.name.toLowerCase() !== name.toLowerCase()) {
-      throw { message: "Missmatch", code: 401 };
+    const normalizedBookingName = booking.name.trim().toLowerCase();
+    const normalizedInputName   = name.trim().toLowerCase();
+
+    if (normalizedBookingName !== normalizedInputName) {
+      throw { message: "Mismatch", code: 401 };
     }
 
     const leadingBookableItem = booking.bookableItems[0]._bookableUsed;

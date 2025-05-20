@@ -86,9 +86,9 @@ class ItemCheckoutService {
   get ignoreAmount() {
     return (
       (this.originBookable.priceType === "per-item" &&
-        this.getPriceCategory().fixedPrice) ||
+        this.getPriceCategory()?.fixedPrice) ||
       (this.originBookable.priceType === "per-square-meter" &&
-        this.getPriceCategory().fixedPrice)
+        this.getPriceCategory()?.fixedPrice)
     );
   }
 
@@ -170,7 +170,7 @@ class ItemCheckoutService {
     const priceCategory = this.getPriceCategory();
 
     let multiplier;
-    if (!priceCategory.fixedPrice) {
+    if (!priceCategory?.fixedPrice) {
       switch (this.originBookable.priceType) {
         case "per-hour":
           multiplier = this.getBookingDuration() / 60;
@@ -185,7 +185,7 @@ class ItemCheckoutService {
       multiplier = 1;
     }
 
-    const price = (Number(priceCategory.priceEur) || 0) * multiplier;
+    const price = (Number(priceCategory?.priceEur) || 0) * multiplier;
     return Math.round(price * 100) / 100;
   }
 
@@ -364,7 +364,7 @@ class ItemCheckoutService {
         !childBookable.amount ||
         amountBooked + this.amount <= childBookable.amount;
 
-      if (isAvailable) {
+      if (!isAvailable) {
         throw new Error(
           `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
         );
