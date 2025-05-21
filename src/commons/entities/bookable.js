@@ -1,3 +1,4 @@
+const { Schema } = require("mongoose");
 const BookableTypes = Object.freeze({
   EVENT_LOCATION: "event-location",
   ROOM: "room",
@@ -243,7 +244,15 @@ class Bookable {
       priceCategories: [
         {
           _id: false,
-          priceEur: Number,
+          priceEur: {
+            type: Number,
+            set: function (value) {
+              if (typeof value === "string") {
+                value = value.replace(",", ".");
+              }
+              return typeof value === "number" ? value : parseFloat(value);
+            },
+          },
           fixedPrice: Boolean,
           interval: {
             start: Number || null,
