@@ -272,9 +272,9 @@ class Bookable {
               {
                 type: Object,
                 default: {
-                  countryCode: String,
-                  stateCode: String,
-                  title: String,
+                  countryCode: "",
+                  stateCode: "",
+                  title: "",
                 }
               },
             ],
