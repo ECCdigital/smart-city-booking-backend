@@ -231,12 +231,18 @@ class ItemCheckoutService {
     );
 
     const filterdHolidayPriceCategories = [];
+    const holidaysServiceCache = new Map();
     for (const pc of holidaysPriceCategories) {
       for (const holiday of pc.holidays) {
-        const hs = new HolidaysService({
-          countryCode: holiday.countryCode,
-          stateCode: holiday.stateCode,
-        });
+        const cacheKey = `${holiday.countryCode}-${holiday.stateCode}`;
+        let hs = holidaysServiceCache.get(cacheKey);
+        if (!hs) {
+          hs = new HolidaysService({
+            countryCode: holiday.countryCode,
+            stateCode: holiday.stateCode,
+          });
+          holidaysServiceCache.set(cacheKey, hs);
+        }
         const holidays = hs.getHolidays(bookingYear);
         const holidayDate = holidays.find((h) => h.name === holiday.name);
         if (holidayDate && formatISO(new Date(holidayDate.date)).split("T")[0] === bookingDate) {
