@@ -57,8 +57,8 @@ module.exports = {
       {},
       {
         $unset: {
-          "bookableItems.$[]. _bookableUsed.priceCategories": "",
-          "bookableItems.$[]. _bookableUsed.priceType": "",
+          "bookableItems.$[]._bookableUsed.priceCategories": "",
+          "bookableItems.$[]._bookableUsed.priceType": "",
         },
       },
     );
