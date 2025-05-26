@@ -18,7 +18,7 @@
     "format:write": "prettier --write .",
     "lint:check": "eslint .",
     "lint:fix": "eslint --fix .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha --recursive \"tests/**/*.js\""
   },
   "keywords": [
     "smartcity",
@@ -46,6 +46,7 @@
     "helmet": "^7.1.0",
     "jsonschema": "^1.4.1",
     "microinvoice": "^1.0.6",
+    "mock-require": "^3.0.3",
     "mongodb": "^6.3.0",
     "mongoose": "^8.9.6",
     "mustache": "^4.2.0",
@@ -57,6 +58,7 @@
     "qrcode": "^1.5.4",
     "qs": "^6.11.2",
     "range-overlap": "^1.0.0",
+    "sinon": "^20.0.0",
     "uuid": "^9.0.1",
     "validator": "^13.12.0",
     "webdav": "^4.11.3",
