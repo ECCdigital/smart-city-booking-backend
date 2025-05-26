@@ -59,7 +59,7 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const bookings = await BookingManager.getBookings(tenant);
+      const bookings = await BookingManager.getTenantBookings(tenant);
 
       if (request.query.public === "true") {
         const anonymizedBookings = bookings.map((b) => {
@@ -279,18 +279,20 @@ class BookingController {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const id = request.params.id;
+      const ids = request.params.ids;
 
-      if (id) {
-        const bookingStatus = await BookingManager.getBookingStatus(
+      if (ids) {
+        const splitIds = ids.split(",");
+
+        const bookingsStatus = await BookingManager.getBookingStatus(
           tenantId,
-          id,
+          splitIds,
         );
 
         logger.info(
-          `${tenantId} -- sending booking status ${bookingStatus} for booking ${id} to user ${user?.id}`,
+          `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,
         );
-        response.status(200).send(bookingStatus);
+        response.status(200).send(bookingsStatus);
       } else {
         logger.warn(
           `${tenantId} -- could not get booking status. No booking ID provided`,
@@ -326,6 +328,7 @@ class BookingController {
   static async createBooking(request, response) {
     const user = request.user;
     const booking = new Booking(request.body);
+    const tenantId = request.params.tenant;
 
     if (
       !(await PermissionsService._allowCreate(
@@ -342,7 +345,12 @@ class BookingController {
     }
 
     try {
-      const newBooking = await BookingService.createBooking(request, true);
+      const newBooking = await BookingService.createSingleBooking({
+        tenantId,
+        user,
+        bookingAttempt: request.body,
+        manualBooking: true,
+      });
       return response.status(200).send(newBooking);
     } catch (err) {
       logger.error(err);
@@ -451,8 +459,21 @@ class BookingController {
         logger.info(
           `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
         );
-        await BookingService.commitBooking(tenant, booking);
-        return response.sendStatus(200);
+        const result = await BookingService.commitBooking(tenant, booking);
+
+        if (!result.success) {
+          return response.status(200).json({
+            success: false,
+            data: null,
+            errors: result.errors,
+          });
+        }
+
+        return response.status(200).json({
+          success: true,
+          data: null,
+          errors: [],
+        });
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
@@ -573,7 +594,7 @@ class BookingController {
         (b) => b.type === "ticket" && b.eventId === eventId,
       );
 
-      const bookings = await BookingManager.getBookings(tenantId);
+      const bookings = await BookingManager.getTenantBookings(tenantId);
       const eventBookings = bookings.filter((b) =>
         b.bookableIds.some((id) => eventTickets.some((t) => t.id === id)),
       );
@@ -659,41 +680,50 @@ class BookingController {
   static async createReceipt(request, response) {
     try {
       const {
-        params: { tenant, id: bookingId },
+        params: { tenant: tenantId, id: bookingId },
         user,
       } = request;
 
-      if (!tenant || !bookingId) {
-        logger.warn(`${tenant} -- Missing required parameters.`);
+      if (!tenantId || !bookingId) {
+        logger.warn(`${tenantId} -- Missing required parameters.`);
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
 
       const hasPermission =
         (await UserManager.hasPermission(
           user.id,
-          tenant,
+          tenantId,
           RolePermission.MANAGE_BOOKINGS,
           "updateAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
+        )) || PermissionsService._isOwner(booking, user.id, tenantId);
 
       if (!hasPermission) {
         logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to create receipt.`,
+          `${tenantId} -- User ${user?.id} is not allowed to create receipt.`,
         );
         return response.sendStatus(403);
       }
 
-      await ReceiptService.createReceipt(tenant, bookingId);
+      const result = await BookingService.createReceipt(tenantId, booking.id);
 
-      return response.sendStatus(200);
+      if (!result.success) {
+        return response.status(200).json({
+          success: false,
+          data: null,
+          errors: result.errors,
+        });
+      }
+
+      const updatedBooking = await BookingManager.getBooking(
+        booking.id,
+        tenantId,
+      );
+
+      response
+        .status(200)
+        .json({ success: true, data: updatedBooking, errors: [] });
     } catch (err) {
       logger.error(err);
       return response.status(500).send("Could not create receipt");
