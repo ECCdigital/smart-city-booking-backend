@@ -48,8 +48,12 @@ class CheckoutController {
       );
 
       let multiplier = parseInt(amount);
-      if (itemCheckoutService.ignoreAmount) {
-        multiplier = 1;
+      try {
+        if (itemCheckoutService.ignoreAmount) {
+          multiplier = 1;
+        }
+      } catch (err) {
+        throw new Error("Es konnte kein Preis ermittelt werden");
       }
 
       const payload = {

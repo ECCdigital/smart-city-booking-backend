@@ -6,6 +6,8 @@ const TenantManger = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
+const HolidaysService = require("../holiday/holidays-service");
+const { formatISO } = require("date-fns");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -143,11 +145,14 @@ class ItemCheckoutService {
    * This method returns the booking duration in minutes.
    * @returns {number}
    */
-  getBookingDuration() {
-    if (!this.timeEnd || !this.timeBegin) {
+  getBookingDuration(segmentStart, segmentEnd) {
+    const start = segmentStart || this.timeBegin;
+    const end = segmentEnd || this.timeEnd;
+
+    if (!start || !end) {
       return 0;
     }
-    return Math.round((this.timeEnd - this.timeBegin) / 60000);
+    return Math.round((end - start) / 60000);
   }
 
   async isTimeRelated() {
@@ -167,33 +172,103 @@ class ItemCheckoutService {
   }
 
   async regularPriceEur() {
-    const priceCategory = this.getPriceCategory();
+    const segments = this._splitIntoDailySegments();
 
-    let multiplier;
-    if (!priceCategory?.fixedPrice) {
-      switch (this.originBookable.priceType) {
-        case "per-hour":
-          multiplier = this.getBookingDuration() / 60;
-          break;
-        case "per-day":
-          multiplier = this.getBookingDuration() / 1440;
-          break;
-        default:
-          multiplier = 1;
+    const prices = [];
+    for (const segment of segments) {
+      const priceCategory = this.getPriceCategory(segment.start, segment.end);
+
+      let multiplier;
+      if (!priceCategory?.fixedPrice) {
+        switch (this.originBookable.priceType) {
+          case "per-hour":
+            multiplier =
+              this.getBookingDuration(segment.start, segment.end) / 60;
+            break;
+          case "per-day":
+            multiplier =
+              this.getBookingDuration(segment.start, segment.end) / 1440;
+            break;
+          default:
+            multiplier = 1;
+        }
+      } else {
+        multiplier = 1;
       }
+      prices.push((Number(priceCategory.priceEur) || 0) * multiplier);
+    }
+    let total;
+    if (
+      this.originBookable.priceType === "per-square-meter" ||
+      this.originBookable.priceType === "per-item"
+    ) {
+      total = Math.max(...prices);
     } else {
-      multiplier = 1;
+      total = prices.reduce((acc, price) => acc + price, 0);
     }
 
-    const price = (Number(priceCategory?.priceEur) || 0) * multiplier;
-    return Math.round(price * 100) / 100;
+    return Math.round(total * 100) / 100;
   }
 
-  getPriceCategory() {
+  getPriceCategory(segmentStart, segmentEnd) {
     const { priceCategories, priceType } = this.originBookable;
+
+    const start = segmentStart || this.timeBegin;
+    const end = segmentEnd || this.timeEnd;
 
     if (priceCategories.length === 1) {
       return priceCategories[0];
+    }
+
+    const dayBegin = new Date(start).getDay();
+    const dayEnd = new Date(end).getDay();
+
+    const bookingYear = new Date(start).getFullYear();
+    const bookingDate = formatISO(new Date(start)).split("T")[0];
+
+    const holidaysPriceCategories = priceCategories.filter(
+      (pc) => pc.holidays.length > 0,
+    );
+
+    const filterdHolidayPriceCategories = [];
+    const holidaysServiceCache = new Map();
+    for (const pc of holidaysPriceCategories) {
+      for (const holiday of pc.holidays) {
+        const cacheKey = `${holiday.countryCode}-${holiday.stateCode}`;
+        let hs = holidaysServiceCache.get(cacheKey);
+        if (!hs) {
+          hs = new HolidaysService({
+            countryCode: holiday.countryCode,
+            stateCode: holiday.stateCode,
+          });
+          holidaysServiceCache.set(cacheKey, hs);
+        }
+        const holidays = hs.getHolidays(bookingYear);
+        const holidayDate = holidays.find((h) => h.name === holiday.name);
+        if (holidayDate && formatISO(new Date(holidayDate.date)).split("T")[0] === bookingDate) {
+          filterdHolidayPriceCategories.push(pc);
+        }
+      }
+    }
+
+    const filteredWeekdaysPriceCategories = priceCategories.filter((pc) => {
+      if (dayBegin !== dayEnd) {
+        return pc.weekdays.includes(dayBegin) || pc.weekdays.includes(dayEnd);
+      } else {
+        return pc.weekdays.includes(dayBegin);
+      }
+    });
+
+    let priceCategoriesToCheck;
+
+    if (filterdHolidayPriceCategories.length > 0) {
+      priceCategoriesToCheck = filterdHolidayPriceCategories;
+    } else if (filteredWeekdaysPriceCategories.length > 0) {
+      priceCategoriesToCheck = filteredWeekdaysPriceCategories;
+    } else {
+      priceCategoriesToCheck = priceCategories.filter(
+        (pc) => pc.weekdays.length === 0,
+      );
     }
 
     const bookingDurationInMinutes = this.getBookingDuration();
@@ -216,7 +291,7 @@ class ItemCheckoutService {
         return null;
     }
 
-    const category = priceCategories.find(({ interval }) => {
+    const category = priceCategoriesToCheck.find(({ interval }) => {
       const { start, end } = interval;
       return (
         (start === null || start <= valueToCheck) &&
@@ -502,6 +577,33 @@ class ItemCheckoutService {
     await this.checkParentAvailability();
     await this.checkChildBookings();
     await this.checkMaxBookingDate();
+  }
+
+  _splitIntoDailySegments() {
+    const segments = [];
+    let cursor = new Date(this.timeBegin);
+
+    while (cursor < this.timeEnd) {
+      const nextMidnight = new Date(cursor);
+      nextMidnight.setHours(24, 0, 0, 0);
+
+      segments.push({
+        start: new Date(cursor).getTime(),
+        end:
+          this.timeEnd < nextMidnight
+            ? new Date(this.timeEnd).getTime()
+            : nextMidnight.getTime(),
+      });
+
+      cursor = nextMidnight;
+    }
+
+    return segments;
+  }
+
+  _weekdayNumber(date) {
+    const d = date.getDay();
+    return d === 0 ? 7 : d;
   }
 }
 

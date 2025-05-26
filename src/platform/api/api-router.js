@@ -4,6 +4,7 @@ const { TenantController } = require("./controllers/tenant-controller");
 const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
+const HolidayController = require("./controllers/holiday-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -132,5 +133,7 @@ router.get(
   AuthenticationController.isSignedIn,
   RoleController.getRoles,
 );
+
+router.get("/holidays", HolidayController.getHolidays);
 
 module.exports = router;
