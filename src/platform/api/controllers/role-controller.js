@@ -3,12 +3,9 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const { Role, RolePermission } = require("../../../commons/entities/role");
 const { v4: uuidv4 } = require("uuid");
 const PermissionService = require("../../../commons/services/permission-service");
-const bunyan = require("bunyan");
+const createComponentLogger = require("../../../middleware/logger");
 
-const logger = bunyan.createLogger({
-  name: "role-controller.js",
-  level: process.env.LOG_LEVEL,
-});
+const logger = createComponentLogger("role-controller.js");
 
 /**
  * Web Controller for Roles.
@@ -18,7 +15,7 @@ class RoleController {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const isPublicView = request.query.public === "true"
+      const isPublicView = request.query.public === "true";
 
       let roles;
 
