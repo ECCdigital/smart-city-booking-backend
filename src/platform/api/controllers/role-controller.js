@@ -15,7 +15,7 @@ class RoleController {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const isPublicView = request.query.public === "true";
+      const isPublicView = request.query.public?.toLowerCase() === "true";
 
       let roles;
 
