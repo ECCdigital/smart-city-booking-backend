@@ -52,6 +52,14 @@ class Role {
     this.freeBookings = freeBookings;
   }
 
+  toPublic() {
+    return {
+      id: this.id,
+      name: this.name,
+      tenantId: this.tenantId,
+    };
+  }
+
   static get schema() {
     return {
       id: { type: String, required: true },

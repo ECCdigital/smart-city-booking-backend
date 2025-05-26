@@ -79,7 +79,7 @@ class WorkflowService {
   static async removeTask(tenantId, taskId) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
 
-    if (!workflow) {
+    if (!workflow || !workflow.states) {
       return;
     }
 

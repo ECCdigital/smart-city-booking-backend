@@ -120,7 +120,7 @@ class EventController {
 
       const existingEvents = await EventManager.getEvent(event.id, tenant);
 
-      if (!existingEvents.isPublic && event.isPublic) {
+      if (!existingEvents?.isPublic && event.isPublic) {
         if ((await EventManager.checkPublicEventCount(tenant)) === false) {
           throw new Error(`Maximum number of public events reached.`);
         }
