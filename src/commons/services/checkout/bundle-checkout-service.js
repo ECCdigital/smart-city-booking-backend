@@ -51,6 +51,7 @@ class BundleCheckoutService {
     attachmentStatus,
     paymentProvider,
     attachments,
+    bookWithPrice,
   }) {
     this.user = user;
     this.tenant = tenant;
@@ -70,6 +71,7 @@ class BundleCheckoutService {
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
+    this.bookWithPrice = bookWithPrice;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -81,6 +83,7 @@ class BundleCheckoutService {
       bookableItem.bookableId,
       bookableItem.amount,
       this.couponCode,
+      this.bookWithPrice,
     );
     await itemCheckoutService.init();
 
@@ -359,6 +362,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     paymentMethod,
     hooks,
     attachments,
+    bookWithPrice,
   }) {
     super({
       user,
@@ -379,6 +383,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachmentStatus,
       paymentProvider,
       attachments,
+      bookWithPrice,
     });
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
@@ -396,6 +401,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       bookableItem.bookableId,
       bookableItem.amount,
       this.couponCode,
+      this.bookWithPrice,
     );
 
     await itemCheckoutService.init(bookableItem._bookableUsed);
