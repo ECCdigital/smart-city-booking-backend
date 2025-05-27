@@ -18,7 +18,7 @@ class CheckoutController {
   static async validateItem(request, response) {
     const tenantId = request.params.tenant;
     const user = request.user;
-    const { bookableId, timeBegin, timeEnd, amount, couponCode } = request.body;
+    const { bookableId, timeBegin, timeEnd, amount, couponCode, bookWithPrice } = request.body;
 
     if (!bookableId || !amount) {
       logger.warn(
@@ -37,6 +37,7 @@ class CheckoutController {
       bookableId,
       parseInt(amount),
       couponCode,
+      bookWithPrice,
     );
 
     await itemCheckoutService.init();
@@ -64,6 +65,7 @@ class CheckoutController {
           (await itemCheckoutService.regularGrossPriceEur()) * multiplier,
         userGrossPriceEur:
           (await itemCheckoutService.userGrossPriceEur()) * multiplier,
+        freeBookingAllowed: await itemCheckoutService.freeBookingAllowed(),
       };
 
       return response.status(200).json(payload);

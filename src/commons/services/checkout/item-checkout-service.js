@@ -2,7 +2,7 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
-const TenantManger = require("../../data-managers/tenant-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
@@ -23,7 +23,7 @@ class CheckoutPermissions {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await TenantManger.getTenantUsersByRoles(
+        await TenantManager.getTenantUsersByRoles(
           tenantId,
           bookable.permittedRoles || [],
         )
@@ -58,6 +58,7 @@ class ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
+    bookWithPrice,
   ) {
     this.user = user;
     this.tenantId = tenantId;
@@ -67,6 +68,7 @@ class ItemCheckoutService {
     this.amount = Number(amount);
     this.couponCode = couponCode;
     this.originBookable = null;
+    this.bookWithPrice = bookWithPrice ?? true;
   }
 
   /**
@@ -92,6 +94,28 @@ class ItemCheckoutService {
       (this.originBookable.priceType === "per-square-meter" &&
         this.getPriceCategory()?.fixedPrice)
     );
+  }
+
+  async freeBookingAllowed() {
+    const freeBookingUsers = [
+      ...(this.originBookable.freeBookingUsers || []),
+      ...(
+        await TenantManager.getTenantUsersByRoles(
+          this.tenantId,
+          this.originBookable.freeBookingRoles || [],
+        )
+      ).map((u) => u.userId),
+    ];
+
+    if (
+      !!this.user &&
+      freeBookingUsers.includes(this.user) &&
+      this.originBookable.tenantId === this.tenantId
+    ) {
+      return true;
+    } else {
+      return false;
+    }
   }
 
   async calculateAmountBooked(bookable) {
@@ -322,25 +346,13 @@ class ItemCheckoutService {
   }
 
   async userPriceEur() {
-    const freeBookingUsers = [
-      ...(this.originBookable.freeBookingUsers || []),
-      ...(
-        await TenantManger.getTenantUsersByRoles(
-          this.tenantId,
-          this.originBookable.freeBookingRoles || [],
-        )
-      ).map((u) => u.userId),
-    ];
-
-    if (
-      !!this.user &&
-      freeBookingUsers.includes(this.user) &&
-      this.originBookable.tenantId === this.tenantId
-    ) {
-      logger.info(
-        `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
-      );
-      return 0;
+    if (await this.freeBookingAllowed()) {
+      if(!this.bookWithPrice) {
+        logger.info(
+          `User ${this.user} is allowed to book bookable ${this.bookableId} for free, but bookWithPrice is set to false.`,
+        );
+        return 0;
+      }
     }
 
     const total = await CouponManager.applyCoupon(

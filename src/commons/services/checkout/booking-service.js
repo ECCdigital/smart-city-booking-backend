@@ -69,6 +69,7 @@ class BookingService {
       isCommitted,
       isPayed,
       isRejected,
+      bookWithPrice,
     } = bookingAttempt;
 
     logger.info(
@@ -158,6 +159,7 @@ class BookingService {
         isRejected: Boolean(request.body.isRejected),
         attachmentStatus,
         paymentProvider,
+        bookWithPrice,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
@@ -180,6 +182,7 @@ class BookingService {
         comment,
         attachmentStatus,
         paymentProvider,
+        bookWithPrice,
       });
     }
 
