@@ -99,8 +99,11 @@ class ItemCheckoutService {
 
     if ((await this.isTimeRelated()) || (await this._isLongRange())) {
       if (!this.timeBegin || !this.timeEnd) {
-        throw new Error(
+        logger.warn(
           `Bookable with ID ${bookable.id} is time related but no time is given.`,
+        );
+        throw new Error(
+          `Bitte geben Sie einen gültigen Zeitraum an, um die Verfügbarkeit zu prüfen.`,
         );
       }
 
@@ -175,6 +178,7 @@ class ItemCheckoutService {
     const segments = this._splitIntoDailySegments();
 
     const prices = [];
+
     for (const segment of segments) {
       const priceCategory = this.getPriceCategory(segment.start, segment.end);
 
@@ -195,8 +199,14 @@ class ItemCheckoutService {
       } else {
         multiplier = 1;
       }
+
+      if (!priceCategory) {
+        throw new Error("Es konnte kein Preis ermittelt werden.");
+      }
+
       prices.push((Number(priceCategory.priceEur) || 0) * multiplier);
     }
+
     let total;
     if (
       this.originBookable.priceType === "per-square-meter" ||
@@ -216,7 +226,7 @@ class ItemCheckoutService {
     const start = segmentStart || this.timeBegin;
     const end = segmentEnd || this.timeEnd;
 
-    if (priceCategories.length === 1) {
+    if (priceCategories.length === 1 || (!start && !end)) {
       return priceCategories[0];
     }
 
@@ -245,7 +255,10 @@ class ItemCheckoutService {
         }
         const holidays = hs.getHolidays(bookingYear);
         const holidayDate = holidays.find((h) => h.name === holiday.name);
-        if (holidayDate && formatISO(new Date(holidayDate.date)).split("T")[0] === bookingDate) {
+        if (
+          holidayDate &&
+          formatISO(new Date(holidayDate.date)).split("T")[0] === bookingDate
+        ) {
           filterdHolidayPriceCategories.push(pc);
         }
       }
@@ -267,7 +280,7 @@ class ItemCheckoutService {
       priceCategoriesToCheck = filteredWeekdaysPriceCategories;
     } else {
       priceCategoriesToCheck = priceCategories.filter(
-        (pc) => pc.weekdays.length === 0,
+        (pc) => pc.weekdays.length === 0 && pc.holidays.length === 0,
       );
     }
 
@@ -331,7 +344,7 @@ class ItemCheckoutService {
     }
 
     const total = await CouponManager.applyCoupon(
-      this.couponCode,
+      this.originBookable.enableCoupons ? this.couponCode : null,
       this.tenantId,
       await this.regularPriceEur(),
     );
@@ -598,7 +611,9 @@ class ItemCheckoutService {
       cursor = nextMidnight;
     }
 
-    return segments;
+    return segments.length > 0
+      ? segments
+      : [{ start: this.timeBegin, end: this.timeEnd }];
   }
 
   _weekdayNumber(date) {
