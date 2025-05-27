@@ -100,7 +100,7 @@ class ItemCheckoutService {
     const freeBookingUsers = [
       ...(this.originBookable.freeBookingUsers || []),
       ...(
-        await TenantManger.getTenantUsersByRoles(
+        await TenantManager.getTenantUsersByRoles(
           this.tenantId,
           this.originBookable.freeBookingRoles || [],
         )
