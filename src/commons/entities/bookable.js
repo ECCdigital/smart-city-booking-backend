@@ -44,6 +44,7 @@ class Bookable {
    * @param {Array<Object>} [params.priceCategories] - The price categories for the bookable.
    * @param {string} params.priceType - The price type of the bookable.
    * @param {number} [params.priceValueAddedTax] - The value-added tax for the price.
+   * @param {boolean} [params.enableCoupons] - Whether coupons are enabled for the bookable.
    * @param {Array<string>} [params.permittedUsers] - The users permitted to book.
    * @param {Array<string>} [params.permittedRoles] - The roles permitted to book.
    * @param {Array<string>} [params.freeBookingUsers] - The users allowed to book for free.
@@ -92,6 +93,8 @@ class Bookable {
     priceType,
     priceValueAddedTax,
 
+    enableCoupons,
+
     permittedUsers,
     permittedRoles,
     freeBookingUsers,
@@ -112,13 +115,13 @@ class Bookable {
     this.type = type;
     this.title = title;
     this.description = description;
-    this.isPublic = isPublic || false;
+    this.isPublic = isPublic ?? false;
     this.imgUrl = imgUrl;
     this.flags = flags || [];
     this.tags = tags || [];
     this.location = location;
 
-    this.isBookable = isBookable || false;
+    this.isBookable = isBookable ?? false;
     this.amount = amount;
     this.minBookingDuration = minBookingDuration;
     this.maxBookingDuration = maxBookingDuration;
@@ -130,11 +133,11 @@ class Bookable {
     };
 
     this.isScheduleRelated = isScheduleRelated;
-    this.isTimePeriodRelated = isTimePeriodRelated || false;
+    this.isTimePeriodRelated = isTimePeriodRelated ?? false;
     this.timePeriods = timePeriods || [];
-    this.isOpeningHoursRelated = isOpeningHoursRelated || false;
+    this.isOpeningHoursRelated = isOpeningHoursRelated ?? false;
     this.openingHours = openingHours || [];
-    this.isSpecialOpeningHoursRelated = isSpecialOpeningHoursRelated || false;
+    this.isSpecialOpeningHoursRelated = isSpecialOpeningHoursRelated ?? false;
     this.specialOpeningHours = specialOpeningHours || [];
     this.isLongRange = isLongRange;
     this.longRangeOptions = longRangeOptions || null;
@@ -142,6 +145,8 @@ class Bookable {
     this.priceCategories = priceCategories || [];
     this.priceType = priceType;
     this.priceValueAddedTax = priceValueAddedTax || 0;
+
+    this.enableCoupons = enableCoupons ?? true;
 
     this.permittedUsers = permittedUsers || [];
     this.permittedRoles = permittedRoles || [];
@@ -288,6 +293,10 @@ class Bookable {
         default: "per-item",
       },
       priceValueAddedTax: Number,
+      enableCoupons: {
+        type: Boolean,
+        default: true,
+      },
       amount: Number || null,
       minBookingDuration: Number,
       maxBookingDuration: Number,
