@@ -201,7 +201,7 @@ class ItemCheckoutService {
       }
 
       if (!priceCategory) {
-        throw new Error("Es kein Preis ermittelt werden.");
+        throw new Error("Es konnte kein Preis ermittelt werden.");
       }
 
       prices.push((Number(priceCategory.priceEur) || 0) * multiplier);
