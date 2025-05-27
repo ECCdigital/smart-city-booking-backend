@@ -2,7 +2,7 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
-const TenantManger = require("../../data-managers/tenant-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
@@ -23,7 +23,7 @@ class CheckoutPermissions {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await TenantManger.getTenantUsersByRoles(
+        await TenantManager.getTenantUsersByRoles(
           tenantId,
           bookable.permittedRoles || [],
         )
