@@ -18,7 +18,8 @@ class InstanceManager {
     }
     rawInstance.set(instance);
     await rawInstance.save();
-    return new Instance(rawInstance);
+    const newInstance = await InstanceModel.findOne();
+    return new Instance(newInstance);
   }
 }
 

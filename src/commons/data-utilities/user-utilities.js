@@ -17,7 +17,7 @@ class UserUtilities {
    */
   static async linkGuestBookingsToUser(userId, tenant) {
     const user = await UserManager.getUser(userId, tenant);
-    const bookings = await BookingManager.getBookings(tenant);
+    const bookings = await BookingManager.getTenantBookings(tenant);
 
     const relatedBookings = bookings.filter(
       (b) => b.mail.toLowerCase() === user.id.toLowerCase(),
