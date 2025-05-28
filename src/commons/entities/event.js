@@ -16,6 +16,7 @@ class Event {
    * @param format {number} Format of the event
    * @param images {Array} List of images
    * @param information {Object} Information about the event
+   * @param externalBookingUrl {string} URL for external booking
    * @param isPublic {boolean} True, if the event is public
    * @param schedules {Array} List of schedules
    * @param ownerUserId {string} The identifier of the owner user
@@ -31,6 +32,7 @@ class Event {
     format,
     images,
     information,
+    externalBookingUrl,
     isPublic,
     schedules,
     ownerUserId,
@@ -45,6 +47,7 @@ class Event {
     this.format = format;
     this.images = images;
     this.information = information;
+    this.externalBookingUrl = externalBookingUrl;
     this.isPublic = isPublic;
     this.schedules = schedules;
     this.ownerUserId = ownerUserId;
@@ -100,6 +103,7 @@ class Event {
         tags: { type: Array, default: [] },
         flags: { type: Array, default: [] },
       },
+      externalBookingUrl: { type: String, default: "" },
       isPublic: { type: Boolean, default: false },
       schedules: { type: Array, default: [] },
       ownerUserId: { type: String, default: "" },
