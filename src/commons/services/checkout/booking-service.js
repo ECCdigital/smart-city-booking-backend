@@ -180,7 +180,7 @@ class BookingService {
       const lockerServiceInstance = LockerService.getInstance();
       if (booking.lockerInfo) {
         for (const locker of booking.lockerInfo) {
-          LockerService.freeReservedLocker(
+          await LockerService.freeReservedLocker(
             booking.tenantId,
             locker.id,
             locker.lockerSystem,
