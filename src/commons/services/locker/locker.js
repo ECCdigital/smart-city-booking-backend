@@ -115,7 +115,10 @@ class ParevaLocker extends BaseLocker {
       );
 
       if (!processId) {
-        return;
+        return {
+          success: false,
+          processId: null,
+        };
       }
 
       const config = this.createAxiosConfig(
