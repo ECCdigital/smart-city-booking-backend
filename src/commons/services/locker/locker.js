@@ -99,20 +99,27 @@ class ParevaLocker extends BaseLocker {
     }
   }
 
-  async cancelReservation() {
+  async cancelReservation(_processId) {
+    const booking = await this.getBooking();
+    const locker = this.getLocker(booking, _processId);
+    const tenant = await this.getTenant();
+    const { processId } = locker;
     try {
-      const booking = await this.getBooking();
-      const locker = this.getLocker(booking);
-      const tenant = await this.getTenant();
       const parevaApp = this.getParevaApp(tenant);
 
       const { user: username, password, serverUrl, lockerId } = parevaApp;
-      const { processId } = locker;
       const trimmedUrl = serverUrl.replace(/\/$/, "");
 
       const base64Credentials = Buffer.from(`${username}:${password}`).toString(
         "base64",
       );
+
+      if (!processId) {
+        return {
+          success: false,
+          processId: null,
+        };
+      }
 
       const config = this.createAxiosConfig(
         "post",
@@ -120,20 +127,21 @@ class ParevaLocker extends BaseLocker {
         base64Credentials,
       );
 
-      if (!processId) {
-        return;
-      }
-
       const response = await axios.request(config);
 
-      if (response.status !== 200) {
-        throw new Error("Unable to cancel reservation");
+      if (response.status !== 200 || response.data.success !== true) {
+        return {
+          success: false,
+          processId: locker.processId,
+        };
       }
 
-      return true;
+      return { success: true, processId: locker.processId };
     } catch (err) {
-      console.error(err);
-      throw new Error(`${err.message}`);
+      return {
+        success: false,
+        processId: processId,
+      };
     }
   }
 
@@ -145,8 +153,12 @@ class ParevaLocker extends BaseLocker {
     return await TenantManager.getTenant(this.tenantId);
   }
 
-  getLocker(booking) {
-    const locker = booking.lockerInfo.find((locker) => locker.id === this.id);
+  getLocker(booking, processId) {
+    const locker = booking.lockerInfo.find(
+      (locker) =>
+        locker.id === this.id &&
+        (processId === undefined || locker.processId === processId),
+    );
     if (!locker) throw new Error("Locker not found");
     return locker;
   }

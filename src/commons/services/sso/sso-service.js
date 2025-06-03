@@ -92,7 +92,7 @@ class SsoService {
         user.id,
       );
 
-      if(!userRoles) {
+      if (!userRoles) {
         if (keycloakRoles.includes(role.keycloakRole)) {
           return {
             tenantId: role.tenantId,
