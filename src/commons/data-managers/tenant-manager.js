@@ -122,7 +122,7 @@ class TenantManager {
   }
 
   static async addUserRole(tenantId, userId, role) {
-     await TenantModel.updateOne(
+    await TenantModel.updateOne(
       { id: tenantId, "users.userId": userId },
       { $addToSet: { "users.$.roles": role } },
     );

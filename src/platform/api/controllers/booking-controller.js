@@ -116,7 +116,7 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      
+
       const bookings = await BookingManager.getAssignedBookings(
         tenant,
         user.id,
@@ -130,7 +130,6 @@ class BookingController {
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
       );
       response.status(200).send(bookings);
-      
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get assigned bookings");
@@ -217,7 +216,6 @@ class BookingController {
       } else {
         response.sendStatus(403);
       }
-
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get related bookings");
