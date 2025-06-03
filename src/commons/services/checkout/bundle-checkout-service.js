@@ -31,6 +31,7 @@ class BundleCheckoutService {
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
    * @param {Array} attachments - The attachments.
+   * @param {Array} lockerInfo - The locker information.
    */
   constructor({
     user,
@@ -51,6 +52,7 @@ class BundleCheckoutService {
     attachmentStatus,
     paymentProvider,
     attachments,
+    lockerInfo,
   }) {
     this.user = user;
     this.tenant = tenant;
@@ -70,6 +72,7 @@ class BundleCheckoutService {
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
+    this.lockerInfo = lockerInfo;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -289,7 +292,9 @@ class BundleCheckoutService {
       isRejected: this.performRejected(),
       paymentProvider: this.paymentProvider,
       paymentMethod: this.setPaymentMethod(),
-      lockerInfo: await this.getLockerInfo(),
+      lockerInfo: this.lockerInfo?.length
+        ? this.lockerInfo
+        : await this.getLockerInfo(),
     };
 
     if (this.couponCode) {
@@ -334,6 +339,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} paymentMethod - The payment method.
    * @param {Array} hooks - The hooks.
    * @param {Array} attachments - The attachments.
+   * @param {Array} lockerInfo - The locker information.
    */
   constructor({
     user,
@@ -359,6 +365,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     paymentMethod,
     hooks,
     attachments,
+    lockerInfo,
   }) {
     super({
       user,
@@ -379,6 +386,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachmentStatus,
       paymentProvider,
       attachments,
+      lockerInfo,
     });
     this.isCommitted = isCommit;
     this.isPayed = isPayed;

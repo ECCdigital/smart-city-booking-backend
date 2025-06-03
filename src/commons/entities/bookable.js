@@ -135,7 +135,7 @@ class Bookable {
     this.relatedBookableIds = relatedBookableIds || [];
     this.checkoutBookableIds = checkoutBookableIds || [];
     this.attachments = attachments || [];
-    this.lockerDetails = lockerDetails || [];
+    this.lockerDetails = lockerDetails || { active: false, units: [] };
     this.requiredFields = requiredFields || [];
     this.eventId = eventId;
     this.ownerUserId = ownerUserId || "";
@@ -267,7 +267,18 @@ class Bookable {
       relatedBookableIds: [String],
       isBookable: Boolean,
       isPublic: Boolean,
-      lockerDetails: [Object],
+      lockerDetails: {
+        active: Boolean,
+        units: [
+          {
+            _id: false,
+            id: String,
+            lockerSystem: String,
+            unitId: String,
+            amount: Number,
+          },
+        ],
+      },
       requiredFields: [String],
       bookingNotes: String,
       checkoutBookableIds: [Object],

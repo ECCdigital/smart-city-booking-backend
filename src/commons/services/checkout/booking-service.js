@@ -177,6 +177,18 @@ class BookingService {
 
     if (simulate === false) {
       await BookingManager.storeBooking(booking);
+      const lockerServiceInstance = LockerService.getInstance();
+      if (booking.lockerInfo) {
+        for (const locker of booking.lockerInfo) {
+          LockerService.freeReservedLocker(
+            booking.tenantId,
+            locker.id,
+            locker.lockerSystem,
+            booking.timeBegin,
+            booking.timeEnd,
+          );
+        }
+      }
 
       const workflow = await WorkflowManager.getWorkflow(tenantId);
       if (workflow && workflow.active && workflow.defaultState) {
@@ -235,7 +247,6 @@ class BookingService {
         }
 
         try {
-          const lockerServiceInstance = LockerService.getInstance();
           await lockerServiceInstance.handleCreate(
             booking.tenantId,
             booking.id,
@@ -267,7 +278,7 @@ class BookingService {
     return booking;
   }
 
-  static async cancelBooking(tenantId, bookingId) {
+  static async removeBooking(tenantId, bookingId) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
       if (!booking) {
@@ -311,6 +322,7 @@ class BookingService {
         paymentProvider: updatedBooking.paymentProvider,
         paymentMethod: updatedBooking.paymentMethod,
         attachments: oldBooking.attachments,
+        lockerInfo: oldBooking.lockerInfo,
       });
 
       const booking = await bundleCheckoutService.prepareBooking({
@@ -322,14 +334,14 @@ class BookingService {
 
       if (!oldBooking.isCommitted && booking.isCommitted) {
         await BookingService.commitBooking(tenantId, booking);
+      } else if (booking.isCommitted && booking.isPayed) {
+        const lockerServiceInstance = LockerService.getInstance();
+        await lockerServiceInstance.handleUpdate(
+          updatedBooking.tenantId,
+          oldBooking,
+          booking,
+        );
       }
-
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.handleUpdate(
-        updatedBooking.tenantId,
-        oldBooking,
-        booking,
-      );
     } catch (error) {
       await BookingManager.storeBooking(oldBooking);
       throw new Error(`Error updating booking: ${error.message}`);
@@ -338,41 +350,92 @@ class BookingService {
     return BookingManager.getBooking(updatedBooking.id, tenantId);
   }
 
-  static async commitBooking(tenant, booking) {
+  static async commitBooking(tenantId, booking) {
     try {
-      const originBooking = await BookingManager.getBooking(booking.id, tenant);
-      originBooking.isCommitted = true;
-      originBooking.isRejected = false;
-      await BookingManager.storeBooking(originBooking);
+      const originBooking = await BookingManager.getBooking(
+        booking.id,
+        tenantId,
+      );
+
+      if (originBooking.isRejected) {
+        const bundleCheckoutService = new ManualBundleCheckoutService({
+          user: originBooking.assignedUserId,
+          tenant: tenantId,
+          timeBegin: originBooking.timeBegin,
+          timeEnd: originBooking.timeEnd,
+          timeCreated: originBooking.timeCreated,
+          bookableItems: originBooking.bookableItems,
+          couponCode: originBooking.couponCode,
+          name: originBooking.name,
+          company: originBooking.company,
+          street: originBooking.street,
+          zipCode: originBooking.zipCode,
+          location: originBooking.location,
+          email: originBooking.mail,
+          phone: originBooking.phone,
+          comment: originBooking.comment,
+          isCommit: Boolean(true),
+          isPayed: Boolean(originBooking.isPayed),
+          isRejected: Boolean(false),
+          attachmentStatus: originBooking.attachmentStatus,
+          paymentProvider: originBooking.paymentProvider,
+          paymentMethod: originBooking.paymentMethod,
+          attachments: originBooking.attachments,
+          lockerInfo: originBooking.lockerInfo,
+        });
+        const booking = await bundleCheckoutService.prepareBooking({
+          keepExistingId: true,
+          existingId: originBooking.id,
+        });
+
+        await BookingManager.storeBooking(booking);
+      } else {
+        originBooking.isCommitted = true;
+        originBooking.isRejected = false;
+        await BookingManager.storeBooking(originBooking);
+      }
+
+      const updatedBooking = await BookingManager.getBooking(
+        booking.id,
+        tenantId,
+      );
+
       if (
-        originBooking.isPayed === true ||
-        !originBooking.priceEur ||
-        originBooking.priceEur === 0
+        updatedBooking.isPayed === true ||
+        !updatedBooking.priceEur ||
+        updatedBooking.priceEur === 0
       ) {
-        await MailController.sendFreeBookingConfirmation(
-          originBooking.mail,
-          originBooking.id,
+        const lockerServiceInstance = LockerService.getInstance();
+        await lockerServiceInstance.handleUpdate(
           originBooking.tenantId,
+          originBooking,
+          updatedBooking,
+        );
+
+        await MailController.sendFreeBookingConfirmation(
+          updatedBooking.mail,
+          updatedBooking.id,
+          updatedBooking.tenantId,
         );
         logger.info(
-          `${tenant} -- booking ${originBooking.id} committed and sent free booking confirmation to ${originBooking.mail}`,
+          `${tenantId} -- booking ${updatedBooking.id} committed and sent free booking confirmation to ${updatedBooking.mail}`,
         );
       } else {
         await MailController.sendPaymentRequest(
-          originBooking.mail,
-          originBooking.id,
-          originBooking.tenantId,
+          updatedBooking.mail,
+          updatedBooking.id,
+          updatedBooking.tenantId,
         );
         logger.info(
-          `${tenant} -- booking ${originBooking.id} committed and sent payment request to ${originBooking.mail}`,
+          `${tenantId} -- booking ${updatedBooking.id} committed and sent payment request to ${updatedBooking.mail}`,
         );
       }
-      const bookableItems = originBooking.bookableItems;
+      const bookableItems = updatedBooking.bookableItems;
       const isTicketBooking = bookableItems.some(isTicket);
 
       if (isTicketBooking) {
         const eventIds = bookableItems.map(getEventForTicket);
-        await sendEmailToOrganizer(eventIds, tenant, originBooking);
+        await sendEmailToOrganizer(eventIds, tenantId, updatedBooking);
       }
     } catch (error) {
       throw new Error(`Error committing booking: ${error.message}`);
@@ -400,6 +463,21 @@ class BookingService {
 
       if (hookId) {
         booking.removeHook(hookId);
+      }
+
+      const lockerServiceInstance = LockerService.getInstance();
+
+      const result = await lockerServiceInstance.handleCancel(
+        booking.tenantId,
+        booking.id,
+      );
+
+      for (const r of result) {
+        if (r.success) {
+          booking.lockerInfo = booking.lockerInfo.filter(
+            (locker) => locker.processId !== r.processId,
+          );
+        }
       }
 
       await BookingManager.storeBooking(booking);
@@ -473,7 +551,7 @@ class BookingService {
     }
 
     const normalizedBookingName = booking.name.trim().toLowerCase();
-    const normalizedInputName   = name.trim().toLowerCase();
+    const normalizedInputName = name.trim().toLowerCase();
 
     if (normalizedBookingName !== normalizedInputName) {
       throw { message: "Mismatch", code: 401 };

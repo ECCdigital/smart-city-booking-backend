@@ -133,7 +133,6 @@ class LockerService {
             return [];
           }
         });
-
         if (availableUnits.length < amount) {
           throw new Error("Not enough lockers available");
         }
@@ -259,9 +258,10 @@ class LockerService {
    */
   async handleUpdate(tenantId, oldBooking, updatedBooking) {
     try {
-      const noTimeChange =
+      const changedBookingTime = !(
         oldBooking.timeBegin === updatedBooking.timeBegin &&
-        oldBooking.timeEnd === updatedBooking.timeEnd;
+        oldBooking.timeEnd === updatedBooking.timeEnd
+      );
 
       const getDifference = (oldBooking, updatedBooking) => {
         const oldBookableItems = oldBooking.bookableItems;
@@ -342,7 +342,7 @@ class LockerService {
             throw new Error("Unsupported locker type");
         }
         if (action === "cancel") {
-          await locker.cancelReservation(unit.id);
+          return await locker.cancelReservation(unit.id);
         } else if (action === "start") {
           return await locker.startReservation(timeBegin, timeEnd);
         } else if (action === "update") {
@@ -361,15 +361,18 @@ class LockerService {
           await Promise.all(
             filteredUnitsToBeCanceled.map(async (unit) => {
               try {
-                await processLocker(
+                const result = await processLocker(
                   unit,
                   "cancel",
                   oldBooking.tenantId,
                   oldBooking.id,
                 );
-                updatedBooking.lockerInfo = updatedBooking.lockerInfo.filter(
-                  (locker) => locker.id !== unit.id,
-                );
+
+                if (result.success) {
+                  updatedBooking.lockerInfo = updatedBooking.lockerInfo.filter(
+                    (locker) => locker.processId !== result.processId,
+                  );
+                }
               } catch (error) {
                 console.log(`Error in canceling reservation: ${error.message}`);
               }
@@ -481,7 +484,7 @@ class LockerService {
         updatedBooking,
       );
 
-      if (!noTimeChange) {
+      if (changedBookingTime) {
         const filteredUnitsToBeUpdated = oldLockerUnits.filter(
           (unit) =>
             unchangedItems.some(
@@ -578,6 +581,8 @@ class LockerService {
       return;
     }
 
+    const results = [];
+
     for (const unit of lockerUnitsToBeCanceled) {
       let locker;
       switch (unit.lockerSystem) {
@@ -587,8 +592,10 @@ class LockerService {
         default:
           throw new Error("Unsupported locker type");
       }
-      await locker.cancelReservation(unit.id);
+      results.push(await locker.cancelReservation(unit.processId));
     }
+
+    return results;
   }
 
   /**

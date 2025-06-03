@@ -69,6 +69,7 @@ class CheckoutController {
   }
 
   static async checkout(request, response) {
+    console.log("Checkout request received");
     try {
       return response
         .status(200)

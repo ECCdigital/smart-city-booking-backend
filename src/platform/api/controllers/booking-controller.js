@@ -407,7 +407,7 @@ class BookingController {
             RolePermission.MANAGE_BOOKINGS,
           )
         ) {
-          await BookingService.cancelBooking(tenant, id);
+          await BookingService.removeBooking(tenant, id);
           await WorkflowService.removeTask(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
           response.sendStatus(200);
