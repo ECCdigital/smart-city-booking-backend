@@ -103,7 +103,7 @@ async function checkAvailabilityIterative(
   user,
   amount,
 ) {
-  const SEGMENT_MIN_LENGTH = 30 * 60 * 1000;
+  const SEGMENT_MIN_LENGTH = 15 * 60 * 1000;
   const queue = [{ start: initialStart, end: initialEnd }];
 
   while (queue.length > 0) {
