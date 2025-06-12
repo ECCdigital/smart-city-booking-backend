@@ -405,7 +405,7 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
       startOfDay.setHours(0, 0, 0, 0);
 
       const endOfDay = new Date(currentDate);
-      endOfDay.setHours(24, 0, 0, 0);
+      endOfDay.setHours(23, 59, 59, 999);
 
       const firstOpeningHour = sortedHours[0];
       const firstStart = new Date(currentDate);
@@ -472,7 +472,7 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
       const startOfDay = new Date(currentDate);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(currentDate);
-      endOfDay.setHours(24, 0, 0, 0);
+      endOfDay.setHours(23, 59, 59, 999);
 
       periods.push({
         start: startOfDay.getTime(),

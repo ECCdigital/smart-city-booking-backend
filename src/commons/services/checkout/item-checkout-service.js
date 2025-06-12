@@ -138,8 +138,8 @@ class ItemCheckoutService {
 
     let amountBooked = 0;
     for (const childBookable of childBookables) {
-      amountBooked +=
-        await this.calculateAmountBooked(childBookable).amountBooked;
+      amountBooked += (await this.calculateAmountBooked(childBookable))
+        .amountBooked;
     }
     return amountBooked;
   }

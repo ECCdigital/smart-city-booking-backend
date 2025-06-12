@@ -158,7 +158,7 @@ class CalendarController {
       : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
 
     startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(24, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
 
     const periods = CalendarController.getTimePeriodsPerHour(
       startDate,
