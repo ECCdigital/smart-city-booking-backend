@@ -24,6 +24,16 @@ class CalendarService {
       BookableManager.getRelatedBookables(bookableId, tenantId),
     ]);
 
+    if (bookable.amount < amount) {
+      return [
+        {
+          timeBegin: start,
+          timeEnd: end,
+          available: false,
+        },
+      ];
+    }
+
     const bookablesToCheck = [
       bookable,
       ...parentBookables,
