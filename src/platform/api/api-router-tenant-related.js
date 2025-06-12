@@ -10,7 +10,6 @@ const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
 const RoleController = require("./controllers/role-controller");
-const UserController = require("./controllers/user-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 
 const router = express.Router({ mergeParams: true });
@@ -25,7 +24,7 @@ router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
   "/bookables/:id/availability",
-  CalendarController.getBookableAvailabilityFixed,
+  CalendarController.getBookableAvailability,
 );
 
 // Protected

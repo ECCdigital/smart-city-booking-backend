@@ -1,4 +1,3 @@
-const bunyan = require("bunyan");
 const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
@@ -6,11 +5,9 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const {
   ItemCheckoutService,
 } = require("../../../commons/services/checkout/item-checkout-service");
-
-const logger = bunyan.createLogger({
-  name: "calendar-controller.js",
-  level: process.env.LOG_LEVEL,
-});
+const {
+  checkAvailability,
+} = require("../../../commons/services/calendar-service");
 
 /**
  * CalendarController class.
@@ -96,276 +93,31 @@ class CalendarController {
    * CalendarController.getBookableAvailability(req, res);
    */
   static async getBookableAvailability(request, response) {
+    const {
+      params: { tenant, id: bookableId },
+      user,
+      query: { amount = 1, startDate: startDateQuery, endDate: endDateQuery },
+    } = request;
+
+    if (!tenant || !bookableId) {
+      return response
+        .status(400)
+        .send({ error: "Tenant ID and bookable ID are required." });
+    }
+
     try {
-      const {
-        params: { tenant, id: bookableId },
+      const availability = await checkAvailability(
+        tenant,
+        bookableId,
+        startDateQuery,
+        endDateQuery,
+        amount,
         user,
-        query: { amount = 1, startDate: startDateQuery, endDate: endDateQuery },
-      } = request;
-
-      if (!tenant || !bookableId) {
-        return response
-          .status(400)
-          .send({ error: "Tenant ID and bookable ID are required." });
-      }
-
-      const startDate = startDateQuery ? new Date(startDateQuery) : new Date();
-      const endDate = endDateQuery
-        ? new Date(endDateQuery)
-        : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
-
-      startDate.setHours(0, 0, 0, 0);
-      endDate.setHours(23, 59, 59, 999);
-
-      const [parentBookables, bookable, relatedBookables] = await Promise.all([
-        BookableManager.getParentBookables(bookableId, tenant),
-        BookableManager.getBookable(bookableId, tenant),
-        BookableManager.getRelatedBookables(bookableId, tenant),
-      ]);
-
-      const bookableToCheck = [
-        ...relatedBookables,
-        bookable,
-        ...parentBookables,
-      ];
-
-      let items = [];
-
-      function combinePeriods(items, index = 0, combined = []) {
-        // Sort items by timeBegin if it's the first call
-
-        if (index === 0) {
-          items.sort((a, b) => a.timeBegin - b.timeBegin);
-        }
-
-        // Base case: if index is out of bounds, return the combined periods
-        if (index >= items.length) {
-          return combined;
-        }
-
-        // Combine overlapping periods
-        const currentItem = items[index];
-        if (index === 0) {
-          combined.push(currentItem);
-        } else {
-          const lastItem = combined[combined.length - 1];
-          if (
-            lastItem.available === currentItem.available &&
-            lastItem.timeEnd >= currentItem.timeBegin
-          ) {
-            lastItem.timeEnd = Math.max(lastItem.timeEnd, currentItem.timeEnd);
-          } else {
-            combined.push(currentItem);
-          }
-        }
-
-        return combinePeriods(items, index + 1, combined);
-      }
-
-      /**
-       * Asynchronously checks the availability of a bookable item within a given time range.
-       *
-       * This function is used to determine whether a bookable item is available within a specified time range.
-       * It does this by creating an instance of the `ItemCheckoutService` class and calling its `checkAll` method.
-       * If the `checkAll` method throws an error, the function assumes that the bookable item is not available.
-       *
-       * If the time range is greater than 15 minutes, the function splits the time range into two halves
-       * and checks the availability for each half separately. This is done by calculating the middle point
-       * of the time range and then recursively calling the `checkAvailability` function for the first half
-       * (from `start` to `middle`) and the second half (from `middle` to `end`).
-       *
-       * If the time range is not greater than 15 minutes, the function marks the time range as unavailable.
-       * This is done by adding an object to the `items` array, with `timeBegin` and `timeEnd` set to `start`
-       * and `end` respectively, and `available` set to `false`.
-       *
-       * @async
-       * @function checkAvailability
-       * @param {number} start - The start time of the time range in milliseconds.
-       * @param {number} end - The end time of the time range in milliseconds.
-       * @returns {Promise<void>} A Promise that resolves when the availability check is complete.
-       */
-      async function checkAvailability(start, end) {
-        const ics = new ItemCheckoutService(
-          user,
-          tenant,
-          new Date(start),
-          new Date(end),
-          bookableId,
-          Number(amount),
-          null,
-        );
-
-        await ics.init();
-
-        try {
-          // in order to check calendar availability, we generally need to perform all checks of the checkout service.
-          // EXCEPTION: we do not need to check minimum / maximum durations when checking fixed time periods
-          await ics.checkPermissions();
-          await ics.checkOpeningHours();
-          await ics.checkAvailability();
-          await ics.checkEventSeats();
-          await ics.checkParentAvailability();
-          await ics.checkChildBookings();
-          await ics.checkMaxBookingDate();
-        } catch {
-          /**
-           * Checks the availability of a bookable item within a given time range.
-           *
-           * If the time range is greater than 1 minute, the function splits the time range into two halves
-           * and checks the availability for each half separately. This is done by calculating the middle point
-           * of the time range and then recursively calling the `checkAvailability` function for the first half
-           * (from `start` to `middle`) and the second half (from `middle` to `end`).
-           *
-           * If the time range is not greater than 1 minute, the function marks the time range as unavailable.
-           * This is done by adding an object to the `items` array, with `timeBegin` and `timeEnd` set to `start`
-           * and `end` respectively, and `available` set to `false`.
-           *
-           * @param {number} start - The start time of the time range in milliseconds.
-           * @param {number} end - The end time of the time range in milliseconds.
-           * @returns {Promise<void>} A Promise that resolves when the availability check is complete.
-           */
-
-          if (end - start > 60000 * 15) {
-            const middle = Math.round(start + (end - start) / 2);
-            await checkAvailability(start, middle);
-            await checkAvailability(middle, end);
-          } else {
-            for (const relatedBookable of bookableToCheck) {
-              const bookings = await BookingManager.getConcurrentBookings(
-                relatedBookable.id,
-                tenant,
-                start,
-                end,
-              );
-              if (bookings.length > 0) {
-                bookings.forEach((booking) => {
-                  items.push({
-                    timeBegin: booking.timeBegin,
-                    timeEnd: booking.timeEnd,
-                    available: false,
-                  });
-                });
-              }
-            }
-          }
-        }
-      }
-
-      /**
-       * Generates time periods based on the provided start date, end date, and opening hours.
-       * The function creates a list of time periods, each indicating whether a bookable item is available or not.
-       *
-       * @param {Date} startDate - The start date of the period.
-       * @param {Date} endDate - The end date of the period.
-       * @param {Array} openingHours - An array of objects, each containing the opening hours for a specific day of the week.
-       * @returns {Array} An array of time periods, each represented as an object with `start`, `end`, and `available` properties.
-       */
-      function generateTimePeriods(startDate, endDate, openingHours) {
-        if (openingHours.length === 0) {
-          return [
-            {
-              start: startDate.getTime(),
-              end: endDate.getTime(),
-              available: true,
-            },
-          ];
-        }
-        const periods = [];
-        let currentDate = new Date(startDate);
-
-        while (currentDate <= endDate) {
-          const weekday = ((currentDate.getDay() + 6) % 7) + 1; // monday = 1, ..., sunday = 7
-
-          const hoursForToday = openingHours.find((hours) =>
-            hours.weekdays.includes(weekday),
-          );
-
-          if (hoursForToday) {
-            const start = new Date(currentDate);
-            const [startHour, startMinute] = hoursForToday.startTime.split(":");
-            start.setHours(startHour, startMinute, 0, 0);
-
-            const end = new Date(currentDate);
-            const [endHour, endMinute] = hoursForToday.endTime.split(":");
-            end.setHours(endHour, endMinute, 0, 0);
-
-            periods.push({
-              start: start.getTime(),
-              end: end.getTime(),
-              available: true,
-            });
-
-            const startOfDay = new Date(currentDate);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(currentDate);
-            endOfDay.setHours(23, 59, 59, 999);
-
-            if (start.getTime() > startOfDay.getTime()) {
-              periods.push({
-                start: startOfDay.getTime(),
-                end: start.getTime(),
-                available: false,
-              });
-            }
-            if (end.getTime() < endOfDay.getTime()) {
-              periods.push({
-                start: end.getTime(),
-                end: endOfDay.getTime(),
-                available: false,
-              });
-            }
-          } else {
-            const startOfDay = new Date(currentDate);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(currentDate);
-            endOfDay.setHours(23, 59, 59, 999);
-
-            periods.push({
-              start: startOfDay.getTime(),
-              end: endOfDay.getTime(),
-              available: false,
-            });
-          }
-
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
-
-        return periods;
-      }
-
-      const openingHours = bookableToCheck
-        .map((b) => {
-          if (b.isOpeningHoursRelated && b.openingHours.length > 0) {
-            return b.openingHours;
-          } else {
-            return [];
-          }
-        })
-        .flat();
-
-      const availablePeriods = generateTimePeriods(
-        startDate,
-        endDate,
-        openingHours,
       );
 
-      for (const period of availablePeriods) {
-        if (period.available) {
-          await checkAvailability(period.start, period.end);
-        } else {
-          items.push({
-            timeBegin: period.start,
-            timeEnd: period.end,
-            available: false,
-          });
-        }
-      }
-
-      items = combinePeriods(items);
-
-      response.status(200).send(items);
+      response.status(200).send(availability);
     } catch (error) {
-      logger.error(error);
+      console.error(error);
       response.status(500).send({ error: "Internal server error" });
     }
   }
@@ -406,7 +158,7 @@ class CalendarController {
       : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
 
     startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
+    endDate.setHours(24, 0, 0, 0);
 
     const periods = CalendarController.getTimePeriodsPerHour(
       startDate,

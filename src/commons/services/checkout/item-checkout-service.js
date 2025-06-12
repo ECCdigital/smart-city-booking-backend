@@ -115,11 +115,19 @@ class ItemCheckoutService {
       );
     }
 
-    return concurrentBookings
+    const amountBooked = concurrentBookings
       .map((cb) => cb.bookableItems)
       .flat()
       .filter((bi) => bi.bookableId === bookable.id)
       .reduce((acc, bi) => acc + bi.amount, 0);
+    return {
+      amountBooked,
+      bookings: concurrentBookings.map((cb) => ({
+        id: cb.id,
+        timeBegin: cb.timeBegin,
+        timeEnd: cb.timeEnd,
+      })),
+    };
   }
 
   async calculateAmountBookedTicketsByParent(parentBookable) {
@@ -130,7 +138,8 @@ class ItemCheckoutService {
 
     let amountBooked = 0;
     for (const childBookable of childBookables) {
-      amountBooked += await this.calculateAmountBooked(childBookable);
+      amountBooked +=
+        await this.calculateAmountBooked(childBookable).amountBooked;
     }
     return amountBooked;
   }
@@ -272,9 +281,9 @@ class ItemCheckoutService {
 
   async checkPermissions() {
     if (this.originBookable.isBookable !== true) {
-      throw new Error(
-        `Bookable with ID ${this.originBookable.id} is not bookable.`,
-      );
+      throw {
+        message: `Das Buchungsobjekt ID ${this.originBookable.id} ist nicht buchbar.`,
+      };
     }
 
     if (
@@ -284,9 +293,9 @@ class ItemCheckoutService {
         this.tenantId,
       ))
     ) {
-      throw new Error(
-        `Sie sind nicht berechtigt, das Objekt ${this.originBookable.title} zu buchen.`,
-      );
+      throw {
+        message: `Sie sind nicht berechtigt, das Objekt ${this.originBookable.title} zu buchen.`,
+      };
     }
   }
 
@@ -296,18 +305,21 @@ class ItemCheckoutService {
    * @returns {Promise<Boolean>}
    */
   async checkAvailability() {
-    const amountBooked = await this.calculateAmountBooked(this.originBookable);
+    const { amountBooked, bookings } = await this.calculateAmountBooked(
+      this.originBookable,
+    );
 
     const isAvailable =
       !this.originBookable.amount ||
       amountBooked + this.amount <= this.originBookable.amount;
 
     if (!isAvailable) {
-      throw new Error(
-        `Das Objekt ${this.originBookable.title} ist nur noch ${
+      throw {
+        message: `Das Objekt ${this.originBookable.title} ist nur noch ${
           this.originBookable.amount - amountBooked
         } mal verfügbar.`,
-      );
+        concurrentBookings: bookings,
+      };
     }
 
     return true;
@@ -320,7 +332,7 @@ class ItemCheckoutService {
     );
 
     for (const parentBookable of parentBookables) {
-      const parentAmountBooked =
+      const { amountBooked: parentAmountBooked, bookings } =
         await this.calculateAmountBooked(parentBookable);
 
       let isAvailable;
@@ -337,9 +349,10 @@ class ItemCheckoutService {
       }
 
       if (!isAvailable) {
-        throw new Error(
-          `Übergeordnetes Objekt ${parentBookable.title} ist nicht verfügbar.`,
-        );
+        throw {
+          message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
+          concurrentBookings: bookings,
+        };
       }
     }
 
@@ -358,16 +371,14 @@ class ItemCheckoutService {
     );
 
     for (const childBookable of filteredChildBookables) {
-      const amountBooked = await this.calculateAmountBooked(childBookable);
+      const { amountBooked, bookings } =
+        await this.calculateAmountBooked(childBookable);
 
-      const isAvailable =
-        !childBookable.amount ||
-        amountBooked + this.amount <= childBookable.amount;
-
-      if (!isAvailable) {
-        throw new Error(
-          `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
-        );
+      if (amountBooked > 0 && childBookable.amount) {
+        throw {
+          message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
+          concurrentBookings: bookings,
+        };
       }
     }
 
@@ -403,9 +414,9 @@ class ItemCheckoutService {
         !!event.attendees.maxAttendees &&
         amountBooked + this.amount > event.attendees.maxAttendees
       ) {
-        throw new Error(
-          `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
-        );
+        throw {
+          message: `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
+        };
       }
     }
 
@@ -462,9 +473,10 @@ class ItemCheckoutService {
           this.timeEnd,
         )
       ) {
-        throw new Error(
-          `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`,
-        );
+        throw {
+          message: `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`,
+          bookings: [],
+        };
       }
     }
 
@@ -485,9 +497,9 @@ class ItemCheckoutService {
     );
 
     if (this.timeBegin > maxBookingDate) {
-      throw new Error(
-        `Sie können maximal ${maxBookingAdvanceInMonths} Monate im Voraus buchen.`,
-      );
+      throw {
+        message: `Sie können maximal ${maxBookingAdvanceInMonths} Monate im Voraus buchen.`,
+      };
     }
 
     return true;
