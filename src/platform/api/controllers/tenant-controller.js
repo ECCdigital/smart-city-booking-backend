@@ -138,8 +138,17 @@ class TenantController {
           "utf8",
         );
 
+        const invoiceTemplate = readFileSync(
+          join(
+            __dirname,
+            "../../../commons/pdf-service/templates/default-invoice-template.temp.html",
+          ),
+          "utf8",
+        );
+
         tenant.genericMailTemplate = emailTemplate;
         tenant.receiptTemplate = receiptTemplate;
+        tenant.invoiceTemplate = invoiceTemplate;
 
         await TenantManager.storeTenant(tenant);
         logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
