@@ -106,8 +106,7 @@ class TenantController {
       const tenant = new Tenant(request.body);
       tenant.id = uuidv4();
 
-      tenant.ownerUserId = user.id;
-
+      tenant.ownerUserIds = [user.id];
       if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
       }

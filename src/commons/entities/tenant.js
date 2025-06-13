@@ -112,7 +112,7 @@ class Tenant {
       bookableDetailLink: { type: String, default: "" },
       eventDetailLink: { type: String, default: "" },
       genericMailTemplate: { type: String, default: "" },
-      useInstanceMail: { type: Boolean, default: false },
+      useInstanceMail: { type: Boolean, default: true },
       noreplyMail: { type: String, default: "" },
       noreplyDisplayName: { type: String, default: "" },
       noreplyHost: { type: String, default: "" },
