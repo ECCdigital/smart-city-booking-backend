@@ -42,14 +42,14 @@ TaskSchema.virtual("bookingDoc", {
  *
  * @property {String} id - The unique ID of the state. Required.
  * @property {String} name - The name of the state. Required.
- * @property {Array<String>} [actions=[]] - A list of actions associated with the state.
+ * @property {Array<Object>} [actions=[]] - A list of actions associated with the state.
  * @property {Array<TaskSchema>} [tasks=[]] - A list of tasks associated with the state.
  */
 const StateSchema = new Schema(
   {
     id: { type: String, required: true },
     name: { type: String, required: true },
-    actions: { type: [String], default: [] },
+    actions: { type: [Object], default: [] },
     tasks: { type: [TaskSchema], default: [] },
   },
   {
