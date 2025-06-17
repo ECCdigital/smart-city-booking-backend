@@ -161,7 +161,7 @@ class BookableManager {
       uniqueMap.set(bookable.id, bookable);
     }
 
-    return Array.from(uniqueMap.values()).map((doc) => new Bookable(doc));
+    return Array.from(uniqueMap.values()).map((doc) => doc.toEntity());
   }
 
   /**
