@@ -258,7 +258,9 @@ class BookingService {
         const isTicketBooking = bookableItems.some(isTicket);
 
         if (isTicketBooking) {
-          const eventIds = bookableItems.map(getEventForTicket);
+          const eventIds = bookableItems
+            .map(getEventForTicket)
+            .filter((id) => id !== null && id !== undefined);
           await sendEmailToOrganizer(eventIds, tenantId, booking);
         }
       }
@@ -434,8 +436,12 @@ class BookingService {
       const isTicketBooking = bookableItems.some(isTicket);
 
       if (isTicketBooking) {
-        const eventIds = bookableItems.map(getEventForTicket);
-        await sendEmailToOrganizer(eventIds, tenantId, updatedBooking);
+        const eventIds = bookableItems
+          .map(getEventForTicket)
+          .filter((id) => id !== null && id !== undefined);
+        if (eventIds.length > 0) {
+          await sendEmailToOrganizer(eventIds, tenantId, updatedBooking);
+        }
       }
     } catch (error) {
       throw new Error(`Error committing booking: ${error.message}`);
@@ -608,7 +614,7 @@ function isTicket(bookableItem) {
 }
 
 function getEventForTicket(bookableItem) {
-  return bookableItem._bookableUsed.eventId || null;
+  return bookableItem._bookableUsed.eventId;
 }
 
 async function sendEmailToOrganizer(eventIds, tenantId, booking) {

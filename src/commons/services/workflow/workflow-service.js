@@ -6,6 +6,9 @@ class WorkflowService {
   static async updateWorkflow(tenantId, workflow) {
     const currentWorkflow = await WorkflowManager.getWorkflow(tenantId);
 
+    if (!currentWorkflow) {
+      return;
+    }
     const statesMap = new Map(currentWorkflow.states.map((s) => [s.id, s]));
 
     const newStates = workflow.states.map((newState) => {
@@ -31,7 +34,12 @@ class WorkflowService {
 
   static async updateTask(tenantId, taskId, destination, newIndex) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
-    const fromStatus = workflow.states.find((status) =>
+
+    if (!workflow || !workflow.states) {
+      return;
+    }
+
+    const fromStatus = workflow?.states.find((status) =>
       status.tasks.some((task) => task.id === taskId),
     );
 
@@ -65,6 +73,10 @@ class WorkflowService {
   static async archiveTask(tenantId, taskId) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
 
+    if (!workflow || !workflow.states) {
+      return;
+    }
+
     const fromAction = workflow.states.find((status) =>
       status.tasks.find((task) => task.id === taskId),
     );
@@ -91,6 +103,10 @@ class WorkflowService {
 
   static async getBacklog(tenantId) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
+
+    if (!workflow || !workflow.active) {
+      return [];
+    }
 
     const trackedBookings = [];
 

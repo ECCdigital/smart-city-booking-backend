@@ -5,13 +5,13 @@ const WorkflowModel = require("./models/workflowModel");
 class WorkflowManager {
   static async getWorkflow(tenantId) {
     const rawWorkflow = await WorkflowModel.findOne({ tenantId: tenantId });
-    if (!rawWorkflow) return {};
+    if (!rawWorkflow) return null;
     return await createWorkflowFromModel(rawWorkflow);
   }
 
   static async getWorkflowStates(tenantId) {
     const rawWorkflow = await WorkflowModel.findOne({ tenantId: tenantId });
-    if (!rawWorkflow) return {};
+    if (!rawWorkflow) return null;
     return await createWorkflowFromModel(rawWorkflow, false);
   }
 
