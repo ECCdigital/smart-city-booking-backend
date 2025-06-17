@@ -1,4 +1,4 @@
-const { Role } = require("../entities/role");
+const { Role } = require("../entities/role/role");
 const RoleModel = require("./models/roleModel");
 
 /**
@@ -9,24 +9,21 @@ const RoleModel = require("./models/roleModel");
 class RoleManager {
   /**
    * Get all roles
-   * @returns {Promise<*>}
+   * @returns {Promise<Role[]>} List of roles
    */
   static async getRoles() {
     const rawRoles = await RoleModel.find();
-    return rawRoles.map((rr) => {
-      return new Role(rr);
-    });
+    return rawRoles.map((doc) => doc.toEntity());
   }
 
   /**
    * Get all tenant roles
-   * @returns List of roles
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Role[]>} List of tenant roles
    */
   static async getTenantRoles(tenantId) {
     const rawRoles = await RoleModel.find({ tenantId: tenantId });
-    return rawRoles.map((rr) => {
-      return new Role(rr);
-    });
+    return rawRoles.map((doc) => doc.toEntity());
   }
 
   /**
@@ -34,30 +31,35 @@ class RoleManager {
    *
    * @param {string} id Logical identifier of the role object
    * @param {string} tenantId The tenant id
-   * @returns A single role object
+   * @returns {Promise<Role|null>} A single role object or null
    */
   static async getRole(id, tenantId) {
     const rawRole = await RoleModel.findOne({ id: id, tenantId: tenantId });
     if (!rawRole) return null;
-    return new Role(rawRole);
+    return rawRole.toEntity();
   }
 
   /**
    * Insert a role object into the database or update it.
    *
-   * @param {Role} role The role object to be stored.
+   * @param {Role|Object} role The role object to be stored.
    * @param {string} tenantId The tenant id
    * @param {boolean} upsert true, if new object should be inserted. Default: true
-   * @returns Promise<>
+   * @returns {Promise<Role>} The stored role
    */
   static async storeRole(role, tenantId, upsert = true) {
+    const roleEntity = role instanceof Role ? role : new Role(role);
+    roleEntity.validate();
+    roleEntity.tenantId = tenantId;
     await RoleModel.findOneAndUpdate(
-      { id: role.id, tenantId: tenantId },
-      role,
+      { id: roleEntity.id, tenantId: tenantId },
+      roleEntity,
       {
         upsert: upsert,
       },
     );
+
+    return roleEntity;
   }
 
   /**
@@ -65,7 +67,7 @@ class RoleManager {
    *
    * @param {string} id Logical identifier of the role object
    * @param {string} tenantId The tenant id
-   * @returns Promise<>
+   * @returns {Promise<void>}
    */
   static async removeRole(id, tenantId) {
     await RoleModel.deleteOne({ id: id, tenantId: tenantId });

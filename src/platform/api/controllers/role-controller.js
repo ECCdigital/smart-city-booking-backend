@@ -1,6 +1,6 @@
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const { Role, RolePermission } = require("../../../commons/entities/role");
+const { Role, RolePermission } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
 const PermissionService = require("../../../commons/services/permission-service");
 const createComponentLogger = require("../../../middleware/logger");
@@ -15,7 +15,8 @@ class RoleController {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const isPublicView = request.query.public?.trim()?.toLowerCase() === "true";
+      const isPublicView =
+        request.query.public?.trim()?.toLowerCase() === "true";
 
       let roles;
 

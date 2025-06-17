@@ -12,11 +12,14 @@ const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
-const { BOOKING_HOOK_TYPES } = require("../../entities/booking");
+const {
+  Booking,
+  BOOKING_HOOK_TYPES,
+} = require("../../entities/booking/booking");
 const WorkflowManager = require("../../data-managers/workflow-manager");
 const WorkflowService = require("../workflow/workflow-service");
 const { BookableManager } = require("../../data-managers/bookable-manager");
-const { GroupBooking } = require("../../entities/groupBooking");
+const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
 const TenantManager = require("../../data-managers/tenant-manager");
 const PaymentUtils = require("../../utilities/payment-utils");
 const {
@@ -154,9 +157,9 @@ class BookingService {
         email: mail,
         phone,
         comment,
-        isCommit: Boolean(request.body.isCommitted),
-        isPayed: Boolean(request.body.isPayed),
-        isRejected: Boolean(request.body.isRejected),
+        isCommit: Boolean(isCommitted),
+        isPayed: Boolean(isPayed),
+        isRejected: Boolean(isRejected),
         attachmentStatus,
         paymentProvider,
         bookWithPrice,
@@ -186,7 +189,13 @@ class BookingService {
       });
     }
 
-    const booking = await bundleCheckoutService.prepareBooking();
+    let booking = await bundleCheckoutService.prepareBooking();
+
+    if (!(booking instanceof Booking)) {
+      const bookingEntity = new Booking(booking);
+      bookingEntity.validate();
+      booking = bookingEntity;
+    }
 
     logger.debug(
       `${tenantId}, cid ${checkoutId} -- Booking prepared: ${JSON.stringify(
@@ -251,6 +260,10 @@ class BookingService {
       simulate,
       manualBooking,
     });
+
+    if (!(booking instanceof Booking)) {
+      throw new Error("Invalid booking entity returned");
+    }
 
     if (!simulate) {
       try {
@@ -459,6 +472,11 @@ class BookingService {
       updatedBooking.id,
       tenantId,
     );
+
+    if (!oldBooking) {
+      throw new Error("Booking not found");
+    }
+
     try {
       const bundleCheckoutService = new ManualBundleCheckoutService({
         user: updatedBooking.assignedUserId,
@@ -485,10 +503,17 @@ class BookingService {
         attachments: oldBooking.attachments,
       });
 
-      const booking = await bundleCheckoutService.prepareBooking({
+      let booking = await bundleCheckoutService.prepareBooking({
         keepExistingId: true,
         existingId: oldBooking.id,
       });
+
+      // Validierung hinzufügen
+      if (!(booking instanceof Booking)) {
+        const bookingEntity = new Booking(booking);
+        bookingEntity.validate();
+        booking = bookingEntity;
+      }
 
       await BookingManager.storeBooking(booking);
 
@@ -502,12 +527,12 @@ class BookingService {
         oldBooking,
         booking,
       );
+
+      return booking; // Direkt das Entity zurückgeben
     } catch (error) {
       await BookingManager.storeBooking(oldBooking);
       throw new Error(`Error updating booking: ${error.message}`);
     }
-
-    return BookingManager.getBooking(updatedBooking.id, tenantId);
   }
 
   static async commitBooking(tenantId, booking) {
@@ -578,7 +603,6 @@ class BookingService {
       groupBookingId,
       true,
     );
-
     const bookings = groupBooking.bookings;
 
     const validator = new BookingConsistencyService([
@@ -665,6 +689,10 @@ class BookingService {
   static async rejectBooking(tenantId, bookingId, reason = "", hookId = null) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
 
       booking.isRejected = true;
 
@@ -764,11 +792,17 @@ class BookingService {
         `${tenantId} -- bookings ${groupBooking.bookingIds} canceled and sent booking rejection to ${groupBooking.bookings[0].mail}`,
       );
     }
+
+    return { success: true };
   }
 
   static async requestRejectBooking(tenant, bookingId, reason = "") {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenant);
+
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
 
       const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, {
         reason: reason,
@@ -783,6 +817,7 @@ class BookingService {
         hook.id,
         reason,
       );
+
       logger.info(
         `${tenant} -- booking ${booking.id} rejection requested and sent booking reject verification to ${booking.mail}`,
       );
@@ -805,7 +840,7 @@ class BookingService {
     }
 
     const normalizedBookingName = booking.name.trim().toLowerCase();
-    const normalizedInputName   = name.trim().toLowerCase();
+    const normalizedInputName = name.trim().toLowerCase();
 
     if (normalizedBookingName !== normalizedInputName) {
       throw { message: "Mismatch", code: 401 };
@@ -948,8 +983,13 @@ async function generateBookingReference(
   text = `G-${text}`;
 
   if (ensureUnique) {
-    if (!!(await GroupBookingManager.getGroupBooking(text, tenantId).id)) {
+    const existingGroupBooking = await GroupBookingManager.getGroupBooking(
+      tenantId,
+      text,
+    );
+    if (existingGroupBooking?.id) {
       return await generateBookingReference(
+        tenantId,
         length,
         chunkLength,
         possible,
@@ -973,14 +1013,11 @@ function isRejection(booking, hookId) {
 }
 
 function isTicket(bookableItem) {
-  if (!bookableItem?._bookableUsed) {
-    return false;
-  }
-  return bookableItem._bookableUsed.type === "ticket";
+  return bookableItem?._bookableUsed?.type === "ticket";
 }
 
 function getEventForTicket(bookableItem) {
-  return bookableItem._bookableUsed.eventId || null;
+  return bookableItem?._bookableUsed?.eventId || null;
 }
 
 async function sendEmailToOrganizer(eventIds, tenantId, booking) {

@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
-const { Event } = require("../entities/event");
-const { Bookable } = require("../entities/bookable");
+const { Event } = require("../entities/event/event");
+const { Bookable } = require("../entities/bookable/bookable");
 const EventManager = require("../data-managers/event-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 

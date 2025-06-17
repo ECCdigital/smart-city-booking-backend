@@ -43,8 +43,6 @@ class MailController {
       bookingDetails = await this.generateBookingDetails(bookingId, tenantId);
     }
 
-    console.log("bookingDetails", bookingDetails);
-
     let qrContent = "";
     let qrAttachment = null;
     if (includeQRCode) {

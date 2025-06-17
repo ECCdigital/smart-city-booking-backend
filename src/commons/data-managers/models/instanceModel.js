@@ -1,10 +1,10 @@
 const mongoose = require("mongoose");
 const SecurityUtils = require("../../utilities/security-utils");
-const Instance = require("../../entities/instance");
+const { instanceSchemaDefinition } = require("../../schemas/instanceSchema");
 const SsoApplication = require("../../entities/application/ssoApplication");
 
 const { Schema } = mongoose;
-const InstanceSchema = new Schema(Instance.schema);
+const InstanceSchema = new Schema(instanceSchemaDefinition);
 
 InstanceSchema.pre("save", async function (next) {
   if (this.isModified("noreplyPassword"))
@@ -53,6 +53,11 @@ function encryptApps(instance) {
     return appClass;
   });
 }
+
+InstanceSchema.methods.toEntity = function () {
+  const Instance = require("../../entities/instance/instance");
+  return new Instance(this.toObject());
+};
 
 module.exports =
   mongoose.models.Instance || mongoose.model("Instance", InstanceSchema);

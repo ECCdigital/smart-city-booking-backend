@@ -2,9 +2,9 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
-const { Bookable } = require("../../../commons/entities/bookable");
+const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
 const {
   getRelatedOpeningHours,

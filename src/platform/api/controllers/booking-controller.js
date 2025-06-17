@@ -5,8 +5,8 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const {
   Booking,
   BOOKING_HOOK_TYPES,
-} = require("../../../commons/entities/booking");
-const { RolePermission } = require("../../../commons/entities/role");
+} = require("../../../commons/entities/booking/booking");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
@@ -116,7 +116,7 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      
+
       const bookings = await BookingManager.getAssignedBookings(
         tenant,
         user.id,
@@ -130,7 +130,6 @@ class BookingController {
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
       );
       response.status(200).send(bookings);
-      
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get assigned bookings");
@@ -217,7 +216,6 @@ class BookingController {
       } else {
         response.sendStatus(403);
       }
-
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get related bookings");
@@ -348,6 +346,7 @@ class BookingController {
       const newBooking = await BookingService.createSingleBooking({
         tenantId,
         user,
+        simulate: false,
         bookingAttempt: request.body,
         manualBooking: true,
       });

@@ -1,7 +1,7 @@
 const mock = require("mock-require");
 const { expect } = require("chai");
 const sinon = require("sinon");
-const { Role } = require("../src/commons/entities/role.js");
+const { Role } = require("../src/commons/entities/role/role.js");
 
 describe("RoleController.getRoles", () => {
   let sandbox, fakeLogger, RoleController, RoleManager, PermissionService;

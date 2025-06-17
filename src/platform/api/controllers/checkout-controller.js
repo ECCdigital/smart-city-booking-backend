@@ -18,7 +18,14 @@ class CheckoutController {
   static async validateItem(request, response) {
     const tenantId = request.params.tenant;
     const user = request.user;
-    const { bookableId, timeBegin, timeEnd, amount, couponCode, bookWithPrice } = request.body;
+    const {
+      bookableId,
+      timeBegin,
+      timeEnd,
+      amount,
+      couponCode,
+      bookWithPrice,
+    } = request.body;
 
     if (!bookableId || !amount) {
       logger.warn(

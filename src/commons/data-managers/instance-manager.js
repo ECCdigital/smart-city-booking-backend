@@ -1,4 +1,4 @@
-const Instance = require("../entities/instance");
+const Instance = require("../entities/instance/instance");
 const InstanceModel = require("./models/instanceModel");
 
 class InstanceManager {
@@ -8,18 +8,23 @@ class InstanceManager {
       return null;
     }
 
-    return new Instance(rawInstance);
+    return rawInstance.toEntity();
   }
 
   static async updateInstance(instance) {
+    const instanceEntity =
+      instance instanceof Instance ? instance : new Instance(instance);
+
+    instanceEntity.validate();
+
     const rawInstance = await InstanceModel.findOne();
     if (!rawInstance) {
       return null;
     }
-    rawInstance.set(instance);
+    rawInstance.set(instanceEntity);
     await rawInstance.save();
     const newInstance = await InstanceModel.findOne();
-    return new Instance(newInstance);
+    return newInstance.toEntity();
   }
 }
 
