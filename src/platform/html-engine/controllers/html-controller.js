@@ -24,6 +24,12 @@ class HtmlController {
     }
 
     bookables.reverse();
+
+    if (bookables.length === 0) {
+      response.status(404).send("No bookables found");
+      return;
+    }
+
     const htmlOutput = await HtmlEngine.bookablesToList(bookables);
 
     response.setHeader("content-type", "text/plain");
@@ -34,10 +40,10 @@ class HtmlController {
     const tenantId = request.params.tenant;
     const id = request.params.id;
     const bookable = await BookableManager.getBookable(id, tenantId);
-    const htmlOutput = await HtmlEngine.bookable(bookable);
 
     // if bookable is not bookable, return 404
-    if (bookable.id && bookable.isPublic === true) {
+    if (bookable?.id && bookable.isPublic === true) {
+      const htmlOutput = await HtmlEngine.bookable(bookable);
       response.setHeader("content-type", "text/plain");
       response.status(200).send(htmlOutput);
     } else {
@@ -84,7 +90,7 @@ class HtmlController {
     const id = request.params.id;
     const event = await EventManager.getEvent(id, tenantId);
 
-    if (event.id) {
+    if (event?.id) {
       const htmlOutput = await HtmlEngine.event(event, !!user);
 
       response.setHeader("content-type", "text/plain");
