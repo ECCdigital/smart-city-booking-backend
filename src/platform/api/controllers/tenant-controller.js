@@ -1,5 +1,5 @@
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const Tenant = require("../../../commons/entities/tenant");
+const Tenant = require("../../../commons/entities/tenant/tenant");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const PermissionService = require("../../../commons/services/permission-service");
 const InstanceManger = require("../../../commons/data-managers/instance-manager");
@@ -7,7 +7,7 @@ const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
 const { v4: uuidv4 } = require("uuid");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 
 const logger = bunyan.createLogger({
@@ -31,9 +31,9 @@ class TenantController {
       const allowedTenants = [];
       for (const tenant of tenants) {
         if (publicTenants) {
-          tenant.removePrivateData();
-          if (tenantIds.includes(tenant.id)) {
-            allowedTenants.push(tenant);
+          const publicTenant = tenant.exportPublic();
+          if (tenantIds.includes(publicTenant.id)) {
+            allowedTenants.push(publicTenant);
           }
         } else if (
           (await PermissionService._isTenantOwner(user.id, tenant.id)) ||

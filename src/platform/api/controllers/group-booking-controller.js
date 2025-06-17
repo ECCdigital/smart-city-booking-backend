@@ -1,7 +1,7 @@
 const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 const bunyan = require("bunyan");
 const PermissionsService = require("../../../commons/services/permission-service");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 
@@ -116,6 +116,9 @@ class GroupBookingController {
   static async commitGroupBooking(req, res) {
     const tenantId = req.params.tenant;
     const user = req.user;
+
+    console.log("Committing group booking for tenant:", tenantId);
+
     try {
       const groupBookingId = req.params.id;
 

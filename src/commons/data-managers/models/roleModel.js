@@ -1,8 +1,8 @@
 const mongoose = require("mongoose");
-const { Role } = require("../../entities/role");
+const { roleSchemaDefinition } = require("../../schemas/roleSchema");
 const { Schema } = mongoose;
 
-const RoleSchema = new Schema(Role.schema);
+const RoleSchema = new Schema(roleSchemaDefinition);
 
 RoleSchema.index({ id: 1, tenantId: 1 }, { unique: true });
 
@@ -15,4 +15,10 @@ RoleSchema.pre("validate", function (next) {
   }
   next();
 });
+
+RoleSchema.methods.toEntity = function () {
+  const { Role } = require("../../entities/role/role");
+  return new Role(this.toObject());
+};
+
 module.exports = mongoose.models.Role || mongoose.model("Role", RoleSchema);

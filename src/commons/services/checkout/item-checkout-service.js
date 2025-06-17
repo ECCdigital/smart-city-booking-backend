@@ -347,7 +347,7 @@ class ItemCheckoutService {
 
   async userPriceEur() {
     if (await this.freeBookingAllowed()) {
-      if(!this.bookWithPrice) {
+      if (!this.bookWithPrice) {
         logger.info(
           `User ${this.user} is allowed to book bookable ${this.bookableId} for free, but bookWithPrice is set to false.`,
         );
