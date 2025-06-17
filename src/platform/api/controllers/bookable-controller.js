@@ -279,7 +279,7 @@ class BookableController {
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
         );
-        response.sendStatus(201);
+        response.status(201).send(bookable);
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to create bookable`,
@@ -340,7 +340,7 @@ class BookableController {
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
         );
-        response.sendStatus(201);
+        response.status(201).send(bookable);
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to update bookable`,
