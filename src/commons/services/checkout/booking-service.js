@@ -496,8 +496,10 @@ class BookingService {
         email: updatedBooking.mail,
         phone: updatedBooking.phone,
         comment: updatedBooking.comment,
-        internalComments: updatedBooking.internalComments || oldBooking.internalComments || "",
-        rejectionReason: updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
+        internalComments:
+          updatedBooking.internalComments || oldBooking.internalComments || "",
+        rejectionReason:
+          updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
         isCommit: Boolean(updatedBooking.isCommitted),
         isPayed: Boolean(updatedBooking.isPayed),
         isRejected: Boolean(updatedBooking.isRejected),
