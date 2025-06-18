@@ -161,7 +161,9 @@ class BookableManager {
       uniqueMap.set(bookable.id, bookable);
     }
 
-    return Array.from(uniqueMap.values()).map((doc) => doc.toEntity());
+    return Array.from(uniqueMap.values())
+      .map((obj) => BookableModel.hydrate(obj))
+      .map((doc) => doc.toEntity());
   }
 
   /**
