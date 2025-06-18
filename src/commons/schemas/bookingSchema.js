@@ -14,6 +14,8 @@ const bookingSchemaDefinition = {
   attachments: { type: [Object], default: [] },
   bookableItems: { type: [Object], default: [] },
   comment: { type: String, default: "" },
+  internalComments: { type: String, default: "" },
+  rejectionReason: { type: String, default: "" },
   company: { type: String, default: "" },
   couponCode: { type: String, default: "" },
   isCommitted: { type: Boolean, default: false },

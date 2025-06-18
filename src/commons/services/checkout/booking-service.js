@@ -157,6 +157,8 @@ class BookingService {
         email: mail,
         phone,
         comment,
+        internalComments: bookingAttempt.internalComments || "",
+        rejectionReason: bookingAttempt.rejectionReason || "",
         isCommit: Boolean(isCommitted),
         isPayed: Boolean(isPayed),
         isRejected: Boolean(isRejected),
@@ -494,6 +496,10 @@ class BookingService {
         email: updatedBooking.mail,
         phone: updatedBooking.phone,
         comment: updatedBooking.comment,
+        internalComments:
+          updatedBooking.internalComments || oldBooking.internalComments || "",
+        rejectionReason:
+          updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
         isCommit: Boolean(updatedBooking.isCommitted),
         isPayed: Boolean(updatedBooking.isPayed),
         isRejected: Boolean(updatedBooking.isRejected),
@@ -695,6 +701,7 @@ class BookingService {
       }
 
       booking.isRejected = true;
+      booking.rejectionReason = reason;
 
       if (hookId) {
         booking.removeHook(hookId);
@@ -762,6 +769,7 @@ class BookingService {
 
     for (const booking of bookings) {
       booking.isRejected = true;
+      booking.rejectionReason = reason;
       await BookingManager.storeBooking(booking);
     }
 
