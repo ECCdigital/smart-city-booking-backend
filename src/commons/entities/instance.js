@@ -33,6 +33,7 @@ class Instance {
     allowedUsersToCreateTenant,
     ownerUserIds,
     isInitialized,
+    userNotifications,
   }) {
     this.applications = applications;
     this.mailTemplate = mailTemplate;
@@ -57,6 +58,7 @@ class Instance {
     this.allowedUsersToCreateTenant = allowedUsersToCreateTenant;
     this.ownerUserIds = ownerUserIds;
     this.isInitialized = isInitialized;
+    this.userNotifications = userNotifications;
   }
 
   removePrivateData() {
@@ -109,6 +111,17 @@ class Instance {
       allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
       ownerUserIds: { type: Array, ref: "User", default: [] },
       isInitialized: { type: Boolean, default: false },
+      userNotifications: { 
+        type: Array, 
+        default: [],
+        schema: {
+          id: { type: String, default: null },
+          enabled: { type: Boolean, default: true },
+          message: { type: String },
+          tenants: { type: Array, default: [] },
+          path: { type: Array, default: [] },
+        }
+      },
     };
   }
 }
