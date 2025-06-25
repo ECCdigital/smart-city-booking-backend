@@ -169,8 +169,6 @@ class BookableController {
       const user = request.user;
       const id = request.params.id;
 
-      console.log("id", id);
-
       if (!id) {
         logger.warn(`${tenant} -- Could not get bookable. No id provided.`);
         return response.status(400).send(`${tenant} -- No id provided`);
