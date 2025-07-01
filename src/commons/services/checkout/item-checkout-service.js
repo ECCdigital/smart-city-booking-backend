@@ -593,11 +593,55 @@ class ItemCheckoutService {
     return true;
   }
 
+  async checkEventDate() {
+    if (
+      this.originBookable.type === "ticket" &&
+      !!this.originBookable.eventId
+    ) {
+      const event = await EventManager.getEvent(
+        this.originBookable.eventId,
+        this.originBookable.tenantId,
+      );
+
+      if (!event) {
+        throw new Error(
+          `Die Veranstaltung für das Ticket ${this.originBookable.title} existiert nicht.`
+        );
+      }
+
+      const now = new Date();
+      const eventEndDate = event.information.endDate ? new Date(event.information.endDate) : null;
+
+      const eventDate = eventEndDate || (event.information.startDate ? new Date(event.information.startDate) : null);
+
+      if (!eventDate) {
+        return true;
+      }
+
+      if (eventEndDate && event.information.endTime) {
+        const [hours, minutes] = event.information.endTime.split(':').map(Number);
+        eventEndDate.setHours(hours, minutes, 0, 0);
+      } else if (!eventEndDate && event.information.startTime) {
+        const [hours, minutes] = event.information.startTime.split(':').map(Number);
+        eventDate.setHours(hours, minutes, 0, 0);
+      }
+
+      if (eventDate < now) {
+        throw new Error(
+          `Die Veranstaltung ${event.information.name} liegt in der Vergangenheit und kann nicht mehr gebucht werden.`
+        );
+      }
+    }
+
+    return true;
+  }
+
   async checkAll() {
     await this.checkPermissions();
     await this.checkOpeningHours();
     await this.checkBookingDuration();
     await this.checkAvailability();
+    await this.checkEventDate();
     await this.checkEventSeats();
     await this.checkParentAvailability();
     await this.checkChildBookings();
