@@ -8,6 +8,7 @@ const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
+const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
