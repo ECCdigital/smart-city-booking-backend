@@ -431,6 +431,7 @@ class CalendarController {
         await itemCheckoutService.checkPermissions();
         await itemCheckoutService.checkOpeningHours();
         await itemCheckoutService.checkAvailability();
+        await itemCheckoutService.checkEventDate();
         await itemCheckoutService.checkEventSeats();
         await itemCheckoutService.checkParentAvailability();
         await itemCheckoutService.checkChildBookings();
