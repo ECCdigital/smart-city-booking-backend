@@ -1,4 +1,4 @@
-const { User, HookTypes } = require("../entities/user");
+const { User, USER_HOOK_TYPES } = require("../entities/user/user");
 const { RoleManager } = require("./role-manager");
 const TenantManager = require("./tenant-manager");
 const InstanceManager = require("./instance-manager");
@@ -9,32 +9,39 @@ class UserManager {
     const rawUser = await UserModel.findOne({ id: id });
     if (!rawUser) {
       return null;
-    } else {
-      const user = new User(rawUser);
-      if (!withSensitive) {
-        user.removeSensitive();
-        return user;
-      } else {
-        return user;
-      }
     }
+
+    let user = rawUser.toEntity();
+    if (!withSensitive) {
+      user = user.exportPublic();
+    }
+    return user;
   }
 
   static async signupUser(user) {
     try {
-      const rawUser = await UserModel.create(user);
-      return new User(rawUser);
+      const userEntity = user instanceof User ? user : new User(user);
+
+      userEntity.validate();
+
+      const rawUser = await UserModel.create(userEntity);
+      return rawUser.toEntity();
     } catch (err) {
       throw err;
     }
   }
 
-  static async storeUser(user) {
+  static async storeUser(user, upsert = true) {
     try {
-      await UserModel.updateOne({ id: user.id }, user, {
-        upsert: true,
+      const userEntity = user instanceof User ? user : new User(user);
+
+      userEntity.validate();
+
+      await UserModel.updateOne({ id: userEntity.id }, userEntity, {
+        upsert: upsert,
       });
-      return await UserManager.getUser(user.id);
+
+      return userEntity;
     } catch (err) {
       throw err;
     }
@@ -43,10 +50,10 @@ class UserManager {
   static async getUsers(withSensitive = false) {
     try {
       const rawUsers = await UserModel.find({});
-      return rawUsers.map((ru) => {
-        const user = new User(ru);
+      return rawUsers.map((doc) => {
+        let user = doc.toEntity();
         if (!withSensitive) {
-          user.removeSensitive();
+          user = user.exportPublic();
         }
         return user;
       });
@@ -58,10 +65,10 @@ class UserManager {
   static async getUsersById(ids, withSensitive = false) {
     try {
       const rawUsers = await UserModel.find({ id: { $in: ids } });
-      return rawUsers.map((ru) => {
-        const user = new User(ru);
+      return rawUsers.map((doc) => {
+        let user = doc.toEntity();
         if (!withSensitive) {
-          user.removeSensitive();
+          user = user.exportPublic();
         }
         return user;
       });
@@ -81,7 +88,7 @@ class UserManager {
   static async requestVerification(user) {
     const MailController = require("../mail-service/mail-controller");
     try {
-      const hook = user.addHook(HookTypes.VERIFY);
+      const hook = user.addHook(USER_HOOK_TYPES.VERIFY);
       await UserManager.storeUser(user);
       await MailController.sendVerificationRequest(user.id, hook.id);
       return hook;
@@ -93,9 +100,12 @@ class UserManager {
   static async resetPassword(user, password) {
     const MailController = require("../mail-service/mail-controller");
     try {
-      const hook = user.addPasswordResetHook(password);
-      await UserManager.storeUser(user);
-      await MailController.sendPasswordResetRequest(user.id, hook.id);
+      const userEntity = user instanceof User ? user : new User(user);
+
+      const hook = userEntity.addPasswordResetHook(password);
+      await UserManager.storeUser(userEntity);
+      await MailController.sendPasswordResetRequest(userEntity.id, hook.id);
+      return hook;
     } catch (err) {
       throw err;
     }
@@ -103,17 +113,25 @@ class UserManager {
 
   static async releaseHook(hookId) {
     try {
-      const user = await UserModel.findOne({ "hooks.id": hookId });
-      if (!user) {
+      const rawUser = await UserModel.findOne({ "hooks.id": hookId });
+      if (!rawUser) {
         throw new Error("No User found with this hook.");
       }
-      const u = new User(user);
-      const hookType = u.hooks.find((h) => h.id === hookId).type;
-      if (u.releaseHook(hookId)) {
-        await UserManager.storeUser(u);
+
+      const user = rawUser.toEntity();
+      const hook = user.hooks.find((hook) => hook.id === hookId);
+
+      if (!hook) {
+        throw new Error("Hook does not exist.");
+      }
+
+      const hookType = hook.type;
+
+      if (user.releaseHook(hookId)) {
+        await UserManager.storeUser(user);
         return hookType;
       } else {
-        throw new Error("Hook does not exist.");
+        throw new Error("Failed to release hook.");
       }
     } catch (err) {
       throw err;
@@ -134,13 +152,11 @@ class UserManager {
       if (!userTenantPermissions || !userTenantPermissions[permissionName]) {
         return false;
       }
-
       return (
         userTenantPermissions.isOwner ||
         userTenantPermissions[permissionName][accessLevel] === true
       );
     } catch (err) {
-      console.error(err);
       return false;
     }
   }

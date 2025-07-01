@@ -2,9 +2,9 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
-const { Bookable } = require("../../../commons/entities/bookable");
+const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
 const {
   getRelatedOpeningHours,
@@ -169,8 +169,6 @@ class BookableController {
       const user = request.user;
       const id = request.params.id;
 
-      console.log("id", id);
-
       if (!id) {
         logger.warn(`${tenant} -- Could not get bookable. No id provided.`);
         return response.status(400).send(`${tenant} -- No id provided`);
@@ -318,7 +316,7 @@ class BookableController {
         tenant,
       );
 
-      if (!existingBookable.isPublic && bookable.isPublic) {
+      if (!existingBookable?.isPublic && bookable.isPublic) {
         if (
           (await BookableManager.checkPublicBookableCount(
             bookable.tenantId,

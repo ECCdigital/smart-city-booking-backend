@@ -1,4 +1,4 @@
-const { Coupon } = require("../entities/coupon");
+const { COUPON_TYPE } = require("../entities/coupon/coupon");
 const CouponModel = require("./models/couponModel");
 
 /**
@@ -31,7 +31,7 @@ class CouponManager {
     if (!rawCoupon) {
       return null;
     }
-    return new Coupon(rawCoupon);
+    return rawCoupon.toEntity();
   }
 
   /**
@@ -41,7 +41,7 @@ class CouponManager {
    */
   static async getCoupons(tenantId) {
     const rawCoupons = await CouponModel.find({ tenantId: tenantId });
-    return rawCoupons.map((rc) => new Coupon(rc));
+    return rawCoupons.map((doc) => doc.toEntity());
   }
 
   /**
@@ -118,13 +118,13 @@ class CouponManager {
     let discountedPrice = bookingPrice;
 
     switch (coupon.type) {
-      case Coupon.COUPON_TYPE.PERCENTAGE:
+      case COUPON_TYPE.PERCENTAGE:
         discountedPrice = Math.max(
           0,
           bookingPrice * (1 - coupon.discount / 100),
         ); //.toFixed(2);
         break;
-      case Coupon.COUPON_TYPE.FIXED:
+      case COUPON_TYPE.FIXED:
         discountedPrice = Math.max(0, bookingPrice - coupon.discount);
         break;
     }

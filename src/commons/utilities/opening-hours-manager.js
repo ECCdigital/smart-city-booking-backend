@@ -1,4 +1,4 @@
-const { Bookable } = require("../entities/bookable");
+const { Bookable } = require("../entities/bookable/bookable");
 const { isRangeOverlap } = require("range-overlap");
 const {
   getBookable,

@@ -1,6 +1,6 @@
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const CouponManager = require("../../../commons/data-managers/coupon-manager");
-const { Coupon } = require("../../../commons/entities/coupon");
+const { Coupon } = require("../../../commons/entities/coupon/coupon");
 const PermissionService = require("../../../commons/services/permission-service");
 const bunyan = require("bunyan");
 

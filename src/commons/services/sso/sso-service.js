@@ -3,7 +3,7 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const axios = require("axios");
 const UserManager = require("../../data-managers/user-manager");
 const { RoleManager } = require("../../data-managers/role-manager");
-const { User } = require("../../entities/user");
+const { User } = require("../../entities/user/user");
 
 class SsoService {
   static async handleLogin(token) {
@@ -92,6 +92,18 @@ class SsoService {
         user.id,
       );
 
+      if (!userRoles) {
+        if (keycloakRoles.includes(role.keycloakRole)) {
+          return {
+            tenantId: role.tenantId,
+            role: role.tenantRoleId,
+            action: "add",
+            needsInvite: true,
+          };
+        }
+        return;
+      }
+
       if (
         keycloakRoles.includes(role.keycloakRole) &&
         !userRoles.includes(role.tenantRoleId)
@@ -140,11 +152,14 @@ function extractRoles(obj) {
 }
 
 async function updateTenantRoles(roles, userId) {
-  for (const role of roles) {
-    if (role.action === "add") {
-      await TenantManager.addUserRole(role.tenantId, userId, role.role);
-    } else if (role.action === "remove") {
-      await TenantManager.removeUserRole(role.tenantId, userId, role.role);
+  for (const { tenantId, role, action, needsInvite } of roles) {
+    if (action === "add") {
+      if (needsInvite) {
+        await TenantManager.addTenantUser(tenantId, userId);
+      }
+      await TenantManager.addUserRole(tenantId, userId, role);
+    } else if (action === "remove") {
+      await TenantManager.removeUserRole(tenantId, userId, role);
     }
   }
 }

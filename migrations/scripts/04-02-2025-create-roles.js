@@ -1,4 +1,4 @@
-const TenantClass = require("../../src/commons/entities/tenant");
+const TenantClass = require("../../src/commons/entities/tenant/tenant");
 
 module.exports = {
   name: "04-02-2025-create-roles",

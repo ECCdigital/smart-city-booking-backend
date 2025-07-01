@@ -1,6 +1,6 @@
 const EventManager = require("../../../commons/data-managers/event-manager");
-const { Event } = require("../../../commons/entities/event");
-const { RolePermission } = require("../../../commons/entities/role");
+const { Event } = require("../../../commons/entities/event/event");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const bunyan = require("bunyan");
 const EventService = require("../../../commons/services/event-service");
 const PermissionService = require("../../../commons/services/permission-service");
@@ -120,7 +120,7 @@ class EventController {
 
       const existingEvents = await EventManager.getEvent(event.id, tenant);
 
-      if (!existingEvents.isPublic && event.isPublic) {
+      if (!existingEvents?.isPublic && event.isPublic) {
         if ((await EventManager.checkPublicEventCount(tenant)) === false) {
           throw new Error(`Maximum number of public events reached.`);
         }

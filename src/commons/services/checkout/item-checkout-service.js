@@ -2,10 +2,12 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
-const TenantManger = require("../../data-managers/tenant-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
+const HolidaysService = require("../holiday/holidays-service");
+const { formatISO } = require("date-fns");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -21,7 +23,7 @@ class CheckoutPermissions {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await TenantManger.getTenantUsersByRoles(
+        await TenantManager.getTenantUsersByRoles(
           tenantId,
           bookable.permittedRoles || [],
         )
@@ -56,6 +58,7 @@ class ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
+    bookWithPrice,
   ) {
     this.user = user;
     this.tenantId = tenantId;
@@ -65,6 +68,7 @@ class ItemCheckoutService {
     this.amount = Number(amount);
     this.couponCode = couponCode;
     this.originBookable = null;
+    this.bookWithPrice = bookWithPrice ?? true;
   }
 
   /**
@@ -86,10 +90,32 @@ class ItemCheckoutService {
   get ignoreAmount() {
     return (
       (this.originBookable.priceType === "per-item" &&
-        this.getPriceCategory().fixedPrice) ||
+        this.getPriceCategory()?.fixedPrice) ||
       (this.originBookable.priceType === "per-square-meter" &&
-        this.getPriceCategory().fixedPrice)
+        this.getPriceCategory()?.fixedPrice)
     );
+  }
+
+  async freeBookingAllowed() {
+    const freeBookingUsers = [
+      ...(this.originBookable.freeBookingUsers || []),
+      ...(
+        await TenantManager.getTenantUsersByRoles(
+          this.tenantId,
+          this.originBookable.freeBookingRoles || [],
+        )
+      ).map((u) => u.userId),
+    ];
+
+    if (
+      !!this.user &&
+      freeBookingUsers.includes(this.user) &&
+      this.originBookable.tenantId === this.tenantId
+    ) {
+      return true;
+    } else {
+      return false;
+    }
   }
 
   async calculateAmountBooked(bookable) {
@@ -97,8 +123,11 @@ class ItemCheckoutService {
 
     if ((await this.isTimeRelated()) || (await this._isLongRange())) {
       if (!this.timeBegin || !this.timeEnd) {
-        throw new Error(
+        logger.warn(
           `Bookable with ID ${bookable.id} is time related but no time is given.`,
+        );
+        throw new Error(
+          `Bitte geben Sie einen gültigen Zeitraum an, um die Verfügbarkeit zu prüfen.`,
         );
       }
 
@@ -143,11 +172,14 @@ class ItemCheckoutService {
    * This method returns the booking duration in minutes.
    * @returns {number}
    */
-  getBookingDuration() {
-    if (!this.timeEnd || !this.timeBegin) {
+  getBookingDuration(segmentStart, segmentEnd) {
+    const start = segmentStart || this.timeBegin;
+    const end = segmentEnd || this.timeEnd;
+
+    if (!start || !end) {
       return 0;
     }
-    return Math.round((this.timeEnd - this.timeBegin) / 60000);
+    return Math.round((end - start) / 60000);
   }
 
   async isTimeRelated() {
@@ -167,33 +199,113 @@ class ItemCheckoutService {
   }
 
   async regularPriceEur() {
-    const priceCategory = this.getPriceCategory();
+    const segments = this._splitIntoDailySegments();
 
-    let multiplier;
-    if (!priceCategory.fixedPrice) {
-      switch (this.originBookable.priceType) {
-        case "per-hour":
-          multiplier = this.getBookingDuration() / 60;
-          break;
-        case "per-day":
-          multiplier = this.getBookingDuration() / 1440;
-          break;
-        default:
-          multiplier = 1;
+    const prices = [];
+
+    for (const segment of segments) {
+      const priceCategory = this.getPriceCategory(segment.start, segment.end);
+
+      let multiplier;
+      if (!priceCategory?.fixedPrice) {
+        switch (this.originBookable.priceType) {
+          case "per-hour":
+            multiplier =
+              this.getBookingDuration(segment.start, segment.end) / 60;
+            break;
+          case "per-day":
+            multiplier =
+              this.getBookingDuration(segment.start, segment.end) / 1440;
+            break;
+          default:
+            multiplier = 1;
+        }
+      } else {
+        multiplier = 1;
       }
-    } else {
-      multiplier = 1;
+
+      if (!priceCategory) {
+        throw new Error("Es konnte kein Preis ermittelt werden.");
+      }
+
+      prices.push((Number(priceCategory.priceEur) || 0) * multiplier);
     }
 
-    const price = (Number(priceCategory.priceEur) || 0) * multiplier;
-    return Math.round(price * 100) / 100;
+    let total;
+    if (
+      this.originBookable.priceType === "per-square-meter" ||
+      this.originBookable.priceType === "per-item"
+    ) {
+      total = Math.max(...prices);
+    } else {
+      total = prices.reduce((acc, price) => acc + price, 0);
+    }
+
+    return Math.round(total * 100) / 100;
   }
 
-  getPriceCategory() {
+  getPriceCategory(segmentStart, segmentEnd) {
     const { priceCategories, priceType } = this.originBookable;
 
-    if (priceCategories.length === 1) {
+    const start = segmentStart || this.timeBegin;
+    const end = segmentEnd || this.timeEnd;
+
+    if (priceCategories.length === 1 || (!start && !end)) {
       return priceCategories[0];
+    }
+
+    const dayBegin = new Date(start).getDay();
+    const dayEnd = new Date(end).getDay();
+
+    const bookingYear = new Date(start).getFullYear();
+    const bookingDate = formatISO(new Date(start)).split("T")[0];
+
+    const holidaysPriceCategories = priceCategories.filter(
+      (pc) => pc.holidays.length > 0,
+    );
+
+    const filterdHolidayPriceCategories = [];
+    const holidaysServiceCache = new Map();
+    for (const pc of holidaysPriceCategories) {
+      for (const holiday of pc.holidays) {
+        const cacheKey = `${holiday.countryCode}-${holiday.stateCode}`;
+        let hs = holidaysServiceCache.get(cacheKey);
+        if (!hs) {
+          hs = new HolidaysService({
+            countryCode: holiday.countryCode,
+            stateCode: holiday.stateCode,
+          });
+          holidaysServiceCache.set(cacheKey, hs);
+        }
+        const holidays = hs.getHolidays(bookingYear);
+        const holidayDate = holidays.find((h) => h.name === holiday.name);
+        if (
+          holidayDate &&
+          formatISO(new Date(holidayDate.date)).split("T")[0] === bookingDate
+        ) {
+          filterdHolidayPriceCategories.push(pc);
+        }
+      }
+    }
+
+    const filteredWeekdaysPriceCategories = priceCategories.filter((pc) => {
+      if (dayBegin !== dayEnd) {
+        return pc.weekdays.includes(dayBegin) || pc.weekdays.includes(dayEnd);
+      } else {
+        return pc.weekdays.includes(dayBegin);
+      }
+    });
+
+    let priceCategoriesToCheck;
+
+    if (filterdHolidayPriceCategories.length > 0) {
+      priceCategoriesToCheck = filterdHolidayPriceCategories;
+    } else if (filteredWeekdaysPriceCategories.length > 0) {
+      priceCategoriesToCheck = filteredWeekdaysPriceCategories;
+    } else {
+      priceCategoriesToCheck = priceCategories.filter(
+        (pc) => pc.weekdays.length === 0 && pc.holidays.length === 0,
+      );
     }
 
     const bookingDurationInMinutes = this.getBookingDuration();
@@ -216,7 +328,7 @@ class ItemCheckoutService {
         return null;
     }
 
-    const category = priceCategories.find(({ interval }) => {
+    const category = priceCategoriesToCheck.find(({ interval }) => {
       const { start, end } = interval;
       return (
         (start === null || start <= valueToCheck) &&
@@ -234,29 +346,17 @@ class ItemCheckoutService {
   }
 
   async userPriceEur() {
-    const freeBookingUsers = [
-      ...(this.originBookable.freeBookingUsers || []),
-      ...(
-        await TenantManger.getTenantUsersByRoles(
-          this.tenantId,
-          this.originBookable.freeBookingRoles || [],
-        )
-      ).map((u) => u.userId),
-    ];
-
-    if (
-      !!this.user &&
-      freeBookingUsers.includes(this.user) &&
-      this.originBookable.tenantId === this.tenantId
-    ) {
-      logger.info(
-        `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
-      );
-      return 0;
+    if (await this.freeBookingAllowed()) {
+      if (!this.bookWithPrice) {
+        logger.info(
+          `User ${this.user} is allowed to book bookable ${this.bookableId} for free, but bookWithPrice is set to false.`,
+        );
+        return 0;
+      }
     }
 
     const total = await CouponManager.applyCoupon(
-      this.couponCode,
+      this.originBookable.enableCoupons ? this.couponCode : null,
       this.tenantId,
       await this.regularPriceEur(),
     );
@@ -364,7 +464,7 @@ class ItemCheckoutService {
         !childBookable.amount ||
         amountBooked + this.amount <= childBookable.amount;
 
-      if (isAvailable) {
+      if (!isAvailable) {
         throw new Error(
           `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
         );
@@ -502,6 +602,35 @@ class ItemCheckoutService {
     await this.checkParentAvailability();
     await this.checkChildBookings();
     await this.checkMaxBookingDate();
+  }
+
+  _splitIntoDailySegments() {
+    const segments = [];
+    let cursor = new Date(this.timeBegin);
+
+    while (cursor < this.timeEnd) {
+      const nextMidnight = new Date(cursor);
+      nextMidnight.setHours(24, 0, 0, 0);
+
+      segments.push({
+        start: new Date(cursor).getTime(),
+        end:
+          this.timeEnd < nextMidnight
+            ? new Date(this.timeEnd).getTime()
+            : nextMidnight.getTime(),
+      });
+
+      cursor = nextMidnight;
+    }
+
+    return segments.length > 0
+      ? segments
+      : [{ start: this.timeBegin, end: this.timeEnd }];
+  }
+
+  _weekdayNumber(date) {
+    const d = date.getDay();
+    return d === 0 ? 7 : d;
   }
 }
 

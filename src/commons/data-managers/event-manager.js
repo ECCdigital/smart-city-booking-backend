@@ -1,4 +1,4 @@
-const { Event } = require("../entities/event");
+const { Event } = require("../entities/event/event");
 const EventModel = require("./models/eventModel");
 
 /**
@@ -14,7 +14,7 @@ class EventManager {
     const rawEvents = await EventModel.find({
       tenantId: tenantId,
     });
-    return rawEvents.map((re) => new Event(re));
+    return rawEvents.map((doc) => doc.toEntity());
   }
 
   /**
@@ -29,7 +29,7 @@ class EventManager {
     if (!rawEvent) {
       return null;
     }
-    return new Event(rawEvent);
+    return rawEvent.toEntity();
   }
 
   /**
@@ -40,13 +40,19 @@ class EventManager {
    * @returns Promise<>
    */
   static async storeEvent(event, upsert = true) {
+    const eventEntity = event instanceof Event ? event : new Event(event);
+
+    eventEntity.validate();
+
     await EventModel.updateOne(
-      { id: event.id, tenantId: event.tenantId },
-      event,
+      { id: eventEntity.id, tenantId: eventEntity.tenantId },
+      eventEntity,
       {
         upsert: upsert,
       },
     );
+
+    return eventEntity;
   }
 
   /**

@@ -1,5 +1,5 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-const { User, HookTypes } = require("../../../commons/entities/user");
+const { User, HookTypes } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const SsoService = require("../../../commons/services/sso/sso-service");

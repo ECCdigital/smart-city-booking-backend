@@ -51,6 +51,7 @@ class BundleCheckoutService {
     attachmentStatus,
     paymentProvider,
     attachments,
+    bookWithPrice,
   }) {
     this.user = user;
     this.tenant = tenant;
@@ -70,6 +71,7 @@ class BundleCheckoutService {
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
+    this.bookWithPrice = bookWithPrice;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -81,6 +83,7 @@ class BundleCheckoutService {
       bookableItem.bookableId,
       bookableItem.amount,
       this.couponCode,
+      this.bookWithPrice,
     );
     await itemCheckoutService.init();
 
@@ -326,6 +329,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} email - The email of the user.
    * @param {string} phone - The phone number of the user.
    * @param {string} comment - The comment of the user.
+   * @param {string} internalComments - Internal comments for administrative purposes.
+   * @param {string} rejectionReason - Reason for rejection if the booking is rejected.
    * @param {boolean} isCommit - The commit status.
    * @param {boolean} isPayed - The payment status.
    * @param {boolean} isRejected - The reject status.
@@ -351,6 +356,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     email,
     phone,
     comment,
+    internalComments,
+    rejectionReason,
     isCommit,
     isPayed,
     isRejected,
@@ -359,6 +366,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     paymentMethod,
     hooks,
     attachments,
+    bookWithPrice,
   }) {
     super({
       user,
@@ -379,12 +387,15 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachmentStatus,
       paymentProvider,
       attachments,
+      bookWithPrice,
     });
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
     this.isRejected = isRejected;
     this.paymentMethod = paymentMethod;
     this.hooks = hooks;
+    this.internalComments = internalComments || "";
+    this.rejectionReason = rejectionReason || "";
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -396,6 +407,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       bookableItem.bookableId,
       bookableItem.amount,
       this.couponCode,
+      this.bookWithPrice,
     );
 
     await itemCheckoutService.init(bookableItem._bookableUsed);
@@ -432,6 +444,13 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
 
   setPaymentMethod() {
     return this.paymentMethod;
+  }
+
+  async prepareBooking(options = {}) {
+    const booking = await super.prepareBooking(options);
+    booking.internalComments = this.internalComments;
+    booking.rejectionReason = this.rejectionReason;
+    return booking;
   }
 }
 

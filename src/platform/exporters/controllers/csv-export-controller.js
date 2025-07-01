@@ -1,4 +1,4 @@
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const Formatters = require("../../../commons/utilities/formatters");
 const UserManager = require("../../../commons/data-managers/user-manager");
