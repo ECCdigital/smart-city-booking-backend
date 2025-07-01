@@ -595,7 +595,7 @@ class ItemCheckoutService {
 
   async checkEventDate() {
     if (
-      this.originBookable.type === "ticket" &&
+      this.originBookable.type === BOOKABLE_TYPES.TICKET &&
       !!this.originBookable.eventId
     ) {
       const event = await EventManager.getEvent(
