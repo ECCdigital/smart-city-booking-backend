@@ -38,7 +38,12 @@ const bookableSchemaDefinition = {
   longRangeOptions: { type: Object, default: null },
 
   // Price properties
-  priceCategories: { type: [Object], default: [] },
+  priceCategories: {
+    type: [Object],
+    default: [
+      { priceEur: 0, interval: { start: null, end: null }, fixedPrice: false },
+    ],
+  },
   priceType: {
     type: String,
     enum: ["per-hour", "per-day", "per-item", "per-square-meter"],
