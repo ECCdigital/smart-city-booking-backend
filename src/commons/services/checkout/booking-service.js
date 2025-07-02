@@ -507,6 +507,7 @@ class BookingService {
         paymentProvider: updatedBooking.paymentProvider,
         paymentMethod: updatedBooking.paymentMethod,
         attachments: oldBooking.attachments,
+        lockerInfo: oldBooking.lockerInfo,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({
