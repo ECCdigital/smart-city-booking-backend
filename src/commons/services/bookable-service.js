@@ -3,6 +3,12 @@ const {
   ItemCheckoutService,
   CHECK_TYPES,
 } = require("./checkout/item-checkout-service");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "bookable-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 /**
  * The BookableService class provides methods for determining the availability
@@ -51,6 +57,7 @@ class BookableService {
         ...occupancyData,
       };
     } catch (error) {
+      logger.error(error);
       return this._createErrorResponse(bookableId);
     }
   }

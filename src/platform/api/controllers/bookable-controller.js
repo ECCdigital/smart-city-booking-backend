@@ -480,14 +480,6 @@ class BookableController {
       const { timeBegin, timeEnd } = request.query;
       const user = request.user;
 
-      console.log("Checking occupancy with params:", {
-        tenantId,
-        bookableId,
-        timeBegin,
-        timeEnd,
-        userId: user?.id,
-      });
-
       if (!bookableId) {
         logger.warn(
           `${tenantId} -- Could not get bookable occupancy. No id provided.`,
@@ -503,7 +495,6 @@ class BookableController {
         userId: user?.id,
       });
 
-      console.log(occupancy);
       response.status(200).send(occupancy);
     } catch (err) {
       logger.error(err);
