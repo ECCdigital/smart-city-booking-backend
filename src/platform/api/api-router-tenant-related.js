@@ -10,8 +10,10 @@ const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
 const RoleController = require("./controllers/role-controller");
-const UserController = require("./controllers/user-controller");
 const { TenantController } = require("./controllers/tenant-controller");
+const {
+  GroupBookingController,
+} = require("./controllers/group-booking-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -25,8 +27,9 @@ router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
   "/bookables/:id/availability",
-  CalendarController.getBookableAvailabilityFixed,
+  CalendarController.getBookableAvailability,
 );
+router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
 
 // Protected
 router.get(
@@ -98,7 +101,7 @@ router.get(
 // Public
 router.get("/bookings", BookingController.getBookings);
 
-router.get("/bookings/:id/status", BookingController.getBookingStatus);
+router.get("/bookings/:ids/status", BookingController.getBookingStatus);
 router.get(
   "/bookings/:id/status/public",
   BookingController.getPublicBookingStatus,
@@ -110,6 +113,7 @@ router.get(
   AuthenticationController.isSignedIn,
   BookingController.getBooking,
 );
+
 router.put(
   "/bookings",
   AuthenticationController.isSignedIn,
@@ -167,9 +171,48 @@ router.get(
   TenantController.getUsers,
 );
 
+// GROUP BOOKINGS
+// ==============
+router.get(
+  "/group-bookings",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getGroupBookings,
+);
+router.get(
+  "/group-bookings/:id",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getGroupBooking,
+);
+router.post(
+  "/group-bookings/:id/commit",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.commitGroupBooking,
+);
+router.post(
+  "/group-bookings/:id/reject",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.rejectGroupBooking,
+);
+router.get(
+  "/group-bookings/booking/:bookingId",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getGroupBookingByBookingId,
+);
+router.delete(
+  "/group-bookings/:id",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.removeGroupBooking,
+);
+router.post(
+  "/group-bookings/:id/receipt",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.createGroupBookingReceipt,
+);
+
 // CHECKOUT
 // ========
 router.post("/checkout", CheckoutController.checkout);
+router.post("/checkout/group", CheckoutController.groupCheckout);
 router.post("/checkout/validateItem", CheckoutController.validateItem);
 router.get("/checkout/permissions/:id", CheckoutController.checkoutPermissions);
 
@@ -250,6 +293,11 @@ router.get(
   "/roles",
   AuthenticationController.isSignedIn,
   RoleController.getRoles,
+);
+router.get(
+  "/roles/tenant",
+  AuthenticationController.isSignedIn,
+  RoleController.getUserRolesByTenant,
 );
 router.put(
   "/roles",

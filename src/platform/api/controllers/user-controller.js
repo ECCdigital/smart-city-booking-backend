@@ -1,9 +1,9 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-const { User } = require("../../../commons/entities/user");
+const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",

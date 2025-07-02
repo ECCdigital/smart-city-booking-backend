@@ -3,7 +3,7 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const axios = require("axios");
 const UserManager = require("../../data-managers/user-manager");
 const { RoleManager } = require("../../data-managers/role-manager");
-const { User } = require("../../entities/user");
+const { User } = require("../../entities/user/user");
 
 class SsoService {
   static async handleLogin(token) {

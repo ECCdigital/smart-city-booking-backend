@@ -6,38 +6,26 @@ module.exports = {
     const bookings = await Booking.find().lean();
 
     for (const booking of bookings) {
-      let hasChanges = false;
+      if (!Array.isArray(booking.bookableItems)) continue;
 
-      for (const item of booking.bookableItems) {
-        const bu = item._bookableUsed;
-        if (!bu) {
-          console.warn(`Skipping Booking ${booking._id}: _bookableUsed fehlt`);
-          continue;
+      for (const bookableItem of booking.bookableItems) {
+        if (bookableItem._bookableUsed) {
+          const bu = bookableItem._bookableUsed;
+          bu.priceCategories = [
+            {
+              priceEur: bu.priceEur,
+              fixedPrice: false,
+              interval: { start: null, end: null },
+            },
+          ];
+          bu.priceType = bu.priceCategory;
         }
-        if (bu.priceEur == null) {
-          console.warn(
-            `Skipping Booking ${booking._id}: priceEur fehlt in _bookableUsed`,
-          );
-          continue;
-        }
-
-        bu.priceCategories = [
-          {
-            priceEur: bu.priceEur,
-            fixedPrice: false,
-            interval: { start: null, end: null },
-          },
-        ];
-        bu.priceType = bu.priceCategory;
-        hasChanges = true;
       }
 
-      if (hasChanges) {
-        await Booking.updateOne(
-          { _id: booking._id },
-          { $set: { bookableItems: booking.bookableItems } },
-        );
-      }
+      await Booking.updateOne(
+        { _id: booking._id },
+        { $set: { bookableItems: booking.bookableItems } },
+      );
     }
   },
 
@@ -46,37 +34,31 @@ module.exports = {
     const bookings = await Booking.find().lean();
 
     for (const booking of bookings) {
-      let hasChanges = false;
+      if (!Array.isArray(booking.bookableItems)) continue;
 
-      for (const item of booking.bookableItems) {
-        const bu = item._bookableUsed;
+      for (const bookableItem of booking.bookableItems) {
         if (
-          !bu ||
-          !Array.isArray(bu.priceCategories) ||
-          bu.priceCategories.length === 0
+          bookableItem._bookableUsed &&
+          Array.isArray(bookableItem._bookableUsed.priceCategories)
         ) {
-          continue;
+          const bu = bookableItem._bookableUsed;
+          bu.priceEur = bu.priceCategories[0].priceEur;
+          bu.priceCategory = bu.priceType;
         }
-
-        bu.priceEur = bu.priceCategories[0].priceEur;
-        bu.priceCategory = bu.priceType;
-        hasChanges = true;
       }
 
-      if (hasChanges) {
-        await Booking.updateOne(
-          { _id: booking._id },
-          { $set: { bookableItems: booking.bookableItems } },
-        );
-      }
+      await Booking.updateOne(
+        { _id: booking._id },
+        { $set: { bookableItems: booking.bookableItems } },
+      );
     }
 
     await Booking.collection.updateMany(
       {},
       {
         $unset: {
-          "bookableItems.$[].priceCategories": 1,
-          "bookableItems.$[].priceType": 1,
+          "bookableItems.$[]._bookableUsed.priceCategories": "",
+          "bookableItems.$[]._bookableUsed.priceType": "",
         },
       },
     );

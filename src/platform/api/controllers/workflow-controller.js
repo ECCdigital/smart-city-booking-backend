@@ -2,9 +2,9 @@ const WorkflowManager = require("../../../commons/data-managers/workflow-manager
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const bunyan = require("bunyan");
 const PermissionsService = require("../../../commons/services/permission-service");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
-const Workflow = require("../../../commons/entities/workflow");
+const Workflow = require("../../../commons/entities/workflow/workflow");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",

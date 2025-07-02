@@ -1,13 +1,11 @@
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
-const { Role, RolePermission } = require("../../../commons/entities/role");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const { Role, RolePermission } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
 const PermissionService = require("../../../commons/services/permission-service");
-const bunyan = require("bunyan");
+const createComponentLogger = require("../../../middleware/logger");
 
-const logger = bunyan.createLogger({
-  name: "role-controller.js",
-  level: process.env.LOG_LEVEL,
-});
+const logger = createComponentLogger("role-controller.js");
 
 /**
  * Web Controller for Roles.
@@ -17,6 +15,8 @@ class RoleController {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
+      const isPublicView =
+        request.query.public?.trim()?.toLowerCase() === "true";
 
       let roles;
 
@@ -27,16 +27,23 @@ class RoleController {
       }
 
       let allowedRoles = [];
-      for (let role of roles) {
-        if (
-          await PermissionService._allowRead(
-            role,
-            user.id,
-            tenantId,
-            RolePermission.MANAGE_ROLES,
-          )
-        ) {
-          allowedRoles.push(role);
+
+      if (isPublicView) {
+        for (let role of roles) {
+          allowedRoles.push(role.toPublic());
+        }
+      } else {
+        for (let role of roles) {
+          if (
+            await PermissionService._allowRead(
+              role,
+              user.id,
+              tenantId,
+              RolePermission.MANAGE_ROLES,
+            )
+          ) {
+            allowedRoles.push(role);
+          }
         }
       }
 
@@ -45,6 +52,52 @@ class RoleController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get roles");
+    }
+  }
+
+  static async getUserRolesByTenant(req, res) {
+    const user = req.user;
+    if (!user) {
+      return res.status(400).json({ error: "User not authenticated" });
+    }
+
+    const tenantId = req.params.tenant;
+    const isPublicView = Boolean(req.query.public);
+
+    try {
+      const tenantRoleIds = await TenantManager.getTenantUserRoles(
+        tenantId,
+        user.id,
+      );
+
+      const roles = await Promise.all(
+        tenantRoleIds.map((id) => RoleManager.getRole(id, tenantId)),
+      );
+      const validRoles = roles.filter((r) => r);
+
+      let allowedRoles;
+      if (isPublicView) {
+        allowedRoles = validRoles.map((role) => role.toPublic());
+      } else {
+        const checks = await Promise.all(
+          validRoles.map(async (role) => {
+            const allowed = await PermissionService.allowRead(
+              role,
+              user.id,
+              tenantId,
+              RolePermission.MANAGE_ROLES,
+            );
+            return allowed ? role : null;
+          }),
+        );
+        allowedRoles = checks.filter((r) => r);
+      }
+
+      logger.info(`Sending ${allowedRoles.length} roles to user ${user.id}`);
+      return res.status(200).json(allowedRoles);
+    } catch (err) {
+      logger.error("Error in getUserRolesByTenant:", err);
+      return res.status(500).json({ error: "Could not get user roles" });
     }
   }
 

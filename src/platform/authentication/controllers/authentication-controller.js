@@ -1,5 +1,5 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-const { User, HookTypes } = require("../../../commons/entities/user");
+const { User, HookTypes } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const SsoService = require("../../../commons/services/sso/sso-service");
@@ -77,7 +77,6 @@ class AuthenticationController {
           const user = new User({
             id: request.body.id,
             secret: undefined,
-            tenant: request.params.tenant,
             firstName: request.body.firstName,
             lastName: request.body.lastName,
             company: request.body.company,
