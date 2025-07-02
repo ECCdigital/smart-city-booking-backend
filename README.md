@@ -217,6 +217,21 @@ The backend offers both public and protected API routes.
   Deletes a bookable resource.  
   _Required Permission:_ bookable.allowDelete
 
+- **GET /api/:tenant/bookables/:id/occupancy**  
+  Returns occupancy information for a specific bookable resource.  
+  _Parameters:_
+  - **id** (path): ID of the bookable resource
+  - **timeBegin** (query, optional): Start time for the occupancy check (timestamp)
+  - **timeEnd** (query, optional): End time for the occupancy check (timestamp)
+
+  _Response:_ JSON object containing:
+  - **bookableId**: ID of the bookable resource
+  - **title**: Title of the bookable resource
+  - **isAvailable**: Boolean indicating if the bookable is available in the specified time range
+  - **totalCapacity**: Total capacity of the bookable
+  - **booked**: Number of booked units
+  - **remaining**: Number of remaining units
+
 #### Other Categories
 
 For endpoints related to events, users, bookings, coupons, checkout, payments, calendars, and files, refer to the detailed API documentation within this README. Each route includes parameter details, example request bodies, and required permissions.

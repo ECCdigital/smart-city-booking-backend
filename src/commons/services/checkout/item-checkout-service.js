@@ -15,6 +15,20 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+const CHECK_TYPES = {
+  PERMISSION: "permission",
+  AVAILABILITY: "availability",
+  PARENT_AVAILABILITY: "parent-availability",
+  OPENING_HOURS: "opening-hours",
+  BOOKING_DURATION: "booking-duration",
+  EVENT_DATE: "event-date",
+  EVENT_SEATS: "event-seats",
+  CHILD_BOOKINGS: "child-bookings",
+  MAX_BOOKING_DATE: "max-booking-date",
+  TIME_RELATION: "time-relation",
+  PRICE_CATEGORY: "price-category",
+};
+
 class CheckoutPermissions {
   static _isOwner(bookable, userId, tenantId) {
     return bookable.ownerUserId === userId && bookable.tenantId === tenantId;
@@ -88,6 +102,13 @@ class ItemCheckoutService {
     return this.originBookable;
   }
 
+  get hasEvent() {
+    return (
+      this.originBookable.type === BOOKABLE_TYPES.TICKET &&
+      !!this.originBookable.eventId
+    );
+  }
+
   get ignoreAmount() {
     return (
       (this.originBookable.priceType === "per-item" &&
@@ -127,9 +148,11 @@ class ItemCheckoutService {
         logger.warn(
           `Bookable with ID ${bookable.id} is time related but no time is given.`,
         );
-        throw new Error(
-          `Bitte geben Sie einen gültigen Zeitraum an, um die Verfügbarkeit zu prüfen.`,
-        );
+        throw {
+          checkType: CHECK_TYPES.TIME_RELATION,
+          available: false,
+          message: `Das Objekt ${bookable.title} ist zeitbezogen, aber es wurde kein Zeitraum angegeben.`,
+        };
       }
 
       concurrentBookings = await BookingManager.getConcurrentBookings(
@@ -226,7 +249,11 @@ class ItemCheckoutService {
       }
 
       if (!priceCategory) {
-        throw new Error("Es konnte kein Preis ermittelt werden.");
+        throw {
+          checkType: CHECK_TYPES.PRICE_CATEGORY,
+          available: false,
+          message: `Es konnte keine passende Preiskategorie für das Objekt ${this.originBookable.title} gefunden werden.`,
+        };
       }
 
       prices.push((Number(priceCategory.priceEur) || 0) * multiplier);
@@ -373,9 +400,11 @@ class ItemCheckoutService {
 
   async checkPermissions() {
     if (this.originBookable.isBookable !== true) {
-      throw new Error(
-        `Bookable with ID ${this.originBookable.id} is not bookable.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.PERMISSION,
+        available: false,
+        message: `Das Objekt ${this.originBookable.title}, mit der ID ${this.originBookable.id} ist nicht buchbar.`,
+      };
     }
 
     if (
@@ -385,16 +414,20 @@ class ItemCheckoutService {
         this.tenantId,
       ))
     ) {
-      throw new Error(
-        `Sie sind nicht berechtigt, das Objekt ${this.originBookable.title} zu buchen.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.PERMISSION,
+        available: false,
+        message: `Sie haben keine Berechtigung, das Objekt ${this.originBookable.title} zu buchen.`,
+      };
     }
+
+    return { checkType: CHECK_TYPES.PERMISSION, available: true };
   }
 
   /**
    * The method returns all concurrent bookings for the affected bookables.
    *
-   * @returns {Promise<Boolean>}
+   * @returns {Promise<Object>}
    */
   async checkAvailability() {
     const amountBooked = await this.calculateAmountBooked(this.originBookable);
@@ -404,14 +437,29 @@ class ItemCheckoutService {
       amountBooked + this.amount <= this.originBookable.amount;
 
     if (!isAvailable) {
-      throw new Error(
-        `Das Objekt ${this.originBookable.title} ist nur noch ${
-          this.originBookable.amount - amountBooked
-        } mal verfügbar.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.AVAILABILITY,
+        available: false,
+        message: `Das Objekt ${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+        totalCapacity: this.originBookable.amount,
+        booked: amountBooked,
+        remaining:
+          this.originBookable.amount > 0
+            ? this.originBookable.amount - amountBooked
+            : null,
+      };
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.AVAILABILITY,
+      available: true,
+      totalCapacity: this.originBookable.amount,
+      booked: amountBooked,
+      remaining:
+        this.originBookable.amount > 0
+          ? this.originBookable.amount - amountBooked
+          : null,
+    };
   }
 
   async checkParentAvailability() {
@@ -419,6 +467,8 @@ class ItemCheckoutService {
       this.originBookable.id,
       this.originBookable.tenantId,
     );
+
+    const parentAmount = [];
 
     for (const parentBookable of parentBookables) {
       const parentAmountBooked =
@@ -437,14 +487,30 @@ class ItemCheckoutService {
           !parentBookable.amount || parentAmountBooked < parentBookable.amount;
       }
 
+      parentAmount.push({
+        bookableId: parentBookable.id,
+        title: parentBookable.title,
+        totalCapacity: parentBookable.amount,
+        booked: parentAmountBooked,
+        remaining: parentBookable.amount - parentAmountBooked,
+        isAvailable: isAvailable,
+      });
+
       if (!isAvailable) {
-        throw new Error(
-          `Übergeordnetes Objekt ${parentBookable.title} ist nicht verfügbar.`,
-        );
+        throw {
+          checkType: CHECK_TYPES.PARENT_AVAILABILITY,
+          available: false,
+          message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+          parentAvailability: parentAmount,
+        };
       }
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.PARENT_AVAILABILITY,
+      available: true,
+      parentAvailabilities: parentAmount,
+    };
   }
 
   async checkChildBookings() {
@@ -452,6 +518,8 @@ class ItemCheckoutService {
       this.originBookable.id,
       this.originBookable.tenantId,
     );
+
+    const childAmount = [];
 
     // remove self
     const filteredChildBookables = childBookables.filter(
@@ -465,21 +533,35 @@ class ItemCheckoutService {
         !childBookable.amount ||
         amountBooked + this.amount <= childBookable.amount;
 
+      childAmount.push({
+        bookableId: childBookable.id,
+        title: childBookable.title,
+        totalCapacity: childBookable.amount,
+        booked: amountBooked,
+        remaining: childBookable.amount - amountBooked,
+      });
+
       if (!isAvailable) {
-        throw new Error(
-          `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
-        );
+        throw {
+          checkType: CHECK_TYPES.CHILD_BOOKINGS,
+          available: false,
+          message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+          totalCapacity: childBookable.amount,
+          booked: amountBooked,
+          remaining: childBookable.amount - amountBooked,
+        };
       }
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.CHILD_BOOKINGS,
+      available: true,
+      childAvailabilities: childAmount,
+    };
   }
 
   async checkEventSeats() {
-    if (
-      this.originBookable.type === "ticket" &&
-      !!this.originBookable.eventId
-    ) {
+    if (this.hasEvent) {
       const event = await EventManager.getEvent(
         this.originBookable.eventId,
         this.originBookable.tenantId,
@@ -504,50 +586,72 @@ class ItemCheckoutService {
         !!event.attendees.maxAttendees &&
         amountBooked + this.amount > event.attendees.maxAttendees
       ) {
-        throw new Error(
-          `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
-        );
+        throw {
+          checkType: CHECK_TYPES.EVENT_SEATS,
+          available: false,
+          message: `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
+          totalCapacity: event.attendees.maxAttendees,
+          booked: amountBooked,
+          remaining: event.attendees.maxAttendees - amountBooked,
+        };
       }
+      return {
+        checkType: CHECK_TYPES.EVENT_SEATS,
+        available: true,
+        totalCapacity: event.attendees.maxAttendees,
+        booked: amountBooked,
+        remaining: event.attendees.maxAttendees - amountBooked,
+      };
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.EVENT_SEATS,
+      available: true,
+    };
   }
 
   async checkBookingDuration() {
     const hours = this.getBookingDuration() / 60;
 
     if (!this.originBookable.isScheduleRelated) {
-      return true;
+      return { checkType: CHECK_TYPES.BOOKING_DURATION, available: true };
     }
 
     if (
       this.originBookable.minBookingDuration &&
       hours < this.originBookable.minBookingDuration
     ) {
-      throw new Error(
-        `Die Buchungsdauer für das Objekt muss mindestens ${this.originBookable.minBookingDuration} Stunden betragen.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.BOOKING_DURATION,
+        available: false,
+        message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} muss mindestens ${this.originBookable.minBookingDuration} Stunden betragen.`,
+      };
     }
 
     if (
       this.originBookable.maxBookingDuration &&
       hours > this.originBookable.maxBookingDuration
     ) {
-      throw new Error(
-        `Die Buchungsdauer für das Objekt darf ${this.originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.BOOKING_DURATION,
+        available: false,
+        message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} darf ${this.originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
+      };
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.BOOKING_DURATION,
+      available: true,
+    };
   }
 
   async checkOpeningHours() {
     if (!(await this.isTimeRelated())) {
-      return true;
+      return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
     if (this.originBookable.isLongRange === true) {
-      return true;
+      return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
     const parentBookables = await BookableManager.getParentBookables(
@@ -563,13 +667,15 @@ class ItemCheckoutService {
           this.timeEnd,
         )
       ) {
-        throw new Error(
-          `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`,
-        );
+        throw {
+          checkType: CHECK_TYPES.OPENING_HOURS,
+          available: false,
+          message: `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`,
+        };
       }
     }
 
-    return true;
+    return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
   }
 
   async checkMaxBookingDate() {
@@ -577,7 +683,7 @@ class ItemCheckoutService {
 
     const maxBookingAdvanceInMonths = Number(tenant?.maxBookingAdvanceInMonths);
     if (!maxBookingAdvanceInMonths) {
-      return true;
+      return { checkType: CHECK_TYPES.MAX_BOOKING_DATE, available: true };
     }
 
     const maxBookingDate = new Date();
@@ -586,12 +692,14 @@ class ItemCheckoutService {
     );
 
     if (this.timeBegin > maxBookingDate) {
-      throw new Error(
-        `Sie können maximal ${maxBookingAdvanceInMonths} Monate im Voraus buchen.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.MAX_BOOKING_DATE,
+        available: false,
+        message: `Die Buchung für das Objekt ${this.originBookable.title} ist nur bis zu ${maxBookingAdvanceInMonths} Monate im Voraus möglich.`,
+      };
     }
 
-    return true;
+    return { checkType: CHECK_TYPES.MAX_BOOKING_DATE, available: true };
   }
 
   async checkEventDate() {
@@ -605,48 +713,84 @@ class ItemCheckoutService {
       );
 
       if (!event) {
-        throw new Error(
-          `Die Veranstaltung für das Ticket ${this.originBookable.title} existiert nicht.`
-        );
+        throw {
+          checkType: CHECK_TYPES.EVENT_DATE,
+          available: false,
+          message: `Die Veranstaltung für das Ticket ${this.originBookable.title} existiert nicht.`,
+        };
       }
 
       const now = new Date();
-      const eventEndDate = event.information.endDate ? new Date(event.information.endDate) : null;
+      const eventEndDate = event.information.endDate
+        ? new Date(event.information.endDate)
+        : null;
 
-      const eventDate = eventEndDate || (event.information.startDate ? new Date(event.information.startDate) : null);
+      const eventDate =
+        eventEndDate ||
+        (event.information.startDate
+          ? new Date(event.information.startDate)
+          : null);
 
       if (!eventDate) {
-        return true;
+        return {
+          checkType: CHECK_TYPES.EVENT_DATE,
+          available: true,
+        };
       }
 
       if (eventEndDate && event.information.endTime) {
-        const [hours, minutes] = event.information.endTime.split(':').map(Number);
+        const [hours, minutes] = event.information.endTime
+          .split(":")
+          .map(Number);
         eventEndDate.setHours(hours, minutes, 0, 0);
       } else if (!eventEndDate && event.information.startTime) {
-        const [hours, minutes] = event.information.startTime.split(':').map(Number);
+        const [hours, minutes] = event.information.startTime
+          .split(":")
+          .map(Number);
         eventDate.setHours(hours, minutes, 0, 0);
       }
 
       if (eventDate < now) {
-        throw new Error(
-          `Die Veranstaltung ${event.information.name} liegt in der Vergangenheit und kann nicht mehr gebucht werden.`
-        );
+        throw {
+          checkType: CHECK_TYPES.EVENT_DATE,
+          available: false,
+          message: `Die Veranstaltung ${event.information.name} liegt in der Vergangenheit und kann nicht mehr gebucht werden.`,
+        };
       }
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.EVENT_DATE,
+      available: true,
+    };
   }
 
-  async checkAll() {
-    await this.checkPermissions();
-    await this.checkOpeningHours();
-    await this.checkBookingDuration();
-    await this.checkAvailability();
-    await this.checkEventDate();
-    await this.checkEventSeats();
-    await this.checkParentAvailability();
-    await this.checkChildBookings();
-    await this.checkMaxBookingDate();
+  async checkAll(stopOnFirstError = true) {
+    if (stopOnFirstError) {
+      return await Promise.all([
+        this.checkPermissions(),
+        this.checkOpeningHours(),
+        this.checkBookingDuration(),
+        this.checkAvailability(),
+        this.checkEventDate(),
+        this.checkEventSeats(),
+        this.checkParentAvailability(),
+        this.checkChildBookings(),
+        this.checkMaxBookingDate(),
+      ]);
+    }
+
+    return await Promise.allSettled([
+      this.checkPermissions(),
+      this.checkOpeningHours(),
+      this.checkBookingDuration(),
+      this.checkAvailability(),
+      this.checkEventDate(),
+      this.checkEventSeats(),
+      this.checkParentAvailability(),
+      this.checkChildBookings(),
+      this.checkMaxBookingDate(),
+    ]);
   }
 
   _splitIntoDailySegments() {
@@ -702,4 +846,5 @@ module.exports = {
   ItemCheckoutService,
   ManualItemCheckoutService,
   CheckoutPermissions,
+  CHECK_TYPES,
 };
