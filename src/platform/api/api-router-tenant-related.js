@@ -27,8 +27,9 @@ router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
   "/bookables/:id/availability",
-  CalendarController.getBookableAvailabilityFixed,
+  CalendarController.getBookableAvailability,
 );
+router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
 
 // Protected
 router.get(

@@ -77,7 +77,6 @@ class AuthenticationController {
           const user = new User({
             id: request.body.id,
             secret: undefined,
-            tenant: request.params.tenant,
             firstName: request.body.firstName,
             lastName: request.body.lastName,
             company: request.body.company,
