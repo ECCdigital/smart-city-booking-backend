@@ -20,7 +20,7 @@ jobs:
       - name: Add openCode remote
         run: |
           git remote add opencode \
-            https://${{ secrets.OPENCODE_TOKEN }}@${{ secrets.OPENCODE_URL }}
+            https://oauth2:${{ secrets.OPENCODE_TOKEN }}@${{ secrets.OPENCODE_URL }}
 
       - name: Push to openCode
         run: git push --mirror opencode
