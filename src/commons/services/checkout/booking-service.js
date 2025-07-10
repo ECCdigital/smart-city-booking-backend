@@ -594,7 +594,7 @@ class BookingService {
       const isTicketBooking = bookableItems.some(isTicket);
 
       if (isTicketBooking) {
-        const eventIds = bookableItems.map(getEventForTicket)..filter((id) => id !== null && id !== undefined);;
+        const eventIds = bookableItems.map(getEventForTicket).filter((id) => id !== null && id !== undefined);
         if (eventIds.length > 0) {
           await sendEmailToOrganizer(eventIds, tenantId, originBooking);
         }

@@ -408,7 +408,7 @@ class ItemCheckoutService {
   }
 
   async checkPermissions() {
-    if (this.originBookable.isBookable !== true) {
+    if (this.originBookable?.isBookable !== true) {
       throw {
         checkType: CHECK_TYPES.PERMISSION,
         available: false,
