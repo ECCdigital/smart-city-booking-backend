@@ -7,7 +7,14 @@ const { UserHook, USER_HOOK_TYPES } = require("./userHook");
 class User {
   constructor(params = {}) {
     const defaults = SchemaUtils.createDefaults(userSchemaDefinition);
-    Object.assign(this, defaults, params);
+
+    Object.assign(this, defaults);
+
+    Object.keys(userSchemaDefinition).forEach(key => {
+      if (params[key] !== undefined) {
+        this[key] = params[key];
+      }
+    });
 
     // Convert hooks to UserHook entities
     if (this.hooks && Array.isArray(this.hooks)) {

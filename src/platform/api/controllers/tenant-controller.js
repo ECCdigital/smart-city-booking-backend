@@ -167,14 +167,56 @@ class TenantController {
   static async updateTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = new Tenant(request.body);
       if (
-        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
         (await PermissionService._isInstanceOwner(user.id))
       ) {
-        await TenantManager.storeTenant(tenant);
+        const tenant = await TenantManager.getTenant(request.body.id);
+
+        const fields = [
+          "name",
+          "contactName",
+          "location",
+          "mail",
+          "phone",
+          "website",
+          "bookableDetailLink",
+          "eventDetailLink",
+          "genericMailTemplate",
+          "useInstanceMail",
+          "noreplyMail",
+          "noreplyDisplayName",
+          "noreplyHost",
+          "noreplyPort",
+          "noreplyUser",
+          "noreplyPassword",
+          "noreplyStarttls",
+          "noreplyUseGraphApi",
+          "noreplyGraphTenantId",
+          "noreplyGraphClientId",
+          "noreplyGraphClientSecret",
+          "receiptTemplate",
+          "receiptNumberPrefix",
+          "invoiceTemplate",
+          "invoiceNumberPrefix",
+          "paymentPurposeSuffix",
+          "applications",
+          "maxBookingAdvanceInMonths",
+          "defaultEventCreationMode",
+          "enablePublicStatusView",
+          "ownerUserIds",
+          "users",
+        ];
+
+        fields.forEach((field) => {
+          if (Object.prototype.hasOwnProperty.call(request.body, field)) {
+            tenant[field] = request.body[field];
+          }
+        });
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
-        response.sendStatus(200);
+        response.status(200).send(updatedTenant);
       } else {
         logger.warn(`User ${user?.id} not allowed to update tenant`);
         response.sendStatus(403);

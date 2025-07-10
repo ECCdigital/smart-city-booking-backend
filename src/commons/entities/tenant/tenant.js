@@ -7,7 +7,13 @@ const SchemaUtils = require("../../utilities/schemaUtils");
 class Tenant {
   constructor(params = {}) {
     const defaults = SchemaUtils.createDefaults(tenantSchemaDefinition);
-    Object.assign(this, defaults, params);
+    Object.assign(this, defaults);
+
+    Object.keys(tenantSchemaDefinition).forEach((key) => {
+      if (params[key] !== undefined) {
+        this[key] = params[key];
+      }
+    });
   }
 
   exportPublic() {
