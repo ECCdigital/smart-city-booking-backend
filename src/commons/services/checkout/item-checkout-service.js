@@ -2,15 +2,32 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
-const TenantManger = require("../../data-managers/tenant-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
+const HolidaysService = require("../holiday/holidays-service");
+const { formatISO } = require("date-fns");
+const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
   level: process.env.LOG_LEVEL,
 });
+
+const CHECK_TYPES = {
+  PERMISSION: "permission",
+  AVAILABILITY: "availability",
+  PARENT_AVAILABILITY: "parent-availability",
+  OPENING_HOURS: "opening-hours",
+  BOOKING_DURATION: "booking-duration",
+  EVENT_DATE: "event-date",
+  EVENT_SEATS: "event-seats",
+  CHILD_BOOKINGS: "child-bookings",
+  MAX_BOOKING_DATE: "max-booking-date",
+  TIME_RELATION: "time-relation",
+  PRICE_CATEGORY: "price-category",
+};
 
 class CheckoutPermissions {
   static _isOwner(bookable, userId, tenantId) {
@@ -21,7 +38,7 @@ class CheckoutPermissions {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await TenantManger.getTenantUsersByRoles(
+        await TenantManager.getTenantUsersByRoles(
           tenantId,
           bookable.permittedRoles || [],
         )
@@ -56,6 +73,7 @@ class ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
+    bookWithPrice,
   ) {
     this.user = user;
     this.tenantId = tenantId;
@@ -65,6 +83,7 @@ class ItemCheckoutService {
     this.amount = Number(amount);
     this.couponCode = couponCode;
     this.originBookable = null;
+    this.bookWithPrice = bookWithPrice ?? true;
   }
 
   /**
@@ -83,6 +102,13 @@ class ItemCheckoutService {
     return this.originBookable;
   }
 
+  get hasEvent() {
+    return (
+      this.originBookable.type === BOOKABLE_TYPES.TICKET &&
+      !!this.originBookable.eventId
+    );
+  }
+
   get ignoreAmount() {
     return (
       (this.originBookable.priceType === "per-item" &&
@@ -92,14 +118,41 @@ class ItemCheckoutService {
     );
   }
 
+  async freeBookingAllowed() {
+    const freeBookingUsers = [
+      ...(this.originBookable.freeBookingUsers || []),
+      ...(
+        await TenantManager.getTenantUsersByRoles(
+          this.tenantId,
+          this.originBookable.freeBookingRoles || [],
+        )
+      ).map((u) => u.userId),
+    ];
+
+    if (
+      !!this.user &&
+      freeBookingUsers.includes(this.user) &&
+      this.originBookable.tenantId === this.tenantId
+    ) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   async calculateAmountBooked(bookable) {
     let concurrentBookings;
 
     if ((await this.isTimeRelated()) || (await this._isLongRange())) {
       if (!this.timeBegin || !this.timeEnd) {
-        throw new Error(
+        logger.warn(
           `Bookable with ID ${bookable.id} is time related but no time is given.`,
         );
+        throw {
+          checkType: CHECK_TYPES.TIME_RELATION,
+          available: false,
+          message: `Das Objekt ${bookable.title} ist zeitbezogen, aber es wurde kein Zeitraum angegeben.`,
+        };
       }
 
       concurrentBookings = await BookingManager.getConcurrentBookings(
@@ -152,11 +205,14 @@ class ItemCheckoutService {
    * This method returns the booking duration in minutes.
    * @returns {number}
    */
-  getBookingDuration() {
-    if (!this.timeEnd || !this.timeBegin) {
+  getBookingDuration(segmentStart, segmentEnd) {
+    const start = segmentStart || this.timeBegin;
+    const end = segmentEnd || this.timeEnd;
+
+    if (!start || !end) {
       return 0;
     }
-    return Math.round((this.timeEnd - this.timeBegin) / 60000);
+    return Math.round((end - start) / 60000);
   }
 
   async isTimeRelated() {
@@ -176,33 +232,117 @@ class ItemCheckoutService {
   }
 
   async regularPriceEur() {
-    const priceCategory = this.getPriceCategory();
+    const segments = this._splitIntoDailySegments();
 
-    let multiplier;
-    if (!priceCategory?.fixedPrice) {
-      switch (this.originBookable.priceType) {
-        case "per-hour":
-          multiplier = this.getBookingDuration() / 60;
-          break;
-        case "per-day":
-          multiplier = this.getBookingDuration() / 1440;
-          break;
-        default:
-          multiplier = 1;
+    const prices = [];
+
+    for (const segment of segments) {
+      const priceCategory = this.getPriceCategory(segment.start, segment.end);
+
+      let multiplier;
+      if (!priceCategory?.fixedPrice) {
+        switch (this.originBookable.priceType) {
+          case "per-hour":
+            multiplier =
+              this.getBookingDuration(segment.start, segment.end) / 60;
+            break;
+          case "per-day":
+            multiplier =
+              this.getBookingDuration(segment.start, segment.end) / 1440;
+            break;
+          default:
+            multiplier = 1;
+        }
+      } else {
+        multiplier = 1;
       }
-    } else {
-      multiplier = 1;
+
+      if (!priceCategory) {
+        throw {
+          checkType: CHECK_TYPES.PRICE_CATEGORY,
+          available: false,
+          message: `Es konnte keine passende Preiskategorie für das Objekt ${this.originBookable.title} gefunden werden.`,
+        };
+      }
+
+      prices.push((Number(priceCategory.priceEur) || 0) * multiplier);
     }
 
-    const price = (Number(priceCategory?.priceEur) || 0) * multiplier;
-    return Math.round(price * 100) / 100;
+    let total;
+    if (
+      this.originBookable.priceType === "per-square-meter" ||
+      this.originBookable.priceType === "per-item"
+    ) {
+      total = Math.max(...prices);
+    } else {
+      total = prices.reduce((acc, price) => acc + price, 0);
+    }
+
+    return Math.round(total * 100) / 100;
   }
 
-  getPriceCategory() {
+  getPriceCategory(segmentStart, segmentEnd) {
     const { priceCategories, priceType } = this.originBookable;
 
-    if (priceCategories.length === 1) {
+    const start = segmentStart || this.timeBegin;
+    const end = segmentEnd || this.timeEnd;
+
+    if (priceCategories.length === 1 || (!start && !end)) {
       return priceCategories[0];
+    }
+
+    const dayBegin = new Date(start).getDay();
+    const dayEnd = new Date(end).getDay();
+
+    const bookingYear = new Date(start).getFullYear();
+    const bookingDate = formatISO(new Date(start)).split("T")[0];
+
+    const holidaysPriceCategories = priceCategories.filter(
+      (pc) => pc.holidays.length > 0,
+    );
+
+    const filterdHolidayPriceCategories = [];
+    const holidaysServiceCache = new Map();
+    for (const pc of holidaysPriceCategories) {
+      for (const holiday of pc.holidays) {
+        const cacheKey = `${holiday.countryCode}-${holiday.stateCode}`;
+        let hs = holidaysServiceCache.get(cacheKey);
+        if (!hs) {
+          hs = new HolidaysService({
+            countryCode: holiday.countryCode,
+            stateCode: holiday.stateCode,
+          });
+          holidaysServiceCache.set(cacheKey, hs);
+        }
+        const holidays = hs.getHolidays(bookingYear);
+        const holidayDate = holidays.find((h) => h.name === holiday.name);
+        if (
+          holidayDate &&
+          formatISO(new Date(holidayDate.date)).split("T")[0] === bookingDate
+        ) {
+          filterdHolidayPriceCategories.push(pc);
+        }
+      }
+    }
+
+    const filteredWeekdaysPriceCategories = priceCategories.filter((pc) => {
+      if (dayBegin !== dayEnd) {
+        return pc.weekdays.includes(dayBegin) || pc.weekdays.includes(dayEnd);
+      } else {
+        return pc.weekdays.includes(dayBegin);
+      }
+    });
+
+    let priceCategoriesToCheck;
+
+    if (filterdHolidayPriceCategories.length > 0) {
+      priceCategoriesToCheck = filterdHolidayPriceCategories;
+    } else if (filteredWeekdaysPriceCategories.length > 0) {
+      priceCategoriesToCheck = filteredWeekdaysPriceCategories;
+    } else {
+      priceCategoriesToCheck = priceCategories.filter(
+        (pc) => pc.weekdays.length === 0 && pc.holidays.length === 0,
+      );
     }
 
     const bookingDurationInMinutes = this.getBookingDuration();
@@ -225,7 +365,7 @@ class ItemCheckoutService {
         return null;
     }
 
-    const category = priceCategories.find(({ interval }) => {
+    const category = priceCategoriesToCheck.find(({ interval }) => {
       const { start, end } = interval;
       return (
         (start === null || start <= valueToCheck) &&
@@ -243,29 +383,17 @@ class ItemCheckoutService {
   }
 
   async userPriceEur() {
-    const freeBookingUsers = [
-      ...(this.originBookable.freeBookingUsers || []),
-      ...(
-        await TenantManger.getTenantUsersByRoles(
-          this.tenantId,
-          this.originBookable.freeBookingRoles || [],
-        )
-      ).map((u) => u.userId),
-    ];
-
-    if (
-      !!this.user &&
-      freeBookingUsers.includes(this.user) &&
-      this.originBookable.tenantId === this.tenantId
-    ) {
-      logger.info(
-        `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
-      );
-      return 0;
+    if (await this.freeBookingAllowed()) {
+      if (!this.bookWithPrice) {
+        logger.info(
+          `User ${this.user} is allowed to book bookable ${this.bookableId} for free, but bookWithPrice is set to false.`,
+        );
+        return 0;
+      }
     }
 
     const total = await CouponManager.applyCoupon(
-      this.couponCode,
+      this.originBookable.enableCoupons ? this.couponCode : null,
       this.tenantId,
       await this.regularPriceEur(),
     );
@@ -282,7 +410,9 @@ class ItemCheckoutService {
   async checkPermissions() {
     if (this.originBookable.isBookable !== true) {
       throw {
-        message: `Das Buchungsobjekt ID ${this.originBookable.id} ist nicht buchbar.`,
+        checkType: CHECK_TYPES.PERMISSION,
+        available: false,
+        message: `Das Objekt ${this.originBookable.title}, mit der ID ${this.originBookable.id} ist nicht buchbar.`,
       };
     }
 
@@ -294,15 +424,19 @@ class ItemCheckoutService {
       ))
     ) {
       throw {
-        message: `Sie sind nicht berechtigt, das Objekt ${this.originBookable.title} zu buchen.`,
+        checkType: CHECK_TYPES.PERMISSION,
+        available: false,
+        message: `Sie haben keine Berechtigung, das Objekt ${this.originBookable.title} zu buchen.`,
       };
     }
+
+    return { checkType: CHECK_TYPES.PERMISSION, available: true };
   }
 
   /**
    * The method returns all concurrent bookings for the affected bookables.
    *
-   * @returns {Promise<Boolean>}
+   * @returns {Promise<Object>}
    */
   async checkAvailability() {
     const { amountBooked, bookings } = await this.calculateAmountBooked(
@@ -315,14 +449,29 @@ class ItemCheckoutService {
 
     if (!isAvailable) {
       throw {
-        message: `Das Objekt ${this.originBookable.title} ist nur noch ${
-          this.originBookable.amount - amountBooked
-        } mal verfügbar.`,
+        checkType: CHECK_TYPES.AVAILABILITY,
+        available: false,
+        message: `Das Objekt ${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+        totalCapacity: this.originBookable.amount,
+        booked: amountBooked,
+        remaining:
+          this.originBookable.amount > 0
+            ? this.originBookable.amount - amountBooked
+            : null,
         concurrentBookings: bookings,
       };
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.AVAILABILITY,
+      available: true,
+      totalCapacity: this.originBookable.amount,
+      booked: amountBooked,
+      remaining:
+        this.originBookable.amount > 0
+          ? this.originBookable.amount - amountBooked
+          : null,
+    };
   }
 
   async checkParentAvailability() {
@@ -330,6 +479,8 @@ class ItemCheckoutService {
       this.originBookable.id,
       this.originBookable.tenantId,
     );
+
+    const parentAmount = [];
 
     for (const parentBookable of parentBookables) {
       const { amountBooked: parentAmountBooked, bookings } =
@@ -348,15 +499,31 @@ class ItemCheckoutService {
           !parentBookable.amount || parentAmountBooked < parentBookable.amount;
       }
 
+      parentAmount.push({
+        bookableId: parentBookable.id,
+        title: parentBookable.title,
+        totalCapacity: parentBookable.amount,
+        booked: parentAmountBooked,
+        remaining: parentBookable.amount - parentAmountBooked,
+        isAvailable: isAvailable,
+      });
+
       if (!isAvailable) {
         throw {
-          message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
+          checkType: CHECK_TYPES.PARENT_AVAILABILITY,
+          available: false,
+          message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+          parentAvailability: parentAmount,
           concurrentBookings: bookings,
         };
       }
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.PARENT_AVAILABILITY,
+      available: true,
+      parentAvailabilities: parentAmount,
+    };
   }
 
   async checkChildBookings() {
@@ -364,6 +531,8 @@ class ItemCheckoutService {
       this.originBookable.id,
       this.originBookable.tenantId,
     );
+
+    const childAmount = [];
 
     // remove self
     const filteredChildBookables = childBookables.filter(
@@ -374,22 +543,40 @@ class ItemCheckoutService {
       const { amountBooked, bookings } =
         await this.calculateAmountBooked(childBookable);
 
-      if (amountBooked > 0 && childBookable.amount) {
+      const isAvailable =
+        !childBookable.amount ||
+        amountBooked + this.amount <= childBookable.amount;
+
+      childAmount.push({
+        bookableId: childBookable.id,
+        title: childBookable.title,
+        totalCapacity: childBookable.amount,
+        booked: amountBooked,
+        remaining: childBookable.amount - amountBooked,
+      });
+
+      if (!isAvailable) {
         throw {
-          message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum bereits gebucht.`,
+          checkType: CHECK_TYPES.CHILD_BOOKINGS,
+          available: false,
+          message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+          totalCapacity: childBookable.amount,
+          booked: amountBooked,
+          remaining: childBookable.amount - amountBooked,
           concurrentBookings: bookings,
         };
       }
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.CHILD_BOOKINGS,
+      available: true,
+      childAvailabilities: childAmount,
+    };
   }
 
   async checkEventSeats() {
-    if (
-      this.originBookable.type === "ticket" &&
-      !!this.originBookable.eventId
-    ) {
+    if (this.hasEvent) {
       const event = await EventManager.getEvent(
         this.originBookable.eventId,
         this.originBookable.tenantId,
@@ -415,49 +602,71 @@ class ItemCheckoutService {
         amountBooked + this.amount > event.attendees.maxAttendees
       ) {
         throw {
+          checkType: CHECK_TYPES.EVENT_SEATS,
+          available: false,
           message: `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
+          totalCapacity: event.attendees.maxAttendees,
+          booked: amountBooked,
+          remaining: event.attendees.maxAttendees - amountBooked,
         };
       }
+      return {
+        checkType: CHECK_TYPES.EVENT_SEATS,
+        available: true,
+        totalCapacity: event.attendees.maxAttendees,
+        booked: amountBooked,
+        remaining: event.attendees.maxAttendees - amountBooked,
+      };
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.EVENT_SEATS,
+      available: true,
+    };
   }
 
   async checkBookingDuration() {
     const hours = this.getBookingDuration() / 60;
 
     if (!this.originBookable.isScheduleRelated) {
-      return true;
+      return { checkType: CHECK_TYPES.BOOKING_DURATION, available: true };
     }
 
     if (
       this.originBookable.minBookingDuration &&
       hours < this.originBookable.minBookingDuration
     ) {
-      throw new Error(
-        `Die Buchungsdauer für das Objekt muss mindestens ${this.originBookable.minBookingDuration} Stunden betragen.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.BOOKING_DURATION,
+        available: false,
+        message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} muss mindestens ${this.originBookable.minBookingDuration} Stunden betragen.`,
+      };
     }
 
     if (
       this.originBookable.maxBookingDuration &&
       hours > this.originBookable.maxBookingDuration
     ) {
-      throw new Error(
-        `Die Buchungsdauer für das Objekt darf ${this.originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
-      );
+      throw {
+        checkType: CHECK_TYPES.BOOKING_DURATION,
+        available: false,
+        message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} darf ${this.originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
+      };
     }
 
-    return true;
+    return {
+      checkType: CHECK_TYPES.BOOKING_DURATION,
+      available: true,
+    };
   }
 
   async checkOpeningHours() {
     if (!(await this.isTimeRelated())) {
-      return true;
+      return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
     if (this.originBookable.isLongRange === true) {
-      return true;
+      return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
     const parentBookables = await BookableManager.getParentBookables(
@@ -474,13 +683,15 @@ class ItemCheckoutService {
         )
       ) {
         throw {
+          checkType: CHECK_TYPES.OPENING_HOURS,
+          available: false,
           message: `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`,
           bookings: [],
         };
       }
     }
 
-    return true;
+    return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
   }
 
   async checkMaxBookingDate() {
@@ -488,7 +699,7 @@ class ItemCheckoutService {
 
     const maxBookingAdvanceInMonths = Number(tenant?.maxBookingAdvanceInMonths);
     if (!maxBookingAdvanceInMonths) {
-      return true;
+      return { checkType: CHECK_TYPES.MAX_BOOKING_DATE, available: true };
     }
 
     const maxBookingDate = new Date();
@@ -498,22 +709,133 @@ class ItemCheckoutService {
 
     if (this.timeBegin > maxBookingDate) {
       throw {
-        message: `Sie können maximal ${maxBookingAdvanceInMonths} Monate im Voraus buchen.`,
+        checkType: CHECK_TYPES.MAX_BOOKING_DATE,
+        available: false,
+        message: `Die Buchung für das Objekt ${this.originBookable.title} ist nur bis zu ${maxBookingAdvanceInMonths} Monate im Voraus möglich.`,
       };
     }
 
-    return true;
+    return { checkType: CHECK_TYPES.MAX_BOOKING_DATE, available: true };
   }
 
-  async checkAll() {
-    await this.checkPermissions();
-    await this.checkOpeningHours();
-    await this.checkBookingDuration();
-    await this.checkAvailability();
-    await this.checkEventSeats();
-    await this.checkParentAvailability();
-    await this.checkChildBookings();
-    await this.checkMaxBookingDate();
+  async checkEventDate() {
+    if (
+      this.originBookable.type === BOOKABLE_TYPES.TICKET &&
+      !!this.originBookable.eventId
+    ) {
+      const event = await EventManager.getEvent(
+        this.originBookable.eventId,
+        this.originBookable.tenantId,
+      );
+
+      if (!event) {
+        throw {
+          checkType: CHECK_TYPES.EVENT_DATE,
+          available: false,
+          message: `Die Veranstaltung für das Ticket ${this.originBookable.title} existiert nicht.`,
+        };
+      }
+
+      const now = new Date();
+      const eventEndDate = event.information.endDate
+        ? new Date(event.information.endDate)
+        : null;
+
+      const eventDate =
+        eventEndDate ||
+        (event.information.startDate
+          ? new Date(event.information.startDate)
+          : null);
+
+      if (!eventDate) {
+        return {
+          checkType: CHECK_TYPES.EVENT_DATE,
+          available: true,
+        };
+      }
+
+      if (eventEndDate && event.information.endTime) {
+        const [hours, minutes] = event.information.endTime
+          .split(":")
+          .map(Number);
+        eventEndDate.setHours(hours, minutes, 0, 0);
+      } else if (!eventEndDate && event.information.startTime) {
+        const [hours, minutes] = event.information.startTime
+          .split(":")
+          .map(Number);
+        eventDate.setHours(hours, minutes, 0, 0);
+      }
+
+      if (eventDate < now) {
+        throw {
+          checkType: CHECK_TYPES.EVENT_DATE,
+          available: false,
+          message: `Die Veranstaltung ${event.information.name} liegt in der Vergangenheit und kann nicht mehr gebucht werden.`,
+        };
+      }
+    }
+
+    return {
+      checkType: CHECK_TYPES.EVENT_DATE,
+      available: true,
+    };
+  }
+
+  async checkAll(stopOnFirstError = true) {
+    if (stopOnFirstError) {
+      return await Promise.all([
+        this.checkPermissions(),
+        this.checkOpeningHours(),
+        this.checkBookingDuration(),
+        this.checkAvailability(),
+        this.checkEventDate(),
+        this.checkEventSeats(),
+        this.checkParentAvailability(),
+        this.checkChildBookings(),
+        this.checkMaxBookingDate(),
+      ]);
+    }
+
+    return await Promise.allSettled([
+      this.checkPermissions(),
+      this.checkOpeningHours(),
+      this.checkBookingDuration(),
+      this.checkAvailability(),
+      this.checkEventDate(),
+      this.checkEventSeats(),
+      this.checkParentAvailability(),
+      this.checkChildBookings(),
+      this.checkMaxBookingDate(),
+    ]);
+  }
+
+  _splitIntoDailySegments() {
+    const segments = [];
+    let cursor = new Date(this.timeBegin);
+
+    while (cursor < this.timeEnd) {
+      const nextMidnight = new Date(cursor);
+      nextMidnight.setHours(24, 0, 0, 0);
+
+      segments.push({
+        start: new Date(cursor).getTime(),
+        end:
+          this.timeEnd < nextMidnight
+            ? new Date(this.timeEnd).getTime()
+            : nextMidnight.getTime(),
+      });
+
+      cursor = nextMidnight;
+    }
+
+    return segments.length > 0
+      ? segments
+      : [{ start: this.timeBegin, end: this.timeEnd }];
+  }
+
+  _weekdayNumber(date) {
+    const d = date.getDay();
+    return d === 0 ? 7 : d;
   }
 }
 
@@ -540,4 +862,5 @@ module.exports = {
   ItemCheckoutService,
   ManualItemCheckoutService,
   CheckoutPermissions,
+  CHECK_TYPES,
 };

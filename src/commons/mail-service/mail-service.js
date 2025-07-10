@@ -1,10 +1,73 @@
 const nodemailer = require("nodemailer");
-const Mustache = require("mustache");
+const Handlebars = require("handlebars");
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
 const InstanceManger = require("../data-managers/instance-manager");
 const axios = require("axios");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
+
+Handlebars.registerHelper("formatDateTime", function (value) {
+  const formatter = new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
+  return formatter.format(new Date(value));
+});
+
+Handlebars.registerHelper("formatDate", function (value) {
+  const formatter = new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  return formatter.format(new Date(value));
+});
+
+Handlebars.registerHelper("priceFormatted", function (value) {
+  const formatter = new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+  });
+  return formatter.format(value);
+});
+Handlebars.registerHelper("sanitizeString", function (value) {
+  if (typeof value === "string" && value.trim() !== "") {
+    return value.replace(/<[^>]*>?/gm, "");
+  }
+  return value;
+});
+Handlebars.registerHelper("gt", function (a, b, options) {
+  return a > b ? options.fn(this) : options.inverse(this);
+});
+
+Handlebars.registerPartial(
+  "contactSnippet",
+  `
+    <strong>Firma:</strong> {{#if booking.company}}{{booking.company}}{{else}}–{{/if}}<br>
+    <strong>Name:</strong> {{#if booking.name}}{{booking.name}}{{else}}–{{/if}}<br>
+    <strong>Adresse:</strong> 
+      {{#if booking.street}}{{booking.street}}{{else}} – {{/if}},
+      {{#if booking.zipCode}}{{booking.zipCode}}{{else}} – {{/if}}
+      {{#if booking.location}}{{booking.location}}{{else}} – {{/if}}<br>
+    <strong>Telefon:</strong> {{#if booking.phone}}{{booking.phone}}{{else}}–{{/if}}<br>
+    <strong>E-Mail:</strong> {{#if booking.mail}}{{booking.mail}}{{else}}–{{/if}}
+`,
+);
+
+Handlebars.registerPartial(
+  "mailFooter",
+  `
+  <hr />
+  <p style="font-size: 0.9em; color: #555;">
+    Falls Sie Fragen haben, können Sie uns gerne 
+    <a href="mailto:{{supportEmail}}">kontaktieren</a>.
+  </p>
+`,
+);
 
 const logger = bunyan.createLogger({
   name: "mail-service.js",
@@ -30,7 +93,8 @@ class MailerService {
     );
 
     try {
-      return Mustache.render(emailTemplate, model);
+      const template = Handlebars.compile(emailTemplate);
+      return template(model);
     } catch (err) {
       throw err;
     }

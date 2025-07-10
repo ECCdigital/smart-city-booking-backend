@@ -1,5 +1,5 @@
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const Tenant = require("../../../commons/entities/tenant");
+const Tenant = require("../../../commons/entities/tenant/tenant");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const PermissionService = require("../../../commons/services/permission-service");
 const InstanceManger = require("../../../commons/data-managers/instance-manager");
@@ -7,7 +7,7 @@ const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
 const { v4: uuidv4 } = require("uuid");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 
 const logger = bunyan.createLogger({
@@ -31,9 +31,9 @@ class TenantController {
       const allowedTenants = [];
       for (const tenant of tenants) {
         if (publicTenants) {
-          tenant.removePrivateData();
-          if (tenantIds.includes(tenant.id)) {
-            allowedTenants.push(tenant);
+          const publicTenant = tenant.exportPublic();
+          if (tenantIds.includes(publicTenant.id)) {
+            allowedTenants.push(publicTenant);
           }
         } else if (
           (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
@@ -106,8 +106,7 @@ class TenantController {
       const tenant = new Tenant(request.body);
       tenant.id = uuidv4();
 
-      tenant.ownerUserId = user.id;
-
+      tenant.ownerUserIds = [user.id];
       if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
       }
@@ -139,8 +138,17 @@ class TenantController {
           "utf8",
         );
 
+        const invoiceTemplate = readFileSync(
+          join(
+            __dirname,
+            "../../../commons/pdf-service/templates/default-invoice-template.temp.html",
+          ),
+          "utf8",
+        );
+
         tenant.genericMailTemplate = emailTemplate;
         tenant.receiptTemplate = receiptTemplate;
+        tenant.invoiceTemplate = invoiceTemplate;
 
         await TenantManager.storeTenant(tenant);
         logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
@@ -159,14 +167,56 @@ class TenantController {
   static async updateTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = new Tenant(request.body);
       if (
-        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
         (await PermissionService._isInstanceOwner(user.id))
       ) {
-        await TenantManager.storeTenant(tenant);
+        const tenant = await TenantManager.getTenant(request.body.id);
+
+        const fields = [
+          "name",
+          "contactName",
+          "location",
+          "mail",
+          "phone",
+          "website",
+          "bookableDetailLink",
+          "eventDetailLink",
+          "genericMailTemplate",
+          "useInstanceMail",
+          "noreplyMail",
+          "noreplyDisplayName",
+          "noreplyHost",
+          "noreplyPort",
+          "noreplyUser",
+          "noreplyPassword",
+          "noreplyStarttls",
+          "noreplyUseGraphApi",
+          "noreplyGraphTenantId",
+          "noreplyGraphClientId",
+          "noreplyGraphClientSecret",
+          "receiptTemplate",
+          "receiptNumberPrefix",
+          "invoiceTemplate",
+          "invoiceNumberPrefix",
+          "paymentPurposeSuffix",
+          "applications",
+          "maxBookingAdvanceInMonths",
+          "defaultEventCreationMode",
+          "enablePublicStatusView",
+          "ownerUserIds",
+          "users",
+        ];
+
+        fields.forEach((field) => {
+          if (Object.prototype.hasOwnProperty.call(request.body, field)) {
+            tenant[field] = request.body[field];
+          }
+        });
+
+        const updatedTenant = await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
-        response.sendStatus(200);
+        response.status(200).send(updatedTenant);
       } else {
         logger.warn(`User ${user?.id} not allowed to update tenant`);
         response.sendStatus(403);

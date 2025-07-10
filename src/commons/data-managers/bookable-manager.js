@@ -1,4 +1,4 @@
-const { Bookable } = require("../entities/bookable");
+const { Bookable } = require("../entities/bookable/bookable");
 const BookableModel = require("./models/bookableModel");
 
 /**
@@ -6,65 +6,127 @@ const BookableModel = require("./models/bookableModel");
  */
 class BookableManager {
   /**
-   * Get all bookables related to a tenant
-   * @param {string} tenantId Identifier of the tenant
-   * @returns List of bookings
+   * Get all bookables for a tenant
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of bookables
    */
   static async getBookables(tenantId) {
     const rawBookables = await BookableModel.find({ tenantId: tenantId });
-    return rawBookables.map((rb) => new Bookable(rb));
+    return rawBookables.map((doc) => doc.toEntity());
   }
 
   /**
-   * Get a specific bookable object from the database.
-   *
-   * @param {string} id Logical identifier of the bookable object
-   * @param {string} tenantId Identifier of the tenant
-   * @returns A single bookable object
+   * Get a specific bookable
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable|null>} Bookable or null
    */
   static async getBookable(id, tenantId) {
     const rawBookable = await BookableModel.findOne({
       id: id,
       tenantId: tenantId,
     });
+
     if (!rawBookable) {
       return null;
     }
-    return new Bookable(rawBookable);
+
+    return rawBookable.toEntity();
   }
 
   /**
-   * Insert or update a bookable object into the database.
-   *
-   * @param {Bookable} bookable The bookable object to be stored.
-   * @param {boolean} upsert true, if new object should be inserted. Default: true
-   * @returns Promise<>
+   * Get public bookables for a tenant
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of public bookables
    */
-  static async storeBookable(bookable, upsert = true) {
-    await BookableModel.updateOne(
-      { id: bookable.id, tenantId: bookable.tenantId },
-      bookable,
-      { upsert: upsert },
-    );
+  static async getPublicBookables(tenantId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      isPublic: true,
+      isBookable: true,
+    });
+    return rawBookables.map((doc) => doc.toEntity());
   }
 
   /**
-   * Remove a bookable object from the database.
-   *
-   * @returns Promise<>
-   * @param id The id of the bookable to remove
-   * @param tenantId The tenant of the bookable to remove
+   * Get bookables by type
+   * @param {string} tenantId Tenant ID
+   * @param {string} type Bookable type
+   * @returns {Promise<Bookable[]>} List of bookables
    */
-  static async removeBookable(id, tenantId) {
-    await BookableModel.deleteOne({ id: id, tenantId: tenantId });
+  static async getBookablesByType(tenantId, type) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      type: type,
+    });
+    return rawBookables.map((doc) => doc.toEntity());
   }
 
   /**
-   * Get all related bookables for a given bookable ID and tenant.
-   *
-   * @param {string} id - The ID of the bookable.
-   * @param {string} tenantId - The tenant identifier.
-   * @returns {Promise<Bookable[]>} - A promise that resolves to an array of related bookable objects.
+   * Get bookables by event ID
+   * @param {string} tenantId Tenant ID
+   * @param {string} eventId Event ID
+   * @returns {Promise<Bookable[]>} List of bookables
+   */
+  static async getEventBookables(tenantId, eventId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      eventId: eventId,
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get bookables by owner
+   * @param {string} tenantId Tenant ID
+   * @param {string} ownerUserId Owner user ID
+   * @returns {Promise<Bookable[]>} List of bookables
+   */
+  static async getOwnedBookables(tenantId, ownerUserId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      ownerUserId: ownerUserId,
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get bookables by tags
+   * @param {string} tenantId Tenant ID
+   * @param {string[]} tags Array of tags
+   * @returns {Promise<Bookable[]>} List of bookables
+   */
+  static async getBookablesByTags(tenantId, tags) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      tags: { $in: tags },
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Search bookables by text
+   * @param {string} tenantId Tenant ID
+   * @param {string} searchText Search text
+   * @returns {Promise<Bookable[]>} List of matching bookables
+   */
+  static async searchBookables(tenantId, searchText) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      $or: [
+        { title: { $regex: searchText, $options: "i" } },
+        { description: { $regex: searchText, $options: "i" } },
+        { tags: { $in: [new RegExp(searchText, "i")] } },
+      ],
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get related bookables (recursive lookup)
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of related bookables
    */
   static async getRelatedBookables(id, tenantId) {
     const pipeline = [
@@ -84,13 +146,6 @@ class BookableManager {
           maxDepth: 100,
         },
       },
-      {
-        $project: {
-          rootBookable: "$$ROOT",
-          allRelatedBookables: 1,
-          _id: 0,
-        },
-      },
     ];
 
     const results = await BookableModel.aggregate(pipeline).exec();
@@ -99,61 +154,133 @@ class BookableManager {
       return [];
     }
 
-    const doc = results[0];
-
-    let combined = [...doc.allRelatedBookables];
+    const relatedBookables = results[0].allRelatedBookables || [];
 
     const uniqueMap = new Map();
-    for (const b of combined) {
-      uniqueMap.set(b.id, b);
+    for (const bookable of relatedBookables) {
+      uniqueMap.set(bookable.id, bookable);
     }
-    combined = [...uniqueMap.values()];
 
-    return combined.map((b) => new Bookable(b));
+    return Array.from(uniqueMap.values())
+      .map((obj) => BookableModel.hydrate(obj))
+      .map((doc) => doc.toEntity());
   }
 
+  /**
+   * Get parent bookables (bookables that reference this one)
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of parent bookables
+   */
   static async getParentBookables(id, tenantId) {
-    let pBookables = await getAllParents(id, tenantId, [], 0);
-    pBookables = pBookables.flat(Infinity);
-
-    // remove duplicates from related bookables
-    pBookables = pBookables.filter((b, i) => {
-      return pBookables.findIndex((b2) => b2.id === b.id) === i;
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      relatedBookableIds: { $in: [id] },
     });
-
-    return pBookables;
+    return rawBookables.map((doc) => doc.toEntity());
   }
 
+  /**
+   * Store a bookable (create or update)
+   * @param {Bookable|Object} bookable Bookable to store
+   * @param {boolean} upsert Whether to create if not exists
+   * @returns {Promise<Bookable>} The stored bookable
+   */
+  static async storeBookable(bookable, upsert = true) {
+    const bookableEntity =
+      bookable instanceof Bookable ? bookable : new Bookable(bookable);
+
+    bookableEntity.validate();
+
+    await BookableModel.updateOne(
+      { id: bookableEntity.id, tenantId: bookableEntity.tenantId },
+      bookableEntity,
+      { upsert: upsert },
+    );
+
+    return bookableEntity;
+  }
+
+  /**
+   * Remove a bookable
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<void>}
+   */
+  static async removeBookable(id, tenantId) {
+    await BookableModel.deleteOne({ id: id, tenantId: tenantId });
+  }
+
+  /**
+   * Check public bookable count limit
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<boolean>} True if under limit
+   */
   static async checkPublicBookableCount(tenantId) {
     const maxBookables = parseInt(process.env.MAX_BOOKABLES, 10);
+    if (!maxBookables) return true;
+
     const count = await BookableModel.countDocuments({
       tenantId: tenantId,
       isPublic: true,
     });
-    return !(maxBookables && count >= maxBookables);
+
+    return count < maxBookables;
   }
-}
 
-async function getAllParents(id, tenantId, parentBookables, depth) {
-  if (depth < 5) {
+  /**
+   * Get bookables with custom filter
+   * @param {string} tenantId Tenant ID
+   * @param {Object} filter MongoDB filter object
+   * @returns {Promise<Bookable[]>} Filtered bookables
+   */
+  static async getBookablesCustomFilter(tenantId, filter) {
     const rawBookables = await BookableModel.find({
-      relatedBookableIds: { $in: [id] },
       tenantId: tenantId,
+      ...filter,
     });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
 
-    for (const rb of rawBookables) {
-      parentBookables.push(new Bookable(rb));
-      parentBookables = parentBookables.concat(
-        await getAllParents(rb.id, rb.tenantId, parentBookables, depth + 1),
-      );
+  /**
+   * Get bookable statistics
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Object>} Statistics object
+   */
+  static async getBookableStats(tenantId) {
+    const pipeline = [
+      { $match: { tenantId: tenantId } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          public: { $sum: { $cond: ["$isPublic", 1, 0] } },
+          bookable: { $sum: { $cond: ["$isBookable", 1, 0] } },
+          byType: { $push: "$type" },
+        },
+      },
+    ];
+
+    const results = await BookableModel.aggregate(pipeline).exec();
+
+    if (!results || results.length === 0) {
+      return { total: 0, public: 0, bookable: 0, byType: {} };
     }
 
-    // remove duplicates from related bookables
-    parentBookables = parentBookables.filter((b, i) => {
-      return parentBookables.findIndex((b2) => b2.id === b.id) === i;
+    const stats = results[0];
+
+    const typeCount = {};
+    stats.byType.forEach((type) => {
+      typeCount[type] = (typeCount[type] || 0) + 1;
     });
+
+    return {
+      total: stats.total,
+      public: stats.public,
+      bookable: stats.bookable,
+      byType: typeCount,
+    };
   }
-  return parentBookables;
 }
 
-module.exports = { BookableManager, BookableModel };
+module.exports = { BookableManager };

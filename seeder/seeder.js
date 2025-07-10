@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { User: UserEntity } = require("../src/commons/entities/user");
+const { User: UserEntity } = require("../src/commons/entities/user/user");
 
 /**
  * Seeds the database with initial data.

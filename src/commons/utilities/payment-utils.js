@@ -6,7 +6,12 @@ const {
 const TenantManager = require("../data-managers/tenant-manager");
 
 class PaymentUtils {
-  static async getPaymentService(tenantId, bookingId, paymentProvider) {
+  static async getPaymentService(
+    tenantId,
+    bookingId,
+    paymentProvider,
+    options,
+  ) {
     const paymentProviders = {
       giroCockpit: GiroCockpitPaymentService,
       pmPayment: PmPaymentService,
@@ -23,7 +28,7 @@ class PaymentUtils {
       throw new Error(`${paymentProvider} payment app not found or inactive.`);
     }
 
-    return new serviceClass(tenantId, bookingId);
+    return new serviceClass(tenantId, bookingId, options);
   }
 }
 

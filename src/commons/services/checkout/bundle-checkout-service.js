@@ -31,7 +31,6 @@ class BundleCheckoutService {
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
    * @param {Array} attachments - The attachments.
-   * @param {Array} lockerInfo - The locker information.
    */
   constructor({
     user,
@@ -52,7 +51,7 @@ class BundleCheckoutService {
     attachmentStatus,
     paymentProvider,
     attachments,
-    lockerInfo,
+    bookWithPrice,
   }) {
     this.user = user;
     this.tenant = tenant;
@@ -72,7 +71,7 @@ class BundleCheckoutService {
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
-    this.lockerInfo = lockerInfo;
+    this.bookWithPrice = bookWithPrice;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -84,6 +83,7 @@ class BundleCheckoutService {
       bookableItem.bookableId,
       bookableItem.amount,
       this.couponCode,
+      this.bookWithPrice,
     );
     await itemCheckoutService.init();
 
@@ -292,9 +292,7 @@ class BundleCheckoutService {
       isRejected: this.performRejected(),
       paymentProvider: this.paymentProvider,
       paymentMethod: this.setPaymentMethod(),
-      lockerInfo: this.lockerInfo?.length
-        ? this.lockerInfo
-        : await this.getLockerInfo(),
+      lockerInfo: await this.getLockerInfo(),
     };
 
     if (this.couponCode) {
@@ -331,6 +329,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} email - The email of the user.
    * @param {string} phone - The phone number of the user.
    * @param {string} comment - The comment of the user.
+   * @param {string} internalComments - Internal comments for administrative purposes.
+   * @param {string} rejectionReason - Reason for rejection if the booking is rejected.
    * @param {boolean} isCommit - The commit status.
    * @param {boolean} isPayed - The payment status.
    * @param {boolean} isRejected - The reject status.
@@ -339,7 +339,6 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} paymentMethod - The payment method.
    * @param {Array} hooks - The hooks.
    * @param {Array} attachments - The attachments.
-   * @param {Array} lockerInfo - The locker information.
    */
   constructor({
     user,
@@ -357,6 +356,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     email,
     phone,
     comment,
+    internalComments,
+    rejectionReason,
     isCommit,
     isPayed,
     isRejected,
@@ -365,7 +366,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     paymentMethod,
     hooks,
     attachments,
-    lockerInfo,
+    bookWithPrice,
   }) {
     super({
       user,
@@ -386,13 +387,15 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachmentStatus,
       paymentProvider,
       attachments,
-      lockerInfo,
+      bookWithPrice,
     });
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
     this.isRejected = isRejected;
     this.paymentMethod = paymentMethod;
     this.hooks = hooks;
+    this.internalComments = internalComments || "";
+    this.rejectionReason = rejectionReason || "";
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -404,6 +407,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       bookableItem.bookableId,
       bookableItem.amount,
       this.couponCode,
+      this.bookWithPrice,
     );
 
     await itemCheckoutService.init(bookableItem._bookableUsed);
@@ -440,6 +444,13 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
 
   setPaymentMethod() {
     return this.paymentMethod;
+  }
+
+  async prepareBooking(options = {}) {
+    const booking = await super.prepareBooking(options);
+    booking.internalComments = this.internalComments;
+    booking.rejectionReason = this.rejectionReason;
+    return booking;
   }
 }
 

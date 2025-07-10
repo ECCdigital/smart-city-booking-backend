@@ -1,9 +1,9 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-const { User } = require("../../../commons/entities/user");
+const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -273,8 +273,7 @@ class UserController {
    */
   static async updateMe(request, response) {
     try {
-      const user = new User(request.user);
-      const newInfos = { id: user.id };
+      const user = await UserManager.getUser(request.user.id, true);
 
       const fields = [
         "firstName",
@@ -288,10 +287,13 @@ class UserController {
 
       fields.forEach((field) => {
         if (Object.prototype.hasOwnProperty.call(request.body, field)) {
-          newInfos[field] = request.body[field];
+          user[field] = request.body[field];
         }
       });
-      const updatedUser = await UserManager.storeUser(newInfos);
+
+      await UserManager.storeUser(user);
+
+      const updatedUser = await UserManager.getUser(user.id, false);
 
       request.session.passport.user.firstName = updatedUser.firstName;
       request.session.passport.user.lastName = updatedUser.lastName;

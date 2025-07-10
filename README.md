@@ -217,6 +217,21 @@ The backend offers both public and protected API routes.
   Deletes a bookable resource.  
   _Required Permission:_ bookable.allowDelete
 
+- **GET /api/:tenant/bookables/:id/occupancy**  
+  Returns occupancy information for a specific bookable resource.  
+  _Parameters:_
+  - **id** (path): ID of the bookable resource
+  - **timeBegin** (query, optional): Start time for the occupancy check (timestamp)
+  - **timeEnd** (query, optional): End time for the occupancy check (timestamp)
+
+  _Response:_ JSON object containing:
+  - **bookableId**: ID of the bookable resource
+  - **title**: Title of the bookable resource
+  - **isAvailable**: Boolean indicating if the bookable is available in the specified time range
+  - **totalCapacity**: Total capacity of the bookable
+  - **booked**: Number of booked units
+  - **remaining**: Number of remaining units
+
 #### Other Categories
 
 For endpoints related to events, users, bookings, coupons, checkout, payments, calendars, and files, refer to the detailed API documentation within this README. Each route includes parameter details, example request bodies, and required permissions.
@@ -368,7 +383,6 @@ Example:
   "id": "default",
   "tenantId": "default",
   "type": "room",
-  "enabled": true,
   "parent": "123-123ada-123",
   "title": "Example Title",
   "description": "Example Description",
@@ -432,7 +446,7 @@ Example:
   "requiredFields": ["field1", "field2"],
   "bookingNotes": "Example Notes",
   "checkoutBookableIds": ["bookable3", "bookable4"],
-  "ownerUserId": "user1",
+  "ownerUserId": "user1"
 }
 ```
 
@@ -630,7 +644,6 @@ Example:
     ]
   ]
 }
-
 ```
 
 | Field          | Description                                                                                  |
@@ -647,6 +660,114 @@ Example:
 | information    | An object containing additional information about the event.                                 |
 | isPublic       | A boolean indicating whether the event is public.                                            |
 | schedules      | An array of schedules for the event. Each schedule has a start time, end time, and location. |
+
+### Instance
+
+The Instance entity represents the global configuration for the entire application. There is only one instance per deployment.
+
+Example:
+
+```JSON
+{
+  "applications": [],
+  "mailTemplate": "<html>...</html>",
+  "mailAddress": "contact@example.com",
+  "noreplyMail": "noreply@example.com",
+  "noreplyDisplayName": "No Reply",
+  "noreplyHost": "smtp.example.com",
+  "noreplyPort": 587,
+  "noreplyUser": "noreply@example.com",
+  "noreplyPassword": {},
+  "noreplyStarttls": true,
+  "noreplyUseGraphApi": false,
+  "noreplyGraphTenantId": "",
+  "noreplyGraphClientId": "",
+  "noreplyGraphClientSecret": {},
+  "mailEnabled": true,
+  "contactAddress": "contact@example.com",
+  "contactUrl": "https://example.com/contact",
+  "dataProtectionUrl": "https://example.com/privacy",
+  "legalNoticeUrl": "https://example.com/legal",
+  "allowAllUsersToCreateTenant": false,
+  "allowedUsersToCreateTenant": [],
+  "ownerUserIds": ["admin@example.com"],
+  "isInitialized": true
+}
+```
+
+### GroupBooking
+
+A GroupBooking entity represents a collection of related bookings that are managed together.
+
+Example:
+
+```JSON
+{
+  "id": "group-123",
+  "tenantId": "default",
+  "bookingIds": ["booking-1", "booking-2"],
+  "name": "Conference Room Booking",
+  "description": "Booking for the annual conference",
+  "ownerUserId": "user-123"
+}
+```
+
+### Application
+
+The Application entity represents external applications that can integrate with the system, such as SSO providers.
+
+Example:
+
+```JSON
+{
+  "id": "app-123",
+  "name": "SSO Provider",
+  "type": "auth",
+  "clientId": "client-123",
+  "clientSecret": {},
+  "redirectUris": ["https://example.com/callback"],
+  "tenantId": "default"
+}
+```
+
+### Workflow
+
+The Workflow entity represents a sequence of states and transitions that a booking or other entity can go through.
+
+Example:
+
+```JSON
+{
+  "id": "workflow-123",
+  "name": "Booking Approval",
+  "tenantId": "default",
+  "states": [
+    {
+      "id": "state-1",
+      "name": "Pending",
+      "description": "Booking is pending approval",
+      "isInitial": true,
+      "isFinal": false
+    },
+    {
+      "id": "state-2",
+      "name": "Approved",
+      "description": "Booking has been approved",
+      "isInitial": false,
+      "isFinal": true
+    }
+  ],
+  "transitions": [
+    {
+      "id": "transition-1",
+      "name": "Approve",
+      "fromStateId": "state-1",
+      "toStateId": "state-2",
+      "roles": ["admin"]
+    }
+  ]
+}
+```
 
 
 ---

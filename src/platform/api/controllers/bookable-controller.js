@@ -2,13 +2,14 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
-const { Bookable } = require("../../../commons/entities/bookable");
+const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
-const { RolePermission } = require("../../../commons/entities/role");
+const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
 const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
+const BookableService = require("../../../commons/services/bookable-service");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -277,7 +278,7 @@ class BookableController {
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
         );
-        response.sendStatus(201);
+        response.status(201).send(bookable);
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to create bookable`,
@@ -338,7 +339,7 @@ class BookableController {
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
         );
-        response.sendStatus(201);
+        response.status(201).send(bookable);
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to update bookable`,
@@ -470,6 +471,34 @@ class BookableController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get opening hours");
+    }
+  }
+
+  static async getBookableOccupancy(request, response) {
+    try {
+      const { tenant: tenantId, id: bookableId } = request.params;
+      const { timeBegin, timeEnd } = request.query;
+      const user = request.user;
+
+      if (!bookableId) {
+        logger.warn(
+          `${tenantId} -- Could not get bookable occupancy. No id provided.`,
+        );
+        return response.status(400).send(`${tenantId} -- No id provided`);
+      }
+
+      const occupancy = await BookableService.getOccupancy({
+        bookableId,
+        tenantId,
+        timeBegin,
+        timeEnd,
+        userId: user?.id,
+      });
+
+      response.status(200).send(occupancy);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get bookable occupancy");
     }
   }
 

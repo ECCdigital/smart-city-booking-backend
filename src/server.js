@@ -7,13 +7,12 @@ const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const fileUpload = require("express-fileupload");
 const passport = require("passport");
-const LocalStrategy = require("passport-local");
 const bunyan = require("bunyan");
 
 const DatabaseManager = require("./commons/utilities/database-manager.js");
-const UserManager = require("./commons/data-managers/user-manager");
 const { runMigrations } = require("../migrations/migrationsManager");
 const seed = require("../seeder/seeder");
+const RuleEngine = require("./rule-engine/ruleEngine");
 
 const dbm = DatabaseManager.getInstance();
 
@@ -104,8 +103,11 @@ dbm.connect().then(() => {
     try {
       await seed(dbm.dbClient.connection);
       await runMigrations(dbm.dbClient.connection);
+      if (process.env.RULE_ENGINE_ENABLED === "true") {
+        await RuleEngine.initEngine();
+      }
     } catch (err) {
-      logger.error("Error running migrations", err);
+      logger.error("Error during application initialization steps", err);
     }
   });
 });
