@@ -320,7 +320,7 @@ class BookingService {
           const isTicketBooking = bookableItems.some(isTicket);
 
           if (isTicketBooking) {
-            const eventIds = bookableItems.map(getEventForTicket);
+            const eventIds = bookableItems.map(getEventForTicket).filter((id) => id !== null && id !== undefined);
             await sendEmailToOrganizer(eventIds, tenantId, booking);
           }
         }
@@ -594,8 +594,10 @@ class BookingService {
       const isTicketBooking = bookableItems.some(isTicket);
 
       if (isTicketBooking) {
-        const eventIds = bookableItems.map(getEventForTicket);
-        await sendEmailToOrganizer(eventIds, tenantId, originBooking);
+        const eventIds = bookableItems.map(getEventForTicket)..filter((id) => id !== null && id !== undefined);;
+        if (eventIds.length > 0) {
+          await sendEmailToOrganizer(eventIds, tenantId, originBooking);
+        }
       }
 
       return { success: true };

@@ -417,7 +417,8 @@ class HtmlEngine {
         event.eventLocation.room,
         event.tenantId,
       );
-      htmlOutput += `<div class="room">${eventLocationBookable.title}</div>`;
+
+      htmlOutput += `<div class="room">${eventLocationBookable?.title}</div>`;
     }
     htmlOutput += event.eventLocation.additional
       ? `<div class="additional">${event.eventAddress.additional || ""}</div>`

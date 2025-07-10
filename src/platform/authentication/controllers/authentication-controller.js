@@ -193,6 +193,29 @@ class AuthenticationController {
       response.sendStatus(400);
     }
   }
+
+  static async checkEmail(request, response) {
+    if(process.env.DISABLE_EMAIL_CHECK === "true") {
+      return response.status(200).send("Email check is disabled");
+    }
+
+    const { email } = request.body;
+
+    if (!email) {
+      return response.status(400).send("Email is required");
+    }
+
+    try {
+      const user = await UserManager.getUser(email);
+      if (user) {
+        return response.status(409).send("Email already in use");
+      }
+      return response.status(200).send("Email is available");
+    } catch (error) {
+      logger.error(error);
+      return response.status(500).send("Internal server error");
+    }
+  }
 }
 
 module.exports = AuthenticationController;

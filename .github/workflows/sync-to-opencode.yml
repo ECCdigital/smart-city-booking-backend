@@ -1,0 +1,29 @@
+name: Mirror to openCode
+
+on:
+  push:
+    branches:
+      - develop
+      - stage
+      - main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Add openCode remote
+        run: |
+          git remote add opencode \
+            https://oauth2:${{ secrets.OPENCODE_TOKEN }}@${{ secrets.OPENCODE_URL }}
+
+      - name: Push all branches
+        run: git push opencode --force --all
+
+      - name: Push all tags
+        run: git push opencode --force --tags

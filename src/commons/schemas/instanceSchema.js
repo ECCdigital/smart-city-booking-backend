@@ -32,6 +32,17 @@ const instanceSchemaDefinition = {
   allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
   ownerUserIds: { type: Array, ref: "User", default: [] },
   isInitialized: { type: Boolean, default: false },
+  userNotifications: {
+    type: Array,
+    default: [],
+    schema: {
+      id: { type: String, default: null },
+      enabled: { type: Boolean, default: true },
+      message: { type: String },
+      tenants: { type: Array, default: [] },
+      path: { type: Array, default: [] },
+    }
+  },
 };
 
 module.exports = {

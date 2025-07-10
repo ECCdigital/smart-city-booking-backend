@@ -79,7 +79,7 @@ class LockerService {
       const bookableLockerDetails = bookable.lockerDetails;
       const activeLockerApps = LockerService.getActiveLockerApps(lockerApps);
 
-      if (bookableLockerDetails.active && activeLockerApps.length > 0) {
+      if (bookableLockerDetails.active === true && activeLockerApps.length > 0) {
         let occupiedUnits = [];
         const possibleUnits = bookableLockerDetails.units;
         const concurrentBookings = await getConcurrentBookings(

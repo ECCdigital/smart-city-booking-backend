@@ -77,6 +77,7 @@ class CheckoutController {
 
       return response.status(200).json(payload);
     } catch (err) {
+      console.error(err);
       logger.warn(err);
       return response.status(409).send(err.message);
     }

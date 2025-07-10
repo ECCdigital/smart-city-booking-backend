@@ -168,11 +168,19 @@ class ItemCheckoutService {
       );
     }
 
-    return concurrentBookings
+    const amountBooked = concurrentBookings
       .map((cb) => cb.bookableItems)
       .flat()
       .filter((bi) => bi.bookableId === bookable.id)
       .reduce((acc, bi) => acc + bi.amount, 0);
+    return {
+      amountBooked,
+      bookings: concurrentBookings.map((cb) => ({
+        id: cb.id,
+        timeBegin: cb.timeBegin,
+        timeEnd: cb.timeEnd,
+      })),
+    };
   }
 
   async calculateAmountBookedTicketsByParent(parentBookable) {
@@ -183,7 +191,8 @@ class ItemCheckoutService {
 
     let amountBooked = 0;
     for (const childBookable of childBookables) {
-      amountBooked += await this.calculateAmountBooked(childBookable);
+      amountBooked += (await this.calculateAmountBooked(childBookable))
+        .amountBooked;
     }
     return amountBooked;
   }
@@ -430,7 +439,9 @@ class ItemCheckoutService {
    * @returns {Promise<Object>}
    */
   async checkAvailability() {
-    const amountBooked = await this.calculateAmountBooked(this.originBookable);
+    const { amountBooked, bookings } = await this.calculateAmountBooked(
+      this.originBookable,
+    );
 
     const isAvailable =
       !this.originBookable.amount ||
@@ -447,6 +458,7 @@ class ItemCheckoutService {
           this.originBookable.amount > 0
             ? this.originBookable.amount - amountBooked
             : null,
+        concurrentBookings: bookings,
       };
     }
 
@@ -471,7 +483,7 @@ class ItemCheckoutService {
     const parentAmount = [];
 
     for (const parentBookable of parentBookables) {
-      const parentAmountBooked =
+      const { amountBooked: parentAmountBooked, bookings } =
         await this.calculateAmountBooked(parentBookable);
 
       let isAvailable;
@@ -502,6 +514,7 @@ class ItemCheckoutService {
           available: false,
           message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
           parentAvailability: parentAmount,
+          concurrentBookings: bookings,
         };
       }
     }
@@ -527,7 +540,8 @@ class ItemCheckoutService {
     );
 
     for (const childBookable of filteredChildBookables) {
-      const amountBooked = await this.calculateAmountBooked(childBookable);
+      const { amountBooked, bookings } =
+        await this.calculateAmountBooked(childBookable);
 
       const isAvailable =
         !childBookable.amount ||
@@ -549,6 +563,7 @@ class ItemCheckoutService {
           totalCapacity: childBookable.amount,
           booked: amountBooked,
           remaining: childBookable.amount - amountBooked,
+          concurrentBookings: bookings,
         };
       }
     }
@@ -671,6 +686,7 @@ class ItemCheckoutService {
           checkType: CHECK_TYPES.OPENING_HOURS,
           available: false,
           message: `Die gewählte Buchungszeit liegt außerhalb der Öffnungszeiten von ${b.title}.`,
+          bookings: [],
         };
       }
     }

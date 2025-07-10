@@ -20,7 +20,7 @@ passport.use(
     },
     async (request, id, password, done) => {
       if (typeof id !== "string") {
-        return done(null, false);
+        return done({ message: "Invalid user ID format", status: 400 }, false);
       }
 
       id = id.toLowerCase();
@@ -28,20 +28,28 @@ passport.use(
       const user = await UserManager.getUser(id, true);
 
       if (user === null) {
-        return done(null, false);
+        return done({ message: "User not found", status: 404 }, false);
       }
 
-      if (
-        user !== undefined &&
-        user.isVerified &&
-        !user.isSuspended &&
-        user.authType === "local" &&
-        user.verifyPassword(password)
-      ) {
-        done(null, user);
-      } else {
-        done(null, false);
+      if (!user.isVerified || user.isSuspended) {
+        return done({ 
+          message: user.isVerified ? "User is suspended" : "User is not verified", 
+          status: 403 
+        }, false);
       }
+
+      if (user.authType !== "local") {
+        return done({ 
+          message: "Invalid authentication type", 
+          status: 401 
+        }, false);
+      }
+
+      if (!user.verifyPassword(password)) {
+        return done({ message: "Invalid password", status: 401 }, false);
+      }
+
+      done(null, user);
     },
   ),
 );
