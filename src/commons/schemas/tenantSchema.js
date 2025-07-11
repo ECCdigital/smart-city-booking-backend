@@ -26,7 +26,7 @@ const tenantSchemaDefinition = {
   receiptCount: { type: Object, default: {} },
   invoiceTemplate: { type: String, default: "" },
   invoiceNumberPrefix: { type: String, default: "" },
-  invoiceCount: { type: Object, required: true },
+  invoiceCount: { type: Object, default: {} },
   paymentPurposeSuffix: { type: String, default: "" },
   applications: { type: Array, default: [] },
   maxBookingAdvanceInMonths: { type: Number, default: null },
