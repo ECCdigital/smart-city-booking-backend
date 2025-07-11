@@ -9,6 +9,15 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      runner_type:
+        description: 'Runner-Typ'
+        required: true
+        type: choice
+        options:
+          - self-hosted
+          - ubuntu-latest
+        default: self-hosted
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -20,7 +29,8 @@ env:
 jobs:
   build:
 
-    runs-on: [self-hosted, Linux, X64]
+    runs-on:
+      - ${{ github.event.inputs.runner_type }}
     permissions:
       contents: read
       packages: write
