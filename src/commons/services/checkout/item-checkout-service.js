@@ -243,25 +243,27 @@ class ItemCheckoutService {
   }
 
   async userPriceEur() {
-    const freeBookingUsers = [
-      ...(this.originBookable.freeBookingUsers || []),
-      ...(
-        await TenantManger.getTenantUsersByRoles(
-          this.tenantId,
-          this.originBookable.freeBookingRoles || [],
-        )
-      ).map((u) => u.userId),
-    ];
+    if (!(this instanceof ManualItemCheckoutService)) {
+      const freeBookingUsers = [
+        ...(this.originBookable.freeBookingUsers || []),
+        ...(
+          await TenantManger.getTenantUsersByRoles(
+            this.tenantId,
+            this.originBookable.freeBookingRoles || [],
+          )
+        ).map((u) => u.userId),
+      ];
 
-    if (
-      !!this.user &&
-      freeBookingUsers.includes(this.user) &&
-      this.originBookable.tenantId === this.tenantId
-    ) {
-      logger.info(
-        `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
-      );
-      return 0;
+      if (
+        !!this.user &&
+        freeBookingUsers.includes(this.user) &&
+        this.originBookable.tenantId === this.tenantId
+      ) {
+        logger.info(
+          `User ${this.user} is allowed to book bookable ${this.bookableId} for free setting price to 0.`,
+        );
+        return 0;
+      }
     }
 
     const total = await CouponManager.applyCoupon(
