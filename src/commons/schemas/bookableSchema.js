@@ -5,7 +5,7 @@ const bookableSchemaDefinition = {
   tenantId: { type: String, required: true, ref: "Tenant" },
 
   // Basic properties
-  type: { type: String, required: true },
+  type: { type: String, enum: ["room", "location", "resource", "ticket"] },
   title: { type: String, required: true },
   description: { type: String, default: "" },
   isPublic: { type: Boolean, default: false },
