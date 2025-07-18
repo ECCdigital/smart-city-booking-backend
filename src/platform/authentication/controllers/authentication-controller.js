@@ -1,5 +1,6 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
-const { User, HookTypes } = require("../../../commons/entities/user/user");
+const { User } = require("../../../commons/entities/user/user");
+const { USER_HOOK_TYPES } = require("../../../commons/entities/user/userHook");
 const bunyan = require("bunyan");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const SsoService = require("../../../commons/services/sso/sso-service");
@@ -139,28 +140,25 @@ class AuthenticationController {
     }
   }
 
-  static releaseHook(request, response, next) {
-    var hookId = request.params.hookId;
+  static async releaseHook(request, response) {
+    const hookId = request.params.hookId;
 
-    UserManager.releaseHook(hookId)
-      .then((hookType) => {
-        let additionalUrl = "";
-        if (hookType === HookTypes.VERIFY) {
-          additionalUrl = "/email/verify";
-        } else if (hookType === HookTypes.RESET_PASSWORD) {
-          additionalUrl = "/password/confirmed";
-        }
+    try {
+      const hookType = await UserManager.releaseHook(hookId);
+      let additionalUrl = "";
+      if (hookType === USER_HOOK_TYPES.VERIFY) {
+        additionalUrl = "/email/verify";
+      } else if (hookType === USER_HOOK_TYPES.RESET_PASSWORD) {
+        additionalUrl = "/password/confirmed";
+      }
 
-        logger.info(`Hook ${hookId} released.`);
+      logger.info(`Hook ${hookId} released.`);
 
-        // redirect to the frontend
-        response.redirect(`${process.env.FRONTEND_URL}${additionalUrl}`);
-        next();
-      })
-      .catch((err) => {
-        logger.error(err);
-        response.status(500).send("could not releasae hook");
-      });
+      response.redirect(`${process.env.FRONTEND_URL}${additionalUrl}`);
+    } catch (err) {
+      logger.error(err);
+      response.redirect(`${process.env.FRONTEND_URL}/login`);
+    }
   }
 
   static resetPassword(request, response) {
@@ -195,7 +193,7 @@ class AuthenticationController {
   }
 
   static async checkEmail(request, response) {
-    if(process.env.DISABLE_EMAIL_CHECK === "true") {
+    if (process.env.DISABLE_EMAIL_CHECK === "true") {
       return response.status(200).send("Email check is disabled");
     }
 
