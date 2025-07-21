@@ -64,6 +64,7 @@ class ItemCheckoutService {
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string} couponCode The coupon code
+   * @param {boolean} bookWithPrice
    */
   constructor(
     user,
@@ -96,6 +97,18 @@ class ItemCheckoutService {
    */
   async init(originBookable = {}) {
     this.originBookable = await this.getBookable();
+  }
+
+  cleanup() {
+    this.user = null;
+    this.tenantId = null;
+    this.timeBegin = null;
+    this.timeEnd = null;
+    this.bookableId = null;
+    this.amount = null;
+    this.couponCode = null;
+    this.originBookable = null;
+    this.bookWithPrice = null;
   }
 
   get bookableUsed() {

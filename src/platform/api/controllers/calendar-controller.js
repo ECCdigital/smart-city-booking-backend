@@ -165,19 +165,20 @@ class CalendarController {
       endDate,
     );
     for (const p of periods) {
-      const itemCheckoutService = new ItemCheckoutService(
-        user?.id,
-        tenant,
-        p.timeBegin,
-        p.timeEnd,
-        bookableId,
-        Number(amount),
-        null,
-      );
-
-      await itemCheckoutService.init();
+      let itemCheckoutService = null;
 
       try {
+        itemCheckoutService = new ItemCheckoutService(
+          user?.id,
+          tenant,
+          p.timeBegin,
+          p.timeEnd,
+          bookableId,
+          Number(amount),
+          null,
+        );
+
+        await itemCheckoutService.init();
         // in order to check calendar availability, we generally need to perform all checks of the checkout service.
         // EXCEPTION: we do not need to check minimum / maximum durations when checking fixed time periods
         await itemCheckoutService.checkPermissions();
@@ -191,6 +192,11 @@ class CalendarController {
         p.available = true;
       } catch {
         p.available = false;
+      } finally {
+        if (itemCheckoutService) {
+          itemCheckoutService.cleanup();
+          itemCheckoutService = null;
+        }
       }
     }
 

@@ -36,20 +36,21 @@ class CheckoutController {
 
     //TODO: Move this to a service
 
-    const itemCheckoutService = new ItemCheckoutService(
-      user?.id,
-      tenantId,
-      timeBegin,
-      timeEnd,
-      bookableId,
-      parseInt(amount),
-      couponCode,
-      bookWithPrice,
-    );
-
-    await itemCheckoutService.init();
+    let itemCheckoutService = null;
 
     try {
+      itemCheckoutService = new ItemCheckoutService(
+        user?.id,
+        tenantId,
+        timeBegin,
+        timeEnd,
+        bookableId,
+        parseInt(amount),
+        couponCode,
+        bookWithPrice,
+      );
+
+      await itemCheckoutService.init();
       await itemCheckoutService.checkAll();
       logger.info(
         `${tenantId} -- validated bookable ${bookableId} for user ${user?.id} with amount ${amount} and time ${timeBegin} - ${timeEnd}`,
@@ -80,6 +81,11 @@ class CheckoutController {
       console.error(err);
       logger.warn(err);
       return response.status(409).send(err.message);
+    } finally {
+      if (itemCheckoutService) {
+        itemCheckoutService.cleanup();
+        itemCheckoutService = null;
+      }
     }
   }
 
