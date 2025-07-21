@@ -64,7 +64,8 @@ class ItemCheckoutService {
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string} couponCode The coupon code
-   * @param {boolean} bookWithPrice
+   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations. 
+   *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
    */
   constructor(
     user,
