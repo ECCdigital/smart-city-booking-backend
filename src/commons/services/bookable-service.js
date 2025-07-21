@@ -33,9 +33,10 @@ class BookableService {
     timeEnd,
     userId = null,
   }) {
+    let checkoutService = null;
     try {
       const bookable = await BookableManager.getBookable(bookableId, tenantId);
-      const checkoutService = new ItemCheckoutService(
+      checkoutService = new ItemCheckoutService(
         userId,
         tenantId,
         timeBegin,
@@ -59,6 +60,11 @@ class BookableService {
     } catch (error) {
       logger.error(error);
       return this._createErrorResponse(bookableId);
+    } finally {
+      if (checkoutService) {
+        checkoutService.cleanup();
+        checkoutService = null;
+      }
     }
   }
 
