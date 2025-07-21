@@ -121,163 +121,173 @@ class BookingService {
 
     let bundleCheckoutService;
 
-    if (manualBooking) {
-      bundleCheckoutService = new ManualBundleCheckoutService({
-        user: user?.id,
-        tenant: tenantId,
-        timeBegin,
-        timeEnd,
-        bookableItems,
-        couponCode,
-        name,
-        company,
-        street,
-        zipCode,
-        location,
-        email: mail,
-        phone,
-        comment,
-        isCommit: Boolean(request.body.isCommitted),
-        isPayed: Boolean(request.body.isPayed),
-        isRejected: Boolean(request.body.isRejected),
-        attachmentStatus,
-        paymentProvider,
-      });
-    } else {
-      const filteredAddons = await validateMandatoryAddons(bookableItems);
-      const filteredBookableItems = bookableItems.concat(filteredAddons);
+    try {
+      if (manualBooking) {
+        bundleCheckoutService = new ManualBundleCheckoutService({
+          user: user?.id,
+          tenant: tenantId,
+          timeBegin,
+          timeEnd,
+          bookableItems,
+          couponCode,
+          name,
+          company,
+          street,
+          zipCode,
+          location,
+          email: mail,
+          phone,
+          comment,
+          isCommit: Boolean(request.body.isCommitted),
+          isPayed: Boolean(request.body.isPayed),
+          isRejected: Boolean(request.body.isRejected),
+          attachmentStatus,
+          paymentProvider,
+        });
+      } else {
+        const filteredAddons = await validateMandatoryAddons(bookableItems);
+        const filteredBookableItems = bookableItems.concat(filteredAddons);
 
-      bundleCheckoutService = new BundleCheckoutService({
-        user: user?.id,
-        tenant: tenantId,
-        timeBegin,
-        timeEnd,
-        bookableItems: filteredBookableItems,
-        couponCode,
-        name,
-        company,
-        street,
-        zipCode,
-        location,
-        email: mail,
-        phone,
-        comment,
-        attachmentStatus,
-        paymentProvider,
-      });
-    }
-
-    const booking = await bundleCheckoutService.prepareBooking();
-
-    logger.debug(
-      `${tenantId}, cid ${checkoutId} -- Booking prepared: ${JSON.stringify(
-        booking,
-      )}`,
-    );
-
-    if (simulate === false) {
-      await BookingManager.storeBooking(booking);
-      const lockerServiceInstance = LockerService.getInstance();
-      if (booking.lockerInfo) {
-        for (const locker of booking.lockerInfo) {
-          await LockerService.freeReservedLocker(
-            booking.tenantId,
-            locker.id,
-            locker.lockerSystem,
-            booking.timeBegin,
-            booking.timeEnd,
-          );
-        }
+        bundleCheckoutService = new BundleCheckoutService({
+          user: user?.id,
+          tenant: tenantId,
+          timeBegin,
+          timeEnd,
+          bookableItems: filteredBookableItems,
+          couponCode,
+          name,
+          company,
+          street,
+          zipCode,
+          location,
+          email: mail,
+          phone,
+          comment,
+          attachmentStatus,
+          paymentProvider,
+        });
       }
 
-      const workflow = await WorkflowManager.getWorkflow(tenantId);
-      if (workflow && workflow.active && workflow.defaultState) {
-        await WorkflowService.updateTask(
-          tenantId,
-          booking.id,
-          workflow.defaultState,
-          0,
-        );
-      }
+      const booking = await bundleCheckoutService.prepareBooking();
 
-      logger.info(
-        `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
+      logger.debug(
+        `${tenantId}, cid ${checkoutId} -- Booking prepared: ${JSON.stringify(
+          booking,
+        )}`,
       );
-      if (!booking.isCommitted) {
-        try {
-          await MailController.sendBookingRequestConfirmation(
-            booking.mail,
-            booking.id,
-            booking.tenantId,
-          );
-        } catch (err) {
-          logger.error(err);
+
+      if (simulate === false) {
+        await BookingManager.storeBooking(booking);
+        const lockerServiceInstance = LockerService.getInstance();
+        if (booking.lockerInfo) {
+          for (const locker of booking.lockerInfo) {
+            await LockerService.freeReservedLocker(
+              booking.tenantId,
+              locker.id,
+              locker.lockerSystem,
+              booking.timeBegin,
+              booking.timeEnd,
+            );
+          }
         }
-      }
-      if (booking.isCommitted && booking.isPayed) {
-        let attachments = [];
-        try {
-          if (booking.priceEur > 0) {
-            const pdfData = await ReceiptService.createReceipt(
-              tenantId,
+
+        const workflow = await WorkflowManager.getWorkflow(tenantId);
+        if (workflow && workflow.active && workflow.defaultState) {
+          await WorkflowService.updateTask(
+            tenantId,
+            booking.id,
+            workflow.defaultState,
+            0,
+          );
+        }
+
+        logger.info(
+          `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
+        );
+        if (!booking.isCommitted) {
+          try {
+            await MailController.sendBookingRequestConfirmation(
+              booking.mail,
+              booking.id,
+              booking.tenantId,
+            );
+          } catch (err) {
+            logger.error(err);
+          }
+        }
+        if (booking.isCommitted && booking.isPayed) {
+          let attachments = [];
+          try {
+            if (booking.priceEur > 0) {
+              const pdfData = await ReceiptService.createReceipt(
+                tenantId,
+                booking.id,
+              );
+
+              attachments = [
+                {
+                  filename: pdfData.name,
+                  content: pdfData.buffer,
+                  contentType: "application/pdf",
+                },
+              ];
+            }
+          } catch (err) {
+            logger.error(err);
+          }
+
+          try {
+            await MailController.sendBookingConfirmation(
+              booking.mail,
+              booking.id,
+              booking.tenantId,
+              attachments,
+            );
+          } catch (err) {
+            logger.error(err);
+          }
+
+          try {
+            await lockerServiceInstance.handleCreate(
+              booking.tenantId,
               booking.id,
             );
-
-            attachments = [
-              {
-                filename: pdfData.name,
-                content: pdfData.buffer,
-                contentType: "application/pdf",
-              },
-            ];
+          } catch (err) {
+            logger.error(err);
           }
-        } catch (err) {
-          logger.error(err);
+
+          const isTicketBooking = bookableItems.some(isTicket);
+
+          if (isTicketBooking) {
+            const eventIds = bookableItems
+              .map(getEventForTicket)
+              .filter((id) => id !== null && id !== undefined);
+            await sendEmailToOrganizer(eventIds, tenantId, booking);
+          }
         }
 
         try {
-          await MailController.sendBookingConfirmation(
-            booking.mail,
+          await MailController.sendIncomingBooking(
+            tenant.mail,
             booking.id,
             booking.tenantId,
-            attachments,
           );
         } catch (err) {
           logger.error(err);
         }
-
-        try {
-          await lockerServiceInstance.handleCreate(
-            booking.tenantId,
-            booking.id,
-          );
-        } catch (err) {
-          logger.error(err);
-        }
-
-        const isTicketBooking = bookableItems.some(isTicket);
-
-        if (isTicketBooking) {
-          const eventIds = bookableItems
-            .map(getEventForTicket)
-            .filter((id) => id !== null && id !== undefined);
-          await sendEmailToOrganizer(eventIds, tenantId, booking);
-        }
+      } else {
+        logger.info(`${tenantId}, cid ${checkoutId} -- Simulated booking`);
       }
-
-      try {
-        await MailController.sendIncomingBooking(
-          tenant.mail,
-          booking.id,
-          booking.tenantId,
-        );
-      } catch (err) {
-        logger.error(err);
+      return booking;
+    } finally {
+      if (
+        bundleCheckoutService &&
+        typeof bundleCheckoutService.cleanup === "function"
+      ) {
+        await bundleCheckoutService.cleanup();
       }
-    } else {
-      logger.info(`${tenantId}, cid ${checkoutId} -- Simulated booking`);
+      bundleCheckoutService = null;
     }
-    return booking;
   }
 
   static async removeBooking(tenantId, bookingId) {
@@ -300,8 +310,9 @@ class BookingService {
       updatedBooking.id,
       tenantId,
     );
+    let bundleCheckoutService;
     try {
-      const bundleCheckoutService = new ManualBundleCheckoutService({
+      bundleCheckoutService = new ManualBundleCheckoutService({
         user: updatedBooking.assignedUserId,
         tenant: tenantId,
         timeBegin: updatedBooking.timeBegin,
@@ -347,12 +358,21 @@ class BookingService {
     } catch (error) {
       await BookingManager.storeBooking(oldBooking);
       throw new Error(`Error updating booking: ${error.message}`);
+    } finally {
+      if (
+        bundleCheckoutService &&
+        typeof bundleCheckoutService.cleanup === "function"
+      ) {
+        await bundleCheckoutService.cleanup();
+      }
+      bundleCheckoutService = null;
     }
 
     return BookingManager.getBooking(updatedBooking.id, tenantId);
   }
 
   static async commitBooking(tenantId, booking) {
+    let bundleCheckoutService;
     try {
       const originBooking = await BookingManager.getBooking(
         booking.id,
@@ -360,7 +380,7 @@ class BookingService {
       );
 
       if (originBooking.isRejected) {
-        const bundleCheckoutService = new ManualBundleCheckoutService({
+        bundleCheckoutService = new ManualBundleCheckoutService({
           user: originBooking.assignedUserId,
           tenant: tenantId,
           timeBegin: originBooking.timeBegin,
@@ -445,6 +465,14 @@ class BookingService {
       }
     } catch (error) {
       throw new Error(`Error committing booking: ${error.message}`);
+    } finally {
+      if (
+        bundleCheckoutService &&
+        typeof bundleCheckoutService.cleanup === "function"
+      ) {
+        await bundleCheckoutService.cleanup();
+      }
+      bundleCheckoutService = null;
     }
   }
 

@@ -75,6 +75,28 @@ class BundleCheckoutService {
     this.lockerInfo = lockerInfo;
   }
 
+  cleanup() {
+    this.user = null;
+    this.tenant = null;
+    this.timeBegin = null;
+    this.timeEnd = null;
+    this.timeCreated = null;
+    this.bookableItems = null;
+    this.couponCode = null;
+    this.name = null;
+    this.company = null;
+    this.street = null;
+    this.zipCode = null;
+    this.location = null;
+    this.email = null;
+    this.phone = null;
+    this.comment = null;
+    this.attachmentStatus = null;
+    this.paymentProvider = null;
+    this.attachments = null;
+    this.lockerInfo = null;
+  }
+
   async createItemCheckoutService(bookableItem) {
     const itemCheckoutService = new ItemCheckoutService(
       this.user,
