@@ -119,18 +119,20 @@ async function checkAvailabilityIterative(
   while (queue.length > 0) {
     const { start, end } = queue.shift();
 
-    const ics = new ItemCheckoutService(
-      user?.id,
-      tenantId,
-      start,
-      end,
-      bookableId,
-      amount,
-      null,
-    );
-    await ics.init();
+    let ics = null;
 
     try {
+      ics = new ItemCheckoutService(
+        user?.id,
+        tenantId,
+        start,
+        end,
+        bookableId,
+        amount,
+        null,
+      );
+      await ics.init();
+
       await ics.checkPermissions();
       await ics.checkOpeningHours();
       await ics.checkAvailability();
@@ -180,6 +182,11 @@ async function checkAvailabilityIterative(
         } else {
           items.push({ timeBegin: start, timeEnd: end, available: false });
         }
+      }
+    } finally {
+      if (ics) {
+        ics.cleanup();
+        ics = null;
       }
     }
   }
@@ -666,19 +673,21 @@ async function checkSegmentAvailability(
 ) {
   const SEGMENT_MIN_LENGTH = 1800000;
 
-  const ics = new ItemCheckoutService(
-    user?.id,
-    tenantId,
-    start,
-    end,
-    bookableId,
-    amount,
-    null,
-  );
-
-  await ics.init();
+  let ics = null;
 
   try {
+    ics = new ItemCheckoutService(
+      user?.id,
+      tenantId,
+      start,
+      end,
+      bookableId,
+      amount,
+      null,
+    );
+
+    await ics.init();
+
     await ics.checkPermissions();
     await ics.checkOpeningHours();
     await ics.checkAvailability();
@@ -772,6 +781,11 @@ async function checkSegmentAvailability(
           available: false,
         });
       }
+    }
+  } finally {
+    if (ics) {
+      ics.cleanup();
+      ics = null;
     }
   }
 }

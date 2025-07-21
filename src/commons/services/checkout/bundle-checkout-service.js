@@ -128,10 +128,18 @@ class BundleCheckoutService {
   }
   async checkAll() {
     for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService =
-        await this.createItemCheckoutService(bookableItem);
+      let itemCheckoutService = null;
+      try {
+        itemCheckoutService =
+          await this.createItemCheckoutService(bookableItem);
 
-      await itemCheckoutService.checkAll();
+        await itemCheckoutService.checkAll();
+      } finally {
+        if (itemCheckoutService) {
+          itemCheckoutService.cleanup();
+          itemCheckoutService = null;
+        }
+      }
     }
 
     return true;
@@ -245,18 +253,26 @@ class BundleCheckoutService {
     await this.checkAll();
 
     for (const bookableItem of this.bookableItems) {
-      const itemCheckoutService =
-        await this.createItemCheckoutService(bookableItem);
-      bookableItem.regularPriceEur =
-        await itemCheckoutService.regularPriceEur();
-      bookableItem.regularGrossPriceEur =
-        await itemCheckoutService.regularGrossPriceEur();
-      bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
-      bookableItem.userGrossPriceEur =
-        await itemCheckoutService.userGrossPriceEur();
-      bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
-      bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
-      delete bookableItem._bookableUsed._id;
+      let itemCheckoutService = null;
+      try {
+        itemCheckoutService =
+          await this.createItemCheckoutService(bookableItem);
+        bookableItem.regularPriceEur =
+          await itemCheckoutService.regularPriceEur();
+        bookableItem.regularGrossPriceEur =
+          await itemCheckoutService.regularGrossPriceEur();
+        bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
+        bookableItem.userGrossPriceEur =
+          await itemCheckoutService.userGrossPriceEur();
+        bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
+        bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
+        delete bookableItem._bookableUsed._id;
+      } finally {
+        if (itemCheckoutService) {
+          itemCheckoutService.cleanup();
+          itemCheckoutService = null;
+        }
+      }
     }
 
     const mergedAttachments = mergeAttachments(

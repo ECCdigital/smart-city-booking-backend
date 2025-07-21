@@ -517,6 +517,17 @@ class ItemCheckoutService {
     await this.checkChildBookings();
     await this.checkMaxBookingDate();
   }
+
+  cleanup() {
+    this.originBookable = null;
+    this.user = null;
+    this.tenantId = null;
+    this.timeBegin = null;
+    this.timeEnd = null;
+    this.bookableId = null;
+    this.amount = null;
+    this.couponCode = null;
+  }
 }
 
 class ManualItemCheckoutService extends ItemCheckoutService {
