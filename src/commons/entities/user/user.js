@@ -12,7 +12,12 @@ class User {
 
     Object.keys(userSchemaDefinition).forEach(key => {
       if (params[key] !== undefined) {
-        this[key] = params[key];
+        // Convert id to lowercase
+        if (key === 'id' && typeof params[key] === 'string') {
+          this[key] = params[key].toLowerCase();
+        } else {
+          this[key] = params[key];
+        }
       }
     });
 

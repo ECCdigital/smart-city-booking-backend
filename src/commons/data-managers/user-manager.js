@@ -6,7 +6,7 @@ const UserModel = require("./models/userModel");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
-    const rawUser = await UserModel.findOne({ id: id });
+    const rawUser = await UserModel.findOne({ id: { $regex: id, $options: 'i' } });
     if (!rawUser) {
       return null;
     }
