@@ -66,7 +66,7 @@ const bookableSchemaDefinition = {
 
   // Additional properties
   attachments: { type: [Object], default: [] },
-  lockerDetails: { type: [Object], default: [] },
+  lockerDetails: { type: Object, default: { active: false, units: [] } },
   requiredFields: { type: [String], default: [] },
 
   // Timestamps
