@@ -1,18 +1,24 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
   <head>
     <meta charset="utf-8" />
     <title>Ihr Zahlungsbeleg</title>
-
     <style>
       body {
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
         font-size: 1rem;
       }
-
       .booking-detail {
         border-collapse: collapse;
         width: 100%;
+      }
+      .booking-detail td,
+      .booking-detail th {
+        padding: 8px;
+        border-bottom: 1px solid #ddd;
+      }
+      .total-row {
+        font-weight: bold;
       }
     </style>
   </head>
@@ -21,51 +27,15 @@
       Belegnummer: {{receiptNumber}}<br />
       Buchungsdatum: {{bookingDate}}
     </p>
-
     <p class="receipt-address">{{{receiptAddress}}}</p>
-
     <h1>Ihr Zahlungsbeleg</h1>
-
     <p>
-      Hiermit bestätigen wir ihre Buchung sowie den vollständigen
-      Zahlungseingang für die folgenden Buchungsdaten:
+      {{#if isAggregated}} Hiermit bestätigen wir den vollständigen
+      Zahlungseingang für die folgenden Buchungen: {{else}} Hiermit bestätigen
+      wir Ihre Buchung sowie den vollständigen Zahlungseingang für die folgenden
+      Buchungsdaten: {{/if}}
     </p>
-
-    <table class="booking-detail">
-      <tr class="item">
-        <td>Buchungsnummer</td>
-
-        <td>{{bookingId}}</td>
-      </tr>
-
-      <tr class="item">
-        <td>Gesamtbetrag</td>
-        <td>{{totalAmount}}</td>
-      </tr>
-
-      <tr class="item">
-        <td>Zahlungsdatum</td>
-        <td>{{payDate}}</td>
-      </tr>
-
-      <tr class="item">
-        <td>Zahlungsmethode</td>
-        <td>{{paymentMethod}}</td>
-      </tr>
-
-      <tr class="item">
-        <td>Buchungszeitraum</td>
-
-        <td>{{bookingPeriod}}</td>
-      </tr>
-
-      <tr class="item last">
-        <td>Buchungsobjekt</td>
-
-        <td>{{{bookedItems}}}</td>
-      </tr>
-    </table>
-
+    {{{bookingEntries}}}
     <p>
       Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift
       gültig.
