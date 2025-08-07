@@ -99,7 +99,7 @@ class BookingManager {
    * @returns {Promise<Object[]>} Array of booking status objects
    */
   static async getBookingStatus(tenantId, bookingIds) {
-    const bookings = await this.getBookings(tenantId, bookingIds);
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
     return bookings.map((booking) => booking.exportStatus());
   }
 
@@ -150,7 +150,7 @@ class BookingManager {
     timeEnd,
     bookingToIgnore = null,
   ) {
-    const relatedBookings = await this.getRelatedBookings(tenantId, bookableId);
+    const relatedBookings = await BookingManager.getRelatedBookings(tenantId, bookableId);
 
     return relatedBookings.filter(
       (booking) =>
@@ -213,7 +213,7 @@ class BookingManager {
     });
 
     const bookableIds = bookables.map((b) => b.id);
-    return await this.getRelatedBookingsBatch(tenantId, bookableIds);
+    return await BookingManager.getRelatedBookingsBatch(tenantId, bookableIds);
   }
 
   /**
