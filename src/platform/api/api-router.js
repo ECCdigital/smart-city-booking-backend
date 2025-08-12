@@ -23,11 +23,7 @@ router.put(
 // =======
 
 // Public
-router.get(
-  "/tenants",
-  AuthenticationController.isSignedIn,
-  TenantController.getTenants,
-);
+router.get("/tenants/public", TenantController.getPublicTenants);
 router.get(
   "/tenants/:id",
   AuthenticationController.isSignedIn,
@@ -36,6 +32,11 @@ router.get(
 router.get("/tenants/:id/payment-apps", TenantController.getActivePaymentApps);
 
 // Protected
+router.get(
+  "/tenants",
+  AuthenticationController.isSignedIn,
+  TenantController.getTenants,
+);
 router.put(
   "/tenants",
   AuthenticationController.isSignedIn,
