@@ -5,6 +5,7 @@ const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
+const CatalogController = require("./controllers/catalog-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -136,5 +137,14 @@ router.get(
 );
 
 router.get("/holidays", HolidayController.getHolidays);
+
+// Catalog
+router.get(
+  "/catalog/:slug",
+  CatalogController.getCatalogBySlug,
+);
+router.get("/catalog/themes/:slug", CatalogController.getTheme);
+router.get("/catalog/availability/:slug", AuthenticationController.isSignedIn, CatalogController.slugAvailability);
+
 
 module.exports = router;

@@ -24,6 +24,22 @@ class Event {
     return true;
   }
 
+  exportPublic() {
+    return {
+      id: this.id,
+      tenantId: this.tenantId,
+      attendees: this.attendees,
+      eventAddress: this.eventAddress,
+      eventLocation: this.eventLocation,
+      eventOrganizer: this.eventOrganizer,
+      format: this.format,
+      images: this.images,
+      information: this.information,
+      schedules: this.schedules,
+      externalBookingUrl: this.externalBookingUrl,
+    };
+  }
+
   /**
    * Create a new event
    * @param {Object} params Event parameters

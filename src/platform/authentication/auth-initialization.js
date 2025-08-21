@@ -2,14 +2,6 @@ const passport = require("passport");
 const UserManager = require("../../commons/data-managers/user-manager");
 const LocalStrategy = require("passport-local").Strategy;
 
-passport.serializeUser(function (user, done) {
-  done(null, user);
-});
-
-passport.deserializeUser(function (user, done) {
-  done(null, user);
-});
-
 passport.use(
   "local-signin",
   new LocalStrategy(
@@ -17,6 +9,7 @@ passport.use(
       usernameField: "id",
       passwordField: "password",
       passReqToCallback: true,
+      session: false,
     },
     async (request, id, password, done) => {
       if (typeof id !== "string") {

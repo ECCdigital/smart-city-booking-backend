@@ -14,6 +14,7 @@ const { TenantController } = require("./controllers/tenant-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
+const CatalogController = require("./controllers/catalog-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -313,6 +314,19 @@ router.delete(
   "/roles/:id",
   AuthenticationController.isSignedIn,
   RoleController.removeRole,
+);
+
+// CATALOG
+
+router.get(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.getCatalogByTenant,
+);
+router.put(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.storeCatalog,
 );
 
 module.exports = router;

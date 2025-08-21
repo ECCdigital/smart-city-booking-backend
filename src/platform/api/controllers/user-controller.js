@@ -295,14 +295,6 @@ class UserController {
 
       const updatedUser = await UserManager.getUser(user.id, false);
 
-      request.session.passport.user.firstName = updatedUser.firstName;
-      request.session.passport.user.lastName = updatedUser.lastName;
-      request.session.passport.user.phone = updatedUser.phone;
-      request.session.passport.user.address = updatedUser.address;
-      request.session.passport.user.zipCode = updatedUser.zipCode;
-      request.session.passport.user.city = updatedUser.city;
-      request.session.save();
-
       response.status(200).send(updatedUser);
     } catch (error) {
       logger.error(error);
