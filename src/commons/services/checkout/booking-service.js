@@ -32,7 +32,7 @@ const {
 } = require("../booking-consitency-service");
 
 const logger = bunyan.createLogger({
-  name: "checkout-controller.js",
+  name: "booking-service.js",
   level: process.env.LOG_LEVEL,
 });
 class BookingService {
@@ -712,7 +712,7 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
-      if (!isRejection(booking, hookId)) {
+      if(isRejection(booking, hookId)) {
         await MailController.sendBookingRejection(
           booking.mail,
           booking.id,
@@ -733,10 +733,6 @@ class BookingService {
           `${tenantId} -- booking ${booking.id} canceled and sent booking rejection to ${booking.mail}`,
         );
       }
-
-      logger.info(
-        `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
-      );
     } catch (error) {
       throw new Error(`Error rejecting booking: ${error.message}`);
     }
@@ -777,7 +773,7 @@ class BookingService {
     }
 
     if (
-      groupBooking.bookings.some((booking) => !isRejection(booking, hookId))
+      groupBooking.bookings.some((booking) => isRejection(booking, hookId))
     ) {
       await MailController.sendBookingRejection(
         groupBooking.bookings[0].mail,
@@ -1020,7 +1016,7 @@ function isNoPaymentRequired(booking) {
 }
 
 function isRejection(booking, hookId) {
-  return booking.isCommitted && !hookId;
+  return !booking.isCommitted && !hookId;
 }
 
 function isTicket(bookableItem) {
