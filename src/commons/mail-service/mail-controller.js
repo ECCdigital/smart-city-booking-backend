@@ -577,7 +577,7 @@ class MailController {
         message: snippetHtml,
         includeQRCode: false,
         attachments,
-        sendBCC: false,
+        sendBCC: true,
         addRejectionLink: false,
       });
     } else {
@@ -591,7 +591,7 @@ class MailController {
           message: snippetHtml,
           includeQRCode: false,
           attachments,
-          sendBCC: false,
+          sendBCC: true,
           addRejectionLink: false,
         });
       }
