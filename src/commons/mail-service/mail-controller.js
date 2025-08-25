@@ -484,7 +484,7 @@ class MailController {
           title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
           message: snippetHtml,
           includeQRCode: includeQRCode,
-          attachments: undefined,
+          attachments,
           sendBCC: false,
           addRejectionLink: true,
         });
