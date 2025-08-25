@@ -1,20 +1,11 @@
-const JwtHelper = require('../commons/utilities/jwt-helper');
 const bunyan = require('bunyan');
+const { authenticateIfNeeded } = require("../commons/utilities/auth-utils");
 
 const logger = bunyan.createLogger({ name: 'jwt-auth' });
 
 const jwtAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Access token required' });
-  }
-
-  const token = authHeader.substring(7);
-
   try {
-    const decoded = JwtHelper.verifyToken(token);
-    req.user = decoded;
+    req.user = authenticateIfNeeded(req, true);
     next();
   } catch (error) {
     logger.error('JWT verification failed:', error);

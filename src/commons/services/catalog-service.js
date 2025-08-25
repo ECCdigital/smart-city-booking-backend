@@ -7,7 +7,8 @@ class CatalogService {
     if (!catalog) {
       throw {
         code: 404,
-        message: `No Catalog found for tenant ${tenantId}`  };
+        message: `No Catalog found for tenant ${tenantId}`,
+      };
     }
 
     return catalog;
@@ -19,7 +20,8 @@ class CatalogService {
     if (!catalog) {
       throw {
         code: 404,
-        message: `Catalog with slug "${slug}" not found`  };
+        message: `Catalog with slug "${slug}" not found`,
+      };
     }
 
     if (!catalog.active) {
@@ -44,7 +46,7 @@ class CatalogService {
       throw new Error(`Theme for catalog with slug "${slug}" is not active`);
     }
 
-    return catalog.theme;
+    return { theme: catalog.theme, visibility: catalog.visibility };
   }
 
   static async updateCatalog(catalog) {
@@ -52,7 +54,9 @@ class CatalogService {
       throw new Error("Catalog data and tenant ID are required");
     }
 
-    const updatedCatalog = await CatalogManager.updateCatalog(catalog, { _id: catalog._id });
+    const updatedCatalog = await CatalogManager.updateCatalog(catalog, {
+      _id: catalog._id,
+    });
 
     if (!updatedCatalog) {
       throw new Error(

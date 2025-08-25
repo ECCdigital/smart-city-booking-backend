@@ -2,6 +2,9 @@ const CatalogService = require("../../../commons/services/catalog-service");
 const PermissionService = require("../../../commons/services/permission-service");
 const bunyan = require("bunyan");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  authenticateIfNeeded,
+} = require("../../../commons/utilities/auth-utils");
 
 const logger = bunyan.createLogger({
   name: "catalog-controller.js",
@@ -27,7 +30,6 @@ class CatalogController {
 
         const catalog = await CatalogService.getCatalogByTenant(tenantId);
 
-        console.log("Catalog data:", catalog);
         response.status(200).send(catalog);
       } else {
         response.sendStatus(403);
@@ -46,6 +48,17 @@ class CatalogController {
 
       const catalog = await CatalogService.getCatalog(slug);
 
+      try {
+        const user = authenticateIfNeeded(request, catalog.visibility === "private");
+        if (user) request.user = user;
+
+        //TODO: Add permission checks here if needed
+      } catch (error) {
+        console.error("Authentication error:", error);
+
+        return response.status(401).json({ message: error.message });
+      }
+
       response.status(200).send(catalog);
     } catch (error) {
       console.error("Error in CatalogController.getCatalog:", error);
@@ -60,7 +73,18 @@ class CatalogController {
     try {
       const slug = request.params.slug;
 
-      const theme = await CatalogService.getTheme(slug);
+      const { theme, visibility } = await CatalogService.getTheme(slug);
+
+      try {
+        const user = authenticateIfNeeded(request, visibility === "private");
+        if (user) request.user = user;
+
+        //TODO: Add permission checks here if needed
+      } catch (error) {
+        console.error("Authentication error:", error);
+
+        return response.status(401).json({ message: error.message });
+      }
 
       response.status(200).send(theme);
     } catch (error) {
@@ -96,8 +120,7 @@ class CatalogController {
           ((await PermissionService._isTenantOwner(user.id, tenant.id)) ||
             (await PermissionService._isInstanceOwner(user.id)))
         ) {
-
-          if(catalogData._id) {
+          if (catalogData._id) {
             const updatedCatalog = await CatalogService.updateTenantCatalog(
               tenantId,
               catalogData,
@@ -116,8 +139,6 @@ class CatalogController {
               content: createdCatalog,
             });
           }
-
-
         } else {
           return response.status(403).send({
             success: false,
