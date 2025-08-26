@@ -12,8 +12,15 @@ const router = express.Router({ mergeParams: true });
 // INSTANCES
 // =========
 
+// Public
+router.get("/instances/public", InstanceController.getPublicInstance);
+
 // Protected
-router.get("/instances", InstanceController.getInstance);
+router.get(
+  "/instances",
+  AuthenticationController.isSignedIn,
+  InstanceController.getInstance,
+);
 router.put(
   "/instances",
   AuthenticationController.isSignedIn,
@@ -139,12 +146,12 @@ router.get(
 router.get("/holidays", HolidayController.getHolidays);
 
 // Catalog
-router.get(
-  "/catalog/:slug",
-  CatalogController.getCatalogBySlug,
-);
+router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
 router.get("/catalog/themes/:slug", CatalogController.getTheme);
-router.get("/catalog/availability/:slug", AuthenticationController.isSignedIn, CatalogController.slugAvailability);
-
+router.get(
+  "/catalog/availability/:slug",
+  AuthenticationController.isSignedIn,
+  CatalogController.slugAvailability,
+);
 
 module.exports = router;

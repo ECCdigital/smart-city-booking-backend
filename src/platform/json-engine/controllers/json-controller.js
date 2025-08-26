@@ -2,15 +2,47 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  authenticateIfNeeded,
+} = require("../../../commons/utilities/auth-utils");
 
 class JSONController {
   static async getBookables(req, res) {
     const { tenant: tenantId } = req.params;
     const { type, ids } = req.query;
 
+    let userRoles;
+    let identity;
+
+    try {
+      identity = authenticateIfNeeded(req, true);
+      if (identity) {
+        userRoles = await TenantManager.getTenantUserRoles(
+          tenantId,
+          identity.id,
+        );
+      }
+    } catch {
+      userRoles = null;
+      identity = null;
+    }
+
     try {
       let bookables = await BookableManager.getBookables(tenantId);
       bookables = bookables.filter((bookable) => bookable.isPublic);
+
+      bookables = bookables.filter((bookable) => {
+        const userAllowed =
+          bookable.permittedUsers.length === 0 ||
+          (identity && bookable.permittedUsers.includes(identity.id));
+        const roleAllowed =
+          bookable.permittedRoles.length === 0 ||
+          (userRoles && userRoles.some((role) => bookable.permittedRoles.includes(role)));
+
+        return userAllowed && roleAllowed;
+      });
+
 
       if (type) {
         bookables = bookables.filter((bookable) => bookable.type === type);
@@ -36,10 +68,33 @@ class JSONController {
 
   static async getBookable(req, res) {
     const { tenant: tenantId, id } = req.params;
+    let userRoles;
+    let identity;
+
+    try {
+      identity = authenticateIfNeeded(req, true);
+      if (identity) {
+        userRoles = await TenantManager.getTenantUserRoles(
+          tenantId,
+          identity.id,
+        );
+      }
+    } catch {
+      userRoles = null;
+      identity = null;
+    }
+
     try {
       const bookable = await BookableManager.getBookable(id, tenantId);
 
-      if (bookable?.id && bookable.isPublic === true) {
+      const userAllowed =
+        bookable.permittedUsers.length === 0 ||
+        (identity && bookable.permittedUsers.includes(identity.id));
+      const roleAllowed =
+        bookable.permittedRoles.length === 0 ||
+        (userRoles && userRoles.some((role) => bookable.permittedRoles.includes(role)));
+
+      if (bookable?.id && bookable.isPublic === true && userAllowed && roleAllowed) {
         res.setHeader("content-type", "application/json");
         res.status(200).send(bookable.exportPublic());
       } else {

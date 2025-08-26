@@ -2,6 +2,7 @@ const CatalogService = require("../../../commons/services/catalog-service");
 const PermissionService = require("../../../commons/services/permission-service");
 const bunyan = require("bunyan");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const InstanceManager = require("../../../commons/data-managers/instance-manager");
 const {
   authenticateIfNeeded,
 } = require("../../../commons/utilities/auth-utils");
@@ -48,6 +49,14 @@ class CatalogController {
 
       const catalog = await CatalogService.getCatalog(slug);
 
+      const {enableCatalog} = await InstanceManager.getInstance();
+      if(!enableCatalog) {
+        return response.status(503).send({
+          success: false,
+          message: "Catalog feature is disabled.",
+        });
+      }
+
       try {
         const user = authenticateIfNeeded(request, catalog.visibility === "private");
         if (user) request.user = user;
@@ -74,6 +83,13 @@ class CatalogController {
       const slug = request.params.slug;
 
       const { theme, visibility } = await CatalogService.getTheme(slug);
+      const {enableCatalog} = await InstanceManager.getInstance();
+      if(!enableCatalog) {
+        return response.status(503).send({
+          success: false,
+          message: "Catalog feature is disabled.",
+        });
+      }
 
       try {
         const user = authenticateIfNeeded(request, visibility === "private");

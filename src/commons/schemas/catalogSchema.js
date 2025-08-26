@@ -9,6 +9,7 @@ const catalogSchemaDefinition = {
     minlength: 3,
     maxlength: 50,
   },
+  name: { type: String, required: true, maxlength: 100 },
   tenantId: { type: String, required: true, unique: true, ref: "Tenant" },
   tenantIds: [
     {
