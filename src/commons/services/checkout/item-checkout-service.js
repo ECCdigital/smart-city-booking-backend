@@ -612,7 +612,7 @@ class ItemCheckoutService {
         .reduce((acc, bi) => acc + bi.amount, 0);
 
       if (
-        !!event.attendees.maxAttendees &&
+        !!event?.attendees.maxAttendees &&
         amountBooked + this.amount > event.attendees.maxAttendees
       ) {
         throw {
@@ -627,9 +627,9 @@ class ItemCheckoutService {
       return {
         checkType: CHECK_TYPES.EVENT_SEATS,
         available: true,
-        totalCapacity: event.attendees.maxAttendees,
+        totalCapacity: event?.attendees.maxAttendees,
         booked: amountBooked,
-        remaining: event.attendees.maxAttendees - amountBooked,
+        remaining: event?.attendees.maxAttendees - amountBooked,
       };
     }
 
