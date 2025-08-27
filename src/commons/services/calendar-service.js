@@ -404,7 +404,7 @@ function generateTimePeriodsFromTimePeriods(startDate, endDate, bookable) {
     startDate,
     endDate,
     mergedTimePeriods,
-    false,
+    true,
   );
 }
 
