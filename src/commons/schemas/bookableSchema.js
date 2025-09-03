@@ -1,4 +1,16 @@
 const { Double } = require("mongodb");
+const { Schema } = require("mongoose");
+
+const priceCategorySchemaDefinition = {
+  priceEur: { type: Number, required: true },
+  interval: {
+    type: Object,
+    default: { start: null, end: null },
+  },
+  fixedPrice: { type: Boolean, default: false },
+  holidays: { type: [String], default: [] },
+  weekdays: { type: [String], default: [] },
+};
 
 const bookableSchemaDefinition = {
   id: { type: String, required: true, unique: true },
@@ -39,9 +51,17 @@ const bookableSchemaDefinition = {
 
   // Price properties
   priceCategories: {
-    type: [Object],
+    type: [
+      new Schema(priceCategorySchemaDefinition, { _id: false }),
+    ],
     default: [
-      { priceEur: 0, interval: { start: null, end: null }, fixedPrice: false },
+      {
+        priceEur: 0,
+        interval: { start: null, end: null },
+        fixedPrice: false,
+        holidays: [],
+        weekdays: [],
+      },
     ],
   },
   priceType: {
