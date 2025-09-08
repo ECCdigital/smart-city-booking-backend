@@ -32,13 +32,6 @@ const tenantSchemaDefinition = {
   maxBookingAdvanceInMonths: { type: Number, default: null },
   defaultEventCreationMode: { type: String, default: "" },
   enablePublicStatusView: { type: Boolean, default: false },
-  ownerUserIds: { type: Array, default: [] },
-  users: [
-    {
-      userId: { type: String, required: true },
-      roles: { type: [String], default: [] },
-    },
-  ],
 };
 
 module.exports = tenantSchemaDefinition;

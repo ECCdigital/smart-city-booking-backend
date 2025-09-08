@@ -17,6 +17,7 @@ const logger = bunyan.createLogger({
  */
 class AuthenticationController {
   static isSignedIn(request, response, next) {
+    console.log("isSignedIn called");
     if (request.isAuthenticated()) {
       next();
     } else {

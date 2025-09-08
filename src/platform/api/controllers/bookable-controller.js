@@ -42,7 +42,7 @@ class BookableController {
         }
       }
       logger.info(
-        `${tenant} -- Returning ${bookables.length} bookables to user ${user?.id}`,
+        `${tenant} -- Returning ${bookables.length} public bookables to user ${user?.id}`,
       );
 
       response.status(200).send(bookables);

@@ -87,10 +87,22 @@ router.post(
   TenantController.removeOwner,
 );
 
+router.post(
+  "/tenants/:id/remove-user-role",
+  AuthenticationController.isSignedIn,
+  TenantController.removeUserRole,
+);
+
 router.get(
   "/tenants/:id/users",
   AuthenticationController.isSignedIn,
   TenantController.getUsers,
+);
+
+router.post(
+  "/tenants/:id/update-user-status",
+  AuthenticationController.isSignedIn,
+  TenantController.updateUserStatus,
 );
 
 // USERS

@@ -3,10 +3,13 @@ const { RoleManager } = require("./role-manager");
 const TenantManager = require("./tenant-manager");
 const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
+const MembershipManager = require("./membership-manager");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
-    const rawUser = await UserModel.findOne({ id: { $regex: id, $options: 'i' } });
+    const rawUser = await UserModel.findOne({
+      id: { $regex: id, $options: "i" },
+    });
     if (!rawUser) {
       return null;
     }
@@ -163,31 +166,25 @@ class UserManager {
 
   static async getUserPermissions(userId) {
     const tenantPermissions = [];
-    const tenants = await TenantManager.getTenants();
     const instance = await InstanceManager.getInstance(false);
+    const memberships = await MembershipManager.getMembershipsByUserID(userId);
+    const filteredMemberschips = memberships.filter(
+      (m) => m.status === "active",
+    );
 
-    for (const tenant of tenants) {
-      let tenantUserRef = tenant.users.find(
-        (userRef) => userRef.userId === userId,
-      );
-      if (!tenantUserRef) {
-        if (tenant.ownerUserIds.includes(userId)) {
-          tenantUserRef = {
-            userId: userId,
-            roles: [],
-          };
-        } else {
-          continue;
-        }
-      }
+    for (const membership of filteredMemberschips) {
+      let tenantUserRef = {
+        userId: userId,
+        roles: membership.roles,
+      };
 
       let workingPermission = tenantPermissions.find(
-        (p) => p.tenantId === tenant.id,
+        (p) => p.tenantId === membership.tenantId,
       );
       if (!workingPermission) {
         workingPermission = {
-          tenantId: tenant.id,
-          isOwner: tenant.ownerUserIds.includes(userId),
+          tenantId: membership.tenantId,
+          isOwner: membership.owner,
           adminInterfaces: [],
           freeBookings: false,
           manageUsers: {},
@@ -201,7 +198,7 @@ class UserManager {
 
       const roles = await Promise.all(
         tenantUserRef.roles.map((roleId) =>
-          RoleManager.getRole(roleId, tenant.id),
+          RoleManager.getRole(roleId, membership.tenantId),
         ),
       );
 

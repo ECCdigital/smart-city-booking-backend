@@ -315,4 +315,16 @@ router.delete(
   RoleController.removeRole,
 );
 
+// INVITATIONS
+router.get(
+  "/invitations/:token/verify",
+  AuthenticationController.isSignedIn,
+  TenantController.verifyInvitationToken,
+);
+router.post(
+  "/invitations/:token/accept",
+  AuthenticationController.isSignedIn,
+  TenantController.acceptInvitationToken,
+);
+
 module.exports = router;

@@ -1,6 +1,6 @@
 const InstanceManager = require("../data-managers/instance-manager");
-const TenantManager = require("../data-managers/tenant-manager");
 const UserManager = require("../data-managers/user-manager");
+const MembershipManager = require("../data-managers/membership-manager");
 
 const actions = {
   CREATE: "create",
@@ -32,8 +32,8 @@ class PermissionService {
    * @returns {Promise<boolean>} - A promise that resolves to true if the user is the owner of the tenant, otherwise false.
    */
   static async _isTenantOwner(userId, tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    return tenant?.ownerUserIds.includes(userId);
+    const membership = await MembershipManager.getMembershipByTenantAndUserID(tenantId, userId);
+    return membership?.owner === true
   }
 
   /**
