@@ -24,6 +24,7 @@ const tenantSchemaDefinition = {
   receiptTemplate: { type: String, default: "" },
   receiptNumberPrefix: { type: String, default: "" },
   receiptCount: { type: Object, default: {} },
+  receiptEnableBCC: { type: Boolean, default: false },
   invoiceTemplate: { type: String, default: "" },
   invoiceNumberPrefix: { type: String, default: "" },
   invoiceCount: { type: Object, default: {} },

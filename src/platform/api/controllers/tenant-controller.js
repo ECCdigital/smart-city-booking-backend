@@ -197,6 +197,7 @@ class TenantController {
           "noreplyGraphClientSecret",
           "receiptTemplate",
           "receiptNumberPrefix",
+          "receiptEnableBCC",
           "invoiceTemplate",
           "invoiceNumberPrefix",
           "paymentPurposeSuffix",
