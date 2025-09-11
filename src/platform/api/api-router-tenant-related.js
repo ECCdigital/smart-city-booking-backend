@@ -9,6 +9,7 @@ const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
+const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const {
@@ -317,14 +318,44 @@ router.delete(
 
 // INVITATIONS
 router.get(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.getInvitationsByTenantID,
+);
+
+router.post(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.createInvitation,
+);
+
+router.delete(
+  "/invitations/:token",
+  AuthenticationController.isSignedIn,
+  InvitationController.deleteInvitation,
+);
+
+router.get(
   "/invitations/:token/verify",
   AuthenticationController.isSignedIn,
-  TenantController.verifyInvitationToken,
+  InvitationController.verifyInvitationToken,
 );
 router.post(
   "/invitations/:token/accept",
   AuthenticationController.isSignedIn,
-  TenantController.acceptInvitationToken,
+  InvitationController.acceptInvitationToken,
+);
+
+router.post(
+  "/invitations/:token/reject",
+  AuthenticationController.isSignedIn,
+  InvitationController.rejectInvitationToken,
+);
+
+router.post(
+  "/invitations/resend",
+  AuthenticationController.isSignedIn,
+  InvitationController.resendInvitation,
 );
 
 module.exports = router;

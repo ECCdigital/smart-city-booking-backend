@@ -5,6 +5,7 @@ const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
+const InvitationController = require("./controllers/invitation-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -148,4 +149,10 @@ router.get(
 
 router.get("/holidays", HolidayController.getHolidays);
 
+//INVITATIONS
+router.get(
+  "/invitations/my",
+  AuthenticationController.isSignedIn,
+  InvitationController.getMyInvitations,
+);
 module.exports = router;

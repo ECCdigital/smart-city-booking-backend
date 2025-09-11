@@ -749,36 +749,6 @@ class TenantController {
       response.status(500).send("Could not update user status in tenant");
     }
   }
-
-  static async verifyInvitationToken(request, response) {
-    try {
-      const { token } = request.params;
-      const tenantId = request.params.tenant;
-      const user = request.user;
-
-      await InvitationService.verifyInvitation(tenantId, token, user?.id);
-
-      return response.status(200).send({ ok: true });
-    } catch (error) {
-      logger.error(error);
-      response.status(500).send("Could not verify invitation token");
-    }
-  }
-
-  static async acceptInvitationToken(request, response) {
-    try {
-      const { token } = request.params;
-      const tenantId = request.params.tenant;
-      const user = request.user;
-
-      await InvitationService.acceptInvitation(tenantId, token, user.id);
-
-      return response.status(200).send({ ok: true });
-    } catch (error) {
-      logger.error(error);
-      response.status(500).send("Could not accept invitation token");
-    }
-  }
 }
 
 module.exports = { TenantController };

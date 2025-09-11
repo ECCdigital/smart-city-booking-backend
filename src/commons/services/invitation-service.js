@@ -43,10 +43,46 @@ class InvitationService {
     return true;
   }
 
+  static async resendInvitationMail(tenantID, userID) {
+    const invitation =
+      await InvitationManager.getInvitationsByTenantIDAndUserID(
+        tenantID,
+        userID,
+      );
+
+    if (!invitation) {
+      throw new Error("Invitation not found");
+    }
+
+    await InvitationManager.updateInvitation(tenantID, invitation[0].token, {
+      status: "active",
+    });
+
+    await MailController.sendInvitationEmail({
+      sendTo: invitation[0].intendedUserId,
+      token: invitation[0].token,
+      tenantId: tenantID,
+    });
+
+    await MembershipManager.updateMembership(tenantID, userID, {
+      status: "pending",
+    });
+
+    return true;
+  }
+
   static async verifyInvitation(tenantID, token, userID = null) {
     const invitation = await InvitationManager.getInvitationByToken(token);
 
     validateInvitation(invitation, tenantID, userID);
+
+    const membership = await MembershipManager.getMembershipByTenantAndUserID(
+      tenantID,
+      userID,
+    );
+    if (membership && membership.status === "active") {
+      throw new Error("User is already a member of this tenant");
+    }
 
     return invitation;
   }
@@ -77,13 +113,24 @@ class InvitationService {
       });
     }
 
-    await InvitationManager.incrementUsedCount(token);
+    if (
+      invitation.type === "single" ||
+      (invitation.maxUses && invitation.usedCount + 1 >= invitation.maxUses)
+    ) {
+      await InvitationManager.deleteInvitation(tenantID, token);
+    } else {
+      await InvitationManager.incrementUsedCount(token);
+    }
 
-    return await InvitationManager.getInvitationByToken(token);
+    return true;
   }
 
   static async deleteUserInvitation(tenantID, userID) {
-    const invitations = await InvitationManager.getInvitationsByTenantIDAndUserID(tenantID, userID);
+    const invitations =
+      await InvitationManager.getInvitationsByTenantIDAndUserID(
+        tenantID,
+        userID,
+      );
     if (!invitations) {
       return true;
     }
@@ -92,36 +139,87 @@ class InvitationService {
     }
     return true;
   }
+
+  static async deleteInvitation(tenantID, token) {
+    const invitation = await InvitationManager.getInvitationByToken(token);
+    if (!invitation) {
+      throw new Error("Invitation not found");
+    }
+    if (invitation.tenantId !== tenantID) {
+      throw new Error("Invitation does not belong to this tenant");
+    }
+    await InvitationManager.deleteInvitation(tenantID, token);
+    return true;
+  }
+
+  static async getMultiUseInvitations(tenantID) {
+    const invitations =
+      await InvitationManager.getInvitationsByTenantID(tenantID);
+    return invitations.filter((invitation) => invitation.type === "multi");
+  }
+
+  static async getPendingInvitationsForUser(userID) {
+    const invitations = await InvitationManager.getInvitationByUserID(userID);
+    return invitations.filter(
+      (invitation) =>
+        invitation.status === "active" &&
+        (!invitation.expiresAt || Date.now() <= invitation.expiresAt) &&
+        (invitation.type === "multi"
+          ? invitation.usedCount < invitation.maxUses
+          : invitation.usedCount < 1),
+    );
+  }
+
+  static async rejectInvitation(tenantID, token, userID) {
+    const invitation = await InvitationManager.getInvitationByToken(token);
+
+    validateInvitation(invitation, tenantID, userID);
+
+    if (invitation.intendedUserId !== userID) {
+      throw new Error("This invitation is not intended for you");
+    }
+
+    await MembershipManager.updateMembership(tenantID, userID, {
+      status: "rejected",
+    });
+
+    await InvitationManager.updateInvitation(tenantID, token, {
+      status: "rejected",
+    });
+
+    return true;
+  }
 }
 
 module.exports = InvitationService;
 
 function validateInvitation(invitation, tenantID, userID = null) {
   if (!invitation) {
-    throw new Error("Invalid invitation token");
+    throw { message: "Invalid invitation token", code: 404 };
   }
 
   if (invitation.tenantId !== tenantID) {
-    throw new Error("Invitation does not belong to this tenant");
+    throw { message: "Invitation does not belong to this tenant", code: 400 };
   }
 
-  if (invitation.revoked) {
-    throw new Error("Invitation has been revoked");
+  if (invitation.status === "revoked") {
+    throw { message: "Invitation has been revoked", code: 410 };
   }
 
   if (invitation.expiresAt && Date.now() > invitation.expiresAt) {
-    throw new Error("Invitation has expired");
+    throw { message: "Invitation has expired", code: 410 };
   }
 
   if (invitation.type === "single" && invitation.usedCount >= 1) {
-    throw new Error("Invitation has already been used");
+    throw { message: "Invitation has already been used", code: 410 };
   }
 
   if (
-    invitation.type === "multi" &&
+    invitation.maxUses &&
+    invitation.usedCount &&
     invitation.usedCount >= invitation.maxUses
   ) {
-    throw new Error("Invitation has reached its maximum uses");
+    throw { message: "Invitation has reached its maximum uses", code: 410 };
   }
 
   if (
@@ -129,7 +227,7 @@ function validateInvitation(invitation, tenantID, userID = null) {
     invitation.intendedUserId &&
     invitation.intendedUserId !== userID
   ) {
-    throw new Error("This invitation is not intended for you");
+    throw { message: "This invitation is not intended for you", code: 403 };
   }
 
   return true;

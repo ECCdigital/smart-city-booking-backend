@@ -5,7 +5,7 @@ const membershipSchemaDefinition = {
   owner: { type: Boolean, default: false },
   status: {
     type: String,
-    enum: ["pending", "active", "suspended"],
+    enum: ["pending", "active", "suspended", "rejected"],
     default: "pending",
   },
   source: {

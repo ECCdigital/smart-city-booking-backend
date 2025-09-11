@@ -22,6 +22,13 @@ class InvitationManager {
     return rawInvitation.map((raw) => raw.toEntity());
   }
 
+  static async getInvitationByUserID(userID) {
+    const rawInvitation = await InvitationModel.find({
+      intendedUserId: userID,
+    });
+    return rawInvitation.map((raw) => raw.toEntity());
+  }
+
   static async createInvitation(tenantID, invitation) {
     const newInvitation = new InvitationModel({
       tenantId: tenantID,
@@ -39,11 +46,18 @@ class InvitationManager {
     );
   }
 
-  static async revokeInvitation(token) {
-    await InvitationModel.updateOne(
-      { token: token },
-      { $set: { revoked: true } },
+  static async updateInvitation(tenantID, token, update) {
+    const rawInvitation = await InvitationModel.findOneAndUpdate(
+      { tenantId: tenantID, token: token },
+      update,
+      { new: true },
     );
+
+    if (!rawInvitation) {
+      return null;
+    }
+
+    return rawInvitation.toEntity();
   }
 
   static async deleteInvitation(tenantID, token) {

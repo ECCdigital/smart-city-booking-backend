@@ -6,12 +6,16 @@ const invitationSchemaDefinition = {
     enum: ["single", "multi"],
     required: true,
   },
-  maxUses: { type: Number, required: 1, default: 1 },
+  maxUses: { type: Number, default: null },
   usedCount: { type: Number, default: 0 },
   roles: { type: [String], default: [] },
   intendedUserId: { type: String, default: null },
   expiresAt: { type: Number, default: null },
-  revoked: { type: Boolean, default: false },
+  status: {
+    type: String,
+    enum: ["active", "revoked", "rejected"],
+    default: "active",
+  },
 };
 
 module.exports = invitationSchemaDefinition;

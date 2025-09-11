@@ -88,18 +88,6 @@ class UserManager {
     }
   }
 
-  static async requestVerification(user) {
-    const MailController = require("../mail-service/mail-controller");
-    try {
-      const hook = user.addHook(USER_HOOK_TYPES.VERIFY);
-      await UserManager.storeUser(user);
-      await MailController.sendVerificationRequest(user.id, hook.id);
-      return hook;
-    } catch (err) {
-      throw err;
-    }
-  }
-
   static async resetPassword(user, password) {
     const MailController = require("../mail-service/mail-controller");
     try {
@@ -114,31 +102,14 @@ class UserManager {
     }
   }
 
-  static async releaseHook(hookId) {
-    try {
-      const rawUser = await UserModel.findOne({ "hooks.id": hookId });
-      if (!rawUser) {
-        throw new Error("No User found with this hook.");
-      }
+  static async getUserByHookID(hookID) {
+    const rawUser = await UserModel.findOne({ "hooks.id": hookID });
 
-      const user = rawUser.toEntity();
-      const hook = user.hooks.find((hook) => hook.id === hookId);
-
-      if (!hook) {
-        throw new Error("Hook does not exist.");
-      }
-
-      const hookType = hook.type;
-
-      if (user.releaseHook(hookId)) {
-        await UserManager.storeUser(user);
-        return hookType;
-      } else {
-        throw new Error("Failed to release hook.");
-      }
-    } catch (err) {
-      throw err;
+    if (!rawUser) {
+      throw new Error("No User found with this hook.");
     }
+
+    return rawUser.toEntity();
   }
 
   static async hasPermission(userId, tenantId, permissionName, accessLevel) {
