@@ -7,7 +7,6 @@ const crypto = require("crypto");
 const BookingManager = require("../../data-managers/booking-manager");
 const InvoiceService = require("./invoice-service");
 const MailController = require("../../mail-service/mail-controller");
-const BookingService = require("../checkout/booking-service");
 
 const logger = bunyan.createLogger({
   name: "payment-service.js",
@@ -51,6 +50,7 @@ class PaymentService {
   }
 
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
+    const BookingService = require("../checkout/booking-service");
     if (this.aggregated) {
       await BookingService.setAggregatedBookingPayed({
         tenantId,
