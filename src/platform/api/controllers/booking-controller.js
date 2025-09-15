@@ -376,11 +376,13 @@ class BookingController {
       ) {
         await BookingService.updateBooking(tenant, booking);
 
+
         await WorkflowService.updateTask(
           tenant,
           booking.id,
           request.body._populated?.workflowStatus,
         );
+
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );

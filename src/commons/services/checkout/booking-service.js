@@ -16,7 +16,6 @@ const {
   Booking,
   BOOKING_HOOK_TYPES,
 } = require("../../entities/booking/booking");
-const WorkflowManager = require("../../data-managers/workflow-manager");
 const WorkflowService = require("../workflow/workflow-service");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
@@ -43,6 +42,7 @@ class BookingService {
    * @param bookingAttempt
    * @param simulate
    * @param manualBooking
+   * @param skipWorkflow
    * @returns {Promise<Booking>}
    */
   static async createBooking({
@@ -51,6 +51,7 @@ class BookingService {
     bookingAttempt,
     simulate,
     manualBooking = false,
+    skipWorkflow = false,
   }) {
     const checkoutId = uuidV4();
 
@@ -208,13 +209,11 @@ class BookingService {
     if (simulate === false) {
       await BookingManager.storeBooking(booking);
 
-      const workflow = await WorkflowManager.getWorkflow(tenantId);
-      if (workflow && workflow.active && workflow.defaultState) {
-        await WorkflowService.updateTask(
+      if (!skipWorkflow) {
+        await WorkflowService.handleWorkflowEvent(
           tenantId,
           booking.id,
-          workflow.defaultState,
-          0,
+          "onCreate",
         );
       }
 
@@ -269,61 +268,15 @@ class BookingService {
 
     if (!simulate) {
       try {
-        if (!booking.isCommitted) {
-          try {
-            await MailController.sendBookingRequestConfirmation(
-              booking.mail,
-              booking.id,
-              booking.tenantId,
-            );
-          } catch (err) {
-            logger.error(err);
-          }
-        }
-        if (booking.isCommitted && booking.isPayed) {
-          let attachments = [];
+        await BookingService.handleSingleBookingRequestConfirmation(
+          tenantId,
+          booking.id,
+        );
 
-          if (booking.priceEur > 0) {
-            const { receipt, name, receiptId, revision, timeCreated } =
-              await ReceiptService.createSingleReceipt(tenantId, booking.id);
-
-            booking.attachments.push({
-              type: "receipt",
-              title: name,
-              receiptId: receiptId,
-              revision: revision,
-              timeCreated,
-            });
-
-            await BookingManager.storeBooking(booking);
-
-            attachments = [
-              {
-                filename: name,
-                content: receipt.buffer,
-                contentType: "application/pdf",
-              },
-            ];
-          }
-
-          await MailController.sendBookingConfirmation(
-            booking.mail,
-            booking.id,
-            booking.tenantId,
-            attachments,
-          );
-
-          const bookableItems = booking.bookableItems.map(
-            (bI) => bI._bookableUsed,
-          );
-
-          const isTicketBooking = bookableItems.some(isTicket);
-
-          if (isTicketBooking) {
-            const eventIds = bookableItems.map(getEventForTicket).filter((id) => id !== null && id !== undefined);
-            await sendEmailToOrganizer(eventIds, tenantId, booking);
-          }
-        }
+        await BookingService.handleSingleBookingConfirmation(
+          tenantId,
+          booking.id,
+        );
 
         const tenant = await TenantManager.getTenant(booking.tenantId);
 
@@ -423,21 +376,11 @@ class BookingService {
             true,
           );
         }
-        const allPayed = newGroupBooking.bookings.every(
-          (booking) => booking.isPayed,
+
+        await BookingService.handleAggregatedBookingConfirmation(
+          tenantId,
+          newGroupBooking.bookingIds,
         );
-
-        if (allCommitted && allPayed) {
-          let attachments = [];
-
-          await MailController.sendBookingConfirmation(
-            newGroupBooking.mail,
-            newGroupBooking.bookingIds,
-            newGroupBooking.tenantId,
-            attachments,
-            true,
-          );
-        }
 
         const tenant = await TenantManager.getTenant(newGroupBooking.tenantId);
         await MailController.sendIncomingBooking(
@@ -475,6 +418,10 @@ class BookingService {
       tenantId,
     );
 
+    const isCommit = Boolean(updatedBooking.isCommitted);
+    const isPayed = Boolean(updatedBooking.isPayed);
+    const isRejected = Boolean(updatedBooking.isRejected);
+
     if (!oldBooking) {
       throw new Error("Booking not found");
     }
@@ -500,9 +447,9 @@ class BookingService {
           updatedBooking.internalComments || oldBooking.internalComments || "",
         rejectionReason:
           updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
-        isCommit: Boolean(updatedBooking.isCommitted),
-        isPayed: Boolean(updatedBooking.isPayed),
-        isRejected: Boolean(updatedBooking.isRejected),
+        isCommit: isCommit,
+        isPayed: isPayed,
+        isRejected: isRejected,
         attachmentStatus: updatedBooking.attachmentStatus,
         paymentProvider: updatedBooking.paymentProvider,
         paymentMethod: updatedBooking.paymentMethod,
@@ -524,8 +471,31 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
-      if (!oldBooking.isCommitted && booking.isCommitted) {
+      const onCommit = !oldBooking.isCommitted && isCommit;
+      const onPay = !oldBooking.isPayed && isPayed;
+      const onReject = !oldBooking.isRejected && isRejected;
+
+      if (onCommit) {
+        console.log("Committing booking...");
         await BookingService.commitBooking(tenantId, booking);
+      }
+
+      if (onPay) {
+        console.log("Setting booking to payed...");
+        await BookingService.setBookingPayed({
+          tenantId,
+          bookingId: booking.id,
+        });
+      }
+
+      if (onReject) {
+        console.log("Rejecting booking...");
+        await BookingService.rejectBooking(
+          tenantId,
+          booking.id,
+          booking.rejectionReason,
+          null,
+        );
       }
 
       const lockerServiceInstance = LockerService.getInstance();
@@ -535,14 +505,14 @@ class BookingService {
         booking,
       );
 
-      return booking; // Direkt das Entity zurückgeben
+      return booking;
     } catch (error) {
       await BookingManager.storeBooking(oldBooking);
       throw new Error(`Error updating booking: ${error.message}`);
     }
   }
 
-  static async commitBooking(tenantId, booking) {
+  static async commitBooking(tenantId, booking, skipWorkflow = false) {
     try {
       const originBooking = await BookingManager.getBooking(
         booking.id,
@@ -564,6 +534,16 @@ class BookingService {
 
       originBooking.isCommitted = true;
       originBooking.isRejected = false;
+
+      if (!skipWorkflow) {
+        await WorkflowService.handleWorkflowEvent(
+          tenantId,
+          booking.id,
+          "onCommit",
+          true,
+        );
+      }
+
       await BookingManager.storeBooking(originBooking);
       if (isNoPaymentRequired(originBooking)) {
         await MailController.sendFreeBookingConfirmation(
@@ -594,7 +574,9 @@ class BookingService {
       const isTicketBooking = bookableItems.some(isTicket);
 
       if (isTicketBooking) {
-        const eventIds = bookableItems.map(getEventForTicket).filter((id) => id !== null && id !== undefined);
+        const eventIds = bookableItems
+          .map(getEventForTicket)
+          .filter((id) => id !== null && id !== undefined);
         if (eventIds.length > 0) {
           await sendEmailToOrganizer(eventIds, tenantId, originBooking);
         }
@@ -606,7 +588,11 @@ class BookingService {
     }
   }
 
-  static async commitGroupBooking(tenantId, groupBookingId) {
+  static async commitGroupBooking(
+    tenantId,
+    groupBookingId,
+    skipWorkflow = false,
+  ) {
     const groupBooking = await GroupBookingManager.getGroupBooking(
       tenantId,
       groupBookingId,
@@ -634,6 +620,15 @@ class BookingService {
       booking.isCommitted = true;
       booking.isRejected = false;
       await BookingManager.storeBooking(booking);
+
+      if (!skipWorkflow) {
+        await WorkflowService.handleWorkflowEvent(
+          tenantId,
+          booking.id,
+          "onCommit",
+          true,
+        );
+      }
     }
 
     if (bookings.every((booking) => isNoPaymentRequired(booking))) {
@@ -682,20 +677,66 @@ class BookingService {
     return { success: true };
   }
 
-  static async setBookingPayed(tenantId, bookingId) {
+  static async setBookingPayed({
+    tenantId,
+    bookingId,
+    skipWorkflow = false,
+    paymentMethod,
+  }) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
       booking.isPayed = true;
+      if (paymentMethod) {
+        booking.paymentMethod = paymentMethod;
+      }
       await BookingManager.storeBooking(booking);
-      logger.info(
-        `${tenantId} -- booking ${booking.id} set to payed and sent payment confirmation to ${booking.mail}`,
-      );
+      logger.info(`${tenantId} -- booking ${booking.id} set to payed`);
+      if (!skipWorkflow) {
+        await WorkflowService.handleWorkflowEvent(
+          tenantId,
+          booking.id,
+          "onPay",
+          true,
+        );
+      }
+
+      await BookingService.handleSingleBookingConfirmation(tenantId, bookingId);
     } catch (error) {
       throw new Error(`Error setting booking to payed: ${error.message}`);
     }
   }
 
-  static async rejectBooking(tenantId, bookingId, reason = "", hookId = null) {
+  static async setAggregatedBookingPayed({
+    tenantId,
+    bookingIds,
+    paymentMethod,
+  }) {
+    try {
+      const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+      for (const booking of bookings) {
+        booking.isPayed = true;
+        if (paymentMethod) {
+          booking.paymentMethod = paymentMethod;
+        }
+        await BookingManager.storeBooking(booking);
+        logger.info(`${tenantId} -- booking ${booking.id} set to payed`);
+      }
+      return await BookingService.handleAggregatedBookingConfirmation(
+        tenantId,
+        bookingIds,
+      );
+    } catch (error) {
+      throw new Error(`Error setting bookings to payed: ${error.message}`);
+    }
+  }
+
+  static async rejectBooking(
+    tenantId,
+    bookingId,
+    reason = "",
+    hookId = null,
+    skipWorkflow = false,
+  ) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
 
@@ -712,7 +753,16 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
-      if(isRejection(booking, hookId)) {
+      if (!skipWorkflow) {
+        await WorkflowService.handleWorkflowEvent(
+          tenantId,
+          booking.id,
+          "onReject",
+          true,
+        );
+      }
+
+      if (isRejection(booking, hookId)) {
         await MailController.sendBookingRejection(
           booking.mail,
           booking.id,
@@ -743,6 +793,7 @@ class BookingService {
     groupBookingId,
     reason = "",
     hookId = null,
+    skipWorkflow = false,
   ) {
     const groupBooking = await GroupBookingManager.getGroupBooking(
       tenantId,
@@ -770,11 +821,18 @@ class BookingService {
       booking.isRejected = true;
       booking.rejectionReason = reason;
       await BookingManager.storeBooking(booking);
+
+      if (!skipWorkflow) {
+        await WorkflowService.handleWorkflowEvent(
+          tenantId,
+          booking.id,
+          "onReject",
+          true,
+        );
+      }
     }
 
-    if (
-      groupBooking.bookings.some((booking) => isRejection(booking, hookId))
-    ) {
+    if (groupBooking.bookings.some((booking) => isRejection(booking, hookId))) {
       await MailController.sendBookingRejection(
         groupBooking.bookings[0].mail,
         groupBooking.bookingIds,
@@ -962,6 +1020,129 @@ class BookingService {
 
     return { success: true };
   }
+
+  static async handleSingleBookingRequestConfirmation(tenantId, bookingId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    if (!booking.isCommitted) {
+      try {
+        await MailController.sendBookingRequestConfirmation(
+          booking.mail,
+          booking.id,
+          booking.tenantId,
+        );
+      } catch (err) {
+        logger.error(err);
+      }
+    }
+  }
+
+  static async handleSingleBookingConfirmation(tenantId, bookingId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (booking && booking.isCommitted && booking.isPayed) {
+      let attachments = [];
+      if (booking.priceEur > 0) {
+        const { receipt, name, receiptId, revision, timeCreated } =
+          await ReceiptService.createSingleReceipt(tenantId, booking.id);
+
+        booking.attachments.push({
+          type: "receipt",
+          title: name,
+          receiptId: receiptId,
+          revision: revision,
+          timeCreated,
+        });
+
+        await BookingManager.storeBooking(booking);
+
+        attachments = [
+          {
+            filename: name,
+            content: receipt.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+
+        try {
+          await MailController.sendBookingConfirmation(
+            booking.mail,
+            booking.id,
+            tenantId,
+            attachments,
+          );
+          logger.info(
+            `${tenantId} -- booking ${booking.id} confirmation sent to ${booking.mail}`,
+          );
+        } catch (err) {
+          logger.error(err);
+        }
+      }
+
+      const bookableItems = booking.bookableItems.map((bI) => bI._bookableUsed);
+
+      const isTicketBooking = bookableItems.some(isTicket);
+
+      if (isTicketBooking) {
+        const eventIds = bookableItems
+          .map(getEventForTicket)
+          .filter((id) => id !== null && id !== undefined);
+        await sendEmailToOrganizer(eventIds, tenantId, booking);
+      }
+    }
+
+    return booking;
+  }
+
+  static async handleAggregatedBookingConfirmation(tenantId, bookingIds) {
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+
+    if (bookings.every((b) => b.isCommitted && b.isPayed)) {
+      let attachments = [];
+      if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
+        const { receipt, name, receiptId, revision, timeCreated } =
+          await ReceiptService.createAggregatedReceipt(
+            tenantId,
+            bookings.map((b) => b.id),
+          );
+
+        for (const booking of bookings) {
+          booking.attachments.push({
+            type: "receipt",
+            title: name,
+            receiptId: receiptId,
+            revision: revision,
+            timeCreated,
+          });
+          await BookingManager.storeBooking(booking);
+        }
+
+        attachments = [
+          {
+            filename: name,
+            content: receipt.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+      }
+
+      try {
+        await MailController.sendBookingConfirmation(
+          bookings[0].mail,
+          bookings.map((b) => b.id),
+          tenantId,
+          attachments,
+          true,
+        );
+        logger.info(
+          `${tenantId} -- bookings ${bookingIds} confirmation sent to ${bookings[0].mail}`,
+        );
+      } catch (err) {
+        logger.error(err);
+      }
+    }
+
+    return bookings;
+  }
 }
 
 module.exports = BookingService;
@@ -1010,9 +1191,7 @@ async function generateBookingReference(
 }
 
 function isNoPaymentRequired(booking) {
-  return (
-    booking.isPayed === true || !booking.priceEur || booking.priceEur === 0
-  );
+  return !booking.priceEur || booking.priceEur === 0;
 }
 
 function isRejection(booking, hookId) {

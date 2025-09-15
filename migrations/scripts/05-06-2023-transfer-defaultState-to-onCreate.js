@@ -12,7 +12,14 @@ module.exports = {
         await Workflow.collection.updateOne(
           { _id: workflow._id },
           {
-            $set: { onCreate: workflow.defaultState, onCommit: "" , onReject: "", onPaid: "" },
+            $set: {
+              eventStateMapping: {
+                onCreate: workflow.defaultState,
+                onCommit: "",
+                onReject: "",
+                onPaid: "",
+              },
+            },
             $unset: { defaultState: "" },
           },
           { runValidators: false, strict: false },
