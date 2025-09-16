@@ -320,18 +320,22 @@ class BookingService {
           const isTicketBooking = bookableItems.some(isTicket);
 
           if (isTicketBooking) {
-            const eventIds = bookableItems.map(getEventForTicket).filter((id) => id !== null && id !== undefined);
+            const eventIds = bookableItems
+              .map(getEventForTicket)
+              .filter((id) => id !== null && id !== undefined);
             await sendEmailToOrganizer(eventIds, tenantId, booking);
           }
         }
 
         const tenant = await TenantManager.getTenant(booking.tenantId);
 
-        await MailController.sendIncomingBooking(
-          tenant.mail,
-          booking.id,
-          booking.tenantId,
-        );
+        if (tenant.notifyOnNewBooking) {
+          await MailController.sendIncomingBooking(
+            tenant.mail,
+            booking.id,
+            booking.tenantId,
+          );
+        }
       } catch (err) {
         logger.error(err);
       }
@@ -440,12 +444,15 @@ class BookingService {
         }
 
         const tenant = await TenantManager.getTenant(newGroupBooking.tenantId);
-        await MailController.sendIncomingBooking(
-          tenant.mail,
-          newGroupBooking.bookingIds,
-          newGroupBooking.tenantId,
-          true,
-        );
+
+        if (tenant.notifyOnNewBooking) {
+          await MailController.sendIncomingBooking(
+            tenant.mail,
+            newGroupBooking.bookingIds,
+            newGroupBooking.tenantId,
+            true,
+          );
+        }
       } catch (err) {
         logger.error(`Error while sending email: ${err}`);
       }
@@ -594,7 +601,9 @@ class BookingService {
       const isTicketBooking = bookableItems.some(isTicket);
 
       if (isTicketBooking) {
-        const eventIds = bookableItems.map(getEventForTicket).filter((id) => id !== null && id !== undefined);
+        const eventIds = bookableItems
+          .map(getEventForTicket)
+          .filter((id) => id !== null && id !== undefined);
         if (eventIds.length > 0) {
           await sendEmailToOrganizer(eventIds, tenantId, originBooking);
         }
@@ -712,7 +721,7 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
-      if(isRejection(booking, hookId)) {
+      if (isRejection(booking, hookId)) {
         await MailController.sendBookingRejection(
           booking.mail,
           booking.id,
@@ -772,9 +781,7 @@ class BookingService {
       await BookingManager.storeBooking(booking);
     }
 
-    if (
-      groupBooking.bookings.some((booking) => isRejection(booking, hookId))
-    ) {
+    if (groupBooking.bookings.some((booking) => isRejection(booking, hookId))) {
       await MailController.sendBookingRejection(
         groupBooking.bookings[0].mail,
         groupBooking.bookingIds,
@@ -1020,11 +1027,11 @@ function isRejection(booking, hookId) {
 }
 
 function isTicket(bookableItem) {
-  return bookableItem?._bookableUsed?.type === "ticket";
+  return bookableItem?.type === "ticket";
 }
 
 function getEventForTicket(bookableItem) {
-  return bookableItem?._bookableUsed?.eventId || null;
+  return bookableItem?.eventId || null;
 }
 
 async function sendEmailToOrganizer(eventIds, tenantId, booking) {
