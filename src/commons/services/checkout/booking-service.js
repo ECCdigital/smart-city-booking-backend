@@ -1096,6 +1096,8 @@ class BookingService {
   static async handleAggregatedBookingConfirmation(tenantId, bookingIds) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
+    console.log(bookings);
+
     if (bookings.every((b) => b.isCommitted && b.isPayed)) {
       let attachments = [];
       if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {

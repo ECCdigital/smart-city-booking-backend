@@ -117,8 +117,6 @@ class GroupBookingController {
     const tenantId = req.params.tenant;
     const user = req.user;
 
-    console.log("Committing group booking for tenant:", tenantId);
-
     try {
       const groupBookingId = req.params.id;
 
@@ -174,6 +172,66 @@ class GroupBookingController {
         { tenantId: tenantId, error: error.message },
         "Error committing group booking",
       );
+      res.status(500).send({ message: error.message });
+    }
+  }
+
+  static async payGroupBooking(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const user = req.user;
+      const groupBookingId = req.params.id;
+      const { paymentMethod } = req.body;
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+
+      if (
+        user &&
+        (await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        const result = await BookingService.setAggregatedBookingPayed({
+          tenantId,
+          bookingIds: groupBooking.bookingIds,
+          paymentMethod,
+        });
+
+        if (!result.success) {
+          return res.status(200).json({
+            success: false,
+            data: null,
+            errors: result.errors,
+          });
+        }
+
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+          tenantId,
+          groupBookingId,
+          true,
+        );
+
+        return res.status(200).json({
+          success: true,
+          data: updatedGroupBooking,
+          errors: [],
+        });
+      } else {
+        logger.error(
+          { tenantId: tenantId, user: user.id },
+          "User not allowed to pay group booking",
+        );
+        res.status(403).send({
+          message: "User not allowed to pay group booking",
+        });
+      }
+    } catch (error) {
       res.status(500).send({ message: error.message });
     }
   }
