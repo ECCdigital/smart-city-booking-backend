@@ -4,6 +4,7 @@ const { RolePermission } = require("../../../commons/entities/role/role");
 const bunyan = require("bunyan");
 const EventService = require("../../../commons/services/event-service");
 const PermissionService = require("../../../commons/services/permission-service");
+const BookingService = require("../../../commons/services/checkout/booking-service");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -51,6 +52,39 @@ class EventController {
       response.status(500).send("could not get event");
     }
   }
+
+  static async getBookedSeatsCount(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const id = request.params.id;
+      const user = request.user;
+
+      if (
+        await PermissionService._allowReadAny(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKABLES,
+        )
+      ) {
+        if (id) {
+          const count = await BookingService.getBookedSeatsCount(tenant, id);
+          response.status(200).send({ bookedSeats: count });
+        } else {
+          logger.warn(`Could not get booked seats count. Missing ID.`);
+          response.sendStatus(400);
+        }
+      } else {
+        logger.warn(
+          `User ${user?.id} not allowed to get booked seats count for event ${id}`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.warn(err);
+      response.status(500).send("could not get booked seats count");
+    }
+  }
+
 
   /**
    * @obsolute Use createEvent and updateEvent instead.

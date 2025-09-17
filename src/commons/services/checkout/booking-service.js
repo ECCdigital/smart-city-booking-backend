@@ -1166,6 +1166,10 @@ class BookingService {
 
     return bookings;
   }
+
+  static async getBookedSeatsCount(tenantId, eventId) {
+    return await BookingManager.getBookedSeatsCount(tenantId, eventId);
+  }
 }
 
 module.exports = BookingService;
