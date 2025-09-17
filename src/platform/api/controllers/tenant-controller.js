@@ -205,6 +205,7 @@ class TenantController {
           "maxBookingAdvanceInMonths",
           "defaultEventCreationMode",
           "enablePublicStatusView",
+          "notifyOnNewBooking",
           "ownerUserIds",
           "users",
         ];
