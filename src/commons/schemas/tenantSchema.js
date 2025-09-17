@@ -33,6 +33,7 @@ const tenantSchemaDefinition = {
   maxBookingAdvanceInMonths: { type: Number, default: null },
   defaultEventCreationMode: { type: String, default: "" },
   enablePublicStatusView: { type: Boolean, default: false },
+  notifyOnNewBooking: { type: Boolean, default: true },
   ownerUserIds: { type: Array, default: [] },
   users: [
     {
