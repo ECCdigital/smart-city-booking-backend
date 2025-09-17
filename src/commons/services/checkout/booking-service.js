@@ -277,12 +277,18 @@ class BookingService {
           tenantId,
           booking.id,
         );
-          if (isTicketBooking) {
-            const eventIds = bookableItems
-              .map(getEventForTicket)
-              .filter((id) => id !== null && id !== undefined);
-            await sendEmailToOrganizer(eventIds, tenantId, booking);
-          }
+
+        const bookableItems = booking.bookableItems.map(
+          (bI) => bI._bookableUsed,
+        );
+
+        const isTicketBooking = bookableItems.some(isTicket);
+
+        if (isTicketBooking) {
+          const eventIds = bookableItems
+            .map(getEventForTicket)
+            .filter((id) => id !== null && id !== undefined);
+          await sendEmailToOrganizer(eventIds, tenantId, booking);
         }
 
         const tenant = await TenantManager.getTenant(booking.tenantId);
@@ -713,6 +719,8 @@ class BookingService {
       }
 
       await BookingService.handleSingleBookingConfirmation(tenantId, bookingId);
+
+      return { success: true };
     } catch (error) {
       throw new Error(`Error setting booking to payed: ${error.message}`);
     }
@@ -733,10 +741,11 @@ class BookingService {
         await BookingManager.storeBooking(booking);
         logger.info(`${tenantId} -- booking ${booking.id} set to payed`);
       }
-      return await BookingService.handleAggregatedBookingConfirmation(
+      await BookingService.handleAggregatedBookingConfirmation(
         tenantId,
         bookingIds,
       );
+      return { success: true };
     } catch (error) {
       throw new Error(`Error setting bookings to payed: ${error.message}`);
     }
