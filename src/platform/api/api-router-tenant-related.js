@@ -135,6 +135,11 @@ router.get(
   BookingController.commitBooking,
 );
 router.post(
+  "/bookings/:id/pay",
+  AuthenticationController.isSignedIn,
+  BookingController.payBooking,
+);
+router.post(
   "/bookings/:id/reject",
   AuthenticationController.isSignedIn,
   BookingController.rejectBooking,
@@ -187,6 +192,11 @@ router.post(
   "/group-bookings/:id/commit",
   AuthenticationController.isSignedIn,
   GroupBookingController.commitGroupBooking,
+);
+router.post(
+  "/group-bookings/:id/pay",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.payGroupBooking,
 );
 router.post(
   "/group-bookings/:id/reject",

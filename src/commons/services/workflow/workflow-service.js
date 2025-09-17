@@ -22,17 +22,100 @@ class WorkflowService {
     });
 
     Object.assign(currentWorkflow, {
-      defaultState: workflow.defaultState,
       active: workflow.active,
       description: workflow.description,
       name: workflow.name,
       states: newStates,
+      eventStateMapping: workflow.eventStateMapping,
     });
+
+    const stateIds = newStates.map((s) => s.id);
+    for (const key in currentWorkflow.eventStateMapping) {
+      if (
+        currentWorkflow.eventStateMapping[key] &&
+        !stateIds.includes(currentWorkflow.eventStateMapping[key])
+      ) {
+        currentWorkflow.eventStateMapping[key] = "";
+      }
+    }
 
     return await WorkflowManager.updateWorkflow(tenantId, currentWorkflow);
   }
 
-  static async updateTask(tenantId, taskId, destination, newIndex) {
+  static async handleWorkflowEvent(
+    tenantId,
+    bookingId,
+    event,
+    skipBookingStatus = false,
+  ) {
+    const workflow = await WorkflowManager.getWorkflow(tenantId);
+    if (workflow && workflow.active) {
+      const eventState = await WorkflowService.getEventState(tenantId, event);
+      if (eventState && eventState.id) {
+        await WorkflowService.updateTask(
+          tenantId,
+          bookingId,
+          eventState.id,
+          0,
+          skipBookingStatus,
+        );
+      }
+    }
+    return true;
+  }
+
+  static async getEventState(tenantId, event) {
+    const workflow = await WorkflowManager.getWorkflow(tenantId);
+
+    if (!workflow || !workflow.states) {
+      return null;
+    }
+
+    const stateId = workflow.eventStateMapping
+      ? workflow.eventStateMapping[event]
+      : null;
+
+    if (!stateId) {
+      return null;
+    }
+
+    const status = workflow.states.find((status) => status.id === stateId);
+
+    return status || null;
+  }
+
+  static async getStatusByBookingId(tenantId, bookingId) {
+    const workflow = await WorkflowManager.getWorkflow(tenantId);
+
+    if (!workflow || !workflow.states) {
+      return null;
+    }
+
+    const status = workflow.states.find((status) =>
+      status.tasks.some((task) => task.id === bookingId),
+    );
+
+    return status || null;
+  }
+
+  static async getBookingStatusAction(tenantId, bookingStatus) {
+    const workflow = await WorkflowManager.getWorkflow(tenantId);
+
+    if (!workflow || !workflow.states) {
+      return null;
+    }
+    const status = workflow.states.find(({ actions }) =>
+      actions.some(
+        (action) =>
+          action.type === "bookingStatus" &&
+          action.bookingStatus.some((status) => status === bookingStatus),
+      ),
+    );
+
+    return status || null;
+  }
+
+  static async updateTask(tenantId, taskId, destination, newIndex, skipBookingStatus) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
 
     if (!workflow || !workflow.states) {
@@ -51,7 +134,7 @@ class WorkflowService {
       moveTask(workflow.states, fromStatus.id, destination, taskId, newIndex);
       await WorkflowManager.updateTasks(tenantId, workflow.id, workflow.states);
       if (fromStatus.id !== destination) {
-        action(workflow.states, fromStatus.id, destination, taskId, tenantId);
+        action(workflow.states, fromStatus.id, destination, taskId, tenantId, skipBookingStatus);
       }
     } else {
       const booking = await BookingManager.getBooking(taskId, tenantId);
@@ -65,7 +148,7 @@ class WorkflowService {
         workflow.id,
         taskId,
       );
-      action(workflow.states, fromStatus?.id, destination, taskId, tenantId);
+      action(workflow.states, fromStatus?.id, destination, taskId, tenantId, skipBookingStatus);
     }
     return await WorkflowManager.getWorkflow(tenantId, true);
   }
@@ -216,6 +299,7 @@ function action(
   destinationStatusId,
   taskId,
   tenantId,
+  skipBookingStatus,
 ) {
   const sourceStatus = statusList.find((s) => s.id === fromStatusId);
 
@@ -238,10 +322,13 @@ function action(
         tenantId,
       );
     }
-    if (action.type === "bookingStatus") {
+    if (action.type === "bookingStatus" && !skipBookingStatus) {
       actionClass = new BookingStatusAction(action, taskId, tenantId);
     }
-    actionClass.execute();
+
+    if (actionClass) {
+      actionClass.execute();
+    }
   });
 }
 

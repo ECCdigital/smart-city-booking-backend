@@ -381,6 +381,7 @@ class BookingController {
           booking.id,
           request.body._populated?.workflowStatus,
         );
+
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );
@@ -483,6 +484,56 @@ class BookingController {
       logger.error(err);
       if (!response.headersSent) {
         response.status(500).send("Could not commit booking");
+      }
+    }
+  }
+
+  static async payBooking(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
+      const paymentMethod = request.body.paymentMethod;
+      if (!id) {
+        return response.sendStatus(400);
+      }
+
+      console.log(request.body);
+
+      const booking = await BookingManager.getBooking(id, tenant);
+
+      if (
+        await PermissionsService._allowUpdate(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        )
+      ) {
+        logger.info(
+          `${tenant} -- setting booking ${booking.id} as paid by user ${user?.id}`,
+        );
+        await BookingService.setBookingPayed({
+          tenantId: tenant,
+          bookingId: id,
+          skipWorkflow: false,
+          paymentMethod,
+        });
+        return response.status(200).send({
+          success: true,
+          data: null,
+          errors: [],
+        });
+      } else {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to set booking as paid.`,
+        );
+        return response.sendStatus(403);
+      }
+    } catch (err) {
+      logger.error(err);
+      if (!response.headersSent) {
+        response.status(500).send("Could not set booking as paid");
       }
     }
   }
