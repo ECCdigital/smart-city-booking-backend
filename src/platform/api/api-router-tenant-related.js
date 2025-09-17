@@ -94,6 +94,11 @@ router.get(
   AuthenticationController.isSignedIn,
   EventController.countCheck,
 );
+router.get(
+  "/events/:id/count",
+  AuthenticationController.isSignedIn,
+  EventController.getBookedSeatsCount,
+);
 
 // BOOKINGS
 // ========
