@@ -498,8 +498,6 @@ class BookingController {
         return response.sendStatus(400);
       }
 
-      console.log(request.body);
-
       const booking = await BookingManager.getBooking(id, tenant);
 
       if (
