@@ -47,6 +47,7 @@
     "json-logic-js": "^2.0.5",
     "jsonschema": "^1.4.1",
     "microinvoice": "^1.0.6",
+    "mime-types": "^3.0.1",
     "mock-require": "^3.0.3",
     "mongodb": "^6.3.0",
     "mongoose": "^8.9.6",

@@ -45,6 +45,58 @@ class NextcloudManager extends FileManager {
   }
 
   /**
+   * Creates a readable stream for a specific file in the Nextcloud server.
+   *
+   * This method uses the WebDAV client to create a readable stream for the file
+   * identified by the combination of the tenant and filename. The stream can be
+   * used to read the file's contents in chunks.
+   *
+   * @param {string} tenant - The tenant ID. This is used to locate the tenant-specific directory in the Nextcloud server.
+   * @param {string} filename - The name of the file for which the readable stream is to be created.
+   * @returns {ReadableStream} A readable stream for the specified file.
+   *
+   * @example
+   * const stream = NextcloudManager.createReadStream('tenant1', 'example.txt');
+   * stream.pipe(process.stdout);
+   */
+  static async createReadStream(tenant, filename) {
+    const client = NextcloudManager._getClient();
+    const path = `${tenant}/${filename}`;
+    return client.createReadStream(path);
+  }
+
+  /**
+   * Retrieves metadata about a specific file in the Nextcloud server.
+   *
+   * This method uses the WebDAV client to fetch details about a file, such as its
+   * ETag, last modification date, size, and MIME type. The file is identified
+   * by the combination of the tenant and filename.
+   *
+   * @param {string} tenant - The tenant ID. This is used to locate the tenant-specific directory in the Nextcloud server.
+   * @param {string} filename - The name of the file whose metadata is to be retrieved.
+   * @returns {Promise<Object>} A promise that resolves to an object containing the file's metadata:
+   * - `etag` {string}: The ETag of the file.
+   * - `lastmod` {string}: The last modification date of the file.
+   * - `size` {number}: The size of the file in bytes.
+   * - `mime` {string}: The MIME type of the file.
+   *
+   * @example
+   * const metadata = await NextcloudManager.statFile('tenant1', 'example.txt');
+   * console.log(metadata);
+   */
+  static async statFile(tenant, filename) {
+    const client = NextcloudManager._getClient();
+    const path = `${tenant}/${filename}`;
+    const s = await client.stat(path);
+    return {
+      etag: s.etag,
+      lastmod: s.lastmod,
+      size: s.size,
+      mime: s.mime || s.contentType,
+    };
+  }
+
+  /**
    * Creates a file in the specified directory.
    *
    * This method uses the webdav client to interact with the Nextcloud server.
