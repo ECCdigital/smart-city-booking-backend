@@ -150,7 +150,10 @@ class BookingManager {
     timeEnd,
     bookingToIgnore = null,
   ) {
-    const relatedBookings = await BookingManager.getRelatedBookings(tenantId, bookableId);
+    const relatedBookings = await BookingManager.getRelatedBookings(
+      tenantId,
+      bookableId,
+    );
 
     return relatedBookings.filter(
       (booking) =>
@@ -214,6 +217,16 @@ class BookingManager {
 
     const bookableIds = bookables.map((b) => b.id);
     return await BookingManager.getRelatedBookingsBatch(tenantId, bookableIds);
+  }
+
+  static async getBookedSeatsCount(tenantId, eventId) {
+    const count = await BookingModel.countDocuments({
+      tenantId: tenantId,
+      isRejected: false,
+      "bookableItems._bookableUsed.eventId": eventId,
+    })
+
+    return count;
   }
 
   /**
