@@ -8,7 +8,28 @@ const invitationSchemaDefinition = {
   },
   maxUses: { type: Number, default: null },
   usedCount: { type: Number, default: 0 },
-  roles: { type: [String], default: [] },
+  roleAssignments: {
+    type: [
+      {
+        role: { type: String, required: true },
+        challenges: {
+          type: [
+            {
+              key: { type: String, required: true },
+              config: { type: Object, default: {} },
+              status: {
+                type: String,
+                enum: ["pending", "passed", "failed"],
+                default: "pending",
+              },
+            },
+          ],
+          default: [],
+        },
+      },
+    ],
+    default: [],
+  },
   intendedUserId: { type: String, default: null },
   expiresAt: { type: Number, default: null },
   status: {

@@ -9,7 +9,7 @@ class InvitationService {
     params = {
       tenantId: null,
       type: "",
-      roles: [],
+      roleAssignments: [],
       intendedUserId: null,
       maxUses: null,
       expiresAt: null,

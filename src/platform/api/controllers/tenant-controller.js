@@ -519,6 +519,8 @@ class TenantController {
       const { userId, roles } = request.body;
       const user = request.user;
 
+      console.log(roles);
+
       if (
         await PermissionService._allowUpdateAny(
           user.id,
@@ -529,15 +531,17 @@ class TenantController {
         const tenantRoles = await RoleManager.getTenantRoles(tenantId);
         const mappedRoles = tenantRoles.map((role) => role.id);
 
-        const verifiedRoles = roles.filter((role) =>
-          mappedRoles.includes(role),
+        const verifiedRoles = roles.filter((r) =>
+          mappedRoles.includes(r.role),
         );
 
         const memberships =
           await MembershipManager.getMembershipsByTenantID(tenantId);
-        const userMembership = memberships.find((m) => m.userId === user.id);
+        const userMembership = memberships.find((m) => m.userId === userId);
 
-        userMembership.roles = verifiedRoles;
+        userMembership.roleStatuses = verifiedRoles;
+
+        console.log(userMembership);
 
         await MembershipManager.setRolesForMembership(
           tenantId,

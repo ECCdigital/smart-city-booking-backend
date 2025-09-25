@@ -92,7 +92,7 @@ class SsoService {
         user.id,
       );
 
-      const userRoles = membership ? membership.roles : null;
+      const userRoles = membership ? membership.roleStatuses : null;
 
       if (!userRoles) {
         if (keycloakRoles.includes(role.keycloakRole)) {
@@ -108,7 +108,7 @@ class SsoService {
 
       if (
         keycloakRoles.includes(role.keycloakRole) &&
-        !userRoles.includes(role.tenantRoleId)
+        !userRoles.some((r) => r.role === role.tenantRoleId)
       ) {
         if (!roles.find((tRole) => tRole.id === role.tenantRoleId)) {
           return;
@@ -120,7 +120,7 @@ class SsoService {
         };
       } else if (
         !keycloakRoles.includes(role.keycloakRole) &&
-        userRoles.includes(role.tenantRoleId)
+        userRoles.some((r) => r.role === role.tenantRoleId)
       ) {
         return {
           tenantId: role.tenantId,
@@ -135,7 +135,11 @@ class SsoService {
     for (const role of rolesToMap) {
       const newRole = await processRole(role);
       if (newRole) {
-        newRoles.push(newRole);
+        newRoles.push({
+          role: newRole.role,
+          status: "active",
+          source: "keycloak",
+        });
       }
     }
 
@@ -159,7 +163,12 @@ async function updateTenantRoles(roles, userId) {
       if (needsInvite) {
         await MembershipManager.addMembership(tenantId, { userId });
       }
-      await MembershipManager.addRoleToMembership(tenantId, userId, role);
+      const newRole = {
+        role: role,
+        status: "active",
+        source: "keycloak",
+      };
+      await MembershipManager.addRoleToMembership(tenantId, userId, newRole);
     } else if (action === "remove") {
       await MembershipManager.removeRoleFromMembership(tenantId, userId, role);
     }
