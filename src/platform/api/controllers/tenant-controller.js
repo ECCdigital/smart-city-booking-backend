@@ -12,6 +12,7 @@ const { RolePermission } = require("../../../commons/entities/role/role");
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const Membership = require("../../../commons/entities/tenant/membership");
 const InvitationService = require("../../../commons/services/invitation-service");
+const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -342,7 +343,7 @@ class TenantController {
 
       const roles = body.roles;
       const userId = body.userId;
-      const type = body.type || "manual";
+      const type = body.type || "manually";
 
       console.log(type);
 
@@ -355,8 +356,6 @@ class TenantController {
       ) {
         const userToAdd = await UserManager.getUser(userId);
 
-        console.log(userToAdd);
-
         const membership =
           await MembershipManager.getMembershipsByTenantID(tenantId);
 
@@ -365,11 +364,17 @@ class TenantController {
           return response.status(400).send("User already in tenant");
         }
 
+        const roleStatuses = roles.map((role) => ({
+          role: role.role,
+          status: type === "manually" ? "active" : "pending",
+          source: type,
+        }));
+
         const newMembership = new Membership({
           tenantId,
           userId,
-          roles,
-          status: type === "manual" ? "active" : "pending",
+          roleStatuses,
+          status: type === "manually" ? "active" : "pending",
           source: type,
         });
 
@@ -441,9 +446,7 @@ class TenantController {
             .send("Only owners can remove other owners");
         }
 
-
         await InvitationService.deleteUserInvitation(tenantId, userId);
-
 
         await MembershipManager.removeMembership(tenantId, userId);
 
@@ -531,9 +534,7 @@ class TenantController {
         const tenantRoles = await RoleManager.getTenantRoles(tenantId);
         const mappedRoles = tenantRoles.map((role) => role.id);
 
-        const verifiedRoles = roles.filter((r) =>
-          mappedRoles.includes(r.role),
-        );
+        const verifiedRoles = roles.filter((r) => mappedRoles.includes(r.role));
 
         const memberships =
           await MembershipManager.getMembershipsByTenantID(tenantId);
@@ -751,6 +752,57 @@ class TenantController {
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not update user status in tenant");
+    }
+  }
+
+  static async getChallenges(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const user = request.user;
+
+      if (
+        (await PermissionService._allowReadAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        const challenges =
+          await ChallengeManager.getChallengesByTenantID(tenantId);
+        response.status(200).send(challenges);
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get challenges for tenant");
+    }
+  }
+
+  static async createChallenge(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const body = request.body;
+      const user = request.user;
+
+      if (
+        (await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        const challenge = await ChallengeManager.createChallenge(
+          tenantId,
+          body,
+        );
+        response.status(201).send(challenge);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not create challenge for tenant");
     }
   }
 }

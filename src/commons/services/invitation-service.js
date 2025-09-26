@@ -3,6 +3,7 @@ const MembershipManager = require("../data-managers/membership-manager");
 const MailController = require("../mail-service/mail-controller");
 const crypto = require("crypto");
 const InvitationManager = require("../data-managers/invitation-manager");
+const ChallengeManager = require("../data-managers/challenge-manager");
 
 class InvitationService {
   static async createInvitation(
@@ -16,6 +17,14 @@ class InvitationService {
     },
   ) {
     const token = crypto.randomBytes(16).toString("hex");
+
+    const challenges = await ChallengeManager.getChallengesByTenantID(
+      params.tenantId,
+    );
+
+    const activeChallenges = challenges.filter((c) => c.status === "active");
+
+    console.log("Active challenges:", activeChallenges);
 
     const invitation = new Invitation({ ...params, token });
 

@@ -358,4 +358,16 @@ router.post(
   InvitationController.resendInvitation,
 );
 
+router.get(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.getChallenges,
+);
+
+router.post(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.createChallenge,
+);
+
 module.exports = router;
