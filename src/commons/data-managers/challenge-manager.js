@@ -28,8 +28,11 @@ class ChallengeManager {
   }
 
   static async updateChallenge(tenantID, challengeID, challenge) {
+    console.log(challenge, 'challenge to update');
+    console.log(tenantID, 'tenant id');
+    console.log(challengeID, 'challenge id');
     const updatedChallenge = await ChallengeModel.findOneAndUpdate(
-      { tenantId: tenantID, _id: challengeID },
+      { tenantId: tenantID, id: challengeID },
       { $set: challenge },
       { new: true },
     );
@@ -40,7 +43,7 @@ class ChallengeManager {
   }
 
   static async deleteChallenge(tenantID, challengeID) {
-    await ChallengeModel.deleteOne({ tenantId: tenantID, _id: challengeID });
+    await ChallengeModel.deleteOne({ tenantId: tenantID, id: challengeID });
   }
 }
 

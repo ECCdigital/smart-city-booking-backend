@@ -29,7 +29,7 @@ class MembershipManager {
   static async getMembershipsByTenantAndRoles(tenantID, roles) {
     const rawMemberships = await MembershipModel.find({
       tenantId: tenantID,
-      'roleStatuses.role': { $in: roles },
+      role: { $in: roles },
     });
     return rawMemberships.map((raw) => raw.toEntity());
 
@@ -44,24 +44,24 @@ class MembershipManager {
     return savedMembership.toEntity();
   }
 
-  static async addRoleToMembership(tenantID, userID, roleStatus) {
+  static async addRoleToMembership(tenantID, userID, role) {
     await MembershipModel.updateOne(
       { tenantId: tenantID, userId: userID },
-      { $addToSet: { roleStatuses: roleStatus } },
+      { $addToSet: { roles: role } },
     );
   }
 
-  static async setRolesForMembership(tenantID, userID, rolesStatuses) {
+  static async setRolesForMembership(tenantID, userID, roles) {
     await MembershipModel.updateOne(
       { tenantId: tenantID, userId: userID },
-      { $set: { roleStatuses: rolesStatuses } },
+      { $set: { roles: roles } },
     );
   }
 
   static async removeRoleFromMembership(tenantID, userID, role) {
     await MembershipModel.updateOne(
       { tenantId: tenantID, userId: userID },
-      { $pull: { 'roleStatuses.role': role } },
+      { $pull: { 'roles': role } },
     );
   }
 

@@ -342,10 +342,10 @@ class TenantController {
       const user = request.user;
 
       const roles = body.roles;
+      const challenges = body.challenges || [];
       const userId = body.userId;
       const type = body.type || "manually";
 
-      console.log(type);
 
       if (
         await PermissionService._allowUpdateAny(
@@ -354,8 +354,6 @@ class TenantController {
           RolePermission.MANAGE_USERS,
         )
       ) {
-        const userToAdd = await UserManager.getUser(userId);
-
         const membership =
           await MembershipManager.getMembershipsByTenantID(tenantId);
 
@@ -364,16 +362,9 @@ class TenantController {
           return response.status(400).send("User already in tenant");
         }
 
-        const roleStatuses = roles.map((role) => ({
-          role: role.role,
-          status: type === "manually" ? "active" : "pending",
-          source: type,
-        }));
-
         const newMembership = new Membership({
           tenantId,
           userId,
-          roleStatuses,
           status: type === "manually" ? "active" : "pending",
           source: type,
         });
@@ -384,6 +375,7 @@ class TenantController {
           tenantId,
           intendedUserId: userId,
           roles,
+          challenges: challenges.map((c) => ({ id: c.id, status: "pending" })),
           type: "single",
           expiresAt: null,
           maxUses: 1,
@@ -534,13 +526,14 @@ class TenantController {
         const tenantRoles = await RoleManager.getTenantRoles(tenantId);
         const mappedRoles = tenantRoles.map((role) => role.id);
 
-        const verifiedRoles = roles.filter((r) => mappedRoles.includes(r.role));
-
+        const verifiedRoles = roles.filter((role) =>
+          mappedRoles.includes(role),
+        );
         const memberships =
           await MembershipManager.getMembershipsByTenantID(tenantId);
         const userMembership = memberships.find((m) => m.userId === userId);
 
-        userMembership.roleStatuses = verifiedRoles;
+        userMembership.roles = verifiedRoles;
 
         console.log(userMembership);
 
@@ -757,7 +750,7 @@ class TenantController {
 
   static async getChallenges(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const user = request.user;
 
       if (
@@ -794,6 +787,10 @@ class TenantController {
         )) ||
         (await PermissionService._isInstanceOwner(user.id))
       ) {
+        body.id = uuidv4();
+
+        console.log(body);
+
         const challenge = await ChallengeManager.createChallenge(
           tenantId,
           body,
@@ -803,6 +800,56 @@ class TenantController {
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not create challenge for tenant");
+    }
+  }
+
+  static async updateChallenge(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const body = request.body;
+      const user = request.user;
+
+      if (
+        (await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        const challenge = await ChallengeManager.updateChallenge(
+          tenantId,
+          body.id,
+          body,
+        );
+        response.status(200).send(challenge);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not update challenge for tenant");
+    }
+  }
+
+  static async deleteChallenge(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const challengeID = request.params.id;
+
+      if (
+        (await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        await ChallengeManager.deleteChallenge(tenantId, challengeID);
+        response.sendStatus(200);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not delete challenge for tenant");
     }
   }
 }

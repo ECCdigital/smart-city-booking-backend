@@ -370,4 +370,16 @@ router.post(
   TenantController.createChallenge,
 );
 
+router.put(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.updateChallenge,
+);
+
+router.delete(
+  "/challenges/:id",
+  AuthenticationController.isSignedIn,
+  TenantController.deleteChallenge,
+);
+
 module.exports = router;

@@ -1,24 +1,7 @@
 const membershipSchemaDefinition = {
   userId: { type: String, required: true },
   tenantId: { type: String, required: true },
-  roleStatuses: {
-    type: [
-      {
-        role: { type: String, required: true },
-        status: {
-          type: String,
-          enum: ["pending", "active", "rejected", "suspended"],
-          default: "pending",
-        },
-        source: {
-          type: String,
-          enum: ["invite", "manually", "keycloak"],
-          default: "manually",
-        },
-      },
-    ],
-    default: [],
-  },
+  roles: { type: [String], default: [] },
   owner: { type: Boolean, default: false },
   status: {
     type: String,

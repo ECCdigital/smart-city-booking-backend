@@ -92,7 +92,7 @@ class SsoService {
         user.id,
       );
 
-      const userRoles = membership ? membership.roleStatuses : null;
+      const userRoles = membership ? membership.roles : null;
 
       if (!userRoles) {
         if (keycloakRoles.includes(role.keycloakRole)) {

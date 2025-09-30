@@ -146,7 +146,7 @@ class UserManager {
     for (const membership of filteredMemberschips) {
       let tenantUserRef = {
         userId: userId,
-        roles: membership.roleStatuses.filter((r) => r.status === "active").map((r) => r.role),
+        roles: membership.roles,
       };
 
       let workingPermission = tenantPermissions.find(

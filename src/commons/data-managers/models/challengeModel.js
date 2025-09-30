@@ -7,7 +7,7 @@ const ChallengeSchema = new Schema(def, {
   timestamps: true,
 });
 
-ChallengeSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+ChallengeSchema.index({ tenantId: 1, label: 1 }, { unique: true });
 
 ChallengeSchema.methods.toEntity = function () {
   const Challenge = require("../../entities/tenant/challenge");

@@ -71,7 +71,7 @@ class InvitationController {
     try {
       const tenantID = request.params.tenant;
       const user = request.user;
-      const { type, roles, intendedUserId: intendedUserId, maxUses, expiresAt } = request.body;
+      const { type, roles, intendedUserId: intendedUserId, maxUses, expiresAt, challenges } = request.body;
 
       const sanitizedUserId = intendedUserId?.toLowerCase()?.trim();
 
@@ -95,6 +95,7 @@ class InvitationController {
         tenantId: tenantID,
         type,
         roles,
+        challenges: Array.isArray(challenges) ? challenges : [],
         intendedUserId: sanitizedUserId || null,
         maxUses: maxUses || null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,

@@ -10,23 +10,37 @@ class InvitationService {
     params = {
       tenantId: null,
       type: "",
-      roleAssignments: [],
+      roles: [],
+      challenges: [],
       intendedUserId: null,
       maxUses: null,
       expiresAt: null,
     },
   ) {
+    console.log("Creating invitation with params:", params);
+    if (!params.tenantId) {
+      throw new Error("Tenant ID is required to create an invitation");
+    }
+
     const token = crypto.randomBytes(16).toString("hex");
 
     const challenges = await ChallengeManager.getChallengesByTenantID(
       params.tenantId,
     );
 
-    const activeChallenges = challenges.filter((c) => c.status === "active");
+    const activeChallenges = challenges.filter((c) => c.enabled);
 
-    console.log("Active challenges:", activeChallenges);
+    const challengeRefs = params.challenges
+      .map((c) => {
+        const matchedChallenge = activeChallenges.find((ac) => ac.id === c);
+        if (matchedChallenge) {
+          return { id: matchedChallenge.id, status: "pending" };
+        }
+        return null;
+      })
+      .filter((c) => c !== null);
 
-    const invitation = new Invitation({ ...params, token });
+    const invitation = new Invitation({ ...params, token, challenges: challengeRefs });
 
     return await InvitationManager.createInvitation(
       params.tenantId,
@@ -122,10 +136,13 @@ class InvitationService {
       });
     }
 
+    //TODO: Trigger challenges
+
     if (
       invitation.type === "single" ||
       (invitation.maxUses && invitation.usedCount + 1 >= invitation.maxUses)
     ) {
+
       await InvitationManager.deleteInvitation(tenantID, token);
     } else {
       await InvitationManager.incrementUsedCount(token);
