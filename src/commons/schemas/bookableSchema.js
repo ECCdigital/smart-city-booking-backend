@@ -8,8 +8,8 @@ const priceCategorySchemaDefinition = {
     default: { start: null, end: null },
   },
   fixedPrice: { type: Boolean, default: false },
-  holidays: { type: [String], default: [] },
-  weekdays: { type: [String], default: [] },
+  holidays: { type: [Object], default: [] },
+  weekdays: { type: [Number], default: [] },
 };
 
 const bookableSchemaDefinition = {

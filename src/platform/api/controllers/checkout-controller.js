@@ -56,23 +56,21 @@ class CheckoutController {
         `${tenantId} -- validated bookable ${bookableId} for user ${user?.id} with amount ${amount} and time ${timeBegin} - ${timeEnd}`,
       );
 
-      let multiplier = parseInt(amount);
-      try {
-        if (itemCheckoutService.ignoreAmount) {
-          multiplier = 1;
-        }
-      } catch (err) {
-        throw new Error("Es konnte kein Preis ermittelt werden");
-      }
+      const { price: regularPrice } =
+        await itemCheckoutService.regularPriceEur();
+
+      const { price: regularGrossPrice } =
+        await itemCheckoutService.regularGrossPriceEur();
+
+      const { price: userPrice } = await itemCheckoutService.userPriceEur();
+      const { price: userGrossPrice } =
+        await itemCheckoutService.userGrossPriceEur();
 
       const payload = {
-        regularPriceEur:
-          (await itemCheckoutService.regularPriceEur()) * multiplier,
-        userPriceEur: (await itemCheckoutService.userPriceEur()) * multiplier,
-        regularGrossPriceEur:
-          (await itemCheckoutService.regularGrossPriceEur()) * multiplier,
-        userGrossPriceEur:
-          (await itemCheckoutService.userGrossPriceEur()) * multiplier,
+        regularPriceEur: regularPrice,
+        userPriceEur: userPrice,
+        regularGrossPriceEur: regularGrossPrice,
+        userGrossPriceEur: userGrossPrice,
         freeBookingAllowed: await itemCheckoutService.freeBookingAllowed(),
       };
 

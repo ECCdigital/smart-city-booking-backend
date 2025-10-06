@@ -147,8 +147,7 @@ class BundleCheckoutService {
   async userPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
-      const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
-      total += bookableItem.userPriceEur * multiplier;
+      total += bookableItem.userPriceEur
     }
 
     return Math.round(total * 100) / 100;
@@ -157,8 +156,7 @@ class BundleCheckoutService {
   async userGrossPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
-      const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
-      total += bookableItem.userGrossPriceEur * multiplier;
+      total += bookableItem.userGrossPriceEur;
     }
     return Math.round(total * 100) / 100;
   }
@@ -256,15 +254,22 @@ class BundleCheckoutService {
       try {
         itemCheckoutService =
           await this.createItemCheckoutService(bookableItem);
-        bookableItem.regularPriceEur =
+
+        const { price: regularPriceEur } =
           await itemCheckoutService.regularPriceEur();
-        bookableItem.regularGrossPriceEur =
+        const { price: regularGrossPriceEur } =
           await itemCheckoutService.regularGrossPriceEur();
-        bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
-        bookableItem.userGrossPriceEur =
+        const { price: userPriceEur } =
+          await itemCheckoutService.userPriceEur();
+        const { price: userGrossPriceEur } =
           await itemCheckoutService.userGrossPriceEur();
+
+        bookableItem.regularPriceEur = regularPriceEur;
+        bookableItem.regularGrossPriceEur = regularGrossPriceEur;
+        bookableItem.userPriceEur = userPriceEur;
+        bookableItem.userGrossPriceEur = userGrossPriceEur;
+
         bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
-        bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
         delete bookableItem._bookableUsed._id;
       } finally {
         if (itemCheckoutService) {
