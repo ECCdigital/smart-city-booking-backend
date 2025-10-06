@@ -128,7 +128,7 @@ class TenantController {
           userId: user.id,
           roles: [],
           status: "active",
-          source: "manual",
+          source: "manually",
           owner: true,
         });
 
