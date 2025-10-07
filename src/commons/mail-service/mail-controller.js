@@ -1181,7 +1181,7 @@ class MailController {
     const invitationUrl = `${process.env.FRONTEND_URL}/auth/invitation/${tenantId}?token=${token}`;
 
     const snippetTemplateString = `
-        <p>Sie wurden eingeladen, sich im Smart City Booking Mandanten {{tenantName}} zu registrieren.</p>
+        <p>Sie wurden zum Smart City Booking Mandanten {{tenantName}} eingeladen.</p>
   
         <p>
           Bitte klicken Sie auf den nachfolgenden Button, um die Einladung anzunehmen:
@@ -1197,7 +1197,7 @@ class MailController {
                text-decoration: none;
                font-weight: bold;
                display: inline-block;">
-            Registrierung abschließen
+            Einladung annehmen
           </a>
         </p>`;
 
@@ -1209,10 +1209,10 @@ class MailController {
 
     await MailerService.send({
       address: sendTo,
-      subject: `Smart City Booking - Einladung zur Registrierung im ${tenant.name} Mandanten`,
+      subject: `Smart City Booking - Einladung zum ${tenant.name} Mandanten`,
       mailTemplate: tenant.genericMailTemplate,
       model: {
-        title: `Smart City Booking - Einladung zur Registrierung im ${tenant.name} Mandanten`,
+        title: `Smart City Booking - Einladung zum ${tenant.name} Mandanten`,
         content: snippetHtml,
       },
       useInstanceMail: tenant.useInstanceMail,

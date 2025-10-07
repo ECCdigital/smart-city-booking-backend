@@ -17,7 +17,6 @@ class InvitationService {
       expiresAt: null,
     },
   ) {
-    console.log("Creating invitation with params:", params);
     if (!params.tenantId) {
       throw new Error("Tenant ID is required to create an invitation");
     }
@@ -40,7 +39,11 @@ class InvitationService {
       })
       .filter((c) => c !== null);
 
-    const invitation = new Invitation({ ...params, token, challenges: challengeRefs });
+    const invitation = new Invitation({
+      ...params,
+      token,
+      challenges: challengeRefs,
+    });
 
     return await InvitationManager.createInvitation(
       params.tenantId,
@@ -103,8 +106,8 @@ class InvitationService {
       tenantID,
       userID,
     );
-    if (membership && membership.status === "active") {
-      throw new Error("User is already a member of this tenant");
+    if (membership && membership.status === "suspended") {
+      throw { message: "Membership suspended", code: 423 };
     }
 
     return invitation;
@@ -120,18 +123,14 @@ class InvitationService {
       userID,
     );
 
-    if (membership) {
-      const updates = {
-        roles: Array.from(new Set([...membership.roles, ...invitation.roles])),
-        status: "active",
-      };
+    if (membership && membership.status === "suspended") {
+      throw { message: "Membership suspended", code: 423 };
+    }
 
-      await MembershipManager.updateMembership(tenantID, userID, updates);
-    } else {
+    if (!membership) {
       await MembershipManager.addMembership(tenantID, {
         userId: userID,
-        roles: invitation.roles,
-        status: "active",
+        status: "pending",
         source: "invite",
       });
     }
@@ -142,8 +141,6 @@ class InvitationService {
       invitation.type === "single" ||
       (invitation.maxUses && invitation.usedCount + 1 >= invitation.maxUses)
     ) {
-
-      await InvitationManager.deleteInvitation(tenantID, token);
     } else {
       await InvitationManager.incrementUsedCount(token);
     }
