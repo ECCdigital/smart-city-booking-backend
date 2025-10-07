@@ -13,6 +13,20 @@ const membershipSchemaDefinition = {
     enum: ["invite", "public", "manually"],
     required: true,
   },
+  challenges: {
+    type: [
+      {
+        id: { type: String, required: true },
+        status: {
+          type: String,
+          enum: ["pending", "completed", "failed", "rejected"],
+          default: "pending",
+        },
+        rolesToAssign: { type: [String], default: [] },
+      },
+    ],
+    default: [],
+  },
 };
 
 module.exports = membershipSchemaDefinition;
