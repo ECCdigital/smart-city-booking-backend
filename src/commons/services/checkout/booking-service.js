@@ -1167,8 +1167,8 @@ class BookingService {
     return bookings;
   }
 
-  static async getBookedSeatsCount(tenantId, eventId) {
-    return await BookingManager.getBookedSeatsCount(tenantId, eventId);
+  static async getBookedSeatsCount(tenantId, eventId, params) {
+    return await BookingManager.getBookedSeatsCount(tenantId, eventId, params);
   }
 }
 

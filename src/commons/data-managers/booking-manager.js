@@ -219,12 +219,17 @@ class BookingManager {
     return await BookingManager.getRelatedBookingsBatch(tenantId, bookableIds);
   }
 
-  static async getBookedSeatsCount(tenantId, eventId) {
+  static async getBookedSeatsCount(
+    tenantId,
+    eventId,
+    { onlyOwn = false, userId = null } = {},
+  ) {
     const count = await BookingModel.countDocuments({
       tenantId: tenantId,
       isRejected: false,
       "bookableItems._bookableUsed.eventId": eventId,
-    })
+      ...(onlyOwn ? { "bookableItems._bookableUsed.ownerUserId": userId } : {}),
+    });
 
     return count;
   }
