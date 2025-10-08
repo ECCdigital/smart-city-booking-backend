@@ -267,6 +267,7 @@ class BookingService {
     }
 
     if (!simulate) {
+      console.log("Handling single booking confirmation...");
       try {
         await BookingService.handleSingleBookingRequestConfirmation(
           tenantId,
@@ -1083,20 +1084,20 @@ class BookingService {
             contentType: "application/pdf",
           },
         ];
+      }
 
-        try {
-          await MailController.sendBookingConfirmation(
-            booking.mail,
-            booking.id,
-            tenantId,
-            attachments,
-          );
-          logger.info(
-            `${tenantId} -- booking ${booking.id} confirmation sent to ${booking.mail}`,
-          );
-        } catch (err) {
-          logger.error(err);
-        }
+      try {
+        await MailController.sendBookingConfirmation(
+          booking.mail,
+          booking.id,
+          tenantId,
+          attachments,
+        );
+        logger.info(
+          `${tenantId} -- booking ${booking.id} confirmation sent to ${booking.mail}`,
+        );
+      } catch (err) {
+        logger.error(err);
       }
 
       const bookableItems = booking.bookableItems.map((bI) => bI._bookableUsed);

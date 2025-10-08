@@ -30,7 +30,9 @@ Handlebars.registerHelper("formatDate", function (value) {
 });
 
 Handlebars.registerHelper("priceFormatted", function (value) {
-  if (!value) return "–";
+  if (typeof value !== "number") {
+    return "–";
+  }
   const formatter = new Intl.NumberFormat("de-DE", {
     style: "currency",
     currency: "EUR",
