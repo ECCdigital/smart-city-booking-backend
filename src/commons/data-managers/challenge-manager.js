@@ -10,7 +10,7 @@ class ChallengeManager {
   static async getChallengeByID(tenantID, challengeID) {
     const rawChallenge = await ChallengeModel.findOne({
       tenantId: tenantID,
-      _id: challengeID,
+      id: challengeID,
     });
     if (!rawChallenge) {
       return null;
@@ -28,9 +28,6 @@ class ChallengeManager {
   }
 
   static async updateChallenge(tenantID, challengeID, challenge) {
-    console.log(challenge, 'challenge to update');
-    console.log(tenantID, 'tenant id');
-    console.log(challengeID, 'challenge id');
     const updatedChallenge = await ChallengeModel.findOneAndUpdate(
       { tenantId: tenantID, id: challengeID },
       { $set: challenge },

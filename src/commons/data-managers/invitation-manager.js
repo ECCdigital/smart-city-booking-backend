@@ -66,6 +66,44 @@ class InvitationManager {
       token: token,
     });
   }
+
+  /**
+   * Atomically consume one use of an invitation.
+   * Returns the updated invitation entity or null if it could not be consumed
+   * (e.g. already exhausted, revoked, or not found).
+   */
+  static async consumeUse(tenantID, token) {
+    const inv = await InvitationModel.findOne({ tenantId: tenantID, token });
+    if (!inv) return null;
+    if (inv.status !== "active") return null;
+
+    let filter;
+    if (inv.type === "single") {
+      filter = {
+        tenantId: tenantID,
+        token,
+        status: "active",
+        usedCount: { $lt: 1 },
+      };
+    } else {
+      if (inv.maxUses == null) {
+        filter = { tenantId: tenantID, token, status: "active" };
+      } else {
+        filter = {
+          tenantId: tenantID,
+          token,
+          status: "active",
+          usedCount: { $lt: inv.maxUses },
+        };
+      }
+    }
+
+    const update = { $inc: { usedCount: 1 } };
+    const updated = await InvitationModel.findOneAndUpdate(filter, update, {
+      new: true,
+    });
+    return updated ? updated.toEntity() : null;
+  }
 }
 
 module.exports = InvitationManager;

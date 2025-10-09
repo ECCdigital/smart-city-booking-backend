@@ -382,4 +382,10 @@ router.delete(
   TenantController.deleteChallenge,
 );
 
+router.post(
+  "/invitations/approve",
+  AuthenticationController.isSignedIn,
+  InvitationController.approveManualChallenge,
+);
+
 module.exports = router;

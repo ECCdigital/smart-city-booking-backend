@@ -13,16 +13,32 @@ const membershipSchemaDefinition = {
     enum: ["invite", "public", "manually"],
     required: true,
   },
-  challenges: {
+  invitations: {
     type: [
       {
-        id: { type: String, required: true },
+        token: { type: String, required: true },
         status: {
           type: String,
-          enum: ["pending", "completed", "failed", "rejected"],
+          enum: ["pending", "completed", "failed", "pending_approval"],
           default: "pending",
         },
-        rolesToAssign: { type: [String], default: [] },
+        reason: { type: String, default: "" },
+        challengeStates: {
+          type: [
+            {
+              challengeId: { type: String, required: true },
+              status: {
+                type: String,
+                enum: ["pending", "passed", "failed", "pending_approval"],
+                default: "pending",
+              },
+              message: { type: String, default: "" },
+              updatedAt: { type: Date, default: Date.now },
+              approvedBy: { type: String, default: null },
+            },
+          ],
+          default: [],
+        },
       },
     ],
     default: [],

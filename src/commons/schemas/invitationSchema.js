@@ -8,25 +8,13 @@ const invitationSchemaDefinition = {
   },
   maxUses: { type: Number, default: null },
   usedCount: { type: Number, default: 0 },
-  challenges: {
-    type: [
-      {
-        id: { type: String, required: true },
-        status: {
-          type: String,
-          enum: ["pending", "completed", "failed", "rejected"],
-          default: "pending",
-        },
-      },
-    ],
-    default: [],
-  },
+  challenges: { type: [String], default: [] },
   roles: { type: [String], default: [] },
   intendedUserId: { type: String, default: null },
   expiresAt: { type: Number, default: null },
   status: {
     type: String,
-    enum: ["active", "revoked", "rejected"],
+    enum: ["active", "revoked", "rejected", "exhausted"],
     default: "active",
   },
 };

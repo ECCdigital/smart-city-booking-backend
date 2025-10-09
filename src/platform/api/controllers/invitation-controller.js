@@ -71,7 +71,14 @@ class InvitationController {
     try {
       const tenantID = request.params.tenant;
       const user = request.user;
-      const { type, roles, intendedUserId: intendedUserId, maxUses, expiresAt, challenges } = request.body;
+      const {
+        type,
+        roles,
+        intendedUserId: intendedUserId,
+        maxUses,
+        expiresAt,
+        challenges,
+      } = request.body;
 
       const sanitizedUserId = intendedUserId?.toLowerCase()?.trim();
 
@@ -167,9 +174,38 @@ class InvitationController {
       const tenantId = request.params.tenant;
       const user = request.user;
 
-      await InvitationService.acceptInvitation(tenantId, token, user.id);
 
-      return response.status(200).send({ ok: true });
+      const result = await InvitationService.acceptInvitation(
+        tenantId,
+        token,
+        user.id,
+      );
+
+      // If the result indicates pending approval, return a specific status
+      if (result && result.pendingApproval) {
+        return response.status(202).send({
+          ok: false,
+          pendingApproval: true,
+          message: result.message,
+          challengeResults: result.challengeResults,
+        });
+      }
+
+      // If the result indicates failure but not pending approval, return an error
+      if (result && !result.success && !result.pendingApproval) {
+        return response.status(400).send({
+          ok: false,
+          message: result.message,
+          challengeResults: result.challengeResults,
+        });
+      }
+
+      // Success case
+      return response.status(200).send({
+        ok: true,
+        message: result.message,
+        roles: result.roles,
+      });
     } catch (error) {
       logger.error(error);
       return response
@@ -222,6 +258,63 @@ class InvitationController {
     } catch (error) {
       logger.error(error);
       response.status(500).send(error.message);
+    }
+  }
+
+  static async approveManualChallenge(request, response) {
+    try {
+      const tenantID = request.params.tenant;
+      const user = request.user;
+      const { challengeId, userId, token } = request.body;
+
+      if (
+        !(await PermissionService._allowUpdateAny(
+          user.id,
+          tenantID,
+          RolePermission.MANAGE_USERS,
+        ))
+      ) {
+        return response
+          .status(403)
+          .send("Forbidden: You don't have permission to approve challenges.");
+      }
+
+      // Validate required parameters
+      if (!challengeId || !userId) {
+        return response
+          .status(400)
+          .send(
+            "Missing required parameters: challengeId and userId are required.",
+          );
+      }
+
+      await InvitationService.approveManualChallenge(tenantID, {
+        challengeId,
+        userId,
+        adminId: user.id,
+        token: token || null,
+      });
+
+      try {
+        const finalizeResults =
+          await InvitationService.tryFinalizePendingInvitationsForUser(
+            tenantID,
+            userId,
+          );
+        logger.info({ finalizeResults }, "Finalize after manual approval");
+      } catch (e) {
+        logger.warn({ err: e }, "Finalize after approval failed");
+      }
+
+      // Return success response
+      response
+        .status(200)
+        .send({ message: "Challenge approved successfully." });
+    } catch (error) {
+      logger.error(error);
+      response
+        .status(error.code || 500)
+        .send(error.message || "Could not approve challenge");
     }
   }
 }

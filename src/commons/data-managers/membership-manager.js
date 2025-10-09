@@ -9,9 +9,7 @@ class MembershipManager {
 
   static async getMembershipsByUserID(userID) {
     const rawMembership = await MembershipModel.find({ userId: userID });
-    if (!rawMembership) {
-      return null;
-    }
+    if (!rawMembership) return [];
     return rawMembership.map((raw) => raw.toEntity());
   }
 
@@ -29,10 +27,9 @@ class MembershipManager {
   static async getMembershipsByTenantAndRoles(tenantID, roles) {
     const rawMemberships = await MembershipModel.find({
       tenantId: tenantID,
-      role: { $in: roles },
+      roles: { $in: roles },
     });
     return rawMemberships.map((raw) => raw.toEntity());
-
   }
 
   static async addMembership(tenantID, membership) {
@@ -61,7 +58,7 @@ class MembershipManager {
   static async removeRoleFromMembership(tenantID, userID, role) {
     await MembershipModel.updateOne(
       { tenantId: tenantID, userId: userID },
-      { $pull: { 'roles': role } },
+      { $pull: { roles: role } },
     );
   }
 

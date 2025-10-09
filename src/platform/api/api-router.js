@@ -6,6 +6,7 @@ const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
 const InvitationController = require("./controllers/invitation-controller");
+const MembershipController = require("./controllers/membership-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -154,5 +155,13 @@ router.get(
   "/invitations/my",
   AuthenticationController.isSignedIn,
   InvitationController.getMyInvitations,
+);
+
+// MEMBERSHIPS
+// ===========
+router.get(
+  "/memberships/my/pending",
+  AuthenticationController.isSignedIn,
+  MembershipController.getMyPendingMemberships,
 );
 module.exports = router;
