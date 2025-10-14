@@ -7,6 +7,7 @@ const axios = require("axios");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
 
 Handlebars.registerHelper("formatDateTime", function (value) {
+  if(!value) return "–";
   const formatter = new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
@@ -19,6 +20,7 @@ Handlebars.registerHelper("formatDateTime", function (value) {
 });
 
 Handlebars.registerHelper("formatDate", function (value) {
+  if(!value) return "–";
   const formatter = new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
@@ -28,6 +30,9 @@ Handlebars.registerHelper("formatDate", function (value) {
 });
 
 Handlebars.registerHelper("priceFormatted", function (value) {
+  if (typeof value !== "number") {
+    return "–";
+  }
   const formatter = new Intl.NumberFormat("de-DE", {
     style: "currency",
     currency: "EUR",

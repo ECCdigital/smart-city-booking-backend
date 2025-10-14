@@ -68,6 +68,44 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/healthz/live", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+async function pingMongoWithTimeout(client, ms = 800) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("mongo ping timeout")), ms),
+  );
+
+  const ping = (async () => {
+    const mongoClient = dbm.dbClient.connection.getClient();
+    await mongoClient.db().admin().ping();
+  })();
+
+  return Promise.race([ping, timeout]);
+}
+
+app.get("/healthz/ready", async (req, res) => {
+  try {
+    await pingMongoWithTimeout(dbm.dbClient, 800);
+
+    if (process.env.RULE_ENGINE_ENABLED === "true") {
+      if (!RuleEngine.isInitialized?.()) {
+        return res.status(503).json({
+          status: "degraded",
+          details: { ruleEngine: "not-initialized" },
+        });
+      }
+    }
+
+    res.status(200).json({ status: "ok" });
+  } catch (err) {
+    res.status(503).json({
+      status: "unavailable",
+    });
+  }
+});
+
 const userManagementRouter = require("./platform/authentication/authentication-router");
 app.use("/auth", userManagementRouter);
 

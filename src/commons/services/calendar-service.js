@@ -55,6 +55,12 @@ class CalendarService {
       [bookable, ...parentBookables],
     );
 
+    const availableTimePeriods = generateTimePeriodsFromTimePeriods(
+      startDate,
+      endDate,
+      bookable,
+    );
+
     /**
      * Represents the available special opening hours periods for a specific entity or location.
      * This variable holds an array of time periods generated based on defined special opening hours,
@@ -75,6 +81,7 @@ class CalendarService {
     const availablePeriods = mergePeriods(
       availableOpeningHoursPeriods,
       availableSpecialOpeningHoursPeriods,
+      availableTimePeriods,
     );
 
     const items = [];
@@ -98,7 +105,6 @@ class CalendarService {
         });
       }
     }
-
     return combineSegments(items);
   }
 }
@@ -146,13 +152,15 @@ async function checkAvailabilityIterative(
       const { concurrentBookings } = error;
 
       if (concurrentBookings?.length) {
+        const availableSlots = bookablesToCheck[0]?.amount || 1;
+        const maxAllowedOverlap = Math.max(0, availableSlots - amount);
         const { validIntervals, invalidIntervals } = splitByOverlapThreshold(
           { start, end },
           concurrentBookings.map((cb) => ({
             start: cb.timeBegin,
             end: cb.timeEnd,
           })),
-          concurrentBookings.length,
+          maxAllowedOverlap,
         );
 
         for (const inv of invalidIntervals) {
@@ -164,7 +172,7 @@ async function checkAvailabilityIterative(
         }
         for (const valid of validIntervals) {
           if (valid.end - valid.start > SEGMENT_MIN_LENGTH) {
-            queue.push({ start: valid.start, end: valid.end });
+            // queue.push({ start: valid.start, end: valid.end });
           } else {
             items.push({
               timeBegin: valid.start,
@@ -192,9 +200,9 @@ async function checkAvailabilityIterative(
   }
 }
 
-function mergePeriods(periods, specials) {
-  const P = [...periods].sort((a, b) => a.start - b.start);
-  const S = [...specials].sort((a, b) => a.start - b.start);
+function mergeTwoPeriodSets(base, overlay) {
+  const P = [...base].sort((a, b) => a.start - b.start);
+  const S = [...overlay].sort((a, b) => a.start - b.start);
   const result = [];
 
   let j = 0;
@@ -237,6 +245,33 @@ function mergePeriods(periods, specials) {
   return result.sort((a, b) => a.start - b.start);
 }
 
+function mergePeriods(...periodSets) {
+  const lists = periodSets.filter(
+    (lst) => Array.isArray(lst) && lst.length > 0,
+  );
+
+  if (lists.length === 0) return [];
+  if (lists.length === 1) {
+    return [...lists[0]].sort((a, b) => a.start - b.start);
+  }
+
+  let acc = [...lists[0]];
+  for (let i = 1; i < lists.length; i++) {
+    acc = mergeTwoPeriodSets(acc, lists[i]);
+  }
+
+  const merged = [];
+  for (const seg of acc) {
+    const last = merged[merged.length - 1];
+    if (last && last.available === seg.available && last.end === seg.start) {
+      last.end = seg.end;
+    } else {
+      merged.push({ ...seg });
+    }
+  }
+  return merged;
+}
+
 function splitByOverlapThreshold(interval, subs, maxOverlap) {
   const { start: A, end: B } = interval;
 
@@ -266,7 +301,7 @@ function splitByOverlapThreshold(interval, subs, maxOverlap) {
     const x = ev.x;
     if (x > prevX) {
       const segment = { start: prevX, end: x };
-      if (count < maxOverlap) {
+      if (count <= maxOverlap) {
         validIntervals.push(segment);
       } else {
         invalidIntervals.push(segment);
@@ -357,6 +392,22 @@ function mergeOpeningHours(periods) {
     });
 }
 
+function generateTimePeriodsFromTimePeriods(startDate, endDate, bookable) {
+  const allTimePeriods =
+    bookable.isTimePeriodRelated && bookable.timePeriods.length > 0
+      ? bookable.timePeriods
+      : [];
+
+  const mergedTimePeriods = mergeOpeningHours(allTimePeriods);
+
+  return buildPeriodsFromMergedHours(
+    startDate,
+    endDate,
+    mergedTimePeriods,
+    true,
+  );
+}
+
 function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
   const allOpeningHours = [];
 
@@ -372,23 +423,57 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
 
   const mergedOpeningHours = mergeOpeningHours(allOpeningHours);
 
-  if (mergedOpeningHours.length === 0) {
-    return [
-      {
-        start: startDate.getTime(),
-        end: endDate.getTime(),
-        available: true,
-      },
-    ];
+  return buildPeriodsFromMergedHours(
+    startDate,
+    endDate,
+    mergedOpeningHours,
+    true,
+  );
+}
+
+function buildPeriodsFromMergedHours(
+  startDate,
+  endDate,
+  mergedHours,
+  defaultAvailableWhenEmpty = false,
+) {
+  if (!mergedHours || mergedHours.length === 0) {
+    if (defaultAvailableWhenEmpty) {
+      return [
+        {
+          start: startDate.getTime(),
+          end: endDate.getTime(),
+          available: true,
+        },
+      ];
+    }
+
+    const periods = [];
+    let current = new Date(startDate);
+    while (current <= endDate) {
+      const startOfDay = new Date(current);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(current);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      periods.push({
+        start: startOfDay.getTime(),
+        end: endOfDay.getTime(),
+        available: false,
+      });
+
+      current.setDate(current.getDate() + 1);
+    }
+    return periods;
   }
 
   const periods = [];
-  let currentDate = new Date(startDate);
+  let current = new Date(startDate);
 
-  while (currentDate <= endDate) {
-    const weekday = currentDate.getDay();
+  while (current <= endDate) {
+    const weekday = current.getDay();
 
-    const hoursForToday = mergedOpeningHours.filter((hours) => {
+    const hoursForToday = mergedHours.filter((hours) => {
       if (Array.isArray(hours.weekdays)) {
         return hours.weekdays.includes(weekday);
       }
@@ -397,13 +482,13 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
 
     if (hoursForToday.length > 0) {
       for (const hour of hoursForToday) {
-        const start = new Date(currentDate);
-        const [startHour, startMinute] = hour.startTime.split(":");
-        start.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+        const start = new Date(current);
+        const [sh, sm] = hour.startTime.split(":").map(Number);
+        start.setHours(sh, sm, 0, 0);
 
-        const end = new Date(currentDate);
-        const [endHour, endMinute] = hour.endTime.split(":");
-        end.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
+        const end = new Date(current);
+        const [eh, em] = hour.endTime.split(":").map(Number);
+        end.setHours(eh, em, 0, 0);
 
         periods.push({
           start: start.getTime(),
@@ -412,29 +497,22 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
         });
       }
 
-      const sortedHours = hoursForToday.sort((a, b) => {
-        const aStart = a.startTime.split(":").map(Number);
-        const bStart = b.startTime.split(":").map(Number);
-        return aStart[0] * 60 + aStart[1] - (bStart[0] * 60 + bStart[1]);
+      const sorted = [...hoursForToday].sort((a, b) => {
+        const [aH, aM] = a.startTime.split(":").map(Number);
+        const [bH, bM] = b.startTime.split(":").map(Number);
+        return aH * 60 + aM - (bH * 60 + bM);
       });
 
-      const startOfDay = new Date(currentDate);
+      const startOfDay = new Date(current);
       startOfDay.setHours(0, 0, 0, 0);
-
-      const endOfDay = new Date(currentDate);
+      const endOfDay = new Date(current);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const firstOpeningHour = sortedHours[0];
-      const firstStart = new Date(currentDate);
-      const [firstStartHour, firstStartMinute] =
-        firstOpeningHour.startTime.split(":");
-      firstStart.setHours(
-        parseInt(firstStartHour),
-        parseInt(firstStartMinute),
-        0,
-        0,
-      );
-
+      const firstStart = new Date(current);
+      {
+        const [h, m] = sorted[0].startTime.split(":").map(Number);
+        firstStart.setHours(h, m, 0, 0);
+      }
       if (firstStart.getTime() > startOfDay.getTime()) {
         periods.push({
           start: startOfDay.getTime(),
@@ -443,26 +521,18 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
         });
       }
 
-      for (let i = 0; i < sortedHours.length - 1; i++) {
-        const currentEnd = new Date(currentDate);
-        const [currentEndHour, currentEndMinute] =
-          sortedHours[i].endTime.split(":");
-        currentEnd.setHours(
-          parseInt(currentEndHour),
-          parseInt(currentEndMinute),
-          0,
-          0,
-        );
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const currentEnd = new Date(current);
+        {
+          const [h, m] = sorted[i].endTime.split(":").map(Number);
+          currentEnd.setHours(h, m, 0, 0);
+        }
 
-        const nextStart = new Date(currentDate);
-        const [nextStartHour, nextStartMinute] =
-          sortedHours[i + 1].startTime.split(":");
-        nextStart.setHours(
-          parseInt(nextStartHour),
-          parseInt(nextStartMinute),
-          0,
-          0,
-        );
+        const nextStart = new Date(current);
+        {
+          const [h, m] = sorted[i + 1].startTime.split(":").map(Number);
+          nextStart.setHours(h, m, 0, 0);
+        }
 
         if (nextStart.getTime() > currentEnd.getTime()) {
           periods.push({
@@ -473,11 +543,12 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
         }
       }
 
-      const lastOpeningHour = sortedHours[sortedHours.length - 1];
-      const lastEnd = new Date(currentDate);
-      const [lastEndHour, lastEndMinute] = lastOpeningHour.endTime.split(":");
-      lastEnd.setHours(parseInt(lastEndHour), parseInt(lastEndMinute), 0, 0);
-
+      const lastEnd = new Date(current);
+      {
+        const last = sorted[sorted.length - 1];
+        const [h, m] = last.endTime.split(":").map(Number);
+        lastEnd.setHours(h, m, 0, 0);
+      }
       if (lastEnd.getTime() < endOfDay.getTime()) {
         periods.push({
           start: lastEnd.getTime(),
@@ -486,9 +557,9 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
         });
       }
     } else {
-      const startOfDay = new Date(currentDate);
+      const startOfDay = new Date(current);
       startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(currentDate);
+      const endOfDay = new Date(current);
       endOfDay.setHours(23, 59, 59, 999);
 
       periods.push({
@@ -498,7 +569,7 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
       });
     }
 
-    currentDate.setDate(currentDate.getDate() + 1);
+    current.setDate(current.getDate() + 1);
   }
 
   return periods;

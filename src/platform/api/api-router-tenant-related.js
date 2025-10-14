@@ -9,6 +9,7 @@ const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
+const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const {
@@ -95,6 +96,11 @@ router.get(
   AuthenticationController.isSignedIn,
   EventController.countCheck,
 );
+router.get(
+  "/events/:id/count",
+  AuthenticationController.isSignedIn,
+  EventController.getBookedSeatsCount,
+);
 
 // BOOKINGS
 // ========
@@ -134,6 +140,11 @@ router.get(
   "/bookings/:id/commit",
   AuthenticationController.isSignedIn,
   BookingController.commitBooking,
+);
+router.post(
+  "/bookings/:id/pay",
+  AuthenticationController.isSignedIn,
+  BookingController.payBooking,
 );
 router.post(
   "/bookings/:id/reject",
@@ -188,6 +199,11 @@ router.post(
   "/group-bookings/:id/commit",
   AuthenticationController.isSignedIn,
   GroupBookingController.commitGroupBooking,
+);
+router.post(
+  "/group-bookings/:id/pay",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.payGroupBooking,
 );
 router.post(
   "/group-bookings/:id/reject",
@@ -314,6 +330,78 @@ router.delete(
   "/roles/:id",
   AuthenticationController.isSignedIn,
   RoleController.removeRole,
+);
+
+// INVITATIONS
+router.get(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.getInvitationsByTenantID,
+);
+
+router.post(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.createInvitation,
+);
+
+router.delete(
+  "/invitations/:token",
+  AuthenticationController.isSignedIn,
+  InvitationController.deleteInvitation,
+);
+
+router.get(
+  "/invitations/:token/verify",
+  AuthenticationController.isSignedIn,
+  InvitationController.verifyInvitationToken,
+);
+router.post(
+  "/invitations/:token/accept",
+  AuthenticationController.isSignedIn,
+  InvitationController.acceptInvitationToken,
+);
+
+router.post(
+  "/invitations/:token/reject",
+  AuthenticationController.isSignedIn,
+  InvitationController.rejectInvitationToken,
+);
+
+router.post(
+  "/invitations/resend",
+  AuthenticationController.isSignedIn,
+  InvitationController.resendInvitation,
+);
+
+router.get(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.getChallenges,
+);
+
+router.post(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.createChallenge,
+);
+
+router.put(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.updateChallenge,
+);
+
+router.delete(
+  "/challenges/:id",
+  AuthenticationController.isSignedIn,
+  TenantController.deleteChallenge,
+);
+
+router.post(
+  "/invitations/approve",
+  AuthenticationController.isSignedIn,
+  InvitationController.approveManualChallenge,
 );
 
 // CATALOG

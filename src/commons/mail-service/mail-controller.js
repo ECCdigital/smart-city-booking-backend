@@ -441,6 +441,8 @@ class MailController {
     bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
     const tenant = await TenantManager.getTenant(tenantId);
     const includeQRCode = tenant.enablePublicStatusView;
+    const receiptEnableBCC =
+      attachments && attachments.length > 0 ? tenant.receiptEnableBCC : false;
 
     const snippetTemplateString = `
     <div style="font-family: sans-serif;">
@@ -471,7 +473,7 @@ class MailController {
         title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
         attachments,
         message: snippetHtml,
-        sendBCC: false,
+        sendBCC: receiptEnableBCC,
         addRejectionLink: true,
       });
     } else {
@@ -484,8 +486,8 @@ class MailController {
           title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
           message: snippetHtml,
           includeQRCode: includeQRCode,
-          attachments: undefined,
-          sendBCC: false,
+          attachments,
+          sendBCC: receiptEnableBCC,
           addRejectionLink: true,
         });
       }
@@ -577,7 +579,7 @@ class MailController {
         message: snippetHtml,
         includeQRCode: false,
         attachments,
-        sendBCC: false,
+        sendBCC: true,
         addRejectionLink: false,
       });
     } else {
@@ -591,7 +593,7 @@ class MailController {
           message: snippetHtml,
           includeQRCode: false,
           attachments,
-          sendBCC: false,
+          sendBCC: true,
           addRejectionLink: false,
         });
       }
@@ -1165,6 +1167,54 @@ class MailController {
       mailTemplate: tenant.genericMailTemplate,
       model: {
         title: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
+        content: snippetHtml,
+      },
+      useInstanceMail: tenant.useInstanceMail,
+    });
+  }
+
+  static async sendInvitationEmail({
+    sendTo,
+    tenantId,
+    token,
+  }) {
+
+    const tenant = await TenantManager.getTenant(tenantId);
+    const invitationUrl = `${process.env.FRONTEND_URL}/auth/invitation/${tenantId}?token=${token}`;
+
+    const snippetTemplateString = `
+        <p>Sie wurden zum Smart City Booking Mandanten {{tenantName}} eingeladen.</p>
+  
+        <p>
+          Bitte klicken Sie auf den nachfolgenden Button, um die Einladung anzunehmen:
+        </p>
+  
+        <p style="text-align: center;">
+          <a href="{{invitationUrl}}"
+             style="
+               background-color: #0055a5;
+               color: #ffffff;
+               padding: 12px 24px;
+               border-radius: 4px;
+               text-decoration: none;
+               font-weight: bold;
+               display: inline-block;">
+            Einladung annehmen
+          </a>
+        </p>`;
+
+    const snippetHtml = renderSnippet(snippetTemplateString, {
+      tenantName: tenant.name,
+      invitationUrl,
+      supportEmail: tenant.mail,
+    });
+
+    await MailerService.send({
+      address: sendTo,
+      subject: `Smart City Booking - Einladung zum ${tenant.name} Mandanten`,
+      mailTemplate: tenant.genericMailTemplate,
+      model: {
+        title: `Smart City Booking - Einladung zum ${tenant.name} Mandanten`,
         content: snippetHtml,
       },
       useInstanceMail: tenant.useInstanceMail,

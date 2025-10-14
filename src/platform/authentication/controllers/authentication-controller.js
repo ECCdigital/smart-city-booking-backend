@@ -4,6 +4,7 @@ const { USER_HOOK_TYPES } = require("../../../commons/entities/user/userHook");
 const bunyan = require("bunyan");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const SsoService = require("../../../commons/services/sso/sso-service");
+const UserService = require("../../../commons/services/user-service");
 
 const JwtHelper = require('../../../commons/utilities/jwt-helper');
 
@@ -97,42 +98,38 @@ class AuthenticationController {
     }
   }
 
-  static signup(request, response) {
-    if (
-      request.body.id &&
-      request.body.password &&
-      request.body.firstName &&
-      request.body.lastName
-    ) {
-      UserManager.getUser(request.body.id).then((user) => {
-        if (user) {
-          response.sendStatus(409);
-        } else {
-          const user = new User({
-            id: request.body.id,
-            secret: undefined,
-            firstName: request.body.firstName,
-            lastName: request.body.lastName,
-            company: request.body.company,
-          });
-          user.setPassword(request.body.password);
+  static async signup(request, response) {
+    try {
+      const {
+        id: userID,
+        password,
+        firstName,
+        lastName,
+        company,
+        nextUrl,
+      } = request.body;
 
-          UserManager.signupUser(user)
-            .then(async (createdUser) => {
-              logger.info(`User ${createdUser.id} signed up.`);
-              await UserManager.requestVerification(createdUser);
-              await MailController.sendUserCreated(createdUser.id);
+      const existingUser = await UserManager.getUser(userID);
 
-              response.sendStatus(201);
-            })
-            .catch((err) => {
-              logger.error(err);
-              response.status(500).send("could not signup user");
-            });
-        }
+      if (existingUser) {
+        return response.sendStatus(409);
+      }
+
+      const user = new User({
+        id: userID,
+        secret: undefined,
+        firstName: firstName,
+        lastName: lastName,
+        company: company,
       });
-    } else {
-      response.sendStatus(400);
+      user.setPassword(password);
+
+      await UserService.singUpUser(user, nextUrl);
+
+      return response.sendStatus(201);
+    } catch (error) {
+      logger.error("Could not sign up user", error);
+      return response.status(error.status || 500).send(error.message);
     }
   }
 
@@ -170,18 +167,12 @@ class AuthenticationController {
   }
 
   static async releaseHook(request, response) {
-    const hookId = request.params.hookId;
+    const hookID = request.params.hookId;
 
     try {
-      const hookType = await UserManager.releaseHook(hookId);
-      let additionalUrl = "";
-      if (hookType === USER_HOOK_TYPES.VERIFY) {
-        additionalUrl = "/email/verify";
-      } else if (hookType === USER_HOOK_TYPES.RESET_PASSWORD) {
-        additionalUrl = "/password/confirmed";
-      }
+      const additionalUrl = await UserService.releaseHook(hookID);
 
-      logger.info(`Hook ${hookId} released.`);
+      logger.info(`Hook ${hookID} released.`);
 
       response.redirect(`${process.env.FRONTEND_URL}${additionalUrl}`);
     } catch (err) {

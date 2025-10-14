@@ -1,6 +1,7 @@
 const MailController = require("../../mail-service/mail-controller");
 const TenantManager = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
+const MembershipManager = require("../../data-managers/membership-manager");
 
 class WorkflowAction {
   constructor(action) {
@@ -34,9 +35,9 @@ class EmailAction extends WorkflowAction {
 
     if (this._action.receiverType === "role") {
       for (const role of this._action.sendTo) {
-        const users = await TenantManager.getTenantUsersByRoles(
+        const users = await MembershipManager.getMembershipsByTenantAndRoles(
           this.tenantId,
-          role,
+          [role],
         );
         for (const user of users) {
           receivers.add(user.userId);
@@ -77,15 +78,32 @@ class BookingStatusAction extends WorkflowAction {
 
     for (const bs of this._action.bookingStatus) {
       if (bs === "commit") {
-        await bookingService.commitBooking(this.tenantId, {
-          id: this.bookingId,
-        });
+        console.log("Committing booking as part of workflow action");
+        await bookingService.commitBooking(
+          this.tenantId,
+          {
+            id: this.bookingId,
+          },
+          true,
+        );
       }
       if (bs === "paid") {
-        await bookingService.setBookingPayed(this.tenantId, this.bookingId);
+        console.log("Setting booking as paid as part of workflow action");
+        await bookingService.setBookingPayed({
+          tenantId: this.tenantId,
+          bookingId: this.bookingId,
+          skipWorkflow: true,
+        });
       }
       if (bs === "reject") {
-        await bookingService.rejectBooking(this.tenantId, this.bookingId);
+        console.log("Rejecting booking as part of workflow action");
+        await bookingService.rejectBooking(
+          this.tenantId,
+          this.bookingId,
+          "",
+          null,
+          true,
+        );
       }
     }
   }

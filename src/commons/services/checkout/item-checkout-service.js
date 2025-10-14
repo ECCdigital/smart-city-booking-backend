@@ -1,5 +1,6 @@
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
+const MembershipManager = require("../../data-managers/membership-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
@@ -38,7 +39,7 @@ class CheckoutPermissions {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await TenantManager.getTenantUsersByRoles(
+        await MembershipManager.getMembershipsByTenantAndRoles(
           tenantId,
           bookable.permittedRoles || [],
         )
@@ -64,7 +65,7 @@ class ItemCheckoutService {
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string} couponCode The coupon code
-   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations. 
+   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations.
    *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
    */
   constructor(
@@ -136,7 +137,7 @@ class ItemCheckoutService {
     const freeBookingUsers = [
       ...(this.originBookable.freeBookingUsers || []),
       ...(
-        await TenantManager.getTenantUsersByRoles(
+        await MembershipManager.getMembershipsByTenantAndRoles(
           this.tenantId,
           this.originBookable.freeBookingRoles || [],
         )
@@ -612,7 +613,7 @@ class ItemCheckoutService {
         .reduce((acc, bi) => acc + bi.amount, 0);
 
       if (
-        !!event.attendees.maxAttendees &&
+        !!event?.attendees.maxAttendees &&
         amountBooked + this.amount > event.attendees.maxAttendees
       ) {
         throw {
@@ -627,9 +628,9 @@ class ItemCheckoutService {
       return {
         checkType: CHECK_TYPES.EVENT_SEATS,
         available: true,
-        totalCapacity: event.attendees.maxAttendees,
+        totalCapacity: event?.attendees.maxAttendees,
         booked: amountBooked,
-        remaining: event.attendees.maxAttendees - amountBooked,
+        remaining: event?.attendees.maxAttendees - amountBooked,
       };
     }
 

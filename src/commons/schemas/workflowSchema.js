@@ -19,7 +19,12 @@ const workflowSchemaDefinition = {
   description: { type: String, default: "" },
   states: { type: [stateSchemaDefinition], default: [] },
   archive: { type: [Schema.Types.Mixed], default: [] },
-  defaultState: { type: String, default: "" },
+  eventStateMapping: {
+    onCreate: { type: String, default: "" },
+    onCommit: { type: String, default: "" },
+    onReject: { type: String, default: "" },
+    onPay: { type: String, default: "" },
+  },
   active: { type: Boolean, default: false },
 };
 

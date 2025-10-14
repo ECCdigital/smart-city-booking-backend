@@ -132,7 +132,7 @@ async function _createInvoiceNumber(tenantId, bookingId) {
     invoiceId = await IdGenerator.next(tenantId, 4, "invoice");
   }
 
-  const invoiceNumber = `${tenant.receiptNumberPrefix}-${invoiceId}-${revision}`;
+  const invoiceNumber = `${tenant.receiptNumberPrefix ? tenant.receiptNumberPrefix + '-' : ''}${invoiceId}-${revision}`;
 
   return {
     invoiceNumber,

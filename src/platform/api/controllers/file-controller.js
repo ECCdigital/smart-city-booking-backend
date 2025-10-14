@@ -2,6 +2,7 @@ const {
   NextcloudManager,
 } = require("../../../commons/data-managers/file-manager");
 const bunyan = require("bunyan");
+const mime = require("mime-types");
 
 const logger = bunyan.createLogger({
   name: "next-cloud-controller.js",
@@ -77,13 +78,41 @@ class FileController {
       const isProtected = filename.startsWith(`/${PROTECTED_PATH}/`);
 
       if (isPublicPath || (isProtected && request.isAuthenticated())) {
-        const content = await NextcloudManager.getFile(tenant, filename);
-        logger.info(`${tenant} -- sending file ${filename}`);
-        response.setHeader(
-          "Content-Disposition",
-          `attachment; filename=${filename}`,
+        const stat = await NextcloudManager.statFile(tenant, filename);
+
+        const contentType =
+          mime.lookup(filename) || stat?.mime || "application/octet-stream";
+        response.setHeader("Content-Type", contentType);
+
+        if (isPublicPath) {
+          response.setHeader(
+            "Cache-Control",
+            "public, max-age=31536000, immutable",
+          );
+        } else {
+          response.setHeader("Cache-Control", "private, max-age=0, no-cache");
+        }
+
+        if (stat?.etag) response.setHeader("ETag", stat.etag);
+        if (stat?.lastmod) response.setHeader("Last-Modified", stat.lastmod);
+
+        const inm = request.headers["if-none-match"];
+        const ims = request.headers["if-modified-since"];
+        const notModifiedByEtag = inm && stat?.etag && inm === stat.etag;
+        const notModifiedByTime =
+          ims && stat?.lastmod && new Date(stat.lastmod) <= new Date(ims);
+        if (notModifiedByEtag || notModifiedByTime) {
+          return response.status(304).end();
+        }
+
+        const stream = await NextcloudManager.createReadStream(
+          tenant,
+          filename,
         );
-        response.status(200).send(content);
+
+        logger.info(`${tenant} -- sending file ${filename}`);
+        response.setHeader("Content-Disposition", "inline");
+        stream.pipe(response);
       } else {
         logger.warn(`${tenant} -- Unauthorized.`);
         response.status(401).send("Unauthorized.");

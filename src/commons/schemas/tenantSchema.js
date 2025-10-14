@@ -24,6 +24,7 @@ const tenantSchemaDefinition = {
   receiptTemplate: { type: String, default: "" },
   receiptNumberPrefix: { type: String, default: "" },
   receiptCount: { type: Object, default: {} },
+  receiptEnableBCC: { type: Boolean, default: false },
   invoiceTemplate: { type: String, default: "" },
   invoiceNumberPrefix: { type: String, default: "" },
   invoiceCount: { type: Object, default: {} },
@@ -32,13 +33,7 @@ const tenantSchemaDefinition = {
   maxBookingAdvanceInMonths: { type: Number, default: null },
   defaultEventCreationMode: { type: String, default: "" },
   enablePublicStatusView: { type: Boolean, default: false },
-  ownerUserIds: { type: Array, default: [] },
-  users: [
-    {
-      userId: { type: String, required: true },
-      roles: { type: [String], default: [] },
-    },
-  ],
+  notifyOnNewBooking: { type: Boolean, default: true },
 };
 
 module.exports = tenantSchemaDefinition;

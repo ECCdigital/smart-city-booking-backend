@@ -5,6 +5,8 @@ const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
+const InvitationController = require("./controllers/invitation-controller");
+const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
 
 const router = express.Router({ mergeParams: true });
@@ -96,10 +98,22 @@ router.post(
   TenantController.removeOwner,
 );
 
+router.post(
+  "/tenants/:id/remove-user-role",
+  AuthenticationController.isSignedIn,
+  TenantController.removeUserRole,
+);
+
 router.get(
   "/tenants/:id/users",
   AuthenticationController.isSignedIn,
   TenantController.getUsers,
+);
+
+router.post(
+  "/tenants/:id/update-user-status",
+  AuthenticationController.isSignedIn,
+  TenantController.updateUserStatus,
 );
 
 // USERS
@@ -145,6 +159,20 @@ router.get(
 
 router.get("/holidays", HolidayController.getHolidays);
 
+//INVITATIONS
+router.get(
+  "/invitations/my",
+  AuthenticationController.isSignedIn,
+  InvitationController.getMyInvitations,
+);
+
+// MEMBERSHIPS
+// ===========
+router.get(
+  "/memberships/my/pending",
+  AuthenticationController.isSignedIn,
+  MembershipController.getMyPendingMemberships,
+);
 // Catalog
 router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
 router.get("/catalog/themes/:slug", CatalogController.getTheme);

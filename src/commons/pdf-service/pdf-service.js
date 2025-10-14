@@ -86,6 +86,10 @@ class PdfService {
     );
 
     const totalAmount = PdfService.formatCurrency(booking.priceEur);
+    const totalNetto = PdfService.formatCurrency(
+      booking.priceEur - booking.vatIncludedEur,
+    );
+    const totalVat = PdfService.formatCurrency(booking.vatIncludedEur);
     const bookingPeriod =
       booking.timeBegin && booking.timeEnd
         ? `${PdfService.formatDateTime(booking.timeBegin)} – ${PdfService.formatDateTime(booking.timeEnd)}`
@@ -114,7 +118,9 @@ class PdfService {
     const bookingEntries = `
     <table class="booking-detail">
       <tr><td>Buchungsnummer</td><td>${booking.id}</td></tr>
-      <tr><td>Gesamtbetrag</td><td>${totalAmount}</td></tr>
+      <tr><td>Gesamt (netto)</td><td>${totalNetto}</td></tr>
+      <tr><td>zzgl. MwSt.</td><td>${totalVat}</td></tr>
+      <tr><td>Gesamt (brutto)</td><td>${totalAmount}</td></tr>
       <tr><td>Zahlungsdatum</td><td>${payDate}</td></tr>
       <tr><td>Zahlungsmethode</td><td>${paymentMethod}</td></tr>
       <tr><td>Buchungszeitraum</td><td>${bookingPeriod}</td></tr>
@@ -404,7 +410,7 @@ class PdfService {
       <tr class="heading">
         <td>Buchungs-ID</td>
         <td>Zeitraum</td>
-        <td style="text-align: right;">Gesamt (Netto)</td>
+        <td style="text-align: right;">Gesamt (netto)</td>
       </tr>
     </thead>
     <tbody>`;
@@ -460,15 +466,15 @@ class PdfService {
     mainContent += `
     <table>
       <tr>
-        <td>Gesamtsumme (Netto):</td>
+        <td>Gesamt (netto):</td>
         <td>${PdfService.formatCurrency(totalNetto)}</td>
       </tr>
       <tr>
-        <td>Gesamte MwSt.:</td>
+        <td>zzgl. MwSt.:</td>
         <td>${PdfService.formatCurrency(totalVat)}</td>
       </tr>
       <tr>
-        <td><strong>Gesamtsumme (Brutto):</strong></td>
+        <td><strong>Gesamt (brutto):</strong></td>
         <td><strong>${PdfService.formatCurrency(totalBrutto)}</strong></td>
       </tr>
     </table>`;
