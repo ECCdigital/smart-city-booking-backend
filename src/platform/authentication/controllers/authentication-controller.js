@@ -1,8 +1,12 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
+const { USER_HOOK_TYPES } = require("../../../commons/entities/user/userHook");
 const bunyan = require("bunyan");
+const MailController = require("../../../commons/mail-service/mail-controller");
 const SsoService = require("../../../commons/services/sso/sso-service");
 const UserService = require("../../../commons/services/user-service");
+
+const JwtHelper = require('../../../commons/utilities/jwt-helper');
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -15,20 +19,26 @@ const logger = bunyan.createLogger({
  * @author Lennard Scheffler, lennard.scheffler@e-c-crew.de
  */
 class AuthenticationController {
-  static isSignedIn(request, response, next) {
-    if (request.isAuthenticated()) {
-      next();
-    } else {
-      response.sendStatus(401);
-    }
-  }
+  static isSignedIn = require('../../../middleware/jwt-auth');
 
   static async signin(request, response) {
+
     const user = request.user;
     try {
+
       const permissions = await UserManager.getUserPermissions(user.id);
+      const requestedUser = await UserManager.getUser(user.id, false);
+
+      const accessToken = JwtHelper.generateToken(user);
+      const refreshToken = JwtHelper.generateRefreshToken(user);
+
       logger.info(`User ${user.id} signed in.`);
-      response.status(200).send({ user, permissions });
+      response.status(200).json({
+        user: requestedUser,
+        permissions,
+        accessToken,
+        refreshToken
+      });
     } catch (error) {
       logger.error(`could not sign in ${user?.id}`, error);
       response.sendStatus(500);
@@ -43,16 +53,13 @@ class AuthenticationController {
       const user = await SsoService.handleLogin(token);
 
       if (user) {
-        request.login(user, { session: true }, async (err) => {
-          if (err) {
-            return next(err);
-          }
-          request.session.save((err) => {
-            if (err) {
-              return next(err);
-            }
-            response.status(200).send(user);
-          });
+        const accessToken = JwtHelper.generateToken(user);
+        const refreshToken = JwtHelper.generateRefreshToken(user);
+
+        response.status(200).json({
+          user,
+          accessToken,
+          refreshToken
         });
       } else {
         response.sendStatus(401);
@@ -60,6 +67,34 @@ class AuthenticationController {
     } catch (error) {
       response.status(error.status || 500).send(error.message);
       logger.error(error);
+    }
+  }
+
+  static async refreshToken(request, response) {
+    try {
+      const { refreshToken } = request.body;
+
+      if (!refreshToken) {
+        return response.status(401).json({ message: 'Refresh token required' });
+      }
+
+      const decoded = JwtHelper.verifyRefreshToken(refreshToken);
+      const user = await UserManager.getUser(decoded.id);
+
+      if (!user) {
+        return response.status(401).json({ message: 'User not found' });
+      }
+
+      const newAccessToken = JwtHelper.generateToken(user);
+      const newRefreshToken = JwtHelper.generateRefreshToken(user);
+
+      response.json({
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken
+      });
+    } catch (error) {
+      logger.error('Token refresh failed:', error);
+      response.status(401).json({ message: 'Invalid refresh token' });
     }
   }
 
@@ -110,13 +145,8 @@ class AuthenticationController {
     }
   }
 
-  static signout(request, response, next) {
-    request.logout(function (err) {
-      if (err) {
-        return next(err);
-      }
-    });
-    response.sendStatus(200);
+  static signout(request, response) {
+    response.status(200).json({ message: 'Logged out successfully' });
   }
 
   static async me(request, response) {
@@ -128,8 +158,9 @@ class AuthenticationController {
       }
 
       const permissions = await UserManager.getUserPermissions(user.id);
+      const requestedUser = await UserManager.getUser(user.id, false);
 
-      response.status(200).send({ user, permissions });
+      response.status(200).send({ user: requestedUser, permissions });
     } catch {
       response.sendStatus(500);
     }

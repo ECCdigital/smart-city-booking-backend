@@ -7,14 +7,22 @@ const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
+const CatalogController = require("./controllers/catalog-controller");
 
 const router = express.Router({ mergeParams: true });
 
 // INSTANCES
 // =========
 
+// Public
+router.get("/instances/public", InstanceController.getPublicInstance);
+
 // Protected
-router.get("/instances", InstanceController.getInstance);
+router.get(
+  "/instances",
+  AuthenticationController.isSignedIn,
+  InstanceController.getInstance,
+);
 router.put(
   "/instances",
   AuthenticationController.isSignedIn,
@@ -25,11 +33,7 @@ router.put(
 // =======
 
 // Public
-router.get(
-  "/tenants",
-  AuthenticationController.isSignedIn,
-  TenantController.getTenants,
-);
+router.get("/tenants/public", TenantController.getPublicTenants);
 router.get(
   "/tenants/:id",
   AuthenticationController.isSignedIn,
@@ -38,6 +42,11 @@ router.get(
 router.get("/tenants/:id/payment-apps", TenantController.getActivePaymentApps);
 
 // Protected
+router.get(
+  "/tenants",
+  AuthenticationController.isSignedIn,
+  TenantController.getTenants,
+);
 router.put(
   "/tenants",
   AuthenticationController.isSignedIn,
@@ -164,4 +173,13 @@ router.get(
   AuthenticationController.isSignedIn,
   MembershipController.getMyPendingMemberships,
 );
+// Catalog
+router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
+router.get("/catalog/themes/:slug", CatalogController.getTheme);
+router.get(
+  "/catalog/availability/:slug",
+  AuthenticationController.isSignedIn,
+  CatalogController.slugAvailability,
+);
+
 module.exports = router;

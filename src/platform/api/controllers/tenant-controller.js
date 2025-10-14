@@ -53,6 +53,17 @@ class TenantController {
     }
   }
 
+  static async getPublicTenants(request, response) {
+    try {
+      const tenants = await TenantManager.getTenants();
+      const publicTenants = tenants.map((tenant) => tenant.exportPublic());
+      response.status(200).send(publicTenants);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get public tenants");
+    }
+  }
+
   static async getTenant(request, response) {
     try {
       const user = request.user;

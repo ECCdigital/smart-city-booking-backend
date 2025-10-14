@@ -3,21 +3,24 @@ const PermissionService = require("../../../commons/services/permission-service"
 
 class InstanceController {
   static async getInstance(request, response) {
-    const publicInstance = request.query.publicInstance === "true";
     const user = request.user;
     try {
       const instance = await InstanceManger.getInstance();
-
-      if (publicInstance) {
-        instance.removePrivateData();
-        return response.status(200).send(instance);
-      }
 
       const hasPermission = await PermissionService._isInstanceOwner(user.id);
       if (!hasPermission) {
         return response.status(403).send({ message: "Permission denied" });
       }
+      response.status(200).send(instance);
+    } catch (error) {
+      response.status(500).send({ message: error.message });
+    }
+  }
 
+  static async getPublicInstance(request, response) {
+    try {
+      const instance = await InstanceManger.getInstance();
+      instance.removePrivateData();
       response.status(200).send(instance);
     } catch (error) {
       response.status(500).send({ message: error.message });
