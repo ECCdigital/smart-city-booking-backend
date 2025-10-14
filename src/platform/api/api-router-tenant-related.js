@@ -9,6 +9,7 @@ const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
+const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const {
@@ -328,6 +329,78 @@ router.delete(
   "/roles/:id",
   AuthenticationController.isSignedIn,
   RoleController.removeRole,
+);
+
+// INVITATIONS
+router.get(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.getInvitationsByTenantID,
+);
+
+router.post(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.createInvitation,
+);
+
+router.delete(
+  "/invitations/:token",
+  AuthenticationController.isSignedIn,
+  InvitationController.deleteInvitation,
+);
+
+router.get(
+  "/invitations/:token/verify",
+  AuthenticationController.isSignedIn,
+  InvitationController.verifyInvitationToken,
+);
+router.post(
+  "/invitations/:token/accept",
+  AuthenticationController.isSignedIn,
+  InvitationController.acceptInvitationToken,
+);
+
+router.post(
+  "/invitations/:token/reject",
+  AuthenticationController.isSignedIn,
+  InvitationController.rejectInvitationToken,
+);
+
+router.post(
+  "/invitations/resend",
+  AuthenticationController.isSignedIn,
+  InvitationController.resendInvitation,
+);
+
+router.get(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.getChallenges,
+);
+
+router.post(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.createChallenge,
+);
+
+router.put(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.updateChallenge,
+);
+
+router.delete(
+  "/challenges/:id",
+  AuthenticationController.isSignedIn,
+  TenantController.deleteChallenge,
+);
+
+router.post(
+  "/invitations/approve",
+  AuthenticationController.isSignedIn,
+  InvitationController.approveManualChallenge,
 );
 
 module.exports = router;

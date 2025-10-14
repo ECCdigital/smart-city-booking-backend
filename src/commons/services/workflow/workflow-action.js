@@ -1,6 +1,7 @@
 const MailController = require("../../mail-service/mail-controller");
 const TenantManager = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
+const MembershipManager = require("../../data-managers/membership-manager");
 
 class WorkflowAction {
   constructor(action) {
@@ -34,9 +35,9 @@ class EmailAction extends WorkflowAction {
 
     if (this._action.receiverType === "role") {
       for (const role of this._action.sendTo) {
-        const users = await TenantManager.getTenantUsersByRoles(
+        const users = await MembershipManager.getMembershipsByTenantAndRoles(
           this.tenantId,
-          role,
+          [role],
         );
         for (const user of users) {
           receivers.add(user.userId);

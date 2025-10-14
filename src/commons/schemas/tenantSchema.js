@@ -34,13 +34,6 @@ const tenantSchemaDefinition = {
   defaultEventCreationMode: { type: String, default: "" },
   enablePublicStatusView: { type: Boolean, default: false },
   notifyOnNewBooking: { type: Boolean, default: true },
-  ownerUserIds: { type: Array, default: [] },
-  users: [
-    {
-      userId: { type: String, required: true },
-      roles: { type: [String], default: [] },
-    },
-  ],
 };
 
 module.exports = tenantSchemaDefinition;
