@@ -441,6 +441,8 @@ class MailController {
     bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
     const tenant = await TenantManager.getTenant(tenantId);
     const includeQRCode = tenant.enablePublicStatusView;
+    const receiptEnableBCC =
+      attachments && attachments.length > 0 ? tenant.receiptEnableBCC : false;
 
     const snippetTemplateString = `
     <div style="font-family: sans-serif;">
@@ -471,7 +473,7 @@ class MailController {
         title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
         attachments,
         message: snippetHtml,
-        sendBCC: false,
+        sendBCC: receiptEnableBCC,
         addRejectionLink: true,
       });
     } else {
@@ -485,7 +487,7 @@ class MailController {
           message: snippetHtml,
           includeQRCode: includeQRCode,
           attachments,
-          sendBCC: false,
+          sendBCC: receiptEnableBCC,
           addRejectionLink: true,
         });
       }

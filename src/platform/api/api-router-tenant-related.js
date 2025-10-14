@@ -95,6 +95,11 @@ router.get(
   AuthenticationController.isSignedIn,
   EventController.countCheck,
 );
+router.get(
+  "/events/:id/count",
+  AuthenticationController.isSignedIn,
+  EventController.getBookedSeatsCount,
+);
 
 // BOOKINGS
 // ========
@@ -134,6 +139,11 @@ router.get(
   "/bookings/:id/commit",
   AuthenticationController.isSignedIn,
   BookingController.commitBooking,
+);
+router.post(
+  "/bookings/:id/pay",
+  AuthenticationController.isSignedIn,
+  BookingController.payBooking,
 );
 router.post(
   "/bookings/:id/reject",
@@ -188,6 +198,11 @@ router.post(
   "/group-bookings/:id/commit",
   AuthenticationController.isSignedIn,
   GroupBookingController.commitGroupBooking,
+);
+router.post(
+  "/group-bookings/:id/pay",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.payGroupBooking,
 );
 router.post(
   "/group-bookings/:id/reject",

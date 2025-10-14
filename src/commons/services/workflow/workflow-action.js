@@ -78,15 +78,32 @@ class BookingStatusAction extends WorkflowAction {
 
     for (const bs of this._action.bookingStatus) {
       if (bs === "commit") {
-        await bookingService.commitBooking(this.tenantId, {
-          id: this.bookingId,
-        });
+        console.log("Committing booking as part of workflow action");
+        await bookingService.commitBooking(
+          this.tenantId,
+          {
+            id: this.bookingId,
+          },
+          true,
+        );
       }
       if (bs === "paid") {
-        await bookingService.setBookingPayed(this.tenantId, this.bookingId);
+        console.log("Setting booking as paid as part of workflow action");
+        await bookingService.setBookingPayed({
+          tenantId: this.tenantId,
+          bookingId: this.bookingId,
+          skipWorkflow: true,
+        });
       }
       if (bs === "reject") {
-        await bookingService.rejectBooking(this.tenantId, this.bookingId);
+        console.log("Rejecting booking as part of workflow action");
+        await bookingService.rejectBooking(
+          this.tenantId,
+          this.bookingId,
+          "",
+          null,
+          true,
+        );
       }
     }
   }

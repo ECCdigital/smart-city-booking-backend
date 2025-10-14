@@ -50,10 +50,18 @@ class CalendarController {
 
       const relatedIds = relatedBookables.map((rb) => rb.id);
 
-      let bookings = await BookingManager.getRelatedBookingsBatch(
-        tenant,
-        relatedIds,
-      );
+      relatedIds.push(bookable.id);
+
+      let bookings;
+
+      if (bookableIds && bookableIds.length > 0) {
+        bookings = await BookingManager.getRelatedBookingsBatch(
+          tenant,
+          relatedIds,
+        );
+      } else {
+        bookings = await BookingManager.getTenantBookings(tenant);
+      }
 
       const bookingMap = new Map();
       for (const booking of bookings) {

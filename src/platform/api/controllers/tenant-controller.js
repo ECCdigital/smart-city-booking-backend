@@ -207,6 +207,7 @@ class TenantController {
           "noreplyGraphClientSecret",
           "receiptTemplate",
           "receiptNumberPrefix",
+          "receiptEnableBCC",
           "invoiceTemplate",
           "invoiceNumberPrefix",
           "paymentPurposeSuffix",
@@ -214,6 +215,7 @@ class TenantController {
           "maxBookingAdvanceInMonths",
           "defaultEventCreationMode",
           "enablePublicStatusView",
+          "notifyOnNewBooking",
         ];
 
         fields.forEach((field) => {
