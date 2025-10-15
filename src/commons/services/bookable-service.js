@@ -124,7 +124,12 @@ class BookableService {
         remaining: lowestAvailability?.remaining ?? null,
       };
     } catch (error) {
-      return this._createUnavailableResponse();
+      const occupancyData = this._extractOccupancyFromFailedCheck(error);
+
+      return {
+        isAvailable: false,
+        ...occupancyData,
+      };
     }
   }
 
