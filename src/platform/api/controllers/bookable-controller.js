@@ -477,10 +477,13 @@ class BookableController {
   static async getBookableOccupancy(request, response) {
     try {
       const { tenant: tenantId, id: bookableId } = request.params;
-      const { timeBegin, timeEnd } = request.query;
+      const {
+        timeBegin,
+        timeEnd,
+        ignoreRelatedEntities: rawIgnoreRelatedEntities,
+      } = request.query;
       const user = request.user;
-      const ignoreRelatedEntities =
-        request.query.ignoreRelatedEntities === "true";
+      const ignoreRelatedEntities = rawIgnoreRelatedEntities === "true";
 
       if (!bookableId) {
         logger.warn(

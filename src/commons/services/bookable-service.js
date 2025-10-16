@@ -21,8 +21,8 @@ class BookableService {
    * @param {Object} params - The parameters for retrieving occupancy information.
    * @param {string} params.bookableId - The unique identifier of the bookable item.
    * @param {string} params.tenantId - The identifier of the tenant requesting the occupancy.
-   * @param {Date} params.timeBegin - The start time of the occupancy check period.
-   * @param {Date} params.timeEnd - The end time of the occupancy check period.
+   * @param {number} params.timeBegin - The start time of the occupancy check period.
+   * @param {number} params.timeEnd - The end time of the occupancy check period.
    * @param {string|null} [params.userId=null] - The identifier of the user requesting the occupancy, if applicable.
    * @param {boolean} [ignoreRelatedEntities=false] - A flag indicating whether to only check the availability of the bookable item itself, ignoring related entities.
    * @return {Promise<Object>} A promise that resolves to an object containing occupancy details, including the bookable ID, title, and availability data. In case of an error, it returns an error response object.
