@@ -1,12 +1,10 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
-const { USER_HOOK_TYPES } = require("../../../commons/entities/user/userHook");
 const bunyan = require("bunyan");
-const MailController = require("../../../commons/mail-service/mail-controller");
 const SsoService = require("../../../commons/services/sso/sso-service");
 const UserService = require("../../../commons/services/user-service");
 
-const JwtHelper = require('../../../commons/utilities/jwt-helper');
+const JwtHelper = require("../../../commons/utilities/jwt-helper");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -19,13 +17,11 @@ const logger = bunyan.createLogger({
  * @author Lennard Scheffler, lennard.scheffler@e-c-crew.de
  */
 class AuthenticationController {
-  static isSignedIn = require('../../../middleware/jwt-auth');
+  static isSignedIn = require("../../../middleware/jwt-auth");
 
   static async signin(request, response) {
-
     const user = request.user;
     try {
-
       const permissions = await UserManager.getUserPermissions(user.id);
       const requestedUser = await UserManager.getUser(user.id, false);
 
@@ -37,7 +33,7 @@ class AuthenticationController {
         user: requestedUser,
         permissions,
         accessToken,
-        refreshToken
+        refreshToken,
       });
     } catch (error) {
       logger.error(`could not sign in ${user?.id}`, error);
@@ -59,7 +55,7 @@ class AuthenticationController {
         response.status(200).json({
           user,
           accessToken,
-          refreshToken
+          refreshToken,
         });
       } else {
         response.sendStatus(401);
@@ -75,14 +71,14 @@ class AuthenticationController {
       const { refreshToken } = request.body;
 
       if (!refreshToken) {
-        return response.status(401).json({ message: 'Refresh token required' });
+        return response.status(401).json({ message: "Refresh token required" });
       }
 
       const decoded = JwtHelper.verifyRefreshToken(refreshToken);
       const user = await UserManager.getUser(decoded.id);
 
       if (!user) {
-        return response.status(401).json({ message: 'User not found' });
+        return response.status(401).json({ message: "User not found" });
       }
 
       const newAccessToken = JwtHelper.generateToken(user);
@@ -90,11 +86,11 @@ class AuthenticationController {
 
       response.json({
         accessToken: newAccessToken,
-        refreshToken: newRefreshToken
+        refreshToken: newRefreshToken,
       });
     } catch (error) {
-      logger.error('Token refresh failed:', error);
-      response.status(401).json({ message: 'Invalid refresh token' });
+      logger.error("Token refresh failed:", error);
+      response.status(401).json({ message: "Invalid refresh token" });
     }
   }
 
@@ -146,7 +142,7 @@ class AuthenticationController {
   }
 
   static signout(request, response) {
-    response.status(200).json({ message: 'Logged out successfully' });
+    response.status(200).json({ message: "Logged out successfully" });
   }
 
   static async me(request, response) {
@@ -182,8 +178,8 @@ class AuthenticationController {
   }
 
   static resetPassword(request, response) {
-    var id = request.body.id;
-    var password = request.body.password;
+    const id = request.body.id;
+    const password = request.body.password;
 
     if (id && password) {
       UserManager.getUser(id, true)
