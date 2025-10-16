@@ -7,25 +7,23 @@ const AuthenticationController = require("./controllers/authentication-controlle
 
 router.get("/signout", AuthenticationController.signout);
 router.post("/signup", AuthenticationController.signup);
+router.post("/refresh", AuthenticationController.refreshToken);
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);
 router.post("/resetpassword", AuthenticationController.resetPassword);
 router.post("/check-email", AuthenticationController.checkEmail);
 
 router.post("/signin", (req, res, next) => {
-  passport.authenticate("local-signin", (err, user, info) => {
+  passport.authenticate("local-signin", { session: false }, (err, user, info) => {
     if (err) {
-      return res.status(err.status).json({ message: err.message });
+      return res.status(err.status || 500).json({ message: err.message });
     }
     if (!user) {
-      return res.status(401).json({ message: "Authentication failed" });
+      return res.status(403).json({ message: "Authentication failed" });
     }
-    req.login(user, (err) => {
-      if (err) {
-        return next(err);
-      }
-      return AuthenticationController.signin(req, res, next);
-    });
+
+    req.user = user;
+    return AuthenticationController.signin(req, res, next);
   })(req, res, next);
 });
 router.post("/sso/signin", AuthenticationController.ssoLogin);

@@ -1,6 +1,6 @@
 {
   "name": "smart-city-booking-backend",
-  "version": "3.3.6",
+  "version": "3.4.0-rc.0",
   "description": "An open-source backend system for booking and managing resources in smart cities and regions.",
   "main": "src/server.js",
   "scripts": {
@@ -46,6 +46,7 @@
     "helmet": "^7.1.0",
     "json-logic-js": "^2.0.5",
     "jsonschema": "^1.4.1",
+    "jsonwebtoken": "^9.0.2",
     "microinvoice": "^1.0.6",
     "mime-types": "^3.0.1",
     "mock-require": "^3.0.3",

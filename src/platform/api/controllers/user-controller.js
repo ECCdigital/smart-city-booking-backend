@@ -2,7 +2,7 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const { RolePermission } = require("../../../commons/entities/role/role");
 
 const logger = bunyan.createLogger({
@@ -89,7 +89,7 @@ class UserController {
         response.sendStatus(403);
         return;
       }
-      const tenantUsers = await TenantManager.getTenantUsers(tenantId);
+      const tenantUsers = await MembershipManager.getMembershipsByTenantID(tenantId);
 
       logger.info(
         `Instance -- sending ${tenantUsers.length} users to user ${user?.id}`,
@@ -294,14 +294,6 @@ class UserController {
       await UserManager.storeUser(user);
 
       const updatedUser = await UserManager.getUser(user.id, false);
-
-      request.session.passport.user.firstName = updatedUser.firstName;
-      request.session.passport.user.lastName = updatedUser.lastName;
-      request.session.passport.user.phone = updatedUser.phone;
-      request.session.passport.user.address = updatedUser.address;
-      request.session.passport.user.zipCode = updatedUser.zipCode;
-      request.session.passport.user.city = updatedUser.city;
-      request.session.save();
 
       response.status(200).send(updatedUser);
     } catch (error) {

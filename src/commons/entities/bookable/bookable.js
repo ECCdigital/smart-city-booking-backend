@@ -18,7 +18,12 @@ const PRICE_TYPES = Object.freeze({
 class Bookable {
   constructor(params = {}) {
     const defaults = SchemaUtils.createDefaults(bookableSchemaDefinition);
-    Object.assign(this, defaults, params);
+    const allowedKeys = Object.keys(bookableSchemaDefinition);
+    const filteredParams = Object.fromEntries(
+      Object.entries(params).filter(([key]) => allowedKeys.includes(key))
+    );
+
+    Object.assign(this, defaults, filteredParams);
 
     // Update timestamp on modification
     this.timeUpdated = Date.now();
@@ -270,17 +275,32 @@ class Bookable {
   exportPublic() {
     return {
       id: this.id,
+      tenantId: this.tenantId,
       type: this.type,
       title: this.title,
       description: this.description,
       imgUrl: this.imgUrl,
+      flags: this.flags,
       tags: this.tags,
       location: this.location,
       isBookable: this.isBookable,
-      priceCategories: this.priceCategories,
-      priceType: this.priceType,
+      amount: this.amount,
       minBookingDuration: this.minBookingDuration,
       maxBookingDuration: this.maxBookingDuration,
+      bookingNotes: this.bookingNotes,
+      isScheduleRelated: this.isScheduleRelated,
+      isTimePeriodRelated: this.isTimePeriodRelated,
+      timePeriods: this.timePeriods,
+      isOpeningHoursRelated: this.isOpeningHoursRelated,
+      openingHours: this.openingHours,
+      isSpecialOpeningHoursRelated: this.isSpecialOpeningHoursRelated,
+      specialOpeningHours: this.specialOpeningHours,
+      isLongRange: this.isLongRange,
+      priceCategories: this.priceCategories,
+      priceType: this.priceType,
+      relatedBookableIds: this.relatedBookableIds,
+      checkoutBookableIds: this.checkoutBookableIds,
+      eventId: this.eventId,
       attachments: this.attachments,
     };
   }
