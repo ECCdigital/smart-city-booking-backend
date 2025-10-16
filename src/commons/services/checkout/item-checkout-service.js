@@ -59,11 +59,11 @@ class ItemCheckoutService {
    *
    * @param {Object} user The user object
    * @param {string} tenantId The tenant ID
-   * @param {string} timeBegin The timestamp of the beginning of the booking
-   * @param {string} timeEnd The timestamp of the end of the booking
+   * @param {number} timeBegin The timestamp of the beginning of the booking
+   * @param {number} timeEnd The timestamp of the end of the booking
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
-   * @param {string} couponCode The coupon code
+   * @param {string || null} couponCode The coupon code
    * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations. 
    *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
    */
