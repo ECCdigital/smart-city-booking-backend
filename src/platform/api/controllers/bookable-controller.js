@@ -479,6 +479,8 @@ class BookableController {
       const { tenant: tenantId, id: bookableId } = request.params;
       const { timeBegin, timeEnd } = request.query;
       const user = request.user;
+      const ignoreRelatedEntities =
+        request.query.ignoreRelatedEntities === "true";
 
       if (!bookableId) {
         logger.warn(
@@ -493,6 +495,7 @@ class BookableController {
         timeBegin,
         timeEnd,
         userId: user?.id,
+        ignoreRelatedEntities,
       });
 
       response.status(200).send(occupancy);

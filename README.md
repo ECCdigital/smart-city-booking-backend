@@ -223,7 +223,7 @@ The backend offers both public and protected API routes.
   - **id** (path): ID of the bookable resource
   - **timeBegin** (query, optional): Start time for the occupancy check (timestamp)
   - **timeEnd** (query, optional): End time for the occupancy check (timestamp)
-
+  - **ignoreRelatedEntities** (query, optional): If set to true, related entities are ignored in the occupancy calculation (default: false)
   _Response:_ JSON object containing:
   - **bookableId**: ID of the bookable resource
   - **title**: Title of the bookable resource

@@ -24,6 +24,7 @@ class BookableService {
    * @param {Date} params.timeBegin - The start time of the occupancy check period.
    * @param {Date} params.timeEnd - The end time of the occupancy check period.
    * @param {string|null} [params.userId=null] - The identifier of the user requesting the occupancy, if applicable.
+   * @param {boolean} [ignoreRelatedEntities=false] - A flag indicating whether to only check the availability of the bookable item itself, ignoring related entities.
    * @return {Promise<Object>} A promise that resolves to an object containing occupancy details, including the bookable ID, title, and availability data. In case of an error, it returns an error response object.
    */
   static async getOccupancy({
@@ -32,6 +33,7 @@ class BookableService {
     timeBegin,
     timeEnd,
     userId = null,
+    ignoreRelatedEntities = false,
   }) {
     let checkoutService = null;
     try {
@@ -49,8 +51,10 @@ class BookableService {
 
       await checkoutService.init(bookable);
 
-      const occupancyData =
-        await this._performAvailabilityCheck(checkoutService);
+      const occupancyData = await this._performAvailabilityCheck(
+        checkoutService,
+        ignoreRelatedEntities,
+      );
 
       return {
         bookableId,
@@ -72,11 +76,23 @@ class BookableService {
    * Performs an availability check using the provided checkout service and processes the results.
    *
    * @param {Object} checkoutService - The service used to perform the availability check. Must include a `checkAll` method and optionally a `hasEvent` flag.
+   * @param {boolean} ignoreRelatedEntities - A flag indicating whether to only check the availability of the bookable item itself, ignoring related entities.
    * @return {Promise<Object>} A promise that resolves to an object indicating availability status. If available, includes capacity details; otherwise, includes occupancy data or an unavailable response.
    */
-  static async _performAvailabilityCheck(checkoutService) {
+  static async _performAvailabilityCheck(
+    checkoutService,
+    ignoreRelatedEntities = false,
+  ) {
     try {
-      const checkResults = await checkoutService.checkAll(false);
+      let checkResults = [];
+      if (ignoreRelatedEntities) {
+        // Only check the availability of the bookable itself.
+        checkResults = await Promise.allSettled([
+          await checkoutService.checkAvailability(),
+        ]);
+      } else {
+        checkResults = await checkoutService.checkAll(false);
+      }
       if (!checkResults || !Array.isArray(checkResults)) {
         return this._createUnavailableResponse();
       }
@@ -102,13 +118,18 @@ class BookableService {
       );
 
       return {
-        isAvailable: true,
+        isAvailable: lowestAvailability?.available ?? false,
         totalCapacity: lowestAvailability?.totalCapacity ?? null,
         booked: lowestAvailability?.booked ?? null,
         remaining: lowestAvailability?.remaining ?? null,
       };
     } catch (error) {
-      return this._createUnavailableResponse();
+      const occupancyData = this._extractOccupancyFromFailedCheck(error);
+
+      return {
+        isAvailable: false,
+        ...occupancyData,
+      };
     }
   }
 
