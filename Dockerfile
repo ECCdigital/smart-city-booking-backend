@@ -1,4 +1,4 @@
-FROM node:slim
+FROM node:22-slim
 
 # Set Puppeteer to skip downloading Chromium since we'll be installing it manually
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
