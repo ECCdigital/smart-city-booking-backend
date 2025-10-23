@@ -34,6 +34,10 @@ const tenantSchemaDefinition = {
   defaultEventCreationMode: { type: String, default: "" },
   enablePublicStatusView: { type: Boolean, default: false },
   notifyOnNewBooking: { type: Boolean, default: true },
+  catalogParticipation: {
+    visible: { type: Boolean, default: true },
+    restricted: { type: Boolean, default: false },
+  },
 };
 
 module.exports = tenantSchemaDefinition;

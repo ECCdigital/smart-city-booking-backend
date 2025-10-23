@@ -174,12 +174,27 @@ router.get(
   MembershipController.getMyPendingMemberships,
 );
 // Catalog
-router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
+router.get(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.getInstanceCatalog,
+);
+router.get("/catalog/public", CatalogController.getPublicCatalog);
+router.get("/catalog/bundle", CatalogController.getCatalogBundle);
+
+router.put(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.storeInstanceCatalog,
+);
+
 router.get("/catalog/themes/:slug", CatalogController.getTheme);
+router.get("/catalog/themes", CatalogController.getTheme);
 router.get(
   "/catalog/availability/:slug",
   AuthenticationController.isSignedIn,
   CatalogController.slugAvailability,
 );
+router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
 
 module.exports = router;
