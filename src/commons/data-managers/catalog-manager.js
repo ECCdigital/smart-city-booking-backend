@@ -6,6 +6,14 @@ class CatalogManager {
     return rawCatalogs.map((doc) => doc.toEntity());
   }
 
+  static async getInstanceCatalog() {
+    const rawCatalog = await CatalogModel.findOne({ type: "instance" });
+    if (!rawCatalog) {
+      return null;
+    }
+    return rawCatalog.toEntity();
+  }
+
   static async getCatalogByTenant(tenantId) {
     const rawCatalog = await CatalogModel.findOne({ tenantId });
     if (!rawCatalog) {

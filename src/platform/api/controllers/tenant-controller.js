@@ -227,6 +227,7 @@ class TenantController {
           "defaultEventCreationMode",
           "enablePublicStatusView",
           "notifyOnNewBooking",
+          "catalogParticipation",
         ];
 
         fields.forEach((field) => {
