@@ -296,6 +296,7 @@ class Bookable {
       isSpecialOpeningHoursRelated: this.isSpecialOpeningHoursRelated,
       specialOpeningHours: this.specialOpeningHours,
       isLongRange: this.isLongRange,
+      priceValueAddedTax: this.priceValueAddedTax,
       priceCategories: this.priceCategories,
       priceType: this.priceType,
       relatedBookableIds: this.relatedBookableIds,
