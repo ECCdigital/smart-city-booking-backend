@@ -62,6 +62,7 @@ class BookingController {
   static async getBookings(request, response) {
     try {
       const tenant = request.params.tenant;
+      const user = request.user;
       const bookings = await BookingManager.getTenantBookings(tenant);
 
       if (request.query.public === "true") {
@@ -73,12 +74,11 @@ class BookingController {
           `${tenant} -- sending ${anonymizedBookings.length} anonymized bookings to user ${user?.id}`,
         );
         response.status(200).send(anonymizedBookings);
-      } else {
-        const user = authenticateIfNeeded(request, true);
+      } else if (user) {
+        if (request.query.populate === "true") {
+          await BookingController._populate(bookings);
+        }
 
-        if (user) {
-          if (request.query.populate === "true") {
-            await BookingController._populate(bookings);
         // Check once whether the user has readAny permission; if so, avoid per-booking checks
         const hasReadAny = await UserManager.hasPermission(
           user.id,
@@ -104,32 +104,17 @@ class BookingController {
               allowedBookings.push(booking);
             }
           }
-
-          const allowedBookings = [];
-          for (const booking of bookings) {
-            if (
-              user &&
-              (await PermissionsService._allowRead(
-                booking,
-                user.id,
-                tenant,
-                RolePermission.MANAGE_BOOKINGS,
-              ))
-            ) {
-              allowedBookings.push(booking);
-            }
-          }
-
-          logger.info(
-            `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
-          );
-          response.status(200).send(allowedBookings);
-        } else {
-          logger.warn(
-            `${tenant} -- could not get bookings. User is not authenticated`,
-          );
-          response.sendStatus(403);
         }
+
+        logger.info(
+          `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
+        );
+        response.status(200).send(allowedBookings);
+      } else {
+        logger.warn(
+          `${tenant} -- could not get bookings. User is not authenticated`,
+        );
+        response.sendStatus(403);
       }
     } catch (err) {
       logger.error(err);
