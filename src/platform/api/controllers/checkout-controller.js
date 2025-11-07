@@ -7,8 +7,7 @@ const BookingService = require("../../../commons/services/checkout/booking-servi
 const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
-
+const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
   level: process.env.LOG_LEVEL,
@@ -155,7 +154,7 @@ class CheckoutController {
       }
       let userRoles;
       try {
-        userRoles = await TenantManager.getTenantUserRoles(tenantId, user.id);
+        userRoles = await MembershipManager.getMembershipByTenantAndUserID(tenantId, user.id)?.roles;
       } catch (err) {
         logger.error(
           `Error while loading user roles for tenant ${tenantId}:`,

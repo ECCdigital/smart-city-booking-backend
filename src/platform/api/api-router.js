@@ -5,14 +5,24 @@ const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
+const InvitationController = require("./controllers/invitation-controller");
+const MembershipController = require("./controllers/membership-controller");
+const CatalogController = require("./controllers/catalog-controller");
 
 const router = express.Router({ mergeParams: true });
 
 // INSTANCES
 // =========
 
+// Public
+router.get("/instances/public", InstanceController.getPublicInstance);
+
 // Protected
-router.get("/instances", InstanceController.getInstance);
+router.get(
+  "/instances",
+  AuthenticationController.isSignedIn,
+  InstanceController.getInstance,
+);
 router.put(
   "/instances",
   AuthenticationController.isSignedIn,
@@ -23,11 +33,7 @@ router.put(
 // =======
 
 // Public
-router.get(
-  "/tenants",
-  AuthenticationController.isSignedIn,
-  TenantController.getTenants,
-);
+router.get("/tenants/public", TenantController.getPublicTenants);
 router.get(
   "/tenants/:id",
   AuthenticationController.isSignedIn,
@@ -36,6 +42,11 @@ router.get(
 router.get("/tenants/:id/payment-apps", TenantController.getActivePaymentApps);
 
 // Protected
+router.get(
+  "/tenants",
+  AuthenticationController.isSignedIn,
+  TenantController.getTenants,
+);
 router.put(
   "/tenants",
   AuthenticationController.isSignedIn,
@@ -87,10 +98,22 @@ router.post(
   TenantController.removeOwner,
 );
 
+router.post(
+  "/tenants/:id/remove-user-role",
+  AuthenticationController.isSignedIn,
+  TenantController.removeUserRole,
+);
+
 router.get(
   "/tenants/:id/users",
   AuthenticationController.isSignedIn,
   TenantController.getUsers,
+);
+
+router.post(
+  "/tenants/:id/update-user-status",
+  AuthenticationController.isSignedIn,
+  TenantController.updateUserStatus,
 );
 
 // USERS
@@ -135,5 +158,43 @@ router.get(
 );
 
 router.get("/holidays", HolidayController.getHolidays);
+
+//INVITATIONS
+router.get(
+  "/invitations/my",
+  AuthenticationController.isSignedIn,
+  InvitationController.getMyInvitations,
+);
+
+// MEMBERSHIPS
+// ===========
+router.get(
+  "/memberships/my/pending",
+  AuthenticationController.isSignedIn,
+  MembershipController.getMyPendingMemberships,
+);
+// Catalog
+router.get(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.getInstanceCatalog,
+);
+router.get("/catalog/public", CatalogController.getPublicCatalog);
+router.get("/catalog/bundle", CatalogController.getCatalogBundle);
+
+router.put(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.storeInstanceCatalog,
+);
+
+router.get("/catalog/themes/:slug", CatalogController.getTheme);
+router.get("/catalog/themes", CatalogController.getTheme);
+router.get(
+  "/catalog/availability/:slug",
+  AuthenticationController.isSignedIn,
+  CatalogController.slugAvailability,
+);
+router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
 
 module.exports = router;

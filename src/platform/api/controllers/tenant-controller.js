@@ -1,6 +1,7 @@
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const Tenant = require("../../../commons/entities/tenant/tenant");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const PermissionService = require("../../../commons/services/permission-service");
 const InstanceManger = require("../../../commons/data-managers/instance-manager");
 const bunyan = require("bunyan");
@@ -9,6 +10,9 @@ const { join } = require("path");
 const { v4: uuidv4 } = require("uuid");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
+const Membership = require("../../../commons/entities/tenant/membership");
+const InvitationService = require("../../../commons/services/invitation-service");
+const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -46,6 +50,17 @@ class TenantController {
     } catch (error) {
       logger.error(error);
       response.sendStatus(500);
+    }
+  }
+
+  static async getPublicTenants(request, response) {
+    try {
+      const tenants = await TenantManager.getTenants();
+      const publicTenants = tenants.map((tenant) => tenant.exportPublic());
+      response.status(200).send(publicTenants);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get public tenants");
     }
   }
 
@@ -119,9 +134,14 @@ class TenantController {
         instance.ownerUserIds.includes(user.id);
 
       if (hasPermission) {
-        if (!tenant.ownerUserIds.includes(user.id)) {
-          tenant.ownerUserIds.push(user.id);
-        }
+        const membership = new Membership({
+          tenantId: tenant.id,
+          userId: user.id,
+          roles: [],
+          status: "active",
+          source: "manually",
+          owner: true,
+        });
 
         const emailTemplate = readFileSync(
           join(
@@ -151,6 +171,7 @@ class TenantController {
         tenant.invoiceTemplate = invoiceTemplate;
 
         await TenantManager.storeTenant(tenant);
+        await MembershipManager.addMembership(tenant.id, membership);
         logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
 
         response.sendStatus(201);
@@ -206,8 +227,7 @@ class TenantController {
           "defaultEventCreationMode",
           "enablePublicStatusView",
           "notifyOnNewBooking",
-          "ownerUserIds",
-          "users",
+          "catalogParticipation",
         ];
 
         fields.forEach((field) => {
@@ -302,8 +322,6 @@ class TenantController {
       const tenantId = request.params.tenant;
       const user = request.user;
 
-      const tenant = await TenantManager.getTenant(tenantId);
-
       if (
         await PermissionService._allowReadAny(
           user.id,
@@ -311,9 +329,17 @@ class TenantController {
           RolePermission.MANAGE_USERS,
         )
       ) {
-        response
-          .status(200)
-          .send({ users: tenant.users, owner: tenant.ownerUserIds });
+        const memberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          memberships.map((m) => m.userId),
+        );
+
+        response.status(200).send({
+          users: memberships,
+          userDetails: userDetails,
+        });
       } else {
         response.sendStatus(403);
       }
@@ -329,40 +355,62 @@ class TenantController {
       const body = request.body;
       const user = request.user;
 
-      const tenant = await TenantManager.getTenant(tenantId);
+      const roles = body.roles;
+      const challenges = body.challenges || [];
+      const userId = body.userId;
+      const type = body.type || "manually";
 
       if (
         await PermissionService._allowUpdateAny(
           user.id,
-          tenant.id,
+          tenantId,
           RolePermission.MANAGE_USERS,
         )
       ) {
-        if (tenant.users.some((userRef) => userRef.userId === body.userId)) {
-          tenant.users
-            .filter((userRef) => userRef.userId === body.userId)
-            .forEach(
-              (userRef) =>
-                (userRef.roles = [
-                  ...new Set([...userRef.roles, ...body.roles]),
-                ]),
-            );
-        } else {
-          const dbUser = await UserManager.getUser(body.userId);
-          if (!dbUser) {
-            return response.status(404).send("User not found");
-          }
-          tenant.users.push({
-            userId: body.userId,
-            roles: [...new Set(body.roles)],
-          });
+        const membership =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userAlreadyInTenant = membership.find((m) => m.userId === userId);
+        if (userAlreadyInTenant) {
+          return response.status(400).send("User already in tenant");
         }
 
-        const updatedTenant = await TenantManager.storeTenant(tenant);
+        const invitation = await InvitationService.createInvitation({
+          tenantId,
+          intendedUserId: userId,
+          roles,
+          challenges: challenges,
+          type: "single",
+          expiresAt: null,
+          maxUses: 1,
+        });
+
+        const newMembership = new Membership({
+          tenantId,
+          userId,
+          status: type === "manually" ? "active" : "pending",
+          source: type,
+          invitations: [{ token: invitation.token, status: "pending" }],
+        });
+
+        await MembershipManager.addMembership(tenantId, newMembership);
+
+        await InvitationService.sendInvitationMail(
+          tenantId,
+          invitation.token,
+          userId,
+        );
+
+        const memberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          memberships.map((m) => m.userId),
+        );
 
         response.status(201).send({
-          users: updatedTenant.users,
-          owner: updatedTenant.ownerUserIds,
+          users: memberships,
+          userDetails: userDetails,
         });
       } else {
         response.sendStatus(403);
@@ -379,30 +427,45 @@ class TenantController {
       const { userId } = request.body;
       const user = request.user;
 
-      const tenant = await TenantManager.getTenant(tenantId);
-
       if (
         await PermissionService._allowUpdateAny(
           user.id,
-          tenant.id,
+          tenantId,
           RolePermission.MANAGE_USERS,
         )
       ) {
-        tenant.users = tenant.users.filter(
-          (userRef) => userRef.userId !== userId,
-        );
+        const userMembership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            user.id,
+          );
 
-        tenant.ownerUserIds = tenant.ownerUserIds.filter((u) => u !== userId);
+        const targetMembership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            userId,
+          );
 
-        if (tenant.ownerUserIds.length === 0) {
-          throw new Error("Cannot remove last owner from tenant");
+        if (!userMembership.owner && targetMembership.owner) {
+          return response
+            .status(403)
+            .send("Only owners can remove other owners");
         }
 
-        const updatedTenant = await TenantManager.storeTenant(tenant);
+        await InvitationService.deleteUserInvitation(tenantId, userId);
+
+        await MembershipManager.removeMembership(tenantId, userId);
+
+        const updatedMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          updatedMemberships.map((m) => m.userId),
+        );
 
         response.status(200).send({
-          users: updatedTenant.users,
-          owner: updatedTenant.ownerUserIds,
+          users: updatedMemberships,
+          userDetails: userDetails,
         });
       } else {
         response.sendStatus(403);
@@ -413,40 +476,101 @@ class TenantController {
     }
   }
 
+  static async removeUserRole(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId, roleId } = request.body;
+      const user = request.user;
+
+      if (
+        await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_USERS,
+        )
+      ) {
+        await MembershipManager.removeRoleFromMembership(
+          tenantId,
+          userId,
+          roleId,
+        );
+
+        const updatedMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          updatedMemberships.map((m) => m.userId),
+        );
+
+        logger.info(
+          `${tenantId} - User ${user?.id} removed role ${roleId} from user ${userId}`,
+        );
+
+        response.status(200).send({
+          users: updatedMemberships,
+          userDetails: userDetails,
+        });
+      } else {
+        logger.warn(
+          `${tenantId} - User ${user?.id} not allowed to remove user role`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not remove user role from tenant");
+    }
+  }
+
   static async editUserRole(request, response) {
     try {
       const tenantId = request.params.id;
       const { userId, roles } = request.body;
       const user = request.user;
 
-      const tenant = await TenantManager.getTenant(tenantId);
+      console.log(roles);
+
       if (
         await PermissionService._allowUpdateAny(
           user.id,
-          tenant.id,
+          tenantId,
           RolePermission.MANAGE_USERS,
         )
       ) {
-        const tenantRoles = await RoleManager.getRoles(tenantId);
+        const tenantRoles = await RoleManager.getTenantRoles(tenantId);
         const mappedRoles = tenantRoles.map((role) => role.id);
 
         const verifiedRoles = roles.filter((role) =>
           mappedRoles.includes(role),
         );
+        const memberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+        const userMembership = memberships.find((m) => m.userId === userId);
 
-        const userRef = tenant.users.find(
-          (userRef) => userRef.userId === userId,
+        userMembership.roles = verifiedRoles;
+
+        console.log(userMembership);
+
+        await MembershipManager.setRolesForMembership(
+          tenantId,
+          userId,
+          verifiedRoles,
         );
-        userRef.roles = verifiedRoles;
 
-        const updatedTenant = await TenantManager.storeTenant(tenant);
+        const updatedMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          updatedMemberships.map((m) => m.userId),
+        );
+
         logger.info(
           `${tenantId} - User ${user?.id} edit roles from user ${userId}`,
         );
 
         response.status(200).send({
-          users: updatedTenant.users,
-          owner: updatedTenant.ownerUserIds,
+          users: updatedMemberships,
+          userDetails: userDetails,
         });
       } else {
         logger.warn(
@@ -466,21 +590,53 @@ class TenantController {
       const { userId } = request.body;
       const user = request.user;
 
-      const tenant = await TenantManager.getTenant(tenantId);
-
       if (
-        (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
+        (await PermissionService._isTenantOwner(user.id, tenantId)) ||
         (await PermissionService._isInstanceOwner(user.id))
       ) {
-        if (!tenant.ownerUserIds.includes(userId)) {
-          tenant.ownerUserIds.push(userId);
+        const userMembership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            user.id,
+          );
+
+        if (!userMembership.owner) {
+          return response.status(403).send("Only owners can add other owners");
         }
 
-        const updatedTenant = await TenantManager.storeTenant(tenant);
+        const existingMembership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            userId,
+          );
+
+        if (!existingMembership) {
+          const newMembership = new Membership({
+            tenantId,
+            userId,
+            roles: [],
+            status: "active",
+            source: "manually",
+            owner: true,
+          });
+
+          await MembershipManager.addMembership(tenantId, newMembership);
+        } else if (!existingMembership.owner) {
+          await MembershipManager.updateMembership(tenantId, userId, {
+            owner: true,
+          });
+        }
+
+        const updatedMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          updatedMemberships.map((m) => m.userId),
+        );
 
         response.status(200).send({
-          users: updatedTenant.users,
-          owner: updatedTenant.ownerUserIds,
+          users: updatedMemberships,
+          userDetails: userDetails,
         });
       } else {
         response.sendStatus(403);
@@ -503,19 +659,55 @@ class TenantController {
         (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
         (await PermissionService._isInstanceOwner(user.id))
       ) {
-        tenant.ownerUserIds = tenant.ownerUserIds.filter(
-          (uid) => uid !== userId,
-        );
+        const existingMembership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            userId,
+          );
 
-        if (tenant.ownerUserIds.length === 0) {
-          throw new Error("Cannot remove last owner from tenant");
+        if (!existingMembership || !existingMembership.owner) {
+          return response
+            .status(400)
+            .send("User is not an owner of the tenant");
         }
 
-        const updatedTenant = await TenantManager.storeTenant(tenant);
+        const userMembership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            user.id,
+          );
+
+        if (!userMembership.owner) {
+          return response
+            .status(403)
+            .send("Only owners can remove other owners");
+        }
+
+        const allMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const ownerMemberships = allMemberships.filter((m) => m.owner);
+
+        if (ownerMemberships.length <= 1) {
+          return response
+            .status(400)
+            .send("Cannot remove the last owner of the tenant");
+        }
+
+        await MembershipManager.updateMembership(tenantId, userId, {
+          owner: false,
+        });
+
+        const updatedMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          updatedMemberships.map((m) => m.userId),
+        );
 
         response.status(200).send({
-          users: updatedTenant.users,
-          owner: updatedTenant.ownerUserIds,
+          users: updatedMemberships,
+          userDetails: userDetails,
         });
       } else {
         response.sendStatus(403);
@@ -523,6 +715,155 @@ class TenantController {
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not remove owner from tenant");
+    }
+  }
+
+  static async updateUserStatus(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId, status } = request.body;
+      const user = request.user;
+
+      if (
+        await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_USERS,
+        )
+      ) {
+        await MembershipManager.updateMembership(tenantId, userId, {
+          status,
+        });
+
+        const updatedMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          updatedMemberships.map((m) => m.userId),
+        );
+
+        logger.info(
+          `${tenantId} - User ${user?.id} updated status for user ${userId} to ${status}`,
+        );
+
+        response.status(200).send({
+          users: updatedMemberships,
+          userDetails: userDetails,
+        });
+      } else {
+        logger.warn(
+          `${tenantId} - User ${user?.id} not allowed to update user status`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not update user status in tenant");
+    }
+  }
+
+  static async getChallenges(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+
+      if (
+        (await PermissionService._allowReadAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        const challenges =
+          await ChallengeManager.getChallengesByTenantID(tenantId);
+        response.status(200).send(challenges);
+      } else {
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not get challenges for tenant");
+    }
+  }
+
+  static async createChallenge(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const body = request.body;
+      const user = request.user;
+
+      if (
+        (await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        body.id = uuidv4();
+
+        console.log(body);
+
+        const challenge = await ChallengeManager.createChallenge(
+          tenantId,
+          body,
+        );
+        response.status(201).send(challenge);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not create challenge for tenant");
+    }
+  }
+
+  static async updateChallenge(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const body = request.body;
+      const user = request.user;
+
+      if (
+        (await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        const challenge = await ChallengeManager.updateChallenge(
+          tenantId,
+          body.id,
+          body,
+        );
+        response.status(200).send(challenge);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not update challenge for tenant");
+    }
+  }
+
+  static async deleteChallenge(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const challengeID = request.params.id;
+
+      if (
+        (await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_TENANTS,
+        )) ||
+        (await PermissionService._isInstanceOwner(user.id))
+      ) {
+        await ChallengeManager.deleteChallenge(tenantId, challengeID);
+        response.sendStatus(200);
+      }
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not delete challenge for tenant");
     }
   }
 }

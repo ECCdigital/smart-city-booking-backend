@@ -1,5 +1,6 @@
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
+const MembershipManager = require("../../data-managers/membership-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
@@ -38,7 +39,7 @@ class CheckoutPermissions {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await TenantManager.getTenantUsersByRoles(
+        await MembershipManager.getMembershipsByTenantAndRoles(
           tenantId,
           bookable.permittedRoles || [],
         )
@@ -136,7 +137,7 @@ class ItemCheckoutService {
     const freeBookingUsers = [
       ...(this.originBookable.freeBookingUsers || []),
       ...(
-        await TenantManager.getTenantUsersByRoles(
+        await MembershipManager.getMembershipsByTenantAndRoles(
           this.tenantId,
           this.originBookable.freeBookingRoles || [],
         )
