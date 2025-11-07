@@ -79,6 +79,30 @@ class BookingController {
         if (user) {
           if (request.query.populate === "true") {
             await BookingController._populate(bookings);
+        // Check once whether the user has readAny permission; if so, avoid per-booking checks
+        const hasReadAny = await UserManager.hasPermission(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+          "readAny",
+        );
+
+        let allowedBookings = [];
+        if (hasReadAny) {
+          allowedBookings = bookings;
+        } else {
+          for (const booking of bookings) {
+            if (
+              user &&
+              (await PermissionsService._allowRead(
+                booking,
+                user.id,
+                tenant,
+                RolePermission.MANAGE_BOOKINGS,
+              ))
+            ) {
+              allowedBookings.push(booking);
+            }
           }
 
           const allowedBookings = [];

@@ -4,7 +4,7 @@ const {
 const TenantManager = require("../../commons/data-managers/tenant-manager");
 
 class HtmlEngine {
-  static translatePriceCategory(priceCategory, short = false) {
+  static translatePriceTyp(priceCategory, short = false) {
     let translation = "";
     if (priceCategory === "per-hour") {
       translation = "Stunde";
@@ -18,6 +18,23 @@ class HtmlEngine {
 
     return short ? translation : "/" + translation;
   }
+
+  static translatePriceCategory(priceCategory, short = false) {
+    let translation = "";
+    if (priceCategory === "per-hour") {
+      translation = "Stunde(n)";
+    } else if (priceCategory === "per-day") {
+      translation = "Tag(en)";
+    } else if (priceCategory === "per-item") {
+      translation = "Stück";
+    } else if (priceCategory === "per-square-meter") {
+      translation = "m²";
+    }
+
+    return short ? translation : "/" + translation;
+  }
+
+
 
   static generateImageHtml(imgUrl, className, altText) {
     return imgUrl
@@ -545,7 +562,7 @@ function getBookablePrice(bookable) {
           currency: "EUR",
         }).format(price);
       htmlOutput +=
-        HtmlEngine.translatePriceCategory(bookable.priceType) + "</span>";
+        HtmlEngine.translatePriceTyp(bookable.priceType) + "</span>";
 
       if (priceCategory.interval.start || priceCategory.interval.end) {
         htmlOutput +=
