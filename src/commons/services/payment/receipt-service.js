@@ -40,6 +40,17 @@ class ReceiptService {
         timeCreated: Date.now(),
       };
     } catch (err) {
+      if (err.isNextcloudError) {
+        logger.error("Failed to create receipt in Nextcloud", {
+          tenantId,
+          bookingId,
+          error: err.message,
+          statusCode: err.statusCode,
+        });
+        throw new Error(
+          "Failed to save receipt: Nextcloud service is unavailable. Please try again later."
+        );
+      }
       throw err;
     }
   }
@@ -98,6 +109,17 @@ class ReceiptService {
         timeCreated: Date.now(),
       };
     } catch (err) {
+      if (err.isNextcloudError) {
+        logger.error("Failed to create aggregated receipt in Nextcloud", {
+          tenantId,
+          bookingIds,
+          error: err.message,
+          statusCode: err.statusCode,
+        });
+        throw new Error(
+          "Failed to save receipt: Nextcloud service is unavailable. Please try again later."
+        );
+      }
       throw err;
     }
   }
@@ -109,6 +131,17 @@ class ReceiptService {
         `receipts/${receiptName}`,
       );
     } catch (err) {
+      if (err.isNextcloudError) {
+        logger.error("Failed to get receipt from Nextcloud", {
+          tenantId,
+          receiptName,
+          error: err.message,
+          statusCode: err.statusCode,
+        });
+        throw new Error(
+          "Failed to retrieve receipt: Nextcloud service is unavailable. Please try again later."
+        );
+      }
       throw err;
     }
   }
