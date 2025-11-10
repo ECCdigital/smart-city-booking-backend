@@ -4,15 +4,24 @@ const passport = require("passport");
 require("./auth-initialization");
 
 const AuthenticationController = require("./controllers/authentication-controller");
+const SessionController = require("./controllers/session-controller");
+const { requireAuth } = require("../../middleware/auth-middleware");
 
-router.get("/signout", AuthenticationController.signout);
+// Öffentliche Auth-Endpoints
 router.post("/signup", AuthenticationController.signup);
 router.post("/refresh", AuthenticationController.refreshToken);
-router.get("/verify/:hookId", AuthenticationController.releaseHook);
-router.get("/reset/:hookId", AuthenticationController.releaseHook);
 router.post("/resetpassword", AuthenticationController.resetPassword);
 router.post("/check-email", AuthenticationController.checkEmail);
 
+// SSO Endpoints
+router.post("/sso/signin", AuthenticationController.ssoLogin);
+router.post("/sso/signup", AuthenticationController.ssoSignup);
+
+// Hooks
+router.get("/verify/:hookId", AuthenticationController.releaseHook);
+router.get("/reset/:hookId", AuthenticationController.releaseHook);
+
+// Geschützte Endpoints
 router.post("/signin", (req, res, next) => {
   passport.authenticate("local-signin", { session: false }, (err, user, info) => {
     if (err) {
@@ -26,12 +35,15 @@ router.post("/signin", (req, res, next) => {
     return AuthenticationController.signin(req, res, next);
   })(req, res, next);
 });
-router.post("/sso/signin", AuthenticationController.ssoLogin);
-router.post("/sso/signup", AuthenticationController.ssoSignup);
-router.get(
-  "/me",
-  AuthenticationController.isSignedIn,
-  AuthenticationController.me,
-);
+
+router.post("/signout", requireAuth, AuthenticationController.signout);
+router.get("/me", requireAuth, AuthenticationController.me);
+
+// Session-Management Endpoints
+router.get("/sessions", requireAuth, SessionController.getUserSessions);
+router.delete("/sessions/:sessionId", requireAuth, SessionController.revokeSession);
+router.post("/sessions/revoke-others", requireAuth, SessionController.revokeOtherSessions);
+router.post("/sessions/revoke-all", requireAuth, SessionController.revokeAllSessions);
+router.get("/sessions/stats", requireAuth, SessionController.getSessionStats);
 
 module.exports = router;

@@ -110,7 +110,7 @@ class CatalogController {
       }
 
       try {
-        const user = authenticateIfNeeded(
+        const user = await authenticateIfNeeded(
           request,
           catalog.visibility === "private",
         );
@@ -158,7 +158,7 @@ class CatalogController {
       }
 
       try {
-        const user = authenticateIfNeeded(request, themeData.visibility === "private");
+        const user = await authenticateIfNeeded(request, themeData.visibility === "private");
         if (user) request.user = user;
 
         //TODO: Add permission checks here if needed

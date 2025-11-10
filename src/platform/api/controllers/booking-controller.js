@@ -217,7 +217,7 @@ class BookingController {
 
         response.status(200).send(anonymizedBookings);
       } else {
-        const user = authenticateIfNeeded(request, true);
+        const user = await authenticateIfNeeded(request, true);
 
         if (user) {
           const hasPermission = await UserManager.hasPermission(
