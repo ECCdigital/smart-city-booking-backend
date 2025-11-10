@@ -25,7 +25,6 @@ class AuthenticationController {
       const permissions = await UserManager.getUserPermissions(user.id);
       const requestedUser = await UserManager.getUser(user.id, false);
 
-      // Context für Session-Tracking
       const context = {
         ip: request.ip || request.connection?.remoteAddress,
         userAgent: request.headers['user-agent'],
@@ -78,7 +77,6 @@ class AuthenticationController {
   }
 
   static async refreshToken(request, response) {
-    console.log("Refresh token request received");
     try {
       const { refreshToken } = request.body;
       if (!refreshToken) {
@@ -88,10 +86,8 @@ class AuthenticationController {
         });
       }
 
-      // Verifiziere Refresh Token
       const decoded = await JwtHelper.verifyRefreshToken(refreshToken);
 
-      // Prüfe ob User noch existiert
       const user = await UserManager.getUser(decoded.sub || decoded.id);
 
       if (!user) {
@@ -101,7 +97,6 @@ class AuthenticationController {
         });
       }
 
-      // Prüfe ob User gesperrt ist
       if (user.isSuspended) {
         return response.status(403).json({
           success: false,
@@ -114,11 +109,9 @@ class AuthenticationController {
         userAgent: request.headers['user-agent'],
       };
 
-      // Generiere neue Tokens
       const newAccessToken = await JwtHelper.generateToken(user, context);
       const newRefreshToken = await JwtHelper.generateRefreshToken(user, context);
 
-      // WICHTIG: Alten Refresh-Token invalidieren (Token-Rotation)
       if (decoded.jti) {
         await JwtHelper.revokeToken(refreshToken, 'token_rotation');
       }
