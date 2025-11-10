@@ -3,6 +3,12 @@ const BookingManager = require("../../data-managers/booking-manager");
 const { NextcloudManager } = require("../../data-managers/file-manager");
 const PdfService = require("../../pdf-service/pdf-service");
 const TenantManager = require("../../data-managers/tenant-manager");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "invoice-service.js",
+  level: process.env.LOG_LEVEL || "info",
+});
 
 class InvoiceService {
   static async createSingleInvoice(tenantId, bookingId) {
@@ -34,7 +40,18 @@ class InvoiceService {
         timeCreated: Date.now(),
       };
     } catch (error) {
-      throw new Error(error);
+      if (error.isNextcloudError) {
+        logger.error("Failed to create invoice in Nextcloud", {
+          tenantId,
+          bookingId,
+          error: error.message,
+          statusCode: error.statusCode,
+        });
+        throw new Error(
+          "Failed to save invoice: Nextcloud service is unavailable. Please try again later."
+        );
+      }
+      throw error;
     }
   }
 
@@ -87,7 +104,18 @@ class InvoiceService {
         timeCreated: Date.now(),
       };
     } catch (error) {
-      throw new Error(error);
+      if (error.isNextcloudError) {
+        logger.error("Failed to create aggregated invoice in Nextcloud", {
+          tenantId,
+          bookingIds,
+          error: error.message,
+          statusCode: error.statusCode,
+        });
+        throw new Error(
+          "Failed to save invoice: Nextcloud service is unavailable. Please try again later."
+        );
+      }
+      throw error;
     }
   }
 
@@ -98,6 +126,17 @@ class InvoiceService {
         `invoices/${invoiceName}`,
       );
     } catch (err) {
+      if (err.isNextcloudError) {
+        logger.error("Failed to get invoice from Nextcloud", {
+          tenantId,
+          invoiceName,
+          error: err.message,
+          statusCode: err.statusCode,
+        });
+        throw new Error(
+          "Failed to retrieve invoice: Nextcloud service is unavailable. Please try again later."
+        );
+      }
       throw err;
     }
   }

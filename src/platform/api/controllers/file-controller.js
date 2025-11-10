@@ -53,8 +53,25 @@ class FileController {
       );
       response.status(200).send(allFiles);
     } catch (err) {
-      logger.error("Error getting files from Next Cloud.", err);
-      response.status(500).send("Error getting files from Next Cloud.");
+      logger.error("Error getting files from Next Cloud.", {
+        error: err.message,
+        statusCode: err.statusCode,
+        tenant,
+      });
+
+      if (err.isNextcloudError) {
+        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
+        response.status(statusCode).send({
+          error:
+            "Nextcloud service is currently unavailable. Please try again later.",
+          details:
+            process.env.NODE_ENV === "development" ? err.message : undefined,
+        });
+      } else {
+        response.status(500).send({
+          error: "Error getting files from Next Cloud.",
+        });
+      }
     }
   }
 
@@ -118,8 +135,26 @@ class FileController {
         response.status(401).send("Unauthorized.");
       }
     } catch (err) {
-      logger.error("Error downloading file from Next Cloud.", err);
-      response.status(500).send("Error downloading file from Next Cloud.");
+      logger.error("Error downloading file from Next Cloud.", {
+        error: err.message,
+        statusCode: err.statusCode,
+        tenant,
+        filename,
+      });
+
+      if (err.isNextcloudError) {
+        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
+        response.status(statusCode).send({
+          error:
+            "Nextcloud service is currently unavailable. Please try again later.",
+          details:
+            process.env.NODE_ENV === "development" ? err.message : undefined,
+        });
+      } else {
+        response.status(500).send({
+          error: "Error downloading file from Next Cloud.",
+        });
+      }
     }
   }
 
@@ -165,8 +200,26 @@ class FileController {
       );
       response.status(201).send("File uploaded successfully.");
     } catch (err) {
-      logger.error("Error uploading file to Next Cloud.", err);
-      response.status(500).send("Error uploading file to Next Cloud.");
+      logger.error("Error uploading file to Next Cloud.", {
+        error: err.message,
+        statusCode: err.statusCode,
+        tenant,
+        filename: file?.name,
+      });
+
+      if (err.isNextcloudError) {
+        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
+        response.status(statusCode).send({
+          error:
+            "Nextcloud service is currently unavailable. Please try again later.",
+          details:
+            process.env.NODE_ENV === "development" ? err.message : undefined,
+        });
+      } else {
+        response.status(500).send({
+          error: "Error uploading file to Next Cloud.",
+        });
+      }
     }
   }
 }
