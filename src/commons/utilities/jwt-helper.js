@@ -8,7 +8,20 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL || "info",
 });
 
+/**
+ * A helper class for managing JSON Web Tokens (JWTs).
+ * Provides methods for generating, verifying, and revoking access and refresh tokens.
+ */
 class JwtHelper {
+
+  /**
+   * Generates an access token for a user.
+   *
+   * @param {Object} user - The user object for whom the token is generated.
+   * @param {string} user.id - The unique identifier of the user.
+   * @param {Object} [context={}] - Additional context for token generation.
+   * @returns {string} The generated access token.
+   */
   static generateToken(user, context = {}) {
     const now = Math.floor(Date.now() / 1000);
     const expiresIn = this.parseExpiry(process.env.JWT_EXPIRES_IN || "15m");
@@ -33,6 +46,15 @@ class JwtHelper {
     return token;
   }
 
+  /**
+   * Generates a refresh token for a user and creates a corresponding session in the database.
+   *
+   * @param {Object} user - The user object for whom the refresh token is generated.
+   * @param {string} user.id - The unique identifier of the user.
+   * @param {Object} [context={}] - Additional context for token generation, such as device information.
+   * @returns {Promise<string>} The generated refresh token.
+   * @throws {Error} If an error occurs while creating the token session in the database.
+   */
   static async generateRefreshToken(user, context = {}) {
     const now = Math.floor(Date.now() / 1000);
     const expiresIn = this.parseExpiry(
@@ -75,6 +97,13 @@ class JwtHelper {
     return token;
   }
 
+  /**
+   * Verifies the validity of an access token.
+   *
+   * @param {string} token - The JWT access token to verify.
+   * @returns {Object} The decoded token payload if verification is successful.
+   * @throws {Error} If the token is invalid, expired, or fails verification.
+   */
   static verifyToken(token) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET, {
@@ -99,6 +128,13 @@ class JwtHelper {
     }
   }
 
+  /**
+   * Verifies the validity of a refresh token.
+   *
+   * @param {string} token - The JWT refresh token to verify.
+   * @returns {Promise<Object>} The decoded token payload if verification is successful.
+   * @throws {Error} If the token is invalid, expired, revoked, or fails verification.
+   */
   static async verifyRefreshToken(token) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET, {
@@ -126,6 +162,14 @@ class JwtHelper {
     }
   }
 
+  /**
+   * Revokes a token by adding it to the blacklist.
+   *
+   * @param {string} token - The JWT token to revoke.
+   * @param {string} [reason="logout"] - The reason for revoking the token.
+   * @returns {Promise<boolean>} `true` if the token was successfully revoked, otherwise `false`.
+   * @throws {Error} If an error occurs during the revocation process.
+   */
   static async revokeToken(token, reason = "logout") {
     try {
       const decoded = jwt.decode(token);
@@ -166,6 +210,14 @@ class JwtHelper {
     }
   }
 
+  /**
+   * Revokes all refresh tokens for a specific user by marking them as blacklisted.
+   *
+   * @param {string} userId - The unique identifier of the user whose tokens are to be revoked.
+   * @param {string} [reason="security"] - The reason for revoking the tokens.
+   * @returns {Promise<number>} The number of tokens that were successfully revoked.
+   * @throws {Error} If an error occurs during the revocation process.
+   */
   static async revokeAllUserTokens(userId, reason = "security") {
     try {
       const count = await TokenSessionService.revokeAllUserTokens(
@@ -182,6 +234,15 @@ class JwtHelper {
     }
   }
 
+  /**
+   * Parses an expiry string and converts it into seconds.
+   *
+   * @param {string} expiry - The expiry duration in the format of `<number><unit>`,
+   *                          where `unit` can be `s` (seconds), `m` (minutes),
+   *                          `h` (hours), or `d` (days).
+   * @returns {number} The expiry duration in seconds.
+   * @throws {Error} If the expiry format is invalid.
+   */
   static parseExpiry(expiry) {
     const units = {
       s: 1,
@@ -200,6 +261,12 @@ class JwtHelper {
     return parseInt(value) * units[unit];
   }
 
+  /**
+   * Extracts the token from an authorization header.
+   *
+   * @param {string} authHeader - The authorization header string, expected to start with "Bearer ".
+   * @returns {string|null} The extracted token if the header is valid, otherwise `null`.
+   */
   static extractToken(authHeader) {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return null;
