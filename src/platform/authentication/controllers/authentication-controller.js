@@ -54,13 +54,9 @@ class AuthenticationController {
       const user = await SsoService.handleLogin(token);
 
       if (user) {
-        const context = {
-          ip: request.ip || request.connection?.remoteAddress,
-          userAgent: request.headers['user-agent'],
-        };
 
-        const accessToken = await JwtHelper.generateToken(user, context);
-        const refreshToken = await JwtHelper.generateRefreshToken(user, context);
+        const accessToken = await JwtHelper.generateToken(user);
+        const refreshToken = await JwtHelper.generateRefreshToken(user);
 
         response.status(200).json({
           user,

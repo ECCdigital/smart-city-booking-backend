@@ -4,7 +4,6 @@ const passport = require("passport");
 require("./auth-initialization");
 
 const AuthenticationController = require("./controllers/authentication-controller");
-const SessionController = require("./controllers/session-controller");
 const { requireAuth } = require("../../middleware/auth-middleware");
 
 // Öffentliche Auth-Endpoints
@@ -38,12 +37,5 @@ router.post("/signin", (req, res, next) => {
 
 router.post("/signout", requireAuth, AuthenticationController.signout);
 router.get("/me", requireAuth, AuthenticationController.me);
-
-// Session-Management Endpoints
-router.get("/sessions", requireAuth, SessionController.getUserSessions);
-router.delete("/sessions/:sessionId", requireAuth, SessionController.revokeSession);
-router.post("/sessions/revoke-others", requireAuth, SessionController.revokeOtherSessions);
-router.post("/sessions/revoke-all", requireAuth, SessionController.revokeAllSessions);
-router.get("/sessions/stats", requireAuth, SessionController.getSessionStats);
 
 module.exports = router;
