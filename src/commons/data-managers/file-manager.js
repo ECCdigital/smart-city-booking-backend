@@ -35,10 +35,14 @@ class NextcloudManager extends FileManager {
   static _getClient() {
     const nextCloudUrl = process.env.NEXTCLOUD_URL;
 
-    if (!nextCloudUrl || !process.env.NEXTCLOUD_USERNAME || !process.env.NEXTCLOUD_PASSWORD) {
+    if (
+      !nextCloudUrl ||
+      !process.env.NEXTCLOUD_USERNAME ||
+      !process.env.NEXTCLOUD_PASSWORD
+    ) {
       throw new NextcloudError(
         "Nextcloud configuration is missing. Please check environment variables.",
-        500
+        500,
       );
     }
 
@@ -73,16 +77,16 @@ class NextcloudManager extends FileManager {
           const delay = NextcloudManager.RETRY_DELAY * Math.pow(2, attempt);
           logger.warn(
             `Nextcloud request failed (attempt ${attempt + 1}/${retries + 1}). Retrying in ${delay}ms...`,
-            { error: error.message }
+            { error: error.message },
           );
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
     }
 
     throw NextcloudManager._handleError(
       lastError,
-      `Nextcloud request failed after ${retries + 1} attempts`
+      `Nextcloud request failed after ${retries + 1} attempts`,
     );
   }
 
@@ -109,7 +113,7 @@ class NextcloudManager extends FileManager {
     return new NextcloudError(
       `${defaultMessage}: ${statusCode} ${statusText}`,
       statusCode,
-      error
+      error,
     );
   }
 
@@ -175,17 +179,19 @@ class NextcloudManager extends FileManager {
    */
   static async createReadStream(tenant, filename) {
     try {
-      return await NextcloudManager._retryWithBackoff(async () => {
-        const client = NextcloudManager._getClient();
-        const path = `${tenant}/${filename}`;
-        return client.createReadStream(path);
-      });
+      // Don't retry for streams - they can fail mid-transfer
+      const client = NextcloudManager._getClient();
+      const path = `${tenant}/${filename}`;
+      return client.createReadStream(path);
     } catch (error) {
       logger.error(
         `Failed to create read stream for file ${filename} for tenant ${tenant}`,
-        { error: error.message }
+        { error: error.message },
       );
-      throw NextcloudManager._handleError(error, "Failed to create read stream");
+      throw NextcloudManager._handleError(
+        error,
+        "Failed to create read stream",
+      );
     }
   }
 
@@ -225,7 +231,10 @@ class NextcloudManager extends FileManager {
       logger.error(`Failed to stat file ${filename} for tenant ${tenant}`, {
         error: error.message,
       });
-      throw NextcloudManager._handleError(error, "Failed to retrieve file metadata");
+      throw NextcloudManager._handleError(
+        error,
+        "Failed to retrieve file metadata",
+      );
     }
   }
 
@@ -252,12 +261,14 @@ class NextcloudManager extends FileManager {
         const directory = `${tenant}/${subDirectory}`;
         let nextCloudPath = `${directory}/${fileName}`;
         await client.createDirectory(directory, { recursive: true });
-        await client.putFileContents(nextCloudPath, file, { contentLength: false });
+        await client.putFileContents(nextCloudPath, file, {
+          contentLength: false,
+        });
       });
     } catch (error) {
       logger.error(
         `Failed to create file ${fileName} in ${subDirectory} for tenant ${tenant}`,
-        { error: error.message }
+        { error: error.message },
       );
       throw NextcloudManager._handleError(error, "Failed to create file");
     }

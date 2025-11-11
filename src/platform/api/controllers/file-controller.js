@@ -104,7 +104,7 @@ class FileController {
         if (isPublicPath) {
           response.setHeader(
             "Cache-Control",
-            "public, max-age=31536000, immutable",
+            "public, max-age=31536000, immutable"
           );
         } else {
           response.setHeader("Cache-Control", "private, max-age=0, no-cache");
@@ -124,11 +124,45 @@ class FileController {
 
         const stream = await NextcloudManager.createReadStream(
           tenant,
-          filename,
+          filename
         );
 
         logger.info(`${tenant} -- sending file ${filename}`);
         response.setHeader("Content-Disposition", "inline");
+
+        // Handle stream errors to prevent crashes
+        stream.on("error", (streamError) => {
+          logger.error("Error during file streaming from Next Cloud.", {
+            error: streamError.message,
+            statusCode: streamError.status || 500,
+            tenant,
+            filename,
+          });
+
+          // Only send error response if headers haven't been sent
+          if (!response.headersSent) {
+            const statusCode = streamError.status >= 500 ? 503 : 500;
+            response.status(statusCode).send({
+              error:
+                "Error streaming file from Nextcloud. Please try again later.",
+              details:
+                process.env.NODE_ENV === "development"
+                  ? streamError.message
+                  : undefined,
+            });
+          } else {
+            // Headers already sent, just destroy the response
+            response.destroy();
+          }
+        });
+
+        // Handle client disconnections
+        request.on("close", () => {
+          if (!response.writableEnded) {
+            stream.destroy();
+          }
+        });
+
         stream.pipe(response);
       } else {
         logger.warn(`${tenant} -- Unauthorized.`);
