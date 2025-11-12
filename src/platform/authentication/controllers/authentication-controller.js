@@ -25,8 +25,13 @@ class AuthenticationController {
       const permissions = await UserManager.getUserPermissions(user.id);
       const requestedUser = await UserManager.getUser(user.id, false);
 
-      const accessToken = JwtHelper.generateToken(user);
-      const refreshToken = JwtHelper.generateRefreshToken(user);
+      const context = {
+        ip: request.ip || request.connection?.remoteAddress,
+        userAgent: request.headers['user-agent'],
+      };
+
+      const accessToken = await JwtHelper.generateToken(requestedUser, context);
+      const refreshToken = await JwtHelper.generateRefreshToken(requestedUser, context);
 
       logger.info(`User ${user.id} signed in.`);
       response.status(200).json({
@@ -49,8 +54,9 @@ class AuthenticationController {
       const user = await SsoService.handleLogin(token);
 
       if (user) {
-        const accessToken = JwtHelper.generateToken(user);
-        const refreshToken = JwtHelper.generateRefreshToken(user);
+
+        const accessToken = await JwtHelper.generateToken(user);
+        const refreshToken = await JwtHelper.generateRefreshToken(user);
 
         response.status(200).json({
           user,
@@ -69,28 +75,56 @@ class AuthenticationController {
   static async refreshToken(request, response) {
     try {
       const { refreshToken } = request.body;
-
       if (!refreshToken) {
-        return response.status(401).json({ message: "Refresh token required" });
+        return response.status(401).json({
+          success: false,
+          message: "Refresh token required"
+        });
       }
 
-      const decoded = JwtHelper.verifyRefreshToken(refreshToken);
-      const user = await UserManager.getUser(decoded.id);
+      const decoded = await JwtHelper.verifyRefreshToken(refreshToken);
+
+      const user = await UserManager.getUser(decoded.sub || decoded.id);
 
       if (!user) {
-        return response.status(401).json({ message: "User not found" });
+        return response.status(401).json({
+          success: false,
+          message: "User not found"
+        });
       }
 
-      const newAccessToken = JwtHelper.generateToken(user);
-      const newRefreshToken = JwtHelper.generateRefreshToken(user);
+      if (user.isSuspended) {
+        return response.status(403).json({
+          success: false,
+          message: "User account is suspended"
+        });
+      }
+
+      const context = {
+        ip: request.ip || request.connection?.remoteAddress,
+        userAgent: request.headers['user-agent'],
+      };
+
+      const newAccessToken = await JwtHelper.generateToken(user, context);
+      const newRefreshToken = await JwtHelper.generateRefreshToken(user, context);
+
+      if (decoded.jti) {
+        await JwtHelper.revokeToken(refreshToken, 'token_rotation');
+      }
+
+      logger.info(`Tokens refreshed for user ${user.id}`);
 
       response.json({
+        success: true,
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
       });
     } catch (error) {
       logger.error("Token refresh failed:", error);
-      response.status(401).json({ message: "Invalid refresh token" });
+      response.status(401).json({
+        success: false,
+        message: "Invalid refresh token"
+      });
     }
   }
 
@@ -141,8 +175,34 @@ class AuthenticationController {
     }
   }
 
-  static signout(request, response) {
-    response.status(200).json({ message: "Logged out successfully" });
+  static async signout(request, response) {
+    try {
+      const authHeader = request.headers.authorization;
+      const token = JwtHelper.extractToken(authHeader);
+
+      if (token) {
+        await JwtHelper.revokeToken(token, 'logout');
+
+        // Optional: Auch Refresh-Token revoken wenn mitgeschickt
+        const { refreshToken } = request.body;
+        if (refreshToken) {
+          await JwtHelper.revokeToken(refreshToken, 'logout');
+        }
+
+        logger.info(`User ${request.user?.id} signed out, tokens revoked`);
+      }
+
+      response.status(200).json({
+        success: true,
+        message: "Logged out successfully"
+      });
+    } catch (error) {
+      logger.error('Signout error:', error);
+      response.status(500).json({
+        success: false,
+        message: 'Logout failed'
+      });
+    }
   }
 
   static async me(request, response) {

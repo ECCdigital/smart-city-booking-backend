@@ -12,6 +12,7 @@ const DatabaseManager = require("./commons/utilities/database-manager.js");
 const { runMigrations } = require("../migrations/migrationsManager");
 const seed = require("../seeder/seeder");
 const RuleEngine = require("./rule-engine/ruleEngine");
+const { requestLogger } = require("./middleware/logger.js");
 
 const dbm = DatabaseManager.getInstance();
 
@@ -39,6 +40,8 @@ app.use(function (req, res, next) {
     next();
   }
 });
+
+app.use(requestLogger);
 
 app.use(cookieParser());
 

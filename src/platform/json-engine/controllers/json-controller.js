@@ -12,20 +12,19 @@ class JSONController {
     const { tenant: tenantId } = req.params;
     const { type, ids } = req.query;
 
-    let userRoles;
-    let identity;
+    // Identity wird jetzt durch optionalAuth Middleware gesetzt
+    const identity = req.user;
+    let userRoles = null;
 
-    try {
-      identity = authenticateIfNeeded(req, true);
-      if (identity) {
+    if (identity) {
+      try {
         userRoles = await TenantManager.getTenantUserRoles(
           tenantId,
           identity.id,
         );
+      } catch (error) {
+        userRoles = null;
       }
-    } catch {
-      userRoles = null;
-      identity = null;
     }
 
     try {
@@ -38,11 +37,11 @@ class JSONController {
           (identity && bookable.permittedUsers.includes(identity.id));
         const roleAllowed =
           bookable.permittedRoles.length === 0 ||
-          (userRoles && userRoles.some((role) => bookable.permittedRoles.includes(role)));
+          (userRoles &&
+            userRoles.some((role) => bookable.permittedRoles.includes(role)));
 
         return userAllowed && roleAllowed;
       });
-
 
       if (type) {
         bookables = bookables.filter((bookable) => bookable.type === type);
@@ -61,47 +60,64 @@ class JSONController {
       res
         .status(200)
         .send(bookables.map((bookable) => bookable.exportPublic()));
-    } catch {
-      res.sendStatus(500);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
     }
   }
 
   static async getBookable(req, res) {
     const { tenant: tenantId, id } = req.params;
-    let userRoles;
-    let identity;
 
-    try {
-      identity = authenticateIfNeeded(req, true);
-      if (identity) {
+    // Identity wird durch optionalAuth Middleware gesetzt
+    const identity = req.user;
+    let userRoles = null;
+
+    if (identity) {
+      try {
         userRoles = await TenantManager.getTenantUserRoles(
           tenantId,
           identity.id,
         );
+      } catch (error) {
+        userRoles = null;
       }
-    } catch {
-      userRoles = null;
-      identity = null;
     }
 
     try {
       const bookable = await BookableManager.getBookable(id, tenantId);
+
+      if (!bookable?.id) {
+        return res.status(404).json({
+          success: false,
+          message: "Bookable not found",
+        });
+      }
 
       const userAllowed =
         bookable.permittedUsers.length === 0 ||
         (identity && bookable.permittedUsers.includes(identity.id));
       const roleAllowed =
         bookable.permittedRoles.length === 0 ||
-        (userRoles && userRoles.some((role) => bookable.permittedRoles.includes(role)));
+        (userRoles &&
+          userRoles.some((role) => bookable.permittedRoles.includes(role)));
 
-      if (bookable?.id && bookable.isPublic === true && userAllowed && roleAllowed) {
+      if (bookable.isPublic === true && userAllowed && roleAllowed) {
         res.setHeader("content-type", "application/json");
         res.status(200).send(bookable.exportPublic());
       } else {
-        res.status(404).send("Bookable not found");
+        res.status(404).json({
+          success: false,
+          message: "Bookable not found",
+        });
       }
-    } catch {
-      res.sendStatus(500);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
     }
   }
 
