@@ -186,7 +186,8 @@ class ItemCheckoutService {
       .map((cb) => cb.bookableItems)
       .flat()
       .filter((bi) => bi.bookableId === bookable.id)
-      .reduce((acc, bi) => acc + bi.amount, 0);
+      .reduce((acc, bi) => Number(acc) + Number(bi.amount), 0);
+
     return {
       amountBooked,
       bookings: concurrentBookings.map((cb) => ({
@@ -609,11 +610,11 @@ class ItemCheckoutService {
             bi._bookableUsed.eventId === this.originBookable.eventId &&
             bi._bookableUsed.tenantId === this.originBookable.tenantId,
         )
-        .reduce((acc, bi) => acc + bi.amount, 0);
+        .reduce((acc, bi) => Number(acc) + Number(bi.amount), 0);
 
       if (
         !!event?.attendees.maxAttendees &&
-        amountBooked + this.amount > event.attendees.maxAttendees
+        Number(amountBooked) + this.amount > event.attendees.maxAttendees
       ) {
         throw {
           checkType: CHECK_TYPES.EVENT_SEATS,
