@@ -109,6 +109,9 @@ class CouponManager {
    * @returns {Promise<number>}
    */
   static async applyCoupon(couponId, tenantId, bookingPrice) {
+    if(!couponId){
+      return bookingPrice;
+    }
     const coupon = await CouponManager.getCoupon(couponId, tenantId);
 
     if (!coupon) {
