@@ -18,8 +18,6 @@ const {
 const CatalogController = require("./controllers/catalog-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
-
-
 const router = express.Router({ mergeParams: true });
 
 // BOOKABLES
@@ -109,7 +107,7 @@ router.get(
 // ========
 
 // Public
-router.get("/bookings",optionalAuth, BookingController.getBookings);
+router.get("/bookings", optionalAuth, BookingController.getBookings);
 
 router.get("/bookings/:ids/status", BookingController.getBookingStatus);
 router.get(
