@@ -7,10 +7,6 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL || 'info'
 });
 
-/**
- * Middleware: Obligatorische Authentifizierung
- * Blockiert Request bei fehlendem/ungültigem Token
- */
 const requireAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -25,7 +21,6 @@ const requireAuth = async (req, res, next) => {
 
     const decoded = JwtHelper.verifyToken(token); // Nicht mehr async
 
-    // Prüfe ob User noch existiert
     const user = await UserManager.getUser(decoded.sub);
     if (!user) {
       return res.status(401).json({
@@ -34,7 +29,6 @@ const requireAuth = async (req, res, next) => {
       });
     }
 
-    // Prüfe ob User gesperrt ist
     if (user.isSuspended) {
       return res.status(403).json({
         success: false,
@@ -69,10 +63,6 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
-/**
- * Middleware: Optionale Authentifizierung
- * Setzt req.user wenn Token vorhanden, blockiert aber nicht
- */
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -112,58 +102,7 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-/**
- * Middleware Factory: Rollen-basierte Authentifizierung
- * @param {...string} allowedRoles - Erlaubte Rollen
- */
-const requireRoles = (...allowedRoles) => {
-  return async (req, res, next) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Authentication required'
-        });
-      }
 
-      const tenantId = req.params.tenant;
-      if (!tenantId) {
-        logger.warn('requireRoles: No tenant ID in request');
-        return res.status(400).json({
-          success: false,
-          message: 'Tenant ID required'
-        });
-      }
-
-      const TenantManager = require('../commons/data-managers/tenant-manager');
-      const userRoles = await TenantManager.getTenantUserRoles(tenantId, req.user.id);
-
-      const hasRole = userRoles.some(role => allowedRoles.includes(role));
-
-      if (!hasRole) {
-        logger.warn(`User ${req.user.id} missing required roles: ${allowedRoles}`);
-        return res.status(403).json({
-          success: false,
-          message: 'Insufficient permissions'
-        });
-      }
-
-      req.user.roles = userRoles;
-      next();
-    } catch (error) {
-      logger.error('Role check failed:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Internal server error'
-      });
-    }
-  };
-};
-
-/**
- * Middleware: Conditional Auth basierend auf Bedingung
- * @param {Function} conditionFn - Funktion die true/false zurückgibt
- */
 const conditionalAuth = (conditionFn) => {
   return async (req, res, next) => {
     const requiresAuth = await conditionFn(req);
@@ -179,7 +118,6 @@ const conditionalAuth = (conditionFn) => {
 module.exports = {
   requireAuth,
   optionalAuth,
-  requireRoles,
   conditionalAuth,
 };
 
