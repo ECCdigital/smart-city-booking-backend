@@ -267,7 +267,6 @@ class BookingService {
     }
 
     if (!simulate) {
-      console.log("Handling single booking confirmation...");
       try {
         await BookingService.handleSingleBookingRequestConfirmation(
           tenantId,
@@ -278,19 +277,6 @@ class BookingService {
           tenantId,
           booking.id,
         );
-
-        const bookableItems = booking.bookableItems.map(
-          (bI) => bI._bookableUsed,
-        );
-
-        const isTicketBooking = bookableItems.some(isTicket);
-
-        if (isTicketBooking) {
-          const eventIds = bookableItems
-            .map(getEventForTicket)
-            .filter((id) => id !== null && id !== undefined);
-          await sendEmailToOrganizer(eventIds, tenantId, booking);
-        }
 
         const tenant = await TenantManager.getTenant(booking.tenantId);
 
