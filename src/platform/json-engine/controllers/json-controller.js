@@ -151,8 +151,20 @@ class JSONController {
             Date.parse(b.information.startDate),
         );
 
+      const publicEvents = events.map((event) => event.exportPublic());
+
+      for (const event of publicEvents) {
+        const tickets = await BookableManager.getEventBookables(
+          tenantId,
+          event.id,
+        );
+        event.tickets = tickets
+          .filter((ticket) => ticket.isPublic)
+          .map((ticket) => ticket.exportPublic());
+      }
+
       res.setHeader("content-type", "application/json");
-      res.status(200).send(events.map((event) => event.exportPublic()));
+      res.status(200).send(publicEvents);
     } catch {
       res.sendStatus(500);
     }
@@ -164,8 +176,18 @@ class JSONController {
       const event = await EventManager.getEvent(id, tenantId);
 
       if (event?.id && event.isPublic === true) {
+        const tickets = await BookableManager.getEventBookables(
+          tenantId,
+          event.id,
+        );
+
+        const publicEvent = event.exportPublic();
+        publicEvent.tickets = tickets
+          .filter((ticket) => ticket.isPublic)
+          .map((ticket) => ticket.exportPublic());
+
         res.setHeader("content-type", "application/json");
-        res.status(200).send(event.exportPublic());
+        res.status(200).send(publicEvent);
       } else {
         res.status(404).send("Event not found");
       }
