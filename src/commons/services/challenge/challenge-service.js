@@ -78,7 +78,7 @@ class DomainChallengeService extends ChallengeService {
     const user = await UserManager.getUser(userId);
 
     if (!user) {
-      return { success: false, message: "User not found" };
+      return { success: false, message: "USER_NOT_FOUND" };
     }
 
     // Get the allowed domains from the challenge config
@@ -89,7 +89,7 @@ class DomainChallengeService extends ChallengeService {
     if (allowedDomains.length === 0) {
       return {
         success: false,
-        message: "No domains configured for this challenge",
+        message: "NO_ALLOWED_DOMAINS_DEFINED",
       };
     }
 
@@ -107,7 +107,7 @@ class DomainChallengeService extends ChallengeService {
     if (allowedDomains.includes(emailDomain)) {
       return {
         success: true,
-        message: "Domain challenge completed successfully",
+        message: "DOMAIN_VERIFIED",
       };
     } else {
       return {
@@ -136,13 +136,13 @@ class ManualApprovalChallengeService extends ChallengeService {
     if (approvals[userId]) {
       return {
         success: true,
-        message: "Manual approval challenge completed successfully",
+        message: "MANUAL_APPROVAL_GRANTED",
       };
     } else {
       // Mark the challenge as pending approval
       return {
         success: true,
-        message: "Manual approval required",
+        message: "MANUAL_APPROVAL_PENDING",
         pendingApproval: true,
       };
     }

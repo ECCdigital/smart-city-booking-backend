@@ -146,6 +146,10 @@ class InvitationService {
 
     membershipInvite = membership.invitations.find((i) => i.token === token);
 
+    if(membershipInvite && membershipInvite.status === "rejected") {
+      throw { message: "Invitation has been rejected previously", code: 410 };
+    }
+
     let challengeResults = [];
     let pendingManualApproval = false;
 
@@ -379,7 +383,7 @@ class InvitationService {
     return results;
   }
 
-  static async deleteUserInvitation(tenantID, userID) {
+  static async deleteUserInvitations(tenantID, userID) {
     const invitations =
       await InvitationManager.getInvitationsByTenantIDAndUserID(
         tenantID,
@@ -391,6 +395,38 @@ class InvitationService {
     for (const invitation of invitations) {
       await InvitationManager.deleteInvitation(tenantID, invitation.token);
     }
+    return true;
+  }
+
+  static async deleteUserInvitation(tenantID, userID, token) {
+    const membership = await MembershipManager.getMembershipByTenantAndUserID(
+      tenantID,
+      userID,
+    );
+
+    if (!membership) {
+      throw new Error("Membership not found");
+    }
+
+    const invite = (membership.invitations || []).find((i) => i.token === token);
+
+    if (!invite) {
+      throw new Error("Invitation not found in membership");
+    }
+
+    const invitation = await InvitationManager.getInvitationByToken(token);
+
+    if(invitation && invitation.intendedUserId === userID && invitation.type === "single") {
+      await InvitationManager.deleteInvitation(tenantID, token);
+    }
+
+    await MembershipManager.updateMembership(tenantID, userID, {
+      invitations: (await MembershipManager.getMembershipByTenantAndUserID(
+        tenantID,
+        userID,
+      )).invitations.filter((inv) => inv.token !== token),
+    });
+
     return true;
   }
 
@@ -566,6 +602,7 @@ class InvitationService {
     if (lockCompleted && invite.status === "completed") return "completed";
     const states = invite.challengeStates || [];
     if (states.some((s) => s.status === "failed")) return "failed";
+    if( states.some((s) => s.status === "rejected")) return "rejected";
     if (states.some((s) => s.status === "pending_approval"))
       return "pending_approval";
     if (states.length === 0 || states.every((s) => s.status === "passed"))
@@ -593,7 +630,7 @@ class InvitationService {
       return (inv.challengeStates || []).some(
         (cs) =>
           cs.challengeId === challengeId &&
-          (cs.status === "pending_approval" || cs.status === "pending"),
+          (cs.status === "pending_approval" || cs.status === "pending" || cs.status === "rejected"),
       );
     });
     const now = new Date();
@@ -601,7 +638,7 @@ class InvitationService {
       const cs = inv.challengeStates.find((c) => c.challengeId === challengeId);
       cs.status = "passed";
       cs.approvedBy = adminId || null;
-      cs.message = "Approved by admin";
+      cs.message = "APPROVED_BY_ADMIN";
       cs.updatedAt = now;
     }
     await MembershipManager.updateMembership(tenantID, userId, {
@@ -609,6 +646,43 @@ class InvitationService {
     });
     return { updatedInvitations: targets.map((t) => t.token) };
   }
+
+  static async rejectManualChallenge(tenantID, {
+    challengeId,
+    userId,
+    adminId,
+    reason,
+    token = null,
+  }) {
+    const membership = await MembershipManager.getMembershipByTenantAndUserID(
+      tenantID,
+      userId,
+    );
+    if (!membership) {
+      throw { message: "Membership not found", code: 404 };
+    }
+    const targets = (membership.invitations || []).filter((inv) => {
+      if (token && inv.token !== token) return false;
+      return (inv.challengeStates || []).some(
+        (cs) =>
+          cs.challengeId === challengeId &&
+          (cs.status === "pending_approval" || cs.status === "pending"),
+      );
+    });
+    const now = new Date();
+    for (const inv of targets) {
+      const cs = inv.challengeStates.find((c) => c.challengeId === challengeId);
+      cs.status = "rejected";
+      cs.approvedBy = adminId || null;
+      cs.message = reason || "REJECTED_BY_ADMIN";
+      cs.updatedAt = now;
+    }
+    await MembershipManager.updateMembership(tenantID, userId, {
+      invitations: membership.invitations,
+    });
+    return { updatedInvitations: targets.map((t) => t.token) };
+  }
+
 }
 
 module.exports = InvitationService;

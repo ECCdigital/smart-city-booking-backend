@@ -405,6 +405,18 @@ router.post(
   InvitationController.approveManualChallenge,
 );
 
+router.post(
+  "/invitations/reject",
+  AuthenticationController.isSignedIn,
+  InvitationController.rejectManualChallenge,
+);
+
+router.delete(
+  "/invitations/user/:userId",
+  AuthenticationController.isSignedIn,
+  InvitationController.deleteUserInvitation,
+);
+
 // CATALOG
 
 router.get(

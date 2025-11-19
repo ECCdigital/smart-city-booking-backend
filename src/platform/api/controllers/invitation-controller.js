@@ -317,6 +317,97 @@ class InvitationController {
         .send(error.message || "Could not approve challenge");
     }
   }
+
+  static async rejectManualChallenge(request, response) {
+    try {
+      const tenantID = request.params.tenant;
+      const user = request.user;
+      const { challengeId, userId, token } = request.body;
+
+      if (
+        !(await PermissionService._allowUpdateAny(
+          user.id,
+          tenantID,
+          RolePermission.MANAGE_USERS,
+        ))
+      ) {
+        return response
+          .status(403)
+          .send("Forbidden: You don't have permission to reject challenges.");
+      }
+
+      // Validate required parameters
+      if (!challengeId || !userId) {
+        return response
+          .status(400)
+          .send(
+            "Missing required parameters: challengeId and userId are required.",
+          );
+      }
+
+      await InvitationService.rejectManualChallenge(tenantID, {
+        challengeId,
+        userId,
+        adminId: user.id,
+        token: token || null,
+      });
+
+      try {
+        const finalizeResults =
+          await InvitationService.tryFinalizePendingInvitationsForUser(
+            tenantID,
+            userId,
+          );
+        logger.info({ finalizeResults }, "Finalize after manual approval");
+      } catch (e) {
+        logger.warn({ err: e }, "Finalize after approval failed");
+      }
+
+      // Return success response
+      response
+        .status(200)
+        .send({ message: "Challenge rejected successfully." });
+    } catch (error) {
+      logger.error(error);
+      response
+        .status(error.code || 500)
+        .send(error.message || "Could not reject challenge");
+    }
+  }
+
+  static async deleteUserInvitation(request, response) {
+    try {
+      const tenantID = request.params.tenant;
+      const userID = request.params.userId;
+      const { token } = request.body;
+      const user = request.user;
+
+      if (
+        !(await PermissionService._allowUpdateAny(
+          user.id,
+          tenantID,
+          RolePermission.MANAGE_USERS,
+        ))
+      ) {
+        return response
+          .status(403)
+          .send("Forbidden: You don't have permission to delete user invitations.");
+      }
+
+      await InvitationService.deleteUserInvitation(tenantID, userID, token);
+
+      response
+        .status(200)
+        .send({ message: "User invitation deleted successfully." });
+    } catch (error) {
+      logger.error(error);
+      response
+        .status(error.code || 500)
+        .send(error.message || "Could not delete user invitation");
+    }
+  }
+
+
 }
 
 module.exports = InvitationController;

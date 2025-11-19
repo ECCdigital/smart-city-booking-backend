@@ -452,7 +452,7 @@ class TenantController {
             .send("Only owners can remove other owners");
         }
 
-        await InvitationService.deleteUserInvitation(tenantId, userId);
+        await InvitationService.deleteUserInvitations(tenantId, userId);
 
         await MembershipManager.removeMembership(tenantId, userId);
 
