@@ -565,6 +565,17 @@ class BookingService {
 
       await BookingManager.storeBooking(originBooking);
       if (isNoPaymentRequired(originBooking)) {
+        try {
+          const lockerServiceInstance = LockerService.getInstance();
+          await lockerServiceInstance.handleCreate(
+            originBooking.tenantId,
+            originBooking.id,
+          );
+        } catch (err) {
+          logger.error(err);
+        }
+
+
         await MailController.sendFreeBookingConfirmation(
           originBooking.mail,
           originBooking.id,
@@ -651,6 +662,18 @@ class BookingService {
     }
 
     if (bookings.every((booking) => isNoPaymentRequired(booking))) {
+      for (const booking of bookings) {
+        try {
+          const lockerServiceInstance = LockerService.getInstance();
+          await lockerServiceInstance.handleCreate(
+            booking.tenantId,
+            booking.id,
+          );
+        } catch (err) {
+          logger.error(err);
+        }
+      }
+
       await MailController.sendFreeBookingConfirmation(
         groupBooking.mail,
         groupBooking.bookingIds,
@@ -719,6 +742,13 @@ class BookingService {
         );
       }
 
+      try {
+        const lockerServiceInstance = LockerService.getInstance();
+        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
+      } catch (err) {
+        logger.error(err);
+      }
+
       await BookingService.handleSingleBookingConfirmation(tenantId, bookingId);
 
       return { success: true };
@@ -741,6 +771,16 @@ class BookingService {
         }
         await BookingManager.storeBooking(booking);
         logger.info(`${tenantId} -- booking ${booking.id} set to payed`);
+
+        try {
+          const lockerServiceInstance = LockerService.getInstance();
+          await lockerServiceInstance.handleCreate(
+            booking.tenantId,
+            booking.id,
+          );
+        } catch (err) {
+          logger.error(err);
+        }
       }
       await BookingService.handleAggregatedBookingConfirmation(
         tenantId,
@@ -885,6 +925,7 @@ class BookingService {
 
   static async requestRejectBooking(tenant, bookingId, reason = "") {
     try {
+      console.log("Requesting booking rejection...");
       const booking = await BookingManager.getBooking(bookingId, tenant);
 
       if (!booking) {
