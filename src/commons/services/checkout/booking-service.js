@@ -824,6 +824,14 @@ class BookingService {
         );
       }
 
+      try {
+        const lockerServiceInstance = LockerService.getInstance();
+        await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+      } catch (err) {
+        logger.error(err);
+      }
+
+
       if (isRejection(booking, hookId)) {
         await MailController.sendBookingRejection(
           booking.mail,
@@ -883,6 +891,13 @@ class BookingService {
       booking.isRejected = true;
       booking.rejectionReason = reason;
       await BookingManager.storeBooking(booking);
+
+      try {
+        const lockerServiceInstance = LockerService.getInstance();
+        await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+      } catch (err) {
+        logger.error(err);
+      }
 
       if (!skipWorkflow) {
         await WorkflowService.handleWorkflowEvent(
