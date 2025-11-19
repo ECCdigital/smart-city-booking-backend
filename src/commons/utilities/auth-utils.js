@@ -1,10 +1,10 @@
 const JwtHelper = require('./jwt-helper');
 
 /**
- * Authentifiziert Request falls Bedingung erfüllt ist
+ * Authenticate request if condition is met
  * @param {Object} req - Express Request
- * @param {boolean} condition - Wenn true, wird Token validiert
- * @returns {Promise<Object|null>} Decoded Token oder null
+ * @param {boolean} condition - If true, authentication is performed
+ * @returns {Promise<Object|null>} - Decoded token or null
  */
 const authenticateIfNeeded = async (req, condition) => {
   if (!condition) return null;
