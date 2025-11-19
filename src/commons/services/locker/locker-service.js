@@ -7,12 +7,18 @@ const {
   getBookingsByTimeRange,
 } = require("../../data-managers/booking-manager");
 const { ParevaLocker } = require("./locker");
+const bunyan = require("bunyan");
 
 const APP_TYPE = "locker";
 
 const LOCKER_TYPE = {
   PAREVA: "pareva",
 };
+
+const logger = bunyan.createLogger({
+  name: "locker-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 /**
  * LockerService is a singleton class that provides methods for managing lockers.
@@ -235,6 +241,9 @@ class LockerService {
           booking.timeEnd,
         );
       }
+
+      logger.info(`Created booking locker info: ${JSON.stringify(booking.lockerInfo)}`);
+
       await BookingManager.storeBooking(booking);
     } catch (error) {
       throw new Error(`Error in getting booking: ${error.message}`);
@@ -551,6 +560,8 @@ class LockerService {
 
       await confirmLockers(oldLockerUnits, updatedBooking);
 
+      logger.info(`Updated booking locker info: ${JSON.stringify(updatedBooking.lockerInfo)}`);
+
       await BookingManager.storeBooking(updatedBooking);
     } catch (error) {
       console.log(`Error in updating booking: ${error}`);
@@ -594,6 +605,8 @@ class LockerService {
       }
       results.push(await locker.cancelReservation(unit.processId));
     }
+
+    logger.info(`Locker cancellation results: ${JSON.stringify(results)}`);
 
     return results;
   }
