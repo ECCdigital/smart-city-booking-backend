@@ -250,10 +250,18 @@ router.get("/calendar/occupancy", CalendarController.getOccupancies);
 
 // COUPONS
 // =======
-router.get("/coupons", CouponController.getCoupons);
+router.get("/coupons", optionalAuth, CouponController.getCoupons);
 router.get("/coupons/:id", CouponController.getCoupon);
-router.put("/coupons", CouponController.storeCoupon);
-router.delete("/coupons/:id", CouponController.deleteCoupon);
+router.put(
+  "/coupons",
+  AuthenticationController.isSignedIn,
+  CouponController.storeCoupon,
+);
+router.delete(
+  "/coupons/:id",
+  AuthenticationController.isSignedIn,
+  CouponController.deleteCoupon,
+);
 
 // NEXT CLOUD
 // ==========
