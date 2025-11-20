@@ -538,6 +538,8 @@ class BookingService {
         tenantId,
       );
 
+      const snapshotBooking = { ...originBooking };
+
       const validator = new BookingConsistencyService([
         validatePaymentProviderRequirement,
       ]);
@@ -564,6 +566,7 @@ class BookingService {
       }
 
       await BookingManager.storeBooking(originBooking);
+
       if (isNoPaymentRequired(originBooking)) {
         try {
           const lockerServiceInstance = LockerService.getInstance();
@@ -572,7 +575,8 @@ class BookingService {
             originBooking.id,
           );
         } catch (err) {
-          logger.error(err);
+          await BookingManager.storeBooking(snapshotBooking);
+          throw err;
         }
 
 
@@ -1174,8 +1178,6 @@ class BookingService {
   static async handleAggregatedBookingConfirmation(tenantId, bookingIds) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
-    console.log(bookings);
-
     if (bookings.every((b) => b.isCommitted && b.isPayed)) {
       let attachments = [];
       if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
@@ -1275,7 +1277,7 @@ async function generateBookingReference(
 }
 
 function isNoPaymentRequired(booking) {
-  return !booking.priceEur || booking.priceEur === 0;
+  return !booking.priceEur || booking.priceEur === 0 || booking.isPayed;
 }
 
 function isRejection(booking, hookId) {

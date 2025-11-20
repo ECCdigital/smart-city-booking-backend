@@ -608,6 +608,21 @@ class LockerService {
 
     logger.info(`Locker cancellation results: ${JSON.stringify(results)}`);
 
+    for (const result of results) {
+      if (result.success) {
+       const locker = booking.lockerInfo.find(
+          (locker) => locker.processId === result.processId,
+        );
+       if(locker) {
+          locker.isConfirmed = false;
+          locker.processId = null;
+       }
+      }
+    }
+
+    await BookingManager.storeBooking(booking);
+
+
     return results;
   }
 
