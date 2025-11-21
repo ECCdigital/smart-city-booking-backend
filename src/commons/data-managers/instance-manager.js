@@ -21,10 +21,12 @@ class InstanceManager {
     if (!rawInstance) {
       return null;
     }
-    rawInstance.set(instanceEntity);
-    await rawInstance.save();
-    const newInstance = await InstanceModel.findOne();
-    return newInstance.toEntity();
+    const updated = await InstanceModel.findOneAndUpdate(
+      {},
+      { $set: instanceEntity },
+      { new: true },
+    );
+    return updated.toEntity();
   }
 }
 
