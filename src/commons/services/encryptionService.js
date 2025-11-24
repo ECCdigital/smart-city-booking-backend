@@ -2,7 +2,7 @@ const SecurityUtils = require("../utilities/security-utils");
 const PaymentApplication = require("../entities/application/paymentApplication");
 const AuthApplication = require("../entities/application/authApplication");
 const LockerApplication = require("../entities/application/lockerApplication");
-const SsoApplication = require("../entities/application/ssoApplication");
+const KeycloakSsoApplication = require("../entities/application/keycloakSsoApplication");
 
 class EncryptionService {
   static encryptFields(obj, fieldNames) {
@@ -77,14 +77,14 @@ class InstanceEncryptionService extends EncryptionService {
   }
   static encryptApplications(applications) {
     const applicationTypes = {
-      auth: SsoApplication,
+      auth: KeycloakSsoApplication,
     };
     return super.encryptApplications(applications, applicationTypes);
   }
 
   static decryptApplications(applications) {
     const applicationTypes = {
-      auth: SsoApplication,
+      auth: KeycloakSsoApplication,
     };
     return super.decryptApplications(applications, applicationTypes);
   }
