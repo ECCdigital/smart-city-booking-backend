@@ -1,26 +1,27 @@
 const mongoose = require("mongoose");
 const tenantSchemaDefinition = require("../../schemas/tenantSchema");
-const TenantEncryptionService = require("../../services/tenantEncryptionService");
+const {
+  TenantEncryptionService,
+} = require("../../services/encryptionService");
 const { Schema } = mongoose;
 
 const TenantSchema = new Schema(tenantSchemaDefinition);
 
 TenantSchema.pre(["updateOne", "replaceOne"], async function (next) {
   const update = this.getUpdate();
-  TenantEncryptionService.encryptInPlace(update);
+  TenantEncryptionService.encrypt(update);
   next();
 });
 
 TenantSchema.pre("save", async function (next) {
-  TenantEncryptionService.encryptInPlace(this);
+  TenantEncryptionService.encrypt(this);
   next();
 });
 
 TenantSchema.post("init", function (doc) {
-  TenantEncryptionService.decryptInPlace(doc);
+  TenantEncryptionService.decrypt(doc);
 });
 
-// Instance method to convert to business entity
 TenantSchema.methods.toEntity = function () {
   const Tenant = require("../../entities/tenant/tenant");
   return new Tenant(this.toObject());
