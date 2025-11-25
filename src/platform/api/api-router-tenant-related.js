@@ -9,11 +9,14 @@ const { BookingController } = require("./controllers/booking-controller");
 const CheckoutController = require("./controllers/checkout-controller");
 const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
+const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
+const CatalogController = require("./controllers/catalog-controller");
+const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
 
@@ -104,7 +107,7 @@ router.get(
 // ========
 
 // Public
-router.get("/bookings", BookingController.getBookings);
+router.get("/bookings", optionalAuth, BookingController.getBookings);
 
 router.get("/bookings/:ids/status", BookingController.getBookingStatus);
 router.get(
@@ -247,10 +250,18 @@ router.get("/calendar/occupancy", CalendarController.getOccupancies);
 
 // COUPONS
 // =======
-router.get("/coupons", CouponController.getCoupons);
+router.get("/coupons", optionalAuth, CouponController.getCoupons);
 router.get("/coupons/:id", CouponController.getCoupon);
-router.put("/coupons", CouponController.storeCoupon);
-router.delete("/coupons/:id", CouponController.deleteCoupon);
+router.put(
+  "/coupons",
+  AuthenticationController.isSignedIn,
+  CouponController.storeCoupon,
+);
+router.delete(
+  "/coupons/:id",
+  AuthenticationController.isSignedIn,
+  CouponController.deleteCoupon,
+);
 
 // NEXT CLOUD
 // ==========
@@ -328,6 +339,103 @@ router.delete(
   "/roles/:id",
   AuthenticationController.isSignedIn,
   RoleController.removeRole,
+);
+
+// INVITATIONS
+router.get(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.getInvitationsByTenantID,
+);
+
+router.post(
+  "/invitations",
+  AuthenticationController.isSignedIn,
+  InvitationController.createInvitation,
+);
+
+router.delete(
+  "/invitations/:token",
+  AuthenticationController.isSignedIn,
+  InvitationController.deleteInvitation,
+);
+
+router.get(
+  "/invitations/:token/verify",
+  AuthenticationController.isSignedIn,
+  InvitationController.verifyInvitationToken,
+);
+router.post(
+  "/invitations/:token/accept",
+  AuthenticationController.isSignedIn,
+  InvitationController.acceptInvitationToken,
+);
+
+router.post(
+  "/invitations/:token/reject",
+  AuthenticationController.isSignedIn,
+  InvitationController.rejectInvitationToken,
+);
+
+router.post(
+  "/invitations/resend",
+  AuthenticationController.isSignedIn,
+  InvitationController.resendInvitation,
+);
+
+router.get(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.getChallenges,
+);
+
+router.post(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.createChallenge,
+);
+
+router.put(
+  "/challenges",
+  AuthenticationController.isSignedIn,
+  TenantController.updateChallenge,
+);
+
+router.delete(
+  "/challenges/:id",
+  AuthenticationController.isSignedIn,
+  TenantController.deleteChallenge,
+);
+
+router.post(
+  "/invitations/approve",
+  AuthenticationController.isSignedIn,
+  InvitationController.approveManualChallenge,
+);
+
+router.post(
+  "/invitations/reject",
+  AuthenticationController.isSignedIn,
+  InvitationController.rejectManualChallenge,
+);
+
+router.delete(
+  "/invitations/user/:userId",
+  AuthenticationController.isSignedIn,
+  InvitationController.deleteUserInvitation,
+);
+
+// CATALOG
+
+router.get(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.getCatalogByTenant,
+);
+router.put(
+  "/catalog",
+  AuthenticationController.isSignedIn,
+  CatalogController.storeCatalog,
 );
 
 module.exports = router;

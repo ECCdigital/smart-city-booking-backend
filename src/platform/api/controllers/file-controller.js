@@ -3,9 +3,12 @@ const {
 } = require("../../../commons/data-managers/file-manager");
 const bunyan = require("bunyan");
 const mime = require("mime-types");
+const {
+  authenticateIfNeeded,
+} = require("../../../commons/utilities/auth-utils");
 
 const logger = bunyan.createLogger({
-  name: "next-cloud-controller.js",
+  name: "file-controller.js",
   level: process.env.LOG_LEVEL,
 });
 
@@ -36,7 +39,7 @@ class FileController {
       }));
 
       let protectedFiles = [];
-      if (request.isAuthenticated() && includeProtectedBool) {
+      if ((await authenticateIfNeeded(request, true)) && includeProtectedBool) {
         const protectedFilesData = await NextcloudManager.getFiles(
           tenant,
           PROTECTED_PATH,
@@ -94,7 +97,10 @@ class FileController {
       const isPublicPath = filename.startsWith(`/${PUBLIC_PATH}/`);
       const isProtected = filename.startsWith(`/${PROTECTED_PATH}/`);
 
-      if (isPublicPath || (isProtected && request.isAuthenticated())) {
+      if (
+        isPublicPath ||
+        (isProtected && (await authenticateIfNeeded(request, true)))
+      ) {
         const stat = await NextcloudManager.statFile(tenant, filename);
 
         const contentType =

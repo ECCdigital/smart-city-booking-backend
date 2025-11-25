@@ -1,58 +1,33 @@
 const mongoose = require("mongoose");
-const SecurityUtils = require("../../utilities/security-utils");
 const { instanceSchemaDefinition } = require("../../schemas/instanceSchema");
-const SsoApplication = require("../../entities/application/ssoApplication");
+const {
+  InstanceEncryptionService,
+} = require("../../services/encryptionService");
 
 const { Schema } = mongoose;
 const InstanceSchema = new Schema(instanceSchemaDefinition);
 
-InstanceSchema.pre("save", async function (next) {
-  if (this.isModified("noreplyPassword"))
-    this.noreplyPassword = SecurityUtils.encrypt(this.noreplyPassword);
-  if (this.isModified("noreplyGraphClientSecret"))
-    this.noreplyGraphClientSecret = SecurityUtils.encrypt(
-      this.noreplyGraphClientSecret,
-    );
-  this.applications = encryptApps(this);
+InstanceSchema.pre(
+  ["updateOne", "replaceOne", "findOneAndUpdate"],
+  async function (next) {
+    const update = this.getUpdate();
+    if (update.$set) {
+      InstanceEncryptionService.encrypt(update.$set);
+    } else {
+      InstanceEncryptionService.encrypt(update);
+    }
+    next();
+  },
+);
 
+InstanceSchema.pre("save", async function (next) {
+  InstanceEncryptionService.encrypt(this);
   next();
 });
 
 InstanceSchema.post("init", function (doc) {
-  if (doc.noreplyPassword) {
-    doc.noreplyPassword = SecurityUtils.decrypt(doc.noreplyPassword);
-  }
-  if (doc.noreplyGraphClientSecret) {
-    doc.noreplyGraphClientSecret = SecurityUtils.decrypt(
-      doc.noreplyGraphClientSecret,
-    );
-  }
-
-  doc.applications = decryptApps(doc);
+  InstanceEncryptionService.decrypt(doc);
 });
-
-function decryptApps(instance) {
-  return instance.applications.map((app) => {
-    let appClass;
-    if (app?.type === "auth") {
-      appClass = SsoApplication.init(app);
-    }
-    appClass?.decrypt();
-    return appClass;
-  });
-}
-
-function encryptApps(instance) {
-  return instance.applications.map((app) => {
-    let appClass;
-    if (app?.type === "auth") {
-      appClass = SsoApplication.init(app);
-    }
-
-    appClass?.encrypt();
-    return appClass;
-  });
-}
 
 InstanceSchema.methods.toEntity = function () {
   const Instance = require("../../entities/instance/instance");

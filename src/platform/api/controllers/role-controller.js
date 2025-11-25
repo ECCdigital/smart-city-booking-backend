@@ -1,5 +1,5 @@
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const { Role, RolePermission } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
 const PermissionService = require("../../../commons/services/permission-service");
@@ -65,10 +65,11 @@ class RoleController {
     const isPublicView = Boolean(req.query.public);
 
     try {
-      const tenantRoleIds = await TenantManager.getTenantUserRoles(
-        tenantId,
-        user.id,
-      );
+      const tenantRoleIds =
+        await MembershipManager.getMembershipByTenantAndUserID(
+          tenantId,
+          user.id,
+        )?.roles;
 
       const roles = await Promise.all(
         tenantRoleIds.map((id) => RoleManager.getRole(id, tenantId)),

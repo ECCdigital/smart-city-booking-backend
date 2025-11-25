@@ -1,7 +1,6 @@
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
-const LockerService = require("../../../commons/services/locker/locker-service");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -97,18 +96,6 @@ class PaymentController {
         }
       }
 
-      for (const booking of bookings) {
-        try {
-          const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(
-            booking.tenantId,
-            booking.id,
-          );
-        } catch (err) {
-          logger.error(err);
-        }
-      }
-
       logger.info(
         `${tenantId} -- bookings ${aggregatedBookingIds} successfully payed and updated.`,
       );
@@ -162,17 +149,6 @@ class PaymentController {
         }
       }
 
-      try {
-        for (const booking of bookings) {
-          const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(
-            booking.tenantId,
-            booking.id,
-          );
-        }
-      } catch (err) {
-        logger.error(err);
-      }
       logger.info(
         `${tenantId} -- booking ${bookingId} successfully payed and updated.`,
       );

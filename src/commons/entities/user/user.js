@@ -105,6 +105,7 @@ class User {
       city: this.city,
       created: this.created,
       isVerified: this.isVerified,
+      isSuspended: this.isSuspended,
     };
   }
 

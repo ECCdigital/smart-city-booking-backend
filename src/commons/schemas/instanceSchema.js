@@ -43,6 +43,8 @@ const instanceSchemaDefinition = {
       path: { type: Array, default: [] },
     }
   },
+  enableCatalog: { type: Boolean, default: false },
+  catalogUrl: { type: String, default: "" },
 };
 
 module.exports = {

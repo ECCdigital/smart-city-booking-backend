@@ -1,9 +1,9 @@
 const InstanceManger = require("../../data-managers/instance-manager");
-const TenantManager = require("../../data-managers/tenant-manager");
 const axios = require("axios");
 const UserManager = require("../../data-managers/user-manager");
 const { RoleManager } = require("../../data-managers/role-manager");
 const { User } = require("../../entities/user/user");
+const MembershipManager = require("../../data-managers/membership-manager");
 
 class SsoService {
   static async handleLogin(token) {
@@ -87,10 +87,12 @@ class SsoService {
     const rolesToMap = app.roleMapping.roles;
 
     async function processRole(role) {
-      const userRoles = await TenantManager.getTenantUserRoles(
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
         role.tenantId,
         user.id,
       );
+
+      const userRoles = membership ? membership.roles : null;
 
       if (!userRoles) {
         if (keycloakRoles.includes(role.keycloakRole)) {
@@ -106,7 +108,7 @@ class SsoService {
 
       if (
         keycloakRoles.includes(role.keycloakRole) &&
-        !userRoles.includes(role.tenantRoleId)
+        !userRoles.some((r) => r.role === role.tenantRoleId)
       ) {
         if (!roles.find((tRole) => tRole.id === role.tenantRoleId)) {
           return;
@@ -118,7 +120,7 @@ class SsoService {
         };
       } else if (
         !keycloakRoles.includes(role.keycloakRole) &&
-        userRoles.includes(role.tenantRoleId)
+        userRoles.some((r) => r.role === role.tenantRoleId)
       ) {
         return {
           tenantId: role.tenantId,
@@ -133,7 +135,11 @@ class SsoService {
     for (const role of rolesToMap) {
       const newRole = await processRole(role);
       if (newRole) {
-        newRoles.push(newRole);
+        newRoles.push({
+          role: newRole.role,
+          status: "active",
+          source: "keycloak",
+        });
       }
     }
 
@@ -155,11 +161,16 @@ async function updateTenantRoles(roles, userId) {
   for (const { tenantId, role, action, needsInvite } of roles) {
     if (action === "add") {
       if (needsInvite) {
-        await TenantManager.addTenantUser(tenantId, userId);
+        await MembershipManager.addMembership(tenantId, { userId });
       }
-      await TenantManager.addUserRole(tenantId, userId, role);
+      const newRole = {
+        role: role,
+        status: "active",
+        source: "keycloak",
+      };
+      await MembershipManager.addRoleToMembership(tenantId, userId, newRole);
     } else if (action === "remove") {
-      await TenantManager.removeUserRole(tenantId, userId, role);
+      await MembershipManager.removeRoleFromMembership(tenantId, userId, role);
     }
   }
 }

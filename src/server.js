@@ -6,13 +6,13 @@ const MongoStore = require("connect-mongo");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const fileUpload = require("express-fileupload");
-const passport = require("passport");
 const bunyan = require("bunyan");
 
 const DatabaseManager = require("./commons/utilities/database-manager.js");
 const { runMigrations } = require("../migrations/migrationsManager");
 const seed = require("../seeder/seeder");
 const RuleEngine = require("./rule-engine/ruleEngine");
+const { requestLogger } = require("./middleware/logger.js");
 
 const dbm = DatabaseManager.getInstance();
 
@@ -29,17 +29,19 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(function (req, res, next) {
   res.header("Access-Control-Allow-Credentials", true);
   res.header("Access-Control-Allow-Origin", req.headers.origin);
-  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
+  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS");
   res.header(
     "Access-Control-Allow-Headers",
-    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept",
+    "X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, Authorization"
   );
   if ("OPTIONS" === req.method) {
-    res.send(200);
+    res.sendStatus(200);
   } else {
     next();
   }
 });
+
+app.use(requestLogger);
 
 app.use(cookieParser());
 
@@ -68,17 +70,6 @@ app.use((req, res, next) => {
 
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));
-
-passport.serializeUser(function (user, done) {
-  done(null, user);
-});
-
-passport.deserializeUser(function (user, done) {
-  done(null, user);
-});
-
-app.use(passport.initialize());
-app.use(passport.session());
 
 app.get("/healthz/live", (req, res) => {
   res.status(200).json({ status: "ok" });
@@ -129,6 +120,9 @@ app.use("/api/:tenant", apiRouterTenantRelated);
 
 const htmlRouterTenantRelated = require("./platform/html-engine/html-router-tenant-related");
 app.use("/html/:tenant", htmlRouterTenantRelated);
+
+const jsonRouterTenantRelated = require("./platform/json-engine/json-router-tenant-related");
+app.use("/json/:tenant", jsonRouterTenantRelated);
 
 const exportersRouterTenantRelated = require("./platform/exporters/exporters-router-tenant-related");
 app.use("/csv/:tenant", exportersRouterTenantRelated);

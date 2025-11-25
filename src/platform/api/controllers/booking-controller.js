@@ -13,6 +13,10 @@ const ReceiptService = require("../../../commons/services/payment/receipt-servic
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
+const AuthenticationController = require("../../authentication/controllers/authentication-controller");
+const {
+  authenticateIfNeeded,
+} = require("../../../commons/utilities/auth-utils");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -212,21 +216,25 @@ class BookingController {
         });
 
         response.status(200).send(anonymizedBookings);
-      } else if (user) {
-        const hasPermission = await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny",
-        );
+      } else {
+        const user = await authenticateIfNeeded(request, true);
 
-        if (hasPermission) {
-          response.status(200).send(bookings);
+        if (user) {
+          const hasPermission = await UserManager.hasPermission(
+            user.id,
+            tenant,
+            RolePermission.MANAGE_BOOKINGS,
+            "readAny",
+          );
+
+          if (hasPermission) {
+            response.status(200).send(bookings);
+          } else {
+            response.sendStatus(403);
+          }
         } else {
           response.sendStatus(403);
         }
-      } else {
-        response.sendStatus(403);
       }
     } catch (err) {
       logger.error(err);

@@ -1,9 +1,10 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
-const { USER_HOOK_TYPES } = require("../../../commons/entities/user/userHook");
 const bunyan = require("bunyan");
-const MailController = require("../../../commons/mail-service/mail-controller");
 const SsoService = require("../../../commons/services/sso/sso-service");
+const UserService = require("../../../commons/services/user-service");
+
+const JwtHelper = require("../../../commons/utilities/jwt-helper");
 
 const logger = bunyan.createLogger({
   name: "authentication-controller.js",
@@ -16,20 +17,29 @@ const logger = bunyan.createLogger({
  * @author Lennard Scheffler, lennard.scheffler@e-c-crew.de
  */
 class AuthenticationController {
-  static isSignedIn(request, response, next) {
-    if (request.isAuthenticated()) {
-      next();
-    } else {
-      response.sendStatus(401);
-    }
-  }
+  static isSignedIn = require("../../../middleware/jwt-auth");
 
   static async signin(request, response) {
     const user = request.user;
     try {
       const permissions = await UserManager.getUserPermissions(user.id);
+      const requestedUser = await UserManager.getUser(user.id, false);
+
+      const context = {
+        ip: request.ip || request.connection?.remoteAddress,
+        userAgent: request.headers['user-agent'],
+      };
+
+      const accessToken = await JwtHelper.generateToken(requestedUser, context);
+      const refreshToken = await JwtHelper.generateRefreshToken(requestedUser, context);
+
       logger.info(`User ${user.id} signed in.`);
-      response.status(200).send({ user, permissions });
+      response.status(200).json({
+        user: requestedUser,
+        permissions,
+        accessToken,
+        refreshToken,
+      });
     } catch (error) {
       logger.error(`could not sign in ${user?.id}`, error);
       response.sendStatus(500);
@@ -44,16 +54,14 @@ class AuthenticationController {
       const user = await SsoService.handleLogin(token);
 
       if (user) {
-        request.login(user, { session: true }, async (err) => {
-          if (err) {
-            return next(err);
-          }
-          request.session.save((err) => {
-            if (err) {
-              return next(err);
-            }
-            response.status(200).send(user);
-          });
+
+        const accessToken = await JwtHelper.generateToken(user);
+        const refreshToken = await JwtHelper.generateRefreshToken(user);
+
+        response.status(200).json({
+          user,
+          accessToken,
+          refreshToken,
         });
       } else {
         response.sendStatus(401);
@@ -64,42 +72,94 @@ class AuthenticationController {
     }
   }
 
-  static signup(request, response) {
-    if (
-      request.body.id &&
-      request.body.password &&
-      request.body.firstName &&
-      request.body.lastName
-    ) {
-      UserManager.getUser(request.body.id).then((user) => {
-        if (user) {
-          response.sendStatus(409);
-        } else {
-          const user = new User({
-            id: request.body.id,
-            secret: undefined,
-            firstName: request.body.firstName,
-            lastName: request.body.lastName,
-            company: request.body.company,
-          });
-          user.setPassword(request.body.password);
+  static async refreshToken(request, response) {
+    try {
+      const { refreshToken } = request.body;
+      if (!refreshToken) {
+        return response.status(401).json({
+          success: false,
+          message: "Refresh token required"
+        });
+      }
 
-          UserManager.signupUser(user)
-            .then(async (createdUser) => {
-              logger.info(`User ${createdUser.id} signed up.`);
-              await UserManager.requestVerification(createdUser);
-              await MailController.sendUserCreated(createdUser.id);
+      const decoded = await JwtHelper.verifyRefreshToken(refreshToken);
 
-              response.sendStatus(201);
-            })
-            .catch((err) => {
-              logger.error(err);
-              response.status(500).send("could not signup user");
-            });
-        }
+      const user = await UserManager.getUser(decoded.sub || decoded.id);
+
+      if (!user) {
+        return response.status(401).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      if (user.isSuspended) {
+        return response.status(403).json({
+          success: false,
+          message: "User account is suspended"
+        });
+      }
+
+      const context = {
+        ip: request.ip || request.connection?.remoteAddress,
+        userAgent: request.headers['user-agent'],
+      };
+
+      const newAccessToken = await JwtHelper.generateToken(user, context);
+      const newRefreshToken = await JwtHelper.generateRefreshToken(user, context);
+
+      if (decoded.jti) {
+        await JwtHelper.revokeToken(refreshToken, 'token_rotation');
+      }
+
+      logger.info(`Tokens refreshed for user ${user.id}`);
+
+      response.json({
+        success: true,
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
       });
-    } else {
-      response.sendStatus(400);
+    } catch (error) {
+      logger.error("Token refresh failed:", error);
+      response.status(401).json({
+        success: false,
+        message: "Invalid refresh token"
+      });
+    }
+  }
+
+  static async signup(request, response) {
+    try {
+      const {
+        id: userID,
+        password,
+        firstName,
+        lastName,
+        company,
+        nextUrl,
+      } = request.body;
+
+      const existingUser = await UserManager.getUser(userID);
+
+      if (existingUser) {
+        return response.sendStatus(409);
+      }
+
+      const user = new User({
+        id: userID,
+        secret: undefined,
+        firstName: firstName,
+        lastName: lastName,
+        company: company,
+      });
+      user.setPassword(password);
+
+      await UserService.singUpUser(user, nextUrl);
+
+      return response.sendStatus(201);
+    } catch (error) {
+      logger.error("Could not sign up user", error);
+      return response.status(error.status || 500).send(error.message);
     }
   }
 
@@ -115,13 +175,34 @@ class AuthenticationController {
     }
   }
 
-  static signout(request, response, next) {
-    request.logout(function (err) {
-      if (err) {
-        return next(err);
+  static async signout(request, response) {
+    try {
+      const authHeader = request.headers.authorization;
+      const token = JwtHelper.extractToken(authHeader);
+
+      if (token) {
+        await JwtHelper.revokeToken(token, 'logout');
+
+        // Optional: Auch Refresh-Token revoken wenn mitgeschickt
+        const { refreshToken } = request.body;
+        if (refreshToken) {
+          await JwtHelper.revokeToken(refreshToken, 'logout');
+        }
+
+        logger.info(`User ${request.user?.id} signed out, tokens revoked`);
       }
-    });
-    response.sendStatus(200);
+
+      response.status(200).json({
+        success: true,
+        message: "Logged out successfully"
+      });
+    } catch (error) {
+      logger.error('Signout error:', error);
+      response.status(500).json({
+        success: false,
+        message: 'Logout failed'
+      });
+    }
   }
 
   static async me(request, response) {
@@ -133,26 +214,21 @@ class AuthenticationController {
       }
 
       const permissions = await UserManager.getUserPermissions(user.id);
+      const requestedUser = await UserManager.getUser(user.id, false);
 
-      response.status(200).send({ user, permissions });
+      response.status(200).send({ user: requestedUser, permissions });
     } catch {
       response.sendStatus(500);
     }
   }
 
   static async releaseHook(request, response) {
-    const hookId = request.params.hookId;
+    const hookID = request.params.hookId;
 
     try {
-      const hookType = await UserManager.releaseHook(hookId);
-      let additionalUrl = "";
-      if (hookType === USER_HOOK_TYPES.VERIFY) {
-        additionalUrl = "/email/verify";
-      } else if (hookType === USER_HOOK_TYPES.RESET_PASSWORD) {
-        additionalUrl = "/password/confirmed";
-      }
+      const additionalUrl = await UserService.releaseHook(hookID);
 
-      logger.info(`Hook ${hookId} released.`);
+      logger.info(`Hook ${hookID} released.`);
 
       response.redirect(`${process.env.FRONTEND_URL}${additionalUrl}`);
     } catch (err) {
@@ -162,8 +238,8 @@ class AuthenticationController {
   }
 
   static resetPassword(request, response) {
-    var id = request.body.id;
-    var password = request.body.password;
+    const id = request.body.id;
+    const password = request.body.password;
 
     if (id && password) {
       UserManager.getUser(id, true)

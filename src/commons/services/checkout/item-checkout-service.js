@@ -1,14 +1,15 @@
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
+const MembershipManager = require("../../data-managers/membership-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
-const TenantManager = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
-const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
+const CouponService = require("../coupon-service");
+
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -38,7 +39,7 @@ class CheckoutPermissions {
     const permittedUsers = [
       ...(bookable.permittedUsers || []),
       ...(
-        await TenantManager.getTenantUsersByRoles(
+        await MembershipManager.getMembershipsByTenantAndRoles(
           tenantId,
           bookable.permittedRoles || [],
         )
@@ -64,7 +65,7 @@ class ItemCheckoutService {
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string || null} couponCode The coupon code
-   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations. 
+   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations.
    *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
    */
   constructor(
@@ -136,7 +137,7 @@ class ItemCheckoutService {
     const freeBookingUsers = [
       ...(this.originBookable.freeBookingUsers || []),
       ...(
-        await TenantManager.getTenantUsersByRoles(
+        await MembershipManager.getMembershipsByTenantAndRoles(
           this.tenantId,
           this.originBookable.freeBookingRoles || [],
         )
@@ -182,11 +183,19 @@ class ItemCheckoutService {
       );
     }
 
-    const amountBooked = concurrentBookings
-      .map((cb) => cb.bookableItems)
-      .flat()
-      .filter((bi) => bi.bookableId === bookable.id)
-      .reduce((acc, bi) => Number(acc) + Number(bi.amount), 0);
+    const amountBooked = concurrentBookings.reduce((sum, cb) => {
+      if (cb.isRejected || !Array.isArray(cb.bookableItems)) {
+        return sum;
+      }
+
+      for (const bi of cb.bookableItems) {
+        if (bi.bookableId === bookable.id) {
+          sum += Number(bi.amount) || 0;
+        }
+      }
+
+      return sum;
+    }, 0);
 
     return {
       amountBooked,
@@ -407,7 +416,7 @@ class ItemCheckoutService {
       }
     }
 
-    const total = await CouponManager.applyCoupon(
+    const total = await CouponService.applyCoupon(
       this.originBookable.enableCoupons ? this.couponCode : null,
       this.tenantId,
       await this.regularPriceEur(),
