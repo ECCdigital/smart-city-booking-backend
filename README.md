@@ -12,6 +12,31 @@
 
 ---
 
+## Changelog
+
+### v3.4.0 (BREAKING)
+
+**Important changes**
+
+1. **Switching from session-based login to JWT-based authentication**  
+   - The previous session/cookie logic has been replaced by JWT (JSON Web Token).  
+   - After successfully logging in, clients must now transmit the returned JWT in subsequent requests (e.g. in the `Authorisation` header) instead of relying on a server-side session.  
+   - Be sure to check your front-end/integration logic and adjust all auth flows (login, logout, token refresh, storage).  
+   - **Environment variables:** The JWT configuration must now be provided via environment variables. Ensure the following keys are set in your `.env` file (or deployment environment): `JWT_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ALGORITHM`, `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN`, `JWT_ISSUER`, `JWT_AUDIENCE`.
+
+2. **Introduction of the membership entity to map user–tenant relationships**  
+   - The user lists previously stored directly in the `Tenant` have been migrated to a new entity called **Membership**.  
+   - The migration script `03-09-2025-migrate-users-to-memberships.js`
+     - Creates a `Membership` document for each entry in `tenant.users` with the following fields:  
+       `tenantId`, `userId`, `roles` (from the previous user object), `status = ‘active’`, `source = ‘invite’`.  
+     - Creates or updates a membership with `owner = true` for all `tenant.ownerUserIds`.
+     - Then removes the fields `users` and `ownerUserIds` from all `Tenant` documents.
+   - **Consequence:**  
+     - Code that previously accessed `tenant.users` or `tenant.ownerUserIds` must be converted to the `Membership` collection (e.g. queries for `tenantId` + `userId`, filters on `roles` or `owner`).
+     - All new or existing features that affect a user's roles/affiliations with a tenant should be mapped exclusively via `Membership`.
+
+---
+
 ## Overview
 
 - **Technologies:** Node.js, npm, Docker, MongoDB
@@ -240,11 +265,12 @@ For endpoints related to events, users, bookings, coupons, checkout, payments, c
 
 ## Entities
 
-The backend manages several key entities. Below is an overview:
+The backend manages several key entities. Below is an overview aligned with the current schemas.
 
 ### Tenant
 
-A tenant represents a group of users sharing common access and configurations.  
+A tenant represents a logical organization (e.g. a city, department or organization) that shares common access and configuration.
+
 Example:
 
 ```json
@@ -259,21 +285,22 @@ Example:
   "bookableDetailLink": "https://example.com/bookable-detail",
   "eventDetailLink": "https://example.com/event-detail",
   "genericMailTemplate": "<html>...</html>",
-  "useInstanceMail": false,
+  "useInstanceMail": true,
   "noreplyMail": "example@example.com",
   "noreplyDisplayName": "Example Display Name",
   "noreplyHost": "smtp.example.com",
-  "noreplyPort": "465",
+  "noreplyPort": 465,
   "noreplyUser": "smtp_user",
   "noreplyPassword": {},
   "noreplyStarttls": false,
   "noreplyUseGraphApi": false,
   "noreplyGraphTenantId": "GraphTenantId",
   "noreplyGraphClientId": "GraphClientId",
-  "noreplyGraphClientSecret": "GraphClientSecret",
+  "noreplyGraphClientSecret": {},
   "receiptTemplate": "<html>...</html>",
   "receiptNumberPrefix": "exmp",
   "receiptCount": { "2024": 1 },
+  "receiptEnableBCC": false,
   "invoiceTemplate": "<html>...</html>",
   "invoiceNumberPrefix": "exmp",
   "invoiceCount": { "2024": 1 },
@@ -282,24 +309,30 @@ Example:
   "maxBookingAdvanceInMonths": 12,
   "defaultEventCreationMode": "simple",
   "enablePublicStatusView": true,
-  "ownerUserIds": ["john.doe@example.com"]
+  "notifyOnNewBooking": true,
+  "catalogParticipation": {
+    "visible": true,
+    "restricted": false
+  }
 }
 ```
 
-> **Note:** Sensitive information (e.g., `noreplyPassword`, `paymentSecret`) is stored encrypted.
+> **Note:** Sensitive information (e.g. `noreplyPassword`, payment-related secrets) is stored encrypted in the database.
 
 ### Roles
 
-Define sets of permissions and are shared across tenants.
+Roles define permission sets within a tenant.
 
 Example:
 
 ```json
 {
-  "id": "default",
-  "name": "Example Name",
+  "id": "admin",
+  "name": "Administrator",
+  "tenantId": "default",
   "adminInterfaces": [
     "locations",
+    "users",
     "roles",
     "bookings",
     "coupons",
@@ -308,6 +341,15 @@ Example:
     "tickets",
     "events"
   ],
+  "manageUsers": {
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteAny": true,
+    "deleteOwn": true
+  },
   "manageBookables": {
     "create": true,
     "readAny": true,
@@ -351,13 +393,13 @@ Example:
 
 ### User
 
-An individual who can perform actions as permitted by their roles.
+A user is an individual that can authenticate and interact with one or more tenants via memberships.
 
 Example:
 
 ```json
 {
-  "id": "default",
+  "id": "someone@example.com",
   "firstName": "John",
   "lastName": "Doe",
   "phone": "1234567890",
@@ -368,34 +410,42 @@ Example:
   "secret": "<hash>",
   "hooks": [],
   "isVerified": true,
+  "created": 1658991377408,
   "isSuspended": false,
-  "created": 1658991377408
+  "authType": "local"
 }
 ```
 
 ### Bookable
+
 Resources such as rooms, tickets, or other bookable objects with detailed attributes.
 
 Example:
 
 ```json
 {
-  "id": "default",
+  "id": "bkbl-123",
   "tenantId": "default",
   "type": "room",
-  "parent": "123-123ada-123",
   "title": "Example Title",
   "description": "Example Description",
-  "flags": ["flag1", "flag2"],
+  "isPublic": true,
   "imgUrl": "https://example.com/image.jpg",
-  "priceEuro": 10.5,
-  "priceValueAddedTax": 19,
+  "flags": ["flag1", "flag2"],
+  "tags": ["tag1", "tag2"],
+  "location": "Example Location",
+
+  "isBookable": true,
   "amount": 10,
   "minBookingDuration": 30,
   "maxBookingDuration": 120,
   "autoCommitBooking": true,
-  "location": "Example Location",
-  "tags": ["tag1", "tag2"],
+  "bookingNotes": "Example Notes",
+  "groupBooking": {
+    "enabled": false,
+    "permittedRoles": []
+  },
+
   "isScheduleRelated": true,
   "isTimePeriodRelated": true,
   "timePeriods": [
@@ -425,74 +475,97 @@ Example:
   "longRangeOptions": {
     "type": "month"
   },
+
+  "priceCategories": [
+    {
+      "priceEur": 10.5,
+      "interval": { "start": null, "end": null },
+      "fixedPrice": false,
+      "holidays": [],
+      "weekdays": []
+    }
+  ],
+  "priceType": "per-item",
+  "priceValueAddedTax": 19,
+  "enableCoupons": true,
+
   "permittedUsers": ["user1", "user2"],
   "permittedRoles": ["role1", "role2"],
   "freeBookingUsers": ["user3"],
   "freeBookingRoles": ["role3"],
+
+  "relatedBookableIds": ["bookable1", "bookable2"],
+  "checkoutBookableIds": [],
   "eventId": "event1",
+  "ownerUserId": "user1",
+
   "attachments": [
     {
       "id": "1",
       "title": "User manual",
       "type": "user-manual",
-      "url": "https://.../manuel.pdf"
+      "url": "https://.../manual.pdf"
     }
   ],
-  "priceCategory": "per-hour",
-  "relatedBookableIds": ["bookable1", "bookable2"],
-  "isBookable": true,
-  "isPublic": true,
-  "lockerDetails": {},
+  "lockerDetails": {
+    "active": false,
+    "units": []
+  },
   "requiredFields": ["field1", "field2"],
-  "bookingNotes": "Example Notes",
-  "checkoutBookableIds": ["bookable3", "bookable4"],
-  "ownerUserId": "user1"
+
+  "timeCreated": 1707994800000,
+  "timeUpdated": 1708009200000
 }
 ```
 
-Here is a table that describes the fields in the bookable object:
+Key fields of a bookable:
 
-| Field                        | Description                                                                                                                                                               |
-|------------------------------| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| id                           | The unique identifier of the bookable.                                                                                                                                    |
-| tenantId                     | The tenant to which the bookable belongs.                                                                                                                                 |
-| type                         | The type of the bookable (e.g., room, event location, resource, ticket).                                                                                                  |
-| title                        | The title or name of the bookable.                                                                                                                                        |
-| description                  | A description of the bookable.                                                                                                                                            |
-| location                     | The location of the bookable.                                                                                                                                             |
-| priceEur                     | The price of the bookable in Euros.                                                                                                                                       |
-| priceCategory                | The category of the price (e.g. per-hour, per-item, per-day).                                                                                                             |
-| amount                       | The available amount of the bookable. Unlimited if undefined.                                                                                                             |
-| isScheduleRelated            | A boolean indicating if the bookable is related to a schedule. If true, the user is promted to choose a booking time in the checkout.                                     |
-| isTimePeriodRelated          | A boolean indicating if the bookable is related to a time period. If true, the user is prompted to select one of the predefined time periods.                             |
-| timePeriods                  | An array of repeating time periods within a week during which the bookable is available. Each time period has weekdays, a start time, and an end time.                    |
-| minBookingDuration           | The minimum booking duration for the bookable.                                                                                                                            |
-| maxBookingDuration           | The maximum booking duration for the bookable.                                                                                                                            |
-| autoCommitBooking            | A boolean indicating if the booking is automatically committed respecively the user is automatically directed into payment.                                               |
-| attachments                  | An array of attachments related to the bookable. Each attachment has an id, title, type, and url.                                                                         |
-| isOpeningHoursRelated        | A boolean indicating if the bookable is dependent to opening hours.                                                                                                       |
-| openingHours                 | An array of opening hours for the bookable. Each opening hour has weekdays, a start time, and an end time.                                                                |
-| isSpecialOpeningHoursRelated | A boolean indicating if the bookable has special opening hours.                                                                                                           |
-| specialOpeningHours          | An array of special opening hours for the bookable. Each special opening hour has a date, start time, and end time.                                                       |
-| tags                         | An array of tags associated with the bookable. Used for internal clustering.                                                                                              |
-| flags                        | An array of flags associated with the bookable. Used to present important features of this bookable to the user.                                                          |
-| eventId                      | The id of the event associated with the bookable. (Only for type = ticket)                                                                                                |
-| relatedBookableIds           | An array of ids of bookables related to the current bookable.                                                                                                             |
-| checkoutBookableIds          | An array of ids of bookables that can be checked out with the current bookable.                                                                                           |
-| imgUrl                       | The URL of the cover image of the bookable.                                                                                                                               |
-| isBookable                   | A boolean indicating if the bookable is bookable. If false, bookable cannot be checked out.                                                                               |
-| isPublic                     | A boolean indicating if the bookable is public. If false, the bookable es excluded from public lists.                                                                     |
-| permittedUsers               | An array of users who are permitted to book the bookable. If empty, every user incl. guests is allowed to book this bookable.                                             |
-| permittedRoles               | An array of roles that are permitted to book the bookable. If empty, every user incl. guests is allowed to book this bookable.                                            |
-| freeBookingUsers             | An array of users who can book the bookable for free.                                                                                                                     |
-| freeBookingRoles             | An array of roles that can book the bookable for free.                                                                                                                    |
-| isLongRange                  | A boolean indicating if the bookable is available for long range booking. If true, the users is requested to select a full week or month when checking out this bookable. |
-| longRangeOptions             | e.g. week, month.                                                                                                                                                         |
-
+| Field                 | Description                                                                                                                                                 |
+|-----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| id                    | Unique identifier of the bookable.                                                                                                                          |
+| tenantId              | Tenant to which the bookable belongs.                                                                                                                       |
+| type                  | Type of the bookable (e.g. `room`, `location`, `resource`, `ticket`).                                                                                       |
+| title                 | Human readable title/name.                                                                                                                                  |
+| description           | Description of the bookable.                                                                                                                                |
+| location              | Location information shown to the user.                                                                                                                     |
+| isPublic              | If `false`, the bookable is hidden from public listings.                                                                                                    |
+| isBookable            | If `false`, the bookable cannot be checked out.                                                                                                             |
+| amount                | Available capacity/amount. `null` means unlimited.                                                                                                         |
+| minBookingDuration    | Minimum booking duration in minutes (if schedule-related).                                                                                                  |
+| maxBookingDuration    | Maximum booking duration in minutes (if schedule-related).                                                                                                  |
+| autoCommitBooking     | If `true`, bookings are automatically committed / forwarded to payment.                                                                                    |
+| isScheduleRelated     | If `true`, the user is asked to choose a booking time during checkout.                                                                                    |
+| isTimePeriodRelated   | If `true`, the user selects one of the predefined `timePeriods`.                                                                                           |
+| timePeriods           | Weekly repeating time windows when the bookable can be used.                                                                                               |
+| isOpeningHoursRelated | If `true`, availability is derived from `openingHours`.                                                                                                     |
+| openingHours          | Regular opening hours per weekday.                                                                                                                          |
+| isSpecialOpeningHoursRelated | If `true`, `specialOpeningHours` override the regular opening hours for specific dates.                                                              |
+| specialOpeningHours   | Special opening hours for specific dates.                                                                                                                   |
+| isLongRange           | If `true`, long-range bookings (e.g. weeks/months) are enabled.                                                                                            |
+| longRangeOptions      | Configuration for long-range bookings (e.g. type = `week` or `month`).                                                                                    |
+| priceCategories       | List of price categories including price, interval, affected weekdays and holidays.                                                                       |
+| priceType             | Price type (e.g. `per-hour`, `per-day`, `per-item`, `per-square-meter`).                                                                                   |
+| priceValueAddedTax    | VAT rate (in percent) applied to this bookable.                                                                                                            |
+| enableCoupons         | If `true`, coupons can be applied to this bookable.                                                                                                       |
+| tags                  | Tags used for internal grouping and filtering.                                                                                                             |
+| flags                 | Feature flags highlighted to users (e.g. "barrier-free").                                                                                                |
+| relatedBookableIds    | IDs of bookables related to this bookable.                                                                                                                 |
+| checkoutBookableIds   | IDs of additional bookables that can be checked out together.                                                                                              |
+| permittedUsers        | List of user IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
+| permittedRoles        | List of role IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
+| freeBookingUsers      | Users who can book this bookable for free.                                                                                                                 |
+| freeBookingRoles      | Roles that can book this bookable for free.                                                                                                                |
+| attachments           | Attachments shown with the bookable (id, title, type, url).                                                                                                |
+| lockerDetails         | Configuration for locker integrations (e.g. units).                                                                                                       |
+| requiredFields        | Additional fields that must be filled in during checkout.                                                                                                  |
+| eventId               | ID of the related event (for `ticket` bookables).                                                                                                         |
+| ownerUserId           | ID of the user that owns/manages this bookable.                                                                                                           |
+| timeCreated           | Timestamp when the bookable was created.                                                                                                                   |
+| timeUpdated           | Timestamp when the bookable was last updated.                                                                                                              |
 
 ### Booking
 
-Reservations made by users for bookable resources.
+A booking is a reservation of one or more bookables by a user (or guest).
 
 Example:
 
@@ -501,65 +574,82 @@ Example:
   "id": "BK-1234",
   "tenantId": "default",
   "assignedUserId": "user1",
-  "timeBegin":  1707994800000,
-  "timeEnd": 1708009200000,
-  "timeCreated": 1707994800000,
-  "bookableItems": [  ],
-  "couponCode": "COUPON123",
-  "name": "John Doe",
-  "company": "Some Corp",
-  "street": "123 Main St",
-  "zipCode": "12345",
-  "location": "Anytown",
-  "mail": "john.doe@example.com",
-  "phone": "1234567890",
+  "attachments": [],
+  "bookableItems": [],
   "comment": "Please provide a projector and whiteboard.",
-  "priceEur": 100,
+  "internalComments": "Internal note",
+  "rejectionReason": "",
+  "company": "Some Corp",
+  "couponCode": "COUPON123",
   "isCommitted": true,
   "isPayed": true,
-  "_couponUsed": { }
+  "isRejected": false,
+  "location": "Anytown",
+  "lockerInfo": [],
+  "mail": "john.doe@example.com",
+  "name": "John Doe",
+  "paymentProvider": "stripe",
+  "paymentMethod": "credit-card",
+  "phone": "1234567890",
+  "priceEur": 100,
+  "street": "123 Main St",
+  "timeBegin": 1707994800000,
+  "timeCreated": 1707994800000,
+  "timeEnd": 1708009200000,
+  "vatIncludedEur": 19,
+  "_couponUsed": {},
+  "hooks": []
 }
 ```
 
-A booking is a reservation of a bookable by a user (or guest). Bookings have a start and end date, a user and one or more related bookables. Bookings can have additional properties like a status, payment method, etc.
+Key fields of a booking:
 
-| Field          | Description                                                                                                                           |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| id             | The unique identifier of the booking.                                                                                                 |
-| tenant         | The tenant to which the booking belongs.                                                                                              |
-| assignedUserId | The ID of the user who made the booking.                                                                                              |
-| timeBegin      | The start time of the booking.                                                                                                        |
-| timeEnd        | The end time of the booking.                                                                                                          |
-| timeCreated    | The time when the booking was created.                                                                                                |
-| bookableItems  | An array of bookable items included in the booking. Each item includes the bookable ID, tenant, amount, and the used bookable object. |
-| couponCode     | The coupon code applied to the booking.                                                                                               |
-| name           | The name of the person who made the booking.                                                                                          |
-| company        | The company of the person who made the booking.                                                                                       |
-| street         | The street address of the person who made the booking.                                                                                |
-| zipCode        | The zip code of the person who made the booking.                                                                                      |
-| location       | The city or location of the person who made the booking.                                                                              |
-| mail           | The email address of the person who made the booking.                                                                                 |
-| phone          | The phone number of the person who made the booking.                                                                                  |
-| comment        | Any comments or special requests made during the booking.                                                                             |
-| priceEur       | The total price of the booking in Euros.                                                                                              |
-| isCommitted    | A boolean indicating whether the booking is committed.                                                                                |
-| isPayed        | A boolean indicating whether the booking is paid.                                                                                     |
-| \_couponUsed   | The coupon used in the booking. It includes the ID, tenant, code, discount in Euros, and the valid from and to dates.                 |
-
+| Field           | Description                                                                                                                           |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| id              | Unique identifier of the booking.                                                                                                     |
+| tenantId        | Tenant to which the booking belongs.                                                                                                  |
+| assignedUserId  | ID of the user who made the booking (may be empty for guest bookings).                                                                |
+| timeBegin       | Start timestamp of the booking (epoch millis).                                                                                        |
+| timeEnd         | End timestamp of the booking (epoch millis).                                                                                          |
+| timeCreated     | Timestamp when the booking was created.                                                                                               |
+| bookableItems   | Array of booked items (bookable id, tenant, amount, and snapshot of the used bookable configuration).                                |
+| couponCode      | Coupon code applied to the booking (if any).                                                                                          |
+| _couponUsed     | Snapshot of the used coupon (id, tenant, discount and validity).                                                                      |
+| priceEur        | Total price in Euro (without additional taxes).                                                                                       |
+| vatIncludedEur  | VAT amount included in `priceEur`.                                                                                                     |
+| isCommitted     | Whether the booking is committed (confirmed) from the system’s perspective.                                                           |
+| isPayed         | Whether the booking has been paid.                                                                                                    |
+| isRejected      | Whether the booking has been rejected.                                                                                                |
+| name            | Name of the person who made the booking.                                                                                              |
+| company         | Company of the person who made the booking.                                                                                           |
+| street          | Street address of the person who made the booking.                                                                                    |
+| zipCode         | Zip code of the person who made the booking.                                                                                          |
+| location        | City or location of the person who made the booking.                                                                                  |
+| mail            | Email address of the person who made the booking.                                                                                     |
+| phone           | Phone number of the person who made the booking.                                                                                      |
+| comment         | Comment or special requests from the customer.                                                                                        |
+| internalComments| Internal comments visible only to administrators.                                                                                     |
+| rejectionReason | Reason why a booking has been rejected (if applicable).                                                                              |
+| attachments     | Attachments related to the booking.                                                                                                   |
+| lockerInfo      | Information about locker assignments associated with this booking.                                                                    |
+| paymentProvider | Identifier of the payment provider used (if any).                                                                                     |
+| paymentMethod   | Human readable payment method (e.g. credit card, invoice).                                                                           |
+| hooks           | Technical hooks triggered for this booking (e.g. webhooks).                                                                          |
 
 ### Coupon
 
-Discount codes that can be applied to bookings.
+Coupons represent discounts that can be applied to bookings.
 
 Example:
 
-```JSON
+```json
 {
   "id": "STUDENT50",
   "tenantId": "default",
   "description": "50% discount for students",
   "type": "percentage",
-  "discount": "50",
+  "discount": 50,
+  "amount": 0,
   "maxAmount": 20,
   "usedAmount": 3,
   "validFrom": 1677668400000,
@@ -570,15 +660,15 @@ Example:
 
 ### Event
 
-Events are not considered as bookables. Instead, they serve as a representation of real-world events, holding crucial information such as the event description, date and time, speakers, and more. This data is primarily used for display purposes on a website, providing users with detailed information about the event. Events can also be linked to tickets, allowing users to book their attendance for these events. However, the booking process is handled through the associated tickets, not the events themselves.
+Events are not considered bookables themselves. They describe real-world events (content, time, speakers, etc.) and can be linked to ticket bookables.
 
 Example:
 
-```JSON
+```json
 {
   "id": "event-123",
   "tenantId": "default",
-  "attachments": [ ],
+  "attachments": [],
   "attendees": {
     "publicEvent": true,
     "needsRegistration": false,
@@ -607,11 +697,11 @@ Example:
     "contactPersonName": "",
     "contactPersonPhoneNumber": "",
     "contactPersonEmailAddress": "",
-    "contactPersonImage": null,
+    "contactPersonImage": "",
     "speakers": []
   },
   "format": 0,
-  "images": [ ],
+  "images": [],
   "information": {
     "name": "",
     "teaserText": "",
@@ -625,49 +715,18 @@ Example:
     "flags": []
   },
   "isPublic": true,
-  "schedules": [
-    [
-      {
-        "id": "",
-        "date": "",
-        "time": "",
-        "description": "",
-        "schedules": []
-      },
-      {
-        "id": "",
-        "date": "",
-        "time": "",
-        "description": "",
-        "schedules": []
-      }
-    ]
-  ]
+  "schedules": [],
+  "ownerUserId": "user-123"
 }
 ```
 
-| Field          | Description                                                                                  |
-|----------------| -------------------------------------------------------------------------------------------- |
-| id             | The unique identifier of the event                                                           |
-| tenantId       | The tenant to which the event belongs.                                                       |
-| attachments    | An array of attachments related to the event. Each attachment is a string.                   |
-| attendees      | An object containing information about the attendees of the event.                           |
-| eventAddress   | An object containing the address of the event.                                               |
-| eventLocation  | An object containing the location of the event.                                              |
-| eventOrganizer | An object containing information about the organizer of the event.                           |
-| format         | The format of the event.                                                                     |
-| images         | An array of images related to the event. Each image has an id, title, type, and url.         |
-| information    | An object containing additional information about the event.                                 |
-| isPublic       | A boolean indicating whether the event is public.                                            |
-| schedules      | An array of schedules for the event. Each schedule has a start time, end time, and location. |
-
 ### Instance
 
-The Instance entity represents the global configuration for the entire application. There is only one instance per deployment.
+The Instance entity represents the global configuration for the entire deployment. There is only one instance per installation.
 
 Example:
 
-```JSON
+```json
 {
   "applications": [],
   "mailTemplate": "<html>...</html>",
@@ -691,7 +750,10 @@ Example:
   "allowAllUsersToCreateTenant": false,
   "allowedUsersToCreateTenant": [],
   "ownerUserIds": ["admin@example.com"],
-  "isInitialized": true
+  "isInitialized": true,
+  "userNotifications": [],
+  "enableCatalog": false,
+  "catalogUrl": ""
 }
 ```
 
@@ -701,24 +763,25 @@ A GroupBooking entity represents a collection of related bookings that are manag
 
 Example:
 
-```JSON
+```json
 {
   "id": "group-123",
   "tenantId": "default",
   "bookingIds": ["booking-1", "booking-2"],
-  "name": "Conference Room Booking",
-  "description": "Booking for the annual conference",
-  "ownerUserId": "user-123"
+  "assignedUserId": "user-123",
+  "mail": "group@example.com",
+  "timeCreated": 1707994800000,
+  "hooks": []
 }
 ```
 
 ### Application
 
-The Application entity represents external applications that can integrate with the system, such as SSO providers.
+Applications are stored as part of the instance or tenant configuration and represent external integrations (e.g. SSO, payment).
 
-Example:
+Example (instance-level application entry):
 
-```JSON
+```json
 {
   "id": "app-123",
   "name": "SSO Provider",
@@ -732,43 +795,162 @@ Example:
 
 ### Workflow
 
-The Workflow entity represents a sequence of states and transitions that a booking or other entity can go through.
+A workflow describes a state machine that can be attached to bookings or other processes.
 
 Example:
 
-```JSON
+```json
 {
-  "id": "workflow-123",
-  "name": "Booking Approval",
   "tenantId": "default",
+  "name": "Booking Approval",
+  "description": "Workflow for approving bookings",
   "states": [
     {
       "id": "state-1",
       "name": "Pending",
-      "description": "Booking is pending approval",
-      "isInitial": true,
-      "isFinal": false
+      "actions": [],
+      "tasks": []
     },
     {
       "id": "state-2",
       "name": "Approved",
-      "description": "Booking has been approved",
-      "isInitial": false,
-      "isFinal": true
+      "actions": [],
+      "tasks": []
     }
   ],
-  "transitions": [
+  "archive": [],
+  "eventStateMapping": {
+    "onCreate": "state-1",
+    "onCommit": "state-2",
+    "onReject": "",
+    "onPay": "state-2"
+  },
+  "active": true
+}
+```
+
+### Membership
+
+Membership objects link a user to a tenant and describe the roles, ownership and onboarding state of that relationship.
+
+Example:
+
+```json
+{
+  "userId": "someone@example.com",
+  "tenantId": "default",
+  "roles": ["admin", "editor"],
+  "owner": true,
+  "status": "active",
+  "source": "invite",
+  "invitations": [
     {
-      "id": "transition-1",
-      "name": "Approve",
-      "fromStateId": "state-1",
-      "toStateId": "state-2",
-      "roles": ["admin"]
+      "token": "INV-123",
+      "status": "completed",
+      "reason": "User accepted the invite",
+      "challengeStates": [
+        {
+          "challengeId": "chlg-terms",
+          "status": "passed",
+          "message": "Terms accepted",
+          "updatedAt": "2024-01-01T12:00:00.000Z",
+          "approvedBy": null
+        }
+      ]
     }
   ]
 }
 ```
 
+### Catalog
+
+Catalogs define public listings of tenants and their resources. They can represent a single tenant, an aggregate over multiple tenants, or an instance-wide catalog.
+
+Example:
+
+```json
+{
+  "type": "single",
+  "slug": "city-hall",
+  "name": "City Hall Catalog",
+  "tenantId": "default",
+  "tenantIds": [],
+  "excludedTenantIds": [],
+  "active": true,
+  "visibility": "public",
+  "theme": {
+    "active": true,
+    "colors": {
+      "primary": "#0055aa",
+      "secondary": "#00aa55"
+    }
+  }
+}
+```
+
+For aggregate catalogs, `type` is set to `"aggregate"` and several tenant IDs are combined; for instance-wide catalogs `type` is `"instance"` and `tenantId`/`name`/`slug` are omitted.
+
+### Challenge
+
+Challenges are reusable building blocks for onboarding or verification flows (e.g. accepting terms, passing checks) that can assign roles when completed.
+
+Example:
+
+```json
+{
+  "id": "chlg-terms",
+  "tenantId": "default",
+  "key": "accept-terms",
+  "enabled": true,
+  "defaultConfig": {
+    "url": "https://example.com/terms"
+  },
+  "label": "Accept Terms of Service",
+  "description": "User must read and accept the current terms of service.",
+  "rolesToAssign": ["member"]
+}
+```
+
+### Invitation
+
+Invitations grant users access to a tenant. They may assign roles and trigger challenges and can be single-use or multi-use links.
+
+Example:
+
+```json
+{
+  "tenantId": "default",
+  "token": "INV-123",
+  "type": "single",
+  "maxUses": 1,
+  "usedCount": 0,
+  "challenges": ["chlg-terms"],
+  "roles": ["member"],
+  "intendedUserId": "someone@example.com",
+  "expiresAt": 1735685940000,
+  "status": "active"
+}
+```
+
+### TokenSession
+
+TokenSession documents track issued access/refresh tokens so they can be revoked or audited.
+
+Example:
+
+```json
+{
+  "jti": "d8b9c5c2-9c3b-4c23-9c39-2f3c9c3b9c3b",
+  "userId": "someone@example.com",
+  "tokenType": "refresh",
+  "status": "active",
+  "issuedAt": "2024-01-01T12:00:00.000Z",
+  "expiresAt": "2024-02-01T12:00:00.000Z",
+  "revokedAt": null,
+  "revokeReason": null,
+  "deviceId": "browser-abc-123"
+}
+```
 
 ---
 
