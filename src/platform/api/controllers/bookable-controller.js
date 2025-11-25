@@ -329,7 +329,7 @@ class BookableController {
 
       if (
         await PermissionService._allowUpdate(
-          bookable,
+          existingBookable,
           user.id,
           tenant,
           RolePermission.MANAGE_BOOKABLES,

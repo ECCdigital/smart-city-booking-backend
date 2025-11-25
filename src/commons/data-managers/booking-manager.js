@@ -224,14 +224,39 @@ class BookingManager {
     eventId,
     { onlyOwn = false, userId = null } = {},
   ) {
-    const count = await BookingModel.countDocuments({
+    const matchStage = {
       tenantId: tenantId,
       isRejected: false,
       "bookableItems._bookableUsed.eventId": eventId,
       ...(onlyOwn ? { "bookableItems._bookableUsed.ownerUserId": userId } : {}),
-    });
+    };
 
-    return count;
+    const result = await BookingModel.aggregate([
+      { $match: matchStage },
+      { $unwind: "$bookableItems" },
+      {
+        $match: {
+          "bookableItems._bookableUsed.eventId": eventId,
+          ...(onlyOwn
+            ? { "bookableItems._bookableUsed.ownerUserId": userId }
+            : {}),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSeats: {
+            $sum: {
+              $toInt: {
+                $ifNull: ["$bookableItems.amount", 0],
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    return result.length > 0 ? result[0].totalSeats : 0;
   }
 
   /**

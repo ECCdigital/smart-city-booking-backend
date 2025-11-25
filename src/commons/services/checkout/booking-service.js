@@ -281,19 +281,6 @@ class BookingService {
           booking.id,
         );
 
-        const bookableItems = booking.bookableItems.map(
-          (bI) => bI._bookableUsed,
-        );
-
-        const isTicketBooking = bookableItems.some(isTicket);
-
-        if (isTicketBooking) {
-          const eventIds = bookableItems
-            .map(getEventForTicket)
-            .filter((id) => id !== null && id !== undefined);
-          await sendEmailToOrganizer(eventIds, tenantId, booking);
-        }
-
         const tenant = await TenantManager.getTenant(booking.tenantId);
 
         if (tenant.notifyOnNewBooking) {
