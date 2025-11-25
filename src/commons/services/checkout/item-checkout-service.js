@@ -3,13 +3,13 @@ const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
 const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
-const TenantManager = require("../../data-managers/tenant-manager");
 const bunyan = require("bunyan");
-const CouponManager = require("../../data-managers/coupon-manager");
 const { getTenant } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
+const CouponService = require("../coupon-service");
+
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -416,7 +416,7 @@ class ItemCheckoutService {
       }
     }
 
-    const total = await CouponManager.applyCoupon(
+    const total = await CouponService.applyCoupon(
       this.originBookable.enableCoupons ? this.couponCode : null,
       this.tenantId,
       await this.regularPriceEur(),
