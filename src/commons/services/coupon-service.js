@@ -27,10 +27,20 @@ class CouponService {
         discountedPrice = Math.max(0, bookingPrice - coupon.discount);
         break;
     }
-
-    await CouponManager.incrementCouponUsage(coupon.id, tenantID);
-
     return discountedPrice;
+  }
+
+  static async incrementCouponUsage(couponID, tenantID) {
+    try {
+      if (await CouponManager.exists(couponID, tenantID)) {
+        return CouponManager.incrementCouponUsage(couponID, tenantID);
+      } else {
+        return null;
+      }
+    } catch (error) {
+      return null;
+    }
+
   }
 
   static generateID() {
@@ -78,7 +88,7 @@ class CouponService {
       );
     }
 
-    return CouponManager.storeCoupon(coupon, tenantID,false);
+    return CouponManager.storeCoupon(coupon, tenantID, false);
   }
 }
 

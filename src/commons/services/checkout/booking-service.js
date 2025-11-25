@@ -1,5 +1,6 @@
 const bunyan = require("bunyan");
 const BookingManager = require("../../data-managers/booking-manager");
+const CouponService = require("../coupon-service");
 const GroupBookingManager = require("../../data-managers/group-booking-manager");
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
@@ -209,6 +210,8 @@ class BookingService {
     if (simulate === false) {
       await BookingManager.storeBooking(booking);
 
+      await CouponService.incrementCouponUsage(couponCode, tenantId);
+
       if (!skipWorkflow) {
         await WorkflowService.handleWorkflowEvent(
           tenantId,
@@ -267,7 +270,6 @@ class BookingService {
     }
 
     if (!simulate) {
-      console.log("Handling single booking confirmation...");
       try {
         await BookingService.handleSingleBookingRequestConfirmation(
           tenantId,
