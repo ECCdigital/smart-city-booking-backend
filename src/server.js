@@ -46,27 +46,6 @@ app.use(requestLogger);
 app.use(cookieParser());
 
 app.enable("trust proxy");
-app.use((req, res, next) => {
-  const domainPattern = /^.*(\..+\..+|localhost)/i;
-  const domain = domainPattern.test(req.hostname)
-    ? domainPattern.exec(req.hostname)[1]
-    : undefined;
-
-  const sessionMid = expressSession({
-    secret: process.env.SESSION_SECRET,
-    resave: true,
-    saveUninitialized: false,
-    rolling: true,
-    store: new MongoStore({ client: dbm.dbClient.connection.getClient() }),
-    cookie: {
-      httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 48,
-      domain: domain,
-    },
-  });
-
-  sessionMid(req, res, next);
-});
 
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));

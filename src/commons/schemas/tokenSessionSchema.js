@@ -5,7 +5,7 @@ const tokenSessionSchemaDefinition = {
   tokenType: { type: String, required: true, enum: ['access', 'refresh'] },
   status: { type: String, required: true, enum: ['active', 'revoked'], default: 'active' },
   issuedAt: { type: Date, required: true },
-  expiresAt: { type: Date, required: true, index: true },
+  expiresAt: { type: Date, required: true },
   revokedAt: { type: Date, default: null },
   revokeReason: { type: String, default: null },
   deviceId: { type: String, default: null },
