@@ -10,7 +10,7 @@ const tokenSessionSchemaDefinition = {
     default: "active",
   },
   issuedAt: { type: Date, required: true },
-  expiresAt: { type: Date, required: true, index: true },
+  expiresAt: { type: Date, required: true },
   revokedAt: { type: Date, default: null },
   revokeReason: { type: String, default: null },
   deviceId: { type: String, default: null },
