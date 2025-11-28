@@ -1020,15 +1020,21 @@ class MailController {
     });
   }
 
-  static async sendVerificationRequest(address, hookId) {
-    const verifyUrl = `${process.env.BACKEND_URL}/auth/verify/${hookId}`;
+  static async sendVerificationRequest(address, hookId, verifyUrl) {
+    let verifyUrlTemplate = "";
+
+    if (!verifyUrl) {
+      verifyUrlTemplate = `${process.env.BACKEND_URL}/auth/verify/${hookId}`;
+    } else {
+      verifyUrlTemplate = `${verifyUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
+    }
 
     const snippetTemplateString = `
         <p>
           Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den folgenden Button.
         </p>
         <p style="text-align: center;">
-          <a href="{{verifyUrl}}"
+          <a href="{{verifyUrlTemplate}}"
              style="
                background-color: #0055a5;
                color: #ffffff;
@@ -1042,7 +1048,7 @@ class MailController {
         </p>`;
 
     const snippetHtml = renderSnippet(snippetTemplateString, {
-      verifyUrl,
+      verifyUrlTemplate,
     });
 
     const instance = await InstanceManager.getInstance(false);

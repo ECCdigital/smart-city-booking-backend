@@ -117,8 +117,9 @@ class UserManager {
     const rawUser = await UserModel.findOne({ "hooks.id": hookID });
 
     if (!rawUser) {
-      throw new Error("No User found with this hook.");
+      return null;
     }
+
 
     return rawUser.toEntity();
   }
