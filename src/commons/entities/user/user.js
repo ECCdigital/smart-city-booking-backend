@@ -79,13 +79,19 @@ class User {
 
     if (!hook) return false;
 
+    if (hook.status !== "active") {
+      throw { message: "Hook already used or expired", status: 410 };
+    }
+
     if (hook.type === USER_HOOK_TYPES.VERIFY) {
       this.isVerified = true;
     } else if (hook.type === USER_HOOK_TYPES.RESET_PASSWORD) {
       this.secret = hook.payload.secret;
     }
 
-    this.hooks = this.hooks.filter((hook) => hook.id !== hookId);
+    hook.status = "released";
+
+
     return true;
   }
 

@@ -1,6 +1,5 @@
-const { User, USER_HOOK_TYPES } = require("../entities/user/user");
+const { User } = require("../entities/user/user");
 const { RoleManager } = require("./role-manager");
-const TenantManager = require("./tenant-manager");
 const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
@@ -106,8 +105,9 @@ class UserManager {
     const rawUser = await UserModel.findOne({ "hooks.id": hookID });
 
     if (!rawUser) {
-      throw new Error("No User found with this hook.");
+      return null;
     }
+
 
     return rawUser.toEntity();
   }

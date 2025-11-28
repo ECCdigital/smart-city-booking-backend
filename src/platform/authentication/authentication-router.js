@@ -20,6 +20,8 @@ router.post("/sso/signup", AuthenticationController.ssoSignup);
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);
 
+router.post("/verify-email", AuthenticationController.verifyEmail);
+
 // Geschützte Endpoints
 router.post("/signin", (req, res, next) => {
   passport.authenticate("local-signin", { session: false }, (err, user, info) => {
