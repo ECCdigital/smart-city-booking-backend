@@ -65,14 +65,16 @@ class RoleController {
     const isPublicView = Boolean(req.query.public);
 
     try {
-      const tenantRoleIds =
+      const membership =
         await MembershipManager.getMembershipByTenantAndUserID(
           tenantId,
           user.id,
-        )?.roles;
+        );
+
+      const roleIds = membership ? membership.roles : [];
 
       const roles = await Promise.all(
-        tenantRoleIds.map((id) => RoleManager.getRole(id, tenantId)),
+        roleIds.map((id) => RoleManager.getRole(id, tenantId)),
       );
       const validRoles = roles.filter((r) => r);
 

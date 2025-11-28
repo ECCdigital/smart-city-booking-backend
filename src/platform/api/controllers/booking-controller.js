@@ -161,7 +161,6 @@ class BookingController {
    */
   static async getRelatedBookings(request, response) {
     try {
-      const user = request.user;
       const tenant = request.params.tenant;
       const bookableId = request.params.id;
 

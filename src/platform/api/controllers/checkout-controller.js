@@ -154,7 +154,8 @@ class CheckoutController {
       }
       let userRoles;
       try {
-        userRoles = await MembershipManager.getMembershipByTenantAndUserID(tenantId, user.id)?.roles;
+        const membership = await MembershipManager.getMembershipByTenantAndUserID(tenantId, user.id)
+        userRoles = membership ? membership.roles : [];
       } catch (err) {
         logger.error(
           `Error while loading user roles for tenant ${tenantId}:`,

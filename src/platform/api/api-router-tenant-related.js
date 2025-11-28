@@ -24,12 +24,21 @@ const router = express.Router({ mergeParams: true });
 // =========
 
 //Public
-router.get("/bookables/public", BookableController.getPublicBookables);
-router.get("/bookables/public/:id", BookableController.getPublicBookable);
+router.get(
+  "/bookables/public",
+  optionalAuth,
+  BookableController.getPublicBookables,
+);
+router.get(
+  "/bookables/public/:id",
+  optionalAuth,
+  BookableController.getPublicBookable,
+);
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
   "/bookables/:id/availability",
+  optionalAuth,
   CalendarController.getBookableAvailability,
 );
 router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
@@ -229,10 +238,18 @@ router.post(
 
 // CHECKOUT
 // ========
-router.post("/checkout", CheckoutController.checkout);
-router.post("/checkout/group", CheckoutController.groupCheckout);
-router.post("/checkout/validateItem", CheckoutController.validateItem);
-router.get("/checkout/permissions/:id", CheckoutController.checkoutPermissions);
+router.post("/checkout", optionalAuth, CheckoutController.checkout);
+router.post("/checkout/group", optionalAuth, CheckoutController.groupCheckout);
+router.post(
+  "/checkout/validateItem",
+  optionalAuth,
+  CheckoutController.validateItem,
+);
+router.get(
+  "/checkout/permissions/:id",
+  optionalAuth,
+  CheckoutController.checkoutPermissions,
+);
 
 // PAYMENTS
 // ========
@@ -265,8 +282,8 @@ router.delete(
 
 // NEXT CLOUD
 // ==========
-router.get("/files/list", FileController.getFiles);
-router.get("/files/get", FileController.getFile);
+router.get("/files/list", optionalAuth, FileController.getFiles);
+router.get("/files/get", optionalAuth, FileController.getFile);
 router.post(
   "/files",
   AuthenticationController.isSignedIn,
