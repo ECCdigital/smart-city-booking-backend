@@ -145,9 +145,6 @@ class AuthenticationController {
         verifyUrl,
       } = request.body;
 
-
-      console.log("Signup request body:", request.body);
-
       const existingUser = await UserManager.getUser(userID);
 
       if (existingUser) {

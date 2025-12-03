@@ -66,7 +66,7 @@ class UserService {
 
     user.releaseHook(token);
 
-    await UserManager.createUser(user);
+    await UserManager.updateUser(user);
 
     return { success: true };
   }
