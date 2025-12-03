@@ -5,7 +5,7 @@ class UserService {
   static async singUpUser(user, nextUrl) {
     const MailController = require("../mail-service/mail-controller");
     const hook = user.addHook(USER_HOOK_TYPES.VERIFY, { nextUrl });
-    const createdUser = await UserManager.storeUser(user);
+    const createdUser = await UserManager.createUser(user);
     await MailController.sendVerificationRequest(createdUser.id, hook.id);
     await MailController.sendUserCreated(createdUser.id);
   }
@@ -17,7 +17,7 @@ class UserService {
 
     user.releaseHook(hookId);
 
-    await UserManager.storeUser(user);
+    await UserManager.updateUser(user);
 
     let additionalUrl = "";
 

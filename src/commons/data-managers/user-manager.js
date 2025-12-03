@@ -34,17 +34,25 @@ class UserManager {
     }
   }
 
-  static async storeUser(user, upsert = true) {
+  static async createUser(user) {
     try {
       const userEntity = user instanceof User ? user : new User(user);
 
       userEntity.validate();
 
-      await UserModel.updateOne({ id: userEntity.id }, userEntity, {
+      const rawUser = await UserModel.create(userEntity);
+      return rawUser.toEntity();
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  static async updateUser(user, upsert = true) {
+    try {
+      const userEntity = await UserModel.findOneAndUpdate({ id: user.id }, user, {
         upsert: upsert,
       });
-
-      return userEntity;
+      return userEntity.toEntity();
     } catch (err) {
       throw err;
     }
@@ -94,7 +102,7 @@ class UserManager {
       const userEntity = user instanceof User ? user : new User(user);
 
       const hook = userEntity.addPasswordResetHook(password);
-      await UserManager.storeUser(userEntity);
+      await UserManager.updateUser(userEntity);
       await MailController.sendPasswordResetRequest(userEntity.id, hook.id);
       return hook;
     } catch (err) {
