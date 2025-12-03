@@ -10,7 +10,6 @@ const { formatISO } = require("date-fns");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const CouponService = require("../coupon-service");
 
-
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
   level: process.env.LOG_LEVEL,
@@ -702,8 +701,8 @@ class ItemCheckoutService {
       if (
         await OpeningHoursManager.hasOpeningHoursConflict(
           b,
-          this.timeBegin,
-          this.timeEnd,
+          Number(this.timeBegin),
+          Number(this.timeEnd),
         )
       ) {
         throw {

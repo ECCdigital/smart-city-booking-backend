@@ -14,8 +14,8 @@ class OpeningHoursManager {
    * Checks if there is a conflict between the booking time and the opening hours or special opening hours of the bookable object.
    *
    * @param {Object} bookable - The bookable object containing opening hours and special opening hours.
-   * @param {string} timeBegin - The start time of the booking in ISO format.
-   * @param {string} timeEnd - The end time of the booking in ISO format.
+   * @param {Number} timeBegin - The start time of the booking in ISO format.
+   * @param {Number} timeEnd - The end time of the booking in ISO format.
    * @returns {Promise<boolean>} - Returns a promise that resolves to true if there is a conflict, otherwise false.
    */
   static async hasOpeningHoursConflict(bookable, timeBegin, timeEnd) {
