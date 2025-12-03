@@ -89,7 +89,8 @@ class UserController {
         response.sendStatus(403);
         return;
       }
-      const tenantUsers = await MembershipManager.getMembershipsByTenantID(tenantId);
+      const tenantUsers =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
       logger.info(
         `Instance -- sending ${tenantUsers.length} users to user ${user?.id}`,
@@ -167,7 +168,7 @@ class UserController {
       if (await UserPermissions._allowCreate(user.id)) {
         const userObject = new User(request.body);
         userObject.setPassword(userObject.secret);
-        const newUser = await UserManager.storeUser(userObject);
+        const newUser = await UserManager.createUser(userObject);
         logger.info(
           ` Instance -- created user ${userObject.id} by user ${user?.id}`,
         );
@@ -214,7 +215,7 @@ class UserController {
       });
 
       if (await UserPermissions._allowUpdate(newInfos, user.id)) {
-        await UserManager.storeUser(newInfos);
+        await UserManager.updateUser(newInfos);
         logger.info(`updated user ${newInfos.id} by user ${user?.id}`);
         response.sendStatus(200);
       } else {
@@ -291,7 +292,7 @@ class UserController {
         }
       });
 
-      await UserManager.storeUser(user);
+      await UserManager.updateUser(user);
 
       const updatedUser = await UserManager.getUser(user.id, false);
 
