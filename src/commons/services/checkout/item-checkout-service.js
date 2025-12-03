@@ -693,8 +693,8 @@ class ItemCheckoutService {
       if (
         await OpeningHoursManager.hasOpeningHoursConflict(
           b,
-          this.timeBegin,
-          this.timeEnd,
+          Number(this.timeBegin),
+          Number(this.timeEnd),
         )
       ) {
         throw {
