@@ -1,4 +1,4 @@
-FROM node:22-slim
+FROM --platform=linux/amd64 node:25-slim
 
 # Set Puppeteer to skip downloading Chromium since we'll be installing it manually
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
