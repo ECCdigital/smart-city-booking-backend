@@ -58,7 +58,7 @@
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "password-hash": "^1.2.2",
-    "puppeteer": "^21.6.1",
+    "puppeteer": "^24.32.1",
     "qrcode": "^1.5.4",
     "qs": "^6.11.2",
     "range-overlap": "^1.0.0",
