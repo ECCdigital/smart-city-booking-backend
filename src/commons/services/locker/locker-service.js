@@ -78,7 +78,7 @@ class LockerService {
     try {
       const bookable = await BookableManager.getBookable(bookableId, tenantId);
       if (!bookable) {
-        throw new Error("Bookable resource not found");
+        return [];
       }
 
       const lockerApps = await getTenantAppByType(tenantId, APP_TYPE);
