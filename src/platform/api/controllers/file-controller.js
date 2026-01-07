@@ -39,7 +39,9 @@ class FileController {
       }));
 
       let protectedFiles = [];
-      if ((await authenticateIfNeeded(request, true)) && includeProtectedBool) {
+
+      const hasPermission = await authenticateIfNeeded(request, includeProtectedBool);
+      if (hasPermission) {
         const protectedFilesData = await NextcloudManager.getFiles(
           tenant,
           PROTECTED_PATH,
