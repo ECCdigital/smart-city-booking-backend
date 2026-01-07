@@ -9,6 +9,8 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+const { authenticateIfNeeded } = require("../../../commons/utilities/auth-utils");
+
 const PUBLIC_PATH = "public";
 const PROTECTED_PATH = "protected";
 
@@ -36,7 +38,9 @@ class FileController {
       }));
 
       let protectedFiles = [];
-      if (request.isAuthenticated() && includeProtectedBool) {
+
+      const hasPermission = await authenticateIfNeeded(request, includeProtectedBool);
+      if (hasPermission) {
         const protectedFilesData = await NextcloudManager.getFiles(
           tenant,
           PROTECTED_PATH,

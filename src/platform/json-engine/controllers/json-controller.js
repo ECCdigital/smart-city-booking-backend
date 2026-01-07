@@ -12,7 +12,6 @@ class JSONController {
     const { tenant: tenantId } = req.params;
     const { type, ids } = req.query;
 
-    // Identity wird jetzt durch optionalAuth Middleware gesetzt
     const identity = req.user;
     let userRoles = null;
 
