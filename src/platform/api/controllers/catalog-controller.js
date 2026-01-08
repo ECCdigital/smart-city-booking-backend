@@ -139,15 +139,22 @@ class CatalogController {
 
       const themeData = { theme: null, visibility: null };
 
+
+
       if (!slug) {
+
         const { theme, visibility } = await CatalogService.getTheme();
         themeData.theme = theme;
         themeData.visibility = visibility;
+
       } else {
         const { theme, visibility } = await CatalogService.getThemeBySlug(slug);
         themeData.theme = theme;
         themeData.visibility = visibility;
       }
+
+      const catalog = await CatalogService.getInstanceCatalog();
+      themeData.logoUrl = catalog.logoUrl;
 
       const { enableCatalog } = await InstanceManager.getInstance();
       if (!enableCatalog) {

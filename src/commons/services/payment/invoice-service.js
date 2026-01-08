@@ -24,13 +24,14 @@ class InvoiceService {
         invoiceNumber,
       );
 
-      await NextcloudManager.createFile(
-        tenantId,
-        pdfData.buffer,
-        pdfData.name,
-        "public",
-        "invoices",
-      );
+      await NextcloudManager.createFile({
+        tenantID: tenantId,
+        file: {
+          data: pdfData.buffer,
+          name: pdfData.name,
+        },
+        subFolder: "invoices",
+      });
 
       return {
         invoice: pdfData,
@@ -88,13 +89,14 @@ class InvoiceService {
         invoiceNumber,
       );
 
-      await NextcloudManager.createFile(
-        tenantId,
-        pdfData.buffer,
-        pdfData.name,
-        "public",
-        "invoices",
-      );
+      await NextcloudManager.createFile({
+        tenantID: tenantId,
+        file: {
+          data: pdfData.buffer,
+          name: pdfData.name,
+        },
+        subFolder: "invoices",
+      });
 
       return {
         invoice: pdfData,
@@ -121,10 +123,11 @@ class InvoiceService {
 
   static async getInvoice(tenantId, invoiceName) {
     try {
-      return await NextcloudManager.getFile(
-        tenantId,
-        `invoices/${invoiceName}`,
-      );
+      return await NextcloudManager.getFile({
+        tenant: tenantId,
+        subFolder: "invoices",
+        filename: invoiceName,
+      });
     } catch (err) {
       if (err.isNextcloudError) {
         logger.error("Failed to get invoice from Nextcloud", {

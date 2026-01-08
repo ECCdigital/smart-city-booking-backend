@@ -282,12 +282,12 @@ router.delete(
 
 // NEXT CLOUD
 // ==========
-router.get("/files/list", optionalAuth, FileController.getFiles);
-router.get("/files/get", optionalAuth, FileController.getFile);
+router.get("/files/list", optionalAuth, FileController.getTenantFiles);
+router.get("/files/get", optionalAuth, FileController.getTenantFile);
 router.post(
   "/files",
   AuthenticationController.isSignedIn,
-  FileController.createFile,
+  FileController.createTenantFile,
 );
 
 // WORKFLOW
