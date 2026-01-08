@@ -18,13 +18,14 @@ class InvoiceService {
         invoiceNumber,
       );
 
-      await NextcloudManager.createFile(
-        tenantId,
-        pdfData.buffer,
-        pdfData.name,
-        "public",
-        "invoices",
-      );
+      await NextcloudManager.createFile({
+        tenantID: tenantId,
+        file: {
+          data: pdfData.buffer,
+          name: pdfData.name,
+        },
+        subFolder: "invoices",
+      });
 
       return {
         invoice: pdfData,
@@ -71,13 +72,14 @@ class InvoiceService {
         invoiceNumber,
       );
 
-      await NextcloudManager.createFile(
-        tenantId,
-        pdfData.buffer,
-        pdfData.name,
-        "public",
-        "invoices",
-      );
+      await NextcloudManager.createFile({
+        tenantID: tenantId,
+        file: {
+          data: pdfData.buffer,
+          name: pdfData.name,
+        },
+        subFolder: "invoices",
+      });
 
       return {
         invoice: pdfData,
@@ -93,10 +95,11 @@ class InvoiceService {
 
   static async getInvoice(tenantId, invoiceName) {
     try {
-      return await NextcloudManager.getFile(
-        tenantId,
-        `invoices/${invoiceName}`,
-      );
+      return await NextcloudManager.getFile({
+        tenant: tenantId,
+        subFolder: "invoices",
+        filename: invoiceName,
+      });
     } catch (err) {
       throw err;
     }
@@ -132,7 +135,7 @@ async function _createInvoiceNumber(tenantId, bookingId) {
     invoiceId = await IdGenerator.next(tenantId, 4, "invoice");
   }
 
-  const invoiceNumber = `${tenant.receiptNumberPrefix ? tenant.receiptNumberPrefix + '-' : ''}${invoiceId}-${revision}`;
+  const invoiceNumber = `${tenant.receiptNumberPrefix ? tenant.receiptNumberPrefix + "-" : ""}${invoiceId}-${revision}`;
 
   return {
     invoiceNumber,

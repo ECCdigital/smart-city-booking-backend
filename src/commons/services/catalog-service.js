@@ -87,7 +87,6 @@ class CatalogService {
     if (!catalog.theme.active) {
       throw new Error(`Theme for catalog with slug "${slug}" is not active`);
     }
-
     return { theme: catalog.theme, visibility: catalog.visibility };
   }
 

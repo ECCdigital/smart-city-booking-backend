@@ -8,6 +8,7 @@ const HolidayController = require("./controllers/holiday-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
+const FileController = require("./controllers/file-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -196,5 +197,13 @@ router.get(
   CatalogController.slugAvailability,
 );
 router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
+
+router.get("/files/list", FileController.getFiles);
+router.get("/files/get", FileController.getFile);
+router.post(
+  "/files",
+  AuthenticationController.isSignedIn,
+  FileController.createFile,
+);
 
 module.exports = router;

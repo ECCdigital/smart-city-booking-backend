@@ -24,13 +24,14 @@ class ReceiptService {
         receiptNumber,
       );
 
-      await NextcloudManager.createFile(
-        tenantId,
-        pdfData.buffer,
-        pdfData.name,
-        "public",
-        "receipts",
-      );
+      await NextcloudManager.createFile({
+        tenantID: tenantId,
+        file: {
+          data: pdfData.buffer,
+          name: pdfData.name,
+        },
+        subFolder: "receipts",
+      });
 
       return {
         receipt: pdfData,
@@ -82,13 +83,14 @@ class ReceiptService {
         receiptNumber,
       );
 
-      await NextcloudManager.createFile(
-        tenantId,
-        pdfData.buffer,
-        pdfData.name,
-        "public",
-        "receipts",
-      );
+      await NextcloudManager.createFile({
+        tenantID: tenantId,
+        file: {
+          data: pdfData.buffer,
+          name: pdfData.name,
+        },
+        subFolder: "receipts",
+      });
 
       return {
         receipt: pdfData,
@@ -104,10 +106,11 @@ class ReceiptService {
 
   static async getReceipt(tenantId, receiptName) {
     try {
-      return await NextcloudManager.getFile(
-        tenantId,
-        `receipts/${receiptName}`,
-      );
+      return await NextcloudManager.getFile({
+        tenant: tenantId,
+        subFolder: "receipts",
+        filename: receiptName,
+      });
     } catch (err) {
       throw err;
     }

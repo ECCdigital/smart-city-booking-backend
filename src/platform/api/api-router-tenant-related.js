@@ -257,12 +257,12 @@ router.delete("/coupons/:id", CouponController.deleteCoupon);
 
 // NEXT CLOUD
 // ==========
-router.get("/files/list", FileController.getFiles);
-router.get("/files/get", FileController.getFile);
+router.get("/files/list", FileController.getTenantFiles);
+router.get("/files/get", FileController.getTenantFile);
 router.post(
   "/files",
   AuthenticationController.isSignedIn,
-  FileController.createFile,
+  FileController.createTenantFile,
 );
 
 // WORKFLOW
