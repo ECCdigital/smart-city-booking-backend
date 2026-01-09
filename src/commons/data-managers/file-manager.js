@@ -139,35 +139,35 @@ class NextcloudManager extends FileManager {
     return await NextcloudManager._retryWithBackoff(async () => {
       const client = NextcloudManager._getClient();
 
-    const directoryItems = await client.getDirectoryContents(fullPath, {
-      deep: true,
-    });
-
-    const basePath = tenantClean
-      ? `/api/${tenantClean}/files/get`
-      : "/api/files/get";
-
-    return directoryItems
-      .filter((item) => item.type === "file")
-      .map((item) => {
-        const filename = String(item.filename || "");
-
-        const tenantPrefix = tenantClean ? `${tenantClean}/` : "";
-
-        const croppedFilename = tenantPrefix
-          ? filename.replace(`${tenant}/`, "")
-          : filename;
-
-        const url = new URL(basePath, backendUrl);
-        url.searchParams.set("name", croppedFilename);
-
-        return {
-          ...item,
-          filename: croppedFilename,
-          link: url.toString(),
-        };
-        });
+      const directoryItems = await client.getDirectoryContents(fullPath, {
+        deep: true,
       });
+
+      const basePath = tenantClean
+        ? `/api/${tenantClean}/files/get`
+        : "/api/files/get";
+
+      return directoryItems
+        .filter((item) => item.type === "file")
+        .map((item) => {
+          const filename = String(item.filename || "");
+
+          const tenantPrefix = tenantClean ? `${tenantClean}/` : "";
+
+          const croppedFilename = tenantPrefix
+            ? filename.replace(`${tenant}/`, "")
+            : filename;
+
+          const url = new URL(basePath, backendUrl);
+          url.searchParams.set("name", croppedFilename);
+
+          return {
+            ...item,
+            filename: croppedFilename,
+            link: url.toString(),
+          };
+        });
+    });
     } catch (error) {
       logger.error(`Failed to get files for tenant ${tenant} at ${rootPath}`, {
         error: error.message,
@@ -189,8 +189,8 @@ class NextcloudManager extends FileManager {
 
     try {
       return await NextcloudManager._retryWithBackoff(async () => {
-    const client = NextcloudManager._getClient();
-    return client.getFileContents(completeFilename);
+        const client = NextcloudManager._getClient();
+        return client.getFileContents(completeFilename);
       });
     } catch(error) {
       logger.error(`Failed to get file ${filename} for tenant ${tenant}`, {
@@ -240,8 +240,8 @@ class NextcloudManager extends FileManager {
     try {
       // Don't retry for streams - they can fail mid-transfer
 
-    const client = NextcloudManager._getClient();
-    return client.createReadStream(path);
+      const client = NextcloudManager._getClient();
+      return client.createReadStream(path);
     } catch (error) {
       logger.error(
         `Failed to create read stream for file ${filename} for tenant ${tenant}`,
@@ -296,16 +296,16 @@ class NextcloudManager extends FileManager {
     const path = segments.join("/");
     try {
       return await NextcloudManager._retryWithBackoff(async () => {
-    const client = NextcloudManager._getClient();
-    const s = await client.stat(path);
+        const client = NextcloudManager._getClient();
+        const s = await client.stat(path);
 
-    return {
-      etag: s?.etag,
-      lastmod: s?.lastmod,
-      size: s?.size,
-      mime: s?.mime ?? s?.contentType,
-    };
-    });
+        return {
+          etag: s?.etag,
+          lastmod: s?.lastmod,
+          size: s?.size,
+          mime: s?.mime ?? s?.contentType,
+        };
+      });
      } catch (error) {
 
       logger.error(`Failed to stat file ${filename} for tenant ${tenant}`, {
@@ -363,17 +363,17 @@ class NextcloudManager extends FileManager {
     try {
       return await NextcloudManager._retryWithBackoff(async () => {
 
-    const client = NextcloudManager._getClient();
+        const client = NextcloudManager._getClient();
 
-    if (directory) {
-      await client.createDirectory(directory, { recursive: true });
-    }
+        if (directory) {
+          await client.createDirectory(directory, { recursive: true });
+        }
 
-    await client.putFileContents(nextCloudPath, file.data, {
-      contentLength: false,
-    });
+        await client.putFileContents(nextCloudPath, file.data, {
+          contentLength: false,
+        });
 
-    return nextCloudPath;
+        return nextCloudPath;
       });
       } catch (error) {
       logger.error(
