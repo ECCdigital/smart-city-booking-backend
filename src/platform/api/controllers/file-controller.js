@@ -338,13 +338,13 @@ class FileController {
     }
 
     try {
-      const subDirectory =
+      const subFolder =
         (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
         "/" +
         customDirectory;
       await NextcloudManager.createFile({
         file,
-        subDirectory,
+        subFolder,
       });
       logger.info(
         `Instance -- file uploaded successfully by user ${user?.id}.`,
@@ -381,14 +381,14 @@ class FileController {
     }
 
     try {
-      const subDirectory =
+      const subFolder =
         (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
         "/" +
         customDirectory;
       await NextcloudManager.createFile({
         tenantID: tenant,
         file,
-        subDirectory,
+        subFolder,
       });
       logger.info(
         `${tenant} -- file uploaded successfully by user ${user?.id}.`,

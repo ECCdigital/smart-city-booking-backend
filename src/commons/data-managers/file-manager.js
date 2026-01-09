@@ -327,13 +327,13 @@ class NextcloudManager extends FileManager {
    * @param {string} tenantID - The tenant ID. This is used to create a tenant-specific directory in the Nextcloud server.
    * @param {Object} file - The file to be uploaded. It should be an object with `name` and `data` properties.
    * @param {string} accessLevel - The access level for the file. This parameter is currently not used in the method.
-   * @param {string} subDirectory - The subdirectory under the tenant directory where the file should be uploaded.
+   * @param {string} subFolder - The subdirectory under the tenant directory where the file should be uploaded.
    * @returns {Promise<string>} A promise that resolves to the path of the created file in the Nextcloud server.
    *
    * @example
    * FileManager.createFile('tenant1', { name: 'file.txt', data: 'Hello, world!' }, 'public', 'documents');
    */
-  static async createFile({ tenantID, file, subDirectory }) {
+  static async createFile({ tenantID, file, subFolder }) {
     if (!file || typeof file !== "object") {
       throw new TypeError("file is required");
     }
@@ -345,7 +345,7 @@ class NextcloudManager extends FileManager {
     const clean = (s) => String(s).replace(/^\/+|\/+$/g, "");
 
     const tenant = tenantID ? clean(tenantID) : "";
-    const subDir = subDirectory ? clean(subDirectory) : "";
+    const subDir = subFolder ? clean(subFolder) : "";
     const fileName = clean(file.name);
 
     const segments = [tenant, subDir, fileName].filter(Boolean);

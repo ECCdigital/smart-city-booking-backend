@@ -24,7 +24,27 @@ const bookableSchemaDefinition = {
   imgUrl: { type: String, default: "" },
   flags: { type: [String], default: [] },
   tags: { type: [String], default: [] },
-  location: { type: String, default: "" },
+  location: {
+    type: Object,
+    default: {
+      coordinates: {
+        type: "Point",
+        points: [null, null],
+      },
+      display_address: "",
+      address: {
+        street: null,
+        house_number: null,
+        post_code: null,
+        city: null,
+        suburb: null,
+        state: null,
+        country: null,
+        country_code: null,
+      },
+      meta: {},
+    },
+  },
 
   // Booking properties
   isBookable: { type: Boolean, default: false },

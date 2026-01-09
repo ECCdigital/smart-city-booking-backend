@@ -41,7 +41,7 @@ class HtmlEngine {
   }
 
   static async bookablesToList(bookables, order = []) {
-    var htmlOutput = '<ul class="booking-manager-list">';
+    let htmlOutput = '<ul class="booking-manager-list">';
 
     if (order.length > 0) {
       bookables.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
@@ -59,10 +59,11 @@ class HtmlEngine {
       htmlOutput += "<h4>" + (bookable.title || "") + "</h4>";
       htmlOutput +=
         '<p class="description">' + (bookable.description || "") + "</p>";
-      htmlOutput +=
-        bookable.location != null && bookable.location.length > 0
-          ? '<p class="location">' + (bookable.location || "") + "</p>"
-          : "";
+      htmlOutput += bookable?.location?.display_address
+        ? '<p class="location">' +
+          (bookable.location.display_address || "") +
+          "</p>"
+        : "";
       htmlOutput += '<p class="type">' + (bookable.type || "") + "</p>";
 
       if (bookable.flags && bookable.flags.length > 0) {
@@ -150,10 +151,11 @@ class HtmlEngine {
     }
 
     if (bookable.isBookable) {
-      htmlOutput +=
-        bookable.location != null && bookable.location.length > 0
-          ? '<p class="location">' + (bookable.location || "") + "</p>"
-          : "";
+      htmlOutput += bookable?.location?.display_address
+        ? '<p class="location">' +
+          (bookable.location.display_address || "") +
+          "</p>"
+        : "";
       htmlOutput += '<p class="type">' + (bookable.type || "") + "</p>";
       htmlOutput +=
         '<p class="autoCommitBooking">' +
@@ -202,7 +204,7 @@ class HtmlEngine {
   }
 
   static async eventsToList(events) {
-    var htmlOutput = '<ul class="booking-manager-list">';
+    let htmlOutput = '<ul class="booking-manager-list">';
 
     for (const event of events) {
       const tenantObj = await TenantManager.getTenant(event.tenantId);
@@ -296,7 +298,7 @@ class HtmlEngine {
   }
 
   static async event(event, showAttachments) {
-    var htmlOutput = `<div class="event">`;
+    let htmlOutput = `<div class="event">`;
 
     // INFORMATION
     htmlOutput += `<div class="information">`;
@@ -364,7 +366,7 @@ class HtmlEngine {
         }</div>`
       : "";
     if (event.eventLocation.room) {
-      var eventLocationBookable = await BookableManager.getBookable(
+      let eventLocationBookable = await BookableManager.getBookable(
         event.eventLocation.room,
         event.tenantId,
       );
