@@ -31,6 +31,7 @@ class BundleCheckoutService {
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
    * @param {Array} attachments - The attachments.
+   * @param {boolean} bookWithPrice - Whether to book with price.
    */
   constructor({
     user,

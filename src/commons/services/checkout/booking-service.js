@@ -721,6 +721,7 @@ class BookingService {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
       booking.isPayed = true;
+      booking.timePaid = Date.now();
       if (paymentMethod) {
         booking.paymentMethod = paymentMethod;
       }
@@ -759,6 +760,7 @@ class BookingService {
       const bookings = await BookingManager.getBookings(tenantId, bookingIds);
       for (const booking of bookings) {
         booking.isPayed = true;
+        booking.timePaid = Date.now();
         if (paymentMethod) {
           booking.paymentMethod = paymentMethod;
         }

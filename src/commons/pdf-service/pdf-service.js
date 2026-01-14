@@ -94,7 +94,9 @@ class PdfService {
       booking.timeBegin && booking.timeEnd
         ? `${PdfService.formatDateTime(booking.timeBegin)} – ${PdfService.formatDateTime(booking.timeEnd)}`
         : "-";
-    const payDate = PdfService.formatDateTime(booking.timeCreated);
+    const payDate = PdfService.formatDateTime(
+      booking.timePaid > 0 ? booking.timePaid : "-",
+    );
     const bookingDate = PdfService.formatDate(new Date());
     const paymentMethod = PdfService.translatePayMethod(booking.paymentMethod);
     const receiptAddress = `
@@ -166,6 +168,7 @@ class PdfService {
           <tr>
             <th style="text-align:start">ID</th>
             <th>Zeitraum</th>
+            <th>Zahlungsdatum</th>
             <th>Bezahlmethode</th>
             <th style="text-align:right">Betrag</th>
           </tr>
@@ -181,6 +184,9 @@ class PdfService {
           bk.timeBegin && bk.timeEnd
             ? `${PdfService.formatDateTime(bk.timeBegin)} – ${PdfService.formatDateTime(bk.timeEnd)}`
             : "-";
+
+        const paymentDate =
+          bk.timePaid > 0 ? PdfService.formatDateTime(bk.timePaid) : "-";
 
         let bookablesHtml = `<ul style="margin: 0; padding-left: 20px;">`;
         if (bk.bookableItems && bk.bookableItems.length) {
@@ -208,11 +214,12 @@ class PdfService {
         <tr>
           <td style="text-align:start">${bk.id}</td>
           <td style="text-align:center">${period}</td>
+          <td style="text-align:center">${paymentDate}</td>
           <td style="text-align:center">${paymentMethod}</td>
           <td style="text-align:right">${PdfService.formatCurrency(netto)}</td>
         </tr>
         <tr>
-          <td colspan="4">
+          <td colspan="5">
             <strong>Details / Artikel:</strong><br/>
             ${bookablesHtml}
           </td>
@@ -222,15 +229,15 @@ class PdfService {
 
       entriesHtml += `
         <tr class="netto" style="border-bottom: 1px solid #eee;">
-          <td colSpan="3">Gesamt (netto)</td>
+          <td colSpan="4">Gesamt (netto)</td>
           <td style="text-align:right">${PdfService.formatCurrency(totalNetto)}</td>
         </tr>
         <tr class="mwst" style="border-bottom: 1px solid #eee;">
-          <td colSpan="3">zzgl. MwSt.</td>
+          <td colSpan="4">zzgl. MwSt.</td>
           <td style="text-align:right">${PdfService.formatCurrency(totalVat)}</td>
         </tr>
         <tr class="brutto" style="font-weight: bold;">
-          <td colSpan="3">Gesamt (brutto)</td>
+          <td colSpan="4">Gesamt (brutto)</td>
           <td style="text-align:right">${PdfService.formatCurrency(totalBrutto)}</td>
         </tr>
       </tbody>
