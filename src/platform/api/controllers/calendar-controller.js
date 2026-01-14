@@ -5,9 +5,7 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const {
   ItemCheckoutService,
 } = require("../../../commons/services/checkout/item-checkout-service");
-const {
-  checkAvailability,
-} = require("../../../commons/services/calendar-service");
+const CalendarService = require("../../../commons/services/calendar-service");
 
 /**
  * CalendarController class.
@@ -114,7 +112,7 @@ class CalendarController {
     }
 
     try {
-      const availability = await checkAvailability(
+      const availability = await CalendarService.checkAvailability(
         tenant,
         bookableId,
         startDateQuery,

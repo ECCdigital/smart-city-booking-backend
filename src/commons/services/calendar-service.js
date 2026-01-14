@@ -25,7 +25,7 @@ class CalendarService {
       BookableManager.getRelatedBookables(bookableId, tenantId),
     ]);
 
-    if (bookable.amount < amount) {
+    if (bookable.amount && Number(bookable.amount) < Number(amount)) {
       return [
         {
           timeBegin: start,
