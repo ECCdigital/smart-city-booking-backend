@@ -596,6 +596,7 @@ Example:
   "timeBegin": 1707994800000,
   "timeCreated": 1707994800000,
   "timeEnd": 1708009200000,
+  "timePaid": 1708002800000,
   "vatIncludedEur": 19,
   "_couponUsed": {},
   "hooks": []
@@ -612,6 +613,7 @@ Key fields of a booking:
 | timeBegin       | Start timestamp of the booking (epoch millis).                                                                                        |
 | timeEnd         | End timestamp of the booking (epoch millis).                                                                                          |
 | timeCreated     | Timestamp when the booking was created.                                                                                               |
+| timePaid        | Timestamp when the booking was paid (if applicable).                                                                                  |
 | bookableItems   | Array of booked items (bookable id, tenant, amount, and snapshot of the used bookable configuration).                                |
 | couponCode      | Coupon code applied to the booking (if any).                                                                                          |
 | _couponUsed     | Snapshot of the used coupon (id, tenant, discount and validity).                                                                      |

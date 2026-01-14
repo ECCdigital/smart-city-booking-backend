@@ -311,7 +311,7 @@ class MailController {
         {{#if booking.timeBegin}}
           <br><strong>Buchungszeitraum:</strong> {{formatDateTime booking.timeBegin}} - {{formatDateTime booking.timeEnd}}
         {{/if}}
-        <br><strong>Gesamtbetrag:</strong>{{priceFormatted booking.priceEur}}
+        <br><strong>Gesamtbetrag:</strong> {{priceFormatted booking.priceEur}}
       </p>
       <p><strong>Artikel:</strong></p>
       <ul>
@@ -725,8 +725,13 @@ class MailController {
       </p>
       
       <p>
-        Wir haben Ihre Anfrage erhalten und bearbeiten diese schnellstmöglich.
-        Sie erhalten in Kürze weitere Informationen von uns.
+        Ihre Buchungsanfrage ist bei uns eingegangen und wird derzeit zur Freigabe
+        geprüft.
+      </p>
+      
+      <p>
+        Sobald Ihre Anfrage freigegeben wurde, erhalten Sie eine Benachrichtigung
+        von uns.
       </p>
       
     </div>`;
@@ -839,11 +844,12 @@ class MailController {
           <p>
             Vielen Dank für Ihre Buchungsanfrage im
             <strong>{{tenantName}}</strong>.
-            Wir haben diese erfolgreich geprüft und freigegeben.
+            Wir haben Ihre Anfrage geprüft und freigegeben.
           </p>
     
           <p>
-            Bitte nutzen Sie den folgenden Button, um Ihre Buchung abzuschließen:
+            Um Ihre Buchung verbindlich abzuschließen, klicken Sie bitte auf den
+            nachfolgenden Knopf und folgen Sie den weiteren Schritten.
           </p>
     
           <p>
@@ -1173,12 +1179,7 @@ class MailController {
     });
   }
 
-  static async sendInvitationEmail({
-    sendTo,
-    tenantId,
-    token,
-  }) {
-
+  static async sendInvitationEmail({ sendTo, tenantId, token }) {
     const tenant = await TenantManager.getTenant(tenantId);
     const invitationUrl = `${process.env.FRONTEND_URL}/auth/invitation/${tenantId}?token=${token}`;
 

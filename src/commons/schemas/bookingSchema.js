@@ -33,6 +33,7 @@ const bookingSchemaDefinition = {
   timeBegin: { type: Double, required: false },
   timeCreated: { type: Double, default: () => Date.now() },
   timeEnd: { type: Double, required: false },
+  timePaid: { type: Double, default: 0 },
   vatIncludedEur: { type: Number, default: 0 },
   zipCode: { type: String, default: "" },
   _couponUsed: { type: Object, default: {} },
