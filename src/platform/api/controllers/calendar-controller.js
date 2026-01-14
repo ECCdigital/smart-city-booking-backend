@@ -113,6 +113,7 @@ class CalendarController {
         .send({ error: "Tenant ID and bookable ID are required." });
     }
 
+
     try {
       const availability = await checkAvailability(
         tenant,

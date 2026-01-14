@@ -1,5 +1,6 @@
 const { BookableManager } = require("../data-managers/bookable-manager");
 const { ItemCheckoutService } = require("./checkout/item-checkout-service");
+const TenantManager = require("../data-managers/tenant-manager");
 
 class CalendarService {
   static async checkAvailability(
@@ -39,6 +40,16 @@ class CalendarService {
       ...parentBookables,
       ...relatedBookables.filter((b) => b.id !== bookable.id),
     ];
+
+    const maxBookingAdvanceInMonths = await TenantManager.getTenant(
+      tenantId,
+    ).then((tenant) => tenant.maxBookingAdvanceInMonths);
+
+    const maxBookingAdvancePeriods = generateTimePeriodsFromMaxBookingAdvance(
+      startDate,
+      endDate,
+      maxBookingAdvanceInMonths,
+    );
 
     /**
      * Represents the available opening hours periods for a specific date range and bookable items.
@@ -82,6 +93,7 @@ class CalendarService {
       availableOpeningHoursPeriods,
       availableSpecialOpeningHoursPeriods,
       availableTimePeriods,
+      maxBookingAdvancePeriods,
     );
 
     const items = [];
@@ -107,6 +119,60 @@ class CalendarService {
     }
     return combineSegments(items);
   }
+}
+
+/**
+ * Generates time periods that are beyond the maximum booking advance limit.
+ * Returns both available and unavailable periods when the range crosses the boundary.
+ * Works with minute-precise timestamps.
+ */
+function generateTimePeriodsFromMaxBookingAdvance(
+  startDate,
+  endDate,
+  maxBookingAdvanceInMonths,
+) {
+  if (!maxBookingAdvanceInMonths || maxBookingAdvanceInMonths <= 0) {
+    return [];
+  }
+
+  const now = new Date();
+  const maxBookingDate = new Date(now);
+  maxBookingDate.setMonth(
+    maxBookingDate.getMonth() + maxBookingAdvanceInMonths,
+  );
+
+  if (endDate <= maxBookingDate) {
+    return [
+      {
+        start: startDate.getTime(),
+        end: endDate.getTime(),
+        available: true,
+      },
+    ];
+  }
+
+  if (startDate > maxBookingDate) {
+    return [
+      {
+        start: startDate.getTime(),
+        end: endDate.getTime(),
+        available: false,
+      },
+    ];
+  }
+
+  return [
+    {
+      start: startDate.getTime(),
+      end: maxBookingDate.getTime(),
+      available: true,
+    },
+    {
+      start: maxBookingDate.getTime(),
+      end: endDate.getTime(),
+      available: false,
+    },
+  ];
 }
 
 async function checkAvailabilityIterative(
