@@ -7,7 +7,6 @@ class Catalog {
     Object.assign(this, defaults, params);
   }
 
-
   exportPublic() {
     const publicFields = [
       "name",

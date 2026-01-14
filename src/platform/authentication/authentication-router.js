@@ -20,19 +20,23 @@ router.post("/sso/signup", AuthenticationController.ssoSignup);
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);
 
-// Geschützte Endpoints
+// Protected Auth-Endpoints
 router.post("/signin", (req, res, next) => {
-  passport.authenticate("local-signin", { session: false }, (err, user, info) => {
-    if (err) {
-      return res.status(err.status || 500).json({ message: err.message });
-    }
-    if (!user) {
-      return res.status(403).json({ message: "Authentication failed" });
-    }
+  passport.authenticate(
+    "local-signin",
+    { session: false },
+    (err, user, info) => {
+      if (err) {
+        return res.status(err.status || 500).json({ message: err.message });
+      }
+      if (!user) {
+        return res.status(403).json({ message: "Authentication failed" });
+      }
 
-    req.user = user;
-    return AuthenticationController.signin(req, res, next);
-  })(req, res, next);
+      req.user = user;
+      return AuthenticationController.signin(req, res, next);
+    },
+  )(req, res, next);
 });
 
 router.post("/signout", requireAuth, AuthenticationController.signout);

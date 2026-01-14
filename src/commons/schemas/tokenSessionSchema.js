@@ -2,8 +2,13 @@ const mongoose = require("mongoose");
 const tokenSessionSchemaDefinition = {
   jti: { type: String, required: true, unique: true, index: true },
   userId: { type: String, required: true, index: true },
-  tokenType: { type: String, required: true, enum: ['access', 'refresh'] },
-  status: { type: String, required: true, enum: ['active', 'revoked'], default: 'active' },
+  tokenType: { type: String, required: true, enum: ["access", "refresh"] },
+  status: {
+    type: String,
+    required: true,
+    enum: ["active", "revoked"],
+    default: "active",
+  },
   issuedAt: { type: Date, required: true },
   expiresAt: { type: Date, required: true, index: true },
   revokedAt: { type: Date, default: null },
@@ -28,4 +33,3 @@ module.exports = {
   TokenSessionSchema,
   TokenSessionModel,
 };
-

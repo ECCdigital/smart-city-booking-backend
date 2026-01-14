@@ -32,8 +32,11 @@ class PermissionService {
    * @returns {Promise<boolean>} - A promise that resolves to true if the user is the owner of the tenant, otherwise false.
    */
   static async _isTenantOwner(userId, tenantId) {
-    const membership = await MembershipManager.getMembershipByTenantAndUserID(tenantId, userId);
-    return membership?.owner === true
+    const membership = await MembershipManager.getMembershipByTenantAndUserID(
+      tenantId,
+      userId,
+    );
+    return membership?.owner === true;
   }
 
   /**

@@ -1,10 +1,10 @@
-const bunyan = require('bunyan');
-const JwtHelper = require('../commons/utilities/jwt-helper');
-const UserManager = require('../commons/data-managers/user-manager');
+const bunyan = require("bunyan");
+const JwtHelper = require("../commons/utilities/jwt-helper");
+const UserManager = require("../commons/data-managers/user-manager");
 
 const logger = bunyan.createLogger({
-  name: 'auth-middleware',
-  level: process.env.LOG_LEVEL || 'info'
+  name: "auth-middleware",
+  level: process.env.LOG_LEVEL || "info",
 });
 
 const requireAuth = async (req, res, next) => {
@@ -15,7 +15,7 @@ const requireAuth = async (req, res, next) => {
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Access token required'
+        message: "Access token required",
       });
     }
 
@@ -25,14 +25,14 @@ const requireAuth = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
     if (user.isSuspended) {
       return res.status(403).json({
         success: false,
-        message: 'User account is suspended'
+        message: "User account is suspended",
       });
     }
 
@@ -45,20 +45,20 @@ const requireAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.error('Authentication failed:', error.message);
+    logger.error("Authentication failed:", error.message);
 
-    let message = 'Invalid or expired token';
-    if (error.message === 'Token has been revoked') {
-      message = 'Token has been revoked';
-    } else if (error.name === 'TokenExpiredError') {
-      message = 'Token has expired';
-    } else if (error.name === 'JsonWebTokenError') {
-      message = 'Invalid token';
+    let message = "Invalid or expired token";
+    if (error.message === "Token has been revoked") {
+      message = "Token has been revoked";
+    } else if (error.name === "TokenExpiredError") {
+      message = "Token has expired";
+    } else if (error.name === "JsonWebTokenError") {
+      message = "Invalid token";
     }
 
     return res.status(401).json({
       success: false,
-      message
+      message,
     });
   }
 };
@@ -96,12 +96,14 @@ const optionalAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.debug('Optional auth failed, continuing without user:', error.message);
+    logger.debug(
+      "Optional auth failed, continuing without user:",
+      error.message,
+    );
     req.user = null;
     next();
   }
 };
-
 
 const conditionalAuth = (conditionFn) => {
   return async (req, res, next) => {
@@ -120,4 +122,3 @@ module.exports = {
   optionalAuth,
   conditionalAuth,
 };
-

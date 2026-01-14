@@ -110,7 +110,7 @@ class FileController {
         if (isPublicPath) {
           response.setHeader(
             "Cache-Control",
-            "public, max-age=31536000, immutable"
+            "public, max-age=31536000, immutable",
           );
         } else {
           response.setHeader("Cache-Control", "private, max-age=0, no-cache");
@@ -130,7 +130,7 @@ class FileController {
 
         const stream = await NextcloudManager.createReadStream(
           tenant,
-          filename
+          filename,
         );
 
         logger.info(`${tenant} -- sending file ${filename}`);

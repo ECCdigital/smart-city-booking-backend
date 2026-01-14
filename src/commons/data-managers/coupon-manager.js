@@ -16,7 +16,10 @@ class CouponManager {
       throw new Error("couponID and tenantID are required.");
     }
 
-    const result = await CouponModel.exists({ id: couponID, tenantId: tenantID });
+    const result = await CouponModel.exists({
+      id: couponID,
+      tenantId: tenantID,
+    });
     return Boolean(result);
   }
 
@@ -53,7 +56,6 @@ class CouponManager {
       throw new Error("tenantID is required.");
     }
 
-
     const rawCoupons = await CouponModel.find({ tenantId: tenantID });
     return rawCoupons.map((doc) => doc.toEntity());
   }
@@ -82,7 +84,6 @@ class CouponManager {
       coupon.maxAmount = Math.trunc(parsed);
     }
 
-
     const filter = { id: coupon.id, tenantId: tenantID };
     const options = {
       upsert,
@@ -91,7 +92,6 @@ class CouponManager {
     };
 
     const updated = await CouponModel.findOneAndUpdate(filter, coupon, options);
-
 
     if (!updated) {
       throw new Error("Coupon not found for update.");
@@ -108,7 +108,7 @@ class CouponManager {
     const updated = await CouponModel.findOneAndUpdate(
       { id: couponID, tenantId: tenantID },
       { $inc: { usedAmount: 1 } },
-      { new: true }
+      { new: true },
     );
 
     if (!updated) {
@@ -131,7 +131,6 @@ class CouponManager {
 
     await CouponModel.deleteOne({ id: couponID, tenantId: tenantID });
   }
-
 }
 
 module.exports = CouponManager;

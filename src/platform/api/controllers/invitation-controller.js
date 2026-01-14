@@ -174,7 +174,6 @@ class InvitationController {
       const tenantId = request.params.tenant;
       const user = request.user;
 
-
       const result = await InvitationService.acceptInvitation(
         tenantId,
         token,
@@ -391,7 +390,9 @@ class InvitationController {
       ) {
         return response
           .status(403)
-          .send("Forbidden: You don't have permission to delete user invitations.");
+          .send(
+            "Forbidden: You don't have permission to delete user invitations.",
+          );
       }
 
       await InvitationService.deleteUserInvitation(tenantID, userID, token);
@@ -406,8 +407,6 @@ class InvitationController {
         .send(error.message || "Could not delete user invitation");
     }
   }
-
-
 }
 
 module.exports = InvitationController;

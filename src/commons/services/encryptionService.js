@@ -24,7 +24,10 @@ class EncryptionService {
   static encryptApplications(applications, applicationTypesMap) {
     if (!applications) return applications;
     return applications.map((app) => {
-      const appInstance = this.createApplicationInstance(app, applicationTypesMap);
+      const appInstance = this.createApplicationInstance(
+        app,
+        applicationTypesMap,
+      );
       appInstance.encrypt();
       return appInstance;
     });
@@ -33,7 +36,10 @@ class EncryptionService {
   static decryptApplications(applications, applicationTypesMap) {
     if (!applications) return applications;
     return applications.map((app) => {
-      const appInstance = this.createApplicationInstance(app, applicationTypesMap);
+      const appInstance = this.createApplicationInstance(
+        app,
+        applicationTypesMap,
+      );
       appInstance.decrypt();
       return appInstance;
     });
@@ -52,24 +58,16 @@ class InstanceEncryptionService extends EncryptionService {
   static encrypt(data) {
     if (!data) return;
 
-    this.encryptFields(data, [
-      "noreplyPassword",
-      "noreplyGraphClientSecret",
-    ]);
+    this.encryptFields(data, ["noreplyPassword", "noreplyGraphClientSecret"]);
 
     if (data.applications) {
       data.applications = this.encryptApplications(data.applications);
     }
-
   }
   static decrypt(data) {
     if (!data) return;
 
-    this.decryptFields(data, [
-      "noreplyPassword",
-      "noreplyGraphClientSecret",
-    ]);
-
+    this.decryptFields(data, ["noreplyPassword", "noreplyGraphClientSecret"]);
 
     if (data.applications) {
       data.applications = this.decryptApplications(data.applications);
@@ -94,10 +92,7 @@ class TenantEncryptionService extends EncryptionService {
   static encrypt(data) {
     if (!data) return;
 
-    this.encryptFields(data, [
-      "noreplyPassword",
-      "noreplyGraphClientSecret",
-    ]);
+    this.encryptFields(data, ["noreplyPassword", "noreplyGraphClientSecret"]);
 
     if (data.applications) {
       data.applications = this.encryptApplications(data.applications);
@@ -107,11 +102,7 @@ class TenantEncryptionService extends EncryptionService {
   static decrypt(data) {
     if (!data) return;
 
-    this.decryptFields(data, [
-      "noreplyPassword",
-      "noreplyGraphClientSecret",
-    ]);
-
+    this.decryptFields(data, ["noreplyPassword", "noreplyGraphClientSecret"]);
 
     if (data.applications) {
       data.applications = this.decryptApplications(data.applications);

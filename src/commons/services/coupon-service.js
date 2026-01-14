@@ -40,7 +40,6 @@ class CouponService {
     } catch (error) {
       return null;
     }
-
   }
 
   static generateID() {

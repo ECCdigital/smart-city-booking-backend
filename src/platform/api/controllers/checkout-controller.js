@@ -154,7 +154,11 @@ class CheckoutController {
       }
       let userRoles;
       try {
-        const membership = await MembershipManager.getMembershipByTenantAndUserID(tenantId, user.id)
+        const membership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            user.id,
+          );
         userRoles = membership ? membership.roles : [];
       } catch (err) {
         logger.error(

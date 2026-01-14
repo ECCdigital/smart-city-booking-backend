@@ -34,8 +34,6 @@ class HtmlEngine {
     return short ? translation : "/" + translation;
   }
 
-
-
   static generateImageHtml(imgUrl, className, altText) {
     return imgUrl
       ? `<img src="${imgUrl}" class="${className}"  alt="${altText}"/>`
@@ -542,8 +540,7 @@ class HtmlEngine {
 }
 
 function getBookablePrice(bookable) {
-
-  let htmlOutput = ""
+  let htmlOutput = "";
 
   const hasPriceWithTax = !!bookable.priceValueAddedTax;
 

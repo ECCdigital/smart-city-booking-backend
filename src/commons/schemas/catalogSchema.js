@@ -1,16 +1,39 @@
 const catalogSchemaDefinition = {
-  type: { type: String, default: "single", enum: ["single", "aggregate", "instance"] },
+  type: {
+    type: String,
+    default: "single",
+    enum: ["single", "aggregate", "instance"],
+  },
   slug: {
     type: String,
-    required: function () { return this.type !== "instance"; },
-    unique: function () { return this.type !== "instance"; },
+    required: function () {
+      return this.type !== "instance";
+    },
+    unique: function () {
+      return this.type !== "instance";
+    },
     lowercase: true,
     trim: true,
     minlength: 3,
     maxlength: 50,
   },
-  name: { type: String, required: function () { return this.type !== "instance"; }, maxlength: 100 },
-  tenantId: { type: String, required: function () { return this.type !== "instance"; }, unique: function () { return this.type !== "instance"; }, ref: "Tenant" },
+  name: {
+    type: String,
+    required: function () {
+      return this.type !== "instance";
+    },
+    maxlength: 100,
+  },
+  tenantId: {
+    type: String,
+    required: function () {
+      return this.type !== "instance";
+    },
+    unique: function () {
+      return this.type !== "instance";
+    },
+    ref: "Tenant",
+  },
   tenantIds: [
     {
       type: Array,

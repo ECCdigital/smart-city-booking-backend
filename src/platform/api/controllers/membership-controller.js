@@ -12,17 +12,16 @@ class MembershipController {
     try {
       const user = request.user;
 
-      const pendingApprovalMemberships = await MembershipService.getPendingApprovalMembershipsByUserId(user.id);
+      const pendingApprovalMemberships =
+        await MembershipService.getPendingApprovalMembershipsByUserId(user.id);
 
       response.status(200).send(pendingApprovalMemberships);
-
     } catch (error) {
       logger.error(error);
       return response
         .status(error.code || 500)
         .send(error.message || "Could not retrieve pending memberships");
     }
-
   }
 }
 

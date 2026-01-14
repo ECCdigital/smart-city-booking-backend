@@ -1,6 +1,5 @@
-const { User, USER_HOOK_TYPES } = require("../entities/user/user");
+const { User } = require("../entities/user/user");
 const { RoleManager } = require("./role-manager");
-const TenantManager = require("./tenant-manager");
 const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
@@ -49,9 +48,13 @@ class UserManager {
 
   static async updateUser(user, upsert = true) {
     try {
-      const userEntity = await UserModel.findOneAndUpdate({ id: user.id }, user, {
-        upsert: upsert,
-      });
+      const userEntity = await UserModel.findOneAndUpdate(
+        { id: user.id },
+        user,
+        {
+          upsert: upsert,
+        },
+      );
       return userEntity.toEntity();
     } catch (err) {
       throw err;

@@ -13,7 +13,6 @@ const logger = bunyan.createLogger({
  * Provides methods for generating, verifying, and revoking access and refresh tokens.
  */
 class JwtHelper {
-
   /**
    * Generates an access token for a user.
    *

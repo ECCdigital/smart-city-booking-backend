@@ -568,7 +568,6 @@ class BookingService {
           throw err;
         }
 
-
         await MailController.sendFreeBookingConfirmation(
           originBooking.mail,
           originBooking.id,
@@ -825,7 +824,6 @@ class BookingService {
       } catch (err) {
         logger.error(err);
       }
-
 
       if (isRejection(booking, hookId)) {
         await MailController.sendBookingRejection(

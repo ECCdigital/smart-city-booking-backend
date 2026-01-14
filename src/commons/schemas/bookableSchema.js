@@ -51,9 +51,7 @@ const bookableSchemaDefinition = {
 
   // Price properties
   priceCategories: {
-    type: [
-      new Schema(priceCategorySchemaDefinition, { _id: false }),
-    ],
+    type: [new Schema(priceCategorySchemaDefinition, { _id: false })],
     default: [
       {
         priceEur: 0,

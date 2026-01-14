@@ -1,5 +1,4 @@
 const passwordHash = require("password-hash");
-const { v4: uuidv4 } = require("uuid");
 const { userSchemaDefinition } = require("../../schemas/userSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { UserHook, USER_HOOK_TYPES } = require("./userHook");
@@ -10,10 +9,10 @@ class User {
 
     Object.assign(this, defaults);
 
-    Object.keys(userSchemaDefinition).forEach(key => {
+    Object.keys(userSchemaDefinition).forEach((key) => {
       if (params[key] !== undefined) {
         // Convert id to lowercase
-        if (key === 'id' && typeof params[key] === 'string') {
+        if (key === "id" && typeof params[key] === "string") {
           this[key] = params[key].toLowerCase();
         } else {
           this[key] = params[key];

@@ -65,11 +65,10 @@ class RoleController {
     const isPublicView = Boolean(req.query.public);
 
     try {
-      const membership =
-        await MembershipManager.getMembershipByTenantAndUserID(
-          tenantId,
-          user.id,
-        );
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
+        tenantId,
+        user.id,
+      );
 
       const roleIds = membership ? membership.roles : [];
 

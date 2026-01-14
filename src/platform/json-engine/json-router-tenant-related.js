@@ -9,5 +9,4 @@ router.get("/bookables/:id", optionalAuth, JSONController.getBookable);
 router.get("/events", optionalAuth, JSONController.getEvents);
 router.get("/events/:id", optionalAuth, JSONController.getEvent);
 
-
 module.exports = router;

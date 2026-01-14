@@ -56,7 +56,10 @@ class CouponController {
       ) {
         try {
           coupon.ownerUserId = user.id;
-          const updatedCoupon = await CouponService.createCoupon(coupon, tenant);
+          const updatedCoupon = await CouponService.createCoupon(
+            coupon,
+            tenant,
+          );
           logger.info(
             `${tenant} -- created coupon ${coupon.id} by user ${user?.id}`,
           );
@@ -92,7 +95,10 @@ class CouponController {
         )
       ) {
         try {
-          const updatedCoupon = await CouponService.updateCoupon(coupon, tenant);
+          const updatedCoupon = await CouponService.updateCoupon(
+            coupon,
+            tenant,
+          );
           logger.info(
             `${tenant} -- updated coupon ${coupon.id} by user ${user?.id}`,
           );

@@ -1,9 +1,9 @@
-const bunyan = require('bunyan');
-const { TokenSessionModel } = require('../schemas/tokenSessionSchema');
+const bunyan = require("bunyan");
+const { TokenSessionModel } = require("../schemas/tokenSessionSchema");
 
 const logger = bunyan.createLogger({
-  name: 'token-session-service',
-  level: process.env.LOG_LEVEL || 'info'
+  name: "token-session-service",
+  level: process.env.LOG_LEVEL || "info",
 });
 
 /**
@@ -11,8 +11,6 @@ const logger = bunyan.createLogger({
  * Provides methods to create, verify, blacklist, and revoke token sessions.
  */
 class TokenSessionService {
-
-
   /**
    * Creates a new token session in the database.
    *
@@ -34,17 +32,19 @@ class TokenSessionService {
         jti: sessionData.jti,
         userId: sessionData.userId,
         tokenType: sessionData.tokenType,
-        status: 'active',
+        status: "active",
         issuedAt: sessionData.issuedAt,
         expiresAt: sessionData.expiresAt,
         deviceId: sessionData.deviceId || null,
       });
 
       await session.save();
-      logger.debug(`Token session created for user ${sessionData.userId}`, { jti: sessionData.jti });
+      logger.debug(`Token session created for user ${sessionData.userId}`, {
+        jti: sessionData.jti,
+      });
       return session;
     } catch (error) {
-      logger.error('Error creating token session:', error);
+      logger.error("Error creating token session:", error);
       throw error;
     }
   }
@@ -60,16 +60,15 @@ class TokenSessionService {
     try {
       const session = await TokenSessionModel.findOne({
         jti,
-        status: 'revoked'
+        status: "revoked",
       }).lean();
 
       return session !== null;
     } catch (error) {
-      logger.error('Error checking blacklist:', error);
+      logger.error("Error checking blacklist:", error);
       return false;
     }
   }
-
 
   /**
    * Adds a token to the blacklist by marking it as revoked in the database.
@@ -79,18 +78,18 @@ class TokenSessionService {
    * @returns {Promise<boolean>} True if the token was successfully blacklisted, false otherwise.
    * @throws {Error} If an error occurs while updating the database.
    */
-  static async addToBlacklist(jti, reason = 'logout') {
+  static async addToBlacklist(jti, reason = "logout") {
     try {
       const result = await TokenSessionModel.updateOne(
         { jti },
         {
           $set: {
-            status: 'revoked',
+            status: "revoked",
             revokedAt: new Date(),
-            revokeReason: reason
-          }
+            revokeReason: reason,
+          },
         },
-        { upsert: false }
+        { upsert: false },
       );
 
       if (result.modifiedCount > 0) {
@@ -101,11 +100,10 @@ class TokenSessionService {
       logger.warn(`Token session ${jti} not found, creating revoked entry`);
       return false;
     } catch (error) {
-      logger.error('Error adding token to blacklist:', error);
+      logger.error("Error adding token to blacklist:", error);
       throw error;
     }
   }
-
 
   /**
    * Revokes all active tokens for a specific user by marking them as revoked in the database.
@@ -115,27 +113,28 @@ class TokenSessionService {
    * @returns {Promise<number>} The number of tokens that were successfully revoked.
    * @throws {Error} If an error occurs while updating the database.
    */
-  static async revokeAllUserTokens(userId, reason = 'security') {
+  static async revokeAllUserTokens(userId, reason = "security") {
     try {
       const result = await TokenSessionModel.updateMany(
-        { userId, status: 'active' },
+        { userId, status: "active" },
         {
           $set: {
-            status: 'revoked',
+            status: "revoked",
             revokedAt: new Date(),
-            revokeReason: reason
-          }
-        }
+            revokeReason: reason,
+          },
+        },
       );
 
-      logger.info(`Revoked ${result.modifiedCount} tokens for user ${userId}`, { reason });
+      logger.info(`Revoked ${result.modifiedCount} tokens for user ${userId}`, {
+        reason,
+      });
       return result.modifiedCount;
     } catch (error) {
-      logger.error('Error revoking all user tokens:', error);
+      logger.error("Error revoking all user tokens:", error);
       throw error;
     }
   }
 }
 
 module.exports = TokenSessionService;
-

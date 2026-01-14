@@ -48,7 +48,7 @@ class InvoiceService {
           statusCode: error.statusCode,
         });
         throw new Error(
-          "Failed to save invoice: Nextcloud service is unavailable. Please try again later."
+          "Failed to save invoice: Nextcloud service is unavailable. Please try again later.",
         );
       }
       throw error;
@@ -112,7 +112,7 @@ class InvoiceService {
           statusCode: error.statusCode,
         });
         throw new Error(
-          "Failed to save invoice: Nextcloud service is unavailable. Please try again later."
+          "Failed to save invoice: Nextcloud service is unavailable. Please try again later.",
         );
       }
       throw error;
@@ -134,7 +134,7 @@ class InvoiceService {
           statusCode: err.statusCode,
         });
         throw new Error(
-          "Failed to retrieve invoice: Nextcloud service is unavailable. Please try again later."
+          "Failed to retrieve invoice: Nextcloud service is unavailable. Please try again later.",
         );
       }
       throw err;
@@ -171,7 +171,7 @@ async function _createInvoiceNumber(tenantId, bookingId) {
     invoiceId = await IdGenerator.next(tenantId, 4, "invoice");
   }
 
-  const invoiceNumber = `${tenant.receiptNumberPrefix ? tenant.receiptNumberPrefix + '-' : ''}${invoiceId}-${revision}`;
+  const invoiceNumber = `${tenant.receiptNumberPrefix ? tenant.receiptNumberPrefix + "-" : ""}${invoiceId}-${revision}`;
 
   return {
     invoiceNumber,

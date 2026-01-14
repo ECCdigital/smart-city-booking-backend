@@ -89,7 +89,8 @@ class UserController {
         response.sendStatus(403);
         return;
       }
-      const tenantUsers = await MembershipManager.getMembershipsByTenantID(tenantId);
+      const tenantUsers =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
       logger.info(
         `Instance -- sending ${tenantUsers.length} users to user ${user?.id}`,

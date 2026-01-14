@@ -85,7 +85,10 @@ class LockerService {
       const bookableLockerDetails = bookable.lockerDetails;
       const activeLockerApps = LockerService.getActiveLockerApps(lockerApps);
 
-      if (bookableLockerDetails.active === true && activeLockerApps.length > 0) {
+      if (
+        bookableLockerDetails.active === true &&
+        activeLockerApps.length > 0
+      ) {
         let occupiedUnits = [];
         const possibleUnits = bookableLockerDetails.units;
         const concurrentBookings = await getConcurrentBookings(
@@ -242,7 +245,9 @@ class LockerService {
         );
       }
 
-      logger.info(`Created booking locker info: ${JSON.stringify(booking.lockerInfo)}`);
+      logger.info(
+        `Created booking locker info: ${JSON.stringify(booking.lockerInfo)}`,
+      );
 
       await BookingManager.storeBooking(booking);
     } catch (error) {
@@ -560,7 +565,9 @@ class LockerService {
 
       await confirmLockers(oldLockerUnits, updatedBooking);
 
-      logger.info(`Updated booking locker info: ${JSON.stringify(updatedBooking.lockerInfo)}`);
+      logger.info(
+        `Updated booking locker info: ${JSON.stringify(updatedBooking.lockerInfo)}`,
+      );
 
       await BookingManager.storeBooking(updatedBooking);
     } catch (error) {
@@ -610,18 +617,17 @@ class LockerService {
 
     for (const result of results) {
       if (result.success) {
-       const locker = booking.lockerInfo.find(
+        const locker = booking.lockerInfo.find(
           (locker) => locker.processId === result.processId,
         );
-       if(locker) {
+        if (locker) {
           locker.isConfirmed = false;
           locker.processId = null;
-       }
+        }
       }
     }
 
     await BookingManager.storeBooking(booking);
-
 
     return results;
   }

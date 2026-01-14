@@ -20,7 +20,7 @@ class Bookable {
     const defaults = SchemaUtils.createDefaults(bookableSchemaDefinition);
     const allowedKeys = Object.keys(bookableSchemaDefinition);
     const filteredParams = Object.fromEntries(
-      Object.entries(params).filter(([key]) => allowedKeys.includes(key))
+      Object.entries(params).filter(([key]) => allowedKeys.includes(key)),
     );
 
     Object.assign(this, defaults, filteredParams);

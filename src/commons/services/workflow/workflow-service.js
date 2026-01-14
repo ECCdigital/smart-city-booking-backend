@@ -115,7 +115,13 @@ class WorkflowService {
     return status || null;
   }
 
-  static async updateTask(tenantId, taskId, destination, newIndex, skipBookingStatus) {
+  static async updateTask(
+    tenantId,
+    taskId,
+    destination,
+    newIndex,
+    skipBookingStatus,
+  ) {
     const workflow = await WorkflowManager.getWorkflow(tenantId);
 
     if (!workflow || !workflow.states) {
@@ -134,7 +140,14 @@ class WorkflowService {
       moveTask(workflow.states, fromStatus.id, destination, taskId, newIndex);
       await WorkflowManager.updateTasks(tenantId, workflow.id, workflow.states);
       if (fromStatus.id !== destination) {
-        action(workflow.states, fromStatus.id, destination, taskId, tenantId, skipBookingStatus);
+        action(
+          workflow.states,
+          fromStatus.id,
+          destination,
+          taskId,
+          tenantId,
+          skipBookingStatus,
+        );
       }
     } else {
       const booking = await BookingManager.getBooking(taskId, tenantId);
@@ -148,7 +161,14 @@ class WorkflowService {
         workflow.id,
         taskId,
       );
-      action(workflow.states, fromStatus?.id, destination, taskId, tenantId, skipBookingStatus);
+      action(
+        workflow.states,
+        fromStatus?.id,
+        destination,
+        taskId,
+        tenantId,
+        skipBookingStatus,
+      );
     }
     return await WorkflowManager.getWorkflow(tenantId, true);
   }

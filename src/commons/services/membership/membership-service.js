@@ -12,17 +12,17 @@ const logger = bunyan.createLogger({
 class MembershipService {
   static async getPendingMembershipByUserId(userId) {
     const memberships = await MembershipManager.getMembershipsByUserID(userId);
-    return (memberships || []).filter(
-      (m) => m?.status === "pending"
-    );
+    return (memberships || []).filter((m) => m?.status === "pending");
   }
 
   static async getPendingApprovalMembershipsByUserId(userId) {
     const memberships = await MembershipManager.getMembershipsByUserID(userId);
     if (!memberships?.length) return [];
 
-    const pending = memberships.filter((m) =>
-      m?.invitations?.some((i) => i?.status === "pending_approval") && m?.status !== "suspended"
+    const pending = memberships.filter(
+      (m) =>
+        m?.invitations?.some((i) => i?.status === "pending_approval") &&
+        m?.status !== "suspended",
     );
     if (!pending.length) return [];
 
@@ -41,7 +41,7 @@ class MembershipService {
           if (!tenant) return null;
 
           const pendingInvites = m.invitations.filter(
-            (i) => i.status === "pending_approval"
+            (i) => i.status === "pending_approval",
           );
 
           let instructions = null;
@@ -81,11 +81,11 @@ class MembershipService {
         } catch (err) {
           logger.error(
             { err, membership: m },
-            "Error processing pending approval membership"
+            "Error processing pending approval membership",
           );
           return null;
         }
-      })
+      }),
     );
 
     const byTenant = new Map();

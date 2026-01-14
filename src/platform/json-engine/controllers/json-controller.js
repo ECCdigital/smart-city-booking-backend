@@ -3,9 +3,6 @@ const {
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const {
-  authenticateIfNeeded,
-} = require("../../../commons/utilities/auth-utils");
 
 class JSONController {
   static async getBookables(req, res) {

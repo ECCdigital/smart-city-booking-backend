@@ -1,4 +1,4 @@
-const JwtHelper = require('./jwt-helper');
+const JwtHelper = require("./jwt-helper");
 
 /**
  * Authenticate request if condition is met
@@ -11,8 +11,8 @@ const authenticateIfNeeded = async (req, condition) => {
 
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Access token required');
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new Error("Access token required");
   }
 
   const token = authHeader.substring(7);

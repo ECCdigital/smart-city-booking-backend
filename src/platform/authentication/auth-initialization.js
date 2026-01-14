@@ -25,17 +25,25 @@ passport.use(
       }
 
       if (!user.isVerified || user.isSuspended) {
-        return done({ 
-          message: user.isVerified ? "User is suspended" : "User is not verified", 
-          status: 403 
-        }, false);
+        return done(
+          {
+            message: user.isVerified
+              ? "User is suspended"
+              : "User is not verified",
+            status: 403,
+          },
+          false,
+        );
       }
 
       if (user.authType !== "local") {
-        return done({ 
-          message: "Invalid authentication type", 
-          status: 401 
-        }, false);
+        return done(
+          {
+            message: "Invalid authentication type",
+            status: 401,
+          },
+          false,
+        );
       }
 
       if (!user.verifyPassword(password)) {

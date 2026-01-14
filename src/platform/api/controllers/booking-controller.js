@@ -13,7 +13,6 @@ const ReceiptService = require("../../../commons/services/payment/receipt-servic
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
-const AuthenticationController = require("../../authentication/controllers/authentication-controller");
 const {
   authenticateIfNeeded,
 } = require("../../../commons/utilities/auth-utils");

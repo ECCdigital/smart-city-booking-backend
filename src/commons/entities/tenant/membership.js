@@ -1,7 +1,6 @@
 const membershipSchemaDefinition = require("../../schemas/membershipSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 
-
 class Membership {
   constructor(params = {}) {
     const defaults = SchemaUtils.createDefaults(membershipSchemaDefinition);

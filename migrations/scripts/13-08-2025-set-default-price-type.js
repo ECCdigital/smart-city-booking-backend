@@ -4,20 +4,16 @@ module.exports = {
   up: async function (mongoose) {
     const Bookable = mongoose.model("Bookable");
 
-    const bookables = await Bookable.find({ 
-      $or: [
-        { priceType: { $exists: false } },
-        { priceType: "" }
-      ]
+    const bookables = await Bookable.find({
+      $or: [{ priceType: { $exists: false } }, { priceType: "" }],
     }).lean();
 
     for (const bookable of bookables) {
       await Bookable.updateOne(
         { _id: bookable._id },
-        { $set: { priceType: 'per-item' } }
+        { $set: { priceType: "per-item" } },
       );
     }
-
   },
 
   down: async function (mongoose) {

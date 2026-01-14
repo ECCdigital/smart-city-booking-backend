@@ -1,8 +1,6 @@
 const mongoose = require("mongoose");
 const tenantSchemaDefinition = require("../../schemas/tenantSchema");
-const {
-  TenantEncryptionService,
-} = require("../../services/encryptionService");
+const { TenantEncryptionService } = require("../../services/encryptionService");
 const { Schema } = mongoose;
 
 const TenantSchema = new Schema(tenantSchemaDefinition);

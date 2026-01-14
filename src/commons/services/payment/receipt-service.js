@@ -48,7 +48,7 @@ class ReceiptService {
           statusCode: err.statusCode,
         });
         throw new Error(
-          "Failed to save receipt: Nextcloud service is unavailable. Please try again later."
+          "Failed to save receipt: Nextcloud service is unavailable. Please try again later.",
         );
       }
       throw err;
@@ -117,7 +117,7 @@ class ReceiptService {
           statusCode: err.statusCode,
         });
         throw new Error(
-          "Failed to save receipt: Nextcloud service is unavailable. Please try again later."
+          "Failed to save receipt: Nextcloud service is unavailable. Please try again later.",
         );
       }
       throw err;
@@ -139,7 +139,7 @@ class ReceiptService {
           statusCode: err.statusCode,
         });
         throw new Error(
-          "Failed to retrieve receipt: Nextcloud service is unavailable. Please try again later."
+          "Failed to retrieve receipt: Nextcloud service is unavailable. Please try again later.",
         );
       }
       throw err;

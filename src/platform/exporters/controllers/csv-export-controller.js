@@ -38,12 +38,12 @@ class CsvExportController {
     if (
       event.tenantId === tenant &&
       event.ownerUserId === userId &&
-          await UserManager.hasPermission(
-            userId,
-            tenant,
-            RolePermission.MANAGE_BOOKABLES,
-            "updateOwn",
-          )
+      (await UserManager.hasPermission(
+        userId,
+        tenant,
+        RolePermission.MANAGE_BOOKABLES,
+        "updateOwn",
+      ))
     )
       return true;
 

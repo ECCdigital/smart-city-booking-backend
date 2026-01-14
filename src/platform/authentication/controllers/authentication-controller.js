@@ -27,11 +27,14 @@ class AuthenticationController {
 
       const context = {
         ip: request.ip || request.connection?.remoteAddress,
-        userAgent: request.headers['user-agent'],
+        userAgent: request.headers["user-agent"],
       };
 
       const accessToken = await JwtHelper.generateToken(requestedUser, context);
-      const refreshToken = await JwtHelper.generateRefreshToken(requestedUser, context);
+      const refreshToken = await JwtHelper.generateRefreshToken(
+        requestedUser,
+        context,
+      );
 
       logger.info(`User ${user.id} signed in.`);
       response.status(200).json({
@@ -46,7 +49,7 @@ class AuthenticationController {
     }
   }
 
-  static async ssoLogin(request, response, next) {
+  static async ssoLogin(request, response) {
     try {
       const {
         body: { token },
@@ -54,7 +57,6 @@ class AuthenticationController {
       const user = await SsoService.handleLogin(token);
 
       if (user) {
-
         const accessToken = await JwtHelper.generateToken(user);
         const refreshToken = await JwtHelper.generateRefreshToken(user);
 
@@ -78,7 +80,7 @@ class AuthenticationController {
       if (!refreshToken) {
         return response.status(401).json({
           success: false,
-          message: "Refresh token required"
+          message: "Refresh token required",
         });
       }
 
@@ -89,27 +91,30 @@ class AuthenticationController {
       if (!user) {
         return response.status(401).json({
           success: false,
-          message: "User not found"
+          message: "User not found",
         });
       }
 
       if (user.isSuspended) {
         return response.status(403).json({
           success: false,
-          message: "User account is suspended"
+          message: "User account is suspended",
         });
       }
 
       const context = {
         ip: request.ip || request.connection?.remoteAddress,
-        userAgent: request.headers['user-agent'],
+        userAgent: request.headers["user-agent"],
       };
 
       const newAccessToken = await JwtHelper.generateToken(user, context);
-      const newRefreshToken = await JwtHelper.generateRefreshToken(user, context);
+      const newRefreshToken = await JwtHelper.generateRefreshToken(
+        user,
+        context,
+      );
 
       if (decoded.jti) {
-        await JwtHelper.revokeToken(refreshToken, 'token_rotation');
+        await JwtHelper.revokeToken(refreshToken, "token_rotation");
       }
 
       logger.info(`Tokens refreshed for user ${user.id}`);
@@ -123,7 +128,7 @@ class AuthenticationController {
       logger.error("Token refresh failed:", error);
       response.status(401).json({
         success: false,
-        message: "Invalid refresh token"
+        message: "Invalid refresh token",
       });
     }
   }
@@ -181,12 +186,12 @@ class AuthenticationController {
       const token = JwtHelper.extractToken(authHeader);
 
       if (token) {
-        await JwtHelper.revokeToken(token, 'logout');
+        await JwtHelper.revokeToken(token, "logout");
 
         // Optional: Auch Refresh-Token revoken wenn mitgeschickt
         const { refreshToken } = request.body;
         if (refreshToken) {
-          await JwtHelper.revokeToken(refreshToken, 'logout');
+          await JwtHelper.revokeToken(refreshToken, "logout");
         }
 
         logger.info(`User ${request.user?.id} signed out, tokens revoked`);
@@ -194,13 +199,13 @@ class AuthenticationController {
 
       response.status(200).json({
         success: true,
-        message: "Logged out successfully"
+        message: "Logged out successfully",
       });
     } catch (error) {
-      logger.error('Signout error:', error);
+      logger.error("Signout error:", error);
       response.status(500).json({
         success: false,
-        message: 'Logout failed'
+        message: "Logout failed",
       });
     }
   }

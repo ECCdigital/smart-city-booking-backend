@@ -1,5 +1,4 @@
 const MailController = require("../../mail-service/mail-controller");
-const TenantManager = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
 
