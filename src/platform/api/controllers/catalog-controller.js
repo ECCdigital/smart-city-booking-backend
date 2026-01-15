@@ -155,6 +155,7 @@ class CatalogController {
 
       const catalog = await CatalogService.getInstanceCatalog();
       themeData.logoUrl = catalog.logoUrl;
+      themeData.hero = catalog.hero;
 
       const { enableCatalog } = await InstanceManager.getInstance();
       if (!enableCatalog) {
