@@ -169,6 +169,12 @@ router.get(
 // MEMBERSHIPS
 // ===========
 router.get(
+  "/memberships",
+  AuthenticationController.isSignedIn,
+  MembershipController.getMemberships,
+);
+
+router.get(
   "/memberships/my/pending",
   AuthenticationController.isSignedIn,
   MembershipController.getMyPendingMemberships,
