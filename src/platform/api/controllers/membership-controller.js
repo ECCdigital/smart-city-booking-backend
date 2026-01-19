@@ -14,8 +14,7 @@ class MembershipController {
     try {
       const user = request.user;
 
-
-      const hasPermission = await PermissionService._isInstanceOwner(user);
+      const hasPermission = await PermissionService._isInstanceOwner(user.id);
 
       if (!hasPermission) {
         return response.sendStatus(403);
