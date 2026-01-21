@@ -2,6 +2,11 @@ const MembershipModel = require("./models/membershipModel");
 const Membership = require("../entities/tenant/membership");
 
 class MembershipManager {
+  static async getMemberships() {
+    const rawMemberships = await MembershipModel.find({});
+    return rawMemberships.map((raw) => raw.toEntity());
+  }
+
   static async getMembershipsByTenantID(tenantID) {
     const rawMemberships = await MembershipModel.find({ tenantId: tenantID });
     return rawMemberships.map((raw) => raw.toEntity());

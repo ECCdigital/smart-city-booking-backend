@@ -1,6 +1,8 @@
 const MembershipService = require("../../../commons/services/membership/membership-service");
+const MembershipManager = require("../../../commons/data-managers/membership-manager");
 
 const bunyan = require("bunyan");
+const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
   name: "membership-controller.js",
@@ -8,6 +10,29 @@ const logger = bunyan.createLogger({
 });
 
 class MembershipController {
+  static async getMemberships(request, response) {
+    try {
+      const user = request.user;
+
+      const hasPermission = await PermissionService._isInstanceOwner(user.id);
+
+      if (!hasPermission) {
+        return response.sendStatus(403);
+      }
+
+
+      const memberships = await MembershipManager.getMemberships();
+
+
+      response.status(200).send(memberships);
+    } catch (error) {
+      logger.error(error);
+      return response
+        .status(error.code || 500)
+        .send(error.message || "Could not retrieve memberships");
+    }
+  }
+
   static async getMyPendingMemberships(request, response) {
     try {
       const user = request.user;
