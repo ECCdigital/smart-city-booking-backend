@@ -185,6 +185,12 @@ router.get(
   BookingController.getReceipt,
 );
 
+router.get(
+  "/bookings/:id/invoice/:invoiceId",
+  AuthenticationController.isSignedIn,
+  BookingController.getInvoice,
+);
+
 // USERS
 // =====
 router.get(

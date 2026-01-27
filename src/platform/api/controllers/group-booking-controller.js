@@ -181,7 +181,7 @@ class GroupBookingController {
       const tenantId = req.params.tenant;
       const user = req.user;
       const groupBookingId = req.params.id;
-      const { paymentMethod } = req.body;
+      const { paymentMethod, timePaid } = req.body;
 
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
@@ -201,6 +201,7 @@ class GroupBookingController {
           tenantId,
           bookingIds: groupBooking.bookingIds,
           paymentMethod,
+          timePaid,
         });
 
         if (!result.success) {

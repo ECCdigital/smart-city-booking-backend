@@ -441,6 +441,9 @@ class BookingService {
         timeBegin: updatedBooking.timeBegin,
         timeEnd: updatedBooking.timeEnd,
         timeCreated: oldBooking.timeCreated,
+        timePaid: updatedBooking.timePaid
+          ? updatedBooking.timePaid
+          : oldBooking.timePaid,
         bookableItems: updatedBooking.bookableItems,
         couponCode: updatedBooking.couponCode,
         name: updatedBooking.name,
@@ -716,11 +719,17 @@ class BookingService {
     bookingId,
     skipWorkflow = false,
     paymentMethod,
+    timePaid,
   }) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
       booking.isPayed = true;
-      booking.timePaid = Date.now();
+
+      if (timePaid && typeof timePaid === "number") {
+        booking.timePaid = timePaid;
+      } else {
+        booking.timePaid = Date.now();
+      }
       if (paymentMethod) {
         booking.paymentMethod = paymentMethod;
       }
@@ -754,12 +763,17 @@ class BookingService {
     tenantId,
     bookingIds,
     paymentMethod,
+    timePaid,
   }) {
     try {
       const bookings = await BookingManager.getBookings(tenantId, bookingIds);
       for (const booking of bookings) {
         booking.isPayed = true;
-        booking.timePaid = Date.now();
+        if (timePaid && typeof timePaid === "number") {
+          booking.timePaid = timePaid;
+        } else {
+          booking.timePaid = Date.now();
+        }
         if (paymentMethod) {
           booking.paymentMethod = paymentMethod;
         }
