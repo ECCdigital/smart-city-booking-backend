@@ -1,4 +1,4 @@
-const puppeteer = require("puppeteer");
+const { chromium } = require("playwright");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const TenantManager = require("../data-managers/tenant-manager");
@@ -141,9 +141,17 @@ class PdfService {
     const template = Handlebars.compile(tenant.receiptTemplate);
     const renderedHtml = template(data);
 
-    const browser = await puppeteer.launch({
+    const browser = await chromium.launch({
       headless: true,
-      args: ["--no-sandbox"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process",
+      ],
     });
     const page = await browser.newPage();
     await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
@@ -259,9 +267,14 @@ class PdfService {
       const template = Handlebars.compile(tenant.receiptTemplate);
       const renderedHtml = template(data);
 
-      const browser = await puppeteer.launch({
+      const browser = await chromium.launch({
         headless: true,
-        args: ["--no-sandbox"],
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+        ],
       });
       const page = await browser.newPage();
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
@@ -385,9 +398,17 @@ class PdfService {
       const template = Handlebars.compile(tenant.invoiceTemplate);
       const renderedHtml = template(data);
 
-      const browser = await puppeteer.launch({
+      const browser = await chromium.launch({
         headless: true,
-        args: ["--no-sandbox"],
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--no-first-run",
+          "--no-zygote",
+          "--single-process",
+        ],
       });
       const page = await browser.newPage();
       await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
@@ -503,9 +524,17 @@ class PdfService {
 
     const renderedHtml = template(data);
 
-    const browser = await puppeteer.launch({
+    const browser = await chromium.launch({
       headless: true,
-      args: ["--no-sandbox"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process",
+      ],
     });
     const page = await browser.newPage();
     await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
