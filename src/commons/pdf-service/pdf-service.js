@@ -1,9 +1,9 @@
-const { chromium } = require("playwright");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const Handlebars = require("handlebars");
+const lazyBrowser = require("./LazyBrowser");
 
 const logger = bunyan.createLogger({
   name: "mail-service.js",
@@ -11,6 +11,29 @@ const logger = bunyan.createLogger({
 });
 
 class PdfService {
+  static async convertToPdf(html, filename) {
+    return await lazyBrowser.execute(async (browser) => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+
+      await page.setContent(html, {
+        waitUntil: "domcontentloaded",
+        timeout: 10000,
+      });
+
+      const buffer = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
+      });
+
+      await context.close();
+      logger.info(`Generated PDF: ${filename} (${buffer.length} bytes)`);
+
+      return { buffer, name: filename };
+    });
+  }
+
   static formatDateTime(value) {
     const formatter = new Intl.DateTimeFormat("de-DE", {
       day: "2-digit",
@@ -79,10 +102,14 @@ class PdfService {
   }
 
   static async generateSingleReceipt(tenantId, bookingId, receiptNumber) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-    const bookables = (await BookableManager.getBookables(tenantId)).filter(
-      (b) => booking.bookableItems.some((bi) => bi.bookableId === b.id),
+    const [tenant, booking, allBookables] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      BookingManager.getBooking(bookingId, tenantId),
+      BookableManager.getBookables(tenantId),
+    ]);
+
+    const bookables = allBookables.filter((b) =>
+      booking.bookableItems.some((bi) => bi.bookableId === b.id),
     );
 
     const totalAmount = PdfService.formatCurrency(booking.priceEur);
@@ -140,32 +167,18 @@ class PdfService {
 
     const template = Handlebars.compile(tenant.receiptTemplate);
     const renderedHtml = template(data);
+    const filename = `Zahlungsbeleg-${receiptNumber}.pdf`;
 
-    const browser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--single-process",
-      ],
-    });
-    const page = await browser.newPage();
-    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
-    const buffer = await page.pdf({ format: "A4" });
-    await browser.close();
-
-    return { buffer, name: `Zahlungsbeleg-${receiptNumber}.pdf` };
+    return await PdfService.convertToPdf(renderedHtml, filename);
   }
 
   static async generateAggregatedReceipt(tenantId, bookingIds, receiptNumber) {
     try {
-      const tenant = await TenantManager.getTenant(tenantId);
-      const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-      const allBookables = await BookableManager.getBookables(tenantId);
+      const [tenant, bookings, allBookables] = await Promise.all([
+        TenantManager.getTenant(tenantId),
+        BookingManager.getBookings(tenantId, bookingIds),
+        BookableManager.getBookables(tenantId),
+      ]);
 
       let totalBrutto = 0;
       let totalNetto = 0;
@@ -266,22 +279,9 @@ class PdfService {
 
       const template = Handlebars.compile(tenant.receiptTemplate);
       const renderedHtml = template(data);
+      const filename = `Sammelbeleg-${receiptNumber}.pdf`;
 
-      const browser = await chromium.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-        ],
-      });
-      const page = await browser.newPage();
-      await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
-      const buffer = await page.pdf({ format: "A4" });
-      await browser.close();
-
-      return { buffer, name: `Sammelbeleg-${receiptNumber}.pdf` };
+      return await PdfService.convertToPdf(renderedHtml, filename);
     } catch (err) {
       logger.error(err);
       throw err;
@@ -290,11 +290,13 @@ class PdfService {
 
   static async generateSingleInvoice(tenantId, bookingId, invoiceNumber) {
     try {
-      const tenant = await TenantManager.getTenant(tenantId);
-      const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
+      const [tenant, invoiceApp, booking, allBookables] = await Promise.all([
+        TenantManager.getTenant(tenantId),
+        TenantManager.getTenantApp(tenantId, "invoice"),
+        BookingManager.getBooking(bookingId, tenantId),
+        BookableManager.getBookables(tenantId),
+      ]);
 
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
-      const allBookables = await BookableManager.getBookables(tenantId);
       const bookables = allBookables.filter((b) =>
         booking.bookableItems.some((bi) => bi.bookableId === b.id),
       );
@@ -397,37 +399,20 @@ class PdfService {
 
       const template = Handlebars.compile(tenant.invoiceTemplate);
       const renderedHtml = template(data);
+      const filename = `Rechnung-${invoiceNumber}.pdf`;
 
-      const browser = await chromium.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--no-first-run",
-          "--no-zygote",
-          "--single-process",
-        ],
-      });
-      const page = await browser.newPage();
-      await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
-      const buffer = await page.pdf({ format: "A4" });
-      await browser.close();
-
-      return {
-        buffer,
-        name: `Rechnung-${invoiceNumber}.pdf`,
-      };
+      return await PdfService.convertToPdf(renderedHtml, filename);
     } catch (err) {
       throw err;
     }
   }
 
   static async generateAggregatedInvoice(tenantId, bookingIds, invoiceNumber) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+    const [tenant, invoiceApp, bookings] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      TenantManager.getTenantApp(tenantId, "invoice"),
+      BookingManager.getBookings(tenantId, bookingIds),
+    ]);
 
     let totalBrutto = 0;
     let totalNetto = 0;
@@ -523,28 +508,9 @@ class PdfService {
     };
 
     const renderedHtml = template(data);
+    const filename = `Sammelrechnung-${invoiceNumber}.pdf`;
 
-    const browser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--single-process",
-      ],
-    });
-    const page = await browser.newPage();
-    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded" });
-    const buffer = await page.pdf({ format: "A4" });
-    await browser.close();
-
-    return {
-      buffer,
-      name: `Sammelrechnung-${invoiceNumber}.pdf`,
-    };
+    return await PdfService.convertToPdf(renderedHtml, filename);
   }
 
   static isValidTemplate(template) {
