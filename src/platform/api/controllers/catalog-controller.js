@@ -56,6 +56,21 @@ class CatalogController {
     try {
       const catalogBundle = await CatalogService.getCatalogBundle();
 
+      const { enableCatalog } = await InstanceManager.getInstance();
+      if (!enableCatalog) {
+        return response.status(503).send({
+          success: false,
+          message: "Catalog feature is disabled.",
+        });
+      }
+
+      if (!catalogBundle) {
+        return response.status(404).send({
+          success: false,
+          message: "Catalog bundle not found.",
+        });
+      }
+
       response.status(200).send(catalogBundle);
     } catch (error) {
       response.status(error.code || 500).send({
@@ -139,14 +154,10 @@ class CatalogController {
 
       const themeData = { theme: null, visibility: null };
 
-
-
       if (!slug) {
-
         const { theme, visibility } = await CatalogService.getTheme();
         themeData.theme = theme;
         themeData.visibility = visibility;
-
       } else {
         const { theme, visibility } = await CatalogService.getThemeBySlug(slug);
         themeData.theme = theme;
