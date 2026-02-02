@@ -115,21 +115,7 @@ router.get(
 // BOOKINGS
 // ========
 
-// Public
 router.get("/bookings", optionalAuth, BookingController.getBookings);
-
-router.get("/bookings/:ids/status", BookingController.getBookingStatus);
-router.get(
-  "/bookings/:id/status/public",
-  BookingController.getPublicBookingStatus,
-);
-
-// Protected
-router.get(
-  "/bookings/:id",
-  AuthenticationController.isSignedIn,
-  BookingController.getBooking,
-);
 
 router.put(
   "/bookings",
@@ -137,15 +123,30 @@ router.put(
   BookingController.storeBooking,
 );
 router.get(
-  "/mybookings",
+  "/bookings/assigned",
   AuthenticationController.isSignedIn,
   BookingController.getAssignedBookings,
 );
+
+router.get(
+  "/bookings/:id",
+  AuthenticationController.isSignedIn,
+  BookingController.getBooking,
+);
+
 router.delete(
   "/bookings/:id",
   AuthenticationController.isSignedIn,
   BookingController.removeBooking,
 );
+
+router.get("/bookings/:ids/status", BookingController.getBookingStatus);
+
+router.get(
+  "/bookings/:id/status/public",
+  BookingController.getPublicBookingStatus,
+);
+
 router.get(
   "/bookings/:id/commit",
   AuthenticationController.isSignedIn,

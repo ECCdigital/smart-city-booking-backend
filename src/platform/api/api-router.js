@@ -9,6 +9,7 @@ const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
 const FileController = require("./controllers/file-controller");
+const { BookingController } = require("./controllers/booking-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -210,6 +211,13 @@ router.post(
   "/files",
   AuthenticationController.isSignedIn,
   FileController.createFile,
+);
+
+//Bookings
+router.get(
+  "/bookings/assigned",
+  AuthenticationController.isSignedIn,
+  BookingController.getAssignedBookings,
 );
 
 module.exports = router;

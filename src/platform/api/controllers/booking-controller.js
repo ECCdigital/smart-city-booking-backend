@@ -132,10 +132,12 @@ class BookingController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const bookings = await BookingManager.getAssignedBookings(
-        tenant,
-        user.id,
-      );
+      const filter = tenant ? { tenantId: tenant } : {};
+
+      const bookings = await BookingManager.getAssignedBookings({
+        userID: user.id,
+        filter,
+      });
 
       if (request.query.populate === "true") {
         await BookingController._populate(bookings);
