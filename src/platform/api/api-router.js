@@ -10,6 +10,7 @@ const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
 const FileController = require("./controllers/file-controller");
 const { BookingController } = require("./controllers/booking-controller");
+const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
 
@@ -188,7 +189,7 @@ router.get(
   CatalogController.getInstanceCatalog,
 );
 router.get("/catalog/public", CatalogController.getPublicCatalog);
-router.get("/catalog/bundle", CatalogController.getCatalogBundle);
+router.get("/catalog/bundle", optionalAuth, CatalogController.getCatalogBundle);
 
 router.put(
   "/catalog",
