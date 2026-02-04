@@ -23,6 +23,7 @@ class PaymentService {
     this.tenantId = tenantId;
     this.bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
     this.aggregated = !!options.aggregated;
+    this.groupBookingId = options.groupBookingId || null;
   }
 
   createPayment() {
@@ -166,9 +167,10 @@ class GiroCockpitPaymentService extends PaymentService {
     const amount = bookings.reduce((acc, booking) => {
       return acc + booking.priceEur * 100 || 0;
     }, 0);
-    const purpose = `${this.bookingIds.join(",")} ${
-      paymentApp.paymentPurposeSuffix || ""
-    }`;
+
+    const purpose = this.groupBookingId
+      ? `${this.groupBookingId} ${paymentApp.paymentPurposeSuffix || ""}`
+      : `${this.bookingIds.join(",")} ${paymentApp.paymentPurposeSuffix || ""}`;
 
     const MERCHANT_ID = paymentApp.paymentMerchantId;
     const PROJECT_ID = paymentApp.paymentProjectId;
@@ -455,9 +457,9 @@ class PmPaymentService extends PaymentService {
       return acc + booking.priceEur * 100 || 0;
     }, 0);
 
-    const desc = `${this.bookingIds.join(",")} ${
-      paymentApp.paymentPurposeSuffix || ""
-    }`;
+    const desc = this.groupBookingId
+      ? `${this.groupBookingId} ${paymentApp.paymentPurposeSuffix || ""}`
+      : `${this.bookingIds.join(",")} ${paymentApp.paymentPurposeSuffix || ""}`;
     const AGS = paymentApp.paymentMerchantId;
     const PROCEDURE = paymentApp.paymentProjectId;
     const PAYMENT_SALT = paymentApp.paymentSecret;

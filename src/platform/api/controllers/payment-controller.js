@@ -1,4 +1,5 @@
 const BookingManager = require("../../../commons/data-managers/booking-manager");
+const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
 
@@ -35,6 +36,15 @@ class PaymentController {
       return;
     }
 
+    let groupBookingId = null;
+
+    if(bookings.length > 1 && aggregated) {
+      const possibleGroupBookingIds = await GroupBookingManager.getGroupBookingsByBookingIds(tenantId, bookingIds);
+     if(possibleGroupBookingIds.length === 1) {
+        groupBookingId = possibleGroupBookingIds[0].id;
+     }
+    }
+
     //TODO: Check if all bookings are in the same tenant and have the same payment provider
 
     try {
@@ -42,7 +52,7 @@ class PaymentController {
         tenantId,
         bookingIds,
         bookings[0].paymentProvider,
-        { aggregated },
+        { aggregated, groupBookingId },
       );
 
       const data = await paymentService?.createPayment();
