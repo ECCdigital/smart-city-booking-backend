@@ -70,6 +70,8 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+    logger.info(`Payment notification GET received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`);
+
     let aggregatedBookingIds = bookingIds
       ? bookingIds
           .split(",")
@@ -123,6 +125,8 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+    logger.info(`Payment notification POST received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`);
+
     let aggregatedBookingIds = bookingIds
       ? bookingIds
           .split(",")
@@ -175,6 +179,8 @@ class PaymentController {
     const {
       query: { id: bookingId, ids: bookingIds, tenant: tenantId, aggregated },
     } = request;
+
+    logger.info(`Payment response received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`);
 
     let aggregatedBookingIds = bookingIds
       ? bookingIds
