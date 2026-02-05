@@ -23,7 +23,14 @@ class HtmlController {
       );
     }
 
-    bookables.reverse();
+    if (ids) {
+      const idsArray = ids.split(",");
+      bookables.sort((a, b) => {
+        return idsArray.indexOf(a.id) - idsArray.indexOf(b.id);
+      });
+    } else {
+      bookables.reverse();
+    }
 
     if (bookables.length === 0) {
       response.status(404).send("No bookables found");
