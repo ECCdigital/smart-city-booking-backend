@@ -1,44 +1,48 @@
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 const Handlebars = require("handlebars");
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
 const InstanceManger = require("../data-managers/instance-manager");
 const axios = require("axios");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
+const { retry } = require("../utilities/retry");
 
-Handlebars.registerHelper("formatDateTime", function (value) {
+const dateTimeFormatter = new Intl.DateTimeFormat("de-DE", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Berlin",
+});
+
+const dateFormatter = new Intl.DateTimeFormat("de-DE", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+const currencyFormatter = new Intl.NumberFormat("de-DE", {
+  style: "currency",
+  currency: "EUR",
+});
+
+Handlebars.registerHelper("formatDateTime", (value) => {
   if (!value) return "–";
-  const formatter = new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Berlin",
-  });
-  return formatter.format(new Date(value));
+  return dateTimeFormatter.format(new Date(value));
 });
 
-Handlebars.registerHelper("formatDate", function (value) {
+Handlebars.registerHelper("formatDate", (value) => {
   if (!value) return "–";
-  const formatter = new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  return formatter.format(new Date(value));
+  return dateFormatter.format(new Date(value));
 });
 
-Handlebars.registerHelper("priceFormatted", function (value) {
-  if (typeof value !== "number") {
-    return "–";
-  }
-  const formatter = new Intl.NumberFormat("de-DE", {
-    style: "currency",
-    currency: "EUR",
-  });
-  return formatter.format(value);
+Handlebars.registerHelper("priceFormatted", (value) => {
+  if (typeof value !== "number") return "–";
+  return currencyFormatter.format(value);
 });
+
 Handlebars.registerHelper("sanitizeString", function (value) {
   if (typeof value === "string" && value.trim() !== "") {
     return value.replace(/<[^>]*>?/gm, "");
@@ -79,10 +83,80 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+const TRANSPORTER_MAX_AGE = 30 * 60 * 1000;
+const MAX_TEMPLATE_CACHE_SIZE = 100;
+
+const templateCache = new Map();
+const transporterPool = new Map();
+
 /**
  * This class handles E-Mail templates and transportation.
  */
 class MailerService {
+  static getConfigHash(config) {
+    const relevantFields = {
+      host: config.noreplyHost,
+      port: config.noreplyPort,
+      user: config.noreplyUser,
+      password: config.noreplyPassword,
+      starttls: config.noreplyStarttls,
+      useGraphApi: config.noreplyUseGraphApi,
+      graphTenantId: config.noreplyGraphTenantId,
+      graphClientId: config.noreplyGraphClientId,
+    };
+    return crypto
+      .createHash("md5")
+      .update(JSON.stringify(relevantFields))
+      .digest("hex");
+  }
+
+  static getTransporter(mailConfig) {
+    const configHash = this.getConfigHash(mailConfig);
+    const now = Date.now();
+
+    for (const [hash, entry] of transporterPool) {
+      if (now - entry.lastUsed > TRANSPORTER_MAX_AGE) {
+        entry.transporter.close?.();
+        transporterPool.delete(hash);
+      }
+    }
+
+    if (!transporterPool.has(configHash)) {
+      const transporterConfig = mailConfig.noreplyUseGraphApi
+        ? this.createGraphTransport({
+            tenantId: mailConfig.noreplyGraphTenantId,
+            clientId: mailConfig.noreplyGraphClientId,
+            clientSecret: mailConfig.noreplyGraphClientSecret,
+            from: {
+              name: mailConfig.noreplyDisplayName,
+              address: mailConfig.noreplyMail,
+            },
+          })
+        : {
+            pool: true,
+            host: mailConfig.noreplyHost,
+            port: mailConfig.noreplyPort,
+            secure: !mailConfig.noreplyStarttls,
+            auth: {
+              user: mailConfig.noreplyUser,
+              pass: mailConfig.noreplyPassword,
+            },
+            ...(mailConfig.noreplyStarttls && {
+              tls: { ciphers: "SSLv3", rejectUnauthorized: false },
+            }),
+          };
+
+      transporterPool.set(configHash, {
+        transporter: nodemailer.createTransport(transporterConfig),
+        lastUsed: now,
+      });
+    }
+
+    const entry = transporterPool.get(configHash);
+    entry.lastUsed = now;
+    return entry.transporter;
+  }
+
   /**
    * Read a template from file and replace dynamic attributes.
    *
@@ -91,18 +165,19 @@ class MailerService {
    * @returns Promise <HTML output of the mail>
    */
   static async processTemplate(emailTemplate, model) {
-    logger.debug(
-      `Processing mail template ${emailTemplate} with model ${JSON.stringify(
-        model,
-      )}`,
-    );
+    let compiledTemplate = templateCache.get(emailTemplate);
 
-    try {
-      const template = Handlebars.compile(emailTemplate);
-      return template(model);
-    } catch (err) {
-      throw err;
+    if (!compiledTemplate) {
+      if (templateCache.size >= MAX_TEMPLATE_CACHE_SIZE) {
+        const firstKey = templateCache.keys().next().value;
+        templateCache.delete(firstKey);
+      }
+
+      compiledTemplate = Handlebars.compile(emailTemplate);
+      templateCache.set(emailTemplate, compiledTemplate);
     }
+
+    return compiledTemplate(model);
   }
 
   /**
@@ -193,49 +268,7 @@ class MailerService {
         `${context} -- sending mail to ${address} with subject ${subject}`,
       );
 
-      let transporterConfig;
-      if (!mailConfig.noreplyUseGraphApi) {
-        // SMTP Transport
-        transporterConfig = {
-          pool: true,
-          host: mailConfig.noreplyHost,
-          port: mailConfig.noreplyPort,
-          secure: !mailConfig.noreplyStarttls,
-          auth: {
-            user: mailConfig.noreplyUser,
-            pass: mailConfig.noreplyPassword,
-          },
-        };
-
-        if (mailConfig.noreplyStarttls) {
-          transporterConfig.tls = {
-            ciphers: "SSLv3",
-            rejectUnauthorized: false,
-          };
-        }
-      } else {
-        // Graph Transport
-        transporterConfig = this.createGraphTransport({
-          tenantId: mailConfig.noreplyGraphTenantId,
-          clientId: mailConfig.noreplyGraphClientId,
-          clientSecret: mailConfig.noreplyGraphClientSecret,
-          from: {
-            name: mailConfig.noreplyDisplayName,
-            address: mailConfig.noreplyMail,
-          },
-        });
-      }
-
-      const safeLogConfig = JSON.parse(JSON.stringify(transporterConfig));
-      if (safeLogConfig.auth && safeLogConfig.auth.pass) {
-        safeLogConfig.auth.pass = "********";
-      }
-
-      logger.debug(
-        `${context} -- using mail configuration ${JSON.stringify(safeLogConfig)}`,
-      );
-
-      const transporter = nodemailer.createTransport(transporterConfig);
+      const transporter = MailerService.getTransporter(mailConfig);
 
       const mailOptions = {
         from: `${mailConfig.noreplyDisplayName} <${mailConfig.noreplyMail}>`,
@@ -247,14 +280,14 @@ class MailerService {
       };
 
       if (address) {
-        await transporter.sendMail(mailOptions);
+        await retry(() => transporter.sendMail(mailOptions), { attempts: 3 });
         logger.info(`${context} -- Mail sent successfully to ${address}`);
       } else {
         logger.error(`${context} -- No recipient address provided`);
       }
     } catch (error) {
+      logger.error(`Error sending mail to ${address}: ${error.message}`);
       throw error;
-      logger.error(error);
     }
   }
 
@@ -369,7 +402,7 @@ class MailerService {
    * @returns {Array} - An array of base64 encoded attachment objects.
    */
   static _base64Attachment(attachments) {
-    if (!attachments && !Array.isArray(attachments)) return [];
+    if (!attachments || !Array.isArray(attachments)) return [];
     return attachments.map((att) => {
       return {
         "@odata.type": "#microsoft.graph.fileAttachment",
