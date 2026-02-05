@@ -233,6 +233,7 @@ class GroupBookingController {
         });
       }
     } catch (error) {
+      logger.error({ error: error.message }, "Error paying group booking");
       res.status(500).send({ message: error.message });
     }
   }
