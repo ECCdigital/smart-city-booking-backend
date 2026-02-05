@@ -15,6 +15,22 @@ const logger = bunyan.createLogger({
 const PUBLIC_PATH = "public";
 const PROTECTED_PATH = "protected";
 
+const withAccessLevel = (files, level) =>
+  files.map((file) => ({ ...file, accessLevel: level }));
+
+const safeGetFiles = async (tenant, path, accessLevel) => {
+  try {
+    const files = await NextcloudManager.getFiles(tenant, path);
+    return withAccessLevel(files, accessLevel);
+  } catch (err) {
+    logger.warn(`Failed to fetch ${accessLevel} files`, {
+      tenant,
+      error: err.message,
+    });
+    return [];
+  }
+};
+
 /**
  * The Next Cloud Controller provides Endpoints to upload and download files from the Next Cloud platform connected to
  * the booking manager instance.
@@ -29,34 +45,33 @@ class FileController {
       user,
       query: { includeProtected = "false" },
     } = request;
-    const includeProtectedBool = includeProtected !== "false";
+
+    if (!tenant) {
+      return response.status(400).json({ error: "Tenant is required." });
+    }
+
+    const includeProtectedBool = includeProtected === "true";
 
     try {
-      const files = await NextcloudManager.getFiles(tenant, PUBLIC_PATH);
-      const publicFiles = files.map((file) => ({
-        ...file,
-        accessLevel: "public",
-      }));
+      const canAccessProtected =
+        includeProtectedBool && (await authenticateIfNeeded(request, true));
 
-      let protectedFiles = [];
-      if ((await authenticateIfNeeded(request, true)) && includeProtectedBool) {
-        const protectedFilesData = await NextcloudManager.getFiles(
-          tenant,
-          PROTECTED_PATH,
-        );
-        protectedFiles = protectedFilesData.map((file) => ({
-          ...file,
-          accessLevel: "protected",
-        }));
-      }
+      const [publicFiles, protectedFiles] = await Promise.all([
+        safeGetFiles(tenant, PUBLIC_PATH, "public"),
+        canAccessProtected
+          ? safeGetFiles(tenant, PROTECTED_PATH, "protected")
+          : [],
+      ]);
 
       const allFiles = [...publicFiles, ...protectedFiles];
+
       logger.info(
-        `${tenant} -- sending ${allFiles.length} files to user ${user?.id}. `,
+        `${tenant} -- sending ${allFiles.length} files to user ${user?.id ?? "anonymous"}`,
       );
-      response.status(200).send(allFiles);
+
+      return response.status(200).json(allFiles);
     } catch (err) {
-      logger.error("Error getting files from Next Cloud.", {
+      logger.error("Error getting files from Nextcloud.", {
         error: err.message,
         statusCode: err.statusCode,
         tenant,
@@ -64,17 +79,17 @@ class FileController {
 
       if (err.isNextcloudError) {
         const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        response.status(statusCode).send({
+        return response.status(statusCode).json({
           error:
             "Nextcloud service is currently unavailable. Please try again later.",
           details:
             process.env.NODE_ENV === "development" ? err.message : undefined,
         });
-      } else {
-        response.status(500).send({
-          error: "Error getting files from Next Cloud.",
-        });
       }
+
+      return response.status(500).json({
+        error: "Error getting files from Nextcloud.",
+      });
     }
   }
 
@@ -89,93 +104,84 @@ class FileController {
 
     if (!tenant || !filename) {
       logger.warn(`${tenant} -- Missing required parameters.`);
-      response.status(400).send("Missing required parameters.");
-      return;
+      return response.status(400).send("Missing required parameters.");
     }
 
     try {
       const isPublicPath = filename.startsWith(`/${PUBLIC_PATH}/`);
-      const isProtected = filename.startsWith(`/${PROTECTED_PATH}/`);
+      const isProtectedPath = filename.startsWith(`/${PROTECTED_PATH}/`);
 
-      if (
+      const hasAccess =
         isPublicPath ||
-        (isProtected && (await authenticateIfNeeded(request, true)))
-      ) {
-        const stat = await NextcloudManager.statFile(tenant, filename);
+        (isProtectedPath && (await authenticateIfNeeded(request, true)));
 
-        const contentType =
-          mime.lookup(filename) || stat?.mime || "application/octet-stream";
-        response.setHeader("Content-Type", contentType);
+      if (!hasAccess) {
+        logger.warn(`${tenant} -- Unauthorized.`);
+        return response.status(401).send("Unauthorized.");
+      }
 
-        if (isPublicPath) {
-          response.setHeader(
-            "Cache-Control",
-            "public, max-age=31536000, immutable",
-          );
-        } else {
-          response.setHeader("Cache-Control", "private, max-age=0, no-cache");
-        }
+      const stat = await NextcloudManager.statFile(tenant, filename);
 
-        if (stat?.etag) response.setHeader("ETag", stat.etag);
-        if (stat?.lastmod) response.setHeader("Last-Modified", stat.lastmod);
+      const contentType =
+        mime.lookup(filename) || stat?.mime || "application/octet-stream";
+      response.setHeader("Content-Type", contentType);
+      response.setHeader(
+        "Cache-Control",
+        isPublicPath
+          ? "public, max-age=31536000, immutable"
+          : "private, max-age=0, no-cache",
+      );
+      response.setHeader("Content-Disposition", "inline");
 
-        const inm = request.headers["if-none-match"];
-        const ims = request.headers["if-modified-since"];
-        const notModifiedByEtag = inm && stat?.etag && inm === stat.etag;
-        const notModifiedByTime =
-          ims && stat?.lastmod && new Date(stat.lastmod) <= new Date(ims);
-        if (notModifiedByEtag || notModifiedByTime) {
-          return response.status(304).end();
-        }
+      if (stat?.etag) response.setHeader("ETag", stat.etag);
+      if (stat?.lastmod) response.setHeader("Last-Modified", stat.lastmod);
 
-        const stream = await NextcloudManager.createReadStream(
+      const inm = request.headers["if-none-match"];
+      const ims = request.headers["if-modified-since"];
+      const notModifiedByEtag = inm && stat?.etag && inm === stat.etag;
+      const notModifiedByTime =
+        ims && stat?.lastmod && new Date(stat.lastmod) <= new Date(ims);
+
+      if (notModifiedByEtag || notModifiedByTime) {
+        return response.status(304).end();
+      }
+
+      const stream = await NextcloudManager.createReadStream(tenant, filename);
+
+      logger.info(`${tenant} -- sending file ${filename}`);
+
+      stream.on("error", (streamError) => {
+        logger.error("Error during file streaming from Nextcloud.", {
+          error: streamError.message,
+          statusCode: streamError.status || 500,
           tenant,
           filename,
-        );
+        });
 
-        logger.info(`${tenant} -- sending file ${filename}`);
-        response.setHeader("Content-Disposition", "inline");
-
-        // Handle stream errors to prevent crashes
-        stream.on("error", (streamError) => {
-          logger.error("Error during file streaming from Next Cloud.", {
-            error: streamError.message,
-            statusCode: streamError.status || 500,
-            tenant,
-            filename,
+        if (!response.headersSent) {
+          const statusCode = streamError.status >= 500 ? 503 : 500;
+          response.status(statusCode).send({
+            error:
+              "Error streaming file from Nextcloud. Please try again later.",
+            details:
+              process.env.NODE_ENV === "development"
+                ? streamError.message
+                : undefined,
           });
+        } else {
+          response.destroy();
+        }
+      });
 
-          // Only send error response if headers haven't been sent
-          if (!response.headersSent) {
-            const statusCode = streamError.status >= 500 ? 503 : 500;
-            response.status(statusCode).send({
-              error:
-                "Error streaming file from Nextcloud. Please try again later.",
-              details:
-                process.env.NODE_ENV === "development"
-                  ? streamError.message
-                  : undefined,
-            });
-          } else {
-            // Headers already sent, just destroy the response
-            response.destroy();
-          }
-        });
+      request.on("close", () => {
+        if (!response.writableEnded) {
+          stream.destroy();
+        }
+      });
 
-        // Handle client disconnections
-        request.on("close", () => {
-          if (!response.writableEnded) {
-            stream.destroy();
-          }
-        });
-
-        stream.pipe(response);
-      } else {
-        logger.warn(`${tenant} -- Unauthorized.`);
-        response.status(401).send("Unauthorized.");
-      }
+      stream.pipe(response);
     } catch (err) {
-      logger.error("Error downloading file from Next Cloud.", {
+      logger.error("Error downloading file from Nextcloud.", {
         error: err.message,
         statusCode: err.statusCode,
         tenant,
@@ -184,17 +190,17 @@ class FileController {
 
       if (err.isNextcloudError) {
         const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        response.status(statusCode).send({
+        return response.status(statusCode).send({
           error:
             "Nextcloud service is currently unavailable. Please try again later.",
           details:
             process.env.NODE_ENV === "development" ? err.message : undefined,
         });
-      } else {
-        response.status(500).send({
-          error: "Error downloading file from Next Cloud.",
-        });
       }
+
+      return response.status(500).send({
+        error: "Error downloading file from Nextcloud.",
+      });
     }
   }
 
@@ -213,21 +219,17 @@ class FileController {
       logger.warn(
         `${tenant} -- could not upload file. Missing required parameters.`,
       );
-      response.status(400).send("Missing required parameters.");
-      return;
+      return response.status(400).send("Missing required parameters.");
     }
 
-    // Check if filename is valid and does not contain exploits
     if (!file.name || file.name.includes("..") || file.name.includes("/")) {
-      response.status(400).send("Invalid filename.");
-      return;
+      return response.status(400).send("Invalid filename.");
     }
 
     try {
-      const subDirectory =
-        (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
-        "/" +
-        customDirectory;
+      const basePath = accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH;
+      const subDirectory = `${basePath}/${customDirectory}`;
+
       await NextcloudManager.createFile(
         tenant,
         file.data,
@@ -235,12 +237,14 @@ class FileController {
         accessLevel,
         subDirectory,
       );
+
       logger.info(
-        `${tenant} -- file uploaded successfully by user ${user?.id}.`,
+        `${tenant} -- file uploaded successfully by user ${user?.id ?? "anonymous"}.`,
       );
-      response.status(201).send("File uploaded successfully.");
+
+      return response.status(201).send("File uploaded successfully.");
     } catch (err) {
-      logger.error("Error uploading file to Next Cloud.", {
+      logger.error("Error uploading file to Nextcloud.", {
         error: err.message,
         statusCode: err.statusCode,
         tenant,
@@ -249,17 +253,17 @@ class FileController {
 
       if (err.isNextcloudError) {
         const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        response.status(statusCode).send({
+        return response.status(statusCode).send({
           error:
             "Nextcloud service is currently unavailable. Please try again later.",
           details:
             process.env.NODE_ENV === "development" ? err.message : undefined,
         });
-      } else {
-        response.status(500).send({
-          error: "Error uploading file to Next Cloud.",
-        });
       }
+
+      return response.status(500).send({
+        error: "Error uploading file to Nextcloud.",
+      });
     }
   }
 }
