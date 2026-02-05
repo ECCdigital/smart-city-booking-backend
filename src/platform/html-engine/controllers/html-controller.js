@@ -21,13 +21,13 @@ class HtmlController {
       bookables = bookables.filter((bookable) => bookable.type === type);
     }
 
-    if (sanitizedIds) {
+    if (sanitizedIds && sanitizedIds.length > 0) {
       bookables = bookables.filter((bookable) =>
         sanitizedIds.includes(bookable.id),
       );
     }
 
-    if (sanitizedIds) {
+    if (sanitizedIds && sanitizedIds.length > 0) {
       bookables.sort((a, b) => {
         return sanitizedIds.indexOf(a.id) - sanitizedIds.indexOf(b.id);
       });
@@ -73,7 +73,7 @@ class HtmlController {
     let events = await EventManager.getEvents(tenantId);
     events = events.filter((event) => event.isPublic);
 
-    if (sanitizedIds) {
+    if (sanitizedIds && sanitizedIds.length > 0) {
       events = events.filter((event) => sanitizedIds.includes(event.id));
     }
 
