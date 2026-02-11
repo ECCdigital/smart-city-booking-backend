@@ -163,7 +163,9 @@ class GiroCockpitPaymentService extends PaymentService {
     const test = 1;
     const currency = "EUR";
 
-    const merchantTxId = this.bookingIds.join(",");
+    const merchantTxId = this.groupBookingId
+      ? `${this.groupBookingId}`
+      : `${this.bookingIds.join(",")}`;
     const amount = bookings.reduce((acc, booking) => {
       return acc + booking.priceEur * 100 || 0;
     }, 0);
