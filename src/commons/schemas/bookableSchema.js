@@ -12,6 +12,17 @@ const priceCategorySchemaDefinition = {
   weekdays: { type: [Number], default: [] },
 };
 
+const attachmentSchemaDefinition = {
+  id: { type: String, required: true },
+  title: { type: String, required: true },
+  caption: { type: String, default: "" },
+  type: { type: String, required: true },
+  url: { type: String, required: true },
+  show: { type: Boolean, default: false },
+  required: { type: Boolean, default: false },
+  mailAttach: { type: Boolean, default: false },
+};
+
 const bookableSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true, ref: "Tenant" },
@@ -83,7 +94,10 @@ const bookableSchemaDefinition = {
   ownerUserId: { type: String, default: "" },
 
   // Additional properties
-  attachments: { type: [Object], default: [] },
+  attachments: {
+    type: [new Schema(attachmentSchemaDefinition, { _id: false })],
+    default: [],
+  },
   lockerDetails: { type: Object, default: { active: false, units: [] } },
   requiredFields: { type: [String], default: [] },
 

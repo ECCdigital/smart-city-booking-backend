@@ -238,6 +238,7 @@ class BundleCheckoutService {
         bookableId: attachment.bookableId,
         url: attachment.url,
         accepted: status ? status.accepted : undefined,
+        mailAttach : attachment.mailAttach,
       };
     });
   }
