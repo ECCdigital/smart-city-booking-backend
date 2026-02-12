@@ -2,7 +2,7 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const MembershipManager = require("../../../commons/data-managers/membership-manager");
 
 class JSONController {
   static async getBookables(req, res) {
@@ -10,33 +10,15 @@ class JSONController {
     const { type, ids } = req.query;
 
     const identity = req.user;
-    let userRoles = null;
-
-    if (identity) {
-      try {
-        userRoles = await TenantManager.getTenantUserRoles(
-          tenantId,
-          identity.id,
-        );
-      } catch (error) {
-        userRoles = null;
-      }
-    }
 
     try {
+      const userRoles = await JSONController.getUserRoles(tenantId, identity);
       let bookables = await BookableManager.getBookables(tenantId);
+
       bookables = bookables.filter((bookable) => bookable.isPublic);
 
       bookables = bookables.filter((bookable) => {
-        const userAllowed =
-          bookable.permittedUsers.length === 0 ||
-          (identity && bookable.permittedUsers.includes(identity.id));
-        const roleAllowed =
-          bookable.permittedRoles.length === 0 ||
-          (userRoles &&
-            userRoles.some((role) => bookable.permittedRoles.includes(role)));
-
-        return userAllowed && roleAllowed;
+        return JSONController.hasAccess(bookable, identity, userRoles);
       });
 
       if (type) {
@@ -67,40 +49,22 @@ class JSONController {
   static async getBookable(req, res) {
     const { tenant: tenantId, id } = req.params;
 
-    // Identity wird durch optionalAuth Middleware gesetzt
     const identity = req.user;
-    let userRoles = null;
-
-    if (identity) {
-      try {
-        userRoles = await TenantManager.getTenantUserRoles(
-          tenantId,
-          identity.id,
-        );
-      } catch (error) {
-        userRoles = null;
-      }
-    }
+    const userRoles = await JSONController.getUserRoles(tenantId, identity);
 
     try {
       const bookable = await BookableManager.getBookable(id, tenantId);
 
-      if (!bookable?.id) {
+      if (!bookable?.id || bookable.isPublic === false) {
         return res.status(404).json({
           success: false,
           message: "Bookable not found",
         });
       }
 
-      const userAllowed =
-        bookable.permittedUsers.length === 0 ||
-        (identity && bookable.permittedUsers.includes(identity.id));
-      const roleAllowed =
-        bookable.permittedRoles.length === 0 ||
-        (userRoles &&
-          userRoles.some((role) => bookable.permittedRoles.includes(role)));
+      const hasAccess = JSONController.hasAccess(bookable, identity, userRoles);
 
-      if (bookable.isPublic === true && userAllowed && roleAllowed) {
+      if (hasAccess) {
         res.setHeader("content-type", "application/json");
         res.status(200).send(bookable.exportPublic());
       } else {
@@ -190,6 +154,46 @@ class JSONController {
     } catch {
       res.sendStatus(500);
     }
+  }
+
+  static async getUserRoles(tenantId, identity) {
+    if (!identity) return null;
+
+    try {
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
+        tenantId,
+        identity.id,
+      );
+      return membership?.roles ?? null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  static hasAccess(bookable, identity, userRoles) {
+    try {
+      const permittedUsers = bookable.permittedUsers ?? [];
+      const permittedRoles = bookable.permittedRoles ?? [];
+
+      if (permittedUsers.length === 0 && permittedRoles.length === 0) {
+        return true;
+      }
+
+      if (!identity) return false;
+
+      const norm = (v) => String(v).trim().toLowerCase();
+      const identityIdNorm = norm(identity.id);
+      const permittedUsersNorm = permittedUsers.map(norm);
+
+      const userMatch = permittedUsersNorm.includes(identityIdNorm);
+      const roleMatch =
+        userRoles?.some((r) => permittedRoles.includes(r)) ?? false;
+
+      return userMatch || roleMatch;
+    } catch {
+      return false;
+    }
+
   }
 }
 

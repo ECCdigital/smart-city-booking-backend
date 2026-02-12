@@ -20,7 +20,7 @@ const withAccessLevel = (files, level) =>
 
 const safeGetFiles = async (tenant, path, accessLevel) => {
   try {
-    const files = await NextcloudManager.getFiles({ tenant, path });
+    const files = await NextcloudManager.getFiles({ tenant, rootPath: path });
     return withAccessLevel(files, accessLevel);
   } catch (err) {
     logger.warn(`Failed to fetch ${accessLevel} files`, {
