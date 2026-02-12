@@ -9,6 +9,11 @@ class HtmlController {
     const tenantId = request.params.tenant;
     const type = request.query.type;
     const ids = request.query.ids;
+    const sanitizedIds =
+      ids
+        ?.split(",")
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0) || null;
     let bookables = await BookableManager.getBookables(tenantId);
     bookables = bookables.filter((bookable) => bookable.isPublic);
 
@@ -16,14 +21,19 @@ class HtmlController {
       bookables = bookables.filter((bookable) => bookable.type === type);
     }
 
-    if (ids) {
-      const idsArray = ids.split(",");
+    if (sanitizedIds && sanitizedIds.length > 0) {
       bookables = bookables.filter((bookable) =>
-        idsArray.includes(bookable.id),
+        sanitizedIds.includes(bookable.id),
       );
     }
 
-    bookables.reverse();
+    if (sanitizedIds && sanitizedIds.length > 0) {
+      bookables.sort((a, b) => {
+        return sanitizedIds.indexOf(a.id) - sanitizedIds.indexOf(b.id);
+      });
+    } else {
+      bookables.reverse();
+    }
 
     if (bookables.length === 0) {
       response.status(404).send("No bookables found");
@@ -39,7 +49,8 @@ class HtmlController {
   static async getBookable(request, response) {
     const tenantId = request.params.tenant;
     const id = request.params.id;
-    const bookable = await BookableManager.getBookable(id, tenantId);
+    const sanitizedId = id.trim();
+    const bookable = await BookableManager.getBookable(sanitizedId, tenantId);
 
     // if bookable is not bookable, return 404
     if (bookable?.id && bookable.isPublic === true) {
@@ -54,12 +65,16 @@ class HtmlController {
   static async getEvents(request, response) {
     const tenantId = request.params.tenant;
     const ids = request.query.ids;
+    const sanitizedIds =
+      ids
+        ?.split(",")
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0) || null;
     let events = await EventManager.getEvents(tenantId);
     events = events.filter((event) => event.isPublic);
 
-    if (ids) {
-      const idsArray = ids.split(",");
-      events = events.filter((event) => idsArray.includes(event.id));
+    if (sanitizedIds && sanitizedIds.length > 0) {
+      events = events.filter((event) => sanitizedIds.includes(event.id));
     }
 
     const yesterday = new Date();
@@ -88,7 +103,8 @@ class HtmlController {
     const user = request.user;
     const tenantId = request.params.tenant;
     const id = request.params.id;
-    const event = await EventManager.getEvent(id, tenantId);
+    const sanitizedId = id.trim();
+    const event = await EventManager.getEvent(sanitizedId, tenantId);
 
     if (event?.id) {
       const htmlOutput = await HtmlEngine.event(event, !!user);

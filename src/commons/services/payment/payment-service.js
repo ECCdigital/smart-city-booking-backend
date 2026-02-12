@@ -23,6 +23,7 @@ class PaymentService {
     this.tenantId = tenantId;
     this.bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
     this.aggregated = !!options.aggregated;
+    this.groupBookingId = options.groupBookingId || null;
   }
 
   createPayment() {
@@ -92,7 +93,7 @@ class GiroCockpitPaymentService extends PaymentService {
       const currency = "EUR";
 
       const merchantTxId = booking.id;
-      const amount = (booking.priceEur * 100 || 0).toString();
+      const amount = Math.round(booking.priceEur * 100 || 0).toString();
       const purpose = `${booking.id} ${paymentApp.paymentPurposeSuffix || ""}`;
 
       const MERCHANT_ID = paymentApp.paymentMerchantId;
@@ -162,13 +163,16 @@ class GiroCockpitPaymentService extends PaymentService {
     const test = 1;
     const currency = "EUR";
 
-    const merchantTxId = this.bookingIds.join(",");
-    const amount = bookings.reduce((acc, booking) => {
-      return acc + booking.priceEur * 100 || 0;
-    }, 0);
-    const purpose = `${this.bookingIds.join(",")} ${
-      paymentApp.paymentPurposeSuffix || ""
-    }`;
+    const merchantTxId = this.groupBookingId
+      ? `${this.groupBookingId}`
+      : `${this.bookingIds.join(",")}`;
+    const amount = Math.round(
+      bookings.reduce((acc, booking) => acc + booking.priceEur * 100, 0),
+    ).toString();
+
+    const purpose = this.groupBookingId
+      ? `${this.groupBookingId} ${paymentApp.paymentPurposeSuffix || ""}`
+      : `${this.bookingIds.join(",")} ${paymentApp.paymentPurposeSuffix || ""}`;
 
     const MERCHANT_ID = paymentApp.paymentMerchantId;
     const PROJECT_ID = paymentApp.paymentProjectId;
@@ -387,7 +391,7 @@ class PmPaymentService extends PaymentService {
         PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
       }
 
-      const amount = (booking.priceEur * 100 || 0).toString();
+      const amount = Math.round(booking.priceEur * 100 || 0).toString();
       const desc = `${bookingId} ${paymentApp.paymentPurposeSuffix || ""}`;
       const AGS = paymentApp.paymentMerchantId;
       const PROCEDURE = paymentApp.paymentProjectId;
@@ -451,13 +455,13 @@ class PmPaymentService extends PaymentService {
       PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
     }
 
-    const amount = bookings.reduce((acc, booking) => {
-      return acc + booking.priceEur * 100 || 0;
-    }, 0);
+    const amount = Math.round(
+      bookings.reduce((acc, booking) => acc + booking.priceEur * 100, 0),
+    );
 
-    const desc = `${this.bookingIds.join(",")} ${
-      paymentApp.paymentPurposeSuffix || ""
-    }`;
+    const desc = this.groupBookingId
+      ? `${this.groupBookingId} ${paymentApp.paymentPurposeSuffix || ""}`
+      : `${this.bookingIds.join(",")} ${paymentApp.paymentPurposeSuffix || ""}`;
     const AGS = paymentApp.paymentMerchantId;
     const PROCEDURE = paymentApp.paymentProjectId;
     const PAYMENT_SALT = paymentApp.paymentSecret;

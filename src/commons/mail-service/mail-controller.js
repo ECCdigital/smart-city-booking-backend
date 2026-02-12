@@ -710,6 +710,7 @@ class MailController {
     bookingIds,
     tenantId,
     aggregated = false,
+    attachments = [],
   ) {
     bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
     const tenant = await TenantManager.getTenant(tenantId);
@@ -749,6 +750,7 @@ class MailController {
         subject: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
         title: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
         message: snippetHtml,
+        attachments,
         sendBCC: false,
         addRejectionLink: true,
       });
@@ -762,7 +764,7 @@ class MailController {
           title: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
           message: snippetHtml,
           includeQRCode: includeQRCode,
-          attachments: undefined,
+          attachments,
           sendBCC: false,
           addRejectionLink: true,
         });

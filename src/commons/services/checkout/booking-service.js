@@ -1,3 +1,5 @@
+const axios = require("axios");
+const mime = require("mime-types");
 const bunyan = require("bunyan");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponService = require("../coupon-service");
@@ -271,14 +273,23 @@ class BookingService {
 
     if (!simulate) {
       try {
+        const mailAttachments = await prepareMailAttachments(
+          booking.attachments,
+        );
+        logger.info(
+          `${tenantId} -- Prepared ${mailAttachments.length} mail attachments for booking ${booking.id}`,
+        );
+
         await BookingService.handleSingleBookingRequestConfirmation(
           tenantId,
           booking.id,
+          mailAttachments,
         );
 
         await BookingService.handleSingleBookingConfirmation(
           tenantId,
           booking.id,
+          mailAttachments,
         );
 
         const tenant = await TenantManager.getTenant(booking.tenantId);
@@ -369,6 +380,18 @@ class BookingService {
 
     if (!simulate) {
       try {
+        const allBookingAttachments = newGroupBooking.bookings.flatMap(
+          (booking) => booking.attachments,
+        );
+
+        const mailAttachments = await prepareMailAttachments(
+          allBookingAttachments,
+        );
+
+        logger.info(
+          `${tenantId} -- Prepared ${mailAttachments.length} mail attachments for group booking ${newGroupBooking.id}`,
+        );
+
         const allCommitted = newGroupBooking.bookings.every(
           (booking) => booking.isCommitted,
         );
@@ -379,12 +402,14 @@ class BookingService {
             newGroupBooking.bookingIds,
             newGroupBooking.tenantId,
             true,
+            mailAttachments,
           );
         }
 
         await BookingService.handleAggregatedBookingConfirmation(
           tenantId,
           newGroupBooking.bookingIds,
+          mailAttachments,
         );
 
         const tenant = await TenantManager.getTenant(newGroupBooking.tenantId);
@@ -441,6 +466,9 @@ class BookingService {
         timeBegin: updatedBooking.timeBegin,
         timeEnd: updatedBooking.timeEnd,
         timeCreated: oldBooking.timeCreated,
+        timePaid: updatedBooking.timePaid
+          ? updatedBooking.timePaid
+          : oldBooking.timePaid,
         bookableItems: updatedBooking.bookableItems,
         couponCode: updatedBooking.couponCode,
         name: updatedBooking.name,
@@ -716,11 +744,17 @@ class BookingService {
     bookingId,
     skipWorkflow = false,
     paymentMethod,
+    timePaid,
   }) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
       booking.isPayed = true;
-      booking.timePaid = Date.now();
+
+      if (timePaid && typeof timePaid === "number") {
+        booking.timePaid = timePaid;
+      } else {
+        booking.timePaid = Date.now();
+      }
       if (paymentMethod) {
         booking.paymentMethod = paymentMethod;
       }
@@ -754,12 +788,17 @@ class BookingService {
     tenantId,
     bookingIds,
     paymentMethod,
+    timePaid,
   }) {
     try {
       const bookings = await BookingManager.getBookings(tenantId, bookingIds);
       for (const booking of bookings) {
         booking.isPayed = true;
-        booking.timePaid = Date.now();
+        if (timePaid && typeof timePaid === "number") {
+          booking.timePaid = timePaid;
+        } else {
+          booking.timePaid = Date.now();
+        }
         if (paymentMethod) {
           booking.paymentMethod = paymentMethod;
         }
@@ -1092,7 +1131,11 @@ class BookingService {
     return { success: true };
   }
 
-  static async handleSingleBookingRequestConfirmation(tenantId, bookingId) {
+  static async handleSingleBookingRequestConfirmation(
+    tenantId,
+    bookingId,
+    additionalAttachments = [],
+  ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
     if (!booking.isCommitted) {
       try {
@@ -1100,6 +1143,8 @@ class BookingService {
           booking.mail,
           booking.id,
           booking.tenantId,
+          false,
+          additionalAttachments,
         );
       } catch (err) {
         logger.error(err);
@@ -1107,12 +1152,16 @@ class BookingService {
     }
   }
 
-  static async handleSingleBookingConfirmation(tenantId, bookingId) {
+  static async handleSingleBookingConfirmation(
+    tenantId,
+    bookingId,
+    additionalAttachments = [],
+  ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
-    if (booking && booking.isCommitted && booking.isPayed) {
-      let attachments = [];
-      if (booking.priceEur > 0) {
+    if (booking && booking.isCommitted ) {
+      let attachments = [...additionalAttachments];
+      if (booking.priceEur > 0 && booking.isPayed) {
         const { receipt, name, receiptId, revision, timeCreated } =
           await ReceiptService.createSingleReceipt(tenantId, booking.id);
 
@@ -1164,11 +1213,15 @@ class BookingService {
     return booking;
   }
 
-  static async handleAggregatedBookingConfirmation(tenantId, bookingIds) {
+  static async handleAggregatedBookingConfirmation(
+    tenantId,
+    bookingIds,
+    additionalAttachments = [],
+  ) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
     if (bookings.every((b) => b.isCommitted && b.isPayed)) {
-      let attachments = [];
+      let attachments = [...additionalAttachments];
       if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
         const { receipt, name, receiptId, revision, timeCreated } =
           await ReceiptService.createAggregatedReceipt(
@@ -1322,4 +1375,273 @@ async function sendEmailToOrganizer(eventIds, tenantId, booking) {
       `Error when retrieving events or sending mails: ${err.message}`,
     );
   }
+}
+
+/**
+ * Downloads and prepares attachments for email sending
+ * @param {Array} attachments - Array of attachment objects from booking
+ * @returns {Promise<Array>} - Array of attachments in nodemailer format
+ */
+async function prepareMailAttachments(attachments) {
+  if (!attachments || !Array.isArray(attachments)) {
+    return [];
+  }
+
+  const attachmentsToMail = attachments.filter(
+    (att) => att.mailAttach === true && att.url,
+  );
+
+  const uniqueAttachments = [];
+  const seenUrls = new Set();
+
+  for (const att of attachmentsToMail) {
+    if (!seenUrls.has(att.url)) {
+      uniqueAttachments.push(att);
+      seenUrls.add(att.url);
+    }
+  }
+
+  if (uniqueAttachments.length === 0) {
+    return [];
+  }
+
+  const downloadedAttachments = await Promise.all(
+    uniqueAttachments.map(async (att) => {
+      try {
+        const response = await axios.get(att.url, {
+          responseType: "arraybuffer",
+          timeout: 30000,
+          maxContentLength: 25 * 1024 * 1024,
+        });
+
+        const filename = extractFilename(att.url, att.title);
+
+        const contentType = determineContentType(
+          response.headers["content-type"],
+          filename,
+        );
+
+        logger.debug(
+          `Downloaded attachment: ${filename} (${contentType}, ${response.data.byteLength} bytes)`,
+        );
+
+        const attachment = {
+          filename: filename,
+          content: Buffer.from(response.data),
+          contentType: contentType,
+        };
+
+        if (!isAttachmentSafe(attachment)) {
+          logger.warn(
+            `Attachment ${filename} failed safety validation, skipping`,
+          );
+          return null;
+        }
+
+        return attachment;
+      } catch (err) {
+        logger.error(
+          `Failed to download attachment from ${att.url}: ${err.message}`,
+        );
+        return null;
+      }
+    }),
+  );
+
+  return downloadedAttachments.filter((att) => att !== null);
+}
+
+/**
+ * Extracts a clean filename from URL or generates one from title
+ * @param {string} url - The attachment URL
+ * @param {string} title - The attachment title
+ * @returns {string} - Clean filename
+ */
+function extractFilename(url, title) {
+  try {
+    let urlFilename = "";
+    let extension = ".pdf";
+
+    try {
+      const urlObj = new URL(url);
+
+      const nameParam = urlObj.searchParams.get("name");
+      if (nameParam) {
+        const pathParts = nameParam.split("/");
+        urlFilename = pathParts[pathParts.length - 1];
+      } else {
+        const pathParts = urlObj.pathname.split("/");
+        urlFilename = decodeURIComponent(pathParts[pathParts.length - 1]);
+      }
+
+      if (urlFilename && urlFilename.includes(".")) {
+        extension = "." + urlFilename.split(".").pop().toLowerCase();
+      }
+    } catch (urlError) {
+      const urlParts = url.split("?")[0].split("/");
+      urlFilename = decodeURIComponent(urlParts[urlParts.length - 1]);
+      if (urlFilename.includes(".")) {
+        extension = "." + urlFilename.split(".").pop().toLowerCase();
+      }
+    }
+
+    if (title && title.trim().length > 0) {
+      let filename = sanitizeFilename(title);
+
+      if (filename.includes(".")) {
+        filename = filename.substring(0, filename.lastIndexOf("."));
+      }
+
+      return filename + extension;
+    }
+
+    if (urlFilename && urlFilename.length >= 3 && urlFilename !== "get") {
+      return urlFilename;
+    }
+
+    return "Anhang" + extension;
+  } catch (err) {
+    return "Anhang.pdf";
+  }
+}
+
+/**
+ * Sanitizes a string to be used as filename
+ * @param {string} str - Input string
+ * @returns {string} - Sanitized filename
+ */
+function sanitizeFilename(str) {
+  if (!str) return "attachment";
+
+  return str
+    .replace(/[^a-zA-Z0-9äöüÄÖÜß._-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .substring(0, 200);
+}
+
+/**
+ * Determines content type from header or filename extension
+ * @param {string} headerContentType - Content-Type from HTTP response
+ * @param {string} filename - The filename
+ * @returns {string} - MIME type
+ */
+function determineContentType(headerContentType, filename) {
+  if (headerContentType && headerContentType !== "application/octet-stream") {
+    return headerContentType.split(";")[0].trim();
+  }
+
+  const mimeType = mime.lookup(filename);
+  if (mimeType) {
+    return mimeType;
+  }
+
+  const extension = filename.split(".").pop().toLowerCase();
+  return getMimeTypeFromExtension(extension);
+}
+
+/**
+ * Manual MIME type mapping for common file extensions
+ * @param {string} extension - File extension without dot
+ * @returns {string} - MIME type
+ */
+function getMimeTypeFromExtension(extension) {
+  const mimeTypes = {
+    // Documents
+    pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    odt: "application/vnd.oasis.opendocument.text",
+    ods: "application/vnd.oasis.opendocument.spreadsheet",
+    odp: "application/vnd.oasis.opendocument.presentation",
+    rtf: "application/rtf",
+    txt: "text/plain",
+    csv: "text/csv",
+
+    // Images
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    bmp: "image/bmp",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    tiff: "image/tiff",
+    tif: "image/tiff",
+    ico: "image/x-icon",
+
+    // Archives
+    zip: "application/zip",
+    rar: "application/x-rar-compressed",
+    "7z": "application/x-7z-compressed",
+    tar: "application/x-tar",
+    gz: "application/gzip",
+
+    // Media
+    mp3: "audio/mpeg",
+    mp4: "video/mp4",
+    avi: "video/x-msvideo",
+    mov: "video/quicktime",
+    wmv: "video/x-ms-wmv",
+    wav: "audio/wav",
+    flac: "audio/flac",
+    ogg: "audio/ogg",
+
+    // Web
+    html: "text/html",
+    htm: "text/html",
+    css: "text/css",
+    js: "application/javascript",
+    json: "application/json",
+    xml: "application/xml",
+
+    // Other
+    ics: "text/calendar",
+    vcf: "text/vcard",
+    eml: "message/rfc822",
+  };
+
+  return mimeTypes[extension] || "application/octet-stream";
+}
+
+/**
+ * Validates if attachment is safe to send
+ * @param {Object} attachment - Attachment object
+ * @returns {boolean} - Whether attachment is safe
+ */
+function isAttachmentSafe(attachment) {
+  const dangerousExtensions = [
+    "exe",
+    "bat",
+    "cmd",
+    "com",
+    "pif",
+    "scr",
+    "vbs",
+    "js",
+    "jar",
+  ];
+
+  const maxSize = 25 * 1024 * 1024;
+
+  if (attachment.content.byteLength > maxSize) {
+    logger.warn(
+      `Attachment ${attachment.filename} exceeds size limit (${attachment.content.byteLength} bytes)`,
+    );
+    return false;
+  }
+
+  const extension = attachment.filename.split(".").pop().toLowerCase();
+  if (dangerousExtensions.includes(extension)) {
+    logger.warn(
+      `Attachment ${attachment.filename} has dangerous extension: ${extension}`,
+    );
+    return false;
+  }
+
+  return true;
 }

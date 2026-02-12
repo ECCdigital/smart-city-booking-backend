@@ -1,4 +1,5 @@
 const { Double } = require("mongodb");
+const { Schema } = require("mongoose");
 
 const bookingHookSchemaDefinition = {
   id: { type: String, required: true },
@@ -7,11 +8,31 @@ const bookingHookSchemaDefinition = {
   payload: { type: Object, default: {} },
 };
 
+const attachmentSchemaDefinition = {
+  type: {
+    type: String,
+    required: true,
+  },
+  title: { type: String },
+  name: { type: String },
+  bookableId: { type: String },
+  url: { type: String },
+  accepted: { type: Boolean },
+  invoiceId: { type: String },
+  receiptId: { type: String },
+  revision: { type: Number },
+  timeCreated: { type: Double },
+  mailAttach: { type: Boolean },
+};
+
 const bookingSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true, ref: "Tenant" },
   assignedUserId: { type: String, ref: "User", default: "" },
-  attachments: { type: [Object], default: [] },
+  attachments: {
+    type: [new Schema(attachmentSchemaDefinition, { _id: false })],
+    default: [],
+  },
   bookableItems: { type: [Object], default: [] },
   comment: { type: String, default: "" },
   internalComments: { type: String, default: "" },

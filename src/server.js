@@ -11,6 +11,7 @@ const { runMigrations } = require("../migrations/migrationsManager");
 const seed = require("../seeder/seeder");
 const RuleEngine = require("./rule-engine/ruleEngine");
 const { requestLogger } = require("./middleware/logger.js");
+const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
 
 const dbm = DatabaseManager.getInstance();
 
@@ -40,11 +41,8 @@ app.use(function (req, res, next) {
 });
 
 app.use(requestLogger);
-
 app.use(cookieParser());
-
 app.enable("trust proxy");
-
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 app.use(express.json({ limit: "1mb" }));
 
@@ -104,9 +102,11 @@ app.use("/json/:tenant", jsonRouterTenantRelated);
 const exportersRouterTenantRelated = require("./platform/exporters/exporters-router-tenant-related");
 app.use("/csv/:tenant", exportersRouterTenantRelated);
 
+let server;
+
 dbm.connect().then(() => {
   const port = process.env.PORT;
-  app.listen(port, async () => {
+  server = app.listen(port, async () => {
     logger.info(`App listening at ${port}`);
     app.emit("app_started");
     try {
@@ -119,6 +119,59 @@ dbm.connect().then(() => {
       logger.error("Error during application initialization steps", err);
     }
   });
+});
+
+async function gracefulShutdown(signal) {
+  logger.info(`${signal} received, starting graceful shutdown...`);
+
+  const forceShutdownTimeout = setTimeout(() => {
+    logger.error("Forced shutdown after timeout");
+    process.exit(1);
+  }, 30000);
+
+  try {
+    if (server) {
+      await new Promise((resolve) => {
+        server.close(() => {
+          logger.info("HTTP server closed");
+          resolve();
+        });
+      });
+    }
+
+    logger.info("Closing browser instance...");
+    await lazyBrowser.cleanup();
+    logger.info("Browser closed successfully");
+
+    if (dbm?.dbClient?.connection) {
+      logger.info("Closing database connection...");
+      await dbm.dbClient.connection.close();
+      logger.info("Database closed successfully");
+    }
+
+    clearTimeout(forceShutdownTimeout);
+    logger.info("Graceful shutdown completed");
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    process.exit(0);
+  } catch (err) {
+    logger.error("Error during graceful shutdown", err);
+    clearTimeout(forceShutdownTimeout);
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught Exception", err);
+  gracefulShutdown("uncaughtException");
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error("Unhandled Rejection at:", promise, "reason:", reason);
+  gracefulShutdown("unhandledRejection");
 });
 
 module.exports = app;

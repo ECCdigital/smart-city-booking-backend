@@ -18,6 +18,7 @@ class BundleCheckoutService {
    * @param {Date} timeBegin - The start time.
    * @param {Date} timeEnd - The end time,
    * @param {Date} timeCreated - The creation time.
+   * @param {Date} timePaid - The payment time.
    * @param {Array} bookableItems - The items to be booked.
    * @param {string} couponCode - The coupon code.
    * @param {string} name - The name of the user.
@@ -39,6 +40,7 @@ class BundleCheckoutService {
     timeBegin,
     timeEnd,
     timeCreated,
+    timePaid,
     bookableItems,
     couponCode,
     name,
@@ -59,6 +61,7 @@ class BundleCheckoutService {
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
     this.timeCreated = timeCreated || Date.now();
+    this.timePaid = timePaid;
     this.bookableItems = bookableItems;
     this.couponCode = couponCode;
     this.name = name;
@@ -235,6 +238,7 @@ class BundleCheckoutService {
         bookableId: attachment.bookableId,
         url: attachment.url,
         accepted: status ? status.accepted : undefined,
+        mailAttach : attachment.mailAttach,
       };
     });
   }
@@ -290,6 +294,7 @@ class BundleCheckoutService {
       timeBegin: this.timeBegin,
       timeEnd: this.timeEnd,
       timeCreated: this.timeCreated,
+      timePaid: this.timePaid,
       bookableItems: this.bookableItems,
       couponCode: this.couponCode,
       name: this.name,
@@ -334,6 +339,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} tenant - The tenant ID.
    * @param {Date} timeBegin - The start time.
    * @param {Date} timeEnd - The end time.
+   * @param {Date} timePaid - The payment time.
    * @param timeCreated - The creation time.
    * @param {Array} bookableItems - The items to be booked.
    * @param {string} couponCode - The coupon code.
@@ -361,6 +367,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     tenant,
     timeBegin,
     timeEnd,
+    timePaid,
     timeCreated,
     bookableItems,
     couponCode,
@@ -390,6 +397,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       timeBegin,
       timeEnd,
       timeCreated,
+      timePaid,
       bookableItems,
       couponCode,
       name,

@@ -10,6 +10,7 @@ const { RolePermission } = require("../../../commons/entities/role/role");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
+const InvoiceService = require("../../../commons/services/payment/invoice-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
@@ -510,10 +511,9 @@ class BookingController {
 
   static async payBooking(request, response) {
     try {
-      const tenant = request.params.tenant;
-      const user = request.user;
-      const id = request.params.id;
-      const paymentMethod = request.body.paymentMethod;
+      const { tenant, id } = request.params;
+      const { user } = request;
+      const { paymentMethod, timePaid } = request.body;
       if (!id) {
         return response.sendStatus(400);
       }
@@ -536,6 +536,7 @@ class BookingController {
           bookingId: id,
           skipWorkflow: false,
           paymentMethod,
+          timePaid,
         });
         return response.status(200).send({
           success: true,
@@ -795,6 +796,59 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response.status(500).send("Could not create receipt");
+    }
+  }
+
+  static async getInvoice(request, response) {
+    const {
+      params: { tenant, id: bookingId, invoiceId },
+      user,
+    } = request;
+
+    try {
+      if (!tenant || !bookingId || !invoiceId) {
+        logger.warn(`${tenant} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+
+      const hasPermission =
+        (await UserManager.hasPermission(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+          "readAny",
+        )) ||
+        PermissionsService._isOwner(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        );
+
+      if (!hasPermission) {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to get invoice.`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const invoice = await InvoiceService.getInvoice(tenant, invoiceId);
+
+      logger.info(
+        `${tenant} -- sending invoice ${invoiceId} to user ${user?.id}`,
+      );
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${invoiceId}`,
+      );
+
+      return response.status(200).send(invoice);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not get invoice");
     }
   }
 
