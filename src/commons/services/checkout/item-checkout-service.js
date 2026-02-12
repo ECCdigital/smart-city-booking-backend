@@ -391,8 +391,8 @@ class ItemCheckoutService {
     const category = priceCategoriesToCheck.find(({ interval }) => {
       const { start, end } = interval;
       return (
-        (start === null || start <= valueToCheck) &&
-        (end === null || end >= valueToCheck)
+        (start === null || start === "" || start <= valueToCheck) &&
+        (end === null || end === "" || end >= valueToCheck)
       );
     });
 
