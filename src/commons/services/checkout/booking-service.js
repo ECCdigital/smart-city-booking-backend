@@ -32,6 +32,12 @@ const {
   checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
+const {
+  BadRequestError,
+  NotFoundError,
+  BaseError,
+  MethodNotAllowedError,
+} = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "booking-service.js",
@@ -85,14 +91,6 @@ class BookingService {
     logger.debug(
       `${tenantId}, cid ${checkoutId} -- Checkout Details: timeBegin=${timeBegin}, timeEnd=${timeEnd}, bookableItems=${bookableItems}, couponCode=${couponCode}, name=${name}, company=${company}, street=${street}, zipCode=${zipCode}, location=${location}, email=${mail}, phone=${phone}, comment=${comment}`,
     );
-
-    if (!bookableItems || bookableItems.length === 0) {
-      logger.warn(
-        `${tenantId}, cid ${checkoutId} -- checkout stopped. Missing parameters`,
-      );
-
-      throw new Error("Missing parameters", { cause: { code: 400 } });
-    }
 
     async function validateMandatoryAddons(bookableItems) {
       const bookableIds = bookableItems.map((item) => item.bookableId);
@@ -198,10 +196,10 @@ class BookingService {
     let booking = await bundleCheckoutService.prepareBooking();
 
     if (!(booking instanceof Booking)) {
-      const bookingEntity = new Booking(booking);
-      bookingEntity.validate();
-      booking = bookingEntity;
+      booking = new Booking(booking);
     }
+
+    booking.validate();
 
     logger.debug(
       `${tenantId}, cid ${checkoutId} -- Booking prepared: ${JSON.stringify(
@@ -267,10 +265,6 @@ class BookingService {
       manualBooking,
     });
 
-    if (!(booking instanceof Booking)) {
-      throw new Error("Invalid booking entity returned");
-    }
-
     if (!simulate) {
       try {
         const mailAttachments = await prepareMailAttachments(
@@ -330,7 +324,7 @@ class BookingService {
     manualBooking = false,
   }) {
     if (!Array.isArray(bookingAttempts) || bookingAttempts.length === 0) {
-      throw new Error("", { cause: { code: 400 } });
+      throw new BadRequestError("missing_booking_attempts");
     }
 
     const checkoutId = uuidV4();
@@ -431,18 +425,14 @@ class BookingService {
   }
 
   static async cancelBooking(tenantId, bookingId) {
-    try {
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
-      if (!booking) {
-        throw new Error("Booking not found");
-      }
-
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
-      await BookingManager.removeBooking(booking.id, booking.tenantId);
-    } catch (error) {
-      throw new Error(`Error cancelling booking: ${error.message}`);
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
     }
+
+    const lockerServiceInstance = LockerService.getInstance();
+    await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+    await BookingManager.removeBooking(booking.id, booking.tenantId);
   }
 
   static async updateBooking(tenantId, updatedBooking) {
@@ -456,7 +446,9 @@ class BookingService {
     const isRejected = Boolean(updatedBooking.isRejected);
 
     if (!oldBooking) {
-      throw new Error("Booking not found");
+      throw new NotFoundError("booking_not_found", {
+        bookingId: updatedBooking.id,
+      });
     }
 
     try {
@@ -498,12 +490,10 @@ class BookingService {
         existingId: oldBooking.id,
       });
 
-      // Validierung hinzufügen
       if (!(booking instanceof Booking)) {
-        const bookingEntity = new Booking(booking);
-        bookingEntity.validate();
-        booking = bookingEntity;
+        booking = new Booking(booking);
       }
+      booking.validate();
 
       await BookingManager.storeBooking(booking);
 
@@ -512,12 +502,10 @@ class BookingService {
       const onReject = !oldBooking.isRejected && isRejected;
 
       if (onCommit) {
-        console.log("Committing booking...");
         await BookingService.commitBooking(tenantId, booking);
       }
 
       if (onPay) {
-        console.log("Setting booking to payed...");
         await BookingService.setBookingPayed({
           tenantId,
           bookingId: booking.id,
@@ -525,7 +513,6 @@ class BookingService {
       }
 
       if (onReject) {
-        console.log("Rejecting booking...");
         await BookingService.rejectBooking(
           tenantId,
           booking.id,
@@ -544,7 +531,7 @@ class BookingService {
       return booking;
     } catch (error) {
       await BookingManager.storeBooking(oldBooking);
-      throw new Error(`Error updating booking: ${error.message}`);
+      throw error;
     }
   }
 
@@ -593,7 +580,9 @@ class BookingService {
           );
         } catch (err) {
           await BookingManager.storeBooking(snapshotBooking);
-          throw err;
+          throw new BaseError("booking_commit_failed", {
+            message: `Error during locker creation: ${err.message}`,
+          });
         }
 
         await MailController.sendFreeBookingConfirmation(
@@ -634,7 +623,9 @@ class BookingService {
 
       return { success: true };
     } catch (error) {
-      throw new Error(`Error committing booking: ${error.message}`);
+      throw new BaseError("booking_commit_failed", {
+        message: `Error committing booking: ${error.message}`,
+      });
     }
   }
 
@@ -780,7 +771,9 @@ class BookingService {
 
       return { success: true };
     } catch (error) {
-      throw new Error(`Error setting booking to payed: ${error.message}`);
+      throw new BaseError("set_booking_payed_failed", {
+        message: `Error setting booking to payed: ${error.message}`,
+      });
     }
   }
 
@@ -821,7 +814,9 @@ class BookingService {
       );
       return { success: true };
     } catch (error) {
-      throw new Error(`Error setting bookings to payed: ${error.message}`);
+      throw new BaseError("set_aggregated_booking_payed_failed", {
+        message: `Error setting aggregated booking to payed: ${error.message}`,
+      });
     }
   }
 
@@ -832,13 +827,13 @@ class BookingService {
     hookId = null,
     skipWorkflow = false,
   ) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
     try {
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
-
-      if (!booking) {
-        throw new Error("Booking not found");
-      }
-
       booking.isRejected = true;
       booking.rejectionReason = reason;
 
@@ -886,7 +881,9 @@ class BookingService {
         );
       }
     } catch (error) {
-      throw new Error(`Error rejecting booking: ${error.message}`);
+      throw new BaseError("booking_rejection_failed", {
+        message: `Error rejecting booking: ${error.message}`,
+      });
     }
   }
 
@@ -971,14 +968,13 @@ class BookingService {
   }
 
   static async requestRejectBooking(tenant, bookingId, reason = "") {
+    const booking = await BookingManager.getBooking(bookingId, tenant);
+
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
     try {
-      console.log("Requesting booking rejection...");
-      const booking = await BookingManager.getBooking(bookingId, tenant);
-
-      if (!booking) {
-        throw new Error("Booking not found");
-      }
-
       const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, {
         reason: reason,
       });
@@ -997,7 +993,9 @@ class BookingService {
         `${tenant} -- booking ${booking.id} rejection requested and sent booking reject verification to ${booking.mail}`,
       );
     } catch (error) {
-      throw new Error(`Error requesting booking rejection: ${error.message}`);
+      throw new BaseError("booking_reject_request_failed", {
+        message: `Error requesting booking rejection: ${error.message}`,
+      });
     }
   }
 
@@ -1005,20 +1003,24 @@ class BookingService {
     const tenant = await getTenant(tenantId);
 
     if (!tenant.enablePublicStatusView) {
-      throw { message: "Public status view disabled ", code: 405 };
+      throw new BaseError("public_status_view_disabled", {
+        message: "Public status view disabled",
+      });
     }
 
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
     if (!booking.id) {
-      throw { message: "Booking not found", code: 404 };
+      throw new NotFoundError("booking_not_found", { bookingId });
     }
 
     const normalizedBookingName = booking.name.trim().toLowerCase();
     const normalizedInputName = name.trim().toLowerCase();
 
     if (normalizedBookingName !== normalizedInputName) {
-      throw { message: "Mismatch", code: 401 };
+      throw new MethodNotAllowedError("booking_name_mismatch", {
+        message: "Provided name does not match booking name",
+      });
     }
 
     const leadingBookableItem = booking.bookableItems[0]._bookableUsed;
@@ -1055,7 +1057,7 @@ class BookingService {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
     if (!booking.id) {
-      throw { message: "Booking not found", code: 404 };
+      throw new NotFoundError("booking_not_found", { bookingId });
     }
 
     return booking.name.toLowerCase() === name.toLowerCase();
@@ -1159,7 +1161,7 @@ class BookingService {
   ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
-    if (booking && booking.isCommitted ) {
+    if (booking && booking.isCommitted) {
       let attachments = [...additionalAttachments];
       if (booking.priceEur > 0 && booking.isPayed) {
         const { receipt, name, receiptId, revision, timeCreated } =
@@ -1284,7 +1286,10 @@ async function generateBookingReference(
   retryCount = 10,
 ) {
   if (ensureUnique && retryCount <= 0) {
-    throw new Error("Unable to generate booking number. Retry count exceeded.");
+    throw new BaseError("booking_reference_generation_failed", {
+      message:
+        "Failed to generate unique booking reference after multiple attempts",
+    });
   }
 
   let text = "";

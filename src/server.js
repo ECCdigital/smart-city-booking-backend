@@ -12,6 +12,7 @@ const seed = require("../seeder/seeder");
 const RuleEngine = require("./rule-engine/ruleEngine");
 const { requestLogger } = require("./middleware/logger.js");
 const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
+const { errorHandler } = require("./middleware/error-handler");
 
 const dbm = DatabaseManager.getInstance();
 
@@ -101,6 +102,8 @@ app.use("/json/:tenant", jsonRouterTenantRelated);
 
 const exportersRouterTenantRelated = require("./platform/exporters/exporters-router-tenant-related");
 app.use("/csv/:tenant", exportersRouterTenantRelated);
+
+app.use(errorHandler);
 
 let server;
 
