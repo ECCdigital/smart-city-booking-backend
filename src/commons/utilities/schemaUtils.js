@@ -1,3 +1,27 @@
+const { ValidationError } = require("../../errors/ValidationError");
+
+const FORMAT_VALIDATORS = {
+  email: (value) => {
+    const { isEmail } = require("validator");
+    return isEmail(value);
+  },
+};
+
+const ERROR_CODES = {
+  required: "required",
+  type_number: "invalid_type_number",
+  type_string: "invalid_type_string",
+  type_array: "invalid_type_array",
+  min: "min_value",
+  max: "max_value",
+  minItems: "min_items",
+  maxItems: "max_items",
+  format: "invalid_format",
+  greaterThan: "greater_than",
+  greaterEqualThan: "greater_equal_than",
+  validate: "invalid_custom",
+};
+
 class SchemaUtils {
   static createDefaults(schemaDefinition) {
     const defaults = {};
@@ -29,20 +53,116 @@ class SchemaUtils {
   static validate(obj, schemaDefinition) {
     const errors = [];
 
+    const addError = (field, codeKey, params = {}) => {
+      console.error(`Validation error on field "${field}": ${codeKey}`, params);
+      errors.push({
+        field,
+        code: ERROR_CODES[codeKey],
+        params,
+      });
+    };
+
     Object.keys(schemaDefinition).forEach((key) => {
       const field = schemaDefinition[key];
       const value = obj[key];
+      const isEmpty = value === undefined || value === null || value === "";
 
-      if (
-        field.required &&
-        (value === undefined || value === null || value === "")
-      ) {
-        errors.push(`${key} is required`);
+      // --- Required ---
+      if (field.required && isEmpty) {
+        addError(key, "required");
+        return;
+      }
+
+      // --- Custom validator ---
+      if (typeof field.validate === "function") {
+        const result = field.validate(value, obj);
+        if (result !== true) {
+          addError(key, result);
+        }
+      }
+
+      if (isEmpty) return;
+
+      // --- Type checks ---
+      if (field.type === Number && typeof value !== "number") {
+        addError(key, "type_number", { expected: "number" });
+        return;
+      }
+
+      if (field.type === String && typeof value !== "string") {
+        addError(key, "type_string", { expected: "string" });
+        return;
+      }
+
+      if (Array.isArray(field.type) && !Array.isArray(value)) {
+        addError(key, "type_array", { expected: "array" });
+        return;
+      }
+
+      // --- min / max ---
+      if (field.min !== undefined && typeof value === "number") {
+        if (value < field.min) {
+          addError(key, "min", { min: field.min });
+        }
+      }
+
+      if (field.max !== undefined && typeof value === "number") {
+        if (value > field.max) {
+          addError(key, "max", { max: field.max });
+        }
+      }
+
+      // --- minItems / maxItems ---
+      if (field.minItems !== undefined && Array.isArray(value)) {
+        if (value.length < field.minItems) {
+          addError(key, "minItems", { minItems: field.minItems });
+        }
+      }
+
+      if (field.maxItems !== undefined && Array.isArray(value)) {
+        if (value.length > field.maxItems) {
+          addError(key, "maxItems", { maxItems: field.maxItems });
+        }
+      }
+
+      // --- format ---
+      if (field.format && typeof value === "string") {
+        const validator = FORMAT_VALIDATORS[field.format];
+        if (validator && !validator(value)) {
+          addError(key, "format", { format: field.format });
+        }
+      }
+
+      // --- greaterThan ---
+      if (field.greaterThan) {
+        const otherValue = obj[field.greaterThan];
+        if (
+          otherValue !== undefined &&
+          otherValue !== null &&
+          value <= otherValue
+        ) {
+          addError(key, "greaterThan", {
+            otherField: field.greaterThan,
+          });
+        }
+      }
+
+      if (field.greaterEqualThan) {
+        const otherValue = obj[field.greaterEqualThan];
+        if (
+          otherValue !== undefined &&
+          otherValue !== null &&
+          value < otherValue
+        ) {
+          addError(key, "greaterEqualThan", {
+            otherField: field.greaterEqualThan,
+          });
+        }
       }
     });
 
     if (errors.length > 0) {
-      throw new Error(errors.join(", "));
+      throw new ValidationError(errors);
     }
 
     return true;

@@ -140,11 +140,6 @@ class Booking {
 
   validate() {
     SchemaUtils.validate(this, bookingSchemaDefinition);
-
-    if (this.priceEur < 0) {
-      throw new Error("Price cannot be negative");
-    }
-
     return true;
   }
 

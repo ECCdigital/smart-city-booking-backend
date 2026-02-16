@@ -33,7 +33,12 @@ const bookingSchemaDefinition = {
     type: [new Schema(attachmentSchemaDefinition, { _id: false })],
     default: [],
   },
-  bookableItems: { type: [Object], default: [] },
+  bookableItems: {
+    type: [Object],
+    required: true,
+    default: [],
+    minItems: 1,
+  },
   comment: { type: String, default: "" },
   internalComments: { type: String, default: "" },
   rejectionReason: { type: String, default: "" },
@@ -44,16 +49,37 @@ const bookingSchemaDefinition = {
   isRejected: { type: Boolean, default: false },
   location: { type: String, default: "" },
   lockerInfo: { type: [Object], default: [] },
-  mail: { type: String, default: "" },
+  mail: {
+    type: String,
+    required: true,
+    format: "email",
+  },
   name: { type: String, default: "" },
-  paymentProvider: { type: String, default: "" },
+  paymentProvider: {
+    type: String,
+    default: "",
+    validate: (value, obj) => {
+      if (obj.priceEur > 0 && (!value || value.trim() === "")) {
+        return "required";
+      }
+      return true;
+    },
+  },
   paymentMethod: { type: String, default: "" },
   phone: { type: String, default: "" },
-  priceEur: { type: Number, default: 0 },
+  priceEur: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   street: { type: String, default: "" },
   timeBegin: { type: Double, required: false },
   timeCreated: { type: Double, default: () => Date.now() },
-  timeEnd: { type: Double, required: false },
+  timeEnd: {
+    type: Double,
+    required: false,
+    greaterEqualThan: "timeBegin",
+  },
   timePaid: { type: Double, default: 0 },
   vatIncludedEur: { type: Number, default: 0 },
   zipCode: { type: String, default: "" },

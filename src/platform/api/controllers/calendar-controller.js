@@ -113,11 +113,11 @@ class CalendarController {
 
     try {
       const availability = await CalendarService.checkAvailability(
-        tenant,
-        bookableId,
+        String(tenant),
+        String(bookableId).trim(),
         startDateQuery,
         endDateQuery,
-        amount,
+        Number(amount),
         user,
       );
 

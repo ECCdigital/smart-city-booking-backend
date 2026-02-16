@@ -328,9 +328,10 @@ class BookingController {
    * @obsolete Use createBooking or updateBooking instead.
    * @param request
    * @param response
+   * @param next
    * @returns {Promise<void>}
    */
-  static async storeBooking(request, response) {
+  static async storeBooking(request, response, next) {
     const booking = new Booking(request.body);
 
     let isUpdate =
@@ -338,13 +339,13 @@ class BookingController {
       !!booking.id;
 
     if (isUpdate) {
-      await BookingController.updateBooking(request, response);
+      await BookingController.updateBooking(request, response, next);
     } else {
-      await BookingController.createBooking(request, response);
+      await BookingController.createBooking(request, response, next);
     }
   }
 
-  static async createBooking(request, response) {
+  static async createBooking(request, response, next) {
     const user = request.user;
     const booking = new Booking(request.body);
     const tenantId = request.params.tenant;
@@ -373,15 +374,11 @@ class BookingController {
       });
       return response.status(200).send(newBooking);
     } catch (err) {
-      logger.error(err);
-      const statusCode = err.cause?.code === 400 ? 400 : 500;
-      return response
-        .status(statusCode)
-        .send(err.message || "Could not create booking");
+      next(err);
     }
   }
 
-  static async updateBooking(request, response) {
+  static async updateBooking(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
@@ -414,8 +411,7 @@ class BookingController {
         response.sendStatus(403);
       }
     } catch (err) {
-      logger.error(err);
-      response.status(500).send("Could not update booking");
+      next(err);
     }
   }
 

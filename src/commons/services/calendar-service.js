@@ -25,7 +25,11 @@ class CalendarService {
       BookableManager.getRelatedBookables(bookableId, tenantId),
     ]);
 
-    if (bookable.amount && Number(bookable.amount) < Number(amount)) {
+    if (
+      bookable &&
+      bookable.amount &&
+      Number(bookable.amount) < Number(amount)
+    ) {
       return [
         {
           timeBegin: start,
@@ -117,7 +121,9 @@ class CalendarService {
         });
       }
     }
-    return combineSegments(items);
+    const segments = combineSegments(items);
+
+    return { title: bookable.title, availability: segments };
   }
 }
 

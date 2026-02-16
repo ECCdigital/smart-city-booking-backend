@@ -376,7 +376,6 @@ class GroupBookingController {
         ))
       ) {
         for (const bookingId of groupBooking.bookingIds) {
-          console.log("Deleting booking with ID:", bookingId);
           await BookingService.cancelBooking(tenantId, bookingId);
           await WorkflowService.removeTask(tenantId, bookingId);
         }
