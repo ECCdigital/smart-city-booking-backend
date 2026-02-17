@@ -25,6 +25,19 @@ class CalendarService {
       BookableManager.getRelatedBookables(bookableId, tenantId),
     ]);
 
+    if (bookable && bookable.isBookable === false) {
+      return {
+        title: bookable.title,
+        availability: [
+          {
+            timeBegin: startDate.getTime(),
+            timeEnd: endDate.getTime(),
+            available: false,
+          },
+        ],
+      };
+    }
+
     if (
       bookable &&
       bookable.amount &&
