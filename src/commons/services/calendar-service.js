@@ -121,6 +121,19 @@ class CalendarService {
         });
       }
     }
+    const closedPeriods = getUnavailablePeriods(
+      availableOpeningHoursPeriods,
+      availableSpecialOpeningHoursPeriods,
+    );
+
+    items.push(
+      ...closedPeriods.map((p) => ({
+        timeBegin: p.start,
+        timeEnd: p.end,
+        available: false,
+      })),
+    );
+
     const segments = combineSegments(items);
 
     return { title: bookable.title, availability: segments };
@@ -193,9 +206,14 @@ async function checkAvailabilityIterative(
 ) {
   const SEGMENT_MIN_LENGTH = 15 * 60 * 1000;
   const queue = [{ start: initialStart, end: initialEnd }];
+  const processed = new Set();
 
   while (queue.length > 0) {
     const { start, end } = queue.shift();
+    const key = `${start}-${end}`;
+
+    if (processed.has(key)) continue;
+    processed.add(key);
 
     let ics = null;
 
@@ -212,7 +230,7 @@ async function checkAvailabilityIterative(
       await ics.init();
 
       await ics.checkPermissions();
-      await ics.checkOpeningHours();
+      //await ics.checkOpeningHours();
       await ics.checkAvailability();
       await ics.checkEventSeats();
       await ics.checkParentAvailability();
@@ -244,7 +262,7 @@ async function checkAvailabilityIterative(
         }
         for (const valid of validIntervals) {
           if (valid.end - valid.start > SEGMENT_MIN_LENGTH) {
-            // queue.push({ start: valid.start, end: valid.end });
+            queue.push({ start: valid.start, end: valid.end });
           } else {
             items.push({
               timeBegin: valid.start,
@@ -315,6 +333,69 @@ function mergeTwoPeriodSets(base, overlay) {
   }
 
   return result.sort((a, b) => a.start - b.start);
+}
+
+function getUnavailablePeriods(
+  availableOpeningHoursPeriods,
+  availableSpecialOpeningHoursPeriods,
+) {
+  if (
+    !availableSpecialOpeningHoursPeriods ||
+    availableSpecialOpeningHoursPeriods.length === 0
+  ) {
+    return availableOpeningHoursPeriods.filter((p) => !p.available);
+  }
+
+  const finalPeriods = [];
+  const specialPeriodsSorted = [...availableSpecialOpeningHoursPeriods].sort(
+    (a, b) => a.start - b.start,
+  );
+
+  for (const normalPeriod of availableOpeningHoursPeriods) {
+    const overlappingSpecial = specialPeriodsSorted.filter(
+      (sp) => sp.start < normalPeriod.end && sp.end > normalPeriod.start,
+    );
+
+    if (overlappingSpecial.length === 0) {
+      finalPeriods.push(normalPeriod);
+    } else {
+      let currentPos = normalPeriod.start;
+
+      for (const special of overlappingSpecial) {
+        if (currentPos < special.start && special.start < normalPeriod.end) {
+          finalPeriods.push({
+            start: currentPos,
+            end: Math.min(special.start, normalPeriod.end),
+            available: normalPeriod.available,
+          });
+        }
+
+        const overlapStart = Math.max(special.start, normalPeriod.start);
+        const overlapEnd = Math.min(special.end, normalPeriod.end);
+        if (overlapStart < overlapEnd) {
+          finalPeriods.push({
+            start: overlapStart,
+            end: overlapEnd,
+            available: special.available,
+          });
+        }
+
+        currentPos = Math.max(currentPos, special.end);
+      }
+
+      if (currentPos < normalPeriod.end) {
+        finalPeriods.push({
+          start: currentPos,
+          end: normalPeriod.end,
+          available: normalPeriod.available,
+        });
+      }
+    }
+  }
+
+  return finalPeriods
+    .filter((p) => !p.available)
+    .sort((a, b) => a.start - b.start);
 }
 
 function mergePeriods(...periodSets) {
