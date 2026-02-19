@@ -35,6 +35,7 @@ class PdfService {
   }
 
   static formatDateTime(value) {
+    console.log("Formatting date:", value);
     const formatter = new Intl.DateTimeFormat("de-DE", {
       day: "2-digit",
       month: "2-digit",
@@ -121,9 +122,8 @@ class PdfService {
       booking.timeBegin && booking.timeEnd
         ? `${PdfService.formatDateTime(booking.timeBegin)} – ${PdfService.formatDateTime(booking.timeEnd)}`
         : "-";
-    const payDate = PdfService.formatDateTime(
-      booking.timePaid > 0 ? booking.timePaid : "-",
-    );
+    const payDate =
+      booking.timePaid > 0 ? PdfService.formatDateTime(booking.timePaid) : "-";
     const bookingDate = PdfService.formatDate(new Date());
     const paymentMethod = PdfService.translatePayMethod(booking.paymentMethod);
     const receiptAddress = `
