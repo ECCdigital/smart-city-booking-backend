@@ -64,7 +64,7 @@ class SchemaUtils {
 
     Object.keys(schemaDefinition).forEach((key) => {
       const field = schemaDefinition[key];
-      const value = obj[key];
+      let value = obj[key];
       const isEmpty = value === undefined || value === null || value === "";
 
       // --- Required ---
@@ -82,6 +82,14 @@ class SchemaUtils {
       }
 
       if (isEmpty) return;
+
+      if (field.type === Number && typeof value === "string") {
+        const coerced = Number(value);
+        if (!isNaN(coerced)) {
+          obj[key] = coerced;
+          value = coerced;
+        }
+      }
 
       // --- Type checks ---
       if (field.type === Number && typeof value !== "number") {
