@@ -343,6 +343,7 @@ class BookingService {
       bookingAttempt.location = contactData.location;
       bookingAttempt.phone = contactData.phone;
       bookingAttempt.paymentProvider = paymentProvider;
+      bookingAttempt.comment = contactData.comment || "";
 
       const booking = await BookingService.createBooking({
         tenantId,
