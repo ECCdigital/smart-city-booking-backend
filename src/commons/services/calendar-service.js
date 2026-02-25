@@ -217,7 +217,7 @@ async function checkAvailabilityIterative(
   user,
   amount,
 ) {
-  const SEGMENT_MIN_LENGTH = 15 * 60 * 1000;
+  const SEGMENT_MIN_LENGTH = 10 * 60 * 1000;
   const queue = [{ start: initialStart, end: initialEnd }];
   const processed = new Set();
 
@@ -254,7 +254,38 @@ async function checkAvailabilityIterative(
     } catch (error) {
       const { concurrentBookings } = error;
 
-      if (concurrentBookings?.length) {
+      if (concurrentBookings?.length === 1) {
+
+        const { validIntervals, invalidIntervals } = splitByOverlapThreshold(
+          { start, end },
+          concurrentBookings.map((cb) => ({
+            start: cb.timeBegin,
+            end: cb.timeEnd,
+          })),
+          error.remaining ?? 0,
+        );
+
+        for (const inv of invalidIntervals) {
+          items.push({
+            timeBegin: inv.start,
+            timeEnd: inv.end,
+            available: false,
+          });
+        }
+
+        for (const valid of validIntervals) {
+          if (valid.end - valid.start > SEGMENT_MIN_LENGTH) {
+            queue.push({ start: valid.start, end: valid.end });
+          } else {
+            items.push({
+              timeBegin: valid.start,
+              timeEnd: valid.end,
+              available: false,
+            });
+          }
+        }
+
+      } else if (concurrentBookings?.length > 1) {
         const availableSlots = bookablesToCheck[0]?.amount || 1;
         const maxAllowedOverlap = Math.max(0, availableSlots - amount);
         const { validIntervals, invalidIntervals } = splitByOverlapThreshold(
