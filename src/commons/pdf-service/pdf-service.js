@@ -507,6 +507,7 @@ class PdfService {
       invoiceAddress: `${bookings[0].name}<br>${bookings[0].street}<br>${bookings[0].zipCode} ${bookings[0].location}`,
       mainContent,
       location: tenant.location,
+      totalAmount: PdfService.formatCurrency(totalBrutto),
     };
 
     const renderedHtml = template(data);
