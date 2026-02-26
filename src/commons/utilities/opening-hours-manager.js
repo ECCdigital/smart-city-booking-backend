@@ -193,6 +193,13 @@ function checkOpeningHoursConflict(bookable, timeBegin, timeEnd) {
   return true;
 }
 
+function toLocalDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Checks if the booking time conflicts with the special opening hours of the bookable object.
  *
@@ -202,60 +209,63 @@ function checkOpeningHoursConflict(bookable, timeBegin, timeEnd) {
  * @returns {boolean|null} - Returns true if there is a conflict, false if there is no conflict, and null if there are no special opening hours for the booking dates.
  */
 function checkSpecialOpeningHours(bookable, timeBegin, timeEnd) {
-  const dates = [];
-  const bookingStartDate = new Date(timeBegin).getTime();
-  const bookingEndDate = new Date(timeEnd).getTime();
-  const bookingStartISO = new Date(bookingStartDate)
-    .toISOString()
-    .split("T")[0];
-  const bookingEndISO = new Date(bookingEndDate).toISOString().split("T")[0];
+  const bookingStart = new Date(timeBegin);
+  const bookingEnd = new Date(timeEnd);
 
-  dates.push(bookingStartDate);
+  const days = [];
+  const current = new Date(bookingStart);
+  current.setHours(0, 0, 0, 0);
 
-  let currentDate = new Date(bookingStartISO);
-  while (currentDate.toISOString().split("T")[0] <= bookingEndISO) {
-    if (currentDate.toISOString().split("T")[0] !== bookingEndISO) {
-      currentDate.setDate(currentDate.getDate() + 1);
-      let startDate = new Date(currentDate).setHours(0, 0, 0, 0);
-      let endDate = new Date(currentDate).setHours(23, 59, 59, 999);
-      dates.push(startDate);
-      dates.push(endDate);
-    } else {
-      dates.push(bookingEndDate);
-      break;
-    }
+  const endDay = new Date(bookingEnd);
+  endDay.setHours(0, 0, 0, 0);
+
+  while (current <= endDay) {
+    days.push(toLocalDateString(current));
+    current.setDate(current.getDate() + 1);
   }
 
-  for (const date of dates) {
-    const sohDates = bookable.specialOpeningHours.filter((soh) => {
-      return (
-        new Date(soh.date).toISOString().split("T")[0] ===
-        new Date(date).toISOString().split("T")[0]
-      );
-    });
-    if (sohDates.length > 0) {
-      for (const sohDate of sohDates) {
-        const sohStartDate = new Date(
-          `${sohDate.date}T${sohDate.startTime}`,
-        ).getTime();
-        const sohEndDate = new Date(
-          `${sohDate.date}T${sohDate.endTime}`,
-        ).getTime();
+  let hasAnySpecialHours = false;
 
-        if (
-          !(dates[0] >= sohStartDate && dates[dates.length - 1] <= sohEndDate)
-        ) {
-          return true;
-        } else if (sohStartDate === sohEndDate) {
-          return true;
-        }
+  for (const day of days) {
+    const sohForDay = bookable.specialOpeningHours.filter(
+      (soh) => soh.date === day,
+    );
+
+    if (sohForDay.length === 0) {
+      continue;
+    }
+
+    hasAnySpecialHours = true;
+
+    for (const soh of sohForDay) {
+      if (soh.startTime === soh.endTime) {
+        return true;
       }
-    } else {
-      // No special opening hours for the booking dates
-      return null;
+
+      const [sohSH, sohSM] = soh.startTime.split(":").map(Number);
+      const [sohEH, sohEM] = soh.endTime.split(":").map(Number);
+
+      const sohStart = new Date(day + "T00:00:00");
+      sohStart.setHours(sohSH, sohSM, 0, 0);
+
+      const sohEnd = new Date(day + "T00:00:00");
+      sohEnd.setHours(sohEH, sohEM, 0, 0);
+
+      const dayBoundaryStart = new Date(`${day}T00:00:00`);
+      const dayBoundaryEnd = new Date(`${day}T23:59:59.999`);
+
+      const dayStart =
+        bookingStart > dayBoundaryStart ? bookingStart : dayBoundaryStart;
+      const dayEnd =
+        bookingEnd < dayBoundaryEnd ? bookingEnd : dayBoundaryEnd;
+
+      if (dayStart < sohStart || dayEnd > sohEnd) {
+        return true;
+      }
     }
   }
-  return false;
+
+  return hasAnySpecialHours ? false : null;
 }
 
 module.exports = OpeningHoursManager;

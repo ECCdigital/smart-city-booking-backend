@@ -310,10 +310,6 @@ class PdfService {
       }
 
       let mainContent = `
-      <p>
-        <strong>Buchungsnummer:</strong> ${booking.id}<br>
-        <strong>Zeitraum:</strong> ${bookingPeriod}
-      </p>
       <table class="booked-items" style="width:100%; border-collapse: collapse;">
         <thead>
           <tr style="background: #eee; border-bottom: 1px solid #ddd;">
@@ -383,10 +379,12 @@ class PdfService {
     `;
 
       const currentDate = PdfService.formatDate(new Date());
+      const bookingDate = PdfService.formatDate(new Date(booking.timeCreated));
+
       const data = {
         title: "Ihre Rechnung",
         invoiceNumber: invoiceNumber,
-        bookingDate: currentDate,
+        bookingDate: bookingDate,
         daysUntilPaymentDue: invoiceApp.daysUntilPaymentDue,
         purposeOfPayment: `${invoiceNumber} ${tenant.paymentPurposeSuffix}`,
         bank: invoiceApp.bank,
@@ -395,6 +393,10 @@ class PdfService {
         invoiceAddress,
         mainContent,
         location: tenant.location,
+        totalAmount: PdfService.formatCurrency(booking.priceEur),
+        invoiceDate: currentDate,
+        bookingId: booking.id,
+        bookingPeriod,
       };
 
       const template = Handlebars.compile(tenant.invoiceTemplate);
@@ -505,6 +507,7 @@ class PdfService {
       invoiceAddress: `${bookings[0].name}<br>${bookings[0].street}<br>${bookings[0].zipCode} ${bookings[0].location}`,
       mainContent,
       location: tenant.location,
+      totalAmount: PdfService.formatCurrency(totalBrutto),
     };
 
     const renderedHtml = template(data);

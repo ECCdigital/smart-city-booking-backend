@@ -217,7 +217,7 @@ async function checkAvailabilityIterative(
   user,
   amount,
 ) {
-  const SEGMENT_MIN_LENGTH = 15 * 60 * 1000;
+  const SEGMENT_MIN_LENGTH = 10 * 60 * 1000;
   const queue = [{ start: initialStart, end: initialEnd }];
   const processed = new Set();
 
@@ -254,7 +254,36 @@ async function checkAvailabilityIterative(
     } catch (error) {
       const { concurrentBookings } = error;
 
-      if (concurrentBookings?.length) {
+      if (concurrentBookings?.length === 1) {
+        const { validIntervals, invalidIntervals } = splitByOverlapThreshold(
+          { start, end },
+          concurrentBookings.map((cb) => ({
+            start: cb.timeBegin,
+            end: cb.timeEnd,
+          })),
+          error.remaining ?? 0,
+        );
+
+        for (const inv of invalidIntervals) {
+          items.push({
+            timeBegin: inv.start,
+            timeEnd: inv.end,
+            available: false,
+          });
+        }
+
+        for (const valid of validIntervals) {
+          if (valid.end - valid.start > SEGMENT_MIN_LENGTH) {
+            queue.push({ start: valid.start, end: valid.end });
+          } else {
+            items.push({
+              timeBegin: valid.start,
+              timeEnd: valid.end,
+              available: false,
+            });
+          }
+        }
+      } else if (concurrentBookings?.length > 1) {
         const availableSlots = bookablesToCheck[0]?.amount || 1;
         const maxAllowedOverlap = Math.max(0, availableSlots - amount);
         const { validIntervals, invalidIntervals } = splitByOverlapThreshold(
@@ -768,21 +797,35 @@ function generateTimePeriodsFromSpecialOpeningHours(
     return [];
   }
 
-  const periods = [];
+  // Helper: parse "2026-02-26" + "08:00" as local time
+  function parseLocalDateTime(dateStr, timeStr) {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return new Date(year, month - 1, day, hours, minutes, 0, 0);
+  }
 
+  // Helper: format a Date to "YYYY-MM-DD" in local time
+  function toLocalDateString(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  const periods = [];
   const specialOpeningHoursByDate = {};
 
-  const startDateISO = startDate.toISOString().split("T")[0];
-  const endDateISO = endDate.toISOString().split("T")[0];
+  const startDateStr = toLocalDateString(startDate);
+  const endDateStr = toLocalDateString(endDate);
 
   for (const soh of allSpecialOpeningHours) {
-    const sohDateISO = new Date(soh.date).toISOString().split("T")[0];
+    const sohDateStr = soh.date; // already "YYYY-MM-DD"
 
-    if (sohDateISO >= startDateISO && sohDateISO <= endDateISO) {
-      if (!specialOpeningHoursByDate[sohDateISO]) {
-        specialOpeningHoursByDate[sohDateISO] = [];
+    if (sohDateStr >= startDateStr && sohDateStr <= endDateStr) {
+      if (!specialOpeningHoursByDate[sohDateStr]) {
+        specialOpeningHoursByDate[sohDateStr] = [];
       }
-      specialOpeningHoursByDate[sohDateISO].push(soh);
+      specialOpeningHoursByDate[sohDateStr].push(soh);
     }
   }
 
@@ -790,39 +833,33 @@ function generateTimePeriodsFromSpecialOpeningHours(
   currentDate.setHours(0, 0, 0, 0);
 
   while (currentDate <= endDate) {
-    const currentDateISO = currentDate.toISOString().split("T")[0];
-    const specialHoursForDate = specialOpeningHoursByDate[currentDateISO] || [];
+    const currentDateStr = toLocalDateString(currentDate);
+    const specialHoursForDate = specialOpeningHoursByDate[currentDateStr] || [];
 
     const startOfDay = new Date(
-      Date.UTC(
-        currentDate.getUTCFullYear(),
-        currentDate.getUTCMonth(),
-        currentDate.getUTCDate(),
-        0,
-        0,
-        0,
-        0,
-      ),
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      currentDate.getDate(),
+      0,
+      0,
+      0,
+      0,
     );
 
     const endOfDay = new Date(
-      Date.UTC(
-        currentDate.getUTCFullYear(),
-        currentDate.getUTCMonth(),
-        currentDate.getUTCDate(),
-        24,
-        0,
-        0,
-        0,
-      ),
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      currentDate.getDate() + 1,
+      0,
+      0,
+      0,
+      0,
     );
 
     if (specialHoursForDate.length > 0) {
-      const closedDay = specialHoursForDate.some((soh) => {
-        const startTime = soh.startTime;
-        const endTime = soh.endTime;
-        return startTime === endTime;
-      });
+      const closedDay = specialHoursForDate.some(
+        (soh) => soh.startTime === soh.endTime,
+      );
 
       if (closedDay) {
         periods.push({
@@ -831,13 +868,14 @@ function generateTimePeriodsFromSpecialOpeningHours(
           available: false,
         });
       } else {
-        specialHoursForDate.sort((a, b) => {
-          return a.startTime.localeCompare(b.startTime);
-        });
+        specialHoursForDate.sort((a, b) =>
+          a.startTime.localeCompare(b.startTime),
+        );
 
         const firstSoh = specialHoursForDate[0];
-        const firstSohStart = new Date(
-          `${firstSoh.date}T${firstSoh.startTime}`,
+        const firstSohStart = parseLocalDateTime(
+          firstSoh.date,
+          firstSoh.startTime,
         );
 
         if (firstSohStart.getTime() > startOfDay.getTime()) {
@@ -850,10 +888,14 @@ function generateTimePeriodsFromSpecialOpeningHours(
 
         for (let i = 0; i < specialHoursForDate.length; i++) {
           const currentSoh = specialHoursForDate[i];
-          const sohStart = new Date(
-            `${currentSoh.date}T${currentSoh.startTime}`,
+          const sohStart = parseLocalDateTime(
+            currentSoh.date,
+            currentSoh.startTime,
           );
-          const sohEnd = new Date(`${currentSoh.date}T${currentSoh.endTime}`);
+          const sohEnd = parseLocalDateTime(
+            currentSoh.date,
+            currentSoh.endTime,
+          );
 
           periods.push({
             start: sohStart.getTime(),
@@ -863,8 +905,9 @@ function generateTimePeriodsFromSpecialOpeningHours(
 
           if (i < specialHoursForDate.length - 1) {
             const nextSoh = specialHoursForDate[i + 1];
-            const nextSohStart = new Date(
-              `${nextSoh.date}T${nextSoh.startTime}`,
+            const nextSohStart = parseLocalDateTime(
+              nextSoh.date,
+              nextSoh.startTime,
             );
 
             if (sohEnd.getTime() < nextSohStart.getTime()) {
@@ -878,11 +921,9 @@ function generateTimePeriodsFromSpecialOpeningHours(
         }
 
         const lastSoh = specialHoursForDate[specialHoursForDate.length - 1];
-
-        const lastSohEnd = new Date(`${lastSoh.date}T${lastSoh.endTime}`);
+        const lastSohEnd = parseLocalDateTime(lastSoh.date, lastSoh.endTime);
 
         if (lastSohEnd.getTime() < endOfDay.getTime()) {
-          lastSohEnd.getTime() < endOfDay.getTime();
           periods.push({
             start: lastSohEnd.getTime(),
             end: endOfDay.getTime(),
