@@ -375,31 +375,51 @@ class TenantController {
           return response.status(400).send("User already in tenant");
         }
 
-        const invitation = await InvitationService.createInvitation({
-          tenantId,
-          intendedUserId: userId,
-          roles,
-          challenges: challenges,
-          type: "single",
-          expiresAt: null,
-          maxUses: 1,
-        });
+        if (type === "manually") {
 
-        const newMembership = new Membership({
-          tenantId,
-          userId,
-          status: type === "manually" ? "active" : "pending",
-          source: type,
-          invitations: [{ token: invitation.token, status: "pending" }],
-        });
+          const existingUser = await UserManager.getUser(userId);
 
-        await MembershipManager.addMembership(tenantId, newMembership);
+          if (!existingUser) {
+            return response.status(404).send("User does not exist");
+          }
 
-        await InvitationService.sendInvitationMail(
-          tenantId,
-          invitation.token,
-          userId,
-        );
+          const newMembership = new Membership({
+            tenantId,
+            userId,
+            status: "active",
+            source: "manually",
+            roles: roles || [],
+            invitations: [],
+          });
+
+          await MembershipManager.addMembership(tenantId, newMembership);
+        } else {
+          const invitation = await InvitationService.createInvitation({
+            tenantId,
+            intendedUserId: userId,
+            roles,
+            challenges: challenges,
+            type: "single",
+            expiresAt: null,
+            maxUses: 1,
+          });
+
+          const newMembership = new Membership({
+            tenantId,
+            userId,
+            status: "pending",
+            source: type,
+            invitations: [{ token: invitation.token, status: "pending" }],
+          });
+
+          await MembershipManager.addMembership(tenantId, newMembership);
+
+          await InvitationService.sendInvitationMail(
+            tenantId,
+            invitation.token,
+            userId,
+          );
+        }
 
         const memberships =
           await MembershipManager.getMembershipsByTenantID(tenantId);
