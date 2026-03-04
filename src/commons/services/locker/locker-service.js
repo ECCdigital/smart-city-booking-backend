@@ -6,14 +6,11 @@ const {
   getBooking,
   getBookingsByTimeRange,
 } = require("../../data-managers/booking-manager");
-const { ParevaLocker } = require("./locker");
+const { createLocker } = require("./locker-registry");
+require("./index");
 const bunyan = require("bunyan");
 
 const APP_TYPE = "locker";
-
-const LOCKER_TYPE = {
-  PAREVA: "pareva",
-};
 
 const logger = bunyan.createLogger({
   name: "locker-service.js",
@@ -218,14 +215,12 @@ class LockerService {
       }
 
       for (const unit of lockerUnitsToBeAssigned) {
-        let locker;
-        switch (unit.lockerSystem) {
-          case LOCKER_TYPE.PAREVA:
-            locker = new ParevaLocker(booking.tenantId, booking.id, unit.id);
-            break;
-          default:
-            throw new Error("Unsupported locker type");
-        }
+        const locker = createLocker(
+          unit.lockerSystem,
+          booking.tenantId,
+          booking.id,
+          unit.id,
+        );
         const updatedLockerInfo = await locker.startReservation(
           booking.timeBegin,
           booking.timeEnd,
@@ -347,14 +342,12 @@ class LockerService {
         timeBegin,
         timeEnd,
       ) => {
-        let locker;
-        switch (unit.lockerSystem) {
-          case LOCKER_TYPE.PAREVA:
-            locker = new ParevaLocker(tenantId, bookingId, unit.id);
-            break;
-          default:
-            throw new Error("Unsupported locker type");
-        }
+        const locker = createLocker(
+          unit.lockerSystem,
+          tenantId,
+          bookingId,
+          unit.id,
+        );
         if (action === "cancel") {
           return await locker.cancelReservation(unit.id);
         } else if (action === "start") {
@@ -602,14 +595,12 @@ class LockerService {
     const results = [];
 
     for (const unit of lockerUnitsToBeCanceled) {
-      let locker;
-      switch (unit.lockerSystem) {
-        case LOCKER_TYPE.PAREVA:
-          locker = new ParevaLocker(tenantId, bookingId, unit.id);
-          break;
-        default:
-          throw new Error("Unsupported locker type");
-      }
+      const locker = createLocker(
+        unit.lockerSystem,
+        tenantId,
+        bookingId,
+        unit.id,
+      );
       results.push(await locker.cancelReservation(unit.processId));
     }
 

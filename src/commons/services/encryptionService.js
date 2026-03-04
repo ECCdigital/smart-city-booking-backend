@@ -1,7 +1,9 @@
 const SecurityUtils = require("../utilities/security-utils");
 const PaymentApplication = require("../entities/application/paymentApplication");
 const AuthApplication = require("../entities/application/authApplication");
-const LockerApplication = require("../entities/application/lockerApplication");
+const {
+  createLockerApplication,
+} = require("../entities/application/lockerApplication");
 const KeycloakSsoApplication = require("../entities/application/keycloakSsoApplication");
 
 class EncryptionService {
@@ -91,9 +93,7 @@ class InstanceEncryptionService extends EncryptionService {
 class TenantEncryptionService extends EncryptionService {
   static encrypt(data) {
     if (!data) return;
-
     this.encryptFields(data, ["noreplyPassword", "noreplyGraphClientSecret"]);
-
     if (data.applications) {
       data.applications = this.encryptApplications(data.applications);
     }
@@ -101,30 +101,37 @@ class TenantEncryptionService extends EncryptionService {
 
   static decrypt(data) {
     if (!data) return;
-
     this.decryptFields(data, ["noreplyPassword", "noreplyGraphClientSecret"]);
-
     if (data.applications) {
       data.applications = this.decryptApplications(data.applications);
     }
   }
 
   static encryptApplications(applications) {
-    const applicationTypes = {
-      payment: PaymentApplication,
-      auth: AuthApplication,
-      locker: LockerApplication,
-    };
-    return super.encryptApplications(applications, applicationTypes);
+    return applications.map((app) => {
+      const instance = this.createAppInstance(app);
+      instance.encrypt();
+      return instance;
+    });
   }
 
   static decryptApplications(applications) {
+    return applications.map((app) => {
+      const instance = this.createAppInstance(app);
+      instance.decrypt();
+      return instance;
+    });
+  }
+
+  static createAppInstance(app) {
+    if (app.type === "locker") {
+      return createLockerApplication(app);
+    }
     const applicationTypes = {
       payment: PaymentApplication,
       auth: AuthApplication,
-      locker: LockerApplication,
     };
-    return super.decryptApplications(applications, applicationTypes);
+    return super.createApplicationInstance(app, applicationTypes);
   }
 }
 

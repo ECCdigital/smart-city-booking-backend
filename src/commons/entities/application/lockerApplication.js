@@ -4,26 +4,36 @@ const SecurityUtils = require("../../utilities/security-utils");
 class LockerApplication extends TenantApplication {
   constructor(params) {
     super({ type: "locker", ...params });
-    this.version = params.version || 1;
-    this.apiKey = params.apiKey || "";
-    this.lockerId = params.lockerId || "";
     this.serverUrl = params.serverUrl || "";
+  }
+
+  decrypt() {}
+
+  encrypt() {}
+
+  static get Schema() {
+    return {
+      ...super.Schema,
+      serverUrl: { type: String, default: "" },
+    };
+  }
+}
+
+class parevaLockerApplication extends LockerApplication {
+  constructor(params) {
+    super(params);
+    this.version = params.version || 1;
+    this.lockerId = params.lockerId || "";
     this.user = params.user || "";
     this.password = params.password || null;
   }
 
-  /**
-   * Decrypts the password if it exists.
-   */
   decrypt() {
     if (this.password) {
       this.password = SecurityUtils.decrypt(this.password);
     }
   }
 
-  /**
-   * Encrypts the password if it exists.
-   */
   encrypt() {
     if (this.password) {
       this.password = SecurityUtils.encrypt(this.password);
@@ -34,13 +44,59 @@ class LockerApplication extends TenantApplication {
     return {
       ...super.Schema,
       version: { type: Number, default: 1 },
-      apiKey: { type: String, default: "" },
       lockerId: { type: String, default: "" },
-      serverUrl: { type: String, default: "" },
       user: { type: String, default: "" },
       password: { type: Object, default: null },
     };
   }
 }
 
-module.exports = LockerApplication;
+class ifbsLockerApplication extends LockerApplication {
+  constructor(params) {
+    super(params);
+    this.apiKeyID = params.apiKeyID || "";
+    this.apiKey = params.apiKey || null;
+  }
+
+  decrypt() {
+    if (this.apiKey) {
+      this.apiKey = SecurityUtils.decrypt(this.apiKey);
+    }
+  }
+
+  encrypt() {
+    if (this.apiKey) {
+      this.apiKey = SecurityUtils.encrypt(this.apiKey);
+    }
+  }
+
+  static get Schema() {
+    return {
+      ...super.Schema,
+      apiKeyID: { type: String, default: "" },
+      apiKey: { type: Object, default: null },
+    };
+  }
+}
+
+const lockerAppTypes = {
+  pareva: parevaLockerApplication,
+  ifbs: ifbsLockerApplication,
+};
+
+function createLockerApplication(params) {
+  const AppClass = lockerAppTypes[params.id] || LockerApplication;
+  return new AppClass(params);
+}
+
+function registerLockerAppType(id, AppClass) {
+  lockerAppTypes[id] = AppClass;
+}
+
+module.exports = {
+  LockerApplication,
+  parevaLockerApplication,
+  ifbsLockerApplication,
+  createLockerApplication,
+  registerLockerAppType,
+};

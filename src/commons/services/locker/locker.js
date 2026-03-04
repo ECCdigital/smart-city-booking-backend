@@ -18,6 +18,14 @@ class BaseLocker {
     this.id = id;
   }
 
+  async getBooking() {
+    return BookingManager.getBooking(this.bookingId, this.tenantId);
+  }
+
+  async getTenant() {
+    return TenantManager.getTenant(this.tenantId);
+  }
+
   /**
    * Starts a new reservation.
    * This method should be overridden by subclasses.
@@ -143,14 +151,6 @@ class ParevaLocker extends BaseLocker {
         processId: processId,
       };
     }
-  }
-
-  async getBooking() {
-    return await BookingManager.getBooking(this.bookingId, this.tenantId);
-  }
-
-  async getTenant() {
-    return await TenantManager.getTenant(this.tenantId);
   }
 
   getLocker(booking, processId) {

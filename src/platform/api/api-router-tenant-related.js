@@ -16,6 +16,7 @@ const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
 const CatalogController = require("./controllers/catalog-controller");
+const LockerController = require("./controllers/locker-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
@@ -459,6 +460,36 @@ router.put(
   "/catalog",
   AuthenticationController.isSignedIn,
   CatalogController.storeCatalog,
+);
+
+router.get(
+  "/locker/:provider/locations",
+  AuthenticationController.isSignedIn,
+  LockerController.getLocations,
+);
+
+router.get(
+  "/locker/:provider/locations/status",
+  AuthenticationController.isSignedIn,
+  LockerController.getLocationsStat,
+);
+
+router.get(
+  "/locker/:provider/locations/:id",
+  AuthenticationController.isSignedIn,
+  LockerController.getLocationById,
+);
+
+router.get(
+  "/locker/:provider/locations/:id/price",
+  AuthenticationController.isSignedIn,
+  LockerController.getPrice,
+);
+
+router.post(
+  "/locker/:provider/test",
+  AuthenticationController.isSignedIn,
+  LockerController.testConnection,
 );
 
 module.exports = router;
