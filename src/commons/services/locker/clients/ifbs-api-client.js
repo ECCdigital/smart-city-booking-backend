@@ -38,13 +38,63 @@ class IfbsApiClient extends BaseLockerApiClient {
     return pricing;
   }
 
+  async getBox(locationId, start, end, userID = 1) {
+    console.log("Requesting box with params:", {
+      locationId,
+      start,
+      end,
+      userID,
+    })
+    try {
+      const response = await this._get("getBox.php", {
+        location: locationId,
+        DATEfrom: start,
+        DATEto: end,
+        User_ID: userID,
+      });
+      console.log("Received box response:", response);
+      const { success, ...boxInfo } = response;
+      return boxInfo;
+    } catch (err) {
+      logger.error(`Error in getBox: ${err.message}`);
+      throw err;
+    }
+  }
+
+  async bookIt(bookingID, checksum) {
+
+    console.log("Booking with params:", {
+      bookingID,
+      checksum,
+    })
+
+    const response = await this._get("bookIt.php", {
+      ID: bookingID,
+      c: checksum,
+    });
+    const { success, ...bookingResult } = response;
+    console.log("Booking result:", bookingResult);
+    return bookingResult;
+  }
+
+  async extendUsage(bookingID, dateTo) {
+    const response = await this._get("extendUsage.php", {
+      ID: bookingID,
+      ...(dateTo ? { DATEto: dateTo } : {}),
+    });
+    return response;
+  }
+
+  async confirmExtension(bookingID, extensionId) {
+    const response = await this._get("extendUsage.php", {
+      ID: bookingID,
+      Extension_ID: extensionId,
+    });
+    return response;
+  }
+
   static get capabilities() {
-    return [
-      "getLocations",
-      "getLocationsStat",
-      "getLocationById",
-      "getPrice",
-    ];
+    return ["getLocations", "getLocationsStat", "getLocationById", "getPrice" , "getBox", "bookIt", "extendUsage", "confirmExtension"];
   }
 
   static async testConnection(serverUrl, apiKey) {
@@ -85,9 +135,7 @@ class IfbsApiClient extends BaseLockerApiClient {
 
       return data;
     } catch (err) {
-      logger.error(
-        `IFBS API request failed: ${endpoint} - ${err.message}`,
-      );
+      logger.error(`IFBS API request failed: ${endpoint} - ${err.message}`);
       throw err;
     }
   }

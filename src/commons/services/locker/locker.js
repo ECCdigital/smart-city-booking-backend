@@ -30,7 +30,9 @@ class BaseLocker {
    * Starts a new reservation.
    * This method should be overridden by subclasses.
    */
-  startReservation() {}
+  startReservation() {
+    throw new Error("startReservation method must be implemented by subclass");
+  }
 
   /**
    * Updates an existing reservation.

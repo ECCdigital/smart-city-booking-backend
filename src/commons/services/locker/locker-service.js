@@ -17,6 +17,8 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+const externalSystems = new Set(["ifbs"]);
+
 /**
  * LockerService is a singleton class that provides methods for managing lockers.
  * It includes methods for getting available lockers, checking locker availability,
@@ -114,6 +116,16 @@ class LockerService {
         };
 
         const availableUnits = possibleUnits.flatMap((unit) => {
+          if (
+            externalSystems.has(unit.lockerSystem) &&
+            activeLockerAppIds.includes(unit.lockerSystem)
+          ) {
+            return Array(Number(unit.amount)).fill({
+              id: unit.lockerSystem === "ifbs" ? unit.locationId : unit.id,
+              lockerSystem: unit.lockerSystem,
+            });
+          }
+
           const remainingAmount = calculateRemainingAmount(unit);
           const isOccupied = remainingAmount <= 0;
           const isReserved = LockerService.isLockerReserved(
@@ -151,6 +163,7 @@ class LockerService {
         }));
 
         units.forEach((unit) => {
+          if (externalSystems.has(unit.lockerSystem)) return;
           LockerService.reserveLocker(
             tenantId,
             bookableId,
@@ -666,12 +679,12 @@ class LockerService {
   static freeReservedLocker(tenantId, id, lockerSystem, startTime, endTime) {
     LockerService.reservedLockers = LockerService.reservedLockers.filter(
       (locker) => {
-        return (
-          locker.tenantId !== tenantId &&
-          locker.id !== id &&
-          locker.lockerSystem !== lockerSystem &&
-          locker.startTime !== startTime &&
-          locker.endTime !== endTime
+        return !(
+          locker.tenantId === tenantId &&
+          locker.id === id &&
+          locker.lockerSystem === lockerSystem &&
+          locker.startTime === startTime &&
+          locker.endTime === endTime
         );
       },
     );

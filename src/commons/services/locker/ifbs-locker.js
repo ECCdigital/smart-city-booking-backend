@@ -1,35 +1,104 @@
 const { BaseLocker } = require("./locker");
-const axios = require("axios");
+const TenantManager = require("../../data-managers/tenant-manager");
+const { createClient } = require("./clients/locker-client-registry");
+const crypto = require("crypto");
+const bunyan = require("bunyan");
+const { getUser } = require("../../data-managers/user-manager");
+
+const APP_TYPE = "locker";
+
+const logger = bunyan.createLogger({
+  name: "ifbs-locker.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class IfbsLocker extends BaseLocker {
+  async getClient(provider = "ifbs") {
+    const tenant = await TenantManager.getTenant(this.tenantId);
+    const rawApp = tenant.applications.find(
+      (a) =>
+        a.type === APP_TYPE && a.id === provider && a.active,
+    );
+
+    if (!rawApp) {
+      throw new Error(
+        `No active locker application '${provider}' ` +
+        `found for tenant '${this.tenantId}'`,
+      );
+    }
+
+    //this._secretPhrase = rawApp.secretPhrase;
+    this._secretPhrase = "IamSecret";
+    return createClient(rawApp);
+  }
+
   async startReservation(timeBegin, timeEnd) {
     const booking = await this.getBooking();
     const locker = this.getLocker(booking);
-    const tenant = await this.getTenant();
-    const ifbsApp = this.getIfbsApp(tenant);
+    const client = await this.getClient();
 
-    const { apiKeyID, apiKey, serverUrl } = ifbsApp;
-    const trimmedUrl = serverUrl.replace(/\/$/, "");
+    const user = await getUser(booking.assignedUserId);
+    let userID = 1; // Default user ID for iFBS
+    if(user && user._id) {
+      userID = typeof user._id === 'string' ? user._id : user._id.toString();
+    }
 
-    // TODO: IFBS-spezifische API-Aufrufe implementieren
-    const response = await axios.request({
-      method: "post",
-      url: `${trimmedUrl}/reserve`,
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key-ID": apiKeyID,
-        "X-API-Key": apiKey,
-      },
-      data: {
-        unitId: locker.id,
-        timeBegin,
-        timeEnd,
-        email: booking.mail,
-      },
+
+    const dateFrom = IfbsLocker.formatDate(timeBegin);
+    const dateTo = IfbsLocker.formatDate(timeEnd);
+
+    console.log("Starting reservation with params:", {
+      lockerId: locker,
+      dateFrom,
+      dateTo,
+      userID,
     });
 
-    locker.processId = response.data.processId;
+
+    // 1) getBox – reserviert für 2 Min beim iFBS-Server
+    const boxResult = await client.getBox(
+      locker.id, // locationId
+      dateFrom,
+      dateTo,
+      userID
+    );
+
+
+    if (!boxResult.Booking_ID) {
+      throw new Error(
+        `No available box at location ${locker.id}`,
+      );
+    }
+
+    // 2) Checksum berechnen und bookIt aufrufen
+    const checksum = IfbsLocker.calculateChecksum(
+      boxResult.nummer,
+      dateFrom,
+      dateTo,
+      this._secretPhrase,
+    );
+
+    console.log("Calculated checksum:", checksum);
+
+    const bookingResult = await client.bookIt(
+      boxResult.Booking_ID,
+      checksum,
+    );
+
+    locker.processId = String(
+      bookingResult.Booking_ID ?? boxResult.Booking_ID,
+    );
     locker.isConfirmed = true;
+    locker.ifbsMetadata = {
+      boxId: boxResult.Box_ID,
+      nummer: boxResult.nummer,
+      price: boxResult.price,
+      bookingId: boxResult.Booking_ID,
+    };
+
+    logger.info(
+      `iFBS booking confirmed: processId=${locker.processId}`,
+    );
     return locker;
   }
 
@@ -41,7 +110,6 @@ class IfbsLocker extends BaseLocker {
   async cancelReservation(_processId) {
     const booking = await this.getBooking();
     const locker = this.getLocker(booking, _processId);
-    const tenant = await this.getTenant();
     const { processId } = locker;
 
     if (!processId) {
@@ -49,47 +117,81 @@ class IfbsLocker extends BaseLocker {
     }
 
     try {
-      const ifbsApp = this.getIfbsApp(tenant);
-      const { apiKeyID, apiKey, serverUrl } = ifbsApp;
-      const trimmedUrl = serverUrl.replace(/\/$/, "");
+      const client = await this.getClient();
+      const now = Date.now();
+      const bookingStart = new Date(booking.timeBegin).getTime();
 
-      // TODO: IFBS-spezifische Cancel-API
-      const response = await axios.request({
-        method: "post",
-        url: `${trimmedUrl}/cancel`,
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key-ID": apiKeyID,
-          "X-API-Key": apiKey,
-        },
-        data: { processId },
-      });
-
-      if (response.status === 200) {
-        return { success: true, processId };
+      if (now < bookingStart) {
+        await client.cancelUsage(processId);
+      } else {
+        const newDateTo = IfbsLocker.formatDate(now);
+        await client.endUsage(processId, newDateTo);
       }
-      return { success: false, processId };
+
+      return { success: true, processId };
     } catch (err) {
+      logger.error(
+        `iFBS cancel failed for processId ${processId}: ` +
+        err.message,
+      );
       return { success: false, processId };
     }
   }
 
   getLocker(booking, processId) {
+    console.log("lockerInfo", booking.lockerInfo)
     const locker = booking.lockerInfo.find(
       (l) =>
         l.id === this.id &&
-        (processId === undefined || l.processId === processId),
+        (processId === undefined ||
+          l.processId === processId),
     );
     if (!locker) throw new Error("Locker not found");
     return locker;
   }
 
-  getIfbsApp(tenant) {
-    const app = tenant.applications.find(
-      (a) => a.type === "locker" && a.id === "ifbs" && a.active,
+  /**
+   * "YYYY-MM-DD HH:mm" – das Format, das iFBS erwartet
+   */
+  static formatDate(timestamp) {
+    const d = new Date(timestamp);
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-` +
+      `${pad(d.getDate())} ` +
+      `${pad(d.getHours())}:${pad(d.getMinutes())}`
     );
-    if (!app) throw new Error("IFBS application not found");
-    return app;
+  }
+
+  /**
+   * MD5 laut iFBS-Spec:
+   * md5(nummer + urlEncode(DATEfrom) + urlEncode(DATEto) + secretPhrase)
+   */
+  static calculateChecksum(
+    nummer,
+    dateFrom,
+    dateTo,
+    secretPhrase,
+  ) {
+
+    console.log("Calculating checksum with values:", {
+      nummer,
+      dateFrom,
+      dateTo,
+      secretPhrase,
+    });
+
+    const encode = (value) =>
+      new URLSearchParams({ v: value }).toString().slice(2);
+
+
+    const raw =
+      String(nummer) +
+      encode(dateFrom) +
+      encode(dateTo) +
+      secretPhrase;
+
+    return crypto.createHash("md5").update(raw).digest("hex");
   }
 }
 

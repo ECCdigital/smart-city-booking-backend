@@ -252,6 +252,18 @@ async function checkAvailabilityIterative(
 
       items.push({ timeBegin: start, timeEnd: end, available: true });
     } catch (error) {
+
+      const externalSource = error?.externalSource
+
+      if (externalSource) {
+        items.push({
+          timeBegin: start,
+          timeEnd: end,
+          available: false,
+        });
+        continue;
+      }
+
       const { concurrentBookings } = error;
 
       if (concurrentBookings?.length === 1) {
