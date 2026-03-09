@@ -14,7 +14,7 @@ const groupBookingSchemaDefinition = {
   assignedUserId: { type: String, default: "" },
   mail: { type: String, default: "" },
   timeCreated: { type: Double, default: () => Date.now() },
-  comment: { type: String, default: "" },
+  internalComments: { type: String, default: "" },
   hooks: { type: [groupBookingHookSchemaDefinition], default: [] },
 };
 

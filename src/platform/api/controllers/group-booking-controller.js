@@ -119,7 +119,7 @@ class GroupBookingController {
 
     try {
       const groupBookingId = req.params.id;
-      const { status } = req.body;
+      const { updateData } = req.body;
 
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
@@ -139,7 +139,7 @@ class GroupBookingController {
           await GroupBookingManager.updateGroupBooking(
             tenantId,
             groupBookingId,
-            status,
+            updateData,
           );
 
         return res.status(200).send(updatedGroupBooking);
