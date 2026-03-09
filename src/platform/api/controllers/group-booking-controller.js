@@ -113,6 +113,54 @@ class GroupBookingController {
     }
   }
 
+  static async updateGroupBooking(req, res) {
+    const tenantId = req.params.tenant;
+    const user = req.user;
+
+    try {
+      const groupBookingId = req.params.id;
+      const { status } = req.body;
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+
+      if (
+        user &&
+        (await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        const updatedGroupBooking =
+          await GroupBookingManager.updateGroupBooking(
+            tenantId,
+            groupBookingId,
+            status,
+          );
+
+        return res.status(200).send(updatedGroupBooking);
+      } else {
+        logger.error(
+          { tenantId: tenantId, user: user.id },
+          "User not allowed to update group booking",
+        );
+        res.status(403).send({
+          message: "User not allowed to update group booking",
+        });
+      }
+    } catch (error) {
+      logger.error(
+        { tenantId: tenantId, error: error.message },
+        "Error updating group booking",
+      );
+      res.status(500).send({ message: error.message });
+    }
+  }
+
   static async commitGroupBooking(req, res) {
     const tenantId = req.params.tenant;
     const user = req.user;
