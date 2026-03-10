@@ -34,10 +34,33 @@ class JSONController {
 
       bookables.reverse();
 
+      const allRelatedIds = [
+        ...new Set(bookables.flatMap((b) => b.relatedBookableIds ?? [])),
+      ];
+
+      const relatedBookables =
+        allRelatedIds.length > 0
+          ? await BookableManager.getBookablesByIds(tenantId, allRelatedIds)
+          : [];
+
+      const relatedMap = new Map(relatedBookables.map((b) => [b.id, b]));
+
+      const result = bookables.map((bookable) => {
+        const pub = bookable.exportPublic();
+        pub.relatedBookables = (bookable.relatedBookableIds ?? [])
+          .map((id) => relatedMap.get(id))
+          .filter(
+            (b) =>
+              b &&
+              b.isPublic &&
+              JSONController.hasAccess(b, identity, userRoles),
+          )
+          .map((b) => b.exportPublic());
+        return pub;
+      });
+
       res.setHeader("content-type", "application/json");
-      res
-        .status(200)
-        .send(bookables.map((bookable) => bookable.exportPublic()));
+      res.status(200).send(result);
     } catch (error) {
       res.status(500).json({
         success: false,
@@ -65,8 +88,25 @@ class JSONController {
       const hasAccess = JSONController.hasAccess(bookable, identity, userRoles);
 
       if (hasAccess) {
+        const pub = bookable.exportPublic();
+
+        const relatedBookables =
+          bookable.relatedBookableIds?.length > 0
+            ? await BookableManager.getBookablesByIds(
+                tenantId,
+                bookable.relatedBookableIds,
+              )
+            : [];
+
+        pub.relatedBookables = relatedBookables
+          .filter(
+            (b) =>
+              b.isPublic && JSONController.hasAccess(b, identity, userRoles),
+          )
+          .map((b) => b.exportPublic());
+
         res.setHeader("content-type", "application/json");
-        res.status(200).send(bookable.exportPublic());
+        res.status(200).send(pub);
       } else {
         res.status(404).json({
           success: false,
@@ -193,7 +233,6 @@ class JSONController {
     } catch {
       return false;
     }
-
   }
 }
 

@@ -5,6 +5,8 @@ const { Schema } = mongoose;
 
 const BookableSchema = new Schema(bookableSchemaDefinition);
 
+BookableSchema.index({ tenantId: 1, id: 1 });
+
 BookableSchema.methods.toEntity = function () {
   const { Bookable } = require("../../entities/bookable/bookable");
   return new Bookable(this.toObject());
