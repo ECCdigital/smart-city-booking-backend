@@ -211,6 +211,11 @@ router.get(
   AuthenticationController.isSignedIn,
   GroupBookingController.getGroupBooking,
 );
+router.put(
+  "/group-bookings/:id",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.updateGroupBooking,
+);
 router.post(
   "/group-bookings/:id/commit",
   AuthenticationController.isSignedIn,
