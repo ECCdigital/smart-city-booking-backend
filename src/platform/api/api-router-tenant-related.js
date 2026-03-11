@@ -11,6 +11,7 @@ const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
+const AccessController = require("./controllers/access-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const {
   GroupBookingController,
@@ -490,6 +491,22 @@ router.post(
   "/locker/:provider/test",
   AuthenticationController.isSignedIn,
   LockerController.testConnection,
+);
+
+router.post(
+  "/bookings/:bookingId/access/:accessPointId/open",
+  AuthenticationController.isSignedIn,
+  AccessController.open,
+);
+router.get(
+  "/bookings/:bookingId/access/:accessPointId/open-status",
+  AuthenticationController.isSignedIn,
+  AccessController.getOpenStatus,
+);
+router.get(
+  "/bookings/:bookingId/access-points",
+  AuthenticationController.isSignedIn,
+  AccessController.getAccessPoints,
 );
 
 module.exports = router;

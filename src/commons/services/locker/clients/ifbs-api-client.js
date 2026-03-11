@@ -1,6 +1,7 @@
 const axios = require("axios");
 const bunyan = require("bunyan");
 const BaseLockerApiClient = require("./base-locker-api-client");
+const IfbsApiError = require("./ifbs-api-error");
 
 const logger = bunyan.createLogger({
   name: "ifbs-api-client.js",
@@ -8,10 +9,11 @@ const logger = bunyan.createLogger({
 });
 
 class IfbsApiClient extends BaseLockerApiClient {
-  constructor(serverUrl, apiKey, secretPhrase) {
+  constructor(serverUrl, apiKey, secretPhrase, options = {}) {
     super(serverUrl);
     this.apiKey = apiKey;
     this.secretPhrase = secretPhrase;
+    this.defaultTimeout = options.defaultTimeout || 30000;
   }
 
   async getLocationsStat() {
@@ -40,12 +42,6 @@ class IfbsApiClient extends BaseLockerApiClient {
   }
 
   async getBox(locationId, start, end, userID = 1) {
-    console.log("Requesting box with params:", {
-      locationId,
-      start,
-      end,
-      userID,
-    })
     try {
       const response = await this._get("getBox.php", {
         location: locationId,
@@ -53,7 +49,6 @@ class IfbsApiClient extends BaseLockerApiClient {
         DATEto: end,
         User_ID: userID,
       });
-      console.log("Received box response:", response);
       const { success, ...boxInfo } = response;
       return boxInfo;
     } catch (err) {
@@ -63,18 +58,11 @@ class IfbsApiClient extends BaseLockerApiClient {
   }
 
   async bookIt(bookingID, checksum) {
-
-    console.log("Booking with params:", {
-      bookingID,
-      checksum,
-    })
-
     const response = await this._get("bookIt.php", {
       ID: bookingID,
       c: checksum,
     });
     const { success, ...bookingResult } = response;
-    console.log("Booking result:", bookingResult);
     return bookingResult;
   }
 
@@ -109,8 +97,51 @@ class IfbsApiClient extends BaseLockerApiClient {
     return response;
   }
 
+  async openBox(bookingID) {
+    const response = await this._get("openBox.php", {
+      ID: bookingID,
+    });
+    const { success, ...result } = response;
+    logger.info(`OpenBox command sent for booking ${bookingID}`);
+    return result;
+  }
+
+  async monitorOpenBox(openBoxID) {
+    const response = await this._get("monitorOpenBox.php", {
+      OpenBox_ID: openBoxID,
+    });
+    const { success, ...result } = response;
+    return result;
+  }
+
+  async waitForOpenBox(openBoxID, timeout = 20) {
+    const response = await this._get(
+      "waitForOpenBox.php",
+      {
+        OpenBox_ID: openBoxID,
+        TimeOut: timeout,
+      },
+      { timeout: (timeout + 10) * 1000 },
+    );
+    const { success, ...result } = response;
+    return result;
+  }
   static get capabilities() {
-    return ["getLocations", "getLocationsStat", "getLocationById", "getPrice" , "getBox", "bookIt", "extendUsage", "confirmExtension", "cancelUsage", "endUsage"];
+    return [
+      "getLocations",
+      "getLocationsStat",
+      "getLocationById",
+      "getPrice",
+      "getBox",
+      "bookIt",
+      "extendUsage",
+      "confirmExtension",
+      "cancelUsage",
+      "endUsage",
+      "openBox",
+      "monitorOpenBox",
+      "waitForOpenBox",
+    ];
   }
 
   static async testConnection(serverUrl, apiKey) {
@@ -133,24 +164,24 @@ class IfbsApiClient extends BaseLockerApiClient {
   }
 
   /** @private */
-  async _get(endpoint, params = {}) {
+  async _get(endpoint, params = {}, options = {}) {
     const url = `${this.baseUrl}/${endpoint}`;
+    const timeout = options.timeout || this.defaultTimeout || 10000;
     try {
       const response = await axios.get(url, {
         params: { key: this.apiKey, ...params },
         headers: { "Content-Type": "application/json" },
-        timeout: 10000,
+        timeout,
       });
 
       const data = response.data;
       if (data.success === "false" || data.success === false) {
-        throw new Error(
-          `IFBS API error on ${endpoint}: ${JSON.stringify(data)}`,
-        );
+        throw new IfbsApiError(endpoint, data);
       }
 
       return data;
     } catch (err) {
+      if (err instanceof IfbsApiError) throw err;
       logger.error(`IFBS API request failed: ${endpoint} - ${err.message}`);
       throw err;
     }

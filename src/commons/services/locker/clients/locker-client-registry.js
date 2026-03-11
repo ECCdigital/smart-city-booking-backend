@@ -1,5 +1,5 @@
 const {
-  createLockerApplication, LockerApplication,
+  createLockerApplication,
 } = require("../../../entities/application/lockerApplication");
 
 const registry = {};
