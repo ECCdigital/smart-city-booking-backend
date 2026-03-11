@@ -121,6 +121,25 @@ class BookingController {
     }
   }
 
+  static async getBookingIcal(request, response) {
+      try {
+          const bookingId = request.params.id;
+
+            console.log(`Received request for iCal download with booking ID: ${bookingId}`);
+
+            if (!bookingId) {
+                logger.warn(`Could not get booking iCal. Missing booking ID.`);
+                return response.sendStatus(400);
+            }
+//toDo - add logic and adjust response to return actual iCal data
+
+          return response.status(200).send("iCal data for booking " + bookingId);
+      } catch (error){
+          logger.warn(error);
+          response.status(500).send("could not get booking ical");
+      }
+  }
+
   /**
    * Get all Bookings assigned to the current user.
    * @param request

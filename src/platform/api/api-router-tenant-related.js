@@ -137,6 +137,11 @@ router.get(
   BookingController.getBooking,
 );
 
+router.get(
+    "/bookings/:id/ical",
+    BookingController.getBookingIcal
+)
+
 router.delete(
   "/bookings/:id",
   AuthenticationController.isSignedIn,
