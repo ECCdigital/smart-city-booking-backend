@@ -54,6 +54,26 @@ class EventController {
     }
   }
 
+  static async getEventIcal(request, response) {
+      try {
+          const eventId = request.params.id;
+
+          console.log(`Received request for iCal download with event ID: ${eventId}`);
+
+        if (!eventId) {
+          logger.warn(`Could not get event iCal. Missing event ID.`);
+          return response.sendStatus(400);
+        }
+
+        //toDo - add logic and adjust response to return actual iCal data
+
+          return response.status(200).send("iCal data for event " + eventId);
+      } catch (error){
+        logger.warn(error);
+        response.status(500).send("could not get event ical");
+      }
+  }
+
   static async getBookedSeatsCount(request, response) {
     try {
       const tenant = request.params.tenant;

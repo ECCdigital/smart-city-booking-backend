@@ -82,7 +82,10 @@ router.get(
 
 // Public
 router.get("/events", EventController.getEvents);
+
 router.get("/events/:id", EventController.getEvent);
+
+router.get("/events/:id/ical", EventController.getEventIcal);
 router.get("/events/:id/bookings", BookingController.getEventBookings);
 
 // Protected
