@@ -9,6 +9,32 @@ const logger = bunyan.createLogger({
 });
 
 class PaymentController {
+  /**
+   * Resolves booking IDs - if an ID starts with "G-", it's a group booking
+   * and we fetch the actual booking IDs from the group.
+   */
+  static async _resolveBookingIds(tenantId, ids) {
+    const resolvedIds = [];
+
+    for (const id of ids) {
+      if (id.startsWith("G-")) {
+        const groupBooking = await GroupBookingManager.getGroupBooking(
+          tenantId,
+          id,
+        );
+        if (groupBooking && groupBooking.bookingIds) {
+          resolvedIds.push(...groupBooking.bookingIds);
+        } else {
+          logger.warn(`${tenantId} -- could not resolve group booking ${id}`);
+        }
+      } else {
+        resolvedIds.push(id);
+      }
+    }
+
+    return resolvedIds;
+  }
+
   static async createPayment(request, response) {
     const {
       params: { tenant: tenantId },
@@ -89,6 +115,11 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
+    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+      tenantId,
+      aggregatedBookingIds,
+    );
+
     const bookings = await BookingManager.getBookings(
       tenantId,
       aggregatedBookingIds,
@@ -147,6 +178,11 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
+    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+      tenantId,
+      aggregatedBookingIds,
+    );
+
     const bookings = await BookingManager.getBookings(
       tenantId,
       aggregatedBookingIds,
@@ -203,6 +239,12 @@ class PaymentController {
     if (bookingId) {
       aggregatedBookingIds.push(bookingId);
     }
+
+    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+      tenantId,
+      aggregatedBookingIds,
+    );
+
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
     const bookings = await BookingManager.getBookings(
