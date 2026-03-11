@@ -78,6 +78,7 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
           this.locationId,
           startDate,
           endDate,
+          this.userID,
         );
         return Math.round((Number(boxInfo.price) || 0) * 100) / 100;
       } catch (err) {

@@ -70,6 +70,7 @@ class ItemCheckoutService {
    * @param {number} amount The amount of the booking
    * @param {string || null} couponCode The coupon code
    * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations.
+   * @param {string} checkoutId The ID of the checkout process, used for correlating logs and operations. Optional.
    *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
    */
   constructor(
@@ -81,6 +82,7 @@ class ItemCheckoutService {
     amount,
     couponCode,
     bookWithPrice,
+    checkoutId,
   ) {
     this.user = user;
     this.tenantId = tenantId;
@@ -91,6 +93,7 @@ class ItemCheckoutService {
     this.couponCode = couponCode;
     this.originBookable = null;
     this.bookWithPrice = bookWithPrice ?? true;
+    this.checkoutId = checkoutId;
     this._cache = new Map();
   }
 
@@ -147,6 +150,7 @@ class ItemCheckoutService {
 
       providers.push(
         providerRegistry.resolve(unit.lockerSystem, client, {
+          userID: this.checkoutId,
           bookable: this.originBookable,
           unit,
           timeBegin: this.timeBegin,
@@ -1027,6 +1031,7 @@ class ManualItemCheckoutService extends ItemCheckoutService {
   async init(originBookable) {
     this.originBookable =
       JSON.parse(JSON.stringify(originBookable)) ?? (await super.getBookable());
+    this.externalProviders = await this._resolveExternalProviders();
   }
 }
 

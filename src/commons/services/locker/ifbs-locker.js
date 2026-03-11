@@ -16,19 +16,17 @@ class IfbsLocker extends BaseLocker {
   async getClient(provider = "ifbs") {
     const tenant = await TenantManager.getTenant(this.tenantId);
     const rawApp = tenant.applications.find(
-      (a) =>
-        a.type === APP_TYPE && a.id === provider && a.active,
+      (a) => a.type === APP_TYPE && a.id === provider && a.active,
     );
 
     if (!rawApp) {
       throw new Error(
         `No active locker application '${provider}' ` +
-        `found for tenant '${this.tenantId}'`,
+          `found for tenant '${this.tenantId}'`,
       );
     }
 
-    //this._secretPhrase = rawApp.secretPhrase;
-    this._secretPhrase = "IamSecret";
+    this._secretPhrase = rawApp.secretPhrase;
     return createClient(rawApp);
   }
 
@@ -38,39 +36,23 @@ class IfbsLocker extends BaseLocker {
     const client = await this.getClient();
 
     const user = await getUser(booking.assignedUserId);
-    let userID = 1; // Default user ID for iFBS
-    if(user && user._id) {
-      userID = typeof user._id === 'string' ? user._id : user._id.toString();
+    let userID = 1;
+    if (user && user._id) {
+      userID =
+        typeof user._id === "string"
+          ? "01" + user._id
+          : "01" + user._id.toString();
     }
-
 
     const dateFrom = IfbsLocker.formatDate(timeBegin);
     const dateTo = IfbsLocker.formatDate(timeEnd);
 
-    console.log("Starting reservation with params:", {
-      lockerId: locker,
-      dateFrom,
-      dateTo,
-      userID,
-    });
-
-
-    // 1) getBox – reserviert für 2 Min beim iFBS-Server
-    const boxResult = await client.getBox(
-      locker.id, // locationId
-      dateFrom,
-      dateTo,
-      userID
-    );
-
+    const boxResult = await client.getBox(locker.id, dateFrom, dateTo, userID);
 
     if (!boxResult.Booking_ID) {
-      throw new Error(
-        `No available box at location ${locker.id}`,
-      );
+      throw new Error(`No available box at location ${locker.id}`);
     }
 
-    // 2) Checksum berechnen und bookIt aufrufen
     const checksum = IfbsLocker.calculateChecksum(
       boxResult.nummer,
       dateFrom,
@@ -78,16 +60,9 @@ class IfbsLocker extends BaseLocker {
       this._secretPhrase,
     );
 
-    console.log("Calculated checksum:", checksum);
+    const bookingResult = await client.bookIt(boxResult.Booking_ID, checksum);
 
-    const bookingResult = await client.bookIt(
-      boxResult.Booking_ID,
-      checksum,
-    );
-
-    locker.processId = String(
-      bookingResult.Booking_ID ?? boxResult.Booking_ID,
-    );
+    locker.processId = String(bookingResult.Booking_ID ?? boxResult.Booking_ID);
     locker.isConfirmed = true;
     locker.ifbsMetadata = {
       boxId: boxResult.Box_ID,
@@ -96,9 +71,7 @@ class IfbsLocker extends BaseLocker {
       bookingId: boxResult.Booking_ID,
     };
 
-    logger.info(
-      `iFBS booking confirmed: processId=${locker.processId}`,
-    );
+    logger.info(`iFBS booking confirmed: processId=${locker.processId}`);
     return locker;
   }
 
@@ -131,20 +104,18 @@ class IfbsLocker extends BaseLocker {
       return { success: true, processId };
     } catch (err) {
       logger.error(
-        `iFBS cancel failed for processId ${processId}: ` +
-        err.message,
+        `iFBS cancel failed for processId ${processId}: ` + err.message,
       );
       return { success: false, processId };
     }
   }
 
   getLocker(booking, processId) {
-    console.log("lockerInfo", booking.lockerInfo)
+    console.log("lockerInfo", booking.lockerInfo);
     const locker = booking.lockerInfo.find(
       (l) =>
         l.id === this.id &&
-        (processId === undefined ||
-          l.processId === processId),
+        (processId === undefined || l.processId === processId),
     );
     if (!locker) throw new Error("Locker not found");
     return locker;
@@ -167,13 +138,7 @@ class IfbsLocker extends BaseLocker {
    * MD5 laut iFBS-Spec:
    * md5(nummer + urlEncode(DATEfrom) + urlEncode(DATEto) + secretPhrase)
    */
-  static calculateChecksum(
-    nummer,
-    dateFrom,
-    dateTo,
-    secretPhrase,
-  ) {
-
+  static calculateChecksum(nummer, dateFrom, dateTo, secretPhrase) {
     console.log("Calculating checksum with values:", {
       nummer,
       dateFrom,
@@ -184,12 +149,8 @@ class IfbsLocker extends BaseLocker {
     const encode = (value) =>
       new URLSearchParams({ v: value }).toString().slice(2);
 
-
     const raw =
-      String(nummer) +
-      encode(dateFrom) +
-      encode(dateTo) +
-      secretPhrase;
+      String(nummer) + encode(dateFrom) + encode(dateTo) + secretPhrase;
 
     return crypto.createHash("md5").update(raw).digest("hex");
   }

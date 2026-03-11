@@ -223,12 +223,10 @@ class BookingService {
       logger.info(
         `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
       );
-      console.log("Booking commit condition:", booking)
 
-      if (booking.isCommitted ) {
+      if (booking.isCommitted && booking.isPayed ) {
         try {
           const lockerServiceInstance = LockerService.getInstance();
-          console.log("Attempting to create locker reservation for booking:", lockerServiceInstance);
           await lockerServiceInstance.handleCreate(
             booking.tenantId,
             booking.id,

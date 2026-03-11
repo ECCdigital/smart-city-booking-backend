@@ -20,6 +20,13 @@ class UserManager {
     return user;
   }
 
+  static async getRawUser(id) {
+    const rawUser = await UserModel.findOne({
+      id: { $regex: id, $options: "i" },
+    });
+    return rawUser;
+  }
+
   static async signupUser(user) {
     try {
       const userEntity = user instanceof User ? user : new User(user);

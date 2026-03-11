@@ -56,17 +56,20 @@ class ifbsLockerApplication extends LockerApplication {
     super(params);
     this.apiKeyID = params.apiKeyID || "";
     this.apiKey = params.apiKey || null;
+    this.secretPhrase = params.secretPhrase || "";
   }
 
   decrypt() {
     if (this.apiKey) {
       this.apiKey = SecurityUtils.decrypt(this.apiKey);
+      this.secretPhrase = SecurityUtils.decrypt(this.secretPhrase);
     }
   }
 
   encrypt() {
     if (this.apiKey) {
       this.apiKey = SecurityUtils.encrypt(this.apiKey);
+      this.secretPhrase = SecurityUtils.encrypt(this.secretPhrase);
     }
   }
 

@@ -4,6 +4,7 @@ class BaseCheckoutProvider {
    * @param {Object} context - { bookable, unit, timeBegin, timeEnd, amount, tenantId }
    */
   constructor(client, context) {
+    this.userID = context.userID;
     this.client = client;
     this.bookable = context.bookable;
     this.unit = context.unit;

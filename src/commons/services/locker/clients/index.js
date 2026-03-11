@@ -3,10 +3,10 @@ const { registerTestHandler } = require("./locker-test-registry");
 const IfbsApiClient = require("./ifbs-api-client");
 const ParevaApiClient = require("./pareva-api-client");
 
-// Client registry
 registerClient("ifbs", IfbsApiClient, (app) => [
   app.serverUrl,
   app.apiKey,
+  app.secretPhrase,
 ]);
 
 registerClient("pareva", ParevaApiClient, (app) => [
@@ -16,7 +16,6 @@ registerClient("pareva", ParevaApiClient, (app) => [
   app.password,
 ]);
 
-// Test handlers
 registerTestHandler("ifbs", {
   requiredFields: ["serverUrl", "apiKey"],
   handler: ({ serverUrl, apiKey }) => {

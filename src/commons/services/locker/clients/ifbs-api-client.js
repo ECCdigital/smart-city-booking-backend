@@ -8,9 +8,10 @@ const logger = bunyan.createLogger({
 });
 
 class IfbsApiClient extends BaseLockerApiClient {
-  constructor(serverUrl, apiKey) {
+  constructor(serverUrl, apiKey, secretPhrase) {
     super(serverUrl);
     this.apiKey = apiKey;
+    this.secretPhrase = secretPhrase;
   }
 
   async getLocationsStat() {
@@ -93,8 +94,23 @@ class IfbsApiClient extends BaseLockerApiClient {
     return response;
   }
 
+  async cancelUsage(bookingID) {
+    const response = await this._get("cancelUsage.php", {
+      ID: bookingID,
+    });
+    return response;
+  }
+
+  async endUsage(bookingID, dateTo) {
+    const response = await this._get("endUsage.php", {
+      ID: bookingID,
+      ...(dateTo ? { DATEto: dateTo } : {}),
+    });
+    return response;
+  }
+
   static get capabilities() {
-    return ["getLocations", "getLocationsStat", "getLocationById", "getPrice" , "getBox", "bookIt", "extendUsage", "confirmExtension"];
+    return ["getLocations", "getLocationsStat", "getLocationById", "getPrice" , "getBox", "bookIt", "extendUsage", "confirmExtension", "cancelUsage", "endUsage"];
   }
 
   static async testConnection(serverUrl, apiKey) {
