@@ -27,6 +27,27 @@ class BaseLocker {
   }
 
   /**
+   * Pre-reserves a locker without fully confirming.
+   * Default implementation: soft local reservation only.
+   * Subclasses can override for systems that support a
+   * temporary hold (e.g. iFBS getBox).
+   *
+   * @param {number} timeBegin
+   * @param {number} timeEnd
+   * @returns {Object} The locker info object (unconfirmed).
+   */
+  async preReserve(timeBegin, timeEnd) {
+    const booking = await this.getBooking();
+    const locker = this.getLocker(booking);
+
+    locker.processId = null;
+    locker.isConfirmed = false;
+    locker.preReservedAt = Date.now();
+
+    return locker;
+  }
+
+  /**
    * Starts a new reservation.
    * This method should be overridden by subclasses.
    */
@@ -48,6 +69,23 @@ class BaseLocker {
 }
 
 class ParevaLocker extends BaseLocker {
+  /**
+   * Pre-reserves a Pareva locker.
+   * Pareva has no server-side hold, so this is a local-only
+   * reservation. The actual API call happens in startReservation
+   * once payment is confirmed.
+   */
+  async preReserve(timeBegin, timeEnd) {
+    const booking = await this.getBooking();
+    const locker = this.getLocker(booking);
+
+    locker.processId = null;
+    locker.isConfirmed = false;
+    locker.preReservedAt = Date.now();
+
+    return locker;
+  }
+
   async startReservation(timeBegin, timeEnd) {
     try {
       const booking = await this.getBooking();
@@ -58,7 +96,6 @@ class ParevaLocker extends BaseLocker {
       const { user: username, password, serverUrl, lockerId } = parevaApp;
 
       const tenantMail = tenant.mail;
-
       const { mail: userEmail } = booking;
       const productId = locker.id;
 
@@ -94,6 +131,7 @@ class ParevaLocker extends BaseLocker {
 
       locker.processId = response.data.processId;
       locker.isConfirmed = true;
+      delete locker.preReservedAt;
       return locker;
     } catch (err) {
       throw new Error(`${err.message}`);
@@ -125,10 +163,7 @@ class ParevaLocker extends BaseLocker {
       );
 
       if (!processId) {
-        return {
-          success: false,
-          processId: null,
-        };
+        return { success: false, processId: null };
       }
 
       const config = this.createAxiosConfig(
@@ -140,18 +175,12 @@ class ParevaLocker extends BaseLocker {
       const response = await axios.request(config);
 
       if (response.status !== 200 || response.data.success !== true) {
-        return {
-          success: false,
-          processId: locker.processId,
-        };
+        return { success: false, processId: locker.processId };
       }
 
       return { success: true, processId: locker.processId };
     } catch (err) {
-      return {
-        success: false,
-        processId: processId,
-      };
+      return { success: false, processId };
     }
   }
 

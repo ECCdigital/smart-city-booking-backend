@@ -211,6 +211,114 @@ class LockerService {
   }
 
   /**
+   * Handles the pre-reservation of iFBS lockers for unpaid bookings.
+   * Calls getBox to hold the box for ~2 minutes without confirming (bookIt).
+   *
+   * @async
+   * @param {string} tenantId - The ID of the tenant.
+   * @param {string} bookingId - The ID of the booking.
+   */
+  async handlePreReserve(tenantId, bookingId) {
+    try {
+      const booking = await getBooking(bookingId, tenantId);
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+
+      const lockerUnits = LockerService.assignedLocker(booking);
+      const unconfirmedUnits = lockerUnits.filter((unit) => !unit.isConfirmed);
+
+      if (unconfirmedUnits.length === 0) {
+        return;
+      }
+
+      for (const unit of unconfirmedUnits) {
+        const locker = createLocker(
+          unit.lockerSystem,
+          booking.tenantId,
+          booking.id,
+          unit.id,
+        );
+
+        const updatedLockerInfo = await locker.preReserve(
+          booking.timeBegin,
+          booking.timeEnd,
+        );
+
+        booking.lockerInfo = booking.lockerInfo.map((l) =>
+          l.id === updatedLockerInfo.id &&
+          l.lockerSystem === updatedLockerInfo.lockerSystem
+            ? updatedLockerInfo
+            : l,
+        );
+
+        LockerService.freeReservedLocker(
+          booking.tenantId,
+          unit.id,
+          unit.lockerSystem,
+          booking.timeBegin,
+          booking.timeEnd,
+        );
+      }
+
+      logger.info(
+        `Pre-reserved lockers for booking ${bookingId}: ` +
+          JSON.stringify(booking.lockerInfo),
+      );
+
+      await BookingManager.storeBooking(booking);
+    } catch (error) {
+      throw new Error(`Error in pre-reserving lockers: ${error.message}`);
+    }
+  }
+
+  /**
+   * Refreshes all iFBS pre-reservations for the given bookings.
+   * Calls preReserve again to get a fresh 2-min hold.
+   * Throws if no box is available anymore.
+   *
+   * @async
+   * @param {string} tenantId
+   * @param {string[]} bookingIds
+   */
+  async refreshPreReservations(tenantId, bookingIds) {
+    for (const bookingId of bookingIds) {
+      const booking = await getBooking(bookingId, tenantId);
+      if (!booking) continue;
+
+      const lockerUnits = LockerService.assignedLocker(booking);
+      const ifbsUnits = lockerUnits.filter(
+        (unit) => unit.lockerSystem === "ifbs" && !unit.isConfirmed,
+      );
+
+      if (ifbsUnits.length === 0) continue;
+
+      for (const unit of ifbsUnits) {
+        const locker = createLocker(
+          unit.lockerSystem,
+          booking.tenantId,
+          booking.id,
+          unit.id,
+        );
+
+        const updatedLockerInfo = await locker.preReserve(
+          booking.timeBegin,
+          booking.timeEnd,
+        );
+
+        booking.lockerInfo = booking.lockerInfo.map((l) =>
+          l.id === updatedLockerInfo.id &&
+          l.lockerSystem === updatedLockerInfo.lockerSystem
+            ? updatedLockerInfo
+            : l,
+        );
+      }
+
+      await BookingManager.storeBooking(booking);
+    }
+  }
+
+  /**
    * Handles the creation of the locker for the given tenantId and bookingId.
    * It throws an error if the booking is not found or if there is an error in getting the booking.
    * @param {string} tenantId - The ID of the tenant.
@@ -620,15 +728,21 @@ class LockerService {
     logger.info(`Locker cancellation results: ${JSON.stringify(results)}`);
 
     for (const result of results) {
-      if (result.success) {
-        const locker = booking.lockerInfo.find(
-          (locker) => locker.processId === result.processId,
-        );
-        if (locker) {
-          locker.isConfirmed = false;
-          locker.processId = null;
-        }
+      if (!result.success) {
+        continue;
       }
+
+      booking.lockerInfo = booking.lockerInfo.map((locker) =>
+        locker.processId === result.processId
+          ? {
+              isConfirmed: false,
+              processId: null,
+              lockerSystem: locker.lockerSystem,
+              id: locker.id,
+              bookableId: locker.bookableId,
+            }
+          : locker,
+      );
     }
 
     await BookingManager.storeBooking(booking);

@@ -44,7 +44,6 @@ class LockerController {
 
       const config = request.body;
 
-
       const {
         testProvider,
       } = require("../../../commons/services/locker/clients/locker-test-registry");
@@ -55,7 +54,10 @@ class LockerController {
         `${tenant} -- ${provider} connection test by user ${user?.id}: ${result.success}`,
       );
 
-      console.log(`Locker connection test result for tenant ${tenant}, provider ${provider}:`, result);
+      console.log(
+        `Locker connection test result for tenant ${tenant}, provider ${provider}:`,
+        result,
+      );
 
       response.status(200).send(result);
     } catch (err) {

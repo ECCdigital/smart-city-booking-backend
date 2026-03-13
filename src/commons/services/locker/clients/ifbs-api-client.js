@@ -33,6 +33,13 @@ class IfbsApiClient extends BaseLockerApiClient {
     return response.location || null;
   }
 
+  async getBookings(locationId) {
+    const response = await this._get("getBookings4Location.php", {
+      LocationID: locationId,
+    });
+    return response.boxes || [];
+  }
+
   async getPrice(locationId) {
     const response = await this._get("getPrice.php", {
       location: locationId,
@@ -141,6 +148,7 @@ class IfbsApiClient extends BaseLockerApiClient {
       "openBox",
       "monitorOpenBox",
       "waitForOpenBox",
+      "getBookings"
     ];
   }
 

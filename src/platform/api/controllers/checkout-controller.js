@@ -8,44 +8,15 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
-const UserManager = require("../../../commons/data-managers/user-manager");
-const crypto = require("crypto");
+const {
+  resolveCheckoutId,
+} = require("../../../commons/utilities/checkout-utils");
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
   level: process.env.LOG_LEVEL,
 });
 
 class CheckoutController {
-  /**
-   * Resolves the checkoutId based on priority:
-   * 1. Explicit checkoutId from request
-   * 2. rawUser.id if user is authenticated
-   * 3. Generate a new UUID
-   *
-   * @returns {{ checkoutId: string, generated: boolean }}
-   */
-  static async _resolveCheckoutId(checkoutId, user, tenantId) {
-    if (checkoutId) {
-      return { checkoutId, generated: false };
-    }
-
-    if (user) {
-      const rawUser = await UserManager.getRawUser(user.id, tenantId);
-      if (rawUser) {
-        const id = typeof rawUser._id === "string" ? rawUser._id : rawUser._id.toString();
-
-
-        return { checkoutId: id, generated: false };
-      }
-    }
-
-    return {
-      checkoutId: crypto.randomBytes(8).toString("hex"),
-      generated: true,
-    };
-  }
-
-
   static async validateItem(request, response) {
     const tenantId = request.params.tenant;
     const user = request.user;
@@ -66,29 +37,28 @@ class CheckoutController {
       return response.status(400).send("Missing parameters");
     }
 
-    const { checkoutId, generated } =
-      await CheckoutController._resolveCheckoutId(
-        requestCheckoutId,
-        user,
-        tenantId,
-      );
+    const { checkoutId, generated } = await resolveCheckoutId(
+      requestCheckoutId,
+      user.id,
+      tenantId,
+    );
 
     //TODO: Move this to a service
 
     let itemCheckoutService = null;
 
     try {
-      itemCheckoutService = new ItemCheckoutService(
-        user?.id,
+      itemCheckoutService = new ItemCheckoutService({
+        user: user?.id,
         tenantId,
         timeBegin,
         timeEnd,
         bookableId,
-        parseInt(amount),
+        amount: parseInt(amount),
         couponCode,
         bookWithPrice,
         checkoutId,
-      );
+      });
 
       await itemCheckoutService.init();
       await itemCheckoutService.checkAll();
@@ -139,6 +109,15 @@ class CheckoutController {
     const tenantId = request.params.tenant;
     const user = request.user;
     const simulate = request.query.simulate === "true";
+
+    const { checkoutId: requestCheckoutId } = request.body;
+
+    const { checkoutId } = await resolveCheckoutId(
+      requestCheckoutId,
+      user.id,
+      tenantId,
+    );
+
     try {
       return response.status(200).send(
         await BookingService.createSingleBooking({
@@ -146,6 +125,7 @@ class CheckoutController {
           user,
           bookingAttempt: request.body,
           simulate,
+          checkoutId,
         }),
       );
     } catch (err) {

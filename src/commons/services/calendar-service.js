@@ -11,6 +11,7 @@ class CalendarService {
     amount,
     user,
   ) {
+    const externalCache = new Map();
     const startDate = start ? new Date(start) : new Date();
     const endDate = end
       ? new Date(end)
@@ -125,6 +126,7 @@ class CalendarService {
           bookableId,
           user,
           Number(amount),
+          externalCache
         );
       } else {
         items.push({
@@ -216,6 +218,7 @@ async function checkAvailabilityIterative(
   bookableId,
   user,
   amount,
+  externalCache
 ) {
   const SEGMENT_MIN_LENGTH = 10 * 60 * 1000;
   const queue = [{ start: initialStart, end: initialEnd }];
@@ -231,15 +234,15 @@ async function checkAvailabilityIterative(
     let ics = null;
 
     try {
-      ics = new ItemCheckoutService(
-        user?.id,
+      ics = new ItemCheckoutService({
+        user: user?.id,
         tenantId,
-        start,
-        end,
+        timeBegin: start,
+        timeEnd: end,
         bookableId,
         amount,
-        null,
-      );
+        externalCache
+      });
       await ics.init();
 
       await ics.checkPermissions();
@@ -252,18 +255,6 @@ async function checkAvailabilityIterative(
 
       items.push({ timeBegin: start, timeEnd: end, available: true });
     } catch (error) {
-
-      const externalSource = error?.externalSource
-
-      if (externalSource) {
-        items.push({
-          timeBegin: start,
-          timeEnd: end,
-          available: false,
-        });
-        continue;
-      }
-
       const { concurrentBookings } = error;
 
       if (concurrentBookings?.length === 1) {
@@ -965,15 +956,14 @@ async function checkSegmentAvailability(
   let ics = null;
 
   try {
-    ics = new ItemCheckoutService(
-      user?.id,
+    ics = new ItemCheckoutService({
+      user: user?.id,
       tenantId,
-      start,
-      end,
+      timeBegin: start,
+      timeEnd: end,
       bookableId,
       amount,
-      null,
-    );
+    });
     await ics.init();
 
     await ics.checkPermissions();

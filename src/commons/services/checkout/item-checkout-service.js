@@ -71,9 +71,10 @@ class ItemCheckoutService {
    * @param {string || null} couponCode The coupon code
    * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations.
    * @param {string} checkoutId The ID of the checkout process, used for correlating logs and operations. Optional.
+   * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
    *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
    */
-  constructor(
+  constructor({
     user,
     tenantId,
     timeBegin,
@@ -83,7 +84,8 @@ class ItemCheckoutService {
     couponCode,
     bookWithPrice,
     checkoutId,
-  ) {
+    externalCache,
+  }) {
     this.user = user;
     this.tenantId = tenantId;
     this.timeBegin = timeBegin;
@@ -94,6 +96,7 @@ class ItemCheckoutService {
     this.originBookable = null;
     this.bookWithPrice = bookWithPrice ?? true;
     this.checkoutId = checkoutId;
+    this.externalCache = externalCache || new Map();
     this._cache = new Map();
   }
 
@@ -157,6 +160,7 @@ class ItemCheckoutService {
           timeEnd: this.timeEnd,
           amount: this.amount,
           tenantId: this.tenantId,
+          externalCache: this.externalCache
         }),
       );
     }
@@ -595,7 +599,7 @@ class ItemCheckoutService {
           available: false,
           message:
             result.message ||
-            `${this.originBookable.title} ist nicht verfügbar.`,
+            `${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
           externalSource: true,
           ...result,
         };
@@ -1016,7 +1020,7 @@ class ItemCheckoutService {
 }
 
 class ManualItemCheckoutService extends ItemCheckoutService {
-  constructor(
+  constructor({
     user,
     tenantId,
     timeBegin,
@@ -1024,8 +1028,16 @@ class ManualItemCheckoutService extends ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
-  ) {
-    super(user, tenantId, timeBegin, timeEnd, bookableId, amount, couponCode);
+  }) {
+    super({
+      user,
+      tenantId,
+      timeBegin,
+      timeEnd,
+      bookableId,
+      amount,
+      couponCode,
+    });
   }
 
   async init(originBookable) {

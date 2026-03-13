@@ -476,13 +476,13 @@ router.get(
 );
 
 router.get(
-  "/locker/:provider/locations/:id",
+  "/locker/:provider/locations/:locationId",
   AuthenticationController.isSignedIn,
   LockerController.getLocationById,
 );
 
 router.get(
-  "/locker/:provider/locations/:id/price",
+  "/locker/:provider/locations/:locationId/price",
   AuthenticationController.isSignedIn,
   LockerController.getPrice,
 );

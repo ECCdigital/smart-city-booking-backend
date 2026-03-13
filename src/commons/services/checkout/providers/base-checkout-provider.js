@@ -12,14 +12,27 @@ class BaseCheckoutProvider {
     this.timeEnd = context.timeEnd;
     this.amount = context.amount;
     this.tenantId = context.tenantId;
+    this.externalCache = context.externalCache || new Map();
     this._cache = new Map();
   }
 
+  /** Per-instance cache. */
   _cached(key, fn) {
     if (!this._cache.has(key)) {
       this._cache.set(key, fn());
     }
     return this._cache.get(key);
+  }
+
+  /**
+   * Shared cache across all provider instances in the same
+   * CalendarService.checkAvailability call.
+   */
+  _sharedCached(key, fn) {
+    if (!this.externalCache.has(key)) {
+      this.externalCache.set(key, fn());
+    }
+    return this.externalCache.get(key);
   }
 
   async checkAvailability() {

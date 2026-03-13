@@ -3,7 +3,7 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const { createClient } = require("./clients/locker-client-registry");
 const crypto = require("crypto");
 const bunyan = require("bunyan");
-const { getUser } = require("../../data-managers/user-manager");
+const { getRawUser } = require("../../data-managers/user-manager");
 
 const APP_TYPE = "locker";
 
@@ -30,28 +30,58 @@ class IfbsLocker extends BaseLocker {
     return createClient(rawApp);
   }
 
+  // ifbs-locker.js – angepasste startReservation
+
   async startReservation(timeBegin, timeEnd) {
     const booking = await this.getBooking();
     const locker = this.getLocker(booking);
     const client = await this.getClient();
 
-    const user = await getUser(booking.assignedUserId);
-    let userID = 1;
-    if (user && user._id) {
-      userID =
-        typeof user._id === "string"
-          ? "01" + user._id
-          : "01" + user._id.toString();
+    let boxResult;
+
+    // Prüfen ob bereits eine Pre-Reservation existiert
+    if (locker.ifbsMetadata?.bookingId && !locker.isConfirmed) {
+      const preReservedAt = locker.ifbsMetadata.preReservedAt || 0;
+      const isStillValid = Date.now() - preReservedAt < 2 * 60 * 1000;
+
+      if (isStillValid) {
+        boxResult = {
+          Booking_ID: locker.ifbsMetadata.bookingId,
+          Box_ID: locker.ifbsMetadata.boxId,
+          nummer: locker.ifbsMetadata.nummer,
+          price: locker.ifbsMetadata.price,
+        };
+        logger.info(
+          `iFBS using existing pre-reservation: Booking_ID=${boxResult.Booking_ID}`,
+        );
+      } else {
+        logger.info(
+          `iFBS pre-reservation expired, fetching new box for location ${locker.id}`,
+        );
+        boxResult = await this._fetchNewBox(
+          client,
+          locker,
+          booking,
+          timeBegin,
+          timeEnd,
+        );
+      }
+    } else {
+      boxResult = await this._fetchNewBox(
+        client,
+        locker,
+        booking,
+        timeBegin,
+        timeEnd,
+      );
     }
-
-    const dateFrom = IfbsLocker.formatDate(timeBegin);
-    const dateTo = IfbsLocker.formatDate(timeEnd);
-
-    const boxResult = await client.getBox(locker.id, dateFrom, dateTo, userID);
 
     if (!boxResult.Booking_ID) {
       throw new Error(`No available box at location ${locker.id}`);
     }
+
+    const dateFrom = IfbsLocker.formatDate(timeBegin);
+    const dateTo = IfbsLocker.formatDate(timeEnd);
 
     const checksum = IfbsLocker.calculateChecksum(
       boxResult.nummer,
@@ -73,6 +103,26 @@ class IfbsLocker extends BaseLocker {
 
     logger.info(`iFBS booking confirmed: processId=${locker.processId}`);
     return locker;
+  }
+
+  /** @private */
+  async _fetchNewBox(client, locker, booking, timeBegin, timeEnd) {
+    const user = await getRawUser(booking.assignedUserId);
+    let userID = 1;
+    if (user && user._id) {
+      userID =
+        typeof user._id === "string"
+          ? "01" + user._id
+          : "01" + user._id.toString();
+    }
+
+    const dateFrom = IfbsLocker.formatDate(timeBegin);
+    const dateTo = IfbsLocker.formatDate(timeEnd);
+
+    const boxResult = await client.getBox(locker.id, dateFrom, dateTo, userID);
+    this._secretPhrase =
+      this._secretPhrase || (await this.getClient())._secretPhrase;
+    return boxResult;
   }
 
   async updateReservation(timeBegin, timeEnd) {
@@ -110,8 +160,48 @@ class IfbsLocker extends BaseLocker {
     }
   }
 
+  async preReserve(timeBegin, timeEnd) {
+    const booking = await this.getBooking();
+    const locker = this.getLocker(booking);
+    const client = await this.getClient();
+
+    const user = await getRawUser(booking.assignedUserId);
+    let userID = 1;
+    if (user && user._id) {
+      userID =
+        typeof user._id === "string"
+          ? "01" + user._id
+          : "01" + user._id.toString();
+    }
+
+    const dateFrom = IfbsLocker.formatDate(timeBegin);
+    const dateTo = IfbsLocker.formatDate(timeEnd);
+
+    const boxResult = await client.getBox(locker.id, dateFrom, dateTo, userID);
+
+    if (!boxResult.Booking_ID) {
+      throw new Error(`No available box at location ${locker.id}`);
+    }
+
+    locker.processId = null;
+    locker.isConfirmed = false;
+    locker.ifbsMetadata = {
+      boxId: boxResult.Box_ID,
+      nummer: boxResult.nummer,
+      price: boxResult.price,
+      bookingId: boxResult.Booking_ID,
+      preReservedAt: Date.now(),
+    };
+
+    logger.info(
+      `iFBS pre-reservation held: Booking_ID=${boxResult.Booking_ID}, ` +
+        `location=${locker.id}`,
+    );
+
+    return locker;
+  }
+
   getLocker(booking, processId) {
-    console.log("lockerInfo", booking.lockerInfo);
     const locker = booking.lockerInfo.find(
       (l) =>
         l.id === this.id &&
@@ -139,13 +229,6 @@ class IfbsLocker extends BaseLocker {
    * md5(nummer + urlEncode(DATEfrom) + urlEncode(DATEto) + secretPhrase)
    */
   static calculateChecksum(nummer, dateFrom, dateTo, secretPhrase) {
-    console.log("Calculating checksum with values:", {
-      nummer,
-      dateFrom,
-      dateTo,
-      secretPhrase,
-    });
-
     const encode = (value) =>
       new URLSearchParams({ v: value }).toString().slice(2);
 
