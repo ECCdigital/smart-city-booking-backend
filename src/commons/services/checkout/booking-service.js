@@ -598,7 +598,7 @@ class BookingService {
         const paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           booking.id,
-          booking.paymentProvider,
+          originBooking.paymentProvider,
           { aggregated: false },
         );
 
