@@ -39,7 +39,7 @@ class CheckoutController {
 
     const { checkoutId, generated } = await resolveCheckoutId(
       requestCheckoutId,
-      user.id,
+      user?.id,
       tenantId,
     );
 
@@ -114,7 +114,7 @@ class CheckoutController {
 
     const { checkoutId } = await resolveCheckoutId(
       requestCheckoutId,
-      user.id,
+      user?.id,
       tenantId,
     );
 
@@ -238,7 +238,8 @@ class CheckoutController {
 
       if (
         bookable.permittedUsers.length > 0 ||
-        bookable.permittedRoles.length > 0
+        bookable.permittedRoles.length > 0 ||
+        bookable.requiresLogin
       ) {
         if (!user) {
           return response.status(401).send("Unauthorized");

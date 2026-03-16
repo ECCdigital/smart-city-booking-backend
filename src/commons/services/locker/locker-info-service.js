@@ -47,9 +47,9 @@ class LockerInfoService {
     return client.getLocations();
   }
 
-  static async getLocationsStat(tenantId, provider) {
+  static async getLocationsStat(tenantId, provider, locationId) {
     const client = await this.getClient(tenantId, provider);
-    return client.getLocationsStat();
+    return client.getLocationsStat(locationId);
   }
 
   static async getLocationById(tenantId, provider, locationId) {

@@ -54,6 +54,10 @@ class BaseCheckoutProvider {
   get handlesAvailability() {
     return false;
   }
+
+  get handlesMaxAmount() {
+    return false;
+  }
 }
 
 module.exports = BaseCheckoutProvider;

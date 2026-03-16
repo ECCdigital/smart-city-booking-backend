@@ -470,15 +470,15 @@ router.get(
 );
 
 router.get(
-  "/locker/:provider/locations/status",
-  AuthenticationController.isSignedIn,
-  LockerController.getLocationsStat,
-);
-
-router.get(
   "/locker/:provider/locations/:locationId",
   AuthenticationController.isSignedIn,
   LockerController.getLocationById,
+);
+
+router.get(
+  "/locker/:provider/locations/:locationId/status",
+  AuthenticationController.isSignedIn,
+  LockerController.getLocationsStat,
 );
 
 router.get(

@@ -119,14 +119,14 @@ class LockerController {
    */
   static async getLocationsStat(request, response) {
     try {
-      const { tenant, provider } = request.params;
+      const { tenant, provider, locationId } = request.params;
       const user = request.user;
 
       if (!(await LockerController._canRead(user.id, tenant))) {
         return response.sendStatus(403);
       }
 
-      const stats = await LockerInfoService.getLocationsStat(tenant, provider);
+      const stats = await LockerInfoService.getLocationsStat(tenant, provider, locationId);
 
       logger.info(
         `${tenant} -- sending ${provider} location stats to user ${user?.id}`,

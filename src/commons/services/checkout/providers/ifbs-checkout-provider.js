@@ -38,6 +38,11 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
   get handlesAvailability() {
     return true;
   }
+
+  get handlesMaxAmount() {
+    return true;
+  }
+
   /**
    * Fetches raw IFBS data. Cached across all segments for the same
    * locationId within one calendar availability check.
@@ -46,24 +51,18 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
     return this._sharedCached(
       `ifbs:locationData:${this.locationId}`,
       async () => {
-        const [boxes, cities] = await Promise.all([
+        const [boxes, location] = await Promise.all([
           this.client.getBookings(this.locationId),
-          this.client.getLocationsStat(),
+          this.client.getLocationsStat(this.locationId),
         ]);
-        return { boxes, cities };
+        return { boxes, location };
       },
     );
   }
 
   async checkAvailability() {
     try {
-      const { boxes, cities } = await this._fetchLocationData();
-
-      const location = cities
-        .find((city) =>
-          city.locations.find((loc) => loc.LocationID === this.locationId),
-        )
-        ?.locations.find((loc) => loc.LocationID === this.locationId);
+      const { boxes, location } = await this._fetchLocationData();
 
       if (!location) {
         return {
@@ -117,33 +116,10 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
       const endDate = formatTimestamp(this.timeEnd);
 
       try {
-        console.log(
-          `Fetching price for IFBS location ${this.locationId} from ${startDate} to ${endDate}...`,
-        );
-
-        const time1 = new Date();
         const boxPrice = await this.client.getPrice(this.locationId);
-        console.log(
-          `Received box price for location ${this.locationId}:`,
-          boxPrice,
-        );
-        console.log(
-          `IFBS price fetch for location ${this.locationId} took ${
-            new Date() - time1
-          } ms`,
-        );
 
-        const calcPrice = calculatePriceFromTiers(boxPrice, startDate, endDate);
-        console.log(
-          `Calculated price from tiers for location ${this.locationId}: ${calcPrice} EUR`,
-        );
-        console.log(
-          `Price tier calculation for location ${this.locationId} took ${
-            new Date() - time1
-          } ms`,
-        );
+        return calculatePriceFromTiers(boxPrice, startDate, endDate);
 
-        const time = new Date();
         /**
         const boxInfo = await this.client.getBox(
           this.locationId,
@@ -163,7 +139,6 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
         );
         return Math.round((Number(boxInfo.price) || 0) * 100) / 100;
           */
-        return calcPrice;
       } catch (err) {
         logger.error(
           `IFBS price fetch failed: ${this.locationId} - ${err.message}`,
@@ -179,6 +154,16 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
       const net = await this.getPriceEur(); // Cache-Hit!
       return Math.round(net * (1 + vat) * 100) / 100;
     });
+  }
+
+  async checkMaxAmount(amount) {
+    if (amount > 1) {
+      return {
+        available: false,
+        message: "Es kann nur 1 Fahrradbox pro Buchung reserviert werden.",
+      };
+    }
+    return { available: true };
   }
 }
 

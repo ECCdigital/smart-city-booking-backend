@@ -9,7 +9,7 @@ class BaseLockerApiClient {
     );
   }
 
-  async getLocationsStat() {
+  async getLocationsStat(locationId) {
     throw new Error(
       `getLocationsStat() is not supported by ${this.constructor.name}`,
     );

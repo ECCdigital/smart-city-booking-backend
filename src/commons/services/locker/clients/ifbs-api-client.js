@@ -2,6 +2,7 @@ const axios = require("axios");
 const bunyan = require("bunyan");
 const BaseLockerApiClient = require("./base-locker-api-client");
 const IfbsApiError = require("./ifbs-api-error");
+const { locations } = require("./ifbs-api-client");
 
 const logger = bunyan.createLogger({
   name: "ifbs-api-client.js",
@@ -16,9 +17,14 @@ class IfbsApiClient extends BaseLockerApiClient {
     this.defaultTimeout = options.defaultTimeout || 30000;
   }
 
-  async getLocationsStat() {
+  async getLocationsStat(locationId) {
     const response = await this._get("getLocationsStat.php");
-    return response.cities || [];
+
+    const allLocations = response.cities.flatMap((city) => city.locations || []);
+
+    const requestedLocation = allLocations.find((loc) => loc.LocationID === locationId);
+
+    return requestedLocation || null;
   }
 
   async getLocations() {

@@ -9,6 +9,10 @@ class ParevaCheckoutProvider extends BaseCheckoutProvider {
     return false;
   }
 
+  get handlesMaxAmount() {
+    return false;
+  }
+
   async checkAvailability() {
     return { available: true };
   }

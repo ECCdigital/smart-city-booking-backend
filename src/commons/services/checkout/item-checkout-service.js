@@ -32,6 +32,7 @@ const CHECK_TYPES = {
   MAX_BOOKING_DATE: "max-booking-date",
   TIME_RELATION: "time-relation",
   PRICE_CATEGORY: "price-category",
+  MAX_AMOUNT: "max-amount",
 };
 
 class CheckoutPermissions {
@@ -160,7 +161,7 @@ class ItemCheckoutService {
           timeEnd: this.timeEnd,
           amount: this.amount,
           tenantId: this.tenantId,
-          externalCache: this.externalCache
+          externalCache: this.externalCache,
         }),
       );
     }
@@ -213,6 +214,13 @@ class ItemCheckoutService {
    */
   get hasExternalAvailability() {
     return this.externalProviders.some((p) => p.handlesAvailability);
+  }
+
+  /**
+   * Whether any external provider controls max-amount validation.
+   */
+  get hasExternalMaxAmount() {
+    return this.externalProviders.some((p) => p.handlesMaxAmount);
   }
 
   async freeBookingAllowed() {
@@ -961,11 +969,53 @@ class ItemCheckoutService {
     };
   }
 
+  async checkMaxAmount() {
+    if (this.hasExternalMaxAmount) {
+      return await this._checkExternalMaxAmount();
+    }
+    return await this._checkInternalMaxAmount();
+  }
+
+  async _checkInternalMaxAmount() {
+    // right now max amount is handles by availability check for bookables with amount.
+    return {
+      checkType: CHECK_TYPES.MAX_AMOUNT,
+      available: true,
+    };
+  }
+
+  async _checkExternalMaxAmount() {
+    for (const provider of this.externalProviders) {
+      if (!provider.handlesMaxAmount) continue;
+
+      const result = await provider.checkMaxAmount(this.amount);
+
+      if (!result.available) {
+        throw {
+          checkType: CHECK_TYPES.MAX_AMOUNT,
+          available: false,
+          message:
+            result.message ||
+            `Die gewünschte Stückzahl (${this.amount}) ist für ${this.originBookable.title} nicht zulässig.`,
+          externalSource: true,
+          ...result,
+        };
+      }
+    }
+
+    return {
+      checkType: CHECK_TYPES.MAX_AMOUNT,
+      available: true,
+      externalSource: true,
+    };
+  }
+
   async checkAll(stopOnFirstError = true) {
     if (stopOnFirstError) {
       return await Promise.all([
         this.checkPermissions(),
         this.checkOpeningHours(),
+        this.checkMaxAmount(),
         this.checkBookingDuration(),
         this.checkAvailability(),
         this.checkEventDate(),
@@ -978,6 +1028,7 @@ class ItemCheckoutService {
 
     return await Promise.allSettled([
       this.checkPermissions(),
+      this.checkMaxAmount(),
       this.checkOpeningHours(),
       this.checkBookingDuration(),
       this.checkAvailability(),
