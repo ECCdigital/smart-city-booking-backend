@@ -1,9 +1,16 @@
 const { Double } = require("mongodb");
 
+const HOOK_STATUS = Object.freeze({
+  ACTIVE: "active",
+  RELEASED: "released",
+  REVOKED: "revoked",
+});
+
 const userHookSchemaDefinition = {
   id: { type: String, required: true },
   type: { type: String, required: true },
   timeCreated: { type: Double, default: () => Date.now() },
+  status: { type: String, default: "active" },
   payload: { type: Object, default: {} },
 };
 

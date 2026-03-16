@@ -92,6 +92,20 @@ class BookableService {
       } else {
         checkResults = await checkoutService.checkAll(false);
       }
+
+      const availabilityCheck =
+        checkResults.find(
+          (result) =>
+            result.status === "fulfilled" &&
+            result.value &&
+            result.value.checkType === CHECK_TYPES.AVAILABILITY,
+        )?.value ||
+        checkResults.find(
+          (result) =>
+            result.status === "rejected" &&
+            result.reason &&
+            result.reason.checkType === CHECK_TYPES.AVAILABILITY,
+        )?.reason;
       if (!checkResults || !Array.isArray(checkResults)) {
         return this._createUnavailableResponse();
       }
@@ -107,20 +121,19 @@ class BookableService {
 
         return {
           isAvailable: false,
-          ...occupancyData,
+          totalCapacity: availabilityCheck?.totalCapacity ?? null,
+          booked: availabilityCheck?.booked ?? null,
+          remaining: availabilityCheck?.remaining ?? null,
+          reason: occupancyData.reason,
+          failedCheck: occupancyData,
         };
       }
 
-      const lowestAvailability = this._findLowestAvailability(
-        checkResults,
-        checkoutService.hasEvent,
-      );
-
       return {
-        isAvailable: lowestAvailability?.available ?? false,
-        totalCapacity: lowestAvailability?.totalCapacity ?? null,
-        booked: lowestAvailability?.booked ?? null,
-        remaining: lowestAvailability?.remaining ?? null,
+        isAvailable: availabilityCheck?.available ?? false,
+        totalCapacity: availabilityCheck?.totalCapacity ?? null,
+        booked: availabilityCheck?.booked ?? null,
+        remaining: availabilityCheck?.remaining ?? null,
       };
     } catch (error) {
       const occupancyData = this._extractOccupancyFromFailedCheck(error);
@@ -144,11 +157,22 @@ class BookableService {
   static _extractOccupancyFromFailedCheck(reasonObj) {
     switch (reasonObj.checkType) {
       case CHECK_TYPES.EVENT_SEATS:
-      case CHECK_TYPES.AVAILABILITY:
         return {
+          eventId: reasonObj.eventId ?? null,
+          title: reasonObj.title ?? null,
           totalCapacity: reasonObj.totalCapacity ?? null,
           booked: reasonObj.booked ?? null,
           remaining: reasonObj.remaining ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
+      case CHECK_TYPES.AVAILABILITY:
+        return {
+          bookableId: reasonObj.bookableId ?? null,
+          title: reasonObj.title ?? null,
+          totalCapacity: reasonObj.totalCapacity ?? null,
+          booked: reasonObj.booked ?? null,
+          remaining: reasonObj.remaining ?? null,
+          reason: reasonObj.checkType ?? null,
         };
 
       case CHECK_TYPES.PARENT_AVAILABILITY:
@@ -156,28 +180,59 @@ class BookableService {
           reasonObj.parentAvailability &&
           reasonObj.parentAvailability.length > 0
         ) {
-          const parentData = reasonObj.parentAvailability[0];
+          const parentData = reasonObj.parentAvailability.find(
+            (avail) => avail.available === false,
+          );
           return {
+            bookableId: parentData.bookableId ?? null,
+            title: parentData.title ?? null,
             totalCapacity: parentData.totalCapacity ?? null,
             booked: parentData.booked ?? null,
             remaining: parentData.remaining ?? null,
+            reason: reasonObj.checkType ?? null,
           };
         }
         break;
 
       case CHECK_TYPES.CHILD_BOOKINGS:
         if (
-          reasonObj.childAvailability &&
-          reasonObj.childAvailability.length > 0
+          reasonObj.childAvailabilities &&
+          reasonObj.childAvailabilities.length > 0
         ) {
-          const childData = reasonObj.childAvailability[0];
+          const childData = reasonObj.childAvailabilities.find(
+            (avail) => avail.available === false,
+          );
           return {
+            bookableId: childData.bookableId ?? null,
+            title: childData.title ?? null,
             totalCapacity: childData.totalCapacity ?? null,
             booked: childData.booked ?? null,
             remaining: childData.remaining ?? null,
+            reason: reasonObj.checkType ?? null,
           };
         }
         break;
+      case CHECK_TYPES.EVENT_DATE:
+        return {
+          eventId: reasonObj.eventId ?? null,
+          title: reasonObj.title ?? null,
+          totalCapacity: reasonObj.totalCapacity ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
+
+      case CHECK_TYPES.TIME_RELATION:
+        return {
+          bookableId: reasonObj.bookableId ?? null,
+          title: reasonObj.title ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
+
+      case CHECK_TYPES.BOOKING_DURATION:
+        return {
+          bookableId: reasonObj.bookableId ?? null,
+          title: reasonObj.title ?? null,
+          reason: reasonObj.checkType ?? null,
+        };
 
       default:
         break;
@@ -203,13 +258,27 @@ class BookableService {
       hasEvent,
     );
 
-    return availabilityChecks
-      .filter((check) => check.remaining !== null)
+    const lowestCheck = availabilityChecks
+      .filter(
+        (check) =>
+          check.remaining !== null &&
+          check.checkType !== CHECK_TYPES.PARENT_AVAILABILITY,
+      )
       .reduce((lowest, current) => {
         return !lowest || current.remaining < lowest.remaining
           ? current
           : lowest;
       }, null);
+
+    if (lowestCheck) {
+      return lowestCheck;
+    } else {
+      return (
+        availabilityChecks.filter(
+          (check) => check.checkType === CHECK_TYPES.AVAILABILITY,
+        )[0] || null
+      );
+    }
   }
 
   /**

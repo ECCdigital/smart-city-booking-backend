@@ -63,6 +63,14 @@ const catalogSchemaDefinition = {
       secondary: { type: String, default: "" },
     },
   },
+  logoUrl: { type: String, default: "" },
+  hero: {
+    type: Object,
+    default: {
+      title: "",
+      subtitle: "",
+    },
+  },
 };
 
 module.exports = {

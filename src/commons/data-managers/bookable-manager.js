@@ -35,6 +35,23 @@ class BookableManager {
   }
 
   /**
+   * Get bookables by their IDs.
+   * @param {string} tenantId - The ID of the tenant.
+   * @param {string[]} ids - An array of bookable IDs.
+   * @returns {Promise<Bookable[]>} - A promise that resolves to a list of bookables.
+   */
+  static async getBookablesByIds(tenantId, ids) {
+    if (!ids?.length) return [];
+
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      id: { $in: ids },
+    });
+
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Get public bookables for a tenant
    * @param {string} tenantId Tenant ID
    * @returns {Promise<Bookable[]>} List of public bookables
@@ -119,6 +136,30 @@ class BookableManager {
         { tags: { $in: [new RegExp(searchText, "i")] } },
       ],
     });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get direct related bookables (non-recursive, single level)
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of directly related bookables
+   */
+  static async getDirectRelatedBookables(id, tenantId) {
+    const bookable = await BookableModel.findOne({
+      id: id,
+      tenantId: tenantId,
+    });
+
+    if (!bookable || !bookable.relatedBookableIds?.length) {
+      return [];
+    }
+
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      id: { $in: bookable.relatedBookableIds },
+    });
+
     return rawBookables.map((doc) => doc.toEntity());
   }
 

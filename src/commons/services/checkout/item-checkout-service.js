@@ -252,6 +252,8 @@ class ItemCheckoutService {
           `Bookable with ID ${bookable.id} is time related but no time is given.`,
         );
         throw {
+          bookableId: bookable.id,
+          title: bookable.title,
           checkType: CHECK_TYPES.TIME_RELATION,
           available: false,
           message: `Das Objekt ${bookable.title} ist zeitbezogen, aber es wurde kein Zeitraum angegeben.`,
@@ -639,8 +641,11 @@ class ItemCheckoutService {
       throw {
         checkType: CHECK_TYPES.AVAILABILITY,
         available: false,
+        bookableId: this.originBookable.id,
+        title: this.originBookable.title,
         message: `Das Objekt ${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-        totalCapacity: this.originBookable.amount,
+        totalCapacity:
+          this.originBookable.amount > 0 ? this.originBookable.amount : null,
         booked: amountBooked,
         remaining:
           this.originBookable.amount > 0
@@ -653,7 +658,10 @@ class ItemCheckoutService {
     return {
       checkType: CHECK_TYPES.AVAILABILITY,
       available: true,
-      totalCapacity: this.originBookable.amount,
+      bookableId: this.originBookable.id,
+      title: this.originBookable.title,
+      totalCapacity:
+        this.originBookable.amount > 0 ? this.originBookable.amount : null,
       booked: amountBooked,
       remaining:
         this.originBookable.amount > 0
@@ -690,10 +698,14 @@ class ItemCheckoutService {
       parentAmount.push({
         bookableId: parentBookable.id,
         title: parentBookable.title,
-        totalCapacity: parentBookable.amount,
+        checkType: CHECK_TYPES.PARENT_AVAILABILITY,
+        totalCapacity: parentBookable.amount > 0 ? parentBookable.amount : null,
         booked: parentAmountBooked,
-        remaining: parentBookable.amount - parentAmountBooked,
-        isAvailable: isAvailable,
+        remaining:
+          parentBookable.amount > 0
+            ? parentBookable.amount - parentAmountBooked
+            : null,
+        available: isAvailable,
       });
 
       if (!isAvailable) {
@@ -736,6 +748,7 @@ class ItemCheckoutService {
         amountBooked + this.amount <= childBookable.amount;
 
       childAmount.push({
+        available: isAvailable,
         bookableId: childBookable.id,
         title: childBookable.title,
         totalCapacity: childBookable.amount,
@@ -748,9 +761,7 @@ class ItemCheckoutService {
           checkType: CHECK_TYPES.CHILD_BOOKINGS,
           available: false,
           message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-          totalCapacity: childBookable.amount,
-          booked: amountBooked,
-          remaining: childBookable.amount - amountBooked,
+          childAvailabilities: childAmount,
           concurrentBookings: bookings,
         };
       }
@@ -792,6 +803,8 @@ class ItemCheckoutService {
         throw {
           checkType: CHECK_TYPES.EVENT_SEATS,
           available: false,
+          eventId: event.id,
+          title: event.information.name,
           message: `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
           totalCapacity: event.attendees.maxAttendees,
           booked: amountBooked,
@@ -799,6 +812,8 @@ class ItemCheckoutService {
         };
       }
       return {
+        eventId: event.id,
+        title: event.information.name,
         checkType: CHECK_TYPES.EVENT_SEATS,
         available: true,
         totalCapacity: event?.attendees.maxAttendees,
@@ -826,6 +841,8 @@ class ItemCheckoutService {
     ) {
       throw {
         checkType: CHECK_TYPES.BOOKING_DURATION,
+        bookableId: this.originBookable.id,
+        title: this.originBookable.title,
         available: false,
         message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} muss mindestens ${this.originBookable.minBookingDuration} Stunden betragen.`,
       };
@@ -837,6 +854,8 @@ class ItemCheckoutService {
     ) {
       throw {
         checkType: CHECK_TYPES.BOOKING_DURATION,
+        bookableId: this.originBookable.id,
+        title: this.originBookable.title,
         available: false,
         message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} darf ${this.originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
       };
@@ -956,6 +975,8 @@ class ItemCheckoutService {
 
       if (eventDate < now) {
         throw {
+          eventId: event.id,
+          title: event.information.name,
           checkType: CHECK_TYPES.EVENT_DATE,
           available: false,
           message: `Die Veranstaltung ${event.information.name} liegt in der Vergangenheit und kann nicht mehr gebucht werden.`,

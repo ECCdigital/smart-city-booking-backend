@@ -142,6 +142,7 @@ class AuthenticationController {
         lastName,
         company,
         nextUrl,
+        verifyUrl,
       } = request.body;
 
       const existingUser = await UserManager.getUser(userID);
@@ -159,7 +160,7 @@ class AuthenticationController {
       });
       user.setPassword(password);
 
-      await UserService.singUpUser(user, nextUrl);
+      await UserService.singUpUser(user, nextUrl, verifyUrl);
 
       return response.sendStatus(201);
     } catch (error) {
@@ -293,6 +294,28 @@ class AuthenticationController {
     } catch (error) {
       logger.error(error);
       return response.status(500).send("Internal server error");
+    }
+  }
+
+  static async verifyEmail(request, response) {
+    const { token, id } = request.body;
+
+    if (!token || !id) {
+      return response.status(400).send("Token and ID are required");
+    }
+
+    try {
+      const { success } = await UserService.verifyEmail(token, id);
+      if (!success) {
+        throw new Error("Email verification failed");
+      }
+      logger.info(`Email verified for user ${id}.`);
+      return response.status(200).send("Email verified successfully");
+    } catch (error) {
+      logger.error(`Email verification failed for user ${id}:`, error);
+      return response
+        .status(error.status || 500)
+        .send(error.message || "Email verification failed");
     }
   }
 }
