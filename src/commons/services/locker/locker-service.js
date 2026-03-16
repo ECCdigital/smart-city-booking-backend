@@ -470,11 +470,15 @@ class LockerService {
           unit.id,
         );
         if (action === "cancel") {
-          return await locker.cancelReservation(unit.id);
+          return await locker.cancelReservation(unit.processId);
         } else if (action === "start") {
           return await locker.startReservation(timeBegin, timeEnd);
         } else if (action === "update") {
-          return await locker.updateReservation(timeBegin, timeEnd);
+          return await locker.updateReservation(
+            unit.processId,
+            timeBegin,
+            timeEnd,
+          );
         }
       };
 

@@ -400,6 +400,7 @@ class BookingController {
           RolePermission.MANAGE_BOOKINGS,
         )
       ) {
+
         await BookingService.updateBooking(tenant, booking);
 
         await WorkflowService.updateTask(

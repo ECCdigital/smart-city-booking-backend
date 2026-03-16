@@ -2,7 +2,6 @@ const axios = require("axios");
 const bunyan = require("bunyan");
 const BaseLockerApiClient = require("./base-locker-api-client");
 const IfbsApiError = require("./ifbs-api-error");
-const { locations } = require("./ifbs-api-client");
 
 const logger = bunyan.createLogger({
   name: "ifbs-api-client.js",
@@ -20,9 +19,13 @@ class IfbsApiClient extends BaseLockerApiClient {
   async getLocationsStat(locationId) {
     const response = await this._get("getLocationsStat.php");
 
-    const allLocations = response.cities.flatMap((city) => city.locations || []);
+    const allLocations = response.cities.flatMap(
+      (city) => city.locations || [],
+    );
 
-    const requestedLocation = allLocations.find((loc) => loc.LocationID === locationId);
+    const requestedLocation = allLocations.find(
+      (loc) => loc.LocationID === locationId,
+    );
 
     return requestedLocation || null;
   }
@@ -92,6 +95,10 @@ class IfbsApiClient extends BaseLockerApiClient {
       ID: bookingID,
       Extension_ID: extensionId,
     });
+    console.error(
+      `ConfirmExtension response for booking ${bookingID} and extension ${extensionId}:`,
+      response,
+    );
     return response;
   }
 
@@ -99,6 +106,7 @@ class IfbsApiClient extends BaseLockerApiClient {
     const response = await this._get("cancelUsage.php", {
       ID: bookingID,
     });
+    console.error(`CancelUsage response for booking ${bookingID}:`, response);
     return response;
   }
 
@@ -107,6 +115,7 @@ class IfbsApiClient extends BaseLockerApiClient {
       ID: bookingID,
       ...(dateTo ? { DATEto: dateTo } : {}),
     });
+    console.error(`EndUsage response for booking ${bookingID}:`, response);
     return response;
   }
 
@@ -154,7 +163,7 @@ class IfbsApiClient extends BaseLockerApiClient {
       "openBox",
       "monitorOpenBox",
       "waitForOpenBox",
-      "getBookings"
+      "getBookings",
     ];
   }
 

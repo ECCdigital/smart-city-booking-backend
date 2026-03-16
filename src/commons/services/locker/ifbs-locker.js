@@ -30,7 +30,6 @@ class IfbsLocker extends BaseLocker {
     return createClient(rawApp);
   }
 
-  // ifbs-locker.js – angepasste startReservation
 
   async startReservation(timeBegin, timeEnd) {
     const booking = await this.getBooking();
@@ -39,7 +38,6 @@ class IfbsLocker extends BaseLocker {
 
     let boxResult;
 
-    // Prüfen ob bereits eine Pre-Reservation existiert
     if (locker.ifbsMetadata?.bookingId && !locker.isConfirmed) {
       const preReservedAt = locker.ifbsMetadata.preReservedAt || 0;
       const isStillValid = Date.now() - preReservedAt < 2 * 60 * 1000;
@@ -125,8 +123,8 @@ class IfbsLocker extends BaseLocker {
     return boxResult;
   }
 
-  async updateReservation(timeBegin, timeEnd) {
-    await this.cancelReservation();
+  async updateReservation(_processId, timeBegin, timeEnd) {
+    await this.cancelReservation(_processId);
     return await this.startReservation(timeBegin, timeEnd);
   }
 

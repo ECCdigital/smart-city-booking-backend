@@ -138,9 +138,9 @@ class ParevaLocker extends BaseLocker {
     }
   }
 
-  async updateReservation(timeBegin, timeEnd) {
+  async updateReservation(_processId, timeBegin, timeEnd) {
     try {
-      await this.cancelReservation();
+      await this.cancelReservation(_processId);
       return await this.startReservation(timeBegin, timeEnd);
     } catch (err) {
       throw new Error(`${err.message}`);

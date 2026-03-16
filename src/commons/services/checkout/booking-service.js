@@ -6,7 +6,6 @@ const CouponService = require("../coupon-service");
 const GroupBookingManager = require("../../data-managers/group-booking-manager");
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
-const { getTenant } = require("../../data-managers/tenant-manager");
 const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
@@ -45,7 +44,6 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 class BookingService {
-
   /**
    * Creates a booking and stores it in the database.
    * @param tenantId
@@ -542,21 +540,9 @@ class BookingService {
       const onCommit = !oldBooking.isCommitted && isCommit;
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
+      const onUnreject = oldBooking.isRejected && !isRejected;
 
       const lockerServiceInstance = LockerService.getInstance();
-
-      if (booking.isCommitted && booking.isPayed) {
-        await lockerServiceInstance.handleUpdate(
-          updatedBooking.tenantId,
-          oldBooking,
-          booking,
-        );
-      } else {
-        await lockerServiceInstance.handlePreReserve(
-          booking.tenantId,
-          booking.id,
-        );
-      }
 
       if (onCommit) {
         await BookingService.commitBooking(tenantId, booking);
@@ -577,6 +563,22 @@ class BookingService {
           null,
         );
       }
+
+      if (booking.isCommitted && booking.isPayed && !onUnreject) {
+        await lockerServiceInstance.handleUpdate(
+          updatedBooking.tenantId,
+          oldBooking,
+          booking,
+        );
+      } else if (onUnreject) {
+        await lockerServiceInstance.handleCreate(updatedBooking.tenantId, booking.id);
+      } else {
+        await lockerServiceInstance.handlePreReserve(
+          updatedBooking.tenantId,
+          booking.id,
+        );
+      }
+
       return booking;
     } catch (error) {
       await BookingManager.storeBooking(oldBooking);
@@ -1049,7 +1051,7 @@ class BookingService {
   }
 
   static async checkBookingStatus(bookingId, name, tenantId) {
-    const tenant = await getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId);
 
     if (!tenant.enablePublicStatusView) {
       throw new BaseError("public_status_view_disabled", {

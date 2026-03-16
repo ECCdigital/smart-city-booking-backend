@@ -367,6 +367,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {Array} attachments - The attachments.
    * @param {boolean} bookWithPrice - Whether to book with price.
    * @param {string} checkoutId - The checkout ID.
+   * @param {Array} lockerInfo - The locker info.
    */
   constructor({
     user,
@@ -397,6 +398,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     attachments,
     bookWithPrice,
     checkoutId,
+    lockerInfo,
   }) {
     super({
       user,
@@ -428,19 +430,20 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     this.hooks = hooks;
     this.internalComments = internalComments || "";
     this.rejectionReason = rejectionReason || "";
+    this.lockerInfo = lockerInfo || null;
   }
 
   async createItemCheckoutService(bookableItem) {
-    const itemCheckoutService = new ManualItemCheckoutService(
-      this.user,
-      this.tenant,
-      this.timeBegin,
-      this.timeEnd,
-      bookableItem.bookableId,
-      bookableItem.amount,
-      this.couponCode,
-      this.bookWithPrice,
-    );
+    const itemCheckoutService = new ManualItemCheckoutService({
+      user: this.user,
+      tenantId: this.tenant,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+      bookableId: bookableItem.bookableId,
+      amount: bookableItem.amount,
+      couponCode: this.couponCode,
+      bookWithPrice: this.bookWithPrice,
+    });
 
     await itemCheckoutService.init(bookableItem._bookableUsed);
 
@@ -483,6 +486,13 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     booking.internalComments = this.internalComments;
     booking.rejectionReason = this.rejectionReason;
     return booking;
+  }
+
+  async getLockerInfo() {
+    if (this.lockerInfo && this.lockerInfo.length > 0) {
+      return this.lockerInfo;
+    }
+    return super.getLockerInfo();
   }
 }
 
