@@ -17,6 +17,9 @@ const PermissionsService = require("../../../commons/services/permission-service
 const {
   authenticateIfNeeded,
 } = require("../../../commons/utilities/auth-utils");
+const {
+  resolveCheckoutId,
+} = require("../../../commons/utilities/checkout-utils");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -364,6 +367,12 @@ class BookingController {
       return response.sendStatus(403);
     }
 
+    const { checkoutId } = await resolveCheckoutId(
+      undefined,
+      booking.mail,
+      tenantId,
+    );
+
     try {
       const newBooking = await BookingService.createSingleBooking({
         tenantId,
@@ -371,6 +380,7 @@ class BookingController {
         simulate: false,
         bookingAttempt: request.body,
         manualBooking: true,
+        checkoutId,
       });
       return response.status(200).send(newBooking);
     } catch (err) {
@@ -392,6 +402,7 @@ class BookingController {
           RolePermission.MANAGE_BOOKINGS,
         )
       ) {
+
         await BookingService.updateBooking(tenant, booking);
 
         await WorkflowService.updateTask(

@@ -2,6 +2,7 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
+const LockerService = require("../../../commons/services/locker/locker-service");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -33,6 +34,23 @@ class PaymentController {
       response
         .status(400)
         .send({ message: "All bookings must not be payed", code: 2 });
+      return;
+    }
+
+    try {
+      const lockerServiceInstance = LockerService.getInstance();
+      await lockerServiceInstance.refreshPreReservations(
+        tenantId,
+        bookingIds,
+      );
+    } catch (err) {
+      logger.warn(
+        `${tenantId} -- Locker reservation failed: ${err.message}`,
+      );
+      response.status(409).send({
+        message: "Locker not available anymore.",
+        code: 3,
+      });
       return;
     }
 

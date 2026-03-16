@@ -102,6 +102,7 @@ const bookableSchemaDefinition = {
   enableCoupons: { type: Boolean, default: true },
 
   // Permission properties
+  requiresLogin: { type: Boolean, default: false },
   permittedUsers: { type: [String], default: [] },
   permittedRoles: { type: [String], default: [] },
   freeBookingUsers: { type: [String], default: [] },

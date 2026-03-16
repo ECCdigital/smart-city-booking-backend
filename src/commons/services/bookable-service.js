@@ -38,16 +38,15 @@ class BookableService {
     let checkoutService = null;
     try {
       const bookable = await BookableManager.getBookable(bookableId, tenantId);
-      checkoutService = new ItemCheckoutService(
-        userId,
+      checkoutService = new ItemCheckoutService({
+        user: userId,
         tenantId,
         timeBegin,
         timeEnd,
         bookableId,
-        1,
-        null,
-        false,
-      );
+        amount: 1,
+        bookWithPrice: false,
+      });
 
       await checkoutService.init(bookable);
 

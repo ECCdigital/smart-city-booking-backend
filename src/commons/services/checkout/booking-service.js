@@ -6,7 +6,6 @@ const CouponService = require("../coupon-service");
 const GroupBookingManager = require("../../data-managers/group-booking-manager");
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
-const { getTenant } = require("../../data-managers/tenant-manager");
 const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
@@ -38,6 +37,7 @@ const {
   BaseError,
   MethodNotAllowedError,
 } = require("../../../errors/BaseError");
+const { resolveCheckoutId } = require("../../utilities/checkout-utils");
 
 const logger = bunyan.createLogger({
   name: "booking-service.js",
@@ -52,6 +52,7 @@ class BookingService {
    * @param simulate
    * @param manualBooking
    * @param skipWorkflow
+   * @param providedCheckoutId - Optional checkoutId to use instead of generating a new one
    * @returns {Promise<Booking>}
    */
   static async createBooking({
@@ -61,6 +62,7 @@ class BookingService {
     simulate,
     manualBooking = false,
     skipWorkflow = false,
+    checkoutId: providedCheckoutId,
   }) {
     const checkoutId = uuidV4();
 
@@ -167,6 +169,7 @@ class BookingService {
         attachmentStatus,
         paymentProvider,
         bookWithPrice,
+        checkoutId: providedCheckoutId,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
@@ -190,6 +193,7 @@ class BookingService {
         attachmentStatus,
         paymentProvider,
         bookWithPrice,
+        checkoutId: providedCheckoutId,
       });
     }
 
@@ -224,16 +228,41 @@ class BookingService {
         `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
       );
 
-      if (booking.isCommitted && booking.isPayed) {
-        try {
-          const lockerServiceInstance = LockerService.getInstance();
+      try {
+        const lockerServiceInstance = LockerService.getInstance();
+
+        if (booking.isCommitted && booking.isPayed) {
           await lockerServiceInstance.handleCreate(
             booking.tenantId,
             booking.id,
           );
-        } catch (err) {
-          logger.error(err);
+        } else {
+          await lockerServiceInstance.handlePreReserve(
+            booking.tenantId,
+            booking.id,
+          );
         }
+      } catch (err) {
+        logger.error(
+          `${tenantId}, cid ${checkoutId} -- Locker reservation failed ` +
+            `for booking ${booking.id}, rolling back: ${err.message}`,
+        );
+
+        try {
+          await BookingManager.removeBooking(booking.id, tenantId);
+          await CouponService.decrementCouponUsage(couponCode, tenantId);
+          logger.info(
+            `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} ` +
+              `rolled back successfully`,
+          );
+        } catch (rollbackErr) {
+          logger.error(
+            `${tenantId}, cid ${checkoutId} -- Rollback failed for ` +
+              `booking ${booking.id}: ${rollbackErr.message}`,
+          );
+        }
+
+        throw err;
       }
     } else {
       logger.info(`${tenantId}, cid ${checkoutId} -- Simulated booking`);
@@ -248,6 +277,7 @@ class BookingService {
    * @param bookingAttempt
    * @param simulate
    * @param manualBooking
+   * @param checkoutId - Optional checkoutId to use instead of generating a new one
    * @returns {Promise<Booking>}
    */
   static async createSingleBooking({
@@ -256,6 +286,7 @@ class BookingService {
     bookingAttempt,
     simulate,
     manualBooking = false,
+    checkoutId,
   }) {
     const booking = await BookingService.createBooking({
       tenantId,
@@ -263,6 +294,7 @@ class BookingService {
       bookingAttempt,
       simulate,
       manualBooking,
+      checkoutId,
     });
 
     if (!simulate) {
@@ -452,6 +484,12 @@ class BookingService {
       });
     }
 
+    const { checkoutId } = await resolveCheckoutId(
+      undefined,
+      oldBooking.assignedUserId,
+      tenantId,
+    );
+
     try {
       const bundleCheckoutService = new ManualBundleCheckoutService({
         user: updatedBooking.assignedUserId,
@@ -484,6 +522,7 @@ class BookingService {
         paymentMethod: updatedBooking.paymentMethod,
         attachments: oldBooking.attachments,
         lockerInfo: oldBooking.lockerInfo,
+        checkoutId,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({
@@ -501,6 +540,9 @@ class BookingService {
       const onCommit = !oldBooking.isCommitted && isCommit;
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
+      const onUnreject = oldBooking.isRejected && !isRejected;
+
+      const lockerServiceInstance = LockerService.getInstance();
 
       if (onCommit) {
         await BookingService.commitBooking(tenantId, booking);
@@ -522,12 +564,20 @@ class BookingService {
         );
       }
 
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.handleUpdate(
-        updatedBooking.tenantId,
-        oldBooking,
-        booking,
-      );
+      if (booking.isCommitted && booking.isPayed && !onUnreject) {
+        await lockerServiceInstance.handleUpdate(
+          updatedBooking.tenantId,
+          oldBooking,
+          booking,
+        );
+      } else if (onUnreject) {
+        await lockerServiceInstance.handleCreate(updatedBooking.tenantId, booking.id);
+      } else {
+        await lockerServiceInstance.handlePreReserve(
+          updatedBooking.tenantId,
+          booking.id,
+        );
+      }
 
       return booking;
     } catch (error) {
@@ -1001,7 +1051,7 @@ class BookingService {
   }
 
   static async checkBookingStatus(bookingId, name, tenantId) {
-    const tenant = await getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId);
 
     if (!tenant.enablePublicStatusView) {
       throw new BaseError("public_status_view_disabled", {

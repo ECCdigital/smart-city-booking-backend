@@ -42,6 +42,18 @@ class CouponService {
     }
   }
 
+  static async decrementCouponUsage(couponID, tenantID) {
+    try {
+      if (await CouponManager.exists(couponID, tenantID)) {
+        return CouponManager.decrementCouponUsage(couponID, tenantID);
+      } else {
+        return null;
+      }
+    } catch (error) {
+      return null;
+    }
+  }
+
   static generateID() {
     return crypto.randomBytes(6).toString("base64url").slice(0, 8);
   }

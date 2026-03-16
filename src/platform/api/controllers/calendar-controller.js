@@ -174,15 +174,14 @@ class CalendarController {
       let itemCheckoutService = null;
 
       try {
-        itemCheckoutService = new ItemCheckoutService(
-          user?.id,
-          tenant,
-          p.timeBegin,
-          p.timeEnd,
+        itemCheckoutService = new ItemCheckoutService({
+          user: user?.id,
+          tenantId: tenant,
+          timeBegin: p.timeBegin,
+          timeEnd: p.timeEnd,
           bookableId,
-          Number(amount),
-          null,
-        );
+          amount: Number(amount),
+        });
 
         await itemCheckoutService.init();
         // in order to check calendar availability, we generally need to perform all checks of the checkout service.

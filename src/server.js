@@ -105,6 +105,10 @@ app.use("/csv/:tenant", exportersRouterTenantRelated);
 
 app.use(errorHandler);
 
+
+require("./commons/services/checkout/providers/register");
+require("./commons/services/access/providers/register-access-providers");
+
 let server;
 
 dbm.connect().then(() => {

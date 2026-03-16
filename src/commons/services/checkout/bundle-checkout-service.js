@@ -33,6 +33,7 @@ class BundleCheckoutService {
    * @param {string} paymentProvider - The payment method.
    * @param {Array} attachments - The attachments.
    * @param {boolean} bookWithPrice - Whether to book with price.
+   * @param {string} checkoutId - The checkout ID.
    */
   constructor({
     user,
@@ -55,6 +56,7 @@ class BundleCheckoutService {
     paymentProvider,
     attachments,
     bookWithPrice,
+    checkoutId,
   }) {
     this.user = user;
     this.tenant = tenant;
@@ -76,19 +78,21 @@ class BundleCheckoutService {
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
     this.bookWithPrice = bookWithPrice;
+    this.checkoutId = checkoutId;
   }
 
   async createItemCheckoutService(bookableItem) {
-    const itemCheckoutService = new ItemCheckoutService(
-      this.user,
-      this.tenant,
-      this.timeBegin,
-      this.timeEnd,
-      bookableItem.bookableId,
-      bookableItem.amount,
-      this.couponCode,
-      this.bookWithPrice,
-    );
+    const itemCheckoutService = new ItemCheckoutService({
+      user: this.user,
+      tenantId: this.tenant,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+      bookableId: bookableItem.bookableId,
+      amount: bookableItem.amount,
+      couponCode: this.couponCode,
+      bookWithPrice: this.bookWithPrice,
+      checkoutId: this.checkoutId,
+    });
     await itemCheckoutService.init();
 
     return itemCheckoutService;
@@ -238,7 +242,7 @@ class BundleCheckoutService {
         bookableId: attachment.bookableId,
         url: attachment.url,
         accepted: status ? status.accepted : undefined,
-        mailAttach : attachment.mailAttach,
+        mailAttach: attachment.mailAttach,
       };
     });
   }
@@ -361,6 +365,9 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} paymentMethod - The payment method.
    * @param {Array} hooks - The hooks.
    * @param {Array} attachments - The attachments.
+   * @param {boolean} bookWithPrice - Whether to book with price.
+   * @param {string} checkoutId - The checkout ID.
+   * @param {Array} lockerInfo - The locker info.
    */
   constructor({
     user,
@@ -390,6 +397,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     hooks,
     attachments,
     bookWithPrice,
+    checkoutId,
+    lockerInfo,
   }) {
     super({
       user,
@@ -412,6 +421,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       paymentProvider,
       attachments,
       bookWithPrice,
+      checkoutId,
     });
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
@@ -420,19 +430,20 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     this.hooks = hooks;
     this.internalComments = internalComments || "";
     this.rejectionReason = rejectionReason || "";
+    this.lockerInfo = lockerInfo || null;
   }
 
   async createItemCheckoutService(bookableItem) {
-    const itemCheckoutService = new ManualItemCheckoutService(
-      this.user,
-      this.tenant,
-      this.timeBegin,
-      this.timeEnd,
-      bookableItem.bookableId,
-      bookableItem.amount,
-      this.couponCode,
-      this.bookWithPrice,
-    );
+    const itemCheckoutService = new ManualItemCheckoutService({
+      user: this.user,
+      tenantId: this.tenant,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+      bookableId: bookableItem.bookableId,
+      amount: bookableItem.amount,
+      couponCode: this.couponCode,
+      bookWithPrice: this.bookWithPrice,
+    });
 
     await itemCheckoutService.init(bookableItem._bookableUsed);
 
@@ -475,6 +486,13 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     booking.internalComments = this.internalComments;
     booking.rejectionReason = this.rejectionReason;
     return booking;
+  }
+
+  async getLockerInfo() {
+    if (this.lockerInfo && this.lockerInfo.length > 0) {
+      return this.lockerInfo;
+    }
+    return super.getLockerInfo();
   }
 }
 

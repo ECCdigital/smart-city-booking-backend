@@ -11,11 +11,13 @@ const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
+const AccessController = require("./controllers/access-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
 const CatalogController = require("./controllers/catalog-controller");
+const LockerController = require("./controllers/locker-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
@@ -460,6 +462,52 @@ router.put(
   "/catalog",
   AuthenticationController.isSignedIn,
   CatalogController.storeCatalog,
+);
+
+router.get(
+  "/locker/:provider/locations",
+  AuthenticationController.isSignedIn,
+  LockerController.getLocations,
+);
+
+router.get(
+  "/locker/:provider/locations/:locationId",
+  AuthenticationController.isSignedIn,
+  LockerController.getLocationById,
+);
+
+router.get(
+  "/locker/:provider/locations/:locationId/status",
+  AuthenticationController.isSignedIn,
+  LockerController.getLocationsStat,
+);
+
+router.get(
+  "/locker/:provider/locations/:locationId/price",
+  AuthenticationController.isSignedIn,
+  LockerController.getPrice,
+);
+
+router.post(
+  "/locker/:provider/test",
+  AuthenticationController.isSignedIn,
+  LockerController.testConnection,
+);
+
+router.post(
+  "/bookings/:bookingId/access/:accessPointId/open",
+  AuthenticationController.isSignedIn,
+  AccessController.open,
+);
+router.get(
+  "/bookings/:bookingId/access/:accessPointId/open-status",
+  AuthenticationController.isSignedIn,
+  AccessController.getOpenStatus,
+);
+router.get(
+  "/bookings/:bookingId/access-points",
+  AuthenticationController.isSignedIn,
+  AccessController.getAccessPoints,
 );
 
 module.exports = router;
