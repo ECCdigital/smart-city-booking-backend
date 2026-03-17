@@ -204,7 +204,10 @@ class BookableManager {
 
     return Array.from(uniqueMap.values())
       .map((obj) => BookableModel.hydrate(obj))
-      .map((doc) => doc.toEntity());
+      .map((doc) => {
+        BookableModel.applyIfbsProvider(doc);
+        return doc.toEntity();
+      });
   }
 
   /**

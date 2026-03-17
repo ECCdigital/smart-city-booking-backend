@@ -3,11 +3,13 @@ const {
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
+const ExternalPriceService = require("../../../commons/services/external-price-service");
 
 class JSONController {
   static async getBookables(req, res) {
     const { tenant: tenantId } = req.params;
     const { type, ids } = req.query;
+
 
     const identity = req.user;
 
@@ -16,6 +18,8 @@ class JSONController {
       let bookables = await BookableManager.getBookables(tenantId);
 
       bookables = bookables.filter((bookable) => bookable.isPublic);
+
+      console.log(`Found ${bookables.length} public bookables for tenant ${tenantId}`);
 
       bookables = bookables.filter((bookable) => {
         return JSONController.hasAccess(bookable, identity, userRoles);
@@ -45,8 +49,25 @@ class JSONController {
 
       const relatedMap = new Map(relatedBookables.map((b) => [b.id, b]));
 
-      const result = bookables.map((bookable) => {
+      const externalCache = new Map();
+
+      console.log(`Processing ${bookables.length} bookables for tenant ${tenantId}`);
+
+      const result = bookables.map(async (bookable) => {
         const pub = bookable.exportPublic();
+
+        const extPrices = await ExternalPriceService.resolve(
+          bookable,
+          tenantId,
+          externalCache,
+        );
+
+        console.log(`Bookable ${bookable.id} - External prices:`, extPrices);
+
+        if (extPrices) {
+          pub.priceCategories = extPrices;
+        }
+
         pub.relatedBookables = (bookable.relatedBookableIds ?? [])
           .map((id) => relatedMap.get(id))
           .filter(
@@ -60,7 +81,7 @@ class JSONController {
       });
 
       res.setHeader("content-type", "application/json");
-      res.status(200).send(result);
+      res.status(200).send(await Promise.all(result));
     } catch (error) {
       res.status(500).json({
         success: false,
@@ -89,6 +110,14 @@ class JSONController {
 
       if (hasAccess) {
         const pub = bookable.exportPublic();
+
+        const extPrices = await ExternalPriceService.resolve(
+          bookable,
+          tenantId,
+        );
+        if (extPrices) {
+          pub.priceCategories = extPrices;
+        }
 
         const relatedBookables =
           bookable.relatedBookableIds?.length > 0

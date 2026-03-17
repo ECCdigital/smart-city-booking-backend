@@ -156,6 +156,40 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
     });
   }
 
+  async getExternalPriceCategories() {
+    return this._cached("getExternalPriceCategories", async () => {
+      const priceData = await this.client.getPrice(this.locationId);
+
+      const tiers = [
+        { key: "Preis_1 Minute", unit: "minute", label: "Pro Minute" },
+        { key: "Preis_1h", unit: "hour", label: "Pro Stunde" },
+        { key: "Preis_1d", unit: "day", label: "Pro Tag" },
+        { key: "Preis_1w", unit: "week", label: "Pro Woche" },
+        { key: "Preis_1m", unit: "month", label: "Pro Monat" },
+        { key: "Preis_1y", unit: "year", label: "Pro Jahr" },
+      ];
+
+      const categories = tiers
+        .filter((t) => Number(priceData[t.key]) > 0)
+        .map((t) => ({
+          priceEur: Number(priceData[t.key]),
+          unit: t.unit,
+          external: true,
+        }));
+
+      const serviceFee = Number(priceData["Preis_Servicegebühr"]) || 0;
+      if (serviceFee > 0) {
+        categories.push({
+          priceEur: serviceFee,
+          unit: "service-fee",
+          external: true,
+        });
+      }
+
+      return categories;
+    });
+  }
+
   async checkMaxAmount(amount) {
     if (amount > 1) {
       return {
@@ -273,14 +307,11 @@ function calculatePriceFromTiers(priceData, startDate, endDate) {
  */
 function parseBerlinDate(dateStr) {
   const isoStr = dateStr.replace(" ", "T");
-  // Treat the string as UTC initially
   const asUtc = new Date(isoStr + "Z");
-  // Determine Berlin's offset at that moment
   const inBerlin = new Date(
     asUtc.toLocaleString("en-US", { timeZone: "Europe/Berlin" }),
   );
   const offsetMs = inBerlin.getTime() - asUtc.getTime();
-  // Subtract offset to get actual UTC timestamp
   return new Date(asUtc.getTime() - offsetMs);
 }
 module.exports = IfbsCheckoutProvider;

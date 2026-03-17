@@ -102,6 +102,15 @@ class TenantManager {
     return tenant.applications.filter((app) => app.type === appType);
   }
 
+  static async getTenantAppById(tenantId, appId) {
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    if (!rawTenant) {
+      return null;
+    }
+    const tenant = rawTenant.toEntity();
+    return tenant.applications.find((app) => app.id === appId) || null;
+  }
+
   /**
    * Check if more tenants can be created
    * @returns {Promise<boolean>} True if more tenants can be created

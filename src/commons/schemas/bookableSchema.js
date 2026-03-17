@@ -122,6 +122,24 @@ const bookableSchemaDefinition = {
   lockerDetails: { type: Object, default: { active: false, units: [] } },
   requiredFields: { type: [String], default: [] },
 
+  externalProviders: {
+    type: [
+      new Schema(
+        {
+          provider: { type: String, required: true },
+          handles: {
+            type: [String],
+            enum: ["pricing", "availability", "maxAmount"],
+            default: [],
+          },
+          config: { type: Object, default: {} },
+        },
+        { _id: false },
+      ),
+    ],
+    default: [],
+  },
+
   // Timestamps
   timeCreated: { type: Double, default: () => Date.now() },
   timeUpdated: { type: Double, default: () => Date.now() },

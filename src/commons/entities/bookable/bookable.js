@@ -268,6 +268,30 @@ class Bookable {
     return this.flags.includes(flag);
   }
 
+  get hasExternalPricing() {
+    return (
+      this.externalProviders?.some((p) =>
+        p.handles.includes("pricing"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalAvailability() {
+    return (
+      this.externalProviders?.some((p) =>
+        p.handles.includes("availability"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalMaxAmount() {
+    return (
+      this.externalProviders?.some((p) =>
+        p.handles.includes("maxAmount"),
+      ) ?? false
+    );
+  }
+
   /**
    * Export public bookable information
    * @returns {Object} Public bookable data

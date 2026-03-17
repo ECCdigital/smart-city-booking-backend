@@ -6,7 +6,7 @@ const OpeningHoursManager = require("../../utilities/opening-hours-manager");
 const bunyan = require("bunyan");
 const {
   getTenant,
-  getTenantAppByType,
+  getTenantAppById,
 } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
@@ -126,37 +126,35 @@ class ItemCheckoutService {
    * @returns {Promise<BaseCheckoutProvider[]>}
    */
   async _resolveExternalProviders() {
-    const { lockerDetails } = this.originBookable;
+    const declarations = this.originBookable.externalProviders || [];
 
-    if (!lockerDetails?.active || !lockerDetails.units?.length) {
-      return [];
-    }
+    if (!declarations.length) return [];
 
-    const lockerApps = await getTenantAppByType(this.tenantId, "locker");
     const providers = [];
 
-    for (const unit of lockerDetails.units) {
-      if (!providerRegistry.has(unit.lockerSystem)) {
+    for (const decl of declarations) {
+      if (!providerRegistry.has(decl.provider)) {
+        logger.warn(
+          `Unknown external provider "${decl.provider}" on bookable ${this.bookableId}`,
+        );
         continue;
       }
 
-      const app = lockerApps.find(
-        (a) => a.id === unit.lockerSystem && a.active,
-      );
+      const app = await getTenantAppById(this.tenantId, decl.provider);
 
-      if (!app) {
+      if (!app || !app.active) {
         throw new Error(
-          `Tenant ${this.tenantId} has no active locker app "${unit.lockerSystem}"`,
+          `Tenant ${this.tenantId} has no active app for provider "${decl.provider}"`,
         );
       }
 
       const client = createClient(app);
 
       providers.push(
-        providerRegistry.resolve(unit.lockerSystem, client, {
+        providerRegistry.resolve(decl.provider, client, {
           userID: this.checkoutId,
           bookable: this.originBookable,
-          unit,
+          unit: decl.config,
           timeBegin: this.timeBegin,
           timeEnd: this.timeEnd,
           amount: this.amount,
@@ -206,21 +204,21 @@ class ItemCheckoutService {
    * Whether any external provider controls pricing.
    */
   get hasExternalPricing() {
-    return this.externalProviders.some((p) => p.handlesPricing);
+    return this.originBookable.hasExternalPricing;
   }
 
   /**
    * Whether any external provider controls availability.
    */
   get hasExternalAvailability() {
-    return this.externalProviders.some((p) => p.handlesAvailability);
+    return this.originBookable.hasExternalAvailability;
   }
 
   /**
    * Whether any external provider controls max-amount validation.
    */
   get hasExternalMaxAmount() {
-    return this.externalProviders.some((p) => p.handlesMaxAmount);
+    return this.originBookable.hasExternalMaxAmount;
   }
 
   async freeBookingAllowed() {

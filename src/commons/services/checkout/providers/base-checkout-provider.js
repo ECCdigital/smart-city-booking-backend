@@ -47,6 +47,10 @@ class BaseCheckoutProvider {
     throw new Error("getGrossPriceEur() not implemented");
   }
 
+  async getExternalPriceCategories() {
+    throw new Error("getExternalPriceCategories() not implemented");
+  }
+
   get handlesPricing() {
     return false;
   }
