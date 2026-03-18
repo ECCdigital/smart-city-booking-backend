@@ -4,6 +4,7 @@ const {
   CHECK_TYPES,
 } = require("./checkout/item-checkout-service");
 const bunyan = require("bunyan");
+const ExternalPriceService = require("./external-price-service");
 
 const logger = bunyan.createLogger({
   name: "bookable-service.js",
@@ -68,6 +69,16 @@ class BookableService {
         checkoutService.cleanup();
         checkoutService = null;
       }
+    }
+  }
+
+  static async getPriceCategoriesForBookable(bookableId, tenantId) {
+    const bookable = await BookableManager.getBookable(bookableId, tenantId);
+    const extPrices = await ExternalPriceService.resolve(bookable, tenantId);
+    if (extPrices) {
+      return extPrices;
+    } else {
+      return bookable.priceCategories;
     }
   }
 
