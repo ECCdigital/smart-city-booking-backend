@@ -2,33 +2,31 @@ const {
   GiroCockpitPaymentService,
   PmPaymentService,
   InvoicePaymentService,
+  EPayBLPaymentService,
 } = require("../services/payment/payment-service");
 const TenantManager = require("../data-managers/tenant-manager");
 
 class PaymentUtils {
-  static async getPaymentService(
-    tenantId,
-    bookingId,
-    paymentProvider,
-    options,
-  ) {
+  static async getPaymentService(tenantId, bookingId, paymentProvider, options) {
     const paymentProviders = {
-      giroCockpit: GiroCockpitPaymentService,
-      pmPayment: PmPaymentService,
-      invoice: InvoicePaymentService,
+      girocockpit: { serviceClass: GiroCockpitPaymentService, name: "giroCockpit" },
+      pmpayment: { serviceClass: PmPaymentService, name: "pmPayment" },
+      invoice: { serviceClass: InvoicePaymentService, name: "invoice" },
+      epaybl: { serviceClass: EPayBLPaymentService, name: "ePayBL" },
     };
-    const serviceClass = paymentProviders[paymentProvider];
-    if (!serviceClass) return null;
+
+    const provider = paymentProviders[paymentProvider.toLowerCase()];
+    if (!provider) return null;
 
     const paymentApp = await TenantManager.getTenantApp(
       tenantId,
-      paymentProvider,
+      provider.name,
     );
     if (!paymentApp || !paymentApp.active) {
-      throw new Error(`${paymentProvider} payment app not found or inactive.`);
+      throw new Error(`${provider.name} payment app not found or inactive.`);
     }
 
-    return new serviceClass(tenantId, bookingId, options);
+    return new provider.serviceClass(tenantId, bookingId, options);
   }
 }
 

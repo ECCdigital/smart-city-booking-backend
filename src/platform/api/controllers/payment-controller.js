@@ -3,6 +3,7 @@ const GroupBookingManager = require("../../../commons/data-managers/group-bookin
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
 const LockerService = require("../../../commons/services/locker/locker-service");
+const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -39,14 +40,9 @@ class PaymentController {
 
     try {
       const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.refreshPreReservations(
-        tenantId,
-        bookingIds,
-      );
+      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
     } catch (err) {
-      logger.warn(
-        `${tenantId} -- Locker reservation failed: ${err.message}`,
-      );
+      logger.warn(`${tenantId} -- Locker reservation failed: ${err.message}`);
       response.status(409).send({
         message: "Locker not available anymore.",
         code: 3,
@@ -270,6 +266,43 @@ class PaymentController {
     } catch (error) {
       logger.error(error);
       response.sendStatus(400);
+    }
+  }
+
+  static async testConnection(request, response) {
+    const { tenant: tenantId, provider } = request.params;
+
+    const user = request.user;
+    const hasPermission =
+      (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
+      (await PermissionService._isInstanceOwner(user.id));
+
+      if (!hasPermission) {
+        response.status(403).send({
+          success: false,
+          message: "Forbidden: You don't have permission to test this payment provider.",
+        });
+        return;
+      }
+
+    try {
+      const paymentService = await PaymentUtils.getPaymentService(
+        tenantId,
+        null,
+        provider,
+        {},
+      );
+
+      const result = await paymentService.testConnection();
+
+      const statusCode = result.success ? 200 : 503;
+      response.status(statusCode).send(result);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send({
+        success: false,
+        message: error.message,
+      });
     }
   }
 }

@@ -7,7 +7,6 @@ class TenantApplication {
   }
 
   decrypt() {}
-
   encrypt() {}
 
   static get Schema() {
@@ -17,18 +16,9 @@ class TenantApplication {
         required: true,
         enum: ["auth", "payment", "locker"],
       },
-      id: {
-        type: String,
-        required: true,
-      },
-      active: {
-        type: Boolean,
-        default: false,
-      },
-      title: {
-        type: String,
-        default: "",
-      },
+      id: { type: String, required: true },
+      active: { type: Boolean, default: false },
+      title: { type: String, default: "" },
     };
   }
 }
