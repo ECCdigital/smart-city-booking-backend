@@ -860,6 +860,15 @@ class EPayBLPaymentService extends PaymentService {
 
   async paymentNotification(body) {
     try {
+      logger.debug(`[ePayBL] Raw notification body:`, {
+        bodyType: typeof body,
+        bodyIsNull: body === null,
+        bodyIsUndefined: body === undefined,
+        bodyKeys: body ? Object.keys(body) : "N/A",
+        bodyStringified: JSON.stringify(body)?.substring(0, 500),
+      });
+
+
       const {
         kassenzeichen,
         status,
