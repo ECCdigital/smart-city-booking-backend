@@ -862,7 +862,6 @@ class EPayBLPaymentService extends PaymentService {
     try {
       const notificationData = body?.data || body;
 
-
       const {
         kassenzeichen,
         status,
@@ -875,6 +874,13 @@ class EPayBLPaymentService extends PaymentService {
         zvp,
         aktivierung,
       } = notificationData;
+
+      if (status === "notify") {
+        logger.info(
+          `[ePayBL] Skipping 'notify' status for tenant=${this.tenantId}`
+        );
+        return true;
+      }
 
       logger.debug(
         `[ePayBL] Notification received for tenant=${this.tenantId}`,
@@ -889,12 +895,12 @@ class EPayBLPaymentService extends PaymentService {
           bookingIds: this.bookingIds,
           hasHash: !!hash,
           hasTan: !!tan,
-        }
+        },
       );
 
       if (!this.bookingIds || !this.tenantId) {
         logger.debug(
-          `[ePayBL] Missing parameters — bookingIds=${this.bookingIds}, tenantId=${this.tenantId}`
+          `[ePayBL] Missing parameters — bookingIds=${this.bookingIds}, tenantId=${this.tenantId}`,
         );
         throw new Error("Missing parameters");
       }
@@ -961,10 +967,26 @@ class EPayBLPaymentService extends PaymentService {
       logger.debug(`[ePayBL] Fetching payment status`, { statusUrl });
 
       const httpsAgent = this._createHttpsAgent(paymentApp);
-      const statusResponse = await axios.get(statusUrl, {
-        headers: { "Content-Type": "application/json" },
-        httpsAgent,
-      });
+
+      let verifiedStatus;
+      try {
+        const statusResponse = await axios.get(statusUrl, {
+          headers: {
+            "Content-Type": "application/json",
+            Expect: "",
+            Connection: "close",
+          },
+          httpsAgent,
+          timeout: 10000,
+        });
+        verifiedStatus = statusResponse.data?.zahlvorgangsInfo?.status;
+      } catch (statusErr) {
+        logger.warn(
+          `[ePayBL] Status check failed (${statusErr.response?.status}), ` +
+          `falling back to notification status: ${status}`,
+        );
+        verifiedStatus = status === "success" ? "BEZAHLT" : status;
+      }
 
       logger.debug(`[ePayBL] Status response`, {
         httpStatus: statusResponse.status,
@@ -972,7 +994,6 @@ class EPayBLPaymentService extends PaymentService {
         rawData: statusResponse.data,
       });
 
-      const verifiedStatus = statusResponse.data?.zahlvorgangsInfo?.status;
 
       if (verifiedStatus === "BEZAHLT" || status === "success") {
         const paymentMapping = {

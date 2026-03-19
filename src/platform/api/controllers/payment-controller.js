@@ -188,12 +188,12 @@ class PaymentController {
       }
 
       logger.info(
-        `${tenantId} -- booking ${bookingId} successfully payed and updated.`,
+        `${tenantId} -- booking ${aggregatedBookingIds} successfully payed and updated.`,
       );
       response.sendStatus(200);
     } catch {
       logger.warn(
-        `${tenantId} -- could not get payment result for booking ${bookingId}.`,
+        `${tenantId} -- could not get payment result for booking ${aggregatedBookingIds}.`,
       );
       response.sendStatus(400);
     }
