@@ -940,9 +940,15 @@ class EPayBLPaymentService extends PaymentService {
 
       try {
         const statusResponse = await axios.get(statusUrl, {
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
           httpsAgent,
           timeout: 10000,
+          maxRedirects: 5,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
         });
 
         const zusatzdaten = statusResponse.data?.kassenzeichen?.zusatzdaten;
@@ -955,10 +961,14 @@ class EPayBLPaymentService extends PaymentService {
           saldo: zusatzdaten?.saldo,
         });
       } catch (statusErr) {
-        logger.warn(
-          `[ePayBL] Status check failed: ` +
-            `${statusErr.response?.status || statusErr.message}`,
-        );
+        logger.warn(`[ePayBL] Status check failed`, {
+          httpStatus: statusErr.response?.status,
+          responseBody: statusErr.response?.data,
+          responseHeaders: statusErr.response?.headers,
+          requestUrl: statusUrl,
+          errorCode: statusErr.code,
+          message: statusErr.message,
+        });
       }
 
       const apiConfirmedPaid = verifiedStatus === "INAKTIV";
