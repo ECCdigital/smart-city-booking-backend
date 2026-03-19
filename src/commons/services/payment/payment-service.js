@@ -877,7 +877,7 @@ class EPayBLPaymentService extends PaymentService {
 
       if (status === "notify") {
         logger.info(
-          `[ePayBL] Skipping 'notify' status for tenant=${this.tenantId}`
+          `[ePayBL] Skipping 'notify' status for tenant=${this.tenantId}`,
         );
         return true;
       }
@@ -979,21 +979,21 @@ class EPayBLPaymentService extends PaymentService {
           httpsAgent,
           timeout: 10000,
         });
+
+        logger.debug(`[ePayBL] Status response`, {
+          httpStatus: statusResponse.status,
+          rawData: statusResponse.data,
+        });
+
         verifiedStatus = statusResponse.data?.zahlvorgangsInfo?.status;
       } catch (statusErr) {
         logger.warn(
-          `[ePayBL] Status check failed (${statusErr.response?.status}), ` +
-          `falling back to notification status: ${status}`,
+          `[ePayBL] Status check failed ` +
+            `(${statusErr.response?.status}), ` +
+            `falling back to notification status: ${status}`,
         );
         verifiedStatus = status === "success" ? "BEZAHLT" : status;
       }
-
-      logger.debug(`[ePayBL] Status response`, {
-        httpStatus: statusResponse.status,
-        zahlvorgangsInfo: statusResponse.data?.zahlvorgangsInfo,
-        rawData: statusResponse.data,
-      });
-
 
       if (verifiedStatus === "BEZAHLT" || status === "success") {
         const paymentMapping = {
