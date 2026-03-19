@@ -873,11 +873,34 @@ class EPayBLPaymentService extends PaymentService {
         aktivierung,
       } = body;
 
+      logger.debug(
+        `[ePayBL] Notification received for tenant=${this.tenantId}`,
+        {
+          kassenzeichen,
+          status,
+          zahlverfahren,
+          mandant,
+          bewirtschafter,
+          zvgid,
+          aktivierung,
+          bookingIds: this.bookingIds,
+          hasHash: !!hash,
+          hasTan: !!tan,
+        }
+      );
+
       if (!this.bookingIds || !this.tenantId) {
+        logger.debug(
+          `[ePayBL] Missing parameters — bookingIds=${this.bookingIds}, tenantId=${this.tenantId}`
+        );
         throw new Error("Missing parameters");
       }
 
       const paymentApp = await getTenantApp(this.tenantId, "ePayBL");
+      logger.debug(`[ePayBL] Tenant app loaded`, {
+        hasNotificationSecret: !!paymentApp.notificationSecret,
+        appKeys: Object.keys(paymentApp),
+      });
 
       if (hash && paymentApp.notificationSecret) {
         const hashString = [
@@ -892,10 +915,32 @@ class EPayBLPaymentService extends PaymentService {
           status,
         ].join("");
 
+        logger.debug(`[ePayBL] Hash validation`, {
+          hashInputFields: {
+            mandant,
+            bewirtschafter,
+            zvgid,
+            kassenzeichen,
+            tan,
+            zvp,
+            zahlverfahren,
+            aktivierung,
+            status,
+          },
+          concatenated: hashString,
+          receivedHash: hash,
+        });
+
         const expectedHash = crypto
           .createHash("sha256")
           .update(hashString + paymentApp.notificationSecret)
           .digest("hex");
+
+        logger.debug(`[ePayBL] Hash comparison`, {
+          receivedHash: hash,
+          expectedHash,
+          match: hash === expectedHash,
+        });
 
         if (hash !== expectedHash) {
           logger.warn(`${this.tenantId} -- ePayBL hash mismatch`);
@@ -910,10 +955,18 @@ class EPayBLPaymentService extends PaymentService {
         `/bewirtschafter/${cfg.bewirtschafter}` +
         `/kassenzeichen/${kassenzeichen}`;
 
+      logger.debug(`[ePayBL] Fetching payment status`, { statusUrl });
+
       const httpsAgent = this._createHttpsAgent(paymentApp);
       const statusResponse = await axios.get(statusUrl, {
         headers: { "Content-Type": "application/json" },
         httpsAgent,
+      });
+
+      logger.debug(`[ePayBL] Status response`, {
+        httpStatus: statusResponse.status,
+        zahlvorgangsInfo: statusResponse.data?.zahlvorgangsInfo,
+        rawData: statusResponse.data,
       });
 
       const verifiedStatus = statusResponse.data?.zahlvorgangsInfo?.status;
@@ -930,15 +983,30 @@ class EPayBLPaymentService extends PaymentService {
           LASTSCHRIFTOHNE: "DIRECT_DEBIT",
         };
 
+        const resolvedMethod = paymentMapping[zahlverfahren] || "OTHER";
+        logger.debug(`[ePayBL] Payment successful — processing`, {
+          verifiedStatus,
+          notificationStatus: status,
+          zahlverfahren,
+          resolvedPaymentMethod: resolvedMethod,
+          bookingIds: this.bookingIds,
+        });
+
         await this.handleSuccessfulPayment({
           bookingIds: this.bookingIds,
           tenantId: this.tenantId,
-          paymentMethod: paymentMapping[zahlverfahren] || "OTHER",
+          paymentMethod: resolvedMethod,
         });
 
+        logger.debug(`[ePayBL] handleSuccessfulPayment completed`);
         return true;
       } else {
         logger.warn(`${this.tenantId} -- ePayBL: ${verifiedStatus}`);
+        logger.debug(`[ePayBL] Payment not successful`, {
+          verifiedStatus,
+          notificationStatus: status,
+          kassenzeichen,
+        });
         return true;
       }
     } catch (error) {
