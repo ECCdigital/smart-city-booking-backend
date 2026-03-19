@@ -860,13 +860,7 @@ class EPayBLPaymentService extends PaymentService {
 
   async paymentNotification(body) {
     try {
-      logger.debug(`[ePayBL] Raw notification body:`, {
-        bodyType: typeof body,
-        bodyIsNull: body === null,
-        bodyIsUndefined: body === undefined,
-        bodyKeys: body ? Object.keys(body) : "N/A",
-        bodyStringified: JSON.stringify(body)?.substring(0, 500),
-      });
+      const notificationData = body?.data || body;
 
 
       const {
@@ -880,7 +874,7 @@ class EPayBLPaymentService extends PaymentService {
         tan,
         zvp,
         aktivierung,
-      } = body;
+      } = notificationData;
 
       logger.debug(
         `[ePayBL] Notification received for tenant=${this.tenantId}`,
