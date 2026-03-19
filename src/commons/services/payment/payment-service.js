@@ -877,41 +877,28 @@ class EPayBLPaymentService extends PaymentService {
 
       if (status === "notify") {
         logger.info(
-          `[ePayBL] Skipping 'notify' status for tenant=${this.tenantId}`,
+          `[ePayBL] Skipping 'notify' status for ` + `tenant=${this.tenantId}`,
         );
         return true;
       }
 
-      logger.debug(
-        `[ePayBL] Notification received for tenant=${this.tenantId}`,
-        {
-          kassenzeichen,
-          status,
-          zahlverfahren,
-          mandant,
-          bewirtschafter,
-          zvgid,
-          aktivierung,
-          bookingIds: this.bookingIds,
-          hasHash: !!hash,
-          hasTan: !!tan,
-        },
-      );
-
       if (!this.bookingIds || !this.tenantId) {
-        logger.debug(
-          `[ePayBL] Missing parameters — bookingIds=${this.bookingIds}, tenantId=${this.tenantId}`,
-        );
         throw new Error("Missing parameters");
       }
 
       const paymentApp = await getTenantApp(this.tenantId, "ePayBL");
-      logger.debug(`[ePayBL] Tenant app loaded`, {
-        hasNotificationSecret: !!paymentApp.notificationSecret,
-        appKeys: Object.keys(paymentApp),
-      });
 
-      if (hash && paymentApp.notificationSecret) {
+      let hashValid = false;
+
+      if (paymentApp.notificationSecret) {
+        if (!hash) {
+          logger.warn(
+            `[ePayBL] Secret configured but no hash in ` +
+              `notification — rejecting`,
+          );
+          throw new Error("Missing hash in notification");
+        }
+
         const hashString = [
           mandant,
           bewirtschafter,
@@ -924,38 +911,23 @@ class EPayBLPaymentService extends PaymentService {
           status,
         ].join("");
 
-        logger.debug(`[ePayBL] Hash validation`, {
-          hashInputFields: {
-            mandant,
-            bewirtschafter,
-            zvgid,
-            kassenzeichen,
-            tan,
-            zvp,
-            zahlverfahren,
-            aktivierung,
-            status,
-          },
-          concatenated: hashString,
-          receivedHash: hash,
-        });
-
         const expectedHash = crypto
           .createHash("sha256")
           .update(hashString + paymentApp.notificationSecret)
           .digest("hex");
 
-        logger.debug(`[ePayBL] Hash comparison`, {
-          receivedHash: hash,
-          expectedHash,
-          match: hash === expectedHash,
-        });
-
         if (hash !== expectedHash) {
           logger.warn(`${this.tenantId} -- ePayBL hash mismatch`);
           throw new Error("Hash mismatch");
         }
+
+        hashValid = true;
+        logger.info(
+          `[ePayBL] Hash validation successful for ` + `${this.tenantId}`,
+        );
       }
+
+      let verifiedStatus = null;
 
       const cfg = this._getEpayblConfig(paymentApp);
       const statusUrl =
@@ -964,38 +936,44 @@ class EPayBLPaymentService extends PaymentService {
         `/bewirtschafter/${cfg.bewirtschafter}` +
         `/kassenzeichen/${kassenzeichen}`;
 
-      logger.debug(`[ePayBL] Fetching payment status`, { statusUrl });
-
       const httpsAgent = this._createHttpsAgent(paymentApp);
 
-      let verifiedStatus;
       try {
         const statusResponse = await axios.get(statusUrl, {
-          headers: {
-            "Content-Type": "application/json",
-            Expect: "",
-            Connection: "close",
-          },
+          headers: { "Content-Type": "application/json" },
           httpsAgent,
           timeout: 10000,
         });
 
-        logger.debug(`[ePayBL] Status response`, {
-          httpStatus: statusResponse.status,
-          rawData: statusResponse.data,
-        });
+        const zusatzdaten = statusResponse.data?.kassenzeichen?.zusatzdaten;
 
-        verifiedStatus = statusResponse.data?.zahlvorgangsInfo?.status;
+        verifiedStatus = zusatzdaten?.paypagestatus;
+
+        logger.debug(`[ePayBL] Status API response`, {
+          paypagestatus: verifiedStatus,
+          bezahlverfahren: zusatzdaten?.bezahlverfahren,
+          saldo: zusatzdaten?.saldo,
+        });
       } catch (statusErr) {
         logger.warn(
-          `[ePayBL] Status check failed ` +
-            `(${statusErr.response?.status}), ` +
-            `falling back to notification status: ${status}`,
+          `[ePayBL] Status check failed: ` +
+            `${statusErr.response?.status || statusErr.message}`,
         );
-        verifiedStatus = status === "success" ? "BEZAHLT" : status;
       }
 
-      if (verifiedStatus === "BEZAHLT" || status === "success") {
+      const apiConfirmedPaid = verifiedStatus === "INAKTIV";
+
+      if (!hashValid && !apiConfirmedPaid) {
+        logger.error(
+          `[ePayBL] Cannot verify payment for ` +
+            `${this.tenantId}: no hash secret configured ` +
+            `and API status check failed or not paid. ` +
+            `Rejecting notification.`,
+        );
+        throw new Error("Payment could not be verified by any means");
+      }
+
+      if (apiConfirmedPaid || (hashValid && status === "success")) {
         const paymentMapping = {
           KREDITKARTE: "CREDIT_CARD",
           GIROPAY: "GIROPAY",
@@ -1008,12 +986,11 @@ class EPayBLPaymentService extends PaymentService {
         };
 
         const resolvedMethod = paymentMapping[zahlverfahren] || "OTHER";
-        logger.debug(`[ePayBL] Payment successful — processing`, {
-          verifiedStatus,
-          notificationStatus: status,
-          zahlverfahren,
-          resolvedPaymentMethod: resolvedMethod,
+
+        logger.info(`[ePayBL] Payment verified for ${this.tenantId}`, {
+          verifiedBy: apiConfirmedPaid ? "API" : "HASH",
           bookingIds: this.bookingIds,
+          paymentMethod: resolvedMethod,
         });
 
         await this.handleSuccessfulPayment({
@@ -1022,15 +999,13 @@ class EPayBLPaymentService extends PaymentService {
           paymentMethod: resolvedMethod,
         });
 
-        logger.debug(`[ePayBL] handleSuccessfulPayment completed`);
         return true;
       } else {
-        logger.warn(`${this.tenantId} -- ePayBL: ${verifiedStatus}`);
-        logger.debug(`[ePayBL] Payment not successful`, {
-          verifiedStatus,
-          notificationStatus: status,
-          kassenzeichen,
-        });
+        logger.warn(
+          `${this.tenantId} -- ePayBL payment not ` +
+            `successful: API=${verifiedStatus}, ` +
+            `notification=${status}`,
+        );
         return true;
       }
     } catch (error) {

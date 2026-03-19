@@ -12,6 +12,7 @@ class EPayBLApplication extends PaymentApplication {
     this.paymentMethods = params.paymentMethods || [];
     this.clientP12 = params.clientP12 || "";
     this.certPassphrase = params.certPassphrase || "";
+    this.notificationSecret = params.notificationSecret || "";
   }
 
   decrypt() {
@@ -21,6 +22,10 @@ class EPayBLApplication extends PaymentApplication {
     if (this.clientP12) {
       this.clientP12 = SecurityUtils.decrypt(this.clientP12);
     }
+
+    if (this.notificationSecret) {
+      this.notificationSecret = SecurityUtils.decrypt(this.notificationSecret);
+    }
   }
 
   encrypt() {
@@ -29,6 +34,10 @@ class EPayBLApplication extends PaymentApplication {
     }
     if (this.clientP12) {
       this.clientP12 = SecurityUtils.encrypt(this.clientP12);
+    }
+
+    if (this.notificationSecret) {
+      this.notificationSecret = SecurityUtils.encrypt(this.notificationSecret);
     }
   }
 
@@ -43,6 +52,7 @@ class EPayBLApplication extends PaymentApplication {
       paymentMethods: { type: [String], default: [] },
       clientP12: { type: Object, default: null },
       certPassphrase: { type: Object, default: null },
+      notificationSecret: { type: Object, default: null },
     };
   }
 }
