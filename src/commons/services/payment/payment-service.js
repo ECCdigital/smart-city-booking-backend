@@ -941,7 +941,6 @@ class EPayBLPaymentService extends PaymentService {
       try {
         const statusResponse = await axios.get(statusUrl, {
           headers: {
-            "Content-Type": "application/json",
             Accept: "application/json",
           },
           httpsAgent,
