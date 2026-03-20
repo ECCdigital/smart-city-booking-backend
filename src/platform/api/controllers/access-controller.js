@@ -48,6 +48,7 @@ class AccessController {
    */
   static async getOpenStatus(request, response) {
     try {
+      console.log("Getting open status with query:", request.query);
       const { tenant, bookingId, accessPointId } = request.params;
       const { openBoxId } = request.query;
       const user = request.user;
@@ -61,6 +62,9 @@ class AccessController {
         tenant,
         bookingId,
       );
+
+      console.log(`User ${user.id} access check for booking ${bookingId}:`, allowed);
+
       if (!allowed) return response.sendStatus(403);
 
       const status = await AccessService.getOpenStatus(
@@ -69,6 +73,8 @@ class AccessController {
         accessPointId,
         openBoxId,
       );
+
+      console.log(`Open status for booking ${bookingId}, access point ${accessPointId}, openBoxId ${openBoxId}:`, status);
 
       response.status(200).send(status);
     } catch (err) {
