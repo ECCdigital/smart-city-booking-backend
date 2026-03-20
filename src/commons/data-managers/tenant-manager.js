@@ -25,6 +25,7 @@ class TenantManager {
     if (!rawTenant) {
       return null;
     }
+
     return rawTenant.toEntity();
   }
 

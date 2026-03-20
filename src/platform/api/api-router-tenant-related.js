@@ -45,7 +45,10 @@ router.get(
 );
 router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
 
-router.get("/bookables/:id/prices", BookableController.getBookablePriceCategories);
+router.get(
+  "/bookables/:id/prices",
+  BookableController.getBookablePriceCategories,
+);
 
 // Protected
 router.get(
@@ -271,6 +274,11 @@ router.get("/payments/notify", PaymentController.paymentNotificationGET);
 router.post("/payments/notify", PaymentController.paymentNotificationPOST);
 router.post("/payments/response", PaymentController.paymentResponse);
 router.get("/payments/response", PaymentController.paymentResponse);
+router.get(
+  "/payments/providers/:provider/test",
+  AuthenticationController.isSignedIn,
+  PaymentController.testConnection,
+);
 
 // CALENDAR
 // ========
