@@ -5,6 +5,9 @@ const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const fileUpload = require("express-fileupload");
 const bunyan = require("bunyan");
+const swaggerUi = require("swagger-ui-express");
+const YAML = require("yamljs");
+const path = require("path");
 
 const DatabaseManager = require("./commons/utilities/database-manager.js");
 const { runMigrations } = require("../migrations/migrationsManager");
@@ -22,6 +25,20 @@ const logger = bunyan.createLogger({
 });
 
 const app = express();
+
+const swaggerSpec = require("./docs/swagger-config");
+
+if (process.env.NODE_ENV !== "production") {
+  app.use(
+    "/api-docs",
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      customSiteTitle: "Access API Docs",
+      customCss: ".swagger-ui .topbar { display: none }",
+    }),
+  );
+}
+
 app.use(fileUpload());
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
@@ -104,7 +121,6 @@ const exportersRouterTenantRelated = require("./platform/exporters/exporters-rou
 app.use("/csv/:tenant", exportersRouterTenantRelated);
 
 app.use(errorHandler);
-
 
 require("./commons/services/checkout/providers/register");
 require("./commons/services/access/providers/register-access-providers");

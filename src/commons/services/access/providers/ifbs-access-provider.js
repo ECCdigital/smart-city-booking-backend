@@ -29,9 +29,8 @@ class IfbsAccessProvider extends AccessProvider {
     const client = await this._getClient(bookingContext.tenant);
     const result = await client.openBox(bookingContext.externalBookingId);
     return {
-      success: true,
-      state: "open",
-      providerResponse: result,
+      processId: result.Booking_ID,
+      openProcessId: result.OpenBox_ID,
     };
   }
 
@@ -55,20 +54,19 @@ class IfbsAccessProvider extends AccessProvider {
         confirmed: result.BoxControlConfirmed === "true",
         confirmedAt: result.BoxControlConfirmedDateTime || null,
         waitTime: result.WaitTime || null,
-        openBoxId,
+        openProcessId: openBoxId || null,
       };
     } catch (err) {
+
       return {
         confirmed: false,
         confirmedAt: null,
         waitTime: null,
-        openBoxId,
+        openProcessId: openBoxId || null,
         errorCode: err instanceof IfbsApiError ? err.errNo : null,
         errorMessage: err instanceof IfbsApiError ? err.errMsg : err.message,
       };
     }
-
-
   }
 
   static get capabilities() {

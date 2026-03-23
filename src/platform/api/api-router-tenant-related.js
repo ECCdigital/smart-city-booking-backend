@@ -461,63 +461,8 @@ router.delete(
   InvitationController.deleteUserInvitation,
 );
 
-// CATALOG
-
-router.get(
-  "/catalog",
-  AuthenticationController.isSignedIn,
-  CatalogController.getCatalogByTenant,
-);
-router.put(
-  "/catalog",
-  AuthenticationController.isSignedIn,
-  CatalogController.storeCatalog,
-);
-
-router.get(
-  "/locker/:provider/locations",
-  AuthenticationController.isSignedIn,
-  LockerController.getLocations,
-);
-
-router.get(
-  "/locker/:provider/locations/:locationId",
-  AuthenticationController.isSignedIn,
-  LockerController.getLocationById,
-);
-
-router.get(
-  "/locker/:provider/locations/:locationId/status",
-  AuthenticationController.isSignedIn,
-  LockerController.getLocationsStat,
-);
-
-router.get(
-  "/locker/:provider/locations/:locationId/price",
-  AuthenticationController.isSignedIn,
-  LockerController.getPrice,
-);
-
-router.post(
-  "/locker/:provider/test",
-  AuthenticationController.isSignedIn,
-  LockerController.testConnection,
-);
-
-router.post(
-  "/bookings/:bookingId/access/:accessPointId/open",
-  AuthenticationController.isSignedIn,
-  AccessController.open,
-);
-router.get(
-  "/bookings/:bookingId/access/:accessPointId/open-status",
-  AuthenticationController.isSignedIn,
-  AccessController.getOpenStatus,
-);
-router.get(
-  "/bookings/:bookingId/access-points",
-  AuthenticationController.isSignedIn,
-  AccessController.getAccessPoints,
-);
+router.use("/catalog", require("./routes/catalog.routes"));
+router.use("/locker", require("./routes/locker.routes"));
+router.use("/access", require("./routes/access.routes"));
 
 module.exports = router;

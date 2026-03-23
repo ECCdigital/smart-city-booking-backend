@@ -63,9 +63,12 @@
     "qs": "^6.11.2",
     "range-overlap": "^1.0.0",
     "sinon": "^20.0.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^9.0.1",
     "validator": "^13.12.0",
     "webdav": "^4.11.3",
+    "yamljs": "^0.3.0",
     "yargs": "^17.7.2"
   },
   "devDependencies": {

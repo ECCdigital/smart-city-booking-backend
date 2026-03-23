@@ -46,21 +46,21 @@ class AccessService {
   /**
    * Returns the current state of an access point.
    */
-  static async getOpenStatus(tenant, bookingId, accessPointId, openBoxId) {
+  static async getOpenStatus(tenant, bookingId, accessPointId, openProcessId) {
     const { accessPoint } = await this._resolve(
       tenant,
       bookingId,
       accessPointId,
     );
     const provider = getAccessProvider(accessPoint.provider);
-    return provider.getOpenStatus(tenant, openBoxId);
+    return await provider.getOpenStatus(tenant, openProcessId);
   }
 
   /**
    * Returns all access points for a booking.
    */
   static async getByBooking(tenant, bookingId) {
-    // TODO: DB query
+    // TODO:
   }
 
   /**
@@ -71,11 +71,7 @@ class AccessService {
 
     const isActive = booking.getIsActive();
 
-    const hasPermission = PermissionsService._isOwner(
-      booking,
-      userId,
-      tenant,
-    );
+    const hasPermission = PermissionsService._isOwner(booking, userId, tenant);
 
     return hasPermission && isActive;
   }
