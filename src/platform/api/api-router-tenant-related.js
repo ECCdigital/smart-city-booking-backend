@@ -11,13 +11,10 @@ const FileController = require("./controllers/file-controller");
 const WorkflowController = require("./controllers/workflow-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const RoleController = require("./controllers/role-controller");
-const AccessController = require("./controllers/access-controller");
 const { TenantController } = require("./controllers/tenant-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
-const CatalogController = require("./controllers/catalog-controller");
-const LockerController = require("./controllers/locker-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });

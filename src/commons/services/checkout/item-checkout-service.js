@@ -10,7 +10,7 @@ const {
 } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
-const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
+const { BOOKABLE_TYPES, Bookable } = require("../../entities/bookable/bookable");
 const CouponService = require("../coupon-service");
 const providerRegistry = require("./providers/checkout-provider-registry");
 const { createClient } = require("../locker/clients/locker-client-registry");
@@ -1111,8 +1111,14 @@ class ManualItemCheckoutService extends ItemCheckoutService {
   }
 
   async init(originBookable) {
-    this.originBookable =
-      JSON.parse(JSON.stringify(originBookable)) ?? (await super.getBookable());
+    if (originBookable) {
+      this.originBookable =
+        originBookable instanceof Bookable
+          ? originBookable
+          : new Bookable(originBookable);
+    } else {
+      this.originBookable = await super.getBookable();
+    }
     this.externalProviders = await this._resolveExternalProviders();
   }
 }

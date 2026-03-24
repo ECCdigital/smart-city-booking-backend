@@ -106,7 +106,6 @@ class IfbsApiClient extends BaseLockerApiClient {
     const response = await this._get("cancelUsage.php", {
       ID: bookingID,
     });
-    console.error(`CancelUsage response for booking ${bookingID}:`, response);
     return response;
   }
 
@@ -115,7 +114,6 @@ class IfbsApiClient extends BaseLockerApiClient {
       ID: bookingID,
       ...(dateTo ? { DATEto: dateTo } : {}),
     });
-    console.error(`EndUsage response for booking ${bookingID}:`, response);
     return response;
   }
 
