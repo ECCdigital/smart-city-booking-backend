@@ -270,24 +270,24 @@ class Bookable {
 
   get hasExternalPricing() {
     return (
-      this.externalProviders?.some((p) =>
-        p.handles.includes("pricing"),
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("pricing"),
       ) ?? false
     );
   }
 
   get hasExternalAvailability() {
     return (
-      this.externalProviders?.some((p) =>
-        p.handles.includes("availability"),
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("availability"),
       ) ?? false
     );
   }
 
   get hasExternalMaxAmount() {
     return (
-      this.externalProviders?.some((p) =>
-        p.handles.includes("maxAmount"),
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("maxAmount"),
       ) ?? false
     );
   }

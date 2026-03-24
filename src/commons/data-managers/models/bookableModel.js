@@ -7,7 +7,6 @@ const BookableSchema = new Schema(bookableSchemaDefinition);
 
 BookableSchema.index({ tenantId: 1, id: 1 });
 
-// --- Temp IFBS Provider Sync Logic ---
 function hasActiveIfbsLocker(doc) {
   return (
     doc.lockerDetails?.active === true &&
@@ -27,29 +26,38 @@ function ensureIfbsProvider(doc) {
     (p) => p.provider === "ifbs",
   );
 
-  if (hasActiveIfbsLocker(doc)) {
-    const ifbsUnit = doc.lockerDetails.units.find(
-      (u) => u.lockerSystem === "ifbs",
-    );
+  const hasLocker = hasActiveIfbsLocker(doc);
 
-    const providerEntry = {
-      provider: "ifbs",
-      handles: ["pricing", "availability", "maxAmount"],
-      config: {
-        locationId: ifbsUnit.locationId ?? null,
-        amount: 1,
-      },
-    };
+  if (!hasLocker) {
+    return;
+  }
 
-    if (existingIndex >= 0) {
-      doc.externalProviders[existingIndex] = providerEntry;
-    } else {
-      doc.externalProviders.push(providerEntry);
-    }
+  let existingProvider =
+    existingIndex >= 0 ? doc.externalProviders[existingIndex] : null;
+
+  let ifbsUnit = null;
+  if (Array.isArray(doc.lockerDetails?.units)) {
+    ifbsUnit = doc.lockerDetails.units.find((u) => u.lockerSystem === "ifbs");
+  }
+
+  const providerEntry = {
+    active: existingProvider?.active ?? false,
+    provider: "ifbs",
+    handles: existingProvider?.handles ?? [
+      "pricing",
+      "availability",
+      "maxAmount",
+    ],
+    config: {
+      locationId: ifbsUnit?.locationId ?? null,
+      amount: 1,
+    },
+  };
+
+  if (existingIndex >= 0) {
+    doc.externalProviders[existingIndex] = providerEntry;
   } else {
-    if (existingIndex >= 0) {
-      doc.externalProviders.splice(existingIndex, 1);
-    }
+    doc.externalProviders.push(providerEntry);
   }
 }
 
@@ -80,7 +88,6 @@ function postFindHook(docs) {
 
 BookableSchema.post("find", postFindHook);
 BookableSchema.post("findOne", postFindHook);
-
 
 BookableSchema.statics.applyIfbsProvider = function (docs) {
   const list = Array.isArray(docs) ? docs : [docs];

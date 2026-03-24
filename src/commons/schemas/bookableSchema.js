@@ -126,6 +126,7 @@ const bookableSchemaDefinition = {
     type: [
       new Schema(
         {
+          active: { type: Boolean, default: false },
           provider: { type: String, required: true },
           handles: {
             type: [String],
