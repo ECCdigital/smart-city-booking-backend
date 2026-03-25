@@ -51,26 +51,107 @@ class AuthenticationController {
 
   static async ssoLogin(request, response) {
     try {
-      const {
-        body: { token },
-      } = request;
-      const user = await SsoService.handleLogin(token);
+      const { token } = request.body;
 
-      if (user) {
-        const accessToken = await JwtHelper.generateToken(user);
-        const refreshToken = await JwtHelper.generateRefreshToken(user);
-
-        response.status(200).json({
-          user,
-          accessToken,
-          refreshToken,
+      if (!token) {
+        return response.status(400).json({
+          success: false,
+          message: "Keycloak token required",
         });
-      } else {
-        response.sendStatus(401);
       }
+
+      // Token gegen Keycloak verifizieren
+      const KeycloakVerifier =
+        require("../../../commons/utilities/keycloak-verifier");
+      const decoded = await KeycloakVerifier.verifyToken(token);
+
+      const userId = decoded.email || decoded.preferred_username;
+
+      // User in lokaler DB suchen
+      let user = await UserManager.getUser(userId, false);
+
+      if (!user) {
+        return response.status(404).json({
+          success: false,
+          message: "User not found. Registration required.",
+        });
+      }
+
+      if (user.isSuspended) {
+        return response.status(403).json({
+          success: false,
+          message: "User account is suspended",
+        });
+      }
+
+      const permissions = await UserManager.getUserPermissions(userId);
+
+      logger.info(`SSO login for user ${userId} (Keycloak token direct)`);
+
+      // Kein eigenes Token mehr generieren!
+      // Das Frontend nutzt das Keycloak-Token direkt.
+      response.status(200).json({
+        success: true,
+        user,
+        permissions,
+        authType: "keycloak",
+      });
     } catch (error) {
-      response.status(error.status || 500).send(error.message);
-      logger.error(error);
+      logger.error("SSO login failed:", error);
+      response.status(error.status || 401).json({
+        success: false,
+        message: error.message || "SSO authentication failed",
+      });
+    }
+  }
+
+  static async ssoVerify(request, response) {
+    try {
+      const { token } = request.body;
+
+      if (!token) {
+        return response.status(400).json({
+          success: false,
+          message: "Token required",
+        });
+      }
+
+      const KeycloakVerifier =
+        require("../../../commons/utilities/keycloak-verifier");
+      const decoded = await KeycloakVerifier.verifyToken(token);
+
+      const userId = decoded.email || decoded.preferred_username;
+      const user = await UserManager.getUser(userId, false);
+
+      if (!user) {
+        return response.status(404).json({
+          success: false,
+          message: "User not found",
+          keycloakEmail: decoded.email,
+        });
+      }
+
+      if (user.isSuspended) {
+        return response.status(403).json({
+          success: false,
+          message: "User account is suspended",
+        });
+      }
+
+      const permissions = await UserManager.getUserPermissions(userId);
+
+      response.status(200).json({
+        success: true,
+        user,
+        permissions,
+        authType: "keycloak",
+      });
+    } catch (error) {
+      logger.error("SSO verify failed:", error.message);
+      response.status(401).json({
+        success: false,
+        message: "Token verification failed",
+      });
     }
   }
 
