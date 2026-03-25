@@ -96,8 +96,11 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+
+    const isAggregated = aggregated === "true";
+
     logger.info(
-      `Payment notification GET received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+      `Payment notification GET received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${isAggregated}`,
     );
 
     let aggregatedBookingIds = bookingIds
@@ -117,8 +120,8 @@ class PaymentController {
     );
 
     try {
-      if (aggregated) {
-        const options = { aggregated };
+      if (isAggregated) {
+        const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           bookings.map((booking) => booking.id),
@@ -154,8 +157,10 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+    const isAggregated = aggregated === "true";
+
     logger.info(
-      `Payment notification POST received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+      `Payment notification POST received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${isAggregated}`,
     );
 
     let aggregatedBookingIds = bookingIds
@@ -175,8 +180,8 @@ class PaymentController {
     );
 
     try {
-      if (aggregated) {
-        const options = { aggregated };
+      if (isAggregated) {
+        const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           bookings.map((booking) => booking.id),
