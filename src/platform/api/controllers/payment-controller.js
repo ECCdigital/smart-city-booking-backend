@@ -17,6 +17,10 @@ class PaymentController {
       body: { bookingIds, aggregated },
     } = request;
 
+    logger.debug(
+      `Create payment request received for tenant ${tenantId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+    );
+
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
     if (!bookings) {
@@ -66,6 +70,10 @@ class PaymentController {
     //TODO: Check if all bookings are in the same tenant and have the same payment provider
 
     try {
+      logger.debug(
+        `Getting payment service for tenant ${tenantId}, bookingIds ${bookingIds}, paymentProvider ${bookings[0].paymentProvider}, aggregated ${aggregated}, groupBookingId ${groupBookingId}`,
+      );
+
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingIds,
@@ -277,13 +285,14 @@ class PaymentController {
       (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
       (await PermissionService._isInstanceOwner(user.id));
 
-      if (!hasPermission) {
-        response.status(403).send({
-          success: false,
-          message: "Forbidden: You don't have permission to test this payment provider.",
-        });
-        return;
-      }
+    if (!hasPermission) {
+      response.status(403).send({
+        success: false,
+        message:
+          "Forbidden: You don't have permission to test this payment provider.",
+      });
+      return;
+    }
 
     try {
       const paymentService = await PaymentUtils.getPaymentService(

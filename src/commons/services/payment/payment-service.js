@@ -680,7 +680,7 @@ class EPayBLPaymentService extends PaymentService {
   }
 
   _buildFaelligkeitsdatum() {
-    const date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const date = new Date(Date.now());
     return date
       .toLocaleString("de-DE", {
         day: "2-digit",
@@ -712,11 +712,12 @@ class EPayBLPaymentService extends PaymentService {
 
     const httpsAgent = this._createHttpsAgent(paymentApp);
 
+    logger.debug(`Posting to ePayBL at ${url} with payload:`, buchungsliste);
+
     const response = await axios.post(url, buchungsliste, {
       headers: { "Content-Type": "application/json" },
       httpsAgent,
     });
-
     const rc = response.data?.ergebnis?.rc;
     if (rc === "+0000" || (rc && rc.startsWith("+"))) {
       const paypageUrl = response.data?.zahlvorgangsInfo?.rechnungUrls?.PAYPAGE;
@@ -754,7 +755,7 @@ class EPayBLPaymentService extends PaymentService {
         faelligkeitsdatum: this._buildFaelligkeitsdatum(),
         waehrungskennzeichen: "EUR",
         kennzeichenMahnverfahren: cfg.mahnkennzeichen,
-        transaktionsnummer: bookingId,
+        transaktionsnummer: `${bookingId}-${Date.now()}`,
         zahlverfahrencodes: cfg.zahlverfahren,
         buchungen: [
           {
@@ -769,12 +770,12 @@ class EPayBLPaymentService extends PaymentService {
             },
           },
         ],
-        beschreibung: `Buchung ${bookingId}`,
+        beschreibung: `Buchungsnummer ${bookingId}`,
         kunde: {
-          name: booking.lastName || "Kunde",
+          name: booking.name || "Kunde",
           vorname: booking.firstName || null,
           typ: "TEMPORAER",
-          kundennummer: bookingId,
+          kundennummer: `${bookingId}-${Date.now()}`,
           firmenkunde: false,
         },
         buchungslistenparameter: null,
@@ -830,15 +831,15 @@ class EPayBLPaymentService extends PaymentService {
       faelligkeitsdatum: this._buildFaelligkeitsdatum(),
       waehrungskennzeichen: "EUR",
       kennzeichenMahnverfahren: cfg.mahnkennzeichen,
-      transaktionsnummer: merchantTxId,
+      transaktionsnummer: `${merchantTxId}-${Date.now()}`,
       zahlverfahrencodes: cfg.zahlverfahren,
       buchungen,
-      beschreibung: `Sammelbuchung ${merchantTxId}`,
+      beschreibung: `Sammelbuchungsnummer ${merchantTxId}`,
       kunde: {
-        name: bookings[0].lastName || "Kunde",
+        name: bookings[0].name || "Kunde",
         vorname: bookings[0].firstName || null,
         typ: "TEMPORAER",
-        kundennummer: merchantTxId,
+        kundennummer: `${merchantTxId}-${Date.now()}`,
         firmenkunde: false,
       },
       buchungslistenparameter: null,
