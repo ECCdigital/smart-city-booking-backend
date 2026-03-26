@@ -60,14 +60,12 @@ class AuthenticationController {
         });
       }
 
-      // Token gegen Keycloak verifizieren
       const KeycloakVerifier =
         require("../../../commons/utilities/keycloak-verifier");
       const decoded = await KeycloakVerifier.verifyToken(token);
 
       const userId = decoded.email || decoded.preferred_username;
 
-      // User in lokaler DB suchen
       let user = await UserManager.getUser(userId, false);
 
       if (!user) {
@@ -88,8 +86,7 @@ class AuthenticationController {
 
       logger.info(`SSO login for user ${userId} (Keycloak token direct)`);
 
-      // Kein eigenes Token mehr generieren!
-      // Das Frontend nutzt das Keycloak-Token direkt.
+      //TODO - Optional: JWT-Token
       response.status(200).json({
         success: true,
         user,
@@ -270,7 +267,6 @@ class AuthenticationController {
       if (token) {
         await JwtHelper.revokeToken(token, "logout");
 
-        // Optional: Auch Refresh-Token revoken wenn mitgeschickt
         const { refreshToken } = request.body;
         if (refreshToken) {
           await JwtHelper.revokeToken(refreshToken, "logout");
