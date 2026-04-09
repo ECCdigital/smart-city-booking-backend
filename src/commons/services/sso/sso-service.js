@@ -136,7 +136,10 @@ class SsoService {
       const newRole = await processRole(role);
       if (newRole) {
         newRoles.push({
+          tenantId: newRole.tenantId,
           role: newRole.role,
+          action: newRole.action,
+          needsInvite: newRole.needsInvite,
           status: "active",
           source: "keycloak",
         });
@@ -158,19 +161,45 @@ function extractRoles(obj) {
 }
 
 async function updateTenantRoles(roles, userId) {
-  for (const { tenantId, role, action, needsInvite } of roles) {
-    if (action === "add") {
-      if (needsInvite) {
-        await MembershipManager.addMembership(tenantId, { userId });
-      }
-      const newRole = {
-        role: role,
+  // Group roles by tenantId to handle multiple roles for the same tenant
+  const rolesByTenant = {};
+  for (const roleObj of roles) {
+    if (!rolesByTenant[roleObj.tenantId]) {
+      rolesByTenant[roleObj.tenantId] = [];
+    }
+    rolesByTenant[roleObj.tenantId].push(roleObj);
+  }
+
+  // Process each tenant's roles
+  for (const tenantId in rolesByTenant) {
+    const tenantRoles = rolesByTenant[tenantId];
+
+    // Check if membership exists
+    const membership = await MembershipManager.getMembershipByTenantAndUserID(
+      tenantId,
+      userId,
+    );
+
+    // If any role needs to create membership and it doesn't exist, create it once
+    if (!membership && tenantRoles.some((r) => r.needsInvite)) {
+      await MembershipManager.addMembership(tenantId, {
+        userId,
+        source: "manually",
         status: "active",
-        source: "keycloak",
-      };
-      await MembershipManager.addRoleToMembership(tenantId, userId, newRole);
-    } else if (action === "remove") {
-      await MembershipManager.removeRoleFromMembership(tenantId, userId, role);
+      });
+    }
+
+    // Now add all roles for this tenant
+    for (const { role, action } of tenantRoles) {
+      if (action === "add") {
+        await MembershipManager.addRoleToMembership(tenantId, userId, role);
+      } else if (action === "remove") {
+        await MembershipManager.removeRoleFromMembership(
+          tenantId,
+          userId,
+          role,
+        );
+      }
     }
   }
 }
