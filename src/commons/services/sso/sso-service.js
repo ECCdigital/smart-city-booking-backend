@@ -108,7 +108,7 @@ class SsoService {
 
       if (
         keycloakRoles.includes(role.keycloakRole) &&
-        !userRoles.some((r) => r.role === role.tenantRoleId)
+        !userRoles.some((r) => r === role.tenantRoleId)
       ) {
         if (!roles.find((tRole) => tRole.id === role.tenantRoleId)) {
           return;
@@ -120,7 +120,7 @@ class SsoService {
         };
       } else if (
         !keycloakRoles.includes(role.keycloakRole) &&
-        userRoles.some((r) => r.role === role.tenantRoleId)
+        userRoles.some((r) => r === role.tenantRoleId)
       ) {
         return {
           tenantId: role.tenantId,
