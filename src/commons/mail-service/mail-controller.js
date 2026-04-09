@@ -5,6 +5,7 @@ const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const UserManager = require("../data-managers/user-manager");
+const ICalService = require("../services/ical-service");
 const QRCode = require("qrcode");
 const Handlebars = require("handlebars");
 
@@ -37,6 +38,24 @@ class MailController {
     addRejectionLink = false,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
+
+    try {
+      if (bookingId) {
+        const cal = await ICalService.getBookingCal(bookingId, tenantId);
+        if (cal) {
+          const icalAttachment = {
+            filename: `buchung-${bookingId}.ics`,
+            content: Buffer.from(cal.toString(), "utf-8"),
+            contentType: "text/calendar; charset=UTF-8; method=PUBLISH",
+          };
+          attachments = attachments
+            ? [...attachments, icalAttachment]
+            : [icalAttachment];
+        }
+      }
+    } catch (err) {
+      console.warn(err.message);
+    }
 
     let bookingDetails = "";
     if (bookingId) {
@@ -127,6 +146,24 @@ class MailController {
     addRejectionLink = false,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
+
+    try {
+      if (bookingIds?.length > 0) {
+        const cal = await ICalService.getMultiBookingCal(bookingIds, tenantId);
+        if (cal) {
+          const icalAttachment = {
+            filename: "buchungen.ics",
+            content: Buffer.from(cal.toString(), "utf-8"),
+            contentType: "text/calendar; charset=UTF-8; method=PUBLISH",
+          };
+          attachments = attachments
+            ? [...attachments, icalAttachment]
+            : [icalAttachment];
+        }
+      }
+    } catch (err) {
+      console.warn(err.message);
+    }
 
     let bookingDetails;
 
