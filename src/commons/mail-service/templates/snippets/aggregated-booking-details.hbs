@@ -1,0 +1,14 @@
+{{> contactSnippet booking=booking }}
+<br>
+<br>
+<strong>Gesamtbetrag:</strong> {{priceFormatted totalPrice}}<br><br>
+
+<br>
+<h2>Bestellübersicht</h2>
+<div style="margin-top: 20px;">
+  {{#each subBookings}}
+    <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #ccc;">
+      {{{this}}}
+    </div>
+  {{/each}}
+</div>

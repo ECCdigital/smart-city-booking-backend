@@ -466,4 +466,6 @@ router.put(
   CatalogController.storeCatalog,
 );
 
+router.use("/ical", require("./routes/ical.routes"));
+
 module.exports = router;
