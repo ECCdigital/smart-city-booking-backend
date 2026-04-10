@@ -3,13 +3,18 @@ const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
+const { DateTime } = require("luxon");
 
 class ICalService {
-  static async getEventCal(eventID, tenantID, { includePast = false } = {}) {
+  static async getEventCal(
+    eventID,
+    tenantID,
+    { includePast = false, includePrivate = false } = {},
+  ) {
     const event = await EventManager.getEvent(eventID, tenantID);
     const tenant = await TenantManager.getTenant(tenantID);
 
-    if (!event || !event.isPublic) {
+    if (!event || (!includePrivate && !event.isPublic)) {
       throw new Error(`Event with ID ${eventID} not found`);
     }
 
@@ -23,7 +28,12 @@ class ICalService {
   static async getMultiEventCal(
     eventIDs,
     tenantID,
-    { includePast = false, from = null, to = null } = {},
+    {
+      includePast = false,
+      from = null,
+      to = null,
+      includePrivate = false,
+    } = {},
   ) {
     const events = await EventManager.getEvents(tenantID);
     const tenant = await TenantManager.getTenant(tenantID);
@@ -36,7 +46,7 @@ class ICalService {
     const toDate = to ? new Date(Number(to)) : null;
 
     const filteredEvents = events.filter((event) => {
-      if (!event.isPublic) return false;
+      if (!includePrivate && !event.isPublic) return false;
       if (!includePast && event.isPast()) return false;
       if (eventIDs?.length > 0 && !eventIDs.includes(event.id)) return false;
 
@@ -160,7 +170,9 @@ class ICalService {
   /**
    * @private
    */
+
   static async _resolveBookingTimes(booking, tenantID) {
+    const EVENT_TZ = process.env.TZ || "Europe/Berlin";
     const hasOwnTimes = booking.timeBegin && booking.timeEnd;
 
     if (hasOwnTimes) {
@@ -177,17 +189,24 @@ class ICalService {
 
       if (bookable?.type === "ticket" && bookable.eventId) {
         const event = await EventManager.getEvent(bookable.eventId, tenantID);
+
         if (event?.information) {
           const info = event.information;
-          const start = new Date(
+
+          const start = DateTime.fromISO(
             `${info.startDate}T${info.startTime || "00:00"}`,
+            { zone: EVENT_TZ },
           );
-          const end = new Date(
+          const end = DateTime.fromISO(
             `${info.endDate || info.startDate}T${info.endTime || "23:59"}`,
+            { zone: EVENT_TZ },
           );
 
-          if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-            return { start, end };
+          if (start.isValid && end.isValid) {
+            return {
+              start: start.toJSDate(),
+              end: end.toJSDate(),
+            };
           }
         }
       }

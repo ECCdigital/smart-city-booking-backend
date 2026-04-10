@@ -1,0 +1,34 @@
+<p>
+  <strong>Buchungsnummer:</strong>
+  {{booking.id}}
+  {{#if booking.timeBegin}}
+    <br /><strong>Buchungszeitraum:</strong>
+    {{formatDateTime booking.timeBegin}}
+    -
+    {{formatDateTime booking.timeEnd}}
+  {{/if}}
+  <br /><strong>Gesamtbetrag:</strong>
+  {{priceFormatted booking.priceEur}}
+</p>
+<p><strong>Artikel:</strong></p>
+<ul>
+  {{#each bookingItems}}
+    <li>{{bookableTitle}} (x{{amount}})</li>
+  {{/each}}
+</ul>
+
+{{#if rejectionUrl}}
+  <a
+    href="{{rejectionUrl}}"
+    style="
+            background-color: #e53935;
+            color: #ffffff;
+            padding: 12px 24px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            display: inline-block;"
+  >
+    Buchung stornieren
+  </a>
+{{/if}}

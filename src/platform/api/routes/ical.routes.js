@@ -1,7 +1,8 @@
-const express = require("express");
-const router = express.Router({ mergeParams: true });
+const { asyncRouter } = require("../../../middleware/async-router");
 const ICalController = require("../controllers/ical-controller");
 const AuthenticationController = require("../../authentication/controllers/authentication-controller");
+
+const router = asyncRouter();
 
 // Events
 router.get("/events", ICalController.getEventsIcal);

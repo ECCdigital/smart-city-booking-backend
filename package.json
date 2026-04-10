@@ -48,6 +48,7 @@
     "json-logic-js": "^2.0.5",
     "jsonschema": "^1.4.1",
     "jsonwebtoken": "^9.0.3",
+    "luxon": "^3.7.2",
     "microinvoice": "^1.0.6",
     "mime-types": "^3.0.2",
     "mock-require": "^3.0.3",
