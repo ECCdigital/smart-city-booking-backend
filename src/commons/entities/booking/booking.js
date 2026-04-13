@@ -105,6 +105,22 @@ class Booking {
     return this.priceEur + this.vatIncludedEur;
   }
 
+  getIsActive() {
+    let bookingActive;
+    if (this.priceEur > 0) {
+      bookingActive = this.isPayed && this.isCommitted && !this.isRejected;
+    } else {
+      bookingActive = this.isCommitted && !this.isRejected;
+    }
+
+    if (bookingActive) {
+      const now = Date.now();
+      return this.timeBegin <= now && this.timeEnd >= now;
+    }
+
+    return false;
+  }
+
   /**
    * Export booking status information
    * @returns {Object} Status information

@@ -35,7 +35,27 @@ const bookableSchemaDefinition = {
   imgUrl: { type: String, default: "" },
   flags: { type: [String], default: [] },
   tags: { type: [String], default: [] },
-  location: { type: String, default: "" },
+  location: {
+    type: Object,
+    default: {
+      coordinates: {
+        type: "Point",
+        points: [null, null],
+      },
+      display_address: "",
+      address: {
+        street: null,
+        house_number: null,
+        post_code: null,
+        city: null,
+        suburb: null,
+        state: null,
+        country: null,
+        country_code: null,
+      },
+      meta: {},
+    },
+  },
 
   // Booking properties
   isBookable: { type: Boolean, default: false },
@@ -82,6 +102,7 @@ const bookableSchemaDefinition = {
   enableCoupons: { type: Boolean, default: true },
 
   // Permission properties
+  requiresLogin: { type: Boolean, default: false },
   permittedUsers: { type: [String], default: [] },
   permittedRoles: { type: [String], default: [] },
   freeBookingUsers: { type: [String], default: [] },
@@ -100,6 +121,25 @@ const bookableSchemaDefinition = {
   },
   lockerDetails: { type: Object, default: { active: false, units: [] } },
   requiredFields: { type: [String], default: [] },
+
+  externalProviders: {
+    type: [
+      new Schema(
+        {
+          active: { type: Boolean, default: false },
+          provider: { type: String, required: true },
+          handles: {
+            type: [String],
+            enum: ["pricing", "availability", "maxAmount"],
+            default: [],
+          },
+          config: { type: Object, default: {} },
+        },
+        { _id: false },
+      ),
+    ],
+    default: [],
+  },
 
   // Timestamps
   timeCreated: { type: Double, default: () => Date.now() },

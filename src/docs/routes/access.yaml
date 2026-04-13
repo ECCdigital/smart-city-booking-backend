@@ -1,0 +1,217 @@
+# swagger/routes/access.yaml
+
+/api/{tenant}/access/{accessPointId}/open:
+  post:
+    tags:
+      - Access
+    summary: Open an access point
+    description: |
+      Triggers the opening of a specific access point.
+      Requires booking ownership or `MANAGE_BOOKINGS` permission.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point to open
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: Access point successfully opened
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  $ref: "#/components/schemas/OpenResult"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "500":
+        description: Could not open access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access/{accessPointId}/open-status:
+  get:
+    tags:
+      - Access
+    summary: Get the status of an open process
+    description: |
+      Polls the current status of a previously triggered open process.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+      - name: openProcessId
+        in: query
+        required: true
+        description: Identifier of the open process (returned by the open endpoint)
+        schema:
+          type: string
+    responses:
+      "200":
+        description: Current status of the open process
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  $ref: "#/components/schemas/OpenStatus"
+      "400":
+        description: Missing `openProcessId` query parameter
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "500":
+        description: Could not get open status
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access:
+  get:
+    tags:
+      - Access
+    summary: List access points for a booking
+    description: |
+      Returns all access points linked to the given booking.
+
+      **Note:** This endpoint is not fully implemented yet and currently
+      returns only `{ "success": true }` without data.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: List of access points (not fully implemented)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  type: array
+                  nullable: true
+                  description: |
+                    Not yet implemented – currently omitted from the response.
+                  items:
+                    $ref: "#/components/schemas/AccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "500":
+        description: Could not get access points
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    OpenResult:
+      type: object
+      description: Result returned after triggering an access point open
+      properties:
+        processId:
+          type: integer
+          description: Identifier of the access point process
+          example: 27415
+        openProcessId:
+          type: integer
+          description: Identifier to poll the open status
+          example: 15840
+
+    OpenStatus:
+      type: object
+      description: Status of a running open process
+      properties:
+        confirmed:
+          type: boolean
+          description: Whether the open process was confirmed by the hardware
+          example: true
+        confirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the opening was confirmed (null if not confirmed)
+          example: "2026-03-23T14:05:12.000Z"
+        openProcessId:
+          type: string
+          description: Identifier of the open process
+          example: "15842"
+        errorCode:
+          type: integer
+          nullable: true
+          description: |
+            Error code if the process failed (null on success).
+            Known codes:
+            - `1904` – waiting timed out
+          example: 1904
+        errorMessage:
+          type: string
+          nullable: true
+          description: Human-readable error description (null on success)
+          example: "waiting timed out"
+
+    AccessPoint:
+      type: object
+      description: An access point linked to a booking
+      properties:
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Could not open access point"
+
+  parameters:
+    TenantParam:
+      name: tenant
+      in: path
+      required: true
+      description: Tenant identifier
+      schema:
+        type: string
+
+    BookingIdQueryParam:
+      name: bookingId
+      in: query
+      required: true
+      description: Unique identifier of the booking
+      schema:
+        type: string

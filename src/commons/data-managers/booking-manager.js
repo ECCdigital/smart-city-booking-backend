@@ -61,14 +61,15 @@ class BookingManager {
 
   /**
    * Get all bookings assigned to a user
-   * @param {string} tenantId Identifier of the tenant
-   * @param {string} userId Identifier of the user
+   * @param {Object} params Parameters object
+   * @param {string} params.userID User ID
+   * @param {Object} [params.filter={}] Additional filter options
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getAssignedBookings(tenantId, userId) {
+  static async getAssignedBookings({ userID, filter = {} }) {
     const rawBookings = await BookingModel.find({
-      tenantId: tenantId,
-      assignedUserId: userId,
+      assignedUserId: userID,
+      ...filter,
     });
     return rawBookings.map((doc) => doc.toEntity());
   }

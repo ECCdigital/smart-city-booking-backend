@@ -508,6 +508,47 @@ class BookableController {
     }
   }
 
+  static async getBookablePriceCategories(request, response) {
+    try {
+      const { tenant: tenantId, id: bookableId } = request.params;
+
+      if (!bookableId) {
+        logger.warn(
+          `${tenantId} -- Could not get bookable price categories. No id provided.`,
+        );
+        return response.status(400).send(`${tenantId} -- No id provided`);
+      }
+
+      const bookable = await BookableManager.getBookable(bookableId, tenantId);
+      if (!bookable) {
+        logger.warn(`${tenantId} -- Bookable with id ${bookableId} not found.`);
+        return response
+          .status(404)
+          .send(`Bookable with id ${bookableId} not found`);
+      }
+
+      if (!bookable.isPublic) {
+        logger.warn(
+          `${tenantId} -- Bookable with id ${bookableId} is not public.`,
+        );
+        return response
+          .status(403)
+          .send(`Bookable with id ${bookableId} is not public`);
+      }
+
+      const priceCategories =
+        await BookableService.getPriceCategoriesForBookable(
+          bookableId,
+          tenantId,
+        );
+
+      response.status(200).send(priceCategories);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get bookable price categories");
+    }
+  }
+
   /**
    * This method is used to check if the creation of a new bookable object is allowed.
    * It first gets the tenant from the request parameters.

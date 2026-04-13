@@ -2,8 +2,30 @@ const {
   BookableManager,
 } = require("../../commons/data-managers/bookable-manager");
 const TenantManager = require("../../commons/data-managers/tenant-manager");
+const ExternalPriceService = require("../../commons/services/external-price-service");
 
 class HtmlEngine {
+  /**
+   * Resolves external price categories for bookables in-place.
+   * @param {Object[]} bookables
+   * @param {string} tenantId
+   * @param {Map} [sharedCache]
+   */
+  static async _resolveExternalPrices(bookables, tenantId, sharedCache) {
+    const cache = sharedCache || new Map();
+    for (const bookable of bookables) {
+      const extPrices = await ExternalPriceService.resolve(
+        bookable,
+        tenantId,
+        cache,
+      );
+
+      if (extPrices) {
+        bookable.priceCategories = extPrices;
+      }
+    }
+  }
+
   static translatePriceTyp(priceCategory, short = false) {
     let translation = "";
     if (priceCategory === "per-hour") {
@@ -17,6 +39,18 @@ class HtmlEngine {
     }
 
     return short ? translation : "/" + translation;
+  }
+
+  static translateExternalUnit(unit) {
+    const map = {
+      hour: "/Stunde",
+      day: "/Tag",
+      week: "/Woche",
+      month: "/Monat",
+      year: "/Jahr",
+      "service-fee": " (Servicegebühr)",
+    };
+    return map[unit] || "";
   }
 
   static translatePriceCategory(priceCategory, short = false) {
@@ -41,7 +75,11 @@ class HtmlEngine {
   }
 
   static async bookablesToList(bookables, order = []) {
-    var htmlOutput = '<ul class="booking-manager-list">';
+    if (bookables.length > 0) {
+      await HtmlEngine._resolveExternalPrices(bookables, bookables[0].tenantId);
+    }
+
+    let htmlOutput = '<ul class="booking-manager-list">';
 
     if (order.length > 0) {
       bookables.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
@@ -59,10 +97,11 @@ class HtmlEngine {
       htmlOutput += "<h4>" + (bookable.title || "") + "</h4>";
       htmlOutput +=
         '<p class="description">' + (bookable.description || "") + "</p>";
-      htmlOutput +=
-        bookable.location != null && bookable.location.length > 0
-          ? '<p class="location">' + (bookable.location || "") + "</p>"
-          : "";
+      htmlOutput += bookable?.location?.display_address
+        ? '<p class="location">' +
+          (bookable.location.display_address || "") +
+          "</p>"
+        : "";
       htmlOutput += '<p class="type">' + (bookable.type || "") + "</p>";
 
       if (bookable.flags && bookable.flags.length > 0) {
@@ -113,6 +152,8 @@ class HtmlEngine {
   }
 
   static async bookable(bookable) {
+    await HtmlEngine._resolveExternalPrices([bookable], bookable.tenantId);
+
     let htmlOutput = '<div class="bookable-item">';
 
     htmlOutput += this.generateImageHtml(
@@ -150,10 +191,11 @@ class HtmlEngine {
     }
 
     if (bookable.isBookable) {
-      htmlOutput +=
-        bookable.location != null && bookable.location.length > 0
-          ? '<p class="location">' + (bookable.location || "") + "</p>"
-          : "";
+      htmlOutput += bookable?.location?.display_address
+        ? '<p class="location">' +
+          (bookable.location.display_address || "") +
+          "</p>"
+        : "";
       htmlOutput += '<p class="type">' + (bookable.type || "") + "</p>";
       htmlOutput +=
         '<p class="autoCommitBooking">' +
@@ -202,7 +244,7 @@ class HtmlEngine {
   }
 
   static async eventsToList(events) {
-    var htmlOutput = '<ul class="booking-manager-list">';
+    let htmlOutput = '<ul class="booking-manager-list">';
 
     for (const event of events) {
       const tenantObj = await TenantManager.getTenant(event.tenantId);
@@ -296,7 +338,7 @@ class HtmlEngine {
   }
 
   static async event(event, showAttachments) {
-    var htmlOutput = `<div class="event">`;
+    let htmlOutput = `<div class="event">`;
 
     // INFORMATION
     htmlOutput += `<div class="information">`;
@@ -364,7 +406,7 @@ class HtmlEngine {
         }</div>`
       : "";
     if (event.eventLocation.room) {
-      var eventLocationBookable = await BookableManager.getBookable(
+      let eventLocationBookable = await BookableManager.getBookable(
         event.eventLocation.room,
         event.tenantId,
       );
@@ -558,15 +600,17 @@ function getBookablePrice(bookable) {
           style: "currency",
           currency: "EUR",
         }).format(price);
-      htmlOutput +=
-        HtmlEngine.translatePriceTyp(bookable.priceType) + "</span>";
+      htmlOutput += priceCategory.external
+        ? HtmlEngine.translateExternalUnit(priceCategory.unit)
+        : HtmlEngine.translatePriceTyp(bookable.priceType);
+      htmlOutput += "</span>";
 
-      if (priceCategory.interval.start || priceCategory.interval.end) {
+      if (priceCategory.interval?.start || priceCategory.interval?.end) {
         htmlOutput +=
           ' <span class="price-category-interval">' +
           HtmlEngine.getPriceRange(
-            priceCategory.interval.start,
-            priceCategory.interval.end,
+            priceCategory.interval?.start,
+            priceCategory.interval?.end,
           ) +
           "</span>";
         htmlOutput +=

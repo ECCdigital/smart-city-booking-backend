@@ -15,10 +15,13 @@ router.post("/check-email", AuthenticationController.checkEmail);
 // SSO Endpoints
 router.post("/sso/signin", AuthenticationController.ssoLogin);
 router.post("/sso/signup", AuthenticationController.ssoSignup);
+router.post("/sso/verify", AuthenticationController.ssoVerify);
 
 // Hooks
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);
+
+router.post("/verify-email", AuthenticationController.verifyEmail);
 
 // Protected Auth-Endpoints
 router.post("/signin", (req, res, next) => {

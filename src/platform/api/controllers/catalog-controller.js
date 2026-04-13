@@ -37,11 +37,8 @@ class CatalogController {
   }
 
   static async getPublicCatalog(request, response) {
-    console.log("Getting public catalog...");
     try {
       const catalog = await CatalogService.getInstanceCatalog();
-
-      console.log("Public catalog retrieved:", catalog);
 
       response.status(200).send(catalog);
     } catch (error) {
@@ -54,9 +51,34 @@ class CatalogController {
 
   static async getCatalogBundle(request, response) {
     try {
-      const catalogBundle = await CatalogService.getCatalogBundle();
+      const bundle = await CatalogService.getCatalogBundle();
 
-      response.status(200).send(catalogBundle);
+      const { enableCatalog } = await InstanceManager.getInstance();
+      if (!enableCatalog) {
+        return response.status(503).send({
+          success: false,
+          message: "Catalog feature is disabled.",
+        });
+      }
+
+      if (!bundle) {
+        return response.status(404).send({
+          success: false,
+          message: "Catalog bundle not found.",
+        });
+      }
+
+      if (bundle.catalog.visibility === "private") {
+        const user = request.user;
+        if (!user) {
+          return response.status(401).send({
+            success: false,
+            message: "Authentication required to access this catalog.",
+          });
+        }
+      }
+
+      response.status(200).send(bundle);
     } catch (error) {
       response.status(error.code || 500).send({
         success: false,
@@ -149,26 +171,16 @@ class CatalogController {
         themeData.visibility = visibility;
       }
 
+      const catalog = await CatalogService.getInstanceCatalog();
+      themeData.logoUrl = catalog.logoUrl;
+      themeData.hero = catalog.hero;
+
       const { enableCatalog } = await InstanceManager.getInstance();
       if (!enableCatalog) {
         return response.status(503).send({
           success: false,
           message: "Catalog feature is disabled.",
         });
-      }
-
-      try {
-        const user = await authenticateIfNeeded(
-          request,
-          themeData.visibility === "private",
-        );
-        if (user) request.user = user;
-
-        //TODO: Add permission checks here if needed
-      } catch (error) {
-        console.error("Authentication error:", error);
-
-        return response.status(401).json({ message: error.message });
       }
 
       response.status(200).send(themeData);

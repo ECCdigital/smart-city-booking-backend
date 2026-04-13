@@ -2,6 +2,8 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
+const LockerService = require("../../../commons/services/locker/locker-service");
+const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -41,6 +43,10 @@ class PaymentController {
       body: { bookingIds, aggregated },
     } = request;
 
+    logger.debug(
+      `Create payment request received for tenant ${tenantId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+    );
+
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
     if (!bookings) {
@@ -62,6 +68,18 @@ class PaymentController {
       return;
     }
 
+    try {
+      const lockerServiceInstance = LockerService.getInstance();
+      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
+    } catch (err) {
+      logger.warn(`${tenantId} -- Locker reservation failed: ${err.message}`);
+      response.status(409).send({
+        message: "Locker not available anymore.",
+        code: 3,
+      });
+      return;
+    }
+
     let groupBookingId = null;
 
     if (bookings.length > 1 && aggregated) {
@@ -78,6 +96,10 @@ class PaymentController {
     //TODO: Check if all bookings are in the same tenant and have the same payment provider
 
     try {
+      logger.debug(
+        `Getting payment service for tenant ${tenantId}, bookingIds ${bookingIds}, paymentProvider ${bookings[0].paymentProvider}, aggregated ${aggregated}, groupBookingId ${groupBookingId}`,
+      );
+
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingIds,
@@ -100,8 +122,11 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+
+    const isAggregated = aggregated === "true";
+
     logger.info(
-      `Payment notification GET received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+      `Payment notification GET received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${isAggregated}`,
     );
 
     let aggregatedBookingIds = bookingIds
@@ -126,8 +151,8 @@ class PaymentController {
     );
 
     try {
-      if (aggregated) {
-        const options = { aggregated };
+      if (isAggregated) {
+        const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           bookings.map((booking) => booking.id),
@@ -163,8 +188,10 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+    const isAggregated = aggregated === "true";
+
     logger.info(
-      `Payment notification POST received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+      `Payment notification POST received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${isAggregated}`,
     );
 
     let aggregatedBookingIds = bookingIds
@@ -189,8 +216,8 @@ class PaymentController {
     );
 
     try {
-      if (aggregated) {
-        const options = { aggregated };
+      if (isAggregated) {
+        const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           bookings.map((booking) => booking.id),
@@ -210,12 +237,12 @@ class PaymentController {
       }
 
       logger.info(
-        `${tenantId} -- booking ${bookingId} successfully payed and updated.`,
+        `${tenantId} -- booking ${aggregatedBookingIds} successfully payed and updated.`,
       );
       response.sendStatus(200);
     } catch {
       logger.warn(
-        `${tenantId} -- could not get payment result for booking ${bookingId}.`,
+        `${tenantId} -- could not get payment result for booking ${aggregatedBookingIds}.`,
       );
       response.sendStatus(400);
     }
@@ -294,6 +321,44 @@ class PaymentController {
     } catch (error) {
       logger.error(error);
       response.sendStatus(400);
+    }
+  }
+
+  static async testConnection(request, response) {
+    const { tenant: tenantId, provider } = request.params;
+
+    const user = request.user;
+    const hasPermission =
+      (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
+      (await PermissionService._isInstanceOwner(user.id));
+
+    if (!hasPermission) {
+      response.status(403).send({
+        success: false,
+        message:
+          "Forbidden: You don't have permission to test this payment provider.",
+      });
+      return;
+    }
+
+    try {
+      const paymentService = await PaymentUtils.getPaymentService(
+        tenantId,
+        null,
+        provider,
+        {},
+      );
+
+      const result = await paymentService.testConnection();
+
+      const statusCode = result.success ? 200 : 503;
+      response.status(statusCode).send(result);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send({
+        success: false,
+        message: error.message,
+      });
     }
   }
 }

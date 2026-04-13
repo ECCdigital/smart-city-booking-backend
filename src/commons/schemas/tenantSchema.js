@@ -35,8 +35,11 @@ const tenantSchemaDefinition = {
   enablePublicStatusView: { type: Boolean, default: false },
   notifyOnNewBooking: { type: Boolean, default: true },
   catalogParticipation: {
-    visible: { type: Boolean, default: true },
-    restricted: { type: Boolean, default: false },
+    type: Object,
+    default: {
+      visible: true,
+      restricted: false,
+    },
   },
 };
 

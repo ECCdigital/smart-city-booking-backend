@@ -252,11 +252,18 @@ class MailController {
     });
   }
 
-  static async sendVerificationRequest(address, hookId) {
+  static async sendVerificationRequest(address, hookId, verifyUrl) {
     const instance = await InstanceManager.getInstance(false);
-    const verifyUrl = `${process.env.BACKEND_URL}/auth/verify/${hookId}`;
 
-    const content = renderSnippet("verification-request", { verifyUrl });
+    let verifyUrlTemplate = "";
+
+    if (!verifyUrl) {
+      verifyUrlTemplate = `${process.env.BACKEND_URL}/auth/verify/${hookId}`;
+    } else {
+      verifyUrlTemplate = `${verifyUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
+    }
+
+    const content = renderSnippet("verification-request", { verifyUrl: verifyUrlTemplate });
 
     await MailerService.send({
       address,
