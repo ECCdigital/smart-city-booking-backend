@@ -1,0 +1,25 @@
+{{{message}}}<br />
+{{{bookingDetails}}}
+
+{{#if rejectionUrl}}
+  <br /><br />
+  <a
+    href="{{rejectionUrl}}"
+    style="
+      background-color: #e53935;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: bold;
+      display: inline-block;
+    "
+  >
+    Buchung stornieren
+  </a>
+{{/if}}
+
+{{#if qrContent}}
+  <br />
+  {{{qrContent}}}
+{{/if}}

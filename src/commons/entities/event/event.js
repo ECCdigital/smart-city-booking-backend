@@ -23,6 +23,38 @@ class Event {
     SchemaUtils.validate(this, eventSchemaDefinition);
     return true;
   }
+  getStartDateTime() {
+    const date = this.information?.startDate;
+    if (!date) return null;
+
+    const time = this.information?.startTime ?? "00:00";
+    return new Date(`${date}T${time}`);
+  }
+
+  getEndDateTime() {
+    const date = this.information?.endDate;
+    if (date) {
+      const time = this.information?.endTime ?? "23:59";
+      return new Date(`${date}T${time}`);
+    }
+    return this.getStartDateTime();
+  }
+
+  isPast(now = new Date()) {
+    const end = this.getEndDateTime();
+    if (!end) return false;
+    return end < now;
+  }
+
+  isFuture(now = new Date()) {
+    const start = this.getStartDateTime();
+    if (!start) return false;
+    return start > now;
+  }
+
+  isOngoing(now = new Date()) {
+    return !this.isPast(now) && !this.isFuture(now);
+  }
 
   exportPublic() {
     return {

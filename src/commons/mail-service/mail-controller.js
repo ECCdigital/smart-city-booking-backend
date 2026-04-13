@@ -1,497 +1,89 @@
+const MailSenderService = require("./mail-sender.service");
 const MailerService = require("./mail-service");
-const BookingManager = require("../data-managers/booking-manager");
-const { BookableManager } = require("../data-managers/bookable-manager");
-const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
+const BookingManager = require("../data-managers/booking-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const UserManager = require("../data-managers/user-manager");
-const QRCode = require("qrcode");
-const Handlebars = require("handlebars");
+const { MailType } = require("./mail-types");
+const { renderSnippet } = require("./templates/template-loader");
+const ICalService = require("../services/ical-service");
 
 class MailController {
-  static async getPopulatedBookables(bookingId, tenant) {
-    let booking = await BookingManager.getBooking(bookingId, tenant);
-    let bookables = (await BookableManager.getBookables(tenant)).filter((b) =>
-      booking.bookableItems.some((bi) => bi.bookableId === b.id),
-    );
-
-    for (const bookable of bookables) {
-      bookable._populated = {
-        event: await EventManager.getEvent(bookable.eventId, bookable.tenantId),
-      };
-    }
-
-    return bookables;
-  }
-
-  static async _sendBookingMail({
-    address,
-    bookingId,
-    tenantId,
-    subject,
-    title,
-    message,
-    includeQRCode = false,
-    attachments = [],
-    sendBCC = false,
-    addRejectionLink = false,
-  }) {
-    const tenant = await TenantManager.getTenant(tenantId);
-
-    let bookingDetails = "";
-    if (bookingId) {
-      bookingDetails = await this.generateBookingDetails(bookingId, tenantId);
-    }
-
-    let qrContent = "";
-    let qrAttachment = null;
-    if (includeQRCode) {
-      const qrResult = await this.generateQRCode(bookingId, tenantId);
-      qrContent = qrResult.content;
-      qrAttachment = qrResult.attachment;
-    }
-
-    const rejectionUrl = addRejectionLink
-      ? `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}`
-      : null;
-
-    const snippetTemplateString = `
-      {{{ message }}}<br>
-      {{{ bookingDetails }}}
-      
-      {{#if rejectionUrl}}
-        <br>
-        <br>
-        <a href="{{rejectionUrl}}"
-          style="
-             background-color: #e53935;
-             color: #ffffff;
-             padding: 12px 24px;
-             border-radius: 4px;
-             text-decoration: none;
-             font-weight: bold;
-             display: inline-block;">
-          Buchung stornieren
-        </a>
-      {{/if}}
-      
-      {{#if qrContent}}
-        <br>
-        {{{ qrContent }}}
-      {{/if}}`;
-    const snippetData = {
-      message,
-      bookingDetails,
-      rejectionUrl,
-      qrContent,
-      showFooter: true,
-      supportEmail: tenant.mail,
-    };
-
-    const snippetHtml = renderSnippet(snippetTemplateString, snippetData);
-
-    if (qrAttachment) {
-      attachments = attachments
-        ? [...attachments, qrAttachment]
-        : [qrAttachment];
-    }
-
-    const model = {
-      title,
-      content: snippetHtml,
-    };
-
-    const bccEmail = sendBCC ? tenant.mail : undefined;
-
-    await MailerService.send({
-      tenantId: tenantId,
-      address: address,
-      subject: subject,
-      mailTemplate: tenant.genericMailTemplate,
-      model,
-      attachments,
-      bcc: bccEmail,
-      useInstanceMail: tenant.useInstanceMail,
-    });
-  }
-
-  static async _sendAggregatedBookingMail({
-    address,
-    bookingIds,
-    tenantId,
-    subject,
-    title,
-    message,
-    attachments = [],
-    sendBCC = false,
-    addRejectionLink = false,
-  }) {
-    const tenant = await TenantManager.getTenant(tenantId);
-
-    let bookingDetails;
-
-    bookingDetails = await this.generateAggregatedBookingDetails(
-      tenantId,
-      bookingIds,
-      addRejectionLink,
-    );
-
-    const snippetTemplateString = `
-      {{{ message }}}<br>
-      {{{ bookingDetails }}}`;
-
-    const snippetData = {
-      message,
-      bookingDetails,
-      showFooter: true,
-      supportEmail: tenant.mail,
-    };
-
-    const snippetHtml = renderSnippet(snippetTemplateString, snippetData);
-
-    const model = {
-      title,
-      content: snippetHtml,
-    };
-
-    const bccEmail = sendBCC ? tenant.mail : undefined;
-
-    await MailerService.send({
-      tenantId: tenantId,
-      address: address,
-      subject: subject,
-      mailTemplate: tenant.genericMailTemplate,
-      model,
-      attachments,
-      bcc: bccEmail,
-      useInstanceMail: tenant.useInstanceMail,
-    });
-  }
-
-  static async generateBookingDetails(bookingId, tenantId) {
-    let booking = await BookingManager.getBooking(bookingId, tenantId);
-    let bookables = await MailController.getPopulatedBookables(
-      bookingId,
-      tenantId,
-    );
-
-    const bookingItems = booking.bookableItems.map((item) => {
-      const bookable = bookables.find((b) => b.id === item.bookableId);
-      const isTicket =
-        bookable.type === "ticket" &&
-        bookable.eventId &&
-        bookable._populated?.event;
-
-      let eventData = null;
-      if (isTicket) {
-        const event = bookable._populated.event;
-        eventData = {
-          name: event.information.name,
-          startDate: event.information.startDate,
-          startTime: event.information.startTime,
-          endDate: event.information.endDate,
-          endTime: event.information.endTime,
-          locationName: event.eventLocation.name,
-          locationStreet: event.eventAddress.street,
-          locationHouseNumber: event.eventAddress.houseNumber,
-          locationZip: event.eventAddress.zip,
-          locationCity: event.eventAddress.city,
-        };
+  static async _attachICalFiles(bookingIds, tenantId, attachments = []) {
+    try {
+      if (typeof bookingIds === "string") {
+        bookingIds = [bookingIds];
       }
 
-      return {
-        amount: item.amount,
-        isTicket,
-        bookableTitle: bookable.title,
-        bookingNotes: bookable.bookingNotes,
-        event: eventData,
-      };
-    });
-
-    let couponInfo = null;
-    if (booking.coupon) {
-      const coupon = booking.coupon;
-      if (coupon.type === "fixed") {
-        couponInfo = {
-          description: coupon.description,
-          value: coupon.value,
-          isFixed: true,
-        };
-      } else if (coupon.type === "percentage") {
-        couponInfo = {
-          description: coupon.description,
-          value: coupon.value,
-          isFixed: false,
-        };
+      if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+        return attachments;
       }
+
+      const isSingle = bookingIds.length === 1;
+      const cal = isSingle
+        ? await ICalService.getBookingCal(bookingIds[0], tenantId)
+        : await ICalService.getMultiBookingCal(bookingIds, tenantId);
+
+      if (!cal) return attachments;
+
+      return [
+        ...attachments,
+        {
+          filename: isSingle ? `buchung-${bookingIds[0]}.ics` : "buchungen.ics",
+          content: Buffer.from(cal.toString(), "utf-8"),
+          contentType: "text/calendar; charset=UTF-8; method=PUBLISH",
+        },
+      ];
+    } catch (err) {
+      console.warn(err.message);
+      return attachments;
     }
-
-    const snippetTemplateString = `
-    <strong>Buchungsnummer:</strong> {{booking.id}}<br>
-    <strong>Gesamtbetrag:</strong> {{priceFormatted booking.priceEur}}<br><br>
- 
-    {{> contactSnippet booking=booking }}
-    
-    {{#gt booking.comment.length 0}}
-      <br><br><strong>Hinweise zur Buchung:</strong> 
-      <br> {{booking.comment}}
-    {{else}} {{/gt}}
-    
-    {{#if booking.timeBegin}}
-      <br><strong>Buchungszeitraum:</strong> {{formatDateTime booking.timeBegin}} - {{formatDateTime booking.timeEnd}}
-    {{/if}}
-    <br>
-    <h2>Bestellübersicht</h2>
-    
-    {{#each bookingItems}}
-      <div style="border-bottom: solid 1px grey; margin-bottom: 10px; padding-bottom: 10px;">
-      <strong>{{bookableTitle}}, Anzahl: {{amount}}</strong>
-      {{#if isTicket}}
-        <div style="color: grey">
-          Ticket für die Veranstaltung {{event.name}}<br>
-          vom {{formatDate event.startDate}} {{event.startTime}}
-          bis {{formatDate event.endDate}} {{event.endTime}}<br>
-          Ort: {{event.locationName}}, {{event.locationStreet}}, {{event.locationHouseNumber}} {{event.locationZip}} {{event.locationCity}}
-        </div>
-      {{/if}}
-      
-      {{#if bookingNotes}}
-        {{{bookingNotes}}}
-      {{/if}}
-      </div>
-    {{/each}}
-    
-    {{#if coupon}}
-      {{#if coupon.isFixed}}
-        <div style="color: grey">
-          Gutschein: {{coupon.description}} ( -{{coupon.value}} € )<br>
-        </div>
-      {{else}}
-        <div style="color: grey">
-          Gutschein: {{coupon.description}} ( -{{coupon.value}} % )<br>
-        </div>
-      {{/if}}
-    {{/if}}`;
-
-    const snippetData = {
-      booking,
-      bookingItems,
-      coupon: couponInfo,
-    };
-
-    return renderSnippet(snippetTemplateString, snippetData);
-  }
-
-  static async generateShortBookingDetails(
-    bookingId,
-    tenantId,
-    addRejectionLink = false,
-  ) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-    let bookables = await MailController.getPopulatedBookables(
-      bookingId,
-      tenantId,
-    );
-
-    const bookingItems = booking.bookableItems.map((item) => {
-      const bookable = bookables.find((b) => b.id === item.bookableId);
-      return {
-        amount: item.amount,
-        bookableTitle: bookable.title,
-      };
-    });
-
-    const rejectionUrl = addRejectionLink
-      ? `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}`
-      : null;
-
-    const snippetTemplateString = `
-      <p>
-        <strong>Buchungsnummer:</strong> {{booking.id}}
-        {{#if booking.timeBegin}}
-          <br><strong>Buchungszeitraum:</strong> {{formatDateTime booking.timeBegin}} - {{formatDateTime booking.timeEnd}}
-        {{/if}}
-        <br><strong>Gesamtbetrag:</strong> {{priceFormatted booking.priceEur}}
-      </p>
-      <p><strong>Artikel:</strong></p>
-      <ul>
-        {{#each bookingItems}}
-          <li>{{bookableTitle}} (x{{amount}})</li>
-        {{/each}}
-      </ul>
-      
-      {{#if rejectionUrl}}
-        <a href="{{rejectionUrl}}"
-          style="
-            background-color: #e53935;
-            color: #ffffff;
-            padding: 12px 24px;
-            border-radius: 4px;
-            text-decoration: none;
-            font-weight: bold;
-            display: inline-block;">
-          Buchung stornieren
-        </a>
-      {{/if}}
-  `;
-
-    const snippetData = {
-      booking,
-      bookingItems,
-      rejectionUrl,
-    };
-
-    return renderSnippet(snippetTemplateString, snippetData);
-  }
-
-  static async generateAggregatedBookingDetails(
-    tenantId,
-    bookingIds,
-    addRejectionLink,
-  ) {
-    const subBookingSnippets = [];
-    let totalPriceEur = 0;
-
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-
-    for (const booking of bookings) {
-      const snippetHtml = await this.generateShortBookingDetails(
-        booking.id,
-        tenantId,
-        addRejectionLink,
-      );
-      subBookingSnippets.push(snippetHtml);
-      totalPriceEur += booking.priceEur;
-    }
-
-    const snippetTemplateString = `
-    {{> contactSnippet booking=booking }}
-    <br>
-    <br>
-    <strong>Gesamtbetrag:</strong> {{priceFormatted totalPrice}}<br><br>
-    
-    <br>
-    <h2>Bestellübersicht</h2>
-    <div style="margin-top: 20px;">
-      {{#each subBookings}}
-        <div style="margin-bottom: 20px; padding: 10px; border: 1px solid #ccc;">
-          {{{this}}}
-        </div>
-      {{/each}}
-    </div>
-  `;
-
-    const snippetTemplate = Handlebars.compile(snippetTemplateString);
-
-    const snippetData = {
-      totalPrice: totalPriceEur,
-      subBookings: subBookingSnippets,
-      bookings,
-      booking: bookings[0],
-    };
-
-    return snippetTemplate(snippetData);
-  }
-
-  static async generateQRCode(bookingId, tenantId) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-    const AppUrl = process.env.FRONTEND_URL;
-    const QRUrl = `${AppUrl}/booking/status/${tenantId}?id=${booking.id}&name=${encodeURIComponent(booking.name)}`;
-
-    const qrCodeBuffer = await QRCode.toBuffer(QRUrl);
-
-    const attachment = {
-      filename: "qrcode.png",
-      content: qrCodeBuffer,
-      cid: "qrcode_cid",
-    };
-
-    const snippetTemplateString = `
-    <p>Sie können den Status Ihrer Buchung jederzeit einsehen, indem Sie entweder auf den folgenden Button klicken oder den QR-Code scannen:</p>
-    <a href="{{qrUrl}}"
-       style="
-         background-color: #0055a5;
-         color: #ffffff;
-         padding: 12px 24px;
-         border-radius: 4px;
-         text-decoration: none;
-         font-weight: bold;
-         display: inline-block;">
-       Buchungsstatus ansehen
-    </a>
-    <br><br>
-    <img src="cid:qrcode_cid" alt="QR Code" />
-  `;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, { qrUrl: QRUrl });
-
-    return {
-      content: snippetHtml,
-      attachment,
-    };
   }
 
   static async sendBookingConfirmation(
     address,
     bookingIds,
     tenantId,
-    attachments = undefined,
+    attachments,
     aggregated = false,
   ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const tenant = await TenantManager.getTenant(tenantId);
-    const includeQRCode = tenant.enablePublicStatusView;
-    const receiptEnableBCC =
-      attachments && attachments.length > 0 ? tenant.receiptEnableBCC : false;
+    attachments = await this._attachICalFiles(
+      bookingIds,
+      tenantId,
+      attachments,
+    );
 
-    const snippetTemplateString = `
-    <div style="font-family: sans-serif;">
-      <p>
-        Hallo,<br>
-        vielen Dank für Ihre Buchung im 
-        <strong>{{tenantName}}</strong>.
-      </p>
-      
-      <p>
-        Im Folgenden senden wir Ihnen die Details Ihrer Buchung.
-      </p>
-      <br>
-      
-    </div>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      tenantName: tenant.name,
-      supportEmail: tenant.mail,
+    await MailSenderService.dispatch({
+      mailType: MailType.BOOKING_CONFIRMATION,
+      address,
+      bookingIds,
+      tenantId,
+      attachments,
+      aggregated,
     });
+  }
 
-    if (aggregated) {
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
-        title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
-        attachments,
-        message: snippetHtml,
-        sendBCC: receiptEnableBCC,
-        addRejectionLink: true,
-      });
-    } else {
-      for (const bookingId of bookingIds) {
-        await this._sendBookingMail({
-          address: address,
-          bookingId: bookingId,
-          tenantId: tenantId,
-          subject: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
-          title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
-          message: snippetHtml,
-          includeQRCode: includeQRCode,
-          attachments,
-          sendBCC: receiptEnableBCC,
-          addRejectionLink: true,
-        });
-      }
-    }
+  static async sendFreeBookingConfirmation(
+    address,
+    bookingIds,
+    tenantId,
+    attachments,
+    aggregated = false,
+  ) {
+    attachments = await this._attachICalFiles(
+      bookingIds,
+      tenantId,
+      attachments,
+    );
+
+    await MailSenderService.dispatch({
+      mailType: MailType.FREE_BOOKING_CONFIRMATION,
+      address,
+      bookingIds,
+      tenantId,
+      attachments,
+      aggregated,
+    });
   }
 
   static async sendBookingRejection(
@@ -499,51 +91,18 @@ class MailController {
     bookingIds,
     tenantId,
     reason,
-    attachments = undefined,
+    attachments,
     aggregated = false,
   ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const tenant = await TenantManager.getTenant(tenantId);
-
-    const snippetTemplateString = `
-    <p>Die nachfolgende Buchung wurde abgelehnt:</p>
-    {{#if rejectionReason}}
-      <p><strong>Ablehnungsgrund:</strong> {{sanitizeString  rejectionReason}} </p>
-    {{/if}}`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      rejectionReason: reason,
+    await MailSenderService.dispatch({
+      mailType: MailType.BOOKING_REJECTION,
+      address,
+      bookingIds,
+      tenantId,
+      templateData: { rejectionReason: reason },
+      attachments,
+      aggregated,
     });
-
-    if (aggregated) {
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Abgelehnt: Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
-        title: `Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
-        message: snippetHtml,
-        includeQRCode: false,
-        attachments,
-        sendBCC: false,
-        addRejectionLink: false,
-      });
-    } else {
-      for (const bookingId of bookingIds) {
-        await this._sendBookingMail({
-          address,
-          bookingId,
-          tenantId,
-          subject: `Abgelehnt: Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
-          title: `Ihre Buchungsanfrage im ${tenant.name} wurde abgelehnt`,
-          message: snippetHtml,
-          includeQRCode: false,
-          attachments,
-          sendBCC: false,
-          addRejectionLink: false,
-        });
-      }
-    }
   }
 
   static async sendBookingCancel(
@@ -551,50 +110,123 @@ class MailController {
     bookingIds,
     tenantId,
     reason,
-    attachments = undefined,
+    attachments,
+    aggregated = false,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.BOOKING_CANCEL,
+      address,
+      bookingIds,
+      tenantId,
+      templateData: { cancelReason: reason },
+      attachments,
+      aggregated,
+    });
+  }
+
+  static async sendBookingRequestConfirmation(
+    address,
+    bookingIds,
+    tenantId,
+    aggregated = false,
+    attachments = [],
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.BOOKING_REQUEST_CONFIRMATION,
+      address,
+      bookingIds,
+      tenantId,
+      attachments,
+      aggregated,
+    });
+  }
+
+  static async sendInvoice(
+    address,
+    bookingIds,
+    tenantId,
+    attachments,
+    aggregated = false,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.INVOICE,
+      address,
+      bookingIds,
+      tenantId,
+      attachments,
+      aggregated,
+    });
+  }
+
+  static async sendInvoiceAfterBookingApproval(
+    address,
+    bookingIds,
+    tenantId,
+    attachments,
+    aggregated = false,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.INVOICE_AFTER_APPROVAL,
+      address,
+      bookingIds,
+      tenantId,
+      attachments,
+      aggregated,
+    });
+  }
+
+  static async sendIncomingBooking(
+    address,
+    bookingIds,
+    tenantId,
+    aggregated = false,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.INCOMING_BOOKING,
+      address,
+      bookingIds,
+      tenantId,
+      aggregated,
+    });
+  }
+
+  static async sendNewBooking(address, bookingId, tenantId) {
+    await MailSenderService.dispatch({
+      mailType: MailType.NEW_BOOKING,
+      address,
+      bookingIds: [bookingId],
+      tenantId,
+    });
+  }
+
+  static async sendPaymentLinkAfterBookingApproval(
+    address,
+    bookingIds,
+    tenantId,
     aggregated = false,
   ) {
     bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const tenant = await TenantManager.getTenant(tenantId);
-
-    console.log("reseon", reason);
-
-    const snippetTemplateString = `
-    <p>Die nachfolgende Buchung wurde storniert:</p>
-    {{#if cancelReason}}
-      <p><strong>Hinweis zur Stornierung</strong>: {{sanitizeString  cancelReason}} </p>
-    {{/if}}`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      cancelReason: reason,
-    });
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
     if (aggregated) {
-      await this._sendAggregatedBookingMail({
+      const paymentUrl = `${process.env.FRONTEND_URL}/payment/redirection?ids=${bookingIds.join(",")}&tenant=${tenantId}&aggregated=true`;
+      await MailSenderService.dispatch({
+        mailType: MailType.PAYMENT_LINK_AFTER_APPROVAL,
         address,
         bookingIds,
         tenantId,
-        subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
-        title: `Ihre Buchung im ${tenant.name} wurde storniert`,
-        message: snippetHtml,
-        includeQRCode: false,
-        attachments,
-        sendBCC: true,
-        addRejectionLink: false,
+        templateData: { paymentUrl },
+        aggregated: true,
       });
     } else {
-      for (const bookingId of bookingIds) {
-        await this._sendBookingMail({
-          address,
-          bookingId,
+      for (const booking of bookings) {
+        const paymentUrl = `${process.env.FRONTEND_URL}/payment/redirection?ids=${booking.id}&tenant=${tenantId}&aggregated=false`;
+        await MailSenderService.dispatch({
+          mailType: MailType.PAYMENT_LINK_AFTER_APPROVAL,
+          address: booking.mail,
+          bookingIds: [booking.id],
           tenantId,
-          subject: `Stornierung: Ihre Buchung im ${tenant.name} wurde storniert`,
-          title: `Ihre Buchung im ${tenant.name} wurde storniert`,
-          message: snippetHtml,
-          includeQRCode: false,
-          attachments,
-          sendBCC: true,
-          addRejectionLink: false,
+          templateData: { paymentUrl },
         });
       }
     }
@@ -606,423 +238,23 @@ class MailController {
     tenantId,
     hookId,
     reason,
-    attachments = undefined,
+    attachments,
   ) {
-    const tenant = await TenantManager.getTenant(tenantId);
-
     const verifyRejectionUrl = `${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}`;
 
-    const snippetTemplateString = `
-    <p>Für die nachfolgende Buchung wurde eine Stornierung vorgemerkt. Wenn Sie diese Stornierung bestätigen möchten, klicken Sie bitte auf den nachfolgenden Button.</p>    
-    <p>Sollten Sie die Stornierung nicht veranlasst haben, können Sie diese Nachricht ignorieren.</p>
-    {{#if cancelReason}}
-      <p><strong>Hinweis zur Stornierung</strong>: {{sanitizeString  cancelReason}} </p>
-    {{/if}}
-    <p>
-      <a href="${verifyRejectionUrl}"
-         style="
-           background-color: #0055a5;
-           color: #ffffff;
-           padding: 12px 24px;
-           border-radius: 4px;
-           text-decoration: none;
-           font-weight: bold;
-           display: inline-block;">
-        Stornierung bestätigen
-      </a>
-    </p>
-  `;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      cancelReason: reason,
-    });
-
-    await this._sendBookingMail({
+    await MailSenderService.dispatch({
+      mailType: MailType.VERIFY_BOOKING_REJECTION,
       address,
-      bookingId,
+      bookingIds: [bookingId],
       tenantId,
-      subject: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
-      title: `Stornierungsanfrage für Ihre Buchung im ${tenant.name}`,
-      message: snippetHtml,
-      includeQRCode: false,
+      templateData: { cancelReason: reason, verifyRejectionUrl },
       attachments,
-      sendBCC: false,
-      addRejectionLink: false,
-    });
-  }
-
-  static async sendFreeBookingConfirmation(
-    address,
-    bookingIds,
-    tenantId,
-    aggregated = false,
-  ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const tenant = await TenantManager.getTenant(tenantId);
-    const includeQRCode = tenant.enablePublicStatusView;
-
-    const snippetTemplateString = `
-    <div style="font-family: sans-serif;">
-      <p>
-        Hallo,<br>
-        vielen Dank für Ihre kostenfreie Buchung im <strong>{{tenantName}}</strong>.
-      </p>
-
-    </div>
-  `;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      tenantName: tenant.name,
-      supportEmail: tenant.mail,
-    });
-
-    if (aggregated) {
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
-        title: `Vielen Dank für Ihre Buchung im  ${tenant.name}`,
-        message: snippetHtml,
-        sendBCC: false,
-        addRejectionLink: true,
-      });
-    } else {
-      for (const bookingId of bookingIds) {
-        await this._sendBookingMail({
-          address,
-          bookingId,
-          tenantId,
-          subject: `Vielen Dank für Ihre Buchung im ${tenant.name}`,
-          title: `Vielen Dank für Ihre Buchung im ${tenant.name}`,
-          message: snippetHtml,
-          includeQRCode: includeQRCode,
-          attachments: undefined,
-          sendBCC: false,
-          addRejectionLink: true,
-        });
-      }
-    }
-  }
-
-  static async sendBookingRequestConfirmation(
-    address,
-    bookingIds,
-    tenantId,
-    aggregated = false,
-    attachments = [],
-  ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const tenant = await TenantManager.getTenant(tenantId);
-
-    const includeQRCode = tenant.enablePublicStatusView;
-
-    const snippetTemplateString = `
-    <div style="font-family: sans-serif;">
-      <p>
-        Hallo,<br>
-        vielen Dank für Ihre Buchungsanfrage im 
-        <strong>{{tenantName}}</strong>.
-      </p>
-      
-      <p>
-        Ihre Buchungsanfrage ist bei uns eingegangen und wird derzeit zur Freigabe
-        geprüft.
-      </p>
-      
-      <p>
-        Sobald Ihre Anfrage freigegeben wurde, erhalten Sie eine Benachrichtigung
-        von uns.
-      </p>
-      
-    </div>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      tenantName: tenant.name,
-      supportEmail: tenant.mail,
-    });
-
-    if (aggregated) {
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
-        title: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
-        message: snippetHtml,
-        attachments,
-        sendBCC: false,
-        addRejectionLink: true,
-      });
-    } else {
-      for (const bookingId of bookingIds) {
-        await this._sendBookingMail({
-          address: address,
-          bookingId: bookingId,
-          tenantId: tenantId,
-          subject: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
-          title: `Vielen Dank für Ihre Buchungsanfrage im ${tenant.name}`,
-          message: snippetHtml,
-          includeQRCode: includeQRCode,
-          attachments,
-          sendBCC: false,
-          addRejectionLink: true,
-        });
-      }
-    }
-  }
-
-  static async sendInvoice(
-    address,
-    bookingIds,
-    tenantId,
-    attachments = undefined,
-    aggregated = false,
-  ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const tenant = await TenantManager.getTenant(tenantId);
-    const includeQRCode = tenant.enablePublicStatusView;
-
-    const snippetTemplateString = `
-        <p>
-          Hallo,<br>
-          vielen Dank für Ihre Buchung bei <strong>{{tenantName}}</strong>.
-        </p>
-        
-        <p>
-          Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang 
-          aufgeführten Betrag auf das angegebene Konto.
-        </p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      tenantName: tenant.name,
-      supportEmail: tenant.mail,
-    });
-
-    if (aggregated) {
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Rechnung zu Ihrer Buchung bei ${tenant.name}`,
-        title: `Rechnung zu Ihrer Buchung bei ${tenant.name}`,
-        message: snippetHtml,
-        attachments,
-        sendBCC: false,
-        addRejectionLink: true,
-      });
-    } else {
-      for (const bookingId of bookingIds) {
-        await this._sendBookingMail({
-          address,
-          bookingId,
-          tenantId,
-          subject: `Rechnung zu Ihrer Buchung bei ${tenant.name}`,
-          title: `Rechnung zu Ihrer Buchung bei ${tenant.name}`,
-          message: snippetHtml,
-          includeQRCode: includeQRCode,
-          attachments,
-          sendBCC: false,
-          addRejectionLink: true,
-        });
-      }
-    }
-  }
-
-  static async sendPaymentLinkAfterBookingApproval(
-    address,
-    bookingIds,
-    tenantId,
-    aggregated = false,
-  ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-    const tenant = await TenantManager.getTenant(tenantId);
-
-    const includeQRCode = tenant.enablePublicStatusView;
-
-    const snippetTemplateString = `
-          <p>
-            Vielen Dank für Ihre Buchungsanfrage im
-            <strong>{{tenantName}}</strong>.
-            Wir haben Ihre Anfrage geprüft und freigegeben.
-          </p>
-    
-          <p>
-            Um Ihre Buchung verbindlich abzuschließen, klicken Sie bitte auf den
-            nachfolgenden Knopf und folgen Sie den weiteren Schritten.
-          </p>
-    
-          <p>
-            <a href="{{paymentUrl}}"
-               style="
-                 background-color: #0055a5;
-                 color: #ffffff;
-                 padding: 12px 24px;
-                 border-radius: 4px;
-                 text-decoration: none;
-                 font-weight: bold;
-                 display: inline-block;">
-              Buchung abschließen
-            </a>
-          </p>`;
-
-    if (aggregated) {
-      const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?ids=${bookingIds.join(",")}&tenant=${tenantId}&aggregated=${aggregated}`;
-      const snippetHtml = renderSnippet(snippetTemplateString, {
-        tenantName: tenant.name,
-        paymentUrl: paymentLink,
-        supportEmail: tenant.mail,
-      });
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-        title: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-        message: snippetHtml,
-        sendBCC: false,
-        addRejectionLink: true,
-      });
-    } else {
-      for (const booking of bookings) {
-        const paymentLink = `${process.env.FRONTEND_URL}/payment/redirection?ids=${booking.id}&tenant=${tenantId}&aggregated=${aggregated}`;
-        const snippetHtml = renderSnippet(snippetTemplateString, {
-          tenantName: tenant.name,
-          paymentUrl: paymentLink,
-          supportEmail: tenant.mail,
-        });
-        await this._sendBookingMail({
-          address: booking.mail,
-          bookingId: booking.id,
-          tenantId,
-          subject: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-          title: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-          message: snippetHtml,
-          includeQRCode: includeQRCode,
-          sendBCC: false,
-          addRejectionLink: true,
-        });
-      }
-    }
-  }
-
-  static async sendInvoiceAfterBookingApproval(
-    address,
-    bookingIds,
-    tenantId,
-    attachments = undefined,
-    aggregated = false,
-  ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-    const tenant = await TenantManager.getTenant(tenantId);
-    const includeQRCode = tenant.enablePublicStatusView;
-
-    const snippetTemplateString = `
-      <p>
-        Vielen Dank für Ihre Buchungsanfrage im 
-        <strong>{{tenantName}}</strong>. Wir haben diese 
-        erfolgreich geprüft und freigegeben.
-      </p>
-      
-      <p>
-        Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den 
-        im Anhang aufgeführten Betrag auf das angegebene Konto.
-      </p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      tenantName: tenant.name,
-      supportEmail: tenant.mail,
-    });
-
-    if (aggregated) {
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-        title: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-        message: snippetHtml,
-        attachments,
-        sendBCC: false,
-        addRejectionLink: false,
-      });
-    } else {
-      for (const booking of bookings) {
-        await this._sendBookingMail({
-          address: booking.mail,
-          bookingId: booking.id,
-          tenantId,
-          subject: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-          title: `Bitte schließen Sie Ihre Buchung im ${tenant.name} ab`,
-          message: snippetHtml,
-          includeQRCode: includeQRCode,
-          attachments,
-          sendBCC: false,
-          addRejectionLink: false,
-        });
-      }
-    }
-  }
-
-  static async sendIncomingBooking(
-    address,
-    bookingIds,
-    tenantId,
-    aggregated = false,
-  ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-
-    const snippetTemplateString = `
-        <p>Es liegt eine neue Buchungsanfrage vor.</p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString);
-
-    if (aggregated) {
-      await this._sendAggregatedBookingMail({
-        address,
-        bookingIds,
-        tenantId,
-        subject: `Eine neue Buchungsanfrage liegt vor`,
-        title: `Eine neue Buchungsanfrage liegt vor`,
-        message: snippetHtml,
-        sendBCC: false,
-        addRejectionLink: false,
-      });
-    } else {
-      for (const bookingId of bookingIds) {
-        await this._sendBookingMail({
-          address: address,
-          bookingId: bookingId,
-          tenantId: tenantId,
-          subject: `Eine neue Buchungsanfrage liegt vor`,
-          title: `Eine neue Buchungsanfrage liegt vor`,
-          message: snippetHtml,
-          sendBCC: false,
-          addRejectionLink: false,
-        });
-      }
-    }
-  }
-
-  static async sendNewBooking(address, bookingId, tenantId) {
-    const message = `<p>Es liegt eine neue Buchung vor.</p><br>`;
-
-    await this._sendBookingMail({
-      address,
-      bookingId,
-      tenantId,
-      subject: "Eine neue Buchung liegt vor",
-      title: "Eine neue Buchung liegt vor",
-      message,
-      sendBCC: false,
     });
   }
 
   static async sendVerificationRequest(address, hookId, verifyUrl) {
+    const instance = await InstanceManager.getInstance(false);
+
     let verifyUrlTemplate = "";
 
     if (!verifyUrl) {
@@ -1031,29 +263,7 @@ class MailController {
       verifyUrlTemplate = `${verifyUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
     }
 
-    const snippetTemplateString = `
-        <p>
-          Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den folgenden Button.
-        </p>
-        <p style="text-align: center;">
-          <a href="{{verifyUrlTemplate}}"
-             style="
-               background-color: #0055a5;
-               color: #ffffff;
-               padding: 12px 24px;
-               border-radius: 4px;
-               text-decoration: none;
-               font-weight: bold;
-               display: inline-block;">
-            E-Mail bestätigen
-          </a>
-        </p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
-      verifyUrlTemplate,
-    });
-
-    const instance = await InstanceManager.getInstance(false);
+    const content = renderSnippet("verification-request", { verifyUrl: verifyUrlTemplate });
 
     await MailerService.send({
       address,
@@ -1061,36 +271,16 @@ class MailController {
       mailTemplate: instance.mailTemplate,
       model: {
         title: "Bestätigen Sie Ihre E-Mail-Adresse",
-        content: snippetHtml,
+        content,
       },
     });
   }
 
   static async sendPasswordResetRequest(address, hookId) {
+    const instance = await InstanceManager.getInstance(false);
     const resetUrl = `${process.env.BACKEND_URL}/auth/reset/${hookId}`;
 
-    const snippetTemplateString = `
-        <p>
-          Ihr Kennwort wurde geändert. Um die Änderung zu bestätigen, klicken Sie bitte auf den nachfolgenden Button.<br>
-          Falls Sie keine Änderung an Ihrem Kennwort vorgenommen haben, können Sie diese Nachricht ignorieren.
-        </p>
-        <p style="text-align: center;">
-          <a href="{{resetUrl}}"
-             style="
-               background-color: #0055a5;
-               color: #ffffff;
-               padding: 12px 24px;
-               border-radius: 4px;
-               text-decoration: none;
-               font-weight: bold;
-               display: inline-block;">
-            Kennwortänderung bestätigen
-          </a>
-        </p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, { resetUrl });
-
-    const instance = await InstanceManager.getInstance(false);
+    const content = renderSnippet("password-reset", { resetUrl });
 
     await MailerService.send({
       address,
@@ -1098,7 +288,7 @@ class MailController {
       mailTemplate: instance.mailTemplate,
       model: {
         title: "Bestätigen Sie die Änderung Ihres Kennworts",
-        content: snippetHtml,
+        content,
       },
     });
   }
@@ -1107,21 +297,7 @@ class MailController {
     const instance = await InstanceManager.getInstance(false);
     const user = await UserManager.getUser(userId);
 
-    const snippetTemplateString = `
-        <p>Ein neuer Benutzer wurde erstellt.</p>
-        <br />
-        <p><strong>Vorname:</strong> {{firstName}}</p>
-        <p><strong>Nachname:</strong> {{lastName}}</p>
-        {{#if company}}
-          <p><strong>Firma:</strong> {{company}}</p>
-        {{/if}}
-        <p><strong>E-Mail:</strong> {{email}}</p>
-        <br />
-        <p>
-          <strong>Registrierungsdatum:</strong> {{formatDateTime createDate}}
-        </p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
+    const content = renderSnippet("user-created", {
       firstName: user.firstName,
       lastName: user.lastName,
       company: user.company,
@@ -1135,7 +311,7 @@ class MailController {
       mailTemplate: instance.mailTemplate,
       model: {
         title: "Ein neuer Benutzer wurde erstellt",
-        content: snippetHtml,
+        content,
       },
     });
   }
@@ -1149,26 +325,7 @@ class MailController {
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
-    const snippetTemplateString = `
-        <p>Guten Tag,</p>
-  
-        <p>
-          bitte beachten Sie, dass sich der Status der folgenden Buchung geändert hat:
-        </p>
-  
-        <ul style="list-style-type: none; padding-left: 0;">
-          <li><strong>Buchungsnummer:</strong> {{bookingId}}</li>
-          <li><strong>Mandant:</strong> {{tenantName}}</li>
-          <li><strong>Alter Status:</strong> {{oldStatus}}</li>
-          <li><strong>Neuer Status:</strong> {{newStatus}}</li>
-        </ul>
-  
-        <p>
-          Aufgrund dieser Änderung ist ggf. eine Prüfung oder 
-          weitere Bearbeitung erforderlich.
-        </p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
+    const content = renderSnippet("workflow-notification", {
       bookingId,
       tenantName: tenant.name,
       oldStatus,
@@ -1181,7 +338,7 @@ class MailController {
       mailTemplate: tenant.genericMailTemplate,
       model: {
         title: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
-        content: snippetHtml,
+        content,
       },
       useInstanceMail: tenant.useInstanceMail,
     });
@@ -1191,28 +348,7 @@ class MailController {
     const tenant = await TenantManager.getTenant(tenantId);
     const invitationUrl = `${process.env.FRONTEND_URL}/auth/invitation/${tenantId}?token=${token}`;
 
-    const snippetTemplateString = `
-        <p>Sie wurden zum Smart City Booking Mandanten {{tenantName}} eingeladen.</p>
-  
-        <p>
-          Bitte klicken Sie auf den nachfolgenden Button, um die Einladung anzunehmen:
-        </p>
-  
-        <p style="text-align: center;">
-          <a href="{{invitationUrl}}"
-             style="
-               background-color: #0055a5;
-               color: #ffffff;
-               padding: 12px 24px;
-               border-radius: 4px;
-               text-decoration: none;
-               font-weight: bold;
-               display: inline-block;">
-            Einladung annehmen
-          </a>
-        </p>`;
-
-    const snippetHtml = renderSnippet(snippetTemplateString, {
+    const content = renderSnippet("invitation", {
       tenantName: tenant.name,
       invitationUrl,
       supportEmail: tenant.mail,
@@ -1220,11 +356,11 @@ class MailController {
 
     await MailerService.send({
       address: sendTo,
-      subject: `Smart City Booking - Einladung zum ${tenant.name} Mandanten`,
+      subject: `Biletado - Einladung zum ${tenant.name} Mandanten`,
       mailTemplate: tenant.genericMailTemplate,
       model: {
-        title: `Smart City Booking - Einladung zum ${tenant.name} Mandanten`,
-        content: snippetHtml,
+        title: `Biletado - Einladung zum ${tenant.name} Mandanten`,
+        content,
       },
       useInstanceMail: tenant.useInstanceMail,
     });
@@ -1232,19 +368,3 @@ class MailController {
 }
 
 module.exports = MailController;
-
-function renderSnippet(htmlSnippet, data) {
-  const wrappedTemplateString = `
-    <div style="font-family: sans-serif;">
-      ${htmlSnippet}
-      
-      {{#if showFooter}}
-        {{> mailFooter email=supportEmail}}
-      {{/if}}
-    </div>
-  `;
-
-  const template = Handlebars.compile(wrappedTemplateString);
-
-  return template(data);
-}

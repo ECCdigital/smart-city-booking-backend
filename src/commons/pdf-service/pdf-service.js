@@ -35,7 +35,6 @@ class PdfService {
   }
 
   static formatDateTime(value) {
-    console.log("Formatting date:", value);
     const formatter = new Intl.DateTimeFormat("de-DE", {
       day: "2-digit",
       month: "2-digit",
@@ -265,15 +264,18 @@ class PdfService {
     </table>
     `;
 
+      const receiptAddress = `
+    ${bookings[0].company || ""}${bookings[0].company ? "<br/>" : ""}
+    ${bookings[0].name}<br/>
+    ${bookings[0].street}<br/>
+    ${bookings[0].zipCode} ${bookings[0].location}
+  `;
+
       const data = {
         isAggregated: true,
         receiptNumber,
         bookingDate: PdfService.formatDate(bookings[0].timeCreated),
-        receiptAddress: `
-        ${bookings[0].name}<br/>
-        ${bookings[0].street}<br/>
-        ${bookings[0].zipCode} ${bookings[0].location}
-      `,
+        receiptAddress,
         bookingEntries: entriesHtml,
       };
 
@@ -494,6 +496,14 @@ class PdfService {
       </tr>
     </table>`;
 
+    const invoiceAddress = `
+      ${bookings[0].company || ""} 
+      ${bookings[0].company ? "<br />" : ""}
+      ${bookings[0].name || ""}<br />
+      ${bookings[0].street || ""}<br />
+      ${bookings[0].zipCode || ""} ${bookings[0].location || ""}
+    `;
+
     const template = Handlebars.compile(tenant.invoiceTemplate);
     const data = {
       title: "Ihre Sammelrechnung",
@@ -504,7 +514,7 @@ class PdfService {
       bank: invoiceApp.bank,
       iban: invoiceApp.iban,
       bic: invoiceApp.bic,
-      invoiceAddress: `${bookings[0].name}<br>${bookings[0].street}<br>${bookings[0].zipCode} ${bookings[0].location}`,
+      invoiceAddress,
       mainContent,
       location: tenant.location,
       totalAmount: PdfService.formatCurrency(totalBrutto),

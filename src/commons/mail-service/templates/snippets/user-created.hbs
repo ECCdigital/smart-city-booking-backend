@@ -1,0 +1,13 @@
+<p>Ein neuer Benutzer wurde erstellt.</p>
+<br />
+<p><strong>Vorname:</strong> {{firstName}}</p>
+<p><strong>Nachname:</strong> {{lastName}}</p>
+{{#if company}}
+  <p><strong>Firma:</strong> {{company}}</p>
+{{/if}}
+<p><strong>E-Mail:</strong> {{email}}</p>
+<br />
+<p>
+  <strong>Registrierungsdatum:</strong>
+  {{formatDateTime createDate}}
+</p>
