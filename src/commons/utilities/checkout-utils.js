@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const UserManager = require("../data-managers/user-manager");
 
 async function resolveCheckoutId(checkoutId, userID, tenantId) {
-  if (checkoutId) {
+    if (checkoutId) {
     return { checkoutId, generated: false };
   }
 
