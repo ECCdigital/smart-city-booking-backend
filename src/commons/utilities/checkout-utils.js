@@ -1,7 +1,7 @@
 const UserManager = require("../data-managers/user-manager");
 
 async function resolveCheckoutId(checkoutId, userID, tenantId) {
-  if (checkoutId) {
+    if (checkoutId) {
     return { checkoutId, generated: false };
   }
 
@@ -16,6 +16,9 @@ async function resolveCheckoutId(checkoutId, userID, tenantId) {
       return { checkoutId: "01" + id, generated: false };
     }
   }
+
+  return { checkoutId: null, generated: true };
+
 }
 
 module.exports = { resolveCheckoutId };
