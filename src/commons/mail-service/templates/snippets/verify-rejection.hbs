@@ -1,0 +1,33 @@
+<p>
+  Für die nachfolgende Buchung wurde eine Stornierung vorgemerkt. Wenn Sie diese
+  Stornierung bestätigen möchten, klicken Sie bitte auf den nachfolgenden
+  Button.
+</p>
+<p>
+  Sollten Sie die Stornierung nicht veranlasst haben, können Sie diese Nachricht
+  ignorieren.
+</p>
+
+{{#if cancelReason}}
+  <p>
+    <strong>Hinweis zur Stornierung</strong>:
+    {{sanitizeString cancelReason}}
+  </p>
+{{/if}}
+
+<p>
+  <a
+    href="{{verifyRejectionUrl}}"
+    style="
+      background-color: #0055a5;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: bold;
+      display: inline-block;
+    "
+  >
+    Stornierung bestätigen
+  </a>
+</p>

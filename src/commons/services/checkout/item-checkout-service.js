@@ -140,6 +140,10 @@ class ItemCheckoutService {
         continue;
       }
 
+      if(decl.active === false) {
+        continue;
+      }
+
       const app = await getTenantAppById(this.tenantId, decl.provider);
 
       if (!app || !app.active) {

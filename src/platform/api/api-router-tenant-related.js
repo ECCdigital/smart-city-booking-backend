@@ -216,6 +216,11 @@ router.get(
   AuthenticationController.isSignedIn,
   GroupBookingController.getGroupBooking,
 );
+router.put(
+  "/group-bookings/:id",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.updateGroupBooking,
+);
 router.post(
   "/group-bookings/:id/commit",
   AuthenticationController.isSignedIn,
@@ -461,5 +466,7 @@ router.delete(
 router.use("/catalog", require("./routes/catalog.routes"));
 router.use("/locker", require("./routes/locker.routes"));
 router.use("/access", require("./routes/access.routes"));
+
+router.use("/ical", require("./routes/ical.routes"));
 
 module.exports = router;

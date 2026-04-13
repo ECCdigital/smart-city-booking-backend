@@ -1,3 +1,4 @@
+const { v4: uuidv4 } = require("uuid");
 const UserManager = require("../data-managers/user-manager");
 
 async function resolveCheckoutId(checkoutId, userID, tenantId) {
@@ -16,9 +17,7 @@ async function resolveCheckoutId(checkoutId, userID, tenantId) {
       return { checkoutId: "01" + id, generated: false };
     }
   }
-
-  return { checkoutId: null, generated: true };
-
+  return { checkoutId: "01" + uuidv4(), generated: true };
 }
 
 module.exports = { resolveCheckoutId };

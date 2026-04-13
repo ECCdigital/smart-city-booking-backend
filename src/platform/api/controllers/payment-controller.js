@@ -11,11 +11,41 @@ const logger = bunyan.createLogger({
 });
 
 class PaymentController {
+  /**
+   * Resolves booking IDs - if an ID starts with "G-", it's a group booking
+   * and we fetch the actual booking IDs from the group.
+   */
+  static async _resolveBookingIds(tenantId, ids) {
+    const resolvedIds = [];
+
+    for (const id of ids) {
+      if (id.startsWith("G-")) {
+        const groupBooking = await GroupBookingManager.getGroupBooking(
+          tenantId,
+          id,
+        );
+        if (groupBooking && groupBooking.bookingIds) {
+          resolvedIds.push(...groupBooking.bookingIds);
+        } else {
+          logger.warn(`${tenantId} -- could not resolve group booking ${id}`);
+        }
+      } else {
+        resolvedIds.push(id);
+      }
+    }
+
+    return resolvedIds;
+  }
+
   static async createPayment(request, response) {
     const {
       params: { tenant: tenantId },
       body: { bookingIds, aggregated },
     } = request;
+
+    logger.debug(
+      `Create payment request received for tenant ${tenantId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+    );
 
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
@@ -66,6 +96,10 @@ class PaymentController {
     //TODO: Check if all bookings are in the same tenant and have the same payment provider
 
     try {
+      logger.debug(
+        `Getting payment service for tenant ${tenantId}, bookingIds ${bookingIds}, paymentProvider ${bookings[0].paymentProvider}, aggregated ${aggregated}, groupBookingId ${groupBookingId}`,
+      );
+
       let paymentService = await PaymentUtils.getPaymentService(
         tenantId,
         bookingIds,
@@ -88,8 +122,11 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+
+    const isAggregated = aggregated === "true";
+
     logger.info(
-      `Payment notification GET received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+      `Payment notification GET received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${isAggregated}`,
     );
 
     let aggregatedBookingIds = bookingIds
@@ -103,14 +140,19 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
+    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+      tenantId,
+      aggregatedBookingIds,
+    );
+
     const bookings = await BookingManager.getBookings(
       tenantId,
       aggregatedBookingIds,
     );
 
     try {
-      if (aggregated) {
-        const options = { aggregated };
+      if (isAggregated) {
+        const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           bookings.map((booking) => booking.id),
@@ -146,8 +188,10 @@ class PaymentController {
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
 
+    const isAggregated = aggregated === "true";
+
     logger.info(
-      `Payment notification POST received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
+      `Payment notification POST received for tenant ${tenantId}, bookingId ${bookingId}, bookingIds ${bookingIds}, aggregated ${isAggregated}`,
     );
 
     let aggregatedBookingIds = bookingIds
@@ -161,14 +205,19 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
+    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+      tenantId,
+      aggregatedBookingIds,
+    );
+
     const bookings = await BookingManager.getBookings(
       tenantId,
       aggregatedBookingIds,
     );
 
     try {
-      if (aggregated) {
-        const options = { aggregated };
+      if (isAggregated) {
+        const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           bookings.map((booking) => booking.id),
@@ -217,6 +266,12 @@ class PaymentController {
     if (bookingId) {
       aggregatedBookingIds.push(bookingId);
     }
+
+    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+      tenantId,
+      aggregatedBookingIds,
+    );
+
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
     const bookings = await BookingManager.getBookings(
@@ -277,13 +332,14 @@ class PaymentController {
       (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
       (await PermissionService._isInstanceOwner(user.id));
 
-      if (!hasPermission) {
-        response.status(403).send({
-          success: false,
-          message: "Forbidden: You don't have permission to test this payment provider.",
-        });
-        return;
-      }
+    if (!hasPermission) {
+      response.status(403).send({
+        success: false,
+        message:
+          "Forbidden: You don't have permission to test this payment provider.",
+      });
+      return;
+    }
 
     try {
       const paymentService = await PaymentUtils.getPaymentService(

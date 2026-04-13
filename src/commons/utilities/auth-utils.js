@@ -16,7 +16,13 @@ const authenticateIfNeeded = async (req, condition) => {
   }
 
   const token = authHeader.substring(7);
-  return await JwtHelper.verifyToken(token);
+  const decoded = await JwtHelper.verifyToken(token);
+
+  // Normalize payload shape for controller code expecting user.id.
+  return {
+    ...decoded,
+    id: decoded.sub,
+  };
 };
 
 module.exports = { authenticateIfNeeded };

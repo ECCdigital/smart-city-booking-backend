@@ -1,0 +1,45 @@
+<strong>Buchungsnummer:</strong> {{booking.id}}<br>
+<strong>Gesamtbetrag:</strong> {{priceFormatted booking.priceEur}}<br><br>
+
+{{> contactSnippet booking=booking }}
+
+{{#gt booking.comment.length 0}}
+  <br><br><strong>Hinweise zur Buchung:</strong>
+  <br> {{booking.comment}}
+{{else}} {{/gt}}
+
+{{#if booking.timeBegin}}
+  <br><strong>Buchungszeitraum:</strong> {{formatDateTime booking.timeBegin}} - {{formatDateTime booking.timeEnd}}
+{{/if}}
+<br>
+<h2>Bestellübersicht</h2>
+
+{{#each bookingItems}}
+  <div style="border-bottom: solid 1px grey; margin-bottom: 10px; padding-bottom: 10px;">
+    <strong>{{bookableTitle}}, Anzahl: {{amount}}</strong>
+    {{#if isTicket}}
+      <div style="color: grey">
+        Ticket für die Veranstaltung {{event.name}}<br>
+        vom {{formatDate event.startDate}} {{event.startTime}}
+        bis {{formatDate event.endDate}} {{event.endTime}}<br>
+        Ort: {{event.locationName}}, {{event.locationStreet}}, {{event.locationHouseNumber}} {{event.locationZip}} {{event.locationCity}}
+      </div>
+    {{/if}}
+
+    {{#if bookingNotes}}
+      {{{bookingNotes}}}
+    {{/if}}
+  </div>
+{{/each}}
+
+{{#if coupon}}
+  {{#if coupon.isFixed}}
+    <div style="color: grey">
+      Gutschein: {{coupon.description}} ( -{{coupon.value}} € )<br>
+    </div>
+  {{else}}
+    <div style="color: grey">
+      Gutschein: {{coupon.description}} ( -{{coupon.value}} % )<br>
+    </div>
+  {{/if}}
+{{/if}}

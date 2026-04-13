@@ -640,6 +640,7 @@ class BookingService {
           originBooking.mail,
           originBooking.id,
           originBooking.tenantId,
+          undefined,
         );
         logger.info(
           `${tenantId} -- booking ${originBooking.id} committed and sent free booking confirmation to ${originBooking.mail}`,
@@ -740,6 +741,7 @@ class BookingService {
         groupBooking.mail,
         groupBooking.bookingIds,
         groupBooking.tenantId,
+        undefined,
         true,
       );
       logger.info(

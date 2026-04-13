@@ -94,6 +94,28 @@ class GroupBookingManager {
     return groupBookingEntity;
   }
 
+  static async updateGroupBooking(tenantID, gID, groupBooking) {
+
+    if (!gID || !tenantID) {
+      throw new Error("id and tenantId are required");
+    }
+
+    if (Object.keys(groupBooking).length === 0) {
+      throw new Error("No fields provided for update");
+    }
+
+    const result = await GroupBookingModel.updateOne(
+      { id: gID, tenantId: tenantID },
+      groupBooking,
+    );
+
+    if (result.matchedCount === 0) {
+      throw new Error("Group booking not found");
+    }
+
+    return await this.getGroupBooking(tenantID, gID);
+  }
+
   /**
    * Delete a group booking
    * @param {string} tenantId Tenant ID
