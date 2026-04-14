@@ -3,7 +3,7 @@ const {
   PmPaymentService,
   InvoicePaymentService,
   EPayBLPaymentService,
-} = require("../services/payment/payment-service");
+} = require("../services/payment/providers");
 const TenantManager = require("../data-managers/tenant-manager");
 
 class PaymentUtils {
