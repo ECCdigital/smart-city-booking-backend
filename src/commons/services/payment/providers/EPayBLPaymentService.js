@@ -313,6 +313,8 @@ class EPayBLPaymentService extends PaymentService {
   }
 
   async paymentNotification(body) {
+    logger.info(`[ePayBL] FULL notification body`, JSON.stringify(body));
+
     try {
       const notificationData = body?.data || body;
 
