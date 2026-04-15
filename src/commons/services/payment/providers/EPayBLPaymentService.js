@@ -329,9 +329,28 @@ class EPayBLPaymentService extends PaymentService {
         aktivierung,
       } = notificationData;
 
+      logger.debug(`[ePayBL] Raw notification body`, {
+        bodyKeys: Object.keys(body || {}),
+        hasDataProp: !!body?.data,
+        notificationDataKeys: Object.keys(notificationData || {}),
+      });
+
+      logger.debug(`[ePayBL] Parsed notification fields`, {
+        kassenzeichen,
+        status,
+        zahlverfahren,
+        hash: hash ? `${hash.substring(0, 8)}...` : "MISSING",
+        mandant,
+        bewirtschafter,
+        zvgid,
+        tan,
+        zvp,
+        aktivierung,
+      });
+
       if (status === "notify") {
         logger.info(
-          `[ePayBL] Skipping 'notify' status for ` + `tenant=${this.tenantId}`,
+          `[ePayBL] Skipping 'notify' status for tenant=${this.tenantId}`,
         );
         return true;
       }
@@ -347,13 +366,12 @@ class EPayBLPaymentService extends PaymentService {
       if (paymentApp.notificationSecret) {
         if (!hash) {
           logger.warn(
-            `[ePayBL] Secret configured but no hash in ` +
-              `notification — rejecting`,
+            `[ePayBL] Secret configured but no hash in notification — rejecting`,
           );
           throw new Error("Missing hash in notification");
         }
 
-        const hashString = [
+        const hashParts = [
           mandant,
           bewirtschafter,
           zvgid,
@@ -363,21 +381,76 @@ class EPayBLPaymentService extends PaymentService {
           zahlverfahren,
           aktivierung,
           status,
-        ].join("");
+        ];
+
+        // Jeden einzelnen Teil loggen, damit man sieht ob etwas
+        // undefined/null/leer ist oder unerwartete Zeichen enthält
+        logger.debug(`[ePayBL] Hash input parts (individual)`, {
+          mandant: { value: mandant, type: typeof mandant },
+          bewirtschafter: {
+            value: bewirtschafter,
+            type: typeof bewirtschafter,
+          },
+          zvgid: { value: zvgid, type: typeof zvgid },
+          kassenzeichen: { value: kassenzeichen, type: typeof kassenzeichen },
+          tan: { value: tan, type: typeof tan },
+          zvp: { value: zvp, type: typeof zvp },
+          zahlverfahren: { value: zahlverfahren, type: typeof zahlverfahren },
+          aktivierung: { value: aktivierung, type: typeof aktivierung },
+          status: { value: status, type: typeof status },
+        });
+
+        const hashString = hashParts.join("");
+
+        const hashInput = hashString + paymentApp.notificationSecret;
+
+        logger.debug(`[ePayBL] Hash computation details`, {
+          // Den zusammengesetzten String OHNE Secret loggen
+          hashStringWithoutSecret: hashString,
+          hashStringLength: hashString.length,
+          // Nur Länge des Secrets loggen (nicht das Secret selbst!)
+          secretLength: paymentApp.notificationSecret.length,
+          // Gesamtlänge des Hash-Inputs
+          totalInputLength: hashInput.length,
+          // Zeigt ob undefined-Teile als "undefined" im String landen
+          containsUndefined: hashString.includes("undefined"),
+          containsNull: hashString.includes("null"),
+        });
 
         const expectedHash = crypto
           .createHash("sha256")
-          .update(hashString + paymentApp.notificationSecret)
+          .update(hashInput)
           .digest("hex");
 
+        logger.debug(`[ePayBL] Hash comparison`, {
+          receivedHash: hash,
+          expectedHash: expectedHash,
+          match: hash === expectedHash,
+          receivedLength: hash?.length,
+          expectedLength: expectedHash.length,
+          // Case-Mismatch erkennen
+          caseInsensitiveMatch:
+            hash?.toLowerCase() === expectedHash.toLowerCase(),
+          // Whitespace-Probleme erkennen
+          receivedTrimmed: hash?.trim() === hash,
+        });
+
         if (hash !== expectedHash) {
-          logger.warn(`${this.tenantId} -- ePayBL hash mismatch`);
+          logger.warn(`[ePayBL] Hash mismatch for ${this.tenantId}`, {
+            receivedHash: hash,
+            expectedHash: expectedHash,
+            // Ersten Unterschied finden
+            firstDiffAt: [...expectedHash].findIndex((c, i) => c !== hash?.[i]),
+          });
           throw new Error("Hash mismatch");
         }
 
         hashValid = true;
-        logger.info(
-          `[ePayBL] Hash validation successful for ` + `${this.tenantId}`,
+        logger.info(`[ePayBL] Hash validation successful for ${this.tenantId}`);
+      } else {
+        logger.warn(
+          `[ePayBL] No notificationSecret configured for ${this.tenantId}` +
+            ` — skipping hash validation`,
         );
       }
 
@@ -428,10 +501,15 @@ class EPayBLPaymentService extends PaymentService {
 
       if (!hashValid && !apiConfirmedPaid) {
         logger.error(
-          `[ePayBL] Cannot verify payment for ` +
-            `${this.tenantId}: no hash secret configured ` +
-            `and API status check failed or not paid. ` +
-            `Rejecting notification.`,
+          `[ePayBL] Cannot verify payment for ${this.tenantId}: ` +
+            `no hash secret configured and API status check failed ` +
+            `or not paid. Rejecting notification.`,
+          {
+            hashValid,
+            apiConfirmedPaid,
+            verifiedStatus,
+            hasSecret: !!paymentApp.notificationSecret,
+          },
         );
         throw new Error("Payment could not be verified by any means");
       }
@@ -465,9 +543,8 @@ class EPayBLPaymentService extends PaymentService {
         return true;
       } else {
         logger.warn(
-          `${this.tenantId} -- ePayBL payment not ` +
-            `successful: API=${verifiedStatus}, ` +
-            `notification=${status}`,
+          `${this.tenantId} -- ePayBL payment not successful: ` +
+            `API=${verifiedStatus}, notification=${status}`,
         );
         return true;
       }
