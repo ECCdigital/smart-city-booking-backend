@@ -52,7 +52,7 @@ const bookingSchemaDefinition = {
   mail: {
     type: String,
     required: true,
-    format: "email",
+    format: "multiEmail",
   },
   name: { type: String, default: "" },
   paymentProvider: {
