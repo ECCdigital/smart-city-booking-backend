@@ -244,7 +244,7 @@ class NextcloudManager extends FileManager {
       return client.createReadStream(path);
     } catch (error) {
       logger.error(
-        `Failed to create read stream for file ${filename} for tenant ${tenant}`,
+        `Failed to create read stream for file ${filename} for tenant ${tenantID}`,
         { error: error.message },
       );
       throw NextcloudManager._handleError(
@@ -308,7 +308,7 @@ class NextcloudManager extends FileManager {
       });
      } catch (error) {
 
-      logger.error(`Failed to stat file ${filename} for tenant ${tenant}`, {
+      logger.error(`Failed to stat file ${filename} for tenant ${tenantID}`, {
         error: error.message,
       });
       throw NextcloudManager._handleError(
@@ -377,7 +377,7 @@ class NextcloudManager extends FileManager {
       });
       } catch (error) {
       logger.error(
-        `Failed to create file ${fileName} in ${subDirectory} for tenant ${tenant}`,
+        `Failed to create file ${fileName} in ${subDir} for tenant ${tenantID}`,
         { error: error.message },
       );
       throw NextcloudManager._handleError(error, "Failed to create file");
