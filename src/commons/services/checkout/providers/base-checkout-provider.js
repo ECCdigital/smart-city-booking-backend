@@ -51,6 +51,10 @@ class BaseCheckoutProvider {
     throw new Error("getExternalPriceCategories() not implemented");
   }
 
+  async checkBookingDuration(durationMinutes) {
+    return { available: true };
+  }
+
   get handlesPricing() {
     return false;
   }
@@ -60,6 +64,10 @@ class BaseCheckoutProvider {
   }
 
   get handlesMaxAmount() {
+    return false;
+  }
+
+  get handlesBookingDuration() {
     return false;
   }
 }

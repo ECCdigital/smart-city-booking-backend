@@ -140,7 +140,7 @@ class ItemCheckoutService {
         continue;
       }
 
-      if(decl.active === false) {
+      if (decl.active === false) {
         continue;
       }
 
@@ -223,6 +223,13 @@ class ItemCheckoutService {
    */
   get hasExternalMaxAmount() {
     return this.originBookable.hasExternalMaxAmount;
+  }
+
+  /**
+   * Whether any external provider controls booking duration.
+   */
+  get hasExternalBookingDuration() {
+    return this.originBookable.hasExternalBookingDuration;
   }
 
   async freeBookingAllowed() {
@@ -831,7 +838,31 @@ class ItemCheckoutService {
   }
 
   async checkBookingDuration() {
-    const hours = this.getBookingDuration() / 60;
+    const durationMinutes = this.getBookingDuration();
+
+    // --- External provider check ---
+    if (this.hasExternalBookingDuration) {
+      for (const provider of this.externalProviders) {
+        if (!provider.handlesBookingDuration) continue;
+
+        const result = await provider.checkBookingDuration(durationMinutes);
+
+        if (!result.available) {
+          throw {
+            checkType: CHECK_TYPES.BOOKING_DURATION,
+            bookableId: this.originBookable.id,
+            title: this.originBookable.title,
+            available: false,
+            externalSource: true,
+            message: result.message,
+            ...result,
+          };
+        }
+      }
+    }
+
+    // --- Internal check  ---
+    const hours = durationMinutes / 60;
 
     if (!this.originBookable.isScheduleRelated) {
       return { checkType: CHECK_TYPES.BOOKING_DURATION, available: true };

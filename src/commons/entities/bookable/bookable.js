@@ -292,6 +292,14 @@ class Bookable {
     );
   }
 
+  get hasExternalBookingDuration() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("availability"),
+      ) ?? false
+    );
+  }
+
   /**
    * Export public bookable information
    * @returns {Object} Public bookable data

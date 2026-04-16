@@ -43,6 +43,10 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
     return true;
   }
 
+  get handlesBookingDuration() {
+    return true;
+  }
+
   /**
    * Fetches raw IFBS data. Cached across all segments for the same
    * locationId within one calendar availability check.
@@ -198,6 +202,25 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
       };
     }
     return { available: true };
+  }
+
+  async checkBookingDuration(durationMinutes) {
+    return this._cached("checkBookingDuration", async () => {
+      const priceData = await this.client.getPrice(this.locationId);
+      const minMinutes = Number(priceData["minimum_usage_time_mins"]) || 0;
+
+      if (minMinutes > 0 && durationMinutes < minMinutes) {
+        const minHours = Math.round((minMinutes / 60) * 100) / 100;
+        return {
+          available: false,
+          message: `Die Mindestbuchungsdauer beträgt ${minMinutes >= 60 ? `${minHours} Stunden` : `${minMinutes} Minuten`}.`,
+          minDurationMinutes: minMinutes,
+          externalSource: "ifbs",
+        };
+      }
+
+      return { available: true };
+    });
   }
 }
 
