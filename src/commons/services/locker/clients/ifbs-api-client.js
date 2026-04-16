@@ -32,7 +32,8 @@ class IfbsApiClient extends BaseLockerApiClient {
 
   async getLocations() {
     const response = await this._get("getLocations.php");
-    return response.cities || [];
+    const filteredCities = response.cities.filter((city) => city.CityID === '35');
+    return filteredCities || [];
   }
 
   async getLocationById(locationId) {
