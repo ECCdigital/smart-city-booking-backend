@@ -1,3 +1,4 @@
+const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const tenantSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
@@ -40,6 +41,11 @@ const tenantSchemaDefinition = {
       visible: true,
       restricted: false,
     },
+  },
+
+  bookableCustomFields: {
+    type: [customFieldDefinitionSchema],
+    default: [],
   },
 };
 

@@ -95,9 +95,15 @@ BookableSchema.statics.applyIfbsProvider = function (docs) {
   return docs;
 };
 
-BookableSchema.methods.toEntity = function () {
+BookableSchema.methods.toEntity = function (customFieldDefs) {
   const { Bookable } = require("../../entities/bookable/bookable");
-  return new Bookable(this.toObject());
+  const entity = new Bookable(this.toObject());
+
+  if (customFieldDefs) {
+    entity.enrichCustomFields(customFieldDefs);
+  }
+
+  return entity;
 };
 
 module.exports =

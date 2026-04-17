@@ -228,6 +228,7 @@ class TenantController {
           "enablePublicStatusView",
           "notifyOnNewBooking",
           "catalogParticipation",
+          "bookableCustomFields",
         ];
 
         fields.forEach((field) => {

@@ -53,6 +53,13 @@ router.get(
   AuthenticationController.isSignedIn,
   BookableController.getBookables,
 );
+
+router.get(
+  "/bookables/_template",
+  AuthenticationController.isSignedIn,
+  BookableController.getBookableTemplate,
+);
+
 router.get(
   "/bookables/:id",
   AuthenticationController.isSignedIn,
@@ -466,7 +473,6 @@ router.delete(
 router.use("/catalog", require("./routes/catalog.routes"));
 router.use("/locker", require("./routes/locker.routes"));
 router.use("/access", require("./routes/access.routes"));
-
 router.use("/ical", require("./routes/ical.routes"));
 
 module.exports = router;

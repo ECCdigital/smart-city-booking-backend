@@ -1,7 +1,6 @@
 const express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const { TenantController } = require("./controllers/tenant-controller");
-const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
@@ -13,27 +12,6 @@ const { BookingController } = require("./controllers/booking-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
-
-// INSTANCES
-// =========
-
-// Public
-router.get("/instances/public", InstanceController.getPublicInstance);
-
-// Protected
-router.get(
-  "/instances",
-  AuthenticationController.isSignedIn,
-  InstanceController.getInstance,
-);
-router.put(
-  "/instances",
-  AuthenticationController.isSignedIn,
-  InstanceController.storeInstance,
-);
-
-// TENANTS
-// =======
 
 // Public
 router.get("/tenants/public", TenantController.getPublicTenants);
@@ -220,5 +198,7 @@ router.get(
   AuthenticationController.isSignedIn,
   BookingController.getAssignedBookings,
 );
+
+router.use("/instances", require("./routes/instance.routes"));
 
 module.exports = router;

@@ -28,6 +28,14 @@ class InstanceManager {
     );
     return updated.toEntity();
   }
+
+  static async getBookableCustomFields() {
+    const rawInstance = await InstanceModel.findOne();
+    if (!rawInstance) {
+      return [];
+    }
+    return rawInstance.bookableCustomFields || [];
+  }
 }
 
 module.exports = InstanceManager;

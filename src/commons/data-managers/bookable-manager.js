@@ -1,18 +1,61 @@
 const { Bookable } = require("../entities/bookable/bookable");
 const BookableModel = require("./models/bookableModel");
+const {
+  CustomFieldCache,
+} = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
+const InstanceModel = require("./models/instanceModel");
+const TenantModel = require("./models/tenantModel");
 
 /**
  * Data Manager for Bookable objects.
  */
 class BookableManager {
+  static async getCustomFieldDefinitions(tenantId) {
+    let instanceFields = CustomFieldCache.getInstanceFields();
+    if (!instanceFields) {
+      const instance = await InstanceModel.findOne(
+        {},
+        { bookableCustomFields: 1 },
+      ).lean();
+      instanceFields = instance?.bookableCustomFields || [];
+      CustomFieldCache.setInstanceFields(instanceFields);
+    }
+
+    let tenantFields = CustomFieldCache.getTenantFields(tenantId);
+    if (!tenantFields) {
+      const tenant = await TenantModel.findOne(
+        { id: tenantId },
+        { bookableCustomFields: 1 },
+      ).lean();
+      tenantFields = tenant?.bookableCustomFields || [];
+      CustomFieldCache.setTenantFields(tenantId, tenantFields);
+    }
+
+    return { instanceFields, tenantFields };
+  }
+
+  static _toEntitiesWithCustomFields(docs, customFieldDefs) {
+    return docs.map((doc) => doc.toEntity(customFieldDefs));
+  }
+
+  static _toEntityWithCustomFields(doc, customFieldDefs) {
+    return doc ? doc.toEntity(customFieldDefs) : null;
+  }
+
   /**
    * Get all bookables for a tenant
    * @param {string} tenantId Tenant ID
    * @returns {Promise<Bookable[]>} List of bookables
    */
   static async getBookables(tenantId) {
-    const rawBookables = await BookableModel.find({ tenantId: tenantId });
-    return rawBookables.map((doc) => doc.toEntity());
+    const [rawBookables, defs] = await Promise.all([
+      BookableModel.find({ tenantId }),
+      this.getCustomFieldDefinitions(tenantId),
+    ]);
+    return this._toEntitiesWithCustomFields(rawBookables, defs);
   }
 
   /**
@@ -22,16 +65,11 @@ class BookableManager {
    * @returns {Promise<Bookable|null>} Bookable or null
    */
   static async getBookable(id, tenantId) {
-    const rawBookable = await BookableModel.findOne({
-      id: id,
-      tenantId: tenantId,
-    });
-
-    if (!rawBookable) {
-      return null;
-    }
-
-    return rawBookable.toEntity();
+    const [rawBookable, defs] = await Promise.all([
+      BookableModel.findOne({ id, tenantId }),
+      this.getCustomFieldDefinitions(tenantId),
+    ]);
+    return this._toEntityWithCustomFields(rawBookable, defs);
   }
 
   /**

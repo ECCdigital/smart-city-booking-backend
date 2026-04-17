@@ -1,5 +1,6 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
+const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 
 const priceCategorySchemaDefinition = {
   priceEur: { type: Number, required: true },
@@ -22,6 +23,14 @@ const attachmentSchemaDefinition = {
   required: { type: Boolean, default: false },
   mailAttach: { type: Boolean, default: false },
 };
+
+const customFieldValueSchema = new Schema(
+  {
+    fieldId: { type: String, required: true },
+    value: { type: Schema.Types.Mixed, default: null },
+  },
+  { _id: false },
+);
 
 const bookableSchemaDefinition = {
   id: { type: String, required: true, unique: true },
@@ -138,6 +147,16 @@ const bookableSchemaDefinition = {
         { _id: false },
       ),
     ],
+    default: [],
+  },
+
+  customFieldDefinitions: {
+    type: [customFieldDefinitionSchema],
+    default: [],
+  },
+
+  customFieldValues: {
+    type: [customFieldValueSchema],
     default: [],
   },
 
