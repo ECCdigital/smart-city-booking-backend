@@ -22,6 +22,7 @@ const userSchemaDefinition = {
   company: { type: String, default: "" },
   isSuspended: { type: Boolean, default: false },
   authType: { type: String, default: "local" },
+  keycloakId: { type: String, default: "" },
 };
 
 module.exports = {

@@ -135,6 +135,16 @@ router.get(
   AuthenticationController.isSignedIn,
   UserController.getUser,
 );
+router.post(
+  "/users/:id/change-id",
+  AuthenticationController.isSignedIn,
+  UserController.changeUserId,
+);
+router.post(
+  "/users/:id/update-names",
+  AuthenticationController.isSignedIn,
+  UserController.updateUserNames,
+);
 router.put(
   "/users",
   AuthenticationController.isSignedIn,

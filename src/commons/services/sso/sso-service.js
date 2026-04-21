@@ -1,6 +1,7 @@
 const InstanceManger = require("../../data-managers/instance-manager");
 const axios = require("axios");
 const UserManager = require("../../data-managers/user-manager");
+const UserModel = require("../../data-managers/models/userModel");
 const { RoleManager } = require("../../data-managers/role-manager");
 const { User } = require("../../entities/user/user");
 const MembershipManager = require("../../data-managers/membership-manager");
@@ -12,6 +13,12 @@ class SsoService {
     let kcResponse = await SsoService.verifyToken(token, app);
 
     let user = await UserManager.getUser(kcResponse.email);
+    if (!user && kcResponse.sub) {
+      const rawUser = await UserModel.findOne({ keycloakId: kcResponse.sub });
+      if (rawUser) {
+        user = rawUser.toEntity().exportPublic();
+      }
+    }
 
     if (!user) {
       throw { message: "User not found", status: 404 };
@@ -21,6 +28,17 @@ class SsoService {
 
     if (app.roleMapping.active) {
       await SsoService.mapRoles(user, kcRoles, app);
+    }
+
+    if (kcResponse.sub && user.keycloakId !== kcResponse.sub) {
+      await UserManager.updateUser(
+        {
+          id: user.id,
+          keycloakId: kcResponse.sub,
+        },
+        false,
+      );
+      user.keycloakId = kcResponse.sub;
     }
 
     user.permissions = await UserManager.getUserPermissions(user.id);
@@ -48,6 +66,7 @@ class SsoService {
       id: kcResponse.email,
       firstName: kcResponse.given_name,
       lastName: kcResponse.family_name,
+      keycloakId: kcResponse.sub || "",
     });
 
     newUser.authType = "keycloak";
