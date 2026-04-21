@@ -50,7 +50,6 @@ const customFieldDefinitionSchema = new Schema(
       type: usageOptionsSchema,
       default: () => ({}),
     },
-    allowOverride: { type: Boolean, default: true },
   },
   { _id: false },
 );

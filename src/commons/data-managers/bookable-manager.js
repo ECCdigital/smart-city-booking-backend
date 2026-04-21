@@ -3,9 +3,6 @@ const BookableModel = require("./models/bookableModel");
 const {
   CustomFieldCache,
 } = require("../services/custom-field/custom-field-cache");
-const {
-  CustomFieldService,
-} = require("../services/custom-field/custom-field-service");
 const InstanceModel = require("./models/instanceModel");
 const TenantModel = require("./models/tenantModel");
 

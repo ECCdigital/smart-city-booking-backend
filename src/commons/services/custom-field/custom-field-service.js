@@ -10,18 +10,16 @@ class CustomFieldService {
       fieldMap.set(field.id, {
         ...field,
         _origin: "instance",
-        _allowOverride: field.allowOverride !== false,
       });
     }
 
     for (const field of tenantFields) {
       const existing = fieldMap.get(field.id);
 
-      if (!existing || existing._allowOverride) {
+      if (!existing) {
         fieldMap.set(field.id, {
           ...field,
           _origin: existing ? "tenant-override" : "tenant",
-          _allowOverride: field.allowOverride !== false,
         });
       }
     }
@@ -29,11 +27,10 @@ class CustomFieldService {
     for (const field of bookableFields) {
       const existing = fieldMap.get(field.id);
 
-      if (!existing || existing._allowOverride) {
+      if (!existing) {
         fieldMap.set(field.id, {
           ...field,
           _origin: existing ? "bookable-override" : "bookable",
-          _allowOverride: false,
         });
       }
     }
