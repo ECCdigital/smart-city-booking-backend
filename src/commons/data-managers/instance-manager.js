@@ -1,5 +1,8 @@
 const Instance = require("../entities/instance/instance");
 const InstanceModel = require("./models/instanceModel");
+const {
+  CustomFieldCache,
+} = require("../services/custom-field/custom-field-cache");
 
 class InstanceManager {
   static async getInstance() {
@@ -26,6 +29,9 @@ class InstanceManager {
       { $set: instanceEntity },
       { new: true },
     );
+
+    CustomFieldCache.invalidateInstance();
+
     return updated.toEntity();
   }
 

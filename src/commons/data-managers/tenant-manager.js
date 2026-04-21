@@ -1,5 +1,7 @@
 const Tenant = require("../entities/tenant/tenant");
 const TenantModel = require("./models/tenantModel");
+const { CustomFieldCache } = require("../services/custom-field/custom-field-cache");
+const rawTenant = require("../schemas/tenantSchema");
 
 /**
  * Data Manager for Tenant objects.
@@ -45,6 +47,8 @@ class TenantManager {
       upsert: upsert,
       setDefaultsOnInsert: true,
     });
+
+    CustomFieldCache.invalidateTenant(tenantEntity.id);
 
     return tenantEntity;
   }
