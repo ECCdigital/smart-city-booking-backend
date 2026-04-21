@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const defaultMailTemplate = fs.readFileSync(
   path.join(
     __dirname,
@@ -45,6 +46,11 @@ const instanceSchemaDefinition = {
   },
   enableCatalog: { type: Boolean, default: false },
   catalogUrl: { type: String, default: "" },
+
+  bookableCustomFields: {
+    type: [customFieldDefinitionSchema],
+    default: [],
+  },
 };
 
 module.exports = {

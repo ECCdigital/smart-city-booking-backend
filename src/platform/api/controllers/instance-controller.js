@@ -43,6 +43,12 @@ class InstanceController {
       response.status(500).send({ message: error.message });
     }
   }
+
+  static async getBookableCustomFields(request, response) {
+    const bookableCustomFields = await InstanceManger.getBookableCustomFields();
+
+    response.status(200).send(bookableCustomFields);
+  }
 }
 
 module.exports = InstanceController;

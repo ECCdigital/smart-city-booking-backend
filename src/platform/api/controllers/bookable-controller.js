@@ -549,6 +549,39 @@ class BookableController {
     }
   }
 
+  static async getBookableTemplate(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const user = request.user;
+
+      if (
+        !(await PermissionService._allowCreate(
+          { tenantId: tenant },
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKABLES,
+        ))
+      ) {
+        return response.sendStatus(403);
+      }
+
+      const defs = await BookableManager.getCustomFieldDefinitions(tenant);
+
+      const template = new Bookable({ tenantId: tenant });
+
+      template.enrichCustomFields(defs);
+
+      logger.info(
+        `${tenant} -- Returning bookable template to user ${user?.id}`,
+      );
+
+      response.status(200).send(template);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get bookable template");
+    }
+  }
+
   /**
    * This method is used to check if the creation of a new bookable object is allowed.
    * It first gets the tenant from the request parameters.

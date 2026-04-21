@@ -25,6 +25,8 @@ class Bookable {
 
     Object.assign(this, defaults, filteredParams);
 
+    this.customFields = params.customFields || undefined;
+
     // Update timestamp on modification
     this.timeUpdated = Date.now();
   }
@@ -266,6 +268,30 @@ class Bookable {
    */
   hasFlag(flag) {
     return this.flags.includes(flag);
+  }
+
+  /**
+   * Enrich this bookable with resolved custom fields
+   * @param {{ instanceFields: Array, tenantFields: Array }} definitions
+   * @returns {Bookable} this (for chaining)
+   */
+  enrichCustomFields({ instanceFields, tenantFields }) {
+    const {
+      CustomFieldService,
+    } = require("../../services/custom-field/custom-field-service");
+
+    const mergedDefs = CustomFieldService.mergeDefinitions({
+      instanceFields,
+      tenantFields,
+      bookableFields: this.customFieldDefinitions || [],
+    });
+
+    this.customFields = CustomFieldService.resolveFieldsWithValues(
+      mergedDefs,
+      this.customFieldValues || [],
+    );
+
+    return this;
   }
 
   get hasExternalPricing() {
