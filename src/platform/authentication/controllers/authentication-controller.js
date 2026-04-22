@@ -3,6 +3,7 @@ const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const SsoService = require("../../../commons/services/sso/sso-service");
 const UserService = require("../../../commons/services/user-service");
+const CardAuthService = require("../../../commons/services/card-auth/card-auth-service");
 
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
 
@@ -60,8 +61,7 @@ class AuthenticationController {
         });
       }
 
-      const KeycloakVerifier =
-        require("../../../commons/utilities/keycloak-verifier");
+      const KeycloakVerifier = require("../../../commons/utilities/keycloak-verifier");
       const decoded = await KeycloakVerifier.verifyToken(token);
 
       const userId = decoded.email || decoded.preferred_username;
@@ -113,8 +113,7 @@ class AuthenticationController {
         });
       }
 
-      const KeycloakVerifier =
-        require("../../../commons/utilities/keycloak-verifier");
+      const KeycloakVerifier = require("../../../commons/utilities/keycloak-verifier");
       const decoded = await KeycloakVerifier.verifyToken(token);
 
       const userId = decoded.email || decoded.preferred_username;
@@ -393,6 +392,60 @@ class AuthenticationController {
       return response
         .status(error.status || 500)
         .send(error.message || "Email verification failed");
+    }
+  }
+
+  static async getCardAuthMethods(request, response) {
+    try {
+      const methods = await CardAuthService.getAvailableCardAuthMethods();
+      response.status(200).json({ methods });
+    } catch (error) {
+      logger.error("Failed to get card auth methods", error);
+      response.sendStatus(500);
+    }
+  }
+
+  static async cardSignin(request, response) {
+    try {
+      const { appId, publicId, secret, userId } = request.body;
+
+      if (!appId || !publicId || !secret || !userId) {
+        return response.status(400).json({
+          message: "appId, publicId, secret, and userId are required",
+        });
+      }
+
+      const { user, permissions } = await CardAuthService.verifyAndLogin(
+        appId,
+        publicId,
+        secret,
+        userId.toLowerCase(),
+      );
+
+      const context = {
+        ip: request.ip || request.connection?.remoteAddress,
+        userAgent: request.headers["user-agent"],
+      };
+
+      const accessToken = await JwtHelper.generateToken(user, context);
+      const refreshToken = await JwtHelper.generateRefreshToken(user, context);
+
+      logger.info(`User ${user.id} signed in via card auth (app: ${appId})`);
+
+      response.status(200).json({
+        user,
+        permissions,
+        accessToken,
+        refreshToken,
+        authType: "card",
+        cardAppId: appId,
+      });
+    } catch (error) {
+      logger.error("Card signin failed:", error);
+      response.status(error.status || 500).json({
+        message: error.message || "Card authentication failed",
+        reason: error.reason || undefined,
+      });
     }
   }
 }
