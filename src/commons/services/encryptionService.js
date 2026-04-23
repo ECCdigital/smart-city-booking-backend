@@ -1,4 +1,3 @@
-// services/encryptionService.js
 const SecurityUtils = require("../utilities/security-utils");
 const ApplicationFactory = require("../entities/application/applicationFactory");
 
@@ -19,10 +18,22 @@ class EncryptionService {
     }
   }
 
+  static _safeCreate(app) {
+    try {
+      return ApplicationFactory.create(app);
+    } catch (err) {
+      console.warn(
+        `Skipping application during encrypt/decrypt: ${err.message}`,
+      );
+      return null;
+    }
+  }
+
   static encryptApplications(applications) {
     if (!applications) return applications;
     return applications.map((app) => {
-      const instance = ApplicationFactory.create(app);
+      const instance = EncryptionService._safeCreate(app);
+      if (!instance) return app; // unverändert durchreichen
       instance.encrypt();
       return instance;
     });
@@ -31,7 +42,8 @@ class EncryptionService {
   static decryptApplications(applications) {
     if (!applications) return applications;
     return applications.map((app) => {
-      const instance = ApplicationFactory.create(app);
+      const instance = EncryptionService._safeCreate(app);
+      if (!instance) return app; // unverändert durchreichen
       instance.decrypt();
       return instance;
     });
