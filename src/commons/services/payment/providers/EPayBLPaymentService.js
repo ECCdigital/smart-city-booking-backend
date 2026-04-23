@@ -366,6 +366,7 @@ class EPayBLPaymentService extends PaymentService {
       let hashValid = false;
 
       if (paymentApp.notificationSecret) {
+        console.log(paymentApp.notificationSecret);
         if (!hash) {
           logger.warn(
             `[ePayBL] Secret configured but no hash in notification — rejecting`,
