@@ -385,8 +385,6 @@ class EPayBLPaymentService extends PaymentService {
           status,
         ];
 
-        // Jeden einzelnen Teil loggen, damit man sieht ob etwas
-        // undefined/null/leer ist oder unerwartete Zeichen enthält
         logger.debug(`[ePayBL] Hash input parts (individual)`, {
           mandant: { value: mandant, type: typeof mandant },
           bewirtschafter: {
@@ -404,17 +402,13 @@ class EPayBLPaymentService extends PaymentService {
 
         const hashString = hashParts.join("");
 
-        const hashInput = hashString + paymentApp.notificationSecret;
+        const hashInput = paymentApp.notificationSecret + hashString;
 
         logger.debug(`[ePayBL] Hash computation details`, {
-          // Den zusammengesetzten String OHNE Secret loggen
           hashStringWithoutSecret: hashString,
           hashStringLength: hashString.length,
-          // Nur Länge des Secrets loggen (nicht das Secret selbst!)
           secretLength: paymentApp.notificationSecret.length,
-          // Gesamtlänge des Hash-Inputs
           totalInputLength: hashInput.length,
-          // Zeigt ob undefined-Teile als "undefined" im String landen
           containsUndefined: hashString.includes("undefined"),
           containsNull: hashString.includes("null"),
         });
@@ -430,10 +424,8 @@ class EPayBLPaymentService extends PaymentService {
           match: hash === expectedHash,
           receivedLength: hash?.length,
           expectedLength: expectedHash.length,
-          // Case-Mismatch erkennen
           caseInsensitiveMatch:
             hash?.toLowerCase() === expectedHash.toLowerCase(),
-          // Whitespace-Probleme erkennen
           receivedTrimmed: hash?.trim() === hash,
         });
 
@@ -441,7 +433,6 @@ class EPayBLPaymentService extends PaymentService {
           logger.warn(`[ePayBL] Hash mismatch for ${this.tenantId}`, {
             receivedHash: hash,
             expectedHash: expectedHash,
-            // Ersten Unterschied finden
             firstDiffAt: [...expectedHash].findIndex((c, i) => c !== hash?.[i]),
           });
           throw new Error("Hash mismatch");
