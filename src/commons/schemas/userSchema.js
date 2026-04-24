@@ -29,6 +29,10 @@ const userSchemaDefinition = {
   company: { type: String, default: "" },
   isSuspended: { type: Boolean, default: false },
   authType: { type: String, default: "local" },
+  cardAuth: {
+    type: Object,
+    default: null,
+  },
 };
 
 module.exports = {

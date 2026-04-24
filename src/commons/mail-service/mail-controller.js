@@ -263,7 +263,9 @@ class MailController {
       verifyUrlTemplate = `${verifyUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
     }
 
-    const content = renderSnippet("verification-request", { verifyUrl: verifyUrlTemplate });
+    const content = renderSnippet("verification-request", {
+      verifyUrl: verifyUrlTemplate,
+    });
 
     await MailerService.send({
       address,
@@ -363,6 +365,37 @@ class MailController {
         content,
       },
       useInstanceMail: tenant.useInstanceMail,
+    });
+  }
+
+  static async sendCardLinkRequest({
+    address,
+    firstName,
+    hookId,
+    cardLabel,
+    linkUrlBase,
+  }) {
+    const instance = await InstanceManager.getInstance(false);
+
+    const linkUrl = linkUrlBase
+      ? `${linkUrlBase}?token=${hookId}&id=${encodeURIComponent(address)}`
+      : `${process.env.BACKEND_URL}/auth/card/link?token=${hookId}&id=${encodeURIComponent(address)}`;
+
+    const content = renderSnippet("card-link-request", {
+      email: address,
+      firstName,
+      cardLabel,
+      linkUrl,
+    });
+
+    await MailerService.send({
+      address,
+      subject: "Karte mit Ihrem Account verknüpfen",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Karte mit Ihrem Account verknüpfen",
+        content,
+      },
     });
   }
 }

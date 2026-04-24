@@ -1,0 +1,42 @@
+{{!-- templates/snippets/card-link-request.hbs --}}
+<p>Hallo{{#if firstName}} {{firstName}}{{/if}},</p>
+
+<p>
+  es wurde soeben versucht, eine Karte
+  {{#if cardLabel}}(<strong>{{cardLabel}}</strong>){{/if}}
+  mit Ihrem Account <strong>{{email}}</strong> zu verknüpfen.
+</p>
+
+<p>
+  Wenn <strong>Sie</strong> das waren, bestätigen Sie die Verknüpfung bitte
+  über den folgenden Link. Nach der Bestätigung können Sie sich zukünftig
+  direkt mit Ihrer Karte anmelden – ohne Passwort.
+</p>
+
+<p style="text-align: center; margin: 30px 0;">
+  <a
+    href="{{linkUrl}}"
+    style="background-color: #1976d2; color: white; padding: 12px 24px;
+           text-decoration: none; border-radius: 4px; display: inline-block;"
+  >
+    Karte jetzt verknüpfen
+  </a>
+</p>
+
+<p style="font-size: 0.9em; color: #555;">
+  Falls der Button nicht funktioniert, kopieren Sie diesen Link in Ihren
+  Browser:<br />
+  <a href="{{linkUrl}}">{{linkUrl}}</a>
+</p>
+
+<p style="font-size: 0.9em; color: #555;">
+  Dieser Link ist 24 Stunden gültig.
+</p>
+
+<hr />
+
+<p style="font-size: 0.9em; color: #c62828;">
+  <strong>Waren Sie das nicht?</strong> Ignorieren Sie diese Email einfach.
+  Ohne Ihre Bestätigung wird keine Karte verknüpft und Ihr Account bleibt
+  unverändert.
+</p>
