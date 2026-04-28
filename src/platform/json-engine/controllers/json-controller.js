@@ -19,8 +19,6 @@ class JSONController {
 
       bookables = bookables.filter((bookable) => bookable.isPublic);
 
-      console.log(`Found ${bookables.length} public bookables for tenant ${tenantId}`);
-
       bookables = bookables.filter((bookable) => {
         return JSONController.hasAccess(bookable, identity, userRoles);
       });
@@ -51,7 +49,6 @@ class JSONController {
 
       const externalCache = new Map();
 
-      console.log(`Processing ${bookables.length} bookables for tenant ${tenantId}`);
 
       const result = bookables.map(async (bookable) => {
         const pub = bookable.exportPublic();
@@ -61,8 +58,6 @@ class JSONController {
           tenantId,
           externalCache,
         );
-
-        console.log(`Bookable ${bookable.id} - External prices:`, extPrices);
 
         if (extPrices) {
           pub.priceCategories = extPrices;
@@ -79,6 +74,8 @@ class JSONController {
           .map((b) => b.exportPublic());
         return pub;
       });
+
+      console.log(await Promise.all(result));
 
       res.setHeader("content-type", "application/json");
       res.status(200).send(await Promise.all(result));

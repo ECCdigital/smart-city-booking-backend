@@ -361,6 +361,8 @@ class Bookable {
       checkoutBookableIds: this.checkoutBookableIds,
       eventId: this.eventId,
       attachments: this.attachments,
+      customFields: this.customFields,
+      customFieldValues: this.customFieldValues,
     };
   }
 
