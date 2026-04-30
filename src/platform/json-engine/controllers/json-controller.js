@@ -75,8 +75,6 @@ class JSONController {
         return pub;
       });
 
-      console.log(await Promise.all(result));
-
       res.setHeader("content-type", "application/json");
       res.status(200).send(await Promise.all(result));
     } catch (error) {

@@ -6,8 +6,6 @@ const helmet = require("helmet");
 const fileUpload = require("express-fileupload");
 const bunyan = require("bunyan");
 const swaggerUi = require("swagger-ui-express");
-const YAML = require("yamljs");
-const path = require("path");
 
 const DatabaseManager = require("./commons/utilities/database-manager.js");
 const { runMigrations } = require("../migrations/migrationsManager");
@@ -107,6 +105,9 @@ app.use("/auth", userManagementRouter);
 
 const apiRouter = require("./platform/api/api-router");
 app.use("/api", apiRouter);
+
+const apiV2Router = require("./platform/api/v2/routes");
+app.use("/api/v2", apiV2Router);
 
 const apiRouterTenantRelated = require("./platform/api/api-router-tenant-related");
 app.use("/api/:tenant", apiRouterTenantRelated);
