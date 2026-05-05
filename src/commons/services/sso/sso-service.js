@@ -12,12 +12,37 @@ class SsoService {
     const app = instance.applications.find((app) => app.id === "keycloak");
     let kcResponse = await SsoService.verifyToken(token, app);
 
-    let user = await UserManager.getUser(kcResponse.email);
-    if (!user && kcResponse.sub) {
+    let user = null;
+    let keycloakBoundUserId = null;
+    let emailBoundUserId = null;
+
+    if (kcResponse.sub) {
       const rawUser = await UserModel.findOne({ keycloakId: kcResponse.sub });
       if (rawUser) {
         user = rawUser.toEntity().exportPublic();
+        keycloakBoundUserId = user.id;
       }
+    }
+
+    if (kcResponse.email) {
+      const emailUser = await UserManager.getUser(kcResponse.email);
+      if (emailUser) {
+        emailBoundUserId = emailUser.id;
+        if (!user) {
+          user = emailUser;
+        }
+      }
+    }
+
+    if (
+      keycloakBoundUserId &&
+      emailBoundUserId &&
+      keycloakBoundUserId.toLowerCase() !== emailBoundUserId.toLowerCase()
+    ) {
+      throw {
+        message: "Identity conflict: email already bound to another account",
+        status: 409,
+      };
     }
 
     if (!user) {
