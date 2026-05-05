@@ -348,7 +348,7 @@ class UserController {
         userSet.keycloakId = normalizedKeycloakId;
       }
       if (anonymize === true) {
-        userSet.firstName = "Gelöschter Nutzer";
+        userSet.firstName = "Gelöschtes Profil";
         userSet.lastName = "";
       }
       if (Object.keys(userSet).length > 0) {
