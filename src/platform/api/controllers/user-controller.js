@@ -7,6 +7,9 @@ const { RolePermission } = require("../../../commons/entities/role/role");
 const UserModel = require("../../../commons/data-managers/models/userModel");
 const BookingModel = require("../../../commons/data-managers/models/bookingModel");
 const GroupBookingModel = require("../../../commons/data-managers/models/groupBookingModel");
+const BookableModel = require("../../../commons/data-managers/models/bookableModel");
+const EventModel = require("../../../commons/data-managers/models/eventModel");
+const CouponModel = require("../../../commons/data-managers/models/couponModel");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -345,7 +348,7 @@ class UserController {
         userSet.keycloakId = normalizedKeycloakId;
       }
       if (anonymize === true) {
-        userSet.firstName = "Deleted";
+        userSet.firstName = "Gelöschter Nutzer";
         userSet.lastName = "";
       }
       if (Object.keys(userSet).length > 0) {
@@ -368,6 +371,29 @@ class UserController {
         await GroupBookingModel.updateMany(
           { mail: previousId },
           { $set: { mail: normalizedNewId } },
+        );
+        await BookableModel.updateMany(
+          { ownerUserId: previousId },
+          { $set: { ownerUserId: normalizedNewId } },
+        );
+        await BookingModel.updateMany(
+          { "bookableItems._bookableUsed.ownerUserId": previousId },
+          {
+            $set: {
+              "bookableItems.$[item]._bookableUsed.ownerUserId": normalizedNewId,
+            },
+          },
+          {
+            arrayFilters: [{ "item._bookableUsed.ownerUserId": previousId }],
+          },
+        );
+        await EventModel.updateMany(
+          { ownerUserId: previousId },
+          { $set: { ownerUserId: normalizedNewId } },
+        );
+        await CouponModel.updateMany(
+          { ownerUserId: previousId },
+          { $set: { ownerUserId: normalizedNewId } },
         );
       }
 
@@ -447,6 +473,15 @@ class UserController {
         return;
       }
 
+      const fullName = `${normalizedFirstName} ${normalizedLastName}`.trim();
+      await BookingModel.updateMany(
+        {
+          assignedUserId: currentUser.id,
+          mail: currentUser.id,
+        },
+        { $set: { name: fullName } },
+      );
+
       logger.info(`updated user names for ${updated.id} by user ${actor?.id}`);
       response.status(200).send({
         id: updated.id,
@@ -470,9 +505,8 @@ class UserController {
    */
   static async removeUser(request, response) {
     try {
-      const tenantId = request.params.tenant;
+      const tenantId = request.query.tenant || request.body?.tenantId;
       const user = request.user;
-      const syncTenantId = request.query.tenant || request.body?.tenantId;
 
       const id = request.params.id;
       const keycloakId = request.query.keycloakId || request.body?.keycloakId;
@@ -493,7 +527,7 @@ class UserController {
         );
         const hasSyncManagePermission = await UserController._allowSyncManageUsers(
           user.id,
-          syncTenantId,
+          tenantId,
           "delete",
         );
 
