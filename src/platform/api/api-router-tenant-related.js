@@ -203,6 +203,12 @@ router.get(
   BookingController.getInvoice,
 );
 
+router.get(
+  "/bookings/:id/cancellation-receipt/:cancellationReceiptId",
+  AuthenticationController.isSignedIn,
+  BookingController.getCancellationReceipt,
+);
+
 // USERS
 // =====
 router.get(
@@ -278,7 +284,7 @@ router.get(
 // ========
 
 // Public
-router.post("/payments", PaymentController.createPayment);
+router.post("/payments", optionalAuth, PaymentController.createPayment);
 router.get("/payments/notify", PaymentController.paymentNotificationGET);
 router.post("/payments/notify", PaymentController.paymentNotificationPOST);
 router.post("/payments/response", PaymentController.paymentResponse);

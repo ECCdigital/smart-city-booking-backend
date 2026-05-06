@@ -20,6 +20,7 @@ const attachmentSchemaDefinition = {
   accepted: { type: Boolean },
   invoiceId: { type: String },
   receiptId: { type: String },
+  cancellationId: { type: String },
   revision: { type: Number },
   timeCreated: { type: Double },
   mailAttach: { type: Boolean },

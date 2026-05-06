@@ -8,6 +8,9 @@ class InvoiceApplication extends PaymentApplication {
     this.bic = params.bic || "";
     this.accountHolder = params.accountHolder || "";
     this.daysUntilPaymentDue = params.daysUntilPaymentDue ?? null;
+    this.permittedUsers = params.permittedUsers || [];
+    this.permittedRoles = params.permittedRoles || [];
+    this.manualCreation = params.manualCreation ?? false;
   }
 
 
@@ -19,6 +22,9 @@ class InvoiceApplication extends PaymentApplication {
       bic: { type: String, default: "" },
       accountHolder: { type: String, default: "" },
       daysUntilPaymentDue: { type: Number, default: null },
+      permittedUsers: { type: [String], default: [] },
+      permittedRoles: { type: [String], default: [] },
+      manualCreation: { type: Boolean, default: false },
     };
   }
 }

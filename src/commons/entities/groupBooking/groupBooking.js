@@ -120,6 +120,13 @@ class GroupBooking {
     );
   }
 
+  areSomeBookingsPaid() {
+    return (
+      this.bookings.length > 0 &&
+      this.bookings.some((booking) => booking.isPayed)
+    );
+  }
+
   /**
    * Check if all bookings are rejected
    * @returns {boolean} True if all bookings are rejected

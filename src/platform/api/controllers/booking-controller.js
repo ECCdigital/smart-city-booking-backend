@@ -20,6 +20,7 @@ const {
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
+const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -856,6 +857,62 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response.status(500).send("Could not get invoice");
+    }
+  }
+
+  static async getCancellationReceipt(request, response) {
+    const {
+      params: { tenant, id: bookingId, cancellationReceiptId },
+      user,
+    } = request;
+
+    try {
+      if (!tenant || !bookingId || !cancellationReceiptId) {
+        logger.warn(`${tenant} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+
+      const hasPermission =
+        (await UserManager.hasPermission(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+          "readAny",
+        )) ||
+        PermissionsService._isOwner(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        );
+
+      if (!hasPermission) {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to get cancellation receipt.`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const cancellationReceipt = await CancellationReceiptService.getCancellation(
+        tenant,
+        cancellationReceiptId,
+      );
+
+      logger.info(
+        `${tenant} -- sending cancellation receipt ${cancellationReceiptId} to user ${user?.id}`,
+      );
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${cancellationReceiptId}`,
+      );
+
+      return response.status(200).send(cancellationReceipt);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not get cancellation receipt");
     }
   }
 

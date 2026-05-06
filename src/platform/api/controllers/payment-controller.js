@@ -95,6 +95,22 @@ class PaymentController {
 
     //TODO: Check if all bookings are in the same tenant and have the same payment provider
 
+    // Check invoice payment permission
+    if (bookings[0].paymentProvider?.toLowerCase() === "invoice") {
+      const userId = request.user?.id;
+      const isPermitted = await PaymentUtils.checkInvoicePermission(
+        tenantId,
+        userId,
+      );
+      if (!isPermitted) {
+        response.status(403).send({
+          message: "Sie sind nicht berechtigt, per Rechnung zu bezahlen.",
+          code: 4,
+        });
+        return;
+      }
+    }
+
     try {
       logger.debug(
         `Getting payment service for tenant ${tenantId}, bookingIds ${bookingIds}, paymentProvider ${bookings[0].paymentProvider}, aggregated ${aggregated}, groupBookingId ${groupBookingId}`,
@@ -106,6 +122,8 @@ class PaymentController {
         bookings[0].paymentProvider,
         { aggregated, groupBookingId },
       );
+
+      console.log(paymentService);
 
       const data = await paymentService?.createPayment();
 
@@ -121,7 +139,6 @@ class PaymentController {
       params: { tenant: tenantId },
       query: { id: bookingId, ids: bookingIds, aggregated },
     } = request;
-
 
     const isAggregated = aggregated === "true";
 

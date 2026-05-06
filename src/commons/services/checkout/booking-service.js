@@ -31,11 +31,13 @@ const {
   checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
+const CancellationService = require("../payment/cancellation-service");
 const {
   BadRequestError,
   NotFoundError,
   BaseError,
   MethodNotAllowedError,
+  ForbiddenError,
 } = require("../../../errors/BaseError");
 const { resolveCheckoutId } = require("../../utilities/checkout-utils");
 
@@ -93,6 +95,19 @@ class BookingService {
     logger.debug(
       `${tenantId}, cid ${checkoutId} -- Checkout Details: timeBegin=${timeBegin}, timeEnd=${timeEnd}, bookableItems=${bookableItems}, couponCode=${couponCode}, name=${name}, company=${company}, street=${street}, zipCode=${zipCode}, location=${location}, email=${mail}, phone=${phone}, comment=${comment}`,
     );
+
+    // Check invoice payment permission
+    if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
+      const isPermitted = await PaymentUtils.checkInvoicePermission(
+        tenantId,
+        user?.id,
+      );
+      if (!isPermitted) {
+        throw new ForbiddenError("invoice_payment_not_permitted", {
+          message: "Sie sind nicht berechtigt, per Rechnung zu bezahlen.",
+        });
+      }
+    }
 
     async function validateMandatoryAddons(bookableItems) {
       const bookableIds = bookableItems.map((item) => item.bookableId);
@@ -359,6 +374,19 @@ class BookingService {
       throw new BadRequestError("missing_booking_attempts");
     }
 
+    // Check invoice payment permission
+    if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
+      const isPermitted = await PaymentUtils.checkInvoicePermission(
+        tenantId,
+        user?.id,
+      );
+      if (!isPermitted) {
+        throw new ForbiddenError("invoice_payment_not_permitted", {
+          message: "Sie sind nicht berechtigt, per Rechnung zu bezahlen.",
+        });
+      }
+    }
+
     const checkoutId = uuidV4();
     logger.info(
       `${tenantId}, cid ${checkoutId} -- multiple checkout request by user ${user?.id}, simulate=${simulate}`,
@@ -571,7 +599,10 @@ class BookingService {
           booking,
         );
       } else if (onUnreject) {
-        await lockerServiceInstance.handleCreate(updatedBooking.tenantId, booking.id);
+        await lockerServiceInstance.handleCreate(
+          updatedBooking.tenantId,
+          booking.id,
+        );
       } else {
         await lockerServiceInstance.handlePreReserve(
           updatedBooking.tenantId,
@@ -894,6 +925,34 @@ class BookingService {
         booking.removeHook(hookId);
       }
 
+      let attachments;
+
+      if (booking.priceEur > 0) {
+        const options = { alreadyPaid: booking.isPayed };
+        const { cancellation, name, cancellationId, revision, timeCreated } =
+          await CancellationService.createSingleCancellation({
+            tenantId,
+            bookingId,
+            options,
+          });
+
+        attachments = [
+          {
+            filename: cancellation.name,
+            content: cancellation.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+
+        booking.attachments.push({
+          type: "cancellation",
+          title: name,
+          cancellationId: cancellationId,
+          revision: revision,
+          timeCreated,
+        });
+      }
+
       await BookingManager.storeBooking(booking);
 
       if (!skipWorkflow) {
@@ -918,6 +977,7 @@ class BookingService {
           booking.id,
           booking.tenantId,
           reason,
+          attachments,
         );
         logger.info(
           `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
@@ -928,6 +988,7 @@ class BookingService {
           booking.id,
           booking.tenantId,
           reason,
+          attachments,
         );
         logger.info(
           `${tenantId} -- booking ${booking.id} canceled and sent booking rejection to ${booking.mail}`,
@@ -969,9 +1030,43 @@ class BookingService {
       return { success: false, errors };
     }
 
+    let attachments;
+    let bookingAttachment;
+
+    if (groupBooking.getTotalPrice() > 0) {
+      const options = { alreadyPaid: groupBooking.areSomeBookingsPaid() };
+
+      const { cancellation, name, cancellationId, revision, timeCreated } =
+        await CancellationService.createAggregatedCancellation({
+          tenantId,
+          bookingIds: groupBooking.bookingIds,
+          options,
+        });
+
+      attachments = [
+        {
+          filename: cancellation.name,
+          content: cancellation.buffer,
+          contentType: "application/pdf",
+        },
+      ];
+
+      bookingAttachment = {
+        type: "cancellation",
+        title: name,
+        cancellationId: cancellationId,
+        revision: revision,
+        timeCreated,
+      };
+    }
+
     for (const booking of bookings) {
       booking.isRejected = true;
       booking.rejectionReason = reason;
+
+      if (bookingAttachment) {
+        booking.attachments.push(bookingAttachment);
+      }
       await BookingManager.storeBooking(booking);
 
       try {
@@ -997,7 +1092,7 @@ class BookingService {
         groupBooking.bookingIds,
         tenantId,
         reason,
-        undefined,
+        attachments,
         true,
       );
       logger.info(
@@ -1009,7 +1104,7 @@ class BookingService {
         groupBooking.bookingIds,
         tenantId,
         reason,
-        undefined,
+        attachments,
         true,
       );
       logger.info(

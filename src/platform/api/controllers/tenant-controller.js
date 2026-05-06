@@ -13,6 +13,7 @@ const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const Membership = require("../../../commons/entities/tenant/membership");
 const InvitationService = require("../../../commons/services/invitation-service");
 const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
+const PaymentUtils = require("../../../commons/utilities/payment-utils");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -229,6 +230,8 @@ class TenantController {
           "notifyOnNewBooking",
           "catalogParticipation",
           "bookableCustomFields",
+          "cancellationTemplate",
+          "cancellationNumberPrefix",
         ];
 
         fields.forEach((field) => {
@@ -292,15 +295,22 @@ class TenantController {
         tenantId,
         "payment",
       );
-      const filteredPaymentApps = paymentApps
-        .filter((app) => app.active)
-        .map((app) => ({
-          id: app.id,
-          title: app.title,
-        }));
+      const activeApps = paymentApps.filter((app) => app.active);
+
+      const filteredPaymentApps = [];
+      for (const app of activeApps) {
+        if (app.id === "invoice") {
+          const isPermitted = await PaymentUtils.checkInvoicePermission(
+            tenantId,
+            user?.id,
+          );
+          if (!isPermitted) continue;
+        }
+        filteredPaymentApps.push({ id: app.id, title: app.title });
+      }
 
       logger.info(
-        `${tenantId} -- sending ${paymentApps.length} payment apps to user ${user?.id}`,
+        `${tenantId} -- sending ${filteredPaymentApps.length} payment apps to user ${user?.id}`,
       );
       response.status(200).send(filteredPaymentApps);
     } catch (err) {
@@ -377,7 +387,6 @@ class TenantController {
         }
 
         if (type === "manually") {
-
           const existingUser = await UserManager.getUser(userId);
 
           if (!existingUser) {
