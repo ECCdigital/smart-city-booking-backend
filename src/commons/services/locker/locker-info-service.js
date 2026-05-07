@@ -20,7 +20,6 @@ class LockerInfoService {
       (a) => a.type === APP_TYPE && a.id === provider && a.active,
     );
 
-
     if (!rawApp) {
       throw new Error(
         `No active locker application '${provider}' found for tenant '${tenantId}'`,
@@ -60,6 +59,22 @@ class LockerInfoService {
   static async getPrice(tenantId, provider, locationId) {
     const client = await this.getClient(tenantId, provider);
     return client.getPrice(locationId);
+  }
+
+  static async getCustomerServiceInfo(tenantId, provider) {
+    const tenant = await TenantManager.getTenant(tenantId);
+
+    const rawApp = tenant.applications.find(
+      (a) => a.type === APP_TYPE && a.id === provider && a.active,
+    );
+
+    if (!rawApp) {
+      throw new Error(
+        `No active locker application '${provider}' found for tenant '${tenantId}'`,
+      );
+    }
+
+    return rawApp.customerService;
   }
 }
 

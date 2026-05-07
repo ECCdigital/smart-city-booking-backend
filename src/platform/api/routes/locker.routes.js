@@ -34,4 +34,9 @@ router.post(
   LockerController.testConnection,
 );
 
+router.get(
+  "/:provider/customer-service-info",
+  LockerController.getCustomerServiceInfo,
+)
+
 module.exports = router;

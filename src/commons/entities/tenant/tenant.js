@@ -29,6 +29,7 @@ class Tenant {
       "eventDetailLink",
       "defaultEventCreationMode",
       "enablePublicStatusView",
+      "applications",
     ];
 
     return publicFields.reduce((result, field) => {

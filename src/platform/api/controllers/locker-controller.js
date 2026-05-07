@@ -126,7 +126,11 @@ class LockerController {
         return response.sendStatus(403);
       }
 
-      const stats = await LockerInfoService.getLocationsStat(tenant, provider, locationId);
+      const stats = await LockerInfoService.getLocationsStat(
+        tenant,
+        provider,
+        locationId,
+      );
 
       logger.info(
         `${tenant} -- sending ${provider} location stats to user ${user?.id}`,
@@ -203,6 +207,25 @@ class LockerController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get locker pricing");
+    }
+  }
+
+  static async getCustomerServiceInfo(request, response) {
+    try {
+      const { tenant, provider } = request.params;
+
+      const info = await LockerInfoService.getCustomerServiceInfo(
+        tenant,
+        provider,
+      );
+
+      logger.info(
+        `${tenant} -- sending ${provider} customer service info`,
+      );
+      response.status(200).send(info);
+    } catch (err) {
+      logger.error(err);
+      response.status(500).send("Could not get locker customer service info");
     }
   }
 
