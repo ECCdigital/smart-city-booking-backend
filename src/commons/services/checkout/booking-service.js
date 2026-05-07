@@ -910,6 +910,7 @@ class BookingService {
     reason = "",
     hookId = null,
     skipWorkflow = false,
+    skipCancellation = false,
   ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
@@ -927,7 +928,7 @@ class BookingService {
 
       let attachments;
 
-      if (booking.priceEur > 0) {
+      if (booking.priceEur > 0 && !skipCancellation) {
         const options = { alreadyPaid: booking.isPayed };
         const { cancellation, name, cancellationId, revision, timeCreated } =
           await CancellationService.createSingleCancellation({
@@ -1007,6 +1008,7 @@ class BookingService {
     reason = "",
     hookId = null,
     skipWorkflow = false,
+    skipCancellation = false,
   ) {
     const groupBooking = await GroupBookingManager.getGroupBooking(
       tenantId,
@@ -1033,7 +1035,7 @@ class BookingService {
     let attachments;
     let bookingAttachment;
 
-    if (groupBooking.getTotalPrice() > 0) {
+    if (groupBooking.getTotalPrice() > 0 && !skipCancellation) {
       const options = { alreadyPaid: groupBooking.areSomeBookingsPaid() };
 
       const { cancellation, name, cancellationId, revision, timeCreated } =

@@ -65,6 +65,15 @@ const MailType = Object.freeze({
     addRejectionLink: true,
   },
 
+  BOOKING_CONFIRMED_INVOICE_PENDING: {
+    templateName: "booking-confirmed-invoice-pending",
+    subject: (ctx) => `Buchungsbestätigung - ${ctx.tenant.name}`,
+    title: (ctx) => `Ihre Buchung bei ${ctx.tenant.name} wurde bestätigt`,
+    includeQRCode: (ctx) => ctx.tenant.enablePublicStatusView,
+    sendBCC: false,
+    addRejectionLink: true,
+  },
+
   PAYMENT_LINK_AFTER_APPROVAL: {
     templateName: "payment-link-after-approval",
     subject: (ctx) =>

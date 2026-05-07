@@ -1,5 +1,6 @@
 const PaymentService = require("./payment-service");
 const BookingManager = require("../../../data-managers/booking-manager");
+const TenantManager = require("../../../data-managers/tenant-manager");
 const InvoiceService = require("../invoice-service");
 const MailController = require("../../../mail-service/mail-controller");
 const bunyan = require("bunyan");
@@ -13,12 +14,62 @@ class InvoicePaymentService extends PaymentService {
   constructor(tenantId, bookingIds, options = {}) {
     super(tenantId, bookingIds, options);
   }
+
+  /**
+   * Checks if the invoice app has manualCreation enabled.
+   * @returns {Promise<boolean>}
+   */
+  async _isManualCreation() {
+    const invoiceApp = await TenantManager.getTenantApp(
+      this.tenantId,
+      "invoice",
+    );
+    return invoiceApp?.manualCreation === true;
+  }
+
   async createPayment() {
+    const isManual = await this._isManualCreation();
+
+    if (isManual) {
+      return this._sendInvoicePendingNotification();
+    }
+
     if (this.aggregated) {
       return this.createAggregatedInvoice();
     } else {
       return this.createSeparateInvoices();
     }
+  }
+
+  /**
+   * Sends an email to the user that the booking is confirmed and
+   * the invoice will follow separately (manualCreation mode).
+   */
+  async _sendInvoicePendingNotification() {
+    const bookings = [];
+    for (const bookingId of this.bookingIds) {
+      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
+      bookings.push(booking);
+    }
+
+    const address = bookings[0].mail;
+
+    try {
+      await MailController.sendBookingConfirmedInvoicePending(
+        address,
+        this.bookingIds,
+        this.tenantId,
+        this.aggregated,
+      );
+    } catch (err) {
+      logger.error(
+        "Error while sending invoice-pending notification:",
+        this.bookingIds,
+        err,
+      );
+    }
+
+    return { manualCreation: true, bookingIds: this.bookingIds };
   }
 
   async createSeparateInvoices() {
@@ -116,6 +167,12 @@ class InvoicePaymentService extends PaymentService {
   }
 
   async paymentRequest() {
+    const isManual = await this._isManualCreation();
+
+    if (isManual) {
+      return this._sendInvoicePendingNotification();
+    }
+
     if (this.aggregated) {
       return this.aggregatedPaymentRequest();
     } else {

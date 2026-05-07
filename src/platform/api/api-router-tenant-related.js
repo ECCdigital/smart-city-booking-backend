@@ -203,6 +203,12 @@ router.get(
   BookingController.getInvoice,
 );
 
+router.post(
+  "/bookings/:id/invoice",
+  AuthenticationController.isSignedIn,
+  BookingController.createInvoice,
+);
+
 router.get(
   "/bookings/:id/cancellation-receipt/:cancellationReceiptId",
   AuthenticationController.isSignedIn,
