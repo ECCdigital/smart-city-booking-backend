@@ -20,7 +20,11 @@ router.get(
   AuthenticationController.isSignedIn,
   TenantController.getTenant,
 );
-router.get("/tenants/:id/payment-apps", TenantController.getActivePaymentApps);
+router.get(
+  "/tenants/:id/payment-apps",
+  optionalAuth,
+  TenantController.getActivePaymentApps,
+);
 
 // Protected
 router.get(

@@ -158,6 +158,24 @@ class MailController {
     });
   }
 
+  static async sendBookingConfirmedInvoicePending(
+    address,
+    bookingIds,
+    tenantId,
+    aggregated = false,
+  ) {
+    const attachments = await this._attachICalFiles(bookingIds, tenantId);
+
+    await MailSenderService.dispatch({
+      mailType: MailType.BOOKING_CONFIRMED_INVOICE_PENDING,
+      address,
+      bookingIds,
+      tenantId,
+      attachments,
+      aggregated,
+    });
+  }
+
   static async sendInvoiceAfterBookingApproval(
     address,
     bookingIds,
@@ -263,7 +281,9 @@ class MailController {
       verifyUrlTemplate = `${verifyUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
     }
 
-    const content = renderSnippet("verification-request", { verifyUrl: verifyUrlTemplate });
+    const content = renderSnippet("verification-request", {
+      verifyUrl: verifyUrlTemplate,
+    });
 
     await MailerService.send({
       address,

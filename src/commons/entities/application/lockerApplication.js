@@ -57,6 +57,7 @@ class ifbsLockerApplication extends LockerApplication {
     this.apiKeyID = params.apiKeyID || "";
     this.apiKey = params.apiKey || null;
     this.secretPhrase = params.secretPhrase || "";
+    this.customerService = params.customerService || null;
   }
 
   decrypt() {
@@ -78,6 +79,8 @@ class ifbsLockerApplication extends LockerApplication {
       ...super.Schema,
       apiKeyID: { type: String, default: "" },
       apiKey: { type: Object, default: null },
+      secretPhrase: { type: Object, default: "" },
+      customerService: { type: Object, default: null },
     };
   }
 }

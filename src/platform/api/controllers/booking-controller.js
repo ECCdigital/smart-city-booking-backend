@@ -20,6 +20,9 @@ const {
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
+const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
+const MailController = require("../../../commons/mail-service/mail-controller");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -402,7 +405,6 @@ class BookingController {
           RolePermission.MANAGE_BOOKINGS,
         )
       ) {
-
         await BookingService.updateBooking(tenant, booking);
 
         await WorkflowService.updateTask(
@@ -569,7 +571,7 @@ class BookingController {
       const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
-      const { reason } = request.body;
+      const { reason, skipCancellation } = request.body;
       if (!id) {
         return response.sendStatus(400);
       }
@@ -587,7 +589,14 @@ class BookingController {
         logger.info(
           `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
         );
-        await BookingService.rejectBooking(tenantId, id, reason);
+        await BookingService.rejectBooking(
+          tenantId,
+          id,
+          reason,
+          null,
+          false,
+          Boolean(skipCancellation),
+        );
         return response.sendStatus(200);
       } else {
         logger.warn(
@@ -856,6 +865,158 @@ class BookingController {
     } catch (err) {
       logger.error(err);
       return response.status(500).send("Could not get invoice");
+    }
+  }
+
+  /**
+   * Admin endpoint to manually create an invoice for a booking.
+   * Used when the invoice app has manualCreation enabled.
+   */
+  static async createInvoice(request, response) {
+    try {
+      const {
+        params: { tenant: tenantId, id: bookingId },
+        query: { sendEmail },
+        user,
+      } = request;
+
+      const shouldSendEmail = sendEmail !== "false";
+
+      if (!tenantId || !bookingId) {
+        logger.warn(`${tenantId} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const hasPermission = await UserManager.hasPermission(
+        user.id,
+        tenantId,
+        RolePermission.MANAGE_BOOKINGS,
+        "updateAny",
+      );
+
+      if (!hasPermission) {
+        logger.warn(
+          `${tenantId} -- User ${user?.id} is not allowed to create invoice.`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
+      if (!invoiceApp || !invoiceApp.active) {
+        return response
+          .status(400)
+          .send({ message: "Invoice app not found or inactive." });
+      }
+
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      if (!booking) {
+        return response.status(404).send({ message: "Booking not found." });
+      }
+
+      const { invoice, name, invoiceId, revision, timeCreated } =
+        await InvoiceService.createSingleInvoice(tenantId, bookingId);
+
+      booking.attachments.push({
+        type: "invoice",
+        name,
+        invoiceId,
+        revision,
+        timeCreated,
+      });
+      await BookingManager.storeBooking(booking);
+
+      if (shouldSendEmail) {
+        const attachments = [
+          {
+            filename: name,
+            content: invoice.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+
+        try {
+          await MailController.sendInvoice(
+            booking.mail,
+            bookingId,
+            tenantId,
+            attachments,
+          );
+        } catch (err) {
+          logger.error("Error while sending invoice:", bookingId, err);
+        }
+      }
+
+      const updatedBooking = await BookingManager.getBooking(
+        bookingId,
+        tenantId,
+      );
+
+      response.status(200).json({
+        success: true,
+        data: updatedBooking,
+        invoice: { name, invoiceId, revision },
+        emailSent: shouldSendEmail,
+      });
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not create invoice");
+    }
+  }
+
+  static async getCancellationReceipt(request, response) {
+    const {
+      params: { tenant, id: bookingId, cancellationReceiptId },
+      user,
+    } = request;
+
+    try {
+      if (!tenant || !bookingId || !cancellationReceiptId) {
+        logger.warn(`${tenant} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+
+      const hasPermission =
+        (await UserManager.hasPermission(
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+          "readAny",
+        )) ||
+        PermissionsService._isOwner(
+          booking,
+          user.id,
+          tenant,
+          RolePermission.MANAGE_BOOKINGS,
+        );
+
+      if (!hasPermission) {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to get cancellation receipt.`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const cancellationReceipt =
+        await CancellationReceiptService.getCancellation(
+          tenant,
+          cancellationReceiptId,
+        );
+
+      logger.info(
+        `${tenant} -- sending cancellation receipt ${cancellationReceiptId} to user ${user?.id}`,
+      );
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${cancellationReceiptId}`,
+      );
+
+      return response.status(200).send(cancellationReceipt);
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not get cancellation receipt");
     }
   }
 
