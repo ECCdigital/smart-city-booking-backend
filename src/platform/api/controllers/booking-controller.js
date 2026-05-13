@@ -306,6 +306,8 @@ class BookingController {
       const tenantId = request.params.tenant;
       const ids = request.params.ids;
 
+      console.log(ids);
+
       if (ids) {
         const splitIds = ids.split(",");
 
@@ -313,6 +315,11 @@ class BookingController {
           tenantId,
           splitIds,
         );
+
+        for (const id of splitIds) {
+          const tmp = await BookingService.getBookingStatus(tenantId, splitIds);
+
+        }
 
         logger.info(
           `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,

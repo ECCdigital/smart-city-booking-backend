@@ -46,6 +46,13 @@ const instanceSchemaDefinition = {
   },
   enableCatalog: { type: Boolean, default: false },
   catalogUrl: { type: String, default: "" },
+  checkout: {
+    type: Object,
+    default: {
+      useLegacyCheckout: true,
+      checkoutUrl: "",
+    },
+  },
 
   bookableCustomFields: {
     type: [customFieldDefinitionSchema],

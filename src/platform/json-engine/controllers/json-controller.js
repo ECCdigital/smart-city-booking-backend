@@ -3,9 +3,34 @@ const {
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
+const InstanceManager = require("../../../commons/data-managers/instance-manager");
 const ExternalPriceService = require("../../../commons/services/external-price-service");
 
 class JSONController {
+  static async _checkoutUrl(bookableId, tenantId, instance) {
+    const checkoutInstance = instance || (await InstanceManager.getInstance());
+
+    if (
+      checkoutInstance &&
+      !checkoutInstance.checkout.useLegacyCheckout &&
+      checkoutInstance.checkout.checkoutUrl
+    ) {
+      return `${checkoutInstance.checkout.checkoutUrl}/checkout/${bookableId}/?tenantId=${tenantId}`;
+    }
+
+    return `${process.env.FRONTEND_URL}/checkout/?id=${bookableId}&tenant=${tenantId}`;
+  }
+
+  static async _exportPublicBookable(bookable, tenantId, instance) {
+    const pub = bookable.exportPublic();
+    pub.checkoutUrl = await JSONController._checkoutUrl(
+      bookable.id,
+      tenantId,
+      instance,
+    );
+    return pub;
+  }
+
   static async getBookables(req, res) {
     const { tenant: tenantId } = req.params;
     const { type, ids } = req.query;
@@ -48,10 +73,15 @@ class JSONController {
       const relatedMap = new Map(relatedBookables.map((b) => [b.id, b]));
 
       const externalCache = new Map();
-
+      const checkoutInstance =
+        bookables.length > 0 ? await InstanceManager.getInstance() : null;
 
       const result = bookables.map(async (bookable) => {
-        const pub = bookable.exportPublic();
+        const pub = await JSONController._exportPublicBookable(
+          bookable,
+          tenantId,
+          checkoutInstance,
+        );
 
         const extPrices = await ExternalPriceService.resolve(
           bookable,
@@ -70,8 +100,12 @@ class JSONController {
               b &&
               b.isPublic &&
               JSONController.hasAccess(b, identity, userRoles),
-          )
-          .map((b) => b.exportPublic());
+          );
+        pub.relatedBookables = await Promise.all(
+          pub.relatedBookables.map((b) =>
+            JSONController._exportPublicBookable(b, tenantId, checkoutInstance),
+          ),
+        );
         return pub;
       });
 
@@ -104,7 +138,12 @@ class JSONController {
       const hasAccess = JSONController.hasAccess(bookable, identity, userRoles);
 
       if (hasAccess) {
-        const pub = bookable.exportPublic();
+        const checkoutInstance = await InstanceManager.getInstance();
+        const pub = await JSONController._exportPublicBookable(
+          bookable,
+          tenantId,
+          checkoutInstance,
+        );
 
         const extPrices = await ExternalPriceService.resolve(
           bookable,
@@ -126,8 +165,12 @@ class JSONController {
           .filter(
             (b) =>
               b.isPublic && JSONController.hasAccess(b, identity, userRoles),
-          )
-          .map((b) => b.exportPublic());
+          );
+        pub.relatedBookables = await Promise.all(
+          pub.relatedBookables.map((b) =>
+            JSONController._exportPublicBookable(b, tenantId, checkoutInstance),
+          ),
+        );
 
         res.setHeader("content-type", "application/json");
         res.status(200).send(pub);
@@ -151,6 +194,7 @@ class JSONController {
 
     try {
       let events = await EventManager.getEvents(tenantId);
+      const checkoutInstance = await InstanceManager.getInstance();
 
       events = events.filter((event) => event.isPublic);
 
@@ -182,9 +226,17 @@ class JSONController {
           tenantId,
           event.id,
         );
-        event.tickets = tickets
-          .filter((ticket) => ticket.isPublic)
-          .map((ticket) => ticket.exportPublic());
+        event.tickets = await Promise.all(
+          tickets
+            .filter((ticket) => ticket.isPublic)
+            .map((ticket) =>
+              JSONController._exportPublicBookable(
+                ticket,
+                tenantId,
+                checkoutInstance,
+              ),
+            ),
+        );
       }
 
       res.setHeader("content-type", "application/json");
@@ -198,6 +250,7 @@ class JSONController {
     const { tenant: tenantId, id } = req.params;
     try {
       const event = await EventManager.getEvent(id, tenantId);
+      const checkoutInstance = await InstanceManager.getInstance();
 
       if (event?.id && event.isPublic === true) {
         const tickets = await BookableManager.getEventBookables(
@@ -206,9 +259,17 @@ class JSONController {
         );
 
         const publicEvent = event.exportPublic();
-        publicEvent.tickets = tickets
-          .filter((ticket) => ticket.isPublic)
-          .map((ticket) => ticket.exportPublic());
+        publicEvent.tickets = await Promise.all(
+          tickets
+            .filter((ticket) => ticket.isPublic)
+            .map((ticket) =>
+              JSONController._exportPublicBookable(
+                ticket,
+                tenantId,
+                checkoutInstance,
+              ),
+            ),
+        );
 
         res.setHeader("content-type", "application/json");
         res.status(200).send(publicEvent);

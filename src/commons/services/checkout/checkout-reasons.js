@@ -41,6 +41,11 @@ const CHECKOUT_REASONS = {
   INVALID_BOOKABLE_ITEMS: "checkout.invalid_bookable_items",
   GROUP_BOOKING_DISABLED: "checkout.group_booking_disabled",
   GROUP_BOOKING_ROLE_REQUIRED: "checkout.group_booking_role_required",
+
+  // payment (triggered as part of v2 checkout)
+  LOCKER_UNAVAILABLE: "checkout.locker_unavailable",
+  PAYMENT_PROVIDER_UNAVAILABLE: "checkout.payment_provider_unavailable",
+  PAYMENT_FAILED: "checkout.payment_failed",
 };
 
 /**

@@ -1420,6 +1420,15 @@ class BookingService {
     return bookings;
   }
 
+  static async getBookingStatus(tenantId, bookingId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    console.log(booking);
+    return booking
+  }
+
   static async getBookedSeatsCount(tenantId, eventId, params) {
     return await BookingManager.getBookedSeatsCount(tenantId, eventId, params);
   }

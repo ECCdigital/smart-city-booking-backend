@@ -123,8 +123,6 @@ class PaymentController {
         { aggregated, groupBookingId },
       );
 
-      console.log(paymentService);
-
       const data = await paymentService?.createPayment();
 
       response.status(200).send({ paymentData: data, bookings });
@@ -311,7 +309,7 @@ class PaymentController {
           bookings[0].paymentProvider,
           options,
         );
-        const url = paymentService.paymentResponse();
+        const url = await paymentService.paymentResponse();
         response.redirect(302, url);
       } else {
         const urls = [];
