@@ -45,7 +45,7 @@ class PaymentService {
       !instance.checkout.useLegacyCheckout &&
       instance.checkout.checkoutUrl
     ) {
-      checkoutUrl = `${instance.checkout.checkoutUrl}/checkout/status?bookingIds=${this.bookingIds.join(",")}&tenantId=${this.tenantId}`;
+      checkoutUrl = `${instance.checkout.checkoutUrl}/checkout/status?bookingId=${this.bookingIds.join(",")}&tenantId=${this.tenantId}`;
     } else {
       checkoutUrl =
         `${process.env.FRONTEND_URL}/checkout/status` +
