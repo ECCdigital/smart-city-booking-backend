@@ -66,6 +66,14 @@ class PdfService {
     return formatter.format(value);
   }
 
+  static formatAmount(value) {
+    if (value == null) return "-";
+    return new Intl.NumberFormat("de-DE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
   static translatePayMethod(value) {
     switch (value) {
       case "CASH":
@@ -457,7 +465,7 @@ class PdfService {
         invoiceAddress,
         mainContent,
         location: tenant.location,
-        totalAmount: PdfService.formatCurrency(booking.priceEur),
+        totalAmount: PdfService.formatAmount(booking.priceEur),
         invoiceDate: currentDate,
         bookingId: booking.id,
         bookingPeriod,
@@ -585,7 +593,7 @@ class PdfService {
       invoiceAddress,
       mainContent,
       location: tenant.location,
-      totalAmount: PdfService.formatCurrency(totalBrutto),
+      totalAmount: PdfService.formatAmount(totalBrutto),
     };
 
     const renderedHtml = template(data);
@@ -687,7 +695,9 @@ class PdfService {
     ${booking.zipCode || ""} ${booking.location || ""}
   `;
 
-    const bankData = invoiceApp?.active ? { bank: invoiceApp.bank, iban: invoiceApp.iban, bic: invoiceApp.bic } : {};
+    const bankData = invoiceApp?.active
+      ? { bank: invoiceApp.bank, iban: invoiceApp.iban, bic: invoiceApp.bic }
+      : {};
 
     const data = {
       title: "Stornorechnung",
