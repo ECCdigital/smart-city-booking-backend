@@ -17,6 +17,14 @@ router.post("/sso/signin", AuthenticationController.ssoLogin);
 router.post("/sso/signup", AuthenticationController.ssoSignup);
 router.post("/sso/verify", AuthenticationController.ssoVerify);
 
+// Card Endpoints
+router.get("/card-methods", AuthenticationController.getCardAuthMethods);
+router.post("/card/signin", AuthenticationController.cardSignin);
+router.post("/card/signup", AuthenticationController.cardSignup);
+router.get("/auth/card/link", AuthenticationController.confirmCardLink);
+router.post("/card/link", AuthenticationController.confirmCardLinkWithToken);
+
+
 // Hooks
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);

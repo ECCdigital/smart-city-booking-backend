@@ -4,6 +4,7 @@ const GiroCockpitApplication = require("./payment/giroCockpitApplication");
 const InvoiceApplication = require("./payment/invoiceApplication");
 const AuthApplication = require("./authApplication");
 const { createLockerApplication } = require("./lockerApplication");
+const CardAuthApplication = require("./cardAuthApplication");
 
 const PAYMENT_CLASS_MAP = {
   ePayBL: EPayBLApplication,
@@ -14,6 +15,7 @@ const PAYMENT_CLASS_MAP = {
 
 const TYPE_CLASS_MAP = {
   auth: AuthApplication,
+  "card-auth": CardAuthApplication,
 };
 
 class ApplicationFactory {
