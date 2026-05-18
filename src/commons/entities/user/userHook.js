@@ -5,6 +5,7 @@ const { userHookSchemaDefinition } = require("../../schemas/userSchema");
 const USER_HOOK_TYPES = Object.freeze({
   VERIFY: "verify",
   RESET_PASSWORD: "reset-password",
+  FORGOT_PASSWORD: "forgot-password",
   LINK_CARD: "link_card",
 });
 

@@ -313,6 +313,32 @@ class MailController {
     });
   }
 
+  static async sendForgotPasswordRequest(address, hookId, resetUrl) {
+    const instance = await InstanceManager.getInstance(false);
+
+    let resetUrlTemplate;
+
+    if (resetUrl) {
+      resetUrlTemplate = `${resetUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
+    } else {
+      resetUrlTemplate = `${process.env.FRONTEND_URL}/password/reset?token=${hookId}&id=${encodeURIComponent(address)}`;
+    }
+
+    const content = renderSnippet("forgot-password-request", {
+      resetUrl: resetUrlTemplate,
+    });
+
+    await MailerService.send({
+      address,
+      subject: "Kennwort zurücksetzen",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Kennwort zurücksetzen",
+        content,
+      },
+    });
+  }
+
   static async sendUserCreated(userId) {
     const instance = await InstanceManager.getInstance(false);
     const user = await UserManager.getUser(userId);

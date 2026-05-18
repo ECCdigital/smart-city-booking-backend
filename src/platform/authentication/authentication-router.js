@@ -11,6 +11,11 @@ router.post("/signup", AuthenticationController.signup);
 router.post("/refresh", AuthenticationController.refreshToken);
 router.post("/resetpassword", AuthenticationController.resetPassword);
 router.post("/check-email", AuthenticationController.checkEmail);
+router.post("/forgot-password", AuthenticationController.forgotPassword);
+router.post(
+  "/reset-password",
+  AuthenticationController.resetPasswordWithToken,
+);
 
 // SSO Endpoints
 router.post("/sso/signin", AuthenticationController.ssoLogin);

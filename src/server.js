@@ -6,8 +6,6 @@ const helmet = require("helmet");
 const fileUpload = require("express-fileupload");
 const bunyan = require("bunyan");
 const swaggerUi = require("swagger-ui-express");
-const YAML = require("yamljs");
-const path = require("path");
 
 const DatabaseManager = require("./commons/utilities/database-manager.js");
 const { runMigrations } = require("../migrations/migrationsManager");

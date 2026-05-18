@@ -319,6 +319,45 @@ class AuthenticationController {
     }
   }
 
+  static async forgotPassword(request, response) {
+    const { id, resetUrl } = request.body;
+
+    if (!id) {
+      return response.status(400).send("Email is required");
+    }
+
+    try {
+      await UserService.requestForgotPassword(id, resetUrl);
+      return response
+        .status(200)
+        .send("If the email exists, a reset link has been sent");
+    } catch (error) {
+      logger.error("Forgot password request failed:", error);
+      return response.status(500).send("Internal server error");
+    }
+  }
+
+  static async resetPasswordWithToken(request, response) {
+    const { token, password, id } = request.body;
+
+    if (!token || !password || !id) {
+      return response
+        .status(400)
+        .send("Token, password, and ID are required");
+    }
+
+    try {
+      await UserService.resetPasswordWithToken(token, password, id);
+      logger.info(`Password reset via token for user ${id}.`);
+      return response.status(200).send("Password reset successfully");
+    } catch (error) {
+      logger.error(`Password reset via token failed for user ${id}:`, error);
+      return response
+        .status(error.status || 500)
+        .send(error.message || "Password reset failed");
+    }
+  }
+
   static resetPassword(request, response) {
     const id = request.body.id;
     const password = request.body.password;

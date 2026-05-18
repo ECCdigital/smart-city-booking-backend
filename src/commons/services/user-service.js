@@ -1,5 +1,10 @@
-const { USER_HOOK_TYPES } = require("../entities/user/user");
+const { User, USER_HOOK_TYPES } = require("../entities/user/user");
 const UserManager = require("../data-managers/user-manager");
+const bunyan = require("bunyan");
+const logger = bunyan.createLogger({
+  name: "user-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class UserService {
   static async singUpUser(user, nextUrl, verifyUrl) {
@@ -67,6 +72,69 @@ class UserService {
     user.releaseHook(token);
 
     await UserManager.updateUser(user);
+
+    return { success: true };
+  }
+
+  static async requestForgotPassword(email, resetUrl) {
+    const MailController = require("../mail-service/mail-controller");
+    const user = await UserManager.getUser(email, true);
+
+    if (!user || user.authType !== "local" || user.isSuspended) {
+      return { success: true };
+    }
+
+    const userEntity = user instanceof User ? user : new User(user);
+
+    userEntity.hooks.forEach((hook) => {
+      if (
+        hook.type === USER_HOOK_TYPES.FORGOT_PASSWORD &&
+        hook.status === "active"
+      ) {
+        hook.status = "revoked";
+      }
+    });
+    
+    const hook = userEntity.addForgotPasswordHook(resetUrl);
+    await UserManager.updateUser(userEntity);
+    await MailController.sendForgotPasswordRequest(
+      userEntity.id,
+      hook.id,
+      resetUrl,
+    );
+
+    logger.info(`Forgot password request sent to user ${userEntity.id}`);
+
+    return { success: true };
+  }
+
+  static async resetPasswordWithToken(token, password, id) {
+    const user = await UserManager.getUserByHookID(token);
+
+    if (!user) {
+      throw { message: "Invalid or expired token", status: 400 };
+    }
+
+    if (user.id.toLowerCase() !== id.toLowerCase()) {
+      throw { message: "User ID does not match token", status: 400 };
+    }
+
+    const hook = user.hooks.find((hook) => hook.id === token);
+
+    if (!hook || hook.type !== USER_HOOK_TYPES.FORGOT_PASSWORD) {
+      throw { message: "Invalid or expired token", status: 400 };
+    }
+
+    if (hook.status !== "active") {
+      throw { message: "Token already used or expired", status: 410 };
+    }
+
+    user.setPassword(password);
+    user.releaseHook(token);
+
+    await UserManager.updateUser(user);
+
+    logger.info(`Password reset for user ${user.id}`);
 
     return { success: true };
   }
