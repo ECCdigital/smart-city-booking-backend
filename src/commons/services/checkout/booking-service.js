@@ -40,12 +40,97 @@ const {
   ForbiddenError,
 } = require("../../../errors/BaseError");
 const { resolveCheckoutId } = require("../../utilities/checkout-utils");
+const {
+  CustomFieldService,
+} = require("../custom-field/custom-field-service");
+const { CheckoutError } = require("../../../errors/CheckoutError");
+const {
+  CHECKOUT_REASONS,
+} = require("./checkout-reasons");
 
 const logger = bunyan.createLogger({
   name: "booking-service.js",
   level: process.env.LOG_LEVEL,
 });
 class BookingService {
+  static async _resolveCheckoutCustomFieldValues({
+    tenantId,
+    bookableItems,
+    customFieldValues,
+  }) {
+    const values = Array.isArray(customFieldValues) ? customFieldValues : [];
+
+    const { instanceFields, tenantFields } =
+      await BookableManager.getCustomFieldDefinitions(tenantId);
+
+    const bookableIds = [
+      ...new Set(bookableItems.map((item) => item.bookableId)),
+    ];
+    const bookables = await Promise.all(
+      bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
+    );
+
+    const bookableFields = bookables.flatMap(
+      (bookable) => bookable?.customFieldDefinitions || [],
+    );
+
+    const mergedDefinitions = CustomFieldService.mergeDefinitions({
+      instanceFields,
+      tenantFields,
+      bookableFields,
+    });
+
+    const checkoutDefinitions =
+      CustomFieldService.filterCheckoutDefinitions(mergedDefinitions);
+
+    if (checkoutDefinitions.length === 0 && values.length === 0) {
+      return [];
+    }
+
+    const { valid, errors } = CustomFieldService.validateValues(
+      checkoutDefinitions,
+      values,
+    );
+
+    if (!valid) {
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.CUSTOM_FIELDS_INVALID,
+        statusCode: 400,
+        params: { errors },
+      });
+    }
+
+    return values;
+  }
+
+  static _resolveCustomFieldValuesForUpdate(
+    updatedBooking,
+    oldBooking,
+    requestBody = {},
+  ) {
+    if (
+      Array.isArray(requestBody.customFields) &&
+      requestBody.customFields.length > 0
+    ) {
+      return requestBody.customFields.map((field) => ({
+        fieldId: field.id ?? field.fieldId,
+        value: field.value ?? null,
+      }));
+    }
+
+    if ("customFieldValues" in requestBody) {
+      return Array.isArray(requestBody.customFieldValues)
+        ? requestBody.customFieldValues
+        : [];
+    }
+
+    if ("customFields" in requestBody) {
+      return [];
+    }
+
+    return oldBooking.customFieldValues || [];
+  }
+
   /**
    * Creates a booking and stores it in the database.
    * @param tenantId
@@ -87,7 +172,15 @@ class BookingService {
       isPayed,
       isRejected,
       bookWithPrice,
+      customFieldValues: rawCustomFieldValues,
     } = bookingAttempt;
+
+    const customFieldValues =
+      await BookingService._resolveCheckoutCustomFieldValues({
+        tenantId,
+        bookableItems,
+        customFieldValues: rawCustomFieldValues,
+      });
 
     logger.info(
       `${tenantId}, cid ${checkoutId} -- checkout request by user ${user?.id} with simulate=${simulate}`,
@@ -185,6 +278,7 @@ class BookingService {
         paymentProvider,
         bookWithPrice,
         checkoutId: providedCheckoutId,
+        customFieldValues,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
@@ -209,6 +303,7 @@ class BookingService {
         paymentProvider,
         bookWithPrice,
         checkoutId: providedCheckoutId,
+        customFieldValues,
       });
     }
 
@@ -496,7 +591,7 @@ class BookingService {
     await BookingManager.removeBooking(booking.id, booking.tenantId);
   }
 
-  static async updateBooking(tenantId, updatedBooking) {
+  static async updateBooking(tenantId, updatedBooking, { requestBody } = {}) {
     const oldBooking = await BookingManager.getBooking(
       updatedBooking.id,
       tenantId,
@@ -551,6 +646,7 @@ class BookingService {
         attachments: oldBooking.attachments,
         lockerInfo: oldBooking.lockerInfo,
         checkoutId,
+        customFieldValues: updatedBooking.customFieldValues,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({

@@ -412,7 +412,11 @@ class BookingController {
           RolePermission.MANAGE_BOOKINGS,
         )
       ) {
-        await BookingService.updateBooking(tenant, booking);
+        const savedBooking = await BookingService.updateBooking(
+          tenant,
+          booking,
+          { requestBody: request.body },
+        );
 
         await WorkflowService.updateTask(
           tenant,
@@ -423,7 +427,7 @@ class BookingController {
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );
-        response.status(201).send(booking);
+        response.status(201).send(savedBooking);
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to update booking.`,

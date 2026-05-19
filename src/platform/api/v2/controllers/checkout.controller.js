@@ -326,12 +326,19 @@ class CheckoutControllerV2 {
         });
       }
 
-      const requiresAuth =
-        bookable.permittedUsers.length > 0 ||
-        bookable.permittedRoles.length > 0 ||
-        bookable.requiresLogin;
+      if (bookable.requiresLogin && !user) {
+        throw new CheckoutError({
+          reason: CHECKOUT_REASONS.LOGIN_REQUIRED,
+          statusCode: 401,
+          checkType: "permissions",
+        });
+      }
 
-      if (requiresAuth) {
+      const requiresPermissionCheck =
+        bookable.permittedUsers.length > 0 ||
+        bookable.permittedRoles.length > 0;
+
+      if (requiresPermissionCheck) {
         if (!user) {
           throw new CheckoutError({
             reason: CHECKOUT_REASONS.UNAUTHORIZED,

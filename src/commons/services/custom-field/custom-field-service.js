@@ -38,6 +38,12 @@ class CustomFieldService {
     return Array.from(fieldMap.values());
   }
 
+  static filterCheckoutDefinitions(mergedDefinitions = []) {
+    return mergedDefinitions.filter(
+      (def) => def.usageOptions?.context === "checkout",
+    );
+  }
+
   static resolveFieldsWithValues(mergedDefinitions, customFieldValues = []) {
     const valueMap = new Map(
       customFieldValues.map((v) => [v.fieldId, v.value]),

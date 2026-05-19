@@ -8,8 +8,10 @@ const CHECKOUT_REASONS = {
   // generic / request
   MISSING_PARAMETERS: "checkout.missing_parameters",
   UNAUTHORIZED: "checkout.unauthorized",
+  LOGIN_REQUIRED: "checkout.login_required",
   PERMISSION_DENIED: "checkout.permission_denied",
   BAD_REQUEST: "checkout.bad_request",
+  CUSTOM_FIELDS_INVALID: "checkout.custom_fields_invalid",
   UNKNOWN: "checkout.unknown",
 
   // bookable

@@ -34,6 +34,7 @@ class BundleCheckoutService {
    * @param {Array} attachments - The attachments.
    * @param {boolean} bookWithPrice - Whether to book with price.
    * @param {string} checkoutId - The checkout ID.
+   * @param {Array} customFieldValues - Checkout custom field values.
    */
   constructor({
     user,
@@ -57,6 +58,7 @@ class BundleCheckoutService {
     attachments,
     bookWithPrice,
     checkoutId,
+    customFieldValues,
   }) {
     this.user = user;
     this.tenant = tenant;
@@ -79,6 +81,9 @@ class BundleCheckoutService {
     this.attachments = attachments || [];
     this.bookWithPrice = bookWithPrice;
     this.checkoutId = checkoutId;
+    this.customFieldValues = Array.isArray(customFieldValues)
+      ? customFieldValues
+      : [];
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -318,6 +323,7 @@ class BundleCheckoutService {
       paymentProvider: this.paymentProvider,
       paymentMethod: this.setPaymentMethod(),
       lockerInfo: await this.getLockerInfo(),
+      customFieldValues: this.customFieldValues,
     };
 
     if (this.couponCode) {
@@ -368,6 +374,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {boolean} bookWithPrice - Whether to book with price.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} lockerInfo - The locker info.
+   * @param {Array} customFieldValues - Checkout custom field values.
    */
   constructor({
     user,
@@ -399,6 +406,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     bookWithPrice,
     checkoutId,
     lockerInfo,
+    customFieldValues,
   }) {
     super({
       user,
@@ -422,6 +430,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachments,
       bookWithPrice,
       checkoutId,
+      customFieldValues,
     });
     this.isCommitted = isCommit;
     this.isPayed = isPayed;
