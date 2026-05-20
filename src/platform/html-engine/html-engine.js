@@ -307,24 +307,29 @@ class HtmlEngine {
       });
       htmlOutput += "</ul>";
 
-      if (event.attendees?.free === false) {
-        htmlOutput += '<ul class="price-category-list">';
-        htmlOutput += '<li class="price-category-item">';
-        event.attendees.priceCategories.forEach((priceCategory) => {
-          htmlOutput +=
-            '<span class="price-category">' + priceCategory.name + "</span>";
-          htmlOutput +=
-            '<div class="price">' +
-            new Intl.NumberFormat("de-DE", {
-              style: "currency",
-              currency: "EUR",
-            }).format(priceCategory.price) +
-            "</div>";
-        });
-        htmlOutput += "</li>";
-        htmlOutput += "</ul>";
+      if (event.externalBookingUrl){
+        htmlOutput += '<a class="btn-booking" href="' + event.externalBookingUrl + '" target="_blank">Jetzt buchen</a>';
+
       } else {
-        htmlOutput += '<p class="price-free">kostenlos</p>';
+        if (event.attendees?.free === false) {
+          htmlOutput += '<ul class="price-category-list">';
+          htmlOutput += '<li class="price-category-item">';
+          event.attendees.priceCategories.forEach((priceCategory) => {
+            htmlOutput +=
+              '<span class="price-category">' + priceCategory.name + "</span>";
+            htmlOutput +=
+              '<div class="price">' +
+              new Intl.NumberFormat("de-DE", {
+                style: "currency",
+                currency: "EUR",
+              }).format(priceCategory.price) +
+              "</div>";
+          });
+          htmlOutput += "</li>";
+          htmlOutput += "</ul>";
+        } else {
+          htmlOutput += '<p class="price-free">kostenlos</p>';
+        }
       }
 
       htmlOutput += `<a class="btn-detail" href="${tenantObj.eventDetailLink}?bkid=${event.id}">Details</a>`;

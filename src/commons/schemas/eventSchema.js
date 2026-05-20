@@ -9,6 +9,7 @@ const eventSchemaDefinition = {
     maxAttendees: { type: Number, default: null },
     priceCategories: { type: Array, default: [] },
   },
+  externalBookingUrl: { type: String, default: "" },
   eventAddress: {
     street: { type: String, default: "" },
     houseNumber: { type: String, default: "" },
