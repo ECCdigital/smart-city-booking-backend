@@ -1,8 +1,12 @@
 const MailerService = require("./mail-service");
 const TenantManager = require("../data-managers/tenant-manager");
-const ICalService = require("../services/ical-service");
 const MailDataService = require("./mail-data.service");
 const { renderSnippet } = require("./templates/template-loader");
+const {
+  getSnippetOverride,
+  getSubjectOverride,
+  renderSubjectOverride,
+} = require("./templates/mail-snippet-overrides");
 
 class MailSenderService {
   /**
@@ -14,12 +18,14 @@ class MailSenderService {
     bookingId,
     tenantId,
     subject,
-    title,
     message,
     includeQRCode = false,
     attachments = [],
     sendBCC = false,
     addRejectionLink = false,
+    paymentUrl = null,
+    cancelReason = null,
+    rejectionReason = null,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
@@ -46,6 +52,9 @@ class MailSenderService {
 
     const snippetHtml = renderSnippet("single-booking-wrapper", {
       message,
+      paymentUrl,
+      cancelReason,
+      rejectionReason,
       bookingDetails,
       rejectionUrl,
       qrContent,
@@ -58,7 +67,7 @@ class MailSenderService {
       address,
       subject,
       mailTemplate: tenant.genericMailTemplate,
-      model: { title, content: snippetHtml },
+      model: { content: snippetHtml },
       attachments,
       bcc: sendBCC ? tenant.mail : undefined,
       useInstanceMail: tenant.useInstanceMail,
@@ -70,11 +79,13 @@ class MailSenderService {
     bookingIds,
     tenantId,
     subject,
-    title,
     message,
     attachments = [],
     sendBCC = false,
     addRejectionLink = false,
+    paymentUrl = null,
+    cancelReason = null,
+    rejectionReason = null,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
@@ -87,6 +98,9 @@ class MailSenderService {
 
     const snippetHtml = renderSnippet("aggregated-booking-wrapper", {
       message,
+      paymentUrl,
+      cancelReason,
+      rejectionReason,
       bookingDetails,
       showFooter: true,
       supportEmail: tenant.mail,
@@ -97,7 +111,7 @@ class MailSenderService {
       address,
       subject,
       mailTemplate: tenant.genericMailTemplate,
-      model: { title, content: snippetHtml },
+      model: { content: snippetHtml },
       attachments,
       bcc: sendBCC ? tenant.mail : undefined,
       useInstanceMail: tenant.useInstanceMail,
@@ -133,17 +147,32 @@ class MailSenderService {
       hasAttachments: attachments?.length > 0,
     };
 
-    const subject = this.resolve(mailType.subject, ctx);
-    const title = this.resolve(mailType.title, ctx);
+    const defaultSubject = this.resolve(mailType.subject, ctx);
+    const subjectOverrideSource = getSubjectOverride(
+      tenant,
+      mailType.templateName,
+    );
+    const subject = subjectOverrideSource
+      ? renderSubjectOverride(subjectOverrideSource, {
+          tenantName: tenant.name,
+          supportEmail: tenant.mail,
+        })
+      : defaultSubject;
+
     const includeQRCode = this.resolve(mailType.includeQRCode, ctx);
     const sendBCC = this.resolve(mailType.sendBCC, ctx);
     const addRejectionLink = this.resolve(mailType.addRejectionLink, ctx);
+    const overrideSource = getSnippetOverride(tenant, mailType.templateName);
+    const { paymentUrl, cancelReason, rejectionReason } = templateData;
 
-    const message = renderSnippet(mailType.templateName, {
-      tenantName: tenant.name,
-      supportEmail: tenant.mail,
-      ...templateData,
-    });
+    const message = renderSnippet(
+      mailType.templateName,
+      {
+        tenantName: tenant.name,
+        supportEmail: tenant.mail,
+      },
+      { overrideSource },
+    );
 
     if (aggregated) {
       await this.sendAggregatedBookingMail({
@@ -151,11 +180,13 @@ class MailSenderService {
         bookingIds,
         tenantId,
         subject,
-        title,
         message,
         attachments,
         sendBCC,
         addRejectionLink,
+        paymentUrl,
+        cancelReason,
+        rejectionReason,
       });
     } else {
       for (const bookingId of bookingIds) {
@@ -164,12 +195,14 @@ class MailSenderService {
           bookingId,
           tenantId,
           subject,
-          title,
           message,
           includeQRCode,
           attachments,
           sendBCC,
           addRejectionLink,
+          paymentUrl,
+          cancelReason,
+          rejectionReason,
         });
       }
     }

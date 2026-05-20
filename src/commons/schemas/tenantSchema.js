@@ -10,6 +10,8 @@ const tenantSchemaDefinition = {
   bookableDetailLink: { type: String, default: "" },
   eventDetailLink: { type: String, default: "" },
   genericMailTemplate: { type: String, default: "" },
+  mailSnippets: { type: Object, default: {} },
+  mailSubjects: { type: Object, default: {} },
   useInstanceMail: { type: Boolean, default: true },
   noreplyMail: { type: String, default: "" },
   noreplyDisplayName: { type: String, default: "" },
