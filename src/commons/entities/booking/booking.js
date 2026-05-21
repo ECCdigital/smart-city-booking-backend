@@ -134,6 +134,7 @@ class Booking {
       isCommitted: this.isCommitted,
       isPayed: this.isPayed,
       isRejected: this.isRejected,
+      cancellationPolicy: this.cancellationPolicy,
     };
   }
 
@@ -151,6 +152,7 @@ class Booking {
       isRejected: this.isRejected,
       priceEur: this.priceEur,
       bookableItems: this.bookableItems,
+      cancellationPolicy: this.cancellationPolicy,
     };
   }
 

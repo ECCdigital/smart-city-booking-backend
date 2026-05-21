@@ -221,6 +221,21 @@ class BundleCheckoutService {
     return lockerInfo;
   }
 
+  /**
+   * Aggregate the cancellation policy of all bookable items in the bundle.
+   * Restrictive rule: every item must allow user cancellation, otherwise the
+   * resulting booking is not user-cancellable.
+   * @param {Array} bookableItems Bookable items with `_bookableUsed` populated.
+   * @returns {{userCancellable: boolean}} Aggregated policy.
+   */
+  aggregateCancellationPolicy(bookableItems) {
+    const userCancellable = bookableItems.every(
+      (item) =>
+        item._bookableUsed?.cancellationPolicy?.userCancellable === true,
+    );
+    return { userCancellable };
+  }
+
   processAttachments(bookableItems, attachmentStatus) {
     const attachments = bookableItems.reduce((acc, bookableItem) => {
       const itemAttachments = bookableItem._bookableUsed.attachments.map(
@@ -288,6 +303,10 @@ class BundleCheckoutService {
       this.processAttachments(this.bookableItems, this.attachmentStatus),
     );
 
+    const cancellationPolicy = this.aggregateCancellationPolicy(
+      this.bookableItems,
+    );
+
     const booking = {
       id:
         keepExistingId && existingId
@@ -318,6 +337,7 @@ class BundleCheckoutService {
       paymentProvider: this.paymentProvider,
       paymentMethod: this.setPaymentMethod(),
       lockerInfo: await this.getLockerInfo(),
+      cancellationPolicy,
     };
 
     if (this.couponCode) {
@@ -368,6 +388,9 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {boolean} bookWithPrice - Whether to book with price.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} lockerInfo - The locker info.
+   * @param {Object} [cancellationPolicy] - Admin override for the booking's
+   *   cancellation policy. When provided, it replaces the value aggregated
+   *   from the underlying bookables.
    */
   constructor({
     user,
@@ -399,6 +422,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     bookWithPrice,
     checkoutId,
     lockerInfo,
+    cancellationPolicy,
   }) {
     super({
       user,
@@ -431,6 +455,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     this.internalComments = internalComments || "";
     this.rejectionReason = rejectionReason || "";
     this.lockerInfo = lockerInfo || null;
+    this.cancellationPolicyOverride = cancellationPolicy;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -485,6 +510,17 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     const booking = await super.prepareBooking(options);
     booking.internalComments = this.internalComments;
     booking.rejectionReason = this.rejectionReason;
+
+    if (
+      this.cancellationPolicyOverride &&
+      typeof this.cancellationPolicyOverride === "object"
+    ) {
+      booking.cancellationPolicy = {
+        ...booking.cancellationPolicy,
+        ...this.cancellationPolicyOverride,
+      };
+    }
+
     return booking;
   }
 

@@ -163,13 +163,15 @@ class MailSenderService {
     const sendBCC = this.resolve(mailType.sendBCC, ctx);
     const addRejectionLink = this.resolve(mailType.addRejectionLink, ctx);
     const overrideSource = getSnippetOverride(tenant, mailType.templateName);
-    const { paymentUrl, cancelReason, rejectionReason } = templateData;
+    const { paymentUrl, cancelReason, rejectionReason, verifyRejectionUrl } =
+      templateData;
 
     const message = renderSnippet(
       mailType.templateName,
       {
         tenantName: tenant.name,
         supportEmail: tenant.mail,
+        verifyRejectionUrl,
       },
       { overrideSource },
     );

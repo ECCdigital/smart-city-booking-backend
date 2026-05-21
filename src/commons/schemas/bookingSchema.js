@@ -86,6 +86,10 @@ const bookingSchemaDefinition = {
   zipCode: { type: String, default: "" },
   _couponUsed: { type: Object, default: {} },
   hooks: { type: [bookingHookSchemaDefinition], default: [] },
+  cancellationPolicy: {
+    type: Object,
+    default: { userCancellable: true },
+  },
 };
 
 module.exports = {

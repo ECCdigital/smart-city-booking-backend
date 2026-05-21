@@ -87,6 +87,7 @@ class BookingService {
       isPayed,
       isRejected,
       bookWithPrice,
+      cancellationPolicy,
     } = bookingAttempt;
 
     logger.info(
@@ -185,6 +186,7 @@ class BookingService {
         paymentProvider,
         bookWithPrice,
         checkoutId: providedCheckoutId,
+        cancellationPolicy,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
@@ -551,6 +553,7 @@ class BookingService {
         attachments: oldBooking.attachments,
         lockerInfo: oldBooking.lockerInfo,
         checkoutId,
+        cancellationPolicy: updatedBooking.cancellationPolicy,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({
@@ -911,6 +914,7 @@ class BookingService {
     hookId = null,
     skipWorkflow = false,
     skipCancellation = false,
+    bankDetails = null,
   ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
@@ -929,7 +933,11 @@ class BookingService {
       let attachments;
 
       if (booking.priceEur > 0 && !skipCancellation) {
-        const options = { alreadyPaid: booking.isPayed };
+        const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+        const options = {
+          alreadyPaid: booking.isPayed,
+          bankDetails: sanitizedBankDetails || undefined,
+        };
         const { cancellation, name, cancellationId, revision, timeCreated } =
           await CancellationService.createSingleCancellation({
             tenantId,
@@ -1042,6 +1050,7 @@ class BookingService {
         await CancellationService.createAggregatedCancellation({
           tenantId,
           bookingIds: groupBooking.bookingIds,
+          groupBookingId: groupBooking.id,
           options,
         });
 
@@ -1117,17 +1126,29 @@ class BookingService {
     return { success: true };
   }
 
-  static async requestRejectBooking(tenant, bookingId, reason = "") {
+  static async requestRejectBooking(tenant, bookingId, payload = {}) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
 
     if (!booking) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
 
-    try {
-      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, {
-        reason: reason,
+    if (booking.cancellationPolicy?.userCancellable !== true) {
+      throw new ForbiddenError("booking_user_cancellation_disabled", {
+        bookingId,
       });
+    }
+
+    const reason = typeof payload === "string" ? payload : payload.reason || "";
+    const sanitizedBankDetails = sanitizeBankDetails(payload?.bankDetails);
+
+    try {
+      const hookPayload = { reason };
+      if (sanitizedBankDetails) {
+        hookPayload.bankDetails = sanitizedBankDetails;
+      }
+
+      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, hookPayload);
 
       await BookingManager.storeBooking(booking);
 
@@ -1475,6 +1496,30 @@ async function generateBookingReference(
 
 function isNoPaymentRequired(booking) {
   return !booking.priceEur || booking.priceEur === 0 || booking.isPayed;
+}
+
+function sanitizeBankDetails(bankDetails) {
+  if (!bankDetails || typeof bankDetails !== "object") {
+    return null;
+  }
+
+  const toTrimmedString = (value) =>
+    typeof value === "string" ? value.trim() : "";
+
+  const accountHolder = toTrimmedString(bankDetails.accountHolder);
+  const bankName = toTrimmedString(bankDetails.bankName);
+  const iban = toTrimmedString(bankDetails.iban)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const bic = toTrimmedString(bankDetails.bic)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+
+  if (!accountHolder && !bankName && !iban && !bic) {
+    return null;
+  }
+
+  return { accountHolder, bankName, iban, bic };
 }
 
 function isRejection(booking, hookId) {

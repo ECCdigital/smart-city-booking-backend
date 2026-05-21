@@ -127,7 +127,11 @@ class InvoicePaymentService extends PaymentService {
     }
 
     const { invoice, name, invoiceId, revision, timeCreated } =
-      await InvoiceService.createAggregatedInvoice(this.tenantId, bookings);
+      await InvoiceService.createAggregatedInvoice(
+        this.tenantId,
+        bookings,
+        this.groupBookingId,
+      );
 
     for (const booking of bookings) {
       booking.attachments.push({
@@ -231,6 +235,7 @@ class InvoicePaymentService extends PaymentService {
       await InvoiceService.createAggregatedInvoice(
         this.tenantId,
         this.bookingIds,
+        this.groupBookingId,
       );
 
     for (const booking of bookings) {

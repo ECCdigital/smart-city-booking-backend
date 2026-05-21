@@ -190,12 +190,11 @@
           <strong>Grund der Stornierung:</strong>
           {{cancellationReason}}<br /><br />
           {{/if}} {{#if alreadyPaid}} Der bereits gezahlte Betrag in Höhe von
-          <strong>{{refundAmount}}</strong> wird Ihnen auf folgendem Weg
-          erstattet:<br />
-          {{refundMethod}}<br />
-          {{#if refundDate}} Voraussichtliches Erstattungsdatum:
-          {{refundDate}}<br />
-          {{/if}} {{#if refundReference}} Referenz: {{refundReference}}<br />
+          <strong>{{refundAmount}}</strong> wird Ihnen erstattet<br />
+          <br />
+          {{#if customerBankDetails}}{{{ customerBankDetails }}}{{/if}}
+          <br />
+          {{/if}}
           {{/if}} {{else}} Sofern noch keine Zahlung erfolgt ist, entfällt die
           Zahlungsverpflichtung aus der ursprünglichen Rechnung. Bitte beachten
           Sie, dass diese Stornorechnung die Rechnung
@@ -205,14 +204,8 @@
         </p>
       </div>
 
-      {{{ mainContent }}} {{#if showBankDetails}}
-      <div class="information">
-        <strong>Unsere Bankverbindung für Rückfragen:</strong><br />
-        {{ bank }} <br />
-        IBAN: {{ iban }} <br />
-        BIC: {{ bic }} <br />
-      </div>
-      {{/if}}
+      {{{ mainContent }}}
+
 
       <div class="information">
         Bei Rückfragen zu dieser Stornorechnung wenden Sie sich bitte unter

@@ -484,7 +484,14 @@ class PdfService {
     }
   }
 
-  static async generateAggregatedInvoice(tenantId, bookingIds, invoiceNumber) {
+  static async generateAggregatedInvoice(
+    tenantId,
+    bookingIds,
+    invoiceNumber,
+    options = {},
+  ) {
+    const { groupBookingId } = options;
+
     const [tenant, invoiceApp, bookings] = await Promise.all([
       TenantManager.getTenant(tenantId),
       TenantManager.getTenantApp(tenantId, "invoice"),
@@ -594,6 +601,7 @@ class PdfService {
       mainContent,
       location: tenant.location,
       totalAmount: PdfService.formatAmount(totalBrutto),
+      bookingId: groupBookingId,
     };
 
     const renderedHtml = template(data);
@@ -612,16 +620,12 @@ class PdfService {
     const {
       cancellationReason,
       alreadyPaid = false,
-      refundMethod,
-      refundDate,
-      refundReference,
       originalInvoiceDate,
-      showBankDetails = true,
+      bankDetails,
     } = options;
 
-    const [tenant, invoiceApp, booking, allBookables] = await Promise.all([
+    const [tenant, booking, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
-      TenantManager.getTenantApp(tenantId, "invoice"),
       BookingManager.getBooking(bookingId, tenantId),
       BookableManager.getBookables(tenantId),
     ]);
@@ -695,9 +699,8 @@ class PdfService {
     ${booking.zipCode || ""} ${booking.location || ""}
   `;
 
-    const bankData = invoiceApp?.active
-      ? { bank: invoiceApp.bank, iban: invoiceApp.iban, bic: invoiceApp.bic }
-      : {};
+    const customerBankDetails =
+      PdfService._buildCustomerBankDetails(bankDetails);
 
     const data = {
       title: "Stornorechnung",
@@ -710,12 +713,7 @@ class PdfService {
       cancellationReason,
       alreadyPaid,
       refundAmount: PdfService.formatCurrency(booking.priceEur),
-      refundMethod:
-        refundMethod || PdfService.translatePayMethod(booking.paymentMethod),
-      refundDate: refundDate ? PdfService.formatDate(refundDate) : null,
-      refundReference,
-      showBankDetails: false,
-      ...bankData,
+      customerBankDetails,
       invoiceAddress,
       mainContent,
       location: tenant.location,
@@ -744,16 +742,13 @@ class PdfService {
     const {
       cancellationReason,
       alreadyPaid = false,
-      refundMethod,
-      refundDate,
-      refundReference,
       originalInvoiceDate,
-      showBankDetails = true,
+      bankDetails,
+      groupBookingId,
     } = options;
 
-    const [tenant, invoiceApp, bookings, allBookables] = await Promise.all([
+    const [tenant, bookings, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
-      TenantManager.getTenantApp(tenantId, "invoice"),
       BookingManager.getBookings(tenantId, bookingIds),
       BookableManager.getBookables(tenantId),
     ]);
@@ -843,6 +838,9 @@ class PdfService {
     ${bookings[0].zipCode || ""} ${bookings[0].location || ""}
   `;
 
+    const customerBankDetails =
+      PdfService._buildCustomerBankDetails(bankDetails);
+
     const data = {
       title: "Sammel-Stornorechnung",
       cancellationNumber,
@@ -854,19 +852,12 @@ class PdfService {
       cancellationReason,
       alreadyPaid,
       refundAmount: PdfService.formatCurrency(totalBrutto),
-      refundMethod:
-        refundMethod ||
-        PdfService.translatePayMethod(bookings[0].paymentMethod),
-      refundDate: refundDate ? PdfService.formatDate(refundDate) : null,
-      refundReference,
-      showBankDetails: false,
-      bank: invoiceApp?.bank,
-      iban: invoiceApp?.iban,
-      bic: invoiceApp?.bic,
+      customerBankDetails,
       invoiceAddress,
       mainContent,
       location: tenant.location,
       totalAmount: PdfService.formatNegativeCurrency(totalBrutto),
+      bookingId: groupBookingId,
     };
 
     const template = PdfService._loadTemplate(
@@ -909,6 +900,51 @@ class PdfService {
     });
     const negativeValue = Math.abs(value) * -1;
     return formatter.format(negativeValue);
+  }
+
+  /**
+   * Build the customer bank details HTML block for the cancellation receipt
+   * template. Returns null when no usable details are provided so the section
+   * can be omitted in the rendered PDF.
+   *
+   * The block is rendered here (and not in the template) to guarantee a
+   * consistent look across the default template and tenant-specific overrides.
+   *
+   * @param {Object|null|undefined} bankDetails - Customer-provided bank details
+   * @returns {string|null} HTML block or null when no details are available
+   */
+  static _buildCustomerBankDetails(bankDetails) {
+    if (!bankDetails || typeof bankDetails !== "object") {
+      return null;
+    }
+
+    const accountHolder = (bankDetails.accountHolder || "").toString().trim();
+    const bank = (bankDetails.bankName || bankDetails.bank || "")
+      .toString()
+      .trim();
+    const iban = (bankDetails.iban || "").toString().trim();
+    const bic = (bankDetails.bic || "").toString().trim();
+
+    if (!accountHolder && !bank && !iban && !bic) {
+      return null;
+    }
+
+    const escape = (value) =>
+      Handlebars.Utils.escapeExpression(value).replace(/\n/g, "<br />");
+
+    const rows = [
+      accountHolder ? `Kontoinhaber: ${escape(accountHolder)}` : null,
+      bank ? escape(bank) : null,
+      iban ? `IBAN: ${escape(iban)}` : null,
+      bic ? `BIC: ${escape(bic)}` : null,
+    ].filter(Boolean);
+
+    return `
+      <div class="information customer-bank-details">
+        <strong>Bankverbindung für die Rückerstattung:</strong><br />
+        ${rows.join("<br />\n        ")}
+      </div>
+    `;
   }
 
   static _loadTemplate(customTemplate, defaultTemplateName) {
