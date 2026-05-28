@@ -50,7 +50,6 @@ class CheckoutControllerV2 {
       bookWithPrice,
     } = req.body;
 
-
     const { checkoutId, generated } = await resolveCheckoutId(
       requestCheckoutId,
       user?.id,
@@ -232,37 +231,62 @@ class CheckoutControllerV2 {
       const user = req.user;
       const simulate = req.query.simulate === "true";
 
-      const bookingAttempts = Array.isArray(req.body.bookingAttempts)
-        ? req.body.bookingAttempts
+      const {
+        bookableItems: rawBookableItems,
+        bookingAttempts: rawBookingAttempts,
+        bookWithPrice,
+        paymentProvider,
+        customFieldValues,
+        couponCode,
+        name,
+        mail,
+        phone,
+        company,
+        street,
+        zipCode,
+        location,
+        comment,
+      } = req.body;
+
+      const bookableItems = Array.isArray(rawBookableItems)
+        ? rawBookableItems.filter((item) => item && item.bookableId)
         : [];
 
-      if (bookingAttempts.length === 0) {
-        throw new CheckoutError({
-          reason: CHECKOUT_REASONS.BOOKING_ATTEMPTS_MISSING,
-          statusCode: 400,
-        });
-      }
-
-      const lead = bookingAttempts[0];
-      const bookableItem = lead.bookableItems?.[0]?.bookable;
-      if (!bookableItem?.id) {
+      if (bookableItems.length === 0) {
         throw new CheckoutError({
           reason: CHECKOUT_REASONS.INVALID_BOOKABLE_ITEMS,
           statusCode: 400,
         });
       }
 
-      const bookable = await BookableManager.getBookable(bookableItem.id, tenantId);
+      const rawAttempts = Array.isArray(rawBookingAttempts)
+        ? rawBookingAttempts
+        : [];
+
+      if (rawAttempts.length === 0) {
+        throw new CheckoutError({
+          reason: CHECKOUT_REASONS.BOOKING_ATTEMPTS_MISSING,
+          statusCode: 400,
+        });
+      }
+
+      const leadBookableId = bookableItems[0].bookableId;
+      const bookable = await BookableManager.getBookable(
+        leadBookableId,
+        tenantId,
+      );
       const gb = bookable?.groupBooking;
       if (!gb?.enabled) {
         throw new CheckoutError({
           reason: CHECKOUT_REASONS.GROUP_BOOKING_DISABLED,
           statusCode: 403,
-          params: { bookableId: bookableItem.id },
+          params: { bookableId: leadBookableId },
         });
       }
 
-      const permitted = Array.isArray(gb.permittedRoles) ? gb.permittedRoles : [];
+      const permitted = Array.isArray(gb.permittedRoles)
+        ? gb.permittedRoles
+        : [];
       if (permitted.length > 0) {
         if (!user) {
           throw new CheckoutError({
@@ -271,10 +295,11 @@ class CheckoutControllerV2 {
           });
         }
 
-        const membership = await MembershipManager.getMembershipByTenantAndUserID(
-          tenantId,
-          user.id,
-        );
+        const membership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            user.id,
+          );
         const userRoles = membership?.roles || [];
         const allowed = userRoles.some((r) => permitted.includes(r));
 
@@ -287,15 +312,52 @@ class CheckoutControllerV2 {
         }
       }
 
+      const bookingAttempts = rawAttempts.map((attempt) => ({
+        timeBegin: attempt?.timeBegin,
+        timeEnd: attempt?.timeEnd,
+        bookableItems,
+        bookWithPrice,
+        customFieldValues,
+        couponCode,
+      }));
+
+      const contactData = {
+        name,
+        mail,
+        phone,
+        company,
+        street,
+        zipCode,
+        location,
+        comment,
+      };
+
       const groupBooking = await BookingService.createGroupBooking({
         tenantId,
         user,
-        contactData: req.body.contactData,
+        contactData,
         bookingAttempts,
-        paymentProvider: req.body.paymentProvider,
+        paymentProvider,
         simulate,
       });
-      return res.status(200).json({ success: true, data: groupBooking });
+
+      if (simulate || !CheckoutControllerV2._needsGroupPayment(groupBooking)) {
+        return res.status(200).json({
+          success: true,
+          data: { groupBooking, payment: null },
+        });
+      }
+
+      const payment = await CheckoutControllerV2._initiateGroupPayment({
+        tenantId,
+        groupBooking,
+        paymentProvider,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: { groupBooking, payment },
+      });
     } catch (err) {
       return CheckoutControllerV2._respondWithError(res, err, {
         logMessage: "groupCheckout: failed",
@@ -312,8 +374,6 @@ class CheckoutControllerV2 {
       const tenantId = req.params.tenant;
       const user = req.user;
       const id = req.params.id;
-
-      console.log("checkoutPermissions", {tenantId, user, id});
 
       const bookable = await BookableManager.getBookable(id, tenantId);
 
@@ -389,6 +449,40 @@ class CheckoutControllerV2 {
   }
 
   /**
+   * Group-booking variant of `_needsPayment`. Only triggers the payment
+   * provider when every booking inside the group is committed, none of
+   * them are already paid and the aggregated price is greater than 0.
+   */
+  static _needsGroupPayment(groupBooking) {
+    if (!groupBooking) return false;
+    if (
+      !Array.isArray(groupBooking.bookings) ||
+      groupBooking.bookings.length === 0
+    ) {
+      return false;
+    }
+    if (typeof groupBooking.areAllBookingsCommitted === "function") {
+      if (!groupBooking.areAllBookingsCommitted()) return false;
+    } else if (!groupBooking.bookings.every((b) => b.isCommitted)) {
+      return false;
+    }
+    if (typeof groupBooking.areSomeBookingsPaid === "function") {
+      if (groupBooking.areSomeBookingsPaid()) return false;
+    } else if (groupBooking.bookings.some((b) => b.isPayed)) {
+      return false;
+    }
+    const totalPrice =
+      typeof groupBooking.getTotalPrice === "function"
+        ? groupBooking.getTotalPrice()
+        : groupBooking.bookings.reduce(
+            (sum, b) => sum + (b.priceEur || 0) + (b.vatIncludedEur || 0),
+            0,
+          );
+    if (!totalPrice || totalPrice === 0) return false;
+    return true;
+  }
+
+  /**
    * Triggers the payment provider for a single booking. Replicates the
    * relevant parts of `PaymentController.createPayment` so the frontend
    * no longer has to make a second request after checkout.
@@ -450,6 +544,91 @@ class CheckoutControllerV2 {
         statusCode: 502,
         params: {
           paymentProvider: booking.paymentProvider,
+          message: err.message,
+        },
+      });
+    }
+  }
+
+  /**
+   * Triggers the payment provider for a group booking in aggregated mode
+   * so the frontend no longer has to call `PaymentController.createPayment`
+   * after a successful group checkout.
+   */
+  static async _initiateGroupPayment({
+    tenantId,
+    groupBooking,
+    paymentProvider,
+  }) {
+    const bookingIds = Array.isArray(groupBooking?.bookingIds)
+      ? groupBooking.bookingIds
+      : [];
+
+    const effectiveProvider =
+      groupBooking?.bookings?.[0]?.paymentProvider || paymentProvider;
+
+    if (!effectiveProvider) {
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.PAYMENT_PROVIDER_UNAVAILABLE,
+        statusCode: 409,
+        params: { paymentProvider: effectiveProvider || null },
+      });
+    }
+
+    try {
+      const lockerServiceInstance = LockerService.getInstance();
+      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
+    } catch (err) {
+      logger.warn(
+        { tenantId, groupBookingId: groupBooking?.id, err: err.message },
+        "groupCheckout: locker pre-reservation refresh failed",
+      );
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.LOCKER_UNAVAILABLE,
+        statusCode: 409,
+        params: { message: err.message },
+      });
+    }
+
+    let paymentService;
+    try {
+      paymentService = await PaymentUtils.getPaymentService(
+        tenantId,
+        bookingIds,
+        effectiveProvider,
+        { aggregated: true, groupBookingId: groupBooking.id },
+      );
+    } catch (err) {
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.PAYMENT_PROVIDER_UNAVAILABLE,
+        statusCode: 409,
+        params: {
+          paymentProvider: effectiveProvider,
+          message: err.message,
+        },
+      });
+    }
+
+    if (!paymentService) {
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.PAYMENT_PROVIDER_UNAVAILABLE,
+        statusCode: 409,
+        params: { paymentProvider: effectiveProvider },
+      });
+    }
+
+    try {
+      const data = await paymentService.createPayment();
+      return {
+        provider: effectiveProvider,
+        data,
+      };
+    } catch (err) {
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.PAYMENT_FAILED,
+        statusCode: 502,
+        params: {
+          paymentProvider: effectiveProvider,
           message: err.message,
         },
       });

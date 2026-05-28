@@ -7,7 +7,7 @@ const router = asyncRouter();
 router.post("/validate/:id", optionalAuth, CheckoutControllerV2.validateItem);
 router.post("/", optionalAuth, CheckoutControllerV2.checkout);
 router.post(
-  "/group-checkout",
+  "/group",
   optionalAuth,
   CheckoutControllerV2.groupCheckout,
 );

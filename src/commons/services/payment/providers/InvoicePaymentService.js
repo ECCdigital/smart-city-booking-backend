@@ -127,7 +127,10 @@ class InvoicePaymentService extends PaymentService {
     }
 
     const { invoice, name, invoiceId, revision, timeCreated } =
-      await InvoiceService.createAggregatedInvoice(this.tenantId, bookings);
+      await InvoiceService.createAggregatedInvoice(
+        this.tenantId,
+        this.bookingIds,
+      );
 
     for (const booking of bookings) {
       booking.attachments.push({
@@ -160,6 +163,13 @@ class InvoicePaymentService extends PaymentService {
     } catch (err) {
       logger.error("Fehler beim Versenden der Sammelrechnung:", err);
     }
+
+    return {
+      bookingIds: this.bookingIds,
+      name,
+      invoiceId,
+      revision,
+    };
   }
 
   async paymentNotification() {
