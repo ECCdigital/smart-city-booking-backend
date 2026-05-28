@@ -171,6 +171,7 @@ router.get(
   CatalogController.getInstanceCatalog,
 );
 router.get("/catalog/public", CatalogController.getPublicCatalog);
+router.get("/catalog/mode", CatalogController.getPortalMode);
 router.get("/catalog/bundle", optionalAuth, CatalogController.getCatalogBundle);
 
 router.put(

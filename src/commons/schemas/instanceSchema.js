@@ -44,8 +44,18 @@ const instanceSchemaDefinition = {
       path: { type: Array, default: [] },
     },
   },
-  enableCatalog: { type: Boolean, default: false },
-  catalogUrl: { type: String, default: "" },
+  publicOffersEnabled: { type: Boolean, default: false },
+  portalUrl: { type: String, default: "" },
+  branding: {
+    type: Object,
+    default: () => ({
+      active: false,
+      theme: {
+        colors: { primary: "", secondary: "" },
+      },
+      logoUrl: "",
+    }),
+  },
 
   bookableCustomFields: {
     type: [customFieldDefinitionSchema],
