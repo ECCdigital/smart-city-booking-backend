@@ -1,7 +1,6 @@
 const InstanceManger = require("../../data-managers/instance-manager");
 const axios = require("axios");
 const UserManager = require("../../data-managers/user-manager");
-const UserModel = require("../../data-managers/models/userModel");
 const { RoleManager } = require("../../data-managers/role-manager");
 const { User } = require("../../entities/user/user");
 const MembershipManager = require("../../data-managers/membership-manager");
@@ -13,14 +12,19 @@ class SsoService {
     let kcResponse = await SsoService.verifyToken(token, app);
 
     let user = null;
+    let userKeycloakId = null;
     let keycloakBoundUserId = null;
     let emailBoundUserId = null;
 
     if (kcResponse.sub) {
-      const rawUser = await UserModel.findOne({ keycloakId: kcResponse.sub });
-      if (rawUser) {
-        user = rawUser.toEntity().exportPublic();
-        keycloakBoundUserId = user.id;
+      const keycloakUser = await UserManager.getUserBy(
+        { keycloakId: kcResponse.sub },
+        true,
+      );
+      if (keycloakUser) {
+        keycloakBoundUserId = keycloakUser.id;
+        userKeycloakId = keycloakUser.keycloakId;
+        user = keycloakUser.exportPublic();
       }
     }
 
@@ -55,7 +59,7 @@ class SsoService {
       await SsoService.mapRoles(user, kcRoles, app);
     }
 
-    if (kcResponse.sub && user.keycloakId !== kcResponse.sub) {
+    if (kcResponse.sub && userKeycloakId !== kcResponse.sub) {
       await UserManager.updateUser(
         {
           id: user.id,
@@ -63,7 +67,6 @@ class SsoService {
         },
         false,
       );
-      user.keycloakId = kcResponse.sub;
     }
 
     user.permissions = await UserManager.getUserPermissions(user.id);

@@ -140,11 +140,6 @@ router.post(
   AuthenticationController.isSignedIn,
   UserController.changeUserId,
 );
-router.post(
-  "/users/:id/update-names",
-  AuthenticationController.isSignedIn,
-  UserController.updateUserNames,
-);
 router.put(
   "/users",
   AuthenticationController.isSignedIn,

@@ -2,14 +2,9 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
+const UserService = require("../../../commons/services/user-service");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const { RolePermission } = require("../../../commons/entities/role/role");
-const UserModel = require("../../../commons/data-managers/models/userModel");
-const BookingModel = require("../../../commons/data-managers/models/bookingModel");
-const GroupBookingModel = require("../../../commons/data-managers/models/groupBookingModel");
-const BookableModel = require("../../../commons/data-managers/models/bookableModel");
-const EventModel = require("../../../commons/data-managers/models/eventModel");
-const CouponModel = require("../../../commons/data-managers/models/couponModel");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -50,24 +45,7 @@ class UserPermissions {
  */
 class UserController {
   static async _findRawUserByIdOrKeycloak(userId, keycloakId = null) {
-    const normalizedUserId = String(userId || "").trim().toLowerCase();
-    const normalizedKeycloakId = String(keycloakId || "").trim();
-
-    let rawUser = null;
-    if (normalizedUserId) {
-      rawUser = await UserModel.findOne({ id: normalizedUserId });
-      if (!rawUser) {
-        rawUser = await UserModel.findOne({
-          id: { $regex: `^${normalizedUserId}$`, $options: "i" },
-        });
-      }
-    }
-
-    if (!rawUser && normalizedKeycloakId) {
-      rawUser = await UserModel.findOne({ keycloakId: normalizedKeycloakId });
-    }
-
-    return rawUser;
+    return await UserManager.findRawUserByIdOrKeycloak(userId, keycloakId);
   }
 
   static async _allowSyncManageUsers(actorId, tenantId, action = "update") {
@@ -249,8 +227,10 @@ class UserController {
   static async updateUser(request, response) {
     try {
       const user = request.user;
+      const tenantId = request.query.tenant || request.body?.tenantId;
 
       const newInfos = { id: request.body.id };
+      const keycloakId = String(request.body.keycloakId || "").trim();
 
       const fields = [
         "firstName",
@@ -270,8 +250,35 @@ class UserController {
         }
       });
 
-      if (await UserPermissions._allowUpdate(newInfos, user.id)) {
+      if (keycloakId) {
+        newInfos.keycloakId = keycloakId;
+      }
+
+      const hasUserUpdatePermission = await UserPermissions._allowUpdate(
+        newInfos,
+        user.id,
+      );
+      const hasSyncManagePermission = await UserController._allowSyncManageUsers(
+        user.id,
+        tenantId,
+        "update",
+      );
+
+      if (hasUserUpdatePermission || hasSyncManagePermission) {
         await UserManager.updateUser(newInfos);
+
+        if (
+          Object.prototype.hasOwnProperty.call(newInfos, "firstName") &&
+          Object.prototype.hasOwnProperty.call(newInfos, "lastName")
+        ) {
+          await UserService.updateUserNames({
+            userId: newInfos.id,
+            firstName: newInfos.firstName,
+            lastName: newInfos.lastName,
+            keycloakId: keycloakId || null,
+          });
+        }
+
         logger.info(`updated user ${newInfos.id} by user ${user?.id}`);
         response.sendStatus(200);
       } else {
@@ -293,148 +300,9 @@ class UserController {
       const currentId = request.params.id;
       const { newId, keycloakId = null, anonymize = false } = request.body;
       const tenantId = request.query.tenant || request.body?.tenantId;
-      const normalizedCurrentId = String(currentId || "").trim().toLowerCase();
-      const normalizedNewId = String(newId || "").trim().toLowerCase();
-      const normalizedKeycloakId = String(keycloakId || "").trim();
-
-      if (!normalizedNewId) {
-        response.status(400).send("Missing required parameters");
-        return;
-      }
-
       const currentUser = await UserController._findRawUserByIdOrKeycloak(
-        normalizedCurrentId,
-        normalizedKeycloakId,
-      );
-      if (!currentUser) {
-        response.status(404).send("User not found");
-        return;
-      }
-
-      const previousId = currentUser.id;
-
-      const hasUserUpdatePermission = await UserPermissions._allowUpdate(
-        { id: previousId },
-        actor.id,
-      );
-      const hasSyncManagePermission = await UserController._allowSyncManageUsers(
-        actor.id,
-        tenantId,
-        "update",
-      );
-
-      if (!hasUserUpdatePermission && !hasSyncManagePermission) {
-        logger.warn(`User ${actor?.id} not allowed to change user id`);
-        response.sendStatus(403);
-        return;
-      }
-
-      if (previousId !== normalizedNewId) {
-        const existingTargetUser = await UserModel.findOne({ id: normalizedNewId });
-        if (
-          existingTargetUser &&
-          String(existingTargetUser._id) !== String(currentUser._id)
-        ) {
-          response.status(409).send("Target user id already exists");
-          return;
-        }
-      }
-
-      const userSet = {};
-      if (previousId !== normalizedNewId) {
-        userSet.id = normalizedNewId;
-      }
-      if (normalizedKeycloakId) {
-        userSet.keycloakId = normalizedKeycloakId;
-      }
-      if (anonymize === true) {
-        userSet.firstName = "Gelöschtes Profil";
-        userSet.lastName = "";
-      }
-      if (Object.keys(userSet).length > 0) {
-        await UserModel.updateOne({ _id: currentUser._id }, { $set: userSet });
-      }
-
-      if (previousId !== normalizedNewId) {
-        await BookingModel.updateMany(
-          { assignedUserId: previousId },
-          { $set: { assignedUserId: normalizedNewId } },
-        );
-        await BookingModel.updateMany(
-          { mail: previousId },
-          { $set: { mail: normalizedNewId } },
-        );
-        await GroupBookingModel.updateMany(
-          { assignedUserId: previousId },
-          { $set: { assignedUserId: normalizedNewId } },
-        );
-        await GroupBookingModel.updateMany(
-          { mail: previousId },
-          { $set: { mail: normalizedNewId } },
-        );
-        await BookableModel.updateMany(
-          { ownerUserId: previousId },
-          { $set: { ownerUserId: normalizedNewId } },
-        );
-        await BookingModel.updateMany(
-          { "bookableItems._bookableUsed.ownerUserId": previousId },
-          {
-            $set: {
-              "bookableItems.$[item]._bookableUsed.ownerUserId": normalizedNewId,
-            },
-          },
-          {
-            arrayFilters: [{ "item._bookableUsed.ownerUserId": previousId }],
-          },
-        );
-        await EventModel.updateMany(
-          { ownerUserId: previousId },
-          { $set: { ownerUserId: normalizedNewId } },
-        );
-        await CouponModel.updateMany(
-          { ownerUserId: previousId },
-          { $set: { ownerUserId: normalizedNewId } },
-        );
-      }
-
-      logger.info(
-        `changed user id ${previousId} -> ${normalizedNewId} by user ${actor?.id}`,
-      );
-      response.status(200).send({
-        previousId,
-        id: normalizedNewId,
-        changed: previousId !== normalizedNewId,
-      });
-    } catch (error) {
-      logger.error(error);
-      response
-        .status(error.status || 500)
-        .send(error.message || "could not change user id");
-    }
-  }
-
-  /**
-   * Updates first and last name of a user.
-   */
-  static async updateUserNames(request, response) {
-    try {
-      const actor = request.user;
-      const userId = request.params.id;
-      const { firstName, lastName, keycloakId = null } = request.body;
-      const tenantId = request.query.tenant || request.body?.tenantId;
-      const normalizedUserId = String(userId || "").trim().toLowerCase();
-      const normalizedKeycloakId = String(keycloakId || "").trim();
-      const normalizedFirstName = (firstName || "").trim();
-      const normalizedLastName = (lastName || "").trim();
-
-      if (!normalizedFirstName || !normalizedLastName) {
-        response.status(400).send("Missing required parameters");
-        return;
-      }
-
-      const currentUser = await UserController._findRawUserByIdOrKeycloak(
-        normalizedUserId,
-        normalizedKeycloakId,
+        currentId,
+        keycloakId,
       );
       if (!currentUser) {
         response.status(404).send("User not found");
@@ -452,47 +320,27 @@ class UserController {
       );
 
       if (!hasUserUpdatePermission && !hasSyncManagePermission) {
-        logger.warn(`User ${actor?.id} not allowed to update user names`);
+        logger.warn(`User ${actor?.id} not allowed to change user id`);
         response.sendStatus(403);
         return;
       }
 
-      const updated = await UserModel.findOneAndUpdate(
-        { _id: currentUser._id },
-        {
-          $set: {
-            firstName: normalizedFirstName,
-            lastName: normalizedLastName,
-            ...(normalizedKeycloakId ? { keycloakId: normalizedKeycloakId } : {}),
-          },
-        },
-        { new: true },
-      );
-      if (!updated) {
-        response.status(404).send("User not found");
-        return;
-      }
-
-      const fullName = `${normalizedFirstName} ${normalizedLastName}`.trim();
-      await BookingModel.updateMany(
-        {
-          assignedUserId: currentUser.id,
-          mail: currentUser.id,
-        },
-        { $set: { name: fullName } },
-      );
-
-      logger.info(`updated user names for ${updated.id} by user ${actor?.id}`);
-      response.status(200).send({
-        id: updated.id,
-        firstName: updated.firstName,
-        lastName: updated.lastName,
+      const changeResult = await UserService.changeUserId({
+        currentId,
+        newId,
+        keycloakId,
+        anonymize,
       });
+
+      logger.info(
+        `changed user id ${changeResult.previousId} -> ${changeResult.id} by user ${actor?.id}`,
+      );
+      response.status(200).send(changeResult);
     } catch (error) {
       logger.error(error);
       response
         .status(error.status || 500)
-        .send(error.message || "could not update user names");
+        .send(error.message || "could not change user id");
     }
   }
 
@@ -525,13 +373,8 @@ class UserController {
           userObject,
           user.id,
         );
-        const hasSyncManagePermission = await UserController._allowSyncManageUsers(
-          user.id,
-          tenantId,
-          "delete",
-        );
 
-        if (hasUserDeletePermission || hasSyncManagePermission) {
+        if (hasUserDeletePermission) {
           await UserManager.deleteUser(userObject.id);
           logger.info(
             `${tenantId} -- removed user ${userObject.id} by user ${user?.id}`,
@@ -583,6 +426,17 @@ class UserController {
       });
 
       await UserManager.updateUser(user);
+
+      if (
+        Object.prototype.hasOwnProperty.call(request.body, "firstName") ||
+        Object.prototype.hasOwnProperty.call(request.body, "lastName")
+      ) {
+        await UserService.updateUserNames({
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        });
+      }
 
       const updatedUser = await UserManager.getUser(user.id, false);
 

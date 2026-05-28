@@ -281,6 +281,13 @@ class BookableManager {
       byType: typeCount,
     };
   }
+
+  static async reassignOwnerUserId(previousUserId, newUserId) {
+    await BookableModel.updateMany(
+      { ownerUserId: previousUserId },
+      { $set: { ownerUserId: newUserId } },
+    );
+  }
 }
 
 module.exports = { BookableManager };
