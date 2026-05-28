@@ -11,6 +11,7 @@ const DEFAULT_BRANDING = Object.freeze({
     colors: { primary: "", secondary: "" },
   },
   logoUrl: "",
+  faviconUrl: "",
 });
 
 const DEFAULT_PORTAL = Object.freeze({

@@ -11,12 +11,13 @@ werden muss, damit sie mit der neuen Backend-Struktur ab v4.0.0 funktioniert.
 2. **Kein `503` mehr** auf `/catalog/bundle`, `/catalog/:slug`,
    `/catalog/themes`, `/catalog/themes/:slug` – stattdessen enthält das Payload
    ein Feld `offersEnabled` bzw. `mode`.
-3. **Theme + Logo** kommen jetzt aus `instance.branding`, **`hero`** bleibt
-   pro Katalog-Slug konfigurierbar.
+3. **Theme + Logo + Favicon** kommen jetzt aus `instance.branding`,
+   **`hero`** bleibt pro Katalog-Slug konfigurierbar.
    - `branding.active` (ehemals `branding.theme.active`) ist der **einzige
      Schalter** für das gesamte Instanz-Branding. Bei `active: false`
-     enthalten die Responses **`theme: null`** **und** **`logoUrl: null`** –
-     das Frontend nutzt dann sein Default-Theme und Default-Logo.
+     enthalten die Responses **`theme: null`**, **`logoUrl: null`** **und**
+     **`faviconUrl: null`** – das Frontend nutzt dann sein Default-Theme,
+     Default-Logo und Default-Favicon.
    - `hero` (am Katalog) ist davon nicht betroffen und wird unabhängig
      ausgeliefert.
 4. Im **Instance-Settings-Formular** zwei umbenannte Felder anbieten
@@ -49,8 +50,9 @@ Routing-Hint für das Frontend.
   "mode": "offers",            // "offers" | "personal"
   "portalUrl": "https://...",
   "branding": {
-    "active": true,            // false → `theme` ist null
+    "active": true,
     "logoUrl": "https://.../logo.png",
+    "faviconUrl": "https://.../favicon.ico",
     "theme": {
       "colors": { "primary": "#005ca9", "secondary": "#ffffff" }
     }
@@ -65,6 +67,7 @@ Bei inaktivem Branding sieht der `branding`-Block so aus:
   "branding": {
     "active": false,
     "logoUrl": null,
+    "faviconUrl": null,
     "theme": null
   }
 }
@@ -90,16 +93,19 @@ Response-Schema **erweitert** (kein Breaking Change für Lese-Pfad, aber kein
   "active": true,
   "theme": { "colors": { "primary": "...", "secondary": "..." } },
   "logoUrl": "https://.../logo.png",
+  "faviconUrl": "https://.../favicon.ico",
   "hero": { "title": "Willkommen", "subtitle": "..." },
   "visibility": "public"
 }
 ```
 
-- `active`, `theme` und `logoUrl` stammen aus `instance.branding`.
+- `active`, `theme`, `logoUrl` und `faviconUrl` stammen aus
+  `instance.branding`.
 - `hero` stammt weiterhin aus dem (jeweiligen) Katalog.
-- **Bei `branding.active === false`** sind `theme` und `logoUrl` **beide
-  `null`** – das Frontend soll dann ausschließlich auf seine Default-Optik
-  zurückfallen. `hero` und `visibility` bleiben befüllt.
+- **Bei `branding.active === false`** sind `theme`, `logoUrl` und
+  `faviconUrl` **alle drei `null`** – das Frontend soll dann ausschließlich
+  auf seine Default-Optik zurückfallen. `hero` und `visibility` bleiben
+  befüllt.
 - **Wegfall**: Vorher endete der Call bei deaktiviertem Katalog in `503`.
   Frontend muss diesen Fehlerpfad **entfernen** und stattdessen den
   `active`-Flag auswerten.
@@ -112,7 +118,12 @@ Erweitert um `offersEnabled` und `branding`:
 ```json
 {
   "offersEnabled": true,
-  "branding": { "active": true, "logoUrl": "...", "theme": { "colors": {...} } },
+  "branding": {
+    "active": true,
+    "logoUrl": "...",
+    "faviconUrl": "...",
+    "theme": { "colors": {...} }
+  },
   "portalUrl": "https://...",
   "catalog": { /* exportPublic() */ },
   "tenants": [ { "id": "...", "name": "..." } ]
@@ -123,7 +134,12 @@ Erweitert um `offersEnabled` und `branding`:
 ```json
 {
   "offersEnabled": false,
-  "branding": { "active": false, "logoUrl": null, "theme": null },
+  "branding": {
+    "active": false,
+    "logoUrl": null,
+    "faviconUrl": null,
+    "theme": null
+  },
   "portalUrl": "https://...",
   "catalog": { /* nur Basisdaten */ },
   "tenants": []
@@ -153,7 +169,12 @@ Verhält sich analog. Bei `publicOffersEnabled = false`:
 {
   "offersEnabled": false,
   "slug": "<requested-slug>",
-  "branding": { "active": true, "logoUrl": "...", "theme": { "colors": {...} } }
+  "branding": {
+    "active": true,
+    "logoUrl": "...",
+    "faviconUrl": "...",
+    "theme": { "colors": {...} }
+  }
 }
 ```
 
@@ -173,9 +194,10 @@ Bei `publicOffersEnabled = true` wie bisher (vollständiges Catalog-Objekt).
 |---|---|---|
 | `enableCatalog` (Boolean) | `publicOffersEnabled` (Boolean) | Toggle „Öffentliche Buchungsangebote anzeigen" mit Hinweistext: *„Wenn deaktiviert, sehen Besucher beim Aufruf der Portal-URL nur ihren persönlichen Bereich (Profil & Buchungen)."* |
 | `catalogUrl` (String) | `portalUrl` (String) | Label „Portal-URL"; selber Input wie bisher. |
-| `catalog.theme.active` | `instance.branding.active` | Eigener Toggle „Branding aktiv" auf der Branding-Sektion. Bei `false` werden weder `theme` noch `logoUrl` ausgeliefert. |
+| `catalog.theme.active` | `instance.branding.active` | Eigener Toggle „Branding aktiv" auf der Branding-Sektion. Bei `false` werden weder `theme`, `logoUrl` noch `faviconUrl` ausgeliefert. |
 | `catalog.theme.colors` | `instance.branding.theme.colors` | Color-Picker für `primary`/`secondary`. |
 | `catalog.logoUrl` (am Catalog-Objekt) | `instance.branding.logoUrl` | Upload-Feld in der Branding-Sektion. |
+| *(neu)* | `instance.branding.faviconUrl` | Zusätzliches Upload-Feld in der Branding-Sektion (Favicon der Instanz). |
 | `catalog.hero` | **bleibt im Katalog** | Wird weiterhin im Katalog-Edit-Bildschirm gepflegt. |
 
 ### 3.2 Übergangsphase
@@ -232,7 +254,7 @@ Instance-Settings-Seite verschoben werden. Hero bleibt in der Katalog-Maske.
    - [ ] Toggle umbenennen: `enableCatalog` → `publicOffersEnabled`.
    - [ ] Input umbenennen: `catalogUrl` → `portalUrl`.
    - [ ] Neue Branding-Sektion mit `active` (Toggle), `theme.colors`
-         (primary/secondary) und `logoUrl` hinzufügen.
+         (primary/secondary), `logoUrl` und `faviconUrl` hinzufügen.
    - [ ] Frontend muss `branding.active === false` (bzw. `theme === null`
          **und** `logoUrl === null`) als "Default-Optik anwenden" behandeln –
          **kein** Logo und **kein** Theme aus dem Backend rendern.
@@ -261,7 +283,10 @@ laden.
    - `28-05-2026-add-instance-branding` (mappt `catalog.theme.active` →
      `instance.branding.active`, `catalog.theme.colors` →
      `instance.branding.theme.colors`, `catalog.logoUrl` →
-     `instance.branding.logoUrl`)
+     `instance.branding.logoUrl`, `branding.faviconUrl` wird leer angelegt)
+   - `28-05-2026-add-branding-favicon-url` (Idempotenz-Migration: ergänzt
+     `branding.faviconUrl: ""` falls noch nicht vorhanden – wichtig für
+     Umgebungen, in denen `add-instance-branding` bereits gelaufen ist)
    - `28-05-2026-rename-instance-catalog-fields` (kopiert `enableCatalog` →
      `publicOffersEnabled`, `catalogUrl` → `portalUrl`)
 2. **Frontend deployen** mit den oben beschriebenen Anpassungen.

@@ -16,6 +16,8 @@ module.exports = {
         colors: legacyTheme.colors ?? { primary: "", secondary: "" },
       },
       logoUrl: instanceCatalog?.logoUrl ?? "",
+      // `faviconUrl` existierte im alten Schema nicht und wird leer initialisiert.
+      faviconUrl: "",
     };
 
     await Instance.updateOne(

@@ -182,7 +182,6 @@ class CatalogController {
 
       response.status(200).send(themeData);
     } catch (error) {
-      console.error("Error in CatalogController.getTheme:", error);
       response.status(error.code || 500).send({
         success: false,
         message: error.message || "Internal Server Error",

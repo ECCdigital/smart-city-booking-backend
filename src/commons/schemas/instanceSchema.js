@@ -54,6 +54,7 @@ const instanceSchemaDefinition = {
         colors: { primary: "", secondary: "" },
       },
       logoUrl: "",
+      faviconUrl: "",
     }),
   },
 

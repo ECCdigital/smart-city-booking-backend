@@ -6,17 +6,23 @@ const DEFAULT_HERO = Object.freeze({ title: "", subtitle: "" });
 
 /**
  * Erstellt eine an Clients ausgelieferte Variante des Brandings.
- * Bei `branding.active === false` werden weder `theme` noch `logoUrl`
- * ausgeliefert (jeweils `null`), damit das Frontend bewusst auf seine
- * Default-Optik und ein Default-Logo zurückfällt.
+ * Bei `branding.active === false` werden weder `theme` noch `logoUrl`/
+ * `faviconUrl` ausgeliefert (jeweils `null`), damit das Frontend bewusst
+ * auf seine Default-Optik (Logo, Favicon, Theme) zurückfällt.
  */
 function exportBranding(branding) {
   if (!branding?.active) {
-    return { active: false, theme: null, logoUrl: null };
+    return {
+      active: false,
+      theme: null,
+      logoUrl: null,
+      faviconUrl: null,
+    };
   }
   return {
     active: true,
     logoUrl: branding.logoUrl ?? "",
+    faviconUrl: branding.faviconUrl ?? "",
     theme: branding.theme ?? null,
   };
 }
