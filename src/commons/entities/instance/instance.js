@@ -37,6 +37,7 @@ class Instance {
     delete this.isInitialized;
     delete this.allowedUsersToCreateTenant;
     delete this.allowAllUsersToCreateTenant;
+    delete this.bookableCustomFields;
   }
 
   /**
