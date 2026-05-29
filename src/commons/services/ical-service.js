@@ -312,13 +312,23 @@ class ICalService {
       .replace(/&nbsp;/g, " ")
       .trim();
 
+    const teaserImage = info.teaserImage || null;
+
+    const descriptionWithImage = teaserImage
+      ? [plainDescription, `Bild: ${teaserImage}`].filter(Boolean).join("\n\n")
+      : plainDescription;
+
     const eventData = {
       id: `event-${event.id}`,
       start,
       end,
       summary: info.name || "Veranstaltung",
-      description: plainDescription,
+      description: descriptionWithImage,
     };
+
+    if (teaserImage) {
+      eventData.attachments = [teaserImage];
+    }
 
     const locationParts = [];
     if (event.eventLocation?.name) {
