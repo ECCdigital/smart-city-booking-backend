@@ -123,8 +123,6 @@ class PaymentController {
         { aggregated, groupBookingId },
       );
 
-      console.log(paymentService);
-
       const data = await paymentService?.createPayment();
 
       response.status(200).send({ paymentData: data, bookings });
