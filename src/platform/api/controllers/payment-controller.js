@@ -166,6 +166,8 @@ class PaymentController {
     );
 
     try {
+      const paymentResults = [];
+
       if (isAggregated) {
         const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
@@ -174,7 +176,9 @@ class PaymentController {
           bookings[0].paymentProvider,
           options,
         );
-        await paymentService.paymentNotification(request.query);
+        paymentResults.push(
+          await paymentService.paymentNotification(request.query),
+        );
       } else {
         for (const booking of bookings) {
           let paymentService = await PaymentUtils.getPaymentService(
@@ -182,13 +186,21 @@ class PaymentController {
             booking.id,
             booking.paymentProvider,
           );
-          await paymentService.paymentNotification(request.query);
+          paymentResults.push(
+            await paymentService.paymentNotification(request.query),
+          );
         }
       }
 
-      logger.info(
-        `${tenantId} -- bookings ${aggregatedBookingIds} successfully payed and updated.`,
-      );
+      if (paymentResults.every(Boolean)) {
+        logger.info(
+          `${tenantId} -- bookings ${aggregatedBookingIds} successfully payed and updated.`,
+        );
+      } else {
+        logger.warn(
+          `${tenantId} -- payment notification processed without successful payment for bookings ${aggregatedBookingIds}.`,
+        );
+      }
       response.sendStatus(200);
     } catch {
       logger.warn(
@@ -231,6 +243,8 @@ class PaymentController {
     );
 
     try {
+      const paymentResults = [];
+
       if (isAggregated) {
         const options = { aggregated: isAggregated };
         let paymentService = await PaymentUtils.getPaymentService(
@@ -239,7 +253,9 @@ class PaymentController {
           bookings[0].paymentProvider,
           options,
         );
-        await paymentService.paymentNotification(request.body);
+        paymentResults.push(
+          await paymentService.paymentNotification(request.body),
+        );
       } else {
         for (const booking of bookings) {
           let paymentService = await PaymentUtils.getPaymentService(
@@ -247,13 +263,21 @@ class PaymentController {
             booking.id,
             booking.paymentProvider,
           );
-          await paymentService.paymentNotification(request.body);
+          paymentResults.push(
+            await paymentService.paymentNotification(request.body),
+          );
         }
       }
 
-      logger.info(
-        `${tenantId} -- booking ${aggregatedBookingIds} successfully payed and updated.`,
-      );
+      if (paymentResults.every(Boolean)) {
+        logger.info(
+          `${tenantId} -- booking ${aggregatedBookingIds} successfully payed and updated.`,
+        );
+      } else {
+        logger.warn(
+          `${tenantId} -- payment notification processed without successful payment for booking ${aggregatedBookingIds}.`,
+        );
+      }
       response.sendStatus(200);
     } catch {
       logger.warn(
