@@ -95,7 +95,7 @@ class PmPaymentService extends PaymentService {
     const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
     let PM_CHECKOUT_URL;
     if (paymentApp.paymentMode === "prod") {
-      PM_CHECKOUT_URL = "https://payment.govconnect.de/payment/secure";
+      PM_CHECKOUT_URL = "https://www.payment.govconnect.de/payment/secure";
     } else {
       PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
     }
@@ -208,7 +208,7 @@ class PmPaymentService extends PaymentService {
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_STATUS_URL;
       if (paymentApp.paymentProvider === "prod") {
-        PM_STATUS_URL = "https://payment.govconnect.de/payment/status";
+        PM_STATUS_URL = "https://www.payment.govconnect.de/payment/status";
       } else {
         PM_STATUS_URL = "https://payment-test.govconnect.de/payment/status";
       }
