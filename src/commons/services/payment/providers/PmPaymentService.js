@@ -13,6 +13,16 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+const PM_CHECKOUT_URL_PROD =
+  "https://www.payment.govconnect.de/payment/secure";
+
+const PM_CHECKOUT_URL_TEST =
+  "https://payment-test.govconnect.de/payment/secure";
+
+const PM_STATUS_URL_PROD = "https://www.payment.govconnect.de/payment/status";
+
+const PM_STATUS_URL_TEST = "https://payment-test.govconnect.de/payment/status";
+
 class PmPaymentService extends PaymentService {
   static PM_SUCCESS_CODE = 1;
 
@@ -31,9 +41,9 @@ class PmPaymentService extends PaymentService {
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_CHECKOUT_URL;
       if (paymentApp.paymentMode === "prod") {
-        PM_CHECKOUT_URL = "https://www.payment.govconnect.de/payment/secure";
+        PM_CHECKOUT_URL = PM_CHECKOUT_URL_PROD;
       } else {
-        PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
+        PM_CHECKOUT_URL = PM_CHECKOUT_URL_TEST;
       }
 
       const amount = Math.round(booking.priceEur * 100 || 0).toString();
@@ -95,9 +105,9 @@ class PmPaymentService extends PaymentService {
     const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
     let PM_CHECKOUT_URL;
     if (paymentApp.paymentMode === "prod") {
-      PM_CHECKOUT_URL = "https://www.payment.govconnect.de/payment/secure";
+      PM_CHECKOUT_URL = PM_CHECKOUT_URL_PROD;
     } else {
-      PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
+      PM_CHECKOUT_URL = PM_CHECKOUT_URL_TEST;
     }
 
     const amount = Math.round(
@@ -208,9 +218,9 @@ class PmPaymentService extends PaymentService {
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_STATUS_URL;
       if (paymentApp.paymentProvider === "prod") {
-        PM_STATUS_URL = "https://www.payment.govconnect.de/payment/status";
+        PM_STATUS_URL = PM_STATUS_URL_PROD;
       } else {
-        PM_STATUS_URL = "https://payment-test.govconnect.de/payment/status";
+        PM_STATUS_URL = PM_STATUS_URL_TEST;
       }
 
       const config = {
