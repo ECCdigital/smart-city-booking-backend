@@ -17,6 +17,30 @@ const OVERRIDABLE_SNIPPETS = Object.freeze([
   "payment-link-after-approval",
 ]);
 
+const OVERRIDE_TEMPLATE_VARIABLES = Object.freeze([
+  {
+    name: "tenantName",
+    description: "Name des Mandanten",
+  },
+  {
+    name: "supportEmail",
+    description: "Support-E-Mail-Adresse des Mandanten",
+  },
+  {
+    name: "customerName",
+    description: "Name des Kunden aus der Buchung",
+  },
+  {
+    name: "customerContact",
+    description:
+      "Kontaktdaten des Kunden als HTML-Block (Name, Firma, E-Mail, Telefon, Adresse)",
+  },
+  {
+    name: "currentDate",
+    description: "Aktuelles Versanddatum im Format TT.MM.JJJJ",
+  },
+]);
+
 const overridableSnippetSet = new Set(OVERRIDABLE_SNIPPETS);
 
 const subjectTemplateCache = new Map();
@@ -122,6 +146,7 @@ function validateMailSubjects(mailSubjects = {}) {
 
 module.exports = {
   OVERRIDABLE_SNIPPETS,
+  OVERRIDE_TEMPLATE_VARIABLES,
   MAX_SUBJECT_OVERRIDE_LENGTH,
   getSnippetOverride,
   getSubjectOverride,

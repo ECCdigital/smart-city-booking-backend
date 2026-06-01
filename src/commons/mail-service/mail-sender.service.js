@@ -1,5 +1,7 @@
+const Handlebars = require("handlebars");
 const MailerService = require("./mail-service");
 const TenantManager = require("../data-managers/tenant-manager");
+const BookingManager = require("../data-managers/booking-manager");
 const MailDataService = require("./mail-data.service");
 const { renderSnippet } = require("./templates/template-loader");
 const {
@@ -7,6 +9,67 @@ const {
   getSubjectOverride,
   renderSubjectOverride,
 } = require("./templates/mail-snippet-overrides");
+
+const overrideDateFormatter = new Intl.DateTimeFormat("de-DE", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+function escapeHtml(value) {
+  if (value === null || value === undefined || value === "") return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildCustomerContactHtml(booking) {
+  if (!booking) return "";
+
+  const lines = [];
+  if (booking.name) {
+    lines.push(`<strong>Name:</strong> ${escapeHtml(booking.name)}`);
+  }
+  if (booking.company) {
+    lines.push(`<strong>Firma:</strong> ${escapeHtml(booking.company)}`);
+  }
+  if (booking.mail) {
+    lines.push(`<strong>E-Mail:</strong> ${escapeHtml(booking.mail)}`);
+  }
+  if (booking.phone) {
+    lines.push(`<strong>Telefon:</strong> ${escapeHtml(booking.phone)}`);
+  }
+
+  const cityLine = [booking.zipCode, booking.location]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join(" ");
+  const addressParts = [];
+  if (booking.street) addressParts.push(escapeHtml(booking.street));
+  if (cityLine) addressParts.push(cityLine);
+  if (addressParts.length) {
+    lines.push(`<strong>Adresse:</strong> ${addressParts.join(", ")}`);
+  }
+
+  return lines.join("<br />");
+}
+
+function buildOverrideTemplateVariables({ tenant, booking, extra = {} }) {
+  const customerContactHtml = buildCustomerContactHtml(booking);
+  return {
+    tenantName: tenant?.name ?? "",
+    supportEmail: tenant?.mail ?? "",
+    customerName: booking?.name ?? "",
+    customerContact: customerContactHtml
+      ? new Handlebars.SafeString(customerContactHtml)
+      : "",
+    currentDate: overrideDateFormatter.format(new Date()),
+    ...extra,
+  };
+}
 
 class MailSenderService {
   /**
@@ -152,12 +215,6 @@ class MailSenderService {
       tenant,
       mailType.templateName,
     );
-    const subject = subjectOverrideSource
-      ? renderSubjectOverride(subjectOverrideSource, {
-          tenantName: tenant.name,
-          supportEmail: tenant.mail,
-        })
-      : defaultSubject;
 
     const includeQRCode = this.resolve(mailType.includeQRCode, ctx);
     const sendBCC = this.resolve(mailType.sendBCC, ctx);
@@ -166,17 +223,31 @@ class MailSenderService {
     const { paymentUrl, cancelReason, rejectionReason, verifyRejectionUrl } =
       templateData;
 
-    const message = renderSnippet(
-      mailType.templateName,
-      {
-        tenantName: tenant.name,
-        supportEmail: tenant.mail,
-        verifyRejectionUrl,
-      },
-      { overrideSource },
-    );
+    const renderForBooking = (booking) => {
+      const variables = buildOverrideTemplateVariables({
+        tenant,
+        booking,
+        extra: { verifyRejectionUrl },
+      });
+
+      const message = renderSnippet(mailType.templateName, variables, {
+        overrideSource,
+      });
+
+      const subject = subjectOverrideSource
+        ? renderSubjectOverride(subjectOverrideSource, variables)
+        : defaultSubject;
+
+      return { message, subject };
+    };
 
     if (aggregated) {
+      const primaryBookingId = bookingIds[0];
+      const primaryBooking = primaryBookingId
+        ? await BookingManager.getBooking(primaryBookingId, tenantId)
+        : null;
+      const { message, subject } = renderForBooking(primaryBooking);
+
       await this.sendAggregatedBookingMail({
         address,
         bookingIds,
@@ -192,6 +263,11 @@ class MailSenderService {
       });
     } else {
       for (const bookingId of bookingIds) {
+        const booking = bookingId
+          ? await BookingManager.getBooking(bookingId, tenantId)
+          : null;
+        const { message, subject } = renderForBooking(booking);
+
         await this.sendBookingMail({
           address,
           bookingId,
