@@ -13,6 +13,8 @@ const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
 
+router.use("/webhooks/access", require("./routes/access-webhook.routes"));
+
 // Public
 router.get("/tenants/public", TenantController.getPublicTenants);
 router.get(

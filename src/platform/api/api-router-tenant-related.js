@@ -151,7 +151,11 @@ router.delete(
   BookingController.removeBooking,
 );
 
-router.get("/bookings/:ids/status", optionalAuth, BookingController.getBookingStatus);
+router.get(
+  "/bookings/:ids/status",
+  optionalAuth,
+  BookingController.getBookingStatus,
+);
 
 router.get(
   "/bookings/:id/status/public",
@@ -485,6 +489,7 @@ router.delete(
 router.use("/catalog", require("./routes/catalog.routes"));
 router.use("/locker", require("./routes/locker.routes"));
 router.use("/access", require("./routes/access.routes"));
+router.use("/access-apps", require("./routes/access-app.routes"));
 router.use("/ical", require("./routes/ical.routes"));
 
 module.exports = router;

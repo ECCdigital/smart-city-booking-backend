@@ -21,7 +21,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
-| **A. Nuki-Integration** | 🟡 | A0-A5 fertig · 6 / 8 Blöcke |
+| **A. Nuki-Integration** | 🟡 | A0-A6 weitgehend fertig · 6.5 / 8 Blöcke |
 | **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
@@ -102,13 +102,13 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| A6.1 | `access.routes.js`: `POST /:id/close`, `GET /:id/status` | Phase 7a.1 | ⬜ | |
-| A6.2 | `access-controller.js`: `close` + `getAccessPoints` (TODO ~Z.88) | Phase 7a.2 | ⬜ | |
-| A6.3 | `access-app.routes.js` + `access-app-controller.js` + `access-info-service.js` | Phase 7a.3-4 | ⬜ | |
-| A6.4 | Routen in `api-router-tenant-related.js` einhängen | Phase 7a.5 | ⬜ | |
-| A6.5 | Webhook-Route `POST /api/webhooks/access/nuki/:tenant` + Controller | Phase 7b.1-2 | ⬜ | |
-| A6.6 | Auto-Register Webhook bei Aktivierung der Nuki-App + Re-Register-Endpoint | Phase 7b.3 | ⬜ | |
-| A6.7 | `open-status` für Nuki webhook-getrieben aus DB lesen | Phase 7b.4 | ⬜ | |
+| A6.1 | `access.routes.js`: `POST /:id/close`, `GET /:id/status` | Phase 7a.1 | ✅ | Runtime-Routen ergänzt |
+| A6.2 | `access-controller.js`: `close` + `getAccessPoints` (TODO ~Z.88) | Phase 7a.2 | ✅ | `close`, `status`, `getAccessPoints` aktiv |
+| A6.3 | `access-app.routes.js` + `access-app-controller.js` + `access-info-service.js` | Phase 7a.3-4 | ✅ | Provider, Access-Points, Test, Webhook-Register |
+| A6.4 | Routen in `api-router-tenant-related.js` einhängen | Phase 7a.5 | ✅ | `/access-apps` registriert |
+| A6.5 | Webhook-Route `POST /api/webhooks/access/nuki/:tenant` + Controller | Phase 7b.1-2 | ✅ | generisch via `/webhooks/access/:provider/:tenant` |
+| A6.6 | Auto-Register Webhook bei Aktivierung der Nuki-App + Re-Register-Endpoint | Phase 7b.3 | 🟡 | manueller Register-/Unregister-Endpoint fertig; Auto-Register wartet auf persistierte Webhook-ID |
+| A6.7 | `open-status` für Nuki webhook-getrieben aus DB lesen | Phase 7b.4 | ✅ | liest `accessInfo.lastEvent`, fallback Live-Status |
 
 ### A7 – Permissions & Migration (für Nuki produktiv)
 

@@ -9,10 +9,22 @@ router.post(
   AccessController.open,
 );
 
+router.post(
+  "/:accessPointId/close",
+  AuthenticationController.isSignedIn,
+  AccessController.close,
+);
+
 router.get(
   "/:accessPointId/open-status",
   AuthenticationController.isSignedIn,
   AccessController.getOpenStatus,
+);
+
+router.get(
+  "/:accessPointId/status",
+  AuthenticationController.isSignedIn,
+  AccessController.getStatus,
 );
 
 router.get(

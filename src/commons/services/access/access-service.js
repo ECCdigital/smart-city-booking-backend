@@ -100,10 +100,19 @@ class AccessService {
       accessPointId,
     );
     const provider = getAccessProvider(accessPoint.provider);
-    const status =
-      typeof provider.getOpenStatus === "function"
-        ? await provider.getOpenStatus(tenant, openProcessId)
-        : await provider.getStatus(accessPoint, bookingContext);
+    let status;
+
+    if (typeof provider.getOpenStatus === "function" && openProcessId) {
+      status = await provider.getOpenStatus(tenant, openProcessId);
+    } else if (bookingContext.lastEvent) {
+      status = {
+        confirmed: bookingContext.lastEvent.success === true,
+        confirmedAt: bookingContext.lastEvent.timestamp || null,
+        event: bookingContext.lastEvent,
+      };
+    } else {
+      status = await provider.getStatus(accessPoint, bookingContext);
+    }
 
     await this._log({
       tenantId: tenant,
@@ -114,6 +123,29 @@ class AccessService {
       payload: status,
       actor: { source: "system" },
     });
+    return status;
+  }
+
+  static async getStatus(tenant, bookingId, accessPointId) {
+    const { accessPoint, bookingContext } = await this._resolve(
+      tenant,
+      bookingId,
+      accessPointId,
+    );
+
+    const provider = getAccessProvider(accessPoint.provider);
+    const status = await provider.getStatus(accessPoint, bookingContext);
+
+    await this._log({
+      tenantId: tenant,
+      accessPoint,
+      bookingId,
+      action: "status",
+      result: "success",
+      payload: status,
+      actor: { source: "system" },
+    });
+
     return status;
   }
 

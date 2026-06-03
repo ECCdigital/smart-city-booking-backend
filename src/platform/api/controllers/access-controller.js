@@ -44,6 +44,39 @@ class AccessController {
   }
 
   /**
+   * POST /:tenant/access/:accessPointId/close
+   */
+  static async close(request, response) {
+    try {
+      const { tenant, accessPointId } = request.params;
+      const { bookingId } = request.query;
+      const user = request.user;
+
+      const allowed = await AccessController._canOperate(
+        user.id,
+        tenant,
+        bookingId,
+      );
+      if (!allowed) return response.sendStatus(403);
+
+      const result = await AccessService.close(
+        tenant,
+        bookingId,
+        accessPointId,
+        user.id,
+      );
+
+      logger.info(
+        `${tenant} -- user ${user.id} closed access-point ${accessPointId} (booking ${bookingId})`,
+      );
+      return ApiResponse.ok(response, { data: result });
+    } catch (err) {
+      logger.error(err);
+      return ApiResponse.error(response, "Could not close access point");
+    }
+  }
+
+  /**
    * GET /:tenant/access/:accessPointId/open-status?openProcessId=15682&bookingId=123
    */
   static async getOpenStatus(request, response) {
@@ -51,13 +84,6 @@ class AccessController {
       const { tenant, accessPointId } = request.params;
       const { openProcessId, bookingId } = request.query;
       const user = request.user;
-
-      if (!openProcessId) {
-        return ApiResponse.error(
-          response,
-          "Missing openProcessId query parameter",
-        );
-      }
 
       const allowed = await AccessController._canOperate(
         user.id,
@@ -78,6 +104,36 @@ class AccessController {
     } catch (err) {
       logger.error(err);
       return ApiResponse.error(response, "Could not get open status");
+    }
+  }
+
+  /**
+   * GET /:tenant/access/:accessPointId/status?bookingId=123
+   */
+  static async getStatus(request, response) {
+    try {
+      const { tenant, accessPointId } = request.params;
+      const { bookingId } = request.query;
+      const user = request.user;
+
+      const allowed = await AccessController._canOperate(
+        user.id,
+        tenant,
+        bookingId,
+      );
+
+      if (!allowed) return response.sendStatus(403);
+
+      const status = await AccessService.getStatus(
+        tenant,
+        bookingId,
+        accessPointId,
+      );
+
+      return ApiResponse.ok(response, { data: status });
+    } catch (err) {
+      logger.error(err);
+      return ApiResponse.error(response, "Could not get access point status");
     }
   }
 
