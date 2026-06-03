@@ -1,7 +1,11 @@
 const bunyan = require("bunyan");
 const { getAccessProvider } = require("./providers/access-provider-registry");
 const BookingManager = require("../../data-managers/booking-manager");
+const { BookableManager } = require("../../data-managers/bookable-manager");
 const PermissionsService = require("../permission-service");
+const SecurityUtils = require("../../utilities/security-utils");
+const AccessLogService = require("./access-log-service");
+const { AccessPointMode } = require("../../entities/access/access-point");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -19,11 +23,32 @@ class AccessService {
       accessPointId,
     );
 
-    const provider = getAccessProvider(accessPoint.provider);
-    const result = await provider.open(accessPoint, bookingContext);
+    try {
+      const provider = getAccessProvider(accessPoint.provider);
+      const result = await provider.open(accessPoint, bookingContext);
 
-    await this._log(tenant, userId, accessPointId, bookingId, "open");
-    return result;
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "open",
+        result: "success",
+        payload: result,
+      });
+      return result;
+    } catch (err) {
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "open",
+        result: "failure",
+        errorMessage: err.message,
+      });
+      throw err;
+    }
   }
 
   /**
@@ -36,31 +61,220 @@ class AccessService {
       accessPointId,
     );
 
-    const provider = getAccessProvider(accessPoint.provider);
-    const result = await provider.close(accessPoint, bookingContext);
+    try {
+      const provider = getAccessProvider(accessPoint.provider);
+      const result = await provider.close(accessPoint, bookingContext);
 
-    await this._log(tenant, userId, accessPointId, bookingId, "close");
-    return result;
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "close",
+        result: "success",
+        payload: result,
+      });
+      return result;
+    } catch (err) {
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "close",
+        result: "failure",
+        errorMessage: err.message,
+      });
+      throw err;
+    }
   }
 
   /**
    * Returns the current state of an access point.
    */
   static async getOpenStatus(tenant, bookingId, accessPointId, openProcessId) {
-    const { accessPoint } = await this._resolve(
+    const { accessPoint, bookingContext } = await this._resolve(
       tenant,
       bookingId,
       accessPointId,
     );
     const provider = getAccessProvider(accessPoint.provider);
-    return await provider.getOpenStatus(tenant, openProcessId);
+    const status =
+      typeof provider.getOpenStatus === "function"
+        ? await provider.getOpenStatus(tenant, openProcessId)
+        : await provider.getStatus(accessPoint, bookingContext);
+
+    await this._log({
+      tenantId: tenant,
+      accessPoint,
+      bookingId,
+      action: "status",
+      result: "success",
+      payload: status,
+      actor: { source: "system" },
+    });
+    return status;
   }
 
   /**
    * Returns all access points for a booking.
    */
   static async getByBooking(tenant, bookingId) {
-    // TODO:
+    const { lockers, doors } = await this._getBookingAccessPoints(
+      tenant,
+      bookingId,
+    );
+
+    return [
+      ...lockers.map(({ accessPoint, bookingContext }) => ({
+        ...accessPoint,
+        externalBookingId: bookingContext.externalBookingId,
+        lastOpenBoxId: bookingContext.lastOpenBoxId,
+        isProvisioned: true,
+      })),
+      ...doors.map(({ accessPoint, bookingContext }) => ({
+        ...accessPoint,
+        authorizationId: bookingContext.authorizationId || null,
+        isProvisioned: bookingContext.isProvisioned || false,
+        provisionedAt: bookingContext.provisionedAt || null,
+        lastEvent: bookingContext.lastEvent || null,
+      })),
+    ];
+  }
+
+  static async provisionForBooking(tenant, bookingId) {
+    const { booking, doors } = await this._getBookingAccessPoints(
+      tenant,
+      bookingId,
+    );
+
+    for (const { accessPoint, bookingContext } of doors) {
+      if (!this._usesAuthorization(accessPoint.mode)) {
+        continue;
+      }
+
+      if (bookingContext.isProvisioned && bookingContext.authorizationId) {
+        continue;
+      }
+
+      const provider = getAccessProvider(accessPoint.provider);
+
+      try {
+        const result = await provider.grantAuthorization(
+          accessPoint,
+          bookingContext,
+        );
+
+        this._upsertAccessInfo(booking, accessPoint, {
+          authorizationId: result.authorizationId,
+          pin: result.pin ? SecurityUtils.encrypt(result.pin) : null,
+          isProvisioned: true,
+          provisionedAt: Date.now(),
+          providerResponse: result.providerResponse || null,
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "provision",
+          result: "success",
+          payload: {
+            authorizationId: result.authorizationId,
+            providerResponse: result.providerResponse || null,
+          },
+          actor: { source: "system" },
+        });
+      } catch (err) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "provision",
+          result: "failure",
+          errorMessage: err.message,
+          actor: { source: "system" },
+        });
+        throw err;
+      }
+    }
+
+    await BookingManager.storeBooking(booking);
+    return booking.accessInfo;
+  }
+
+  static async revokeForBooking(tenant, bookingId) {
+    const { booking, doors } = await this._getBookingAccessPoints(
+      tenant,
+      bookingId,
+    );
+
+    for (const { accessPoint, bookingContext } of doors) {
+      if (!this._usesAuthorization(accessPoint.mode)) {
+        continue;
+      }
+
+      if (!bookingContext.authorizationId) {
+        continue;
+      }
+
+      const provider = getAccessProvider(accessPoint.provider);
+
+      try {
+        const result = await provider.revokeAuthorization(
+          accessPoint,
+          bookingContext,
+        );
+
+        this._upsertAccessInfo(booking, accessPoint, {
+          isProvisioned: false,
+          revokedAt: Date.now(),
+          providerResponse: result.providerResponse || null,
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "revoke",
+          result: "success",
+          payload: {
+            authorizationId: bookingContext.authorizationId,
+            providerResponse: result.providerResponse || null,
+          },
+          actor: { source: "system" },
+        });
+      } catch (err) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "revoke",
+          result: "failure",
+          errorMessage: err.message,
+          actor: { source: "system" },
+        });
+      }
+    }
+
+    await BookingManager.storeBooking(booking);
+    return booking.accessInfo;
+  }
+
+  static async updateForBooking(tenant, oldBooking, newBooking) {
+    const changedTime =
+      oldBooking.timeBegin !== newBooking.timeBegin ||
+      oldBooking.timeEnd !== newBooking.timeEnd;
+    const changedAccessPoints =
+      (await this._getDoorAccessPointKey(oldBooking, tenant)) !==
+      (await this._getDoorAccessPointKey(newBooking, tenant));
+
+    if (!changedTime && !changedAccessPoints) {
+      return newBooking.accessInfo || [];
+    }
+
+    await this.revokeForBooking(tenant, oldBooking.id);
+    return this.provisionForBooking(tenant, newBooking.id);
   }
 
   /**
@@ -81,45 +295,193 @@ class AccessService {
    * Resolves access point + builds booking context for the provider.
    */
   static async _resolve(tenant, bookingId, accessPointId) {
-    const BookingManager = require("../../data-managers/booking-manager");
+    const { lockers, doors } = await this._getBookingAccessPoints(
+      tenant,
+      bookingId,
+    );
+
+    const resolved = [...lockers, ...doors].find(
+      ({ accessPoint }) => String(accessPoint.id) === String(accessPointId),
+    );
+
+    if (!resolved) {
+      throw new Error(
+        `Access point ${accessPointId} not found in booking ${bookingId}`,
+      );
+    }
+
+    return resolved;
+  }
+
+  static async _getBookingAccessPoints(tenant, bookingId) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
 
     if (!booking) {
       throw new Error(`Booking ${bookingId} not found`);
     }
 
-    const lockerInfo = booking.lockerInfo?.find(
-      (l) => String(l.processId) === String(accessPointId),
-    );
+    const lockers = this._getLockerAccessPoints(tenant, booking);
+    const doors = await this._getDoorAccessPoints(tenant, booking);
 
-    if (!lockerInfo) {
-      throw new Error(
-        `Access point ${accessPointId} not found in booking ${bookingId}`,
-      );
-    }
+    return { booking, lockers, doors };
+  }
 
-    return {
+  static _getLockerAccessPoints(tenant, booking) {
+    return (booking.lockerInfo || []).map((lockerInfo) => ({
       accessPoint: {
-        id: accessPointId,
+        id: lockerInfo.processId,
         tenant,
         provider: lockerInfo.lockerSystem,
         type: "locker",
       },
       bookingContext: {
         tenant,
-        bookingId,
+        bookingId: booking.id,
         externalBookingId: lockerInfo.processId,
         lastOpenBoxId: lockerInfo.ifbsMetadata?.lastOpenBoxId,
       },
+    }));
+  }
+
+  static async _getDoorAccessPoints(tenant, booking) {
+    const bookableIds = this._getBookableIds(booking);
+    const bookables = await BookableManager.getBookablesByIds(
+      tenant,
+      bookableIds,
+    );
+
+    return bookables.flatMap((bookable) => {
+      if (bookable.accessPointDetails?.active !== true) {
+        return [];
+      }
+
+      return (bookable.accessPointDetails.points || []).map((point) => {
+        const accessInfo = (booking.accessInfo || []).find(
+          (info) => String(info.accessPointId) === String(point.id),
+        );
+        const accessPoint = {
+          id: point.id,
+          tenant,
+          type: "door",
+          provider: point.provider,
+          externalId: point.externalId,
+          locationId: point.locationId || null,
+          label: point.label || "",
+          mode: point.mode || AccessPointMode.AUTHORIZATION,
+          config: point.config || {},
+          bookableId: bookable.id,
+          bookableTitle: bookable.title,
+        };
+
+        return {
+          accessPoint,
+          bookingContext: {
+            tenant,
+            bookingId: booking.id,
+            timeBegin: booking.timeBegin,
+            timeEnd: booking.timeEnd,
+            booking,
+            accessInfo,
+            authorizationId: accessInfo?.authorizationId || null,
+            isProvisioned: accessInfo?.isProvisioned || false,
+            provisionedAt: accessInfo?.provisionedAt || null,
+            lastEvent: accessInfo?.lastEvent || null,
+          },
+        };
+      });
+    });
+  }
+
+  static _getBookableIds(booking) {
+    return [
+      ...new Set(
+        (booking.bookableItems || [])
+          .map((item) => item.bookableId || item._bookableUsed?.id)
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  static _usesAuthorization(mode) {
+    return (
+      mode === AccessPointMode.AUTHORIZATION || mode === AccessPointMode.BOTH
+    );
+  }
+
+  static _upsertAccessInfo(booking, accessPoint, updates) {
+    if (!Array.isArray(booking.accessInfo)) {
+      booking.accessInfo = [];
+    }
+
+    const index = booking.accessInfo.findIndex(
+      (info) => String(info.accessPointId) === String(accessPoint.id),
+    );
+    const existing = index >= 0 ? booking.accessInfo[index] : {};
+    const next = {
+      ...existing,
+      accessPointId: accessPoint.id,
+      accessPointType: accessPoint.type,
+      provider: accessPoint.provider,
+      externalId: accessPoint.externalId,
+      mode: accessPoint.mode,
+      ...updates,
     };
+
+    if (index >= 0) {
+      booking.accessInfo[index] = next;
+    } else {
+      booking.accessInfo.push(next);
+    }
+  }
+
+  static async _getDoorAccessPointKey(booking, tenant) {
+    const doors = await this._getDoorAccessPoints(tenant, booking);
+    return doors
+      .map(({ accessPoint }) =>
+        [
+          accessPoint.id,
+          accessPoint.provider,
+          accessPoint.externalId,
+          accessPoint.mode,
+        ].join(":"),
+      )
+      .sort()
+      .join("|");
   }
 
   /** @private */
-  static async _log(tenant, userId, accessPointId, bookingId, action) {
+  static async _log({
+    tenantId,
+    userId,
+    accessPoint,
+    bookingId,
+    action,
+    result = "pending",
+    payload = {},
+    errorMessage = null,
+    actor = null,
+  }) {
     logger.info(
-      `${tenant} -- user ${userId} performed ${action} on access-point ${accessPointId} (booking ${bookingId})`,
+      `${tenantId} -- ${action} ${result} on access-point ${accessPoint.id} (booking ${bookingId})`,
     );
-    // TODO: Audit-Log in DB schreiben
+
+    try {
+      await AccessLogService.log({
+        tenantId,
+        bookingId,
+        accessPointId: accessPoint.id,
+        accessPointType: accessPoint.type,
+        provider: accessPoint.provider,
+        externalId: accessPoint.externalId || null,
+        action,
+        actor: actor || { userId, source: userId ? "user" : "system" },
+        result,
+        payload,
+        errorMessage,
+      });
+    } catch (err) {
+      logger.error(`Failed to write access log: ${err.message}`);
+    }
   }
 }
 

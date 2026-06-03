@@ -40,6 +40,7 @@ const accessLogSchemaDefinition = {
   errorCode: { type: String, default: null },
   errorMessage: { type: String, default: null },
   timestamp: { type: Double, default: () => Date.now() },
+  expiresAt: { type: Date, default: null },
 };
 
 module.exports = {

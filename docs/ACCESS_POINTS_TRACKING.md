@@ -21,7 +21,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
-| **A. Nuki-Integration** | 🟡 | A0-A3 fertig · 4 / 8 Blöcke |
+| **A. Nuki-Integration** | 🟡 | A0-A4 fertig · 5 / 8 Blöcke |
 | **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
@@ -83,12 +83,12 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| A4.1 | `_resolve()` Door- vs. Locker-Pfad | Phase 5a.1 | ⬜ | |
-| A4.2 | `getByBooking()` implementieren (TODO ~Z.63) | Phase 5a.2 | ⬜ | |
-| A4.3 | `provisionForBooking` / `revokeForBooking` / `updateForBooking` | Phase 5a.3 | ⬜ | |
-| A4.4 | `accessLogModel.js` + `access-log-manager.js` + `access-log-service.js` | Phase 5b.1 | ⬜ | |
-| A4.5 | Logging in alle AccessService-Operationen + IfbsProvider einhängen | Phase 5b.4-5 | ⬜ | |
-| A4.6 | Retention via `ACCESS_LOG_RETENTION_DAYS` (TTL-Index) | Phase 5b.3 | ⬜ | |
+| A4.1 | `_resolve()` Door- vs. Locker-Pfad | Phase 5a.1 | ✅ | Locker bleibt, Door über Bookables + `accessInfo` |
+| A4.2 | `getByBooking()` implementieren (TODO ~Z.63) | Phase 5a.2 | ✅ | vereinheitlichte Locker-/Door-Liste ohne PIN |
+| A4.3 | `provisionForBooking` / `revokeForBooking` / `updateForBooking` | Phase 5a.3 | ✅ | Nuki Authorization-Lifecycle vorbereitet |
+| A4.4 | `accessLogModel.js` + `access-log-manager.js` + `access-log-service.js` | Phase 5b.1 | ✅ | append-only `AccessLogService.log` |
+| A4.5 | Logging in alle AccessService-Operationen + IfbsProvider einhängen | Phase 5b.4-5 | ✅ | open/close/status/provision/revoke via Service |
+| A4.6 | Retention via `ACCESS_LOG_RETENTION_DAYS` (TTL-Index) | Phase 5b.3 | ✅ | `expiresAt` TTL, Default 730 Tage |
 
 ### A5 – Lifecycle-Hooks + PIN-Mail
 
