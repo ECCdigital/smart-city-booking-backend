@@ -21,7 +21,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
-| **A. Nuki-Integration** | 🟡 | A0-A2 fertig · 3 / 8 Blöcke |
+| **A. Nuki-Integration** | 🟡 | A0-A3 fertig · 4 / 8 Blöcke |
 | **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
@@ -72,12 +72,12 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| A3.1 | `access-provider.js` um neue Methoden erweitern (grant/revoke/list/webhook) | Phase 4.1 | ⬜ | |
-| A3.2 | `nuki-access-provider.js`: `open` / `close` / `getStatus` | Phase 4.2 | ⬜ | |
-| A3.3 | `nuki-access-provider.js`: `grantAuthorization` / `revokeAuthorization` | Phase 4.2 | ⬜ | |
-| A3.4 | `nuki-access-provider.js`: `listAccessPoints` | Phase 4.2 | ⬜ | |
-| A3.5 | `nuki-access-provider.js`: `registerWebhook` / `parseWebhook` / `verifyWebhookSignature` | Phase 4.2 | ⬜ | |
-| A3.6 | Registrierung `nuki` in `register-access-providers.js` | Phase 4.4 | ⬜ | |
+| A3.1 | `access-provider.js` um neue Methoden erweitern (grant/revoke/list/webhook) | Phase 4.1 | ✅ | Default-Fehler für optionale Methoden |
+| A3.2 | `nuki-access-provider.js`: `open` / `close` / `getStatus` | Phase 4.2 | ✅ | unlock/lock/state über Nuki-Client |
+| A3.3 | `nuki-access-provider.js`: `grantAuthorization` / `revokeAuthorization` | Phase 4.2 | ✅ | keypad-PIN + Authorization-ID-Rückgabe |
+| A3.4 | `nuki-access-provider.js`: `listAccessPoints` | Phase 4.2 | ✅ | Smartlocks auf interne Door-Struktur gemappt |
+| A3.5 | `nuki-access-provider.js`: `registerWebhook` / `parseWebhook` / `verifyWebhookSignature` | Phase 4.2 | ✅ | Callback-Methoden + HMAC-Helfer |
+| A3.6 | Registrierung `nuki` in `register-access-providers.js` | Phase 4.4 | ✅ | Provider-Registry-Check grün |
 
 ### A4 – AccessService + AccessLogService
 
