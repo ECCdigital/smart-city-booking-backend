@@ -132,7 +132,7 @@ class AccessAppController {
   }
 
   static async _canManageTenants(userId, tenant) {
-    return PermissionService._allowWriteAny(
+    return PermissionService._allowUpdateAny(
       userId,
       tenant,
       RolePermission.MANAGE_TENANTS,

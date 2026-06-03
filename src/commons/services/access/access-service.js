@@ -102,17 +102,24 @@ class AccessService {
     const provider = getAccessProvider(accessPoint.provider);
     let status;
 
+    let statusSource;
+
     if (typeof provider.getOpenStatus === "function" && openProcessId) {
       status = await provider.getOpenStatus(tenant, openProcessId);
+      statusSource = "open_process";
     } else if (bookingContext.lastEvent) {
       status = {
         confirmed: bookingContext.lastEvent.success === true,
         confirmedAt: bookingContext.lastEvent.timestamp || null,
         event: bookingContext.lastEvent,
       };
+      statusSource = "last_event";
     } else {
       status = await provider.getStatus(accessPoint, bookingContext);
+      statusSource = "provider_status";
     }
+
+    status = this._normalizeOpenStatus(status, statusSource);
 
     await this._log({
       tenantId: tenant,
@@ -134,7 +141,10 @@ class AccessService {
     );
 
     const provider = getAccessProvider(accessPoint.provider);
-    const status = await provider.getStatus(accessPoint, bookingContext);
+    const status = this._normalizeOpenStatus(
+      await provider.getStatus(accessPoint, bookingContext),
+      "provider_status",
+    );
 
     await this._log({
       tenantId: tenant,
@@ -147,6 +157,54 @@ class AccessService {
     });
 
     return status;
+  }
+
+  static _normalizeOpenStatus(status = {}, statusSource = null) {
+    const open = this._resolveOpen(status);
+
+    return {
+      ...status,
+      open,
+      locked: this._resolveLocked(status, open),
+      doorOpen: typeof status.doorOpen === "boolean" ? status.doorOpen : null,
+      statusSource,
+    };
+  }
+
+  static _resolveOpen(status) {
+    if (typeof status.open === "boolean") {
+      return status.open;
+    }
+
+    if (typeof status.confirmed === "boolean") {
+      return status.confirmed;
+    }
+
+    if (status.state === "open" || status.state === "unlocked") {
+      return true;
+    }
+
+    if (status.state === "closed" || status.state === "locked") {
+      return false;
+    }
+
+    return null;
+  }
+
+  static _resolveLocked(status, open) {
+    if (typeof status.locked === "boolean") {
+      return status.locked;
+    }
+
+    if (status.state === "closed" || status.state === "locked") {
+      return true;
+    }
+
+    if (open === true) {
+      return false;
+    }
+
+    return null;
   }
 
   /**

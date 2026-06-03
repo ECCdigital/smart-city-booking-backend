@@ -1,6 +1,7 @@
 # Access-Points – Umsetzungs-Tracking
 
 Tracking-Board zum [ACCESS_POINTS_IMPLEMENTATION_PLAN.md](./ACCESS_POINTS_IMPLEMENTATION_PLAN.md).
+Frontend-Handover für Nuki: [ACCESS_POINTS_FRONTEND_NUKI.md](./ACCESS_POINTS_FRONTEND_NUKI.md).
 
 **Strategie:** Zuerst **Nuki** vollständig integrieren und produktiv testen
 (Meilenstein A). Erst wenn Nuki stabil läuft, **Salto KS** ergänzen
@@ -21,7 +22,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
-| **A. Nuki-Integration** | 🟡 | A0-A6 weitgehend fertig · 6.5 / 8 Blöcke |
+| **A. Nuki-Integration** | 🟡 | A0-A7 weitgehend fertig · 7.5 / 8 Blöcke (nur A6.6 Auto-Register offen) |
 | **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
@@ -114,8 +115,8 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| A7.1 | Permissions prüfen (`MANAGE_BOOKABLES`, `MANAGE_TENANTS`, Owner-Check) | Phase 8 | ⬜ | |
-| A7.2 | Migration: Defaults `accessPointDetails` / `accessInfo`, `accessLogs`-Collection + Indizes | Phase 9 | ⬜ | |
+| A7.1 | Permissions prüfen (`MANAGE_BOOKABLES`, `MANAGE_TENANTS`, Owner-Check) | Phase 8 | ✅ | Runtime: Owner+aktiv/`MANAGE_BOOKINGS`; Config: `MANAGE_BOOKABLES`(R)/`MANAGE_TENANTS`(W) |
+| A7.2 | Migration: Defaults `accessPointDetails` / `accessInfo`, `accessLogs`-Collection + Indizes | Phase 9 | ✅ | `03-06-2026-add-access-points.js` (createCollection + syncIndexes) |
 
 **✅ Definition of Done Meilenstein A (Nuki):**
 - [ ] Bookable kann Nuki-Tür zugewiesen bekommen (UI listet Smartlocks)
