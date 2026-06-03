@@ -14,7 +14,7 @@ class TenantApplication {
       type: {
         type: String,
         required: true,
-        enum: ["auth", "payment", "locker"],
+        enum: ["auth", "payment", "locker", "access"],
       },
       id: { type: String, required: true },
       active: { type: Boolean, default: false },

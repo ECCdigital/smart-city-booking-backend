@@ -135,6 +135,10 @@ const bookableSchemaDefinition = {
     default: [],
   },
   lockerDetails: { type: Object, default: { active: false, units: [] } },
+  accessPointDetails: {
+    type: Object,
+    default: { active: false, points: [] },
+  },
   requiredFields: { type: [String], default: [] },
 
   externalProviders: {

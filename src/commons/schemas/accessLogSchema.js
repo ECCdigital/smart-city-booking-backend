@@ -1,0 +1,48 @@
+const { Double } = require("mongodb");
+const { Schema } = require("mongoose");
+
+const accessLogActorSchemaDefinition = {
+  userId: { type: String, default: null },
+  source: {
+    type: String,
+    enum: ["user", "system", "webhook"],
+    default: "system",
+  },
+};
+
+const accessLogSchemaDefinition = {
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, required: true, ref: "Tenant" },
+  bookingId: { type: String, default: null },
+  accessPointId: { type: String, default: null },
+  accessPointType: {
+    type: String,
+    enum: ["locker", "door"],
+    default: null,
+  },
+  provider: { type: String, default: null },
+  externalId: { type: String, default: null },
+  action: {
+    type: String,
+    enum: ["open", "close", "provision", "revoke", "status", "webhook"],
+    required: true,
+  },
+  actor: {
+    type: new Schema(accessLogActorSchemaDefinition, { _id: false }),
+    default: () => ({}),
+  },
+  result: {
+    type: String,
+    enum: ["success", "failure", "pending"],
+    default: "pending",
+  },
+  payload: { type: Object, default: {} },
+  errorCode: { type: String, default: null },
+  errorMessage: { type: String, default: null },
+  timestamp: { type: Double, default: () => Date.now() },
+};
+
+module.exports = {
+  accessLogSchemaDefinition,
+  accessLogActorSchemaDefinition,
+};

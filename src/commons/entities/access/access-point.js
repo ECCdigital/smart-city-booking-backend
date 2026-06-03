@@ -1,7 +1,12 @@
-// commons/entities/access/access-point.js
-
 const AccessPointType = Object.freeze({
   LOCKER: "locker",
+  DOOR: "door",
+});
+
+const AccessPointMode = Object.freeze({
+  REMOTE: "remote",
+  AUTHORIZATION: "authorization",
+  BOTH: "both",
 });
 
 const AccessPointState = Object.freeze({
@@ -14,12 +19,12 @@ class AccessPoint {
   constructor({
     id,
     tenant,
-    type, // AccessPointType
-    provider, // z.B. "ilockit", "nuki", "salto"
-    externalId, // ID beim Provider
-    locationId, // optional: Standort
-    label, // z.B. "Box 12" oder "Raum 3.04"
-    metadata, // provider-spezifische Daten
+    type,
+    provider,
+    externalId,
+    locationId,
+    label,
+    metadata,
   }) {
     this.id = id;
     this.tenant = tenant;
@@ -32,4 +37,9 @@ class AccessPoint {
   }
 }
 
-module.exports = { AccessPoint, AccessPointType, AccessPointState };
+module.exports = {
+  AccessPoint,
+  AccessPointType,
+  AccessPointMode,
+  AccessPointState,
+};
