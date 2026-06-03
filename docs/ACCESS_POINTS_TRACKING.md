@@ -21,7 +21,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
-| **A. Nuki-Integration** | 🟡 | A0 fertig · 1 / 8 Blöcke |
+| **A. Nuki-Integration** | 🟡 | A0-A1 fertig · 2 / 8 Blöcke |
 | **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
@@ -54,8 +54,8 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| A1.1 | `NukiAccessApplication` (`apiToken` verschlüsselt, `apiBaseUrl`) | Phase 2.1 | ⬜ | |
-| A1.2 | Registrierung in `createAccessApplication` / `applicationFactory` | Phase 2.2 | ⬜ | |
+| A1.1 | `NukiAccessApplication` (`apiToken` verschlüsselt, `apiBaseUrl`) | Phase 2.1 | ✅ | Default `https://api.nuki.io`, `apiToken` encrypt/decrypt |
+| A1.2 | Registrierung in `createAccessApplication` / `applicationFactory` | Phase 2.2 | ✅ | `id: "nuki"` registriert, Factory-Check grün |
 
 ### A2 – Nuki API-Client
 
