@@ -388,6 +388,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {boolean} bookWithPrice - Whether to book with price.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} lockerInfo - The locker info.
+   * @param {Array} accessInfo - The provisioned access-point info.
    * @param {Object} [cancellationPolicy] - Admin override for the booking's
    *   cancellation policy. When provided, it replaces the value aggregated
    *   from the underlying bookables.
@@ -422,6 +423,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     bookWithPrice,
     checkoutId,
     lockerInfo,
+    accessInfo,
     cancellationPolicy,
   }) {
     super({
@@ -455,6 +457,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     this.internalComments = internalComments || "";
     this.rejectionReason = rejectionReason || "";
     this.lockerInfo = lockerInfo || null;
+    this.accessInfo = accessInfo || [];
     this.cancellationPolicyOverride = cancellationPolicy;
   }
 
@@ -510,6 +513,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     const booking = await super.prepareBooking(options);
     booking.internalComments = this.internalComments;
     booking.rejectionReason = this.rejectionReason;
+    booking.accessInfo = this.accessInfo;
 
     if (
       this.cancellationPolicyOverride &&

@@ -6,6 +6,7 @@ const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const AccessLogService = require("./access-log-service");
 const { AccessPointMode } = require("../../entities/access/access-point");
+const MailController = require("../../mail-service/mail-controller");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -147,6 +148,7 @@ class AccessService {
       tenant,
       bookingId,
     );
+    const provisionedAccessPoints = [];
 
     for (const { accessPoint, bookingContext } of doors) {
       if (!this._usesAuthorization(accessPoint.mode)) {
@@ -172,6 +174,15 @@ class AccessService {
           provisionedAt: Date.now(),
           providerResponse: result.providerResponse || null,
         });
+        if (result.pin) {
+          provisionedAccessPoints.push({
+            accessPointId: accessPoint.id,
+            label: accessPoint.label || accessPoint.id,
+            provider: accessPoint.provider,
+            bookableTitle: accessPoint.bookableTitle || "",
+            pin: result.pin,
+          });
+        }
 
         await this._log({
           tenantId: tenant,
@@ -200,6 +211,7 @@ class AccessService {
     }
 
     await BookingManager.storeBooking(booking);
+    await this._sendProvisionedMail(booking, provisionedAccessPoints);
     return booking.accessInfo;
   }
 
@@ -209,6 +221,12 @@ class AccessService {
       bookingId,
     );
 
+    await this._revokeResolvedDoors(tenant, booking, doors);
+    await BookingManager.storeBooking(booking);
+    return booking.accessInfo;
+  }
+
+  static async _revokeResolvedDoors(tenant, booking, doors) {
     for (const { accessPoint, bookingContext } of doors) {
       if (!this._usesAuthorization(accessPoint.mode)) {
         continue;
@@ -235,7 +253,7 @@ class AccessService {
         await this._log({
           tenantId: tenant,
           accessPoint,
-          bookingId,
+          bookingId: booking.id,
           action: "revoke",
           result: "success",
           payload: {
@@ -248,7 +266,7 @@ class AccessService {
         await this._log({
           tenantId: tenant,
           accessPoint,
-          bookingId,
+          bookingId: booking.id,
           action: "revoke",
           result: "failure",
           errorMessage: err.message,
@@ -256,9 +274,6 @@ class AccessService {
         });
       }
     }
-
-    await BookingManager.storeBooking(booking);
-    return booking.accessInfo;
   }
 
   static async updateForBooking(tenant, oldBooking, newBooking) {
@@ -273,7 +288,11 @@ class AccessService {
       return newBooking.accessInfo || [];
     }
 
-    await this.revokeForBooking(tenant, oldBooking.id);
+    const { doors: oldDoors } = await this._getBookingAccessPointsFromBooking(
+      tenant,
+      oldBooking,
+    );
+    await this._revokeResolvedDoors(tenant, oldBooking, oldDoors);
     return this.provisionForBooking(tenant, newBooking.id);
   }
 
@@ -320,6 +339,10 @@ class AccessService {
       throw new Error(`Booking ${bookingId} not found`);
     }
 
+    return this._getBookingAccessPointsFromBooking(tenant, booking);
+  }
+
+  static async _getBookingAccessPointsFromBooking(tenant, booking) {
     const lockers = this._getLockerAccessPoints(tenant, booking);
     const doors = await this._getDoorAccessPoints(tenant, booking);
 
@@ -447,6 +470,25 @@ class AccessService {
       )
       .sort()
       .join("|");
+  }
+
+  static async _sendProvisionedMail(booking, provisionedAccessPoints) {
+    if (!provisionedAccessPoints.length || !booking.mail) {
+      return;
+    }
+
+    try {
+      await MailController.sendAccessProvisioned(
+        booking.mail,
+        booking.id,
+        booking.tenantId,
+        provisionedAccessPoints,
+      );
+    } catch (err) {
+      logger.error(
+        `${booking.tenantId} -- failed to send access provisioned mail for booking ${booking.id}: ${err.message}`,
+      );
+    }
   }
 
   /** @private */

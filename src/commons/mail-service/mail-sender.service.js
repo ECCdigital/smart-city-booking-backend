@@ -220,14 +220,19 @@ class MailSenderService {
     const sendBCC = this.resolve(mailType.sendBCC, ctx);
     const addRejectionLink = this.resolve(mailType.addRejectionLink, ctx);
     const overrideSource = getSnippetOverride(tenant, mailType.templateName);
-    const { paymentUrl, cancelReason, rejectionReason, verifyRejectionUrl } =
-      templateData;
+    const {
+      paymentUrl,
+      cancelReason,
+      rejectionReason,
+      verifyRejectionUrl,
+      accessPoints,
+    } = templateData;
 
     const renderForBooking = (booking) => {
       const variables = buildOverrideTemplateVariables({
         tenant,
         booking,
-        extra: { verifyRejectionUrl },
+        extra: { verifyRejectionUrl, accessPoints },
       });
 
       const message = renderSnippet(mailType.templateName, variables, {

@@ -21,7 +21,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
-| **A. Nuki-Integration** | 🟡 | A0-A4 fertig · 5 / 8 Blöcke |
+| **A. Nuki-Integration** | 🟡 | A0-A5 fertig · 6 / 8 Blöcke |
 | **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
@@ -94,9 +94,9 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| A5.1 | `booking-service.js`: `provision/update/revoke` an Locker-Hooks andocken | Phase 6.1 | ⬜ | |
-| A5.2 | PIN-Mail-Template + Versand bei erfolgreichem Provisioning | Phase 6.2 | ⬜ | |
-| A5.3 | Nuki Authorization-Lifecycle (keypad-PIN, `authorizationId` speichern) | Phase 6.4 | ⬜ | |
+| A5.1 | `booking-service.js`: `provision/update/revoke` an Locker-Hooks andocken | Phase 6.1 | ✅ | Create/Commit/Pay/Update/Cancel/Reject angebunden |
+| A5.2 | PIN-Mail-Template + Versand bei erfolgreichem Provisioning | Phase 6.2 | ✅ | `access-provisioned` Mail mit neu erzeugten PINs |
+| A5.3 | Nuki Authorization-Lifecycle (keypad-PIN, `authorizationId` speichern) | Phase 6.4 | ✅ | Lifecycle über A3/A4 Provider + `booking.accessInfo` |
 
 ### A6 – Routen, Controller & Webhooks
 

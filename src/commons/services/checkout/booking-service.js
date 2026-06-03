@@ -12,6 +12,7 @@ const {
 } = require("./bundle-checkout-service");
 const ReceiptService = require("../payment/receipt-service");
 const LockerService = require("../locker/locker-service");
+const AccessService = require("../access/access-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
 const {
@@ -253,6 +254,7 @@ class BookingService {
             booking.tenantId,
             booking.id,
           );
+          await AccessService.provisionForBooking(booking.tenantId, booking.id);
         } else {
           await lockerServiceInstance.handlePreReserve(
             booking.tenantId,
@@ -495,6 +497,7 @@ class BookingService {
 
     const lockerServiceInstance = LockerService.getInstance();
     await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+    await AccessService.revokeForBooking(booking.tenantId, booking.id);
     await BookingManager.removeBooking(booking.id, booking.tenantId);
   }
 
@@ -552,6 +555,7 @@ class BookingService {
         paymentMethod: updatedBooking.paymentMethod,
         attachments: oldBooking.attachments,
         lockerInfo: oldBooking.lockerInfo,
+        accessInfo: oldBooking.accessInfo,
         checkoutId,
         cancellationPolicy: updatedBooking.cancellationPolicy,
       });
@@ -601,13 +605,28 @@ class BookingService {
           oldBooking,
           booking,
         );
+        if (!booking.isRejected) {
+          await AccessService.updateForBooking(
+            updatedBooking.tenantId,
+            oldBooking,
+            booking,
+          );
+        }
       } else if (onUnreject) {
         await lockerServiceInstance.handleCreate(
           updatedBooking.tenantId,
           booking.id,
         );
+        await AccessService.provisionForBooking(
+          updatedBooking.tenantId,
+          booking.id,
+        );
       } else {
         await lockerServiceInstance.handlePreReserve(
+          updatedBooking.tenantId,
+          booking.id,
+        );
+        await AccessService.revokeForBooking(
           updatedBooking.tenantId,
           booking.id,
         );
@@ -660,6 +679,10 @@ class BookingService {
         try {
           const lockerServiceInstance = LockerService.getInstance();
           await lockerServiceInstance.handleCreate(
+            originBooking.tenantId,
+            originBooking.id,
+          );
+          await AccessService.provisionForBooking(
             originBooking.tenantId,
             originBooking.id,
           );
@@ -766,6 +789,7 @@ class BookingService {
             booking.tenantId,
             booking.id,
           );
+          await AccessService.provisionForBooking(booking.tenantId, booking.id);
         } catch (err) {
           logger.error(err);
         }
@@ -850,6 +874,7 @@ class BookingService {
       try {
         const lockerServiceInstance = LockerService.getInstance();
         await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
+        await AccessService.provisionForBooking(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
       }
@@ -891,6 +916,7 @@ class BookingService {
             booking.tenantId,
             booking.id,
           );
+          await AccessService.provisionForBooking(booking.tenantId, booking.id);
         } catch (err) {
           logger.error(err);
         }
@@ -976,6 +1002,7 @@ class BookingService {
       try {
         const lockerServiceInstance = LockerService.getInstance();
         await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+        await AccessService.revokeForBooking(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
       }
@@ -1083,6 +1110,7 @@ class BookingService {
       try {
         const lockerServiceInstance = LockerService.getInstance();
         await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
+        await AccessService.revokeForBooking(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
       }
