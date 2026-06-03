@@ -21,7 +21,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
-| **A. Nuki-Integration** | 🟡 | A0-A1 fertig · 2 / 8 Blöcke |
+| **A. Nuki-Integration** | 🟡 | A0-A2 fertig · 3 / 8 Blöcke |
 | **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
@@ -61,12 +61,12 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| A2.1 | `base-access-api-client.js` | Phase 3 | ⬜ | |
-| A2.2 | `nuki-api-client.js`: `getSmartlocks`, `executeAction`, `getSmartlockState` | Phase 3 | ⬜ | |
-| A2.3 | `nuki-api-client.js`: `createAuthorization` / `deleteAuthorization` (keypad-PIN) | Phase 3 | ⬜ | |
-| A2.4 | `nuki-api-client.js`: `registerNotification` / `unregisterNotification` | Phase 3 | ⬜ | |
-| A2.5 | `nuki-api-client.js`: `testConnection` (`GET /account`) | Phase 3 | ⬜ | |
-| A2.6 | `access-client-registry.js` + `access-test-registry.js` + `index.js` | Phase 3 | ⬜ | |
+| A2.1 | `base-access-api-client.js` | Phase 3 | ✅ | Base-Methoden + Connection-Error-Mapping |
+| A2.2 | `nuki-api-client.js`: `getSmartlocks`, `executeAction`, `getSmartlockState` | Phase 3 | ✅ | inkl. `getAccessPoints`/`getStatus` Alias |
+| A2.3 | `nuki-api-client.js`: `createAuthorization` / `deleteAuthorization` (keypad-PIN) | Phase 3 | ✅ | Payload wird unverändert an Nuki übergeben |
+| A2.4 | `nuki-api-client.js`: `registerNotification` / `unregisterNotification` | Phase 3 | ✅ | Callback-Client-Methoden vorhanden |
+| A2.5 | `nuki-api-client.js`: `testConnection` (`GET /account`) | Phase 3 | ✅ | Registry-Test-Handler nutzt `apiToken` |
+| A2.6 | `access-client-registry.js` + `access-test-registry.js` + `index.js` | Phase 3 | ✅ | Nuki registriert, decrypt-aware Client-Erzeugung |
 
 ### A3 – Nuki Access-Provider
 

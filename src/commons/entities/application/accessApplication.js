@@ -27,13 +27,13 @@ class NukiAccessApplication extends AccessApplication {
   }
 
   decrypt() {
-    if (this.apiToken) {
+    if (this.apiToken?.iv != null && this.apiToken?.data != null) {
       this.apiToken = SecurityUtils.decrypt(this.apiToken);
     }
   }
 
   encrypt() {
-    if (this.apiToken) {
+    if (this.apiToken && typeof this.apiToken === "string") {
       this.apiToken = SecurityUtils.encrypt(this.apiToken);
     }
   }
