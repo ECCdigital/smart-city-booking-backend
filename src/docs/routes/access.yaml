@@ -188,6 +188,32 @@ components:
       type: object
       description: An access point linked to a booking
       properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [locker, door]
+        provider:
+          type: string
+        externalId:
+          type: string
+        label:
+          type: string
+        mode:
+          type: string
+          enum: [remote, authorization, both]
+        capabilities:
+          type: array
+          description: Atomic provider capabilities detected for the access point
+          items:
+            type: string
+            enum: [remote, authorization]
+        supportedModes:
+          type: array
+          description: Modes that can be selected for this access point
+          items:
+            type: string
+            enum: [remote, authorization, both]
 
     ErrorResponse:
       type: object

@@ -250,6 +250,24 @@ class AccessService {
       }
 
       const provider = getAccessProvider(accessPoint.provider);
+      const supportedModes = await this._getSupportedModes(
+        provider,
+        accessPoint,
+        tenant,
+      );
+
+      if (supportedModes && !supportedModes.includes(accessPoint.mode)) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "provision",
+          result: "failure",
+          errorMessage: `Access mode '${accessPoint.mode}' is not supported by access point '${accessPoint.id}'`,
+          actor: { source: "system" },
+        });
+        continue;
+      }
 
       try {
         const result = await provider.grantAuthorization(
@@ -519,6 +537,14 @@ class AccessService {
     return (
       mode === AccessPointMode.AUTHORIZATION || mode === AccessPointMode.BOTH
     );
+  }
+
+  static async _getSupportedModes(provider, accessPoint, tenant) {
+    if (!provider.constructor.capabilities.includes("getSupportedModes")) {
+      return null;
+    }
+
+    return provider.getSupportedModes(accessPoint, tenant);
   }
 
   static _upsertAccessInfo(booking, accessPoint, updates) {

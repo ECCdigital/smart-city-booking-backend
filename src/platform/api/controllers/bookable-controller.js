@@ -6,6 +6,10 @@ const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
+const AccessInfoService = require("../../../commons/services/access/access-info-service");
+const {
+  AccessPointMode,
+} = require("../../../commons/entities/access/access-point");
 const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
@@ -274,6 +278,7 @@ class BookableController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await BookableController._validateAccessPointModes(bookable, tenant);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -287,6 +292,9 @@ class BookableController {
       }
     } catch (err) {
       logger.error(err);
+      if (err.statusCode) {
+        return response.status(err.statusCode).send(err.message);
+      }
       response.status(500).send("Could not create bookable");
     }
   }
@@ -335,6 +343,7 @@ class BookableController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await BookableController._validateAccessPointModes(bookable, tenant);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
@@ -348,7 +357,50 @@ class BookableController {
       }
     } catch (err) {
       logger.error(err);
+      if (err.statusCode) {
+        return response.status(err.statusCode).send(err.message);
+      }
       response.status(500).send("Could not update bookable");
+    }
+  }
+
+  static async _validateAccessPointModes(bookable, tenant) {
+    const points = bookable.accessPointDetails?.active
+      ? bookable.accessPointDetails.points || []
+      : [];
+    const providerIds = [
+      ...new Set(points.map((point) => point.provider)),
+    ].filter(Boolean);
+    const providerAccessPoints = new Map();
+
+    for (const provider of providerIds) {
+      const accessPoints = await AccessInfoService.getAccessPoints(
+        tenant,
+        provider,
+      );
+      providerAccessPoints.set(provider, accessPoints || []);
+    }
+
+    for (const point of points) {
+      const configuredMode = point.mode || AccessPointMode.AUTHORIZATION;
+      const providerPoints = providerAccessPoints.get(point.provider) || [];
+      const providerPoint = providerPoints.find(
+        (candidate) =>
+          String(candidate.id) === String(point.id) ||
+          String(candidate.externalId) === String(point.externalId),
+      );
+
+      if (!Array.isArray(providerPoint?.supportedModes)) {
+        continue;
+      }
+
+      if (!providerPoint.supportedModes.includes(configuredMode)) {
+        const err = new Error(
+          `Access mode '${configuredMode}' is not supported by access point '${point.label || point.id || point.externalId}'`,
+        );
+        err.statusCode = 400;
+        throw err;
+      }
     }
   }
 

@@ -9,11 +9,38 @@ const AccessPointMode = Object.freeze({
   BOTH: "both",
 });
 
+const AccessCapability = Object.freeze({
+  REMOTE: "remote",
+  AUTHORIZATION: "authorization",
+});
+
 const AccessPointState = Object.freeze({
   OPEN: "open",
   CLOSED: "closed",
   UNKNOWN: "unknown",
 });
+
+function deriveSupportedModes(capabilities = []) {
+  const hasRemote = capabilities.includes(AccessCapability.REMOTE);
+  const hasAuthorization = capabilities.includes(
+    AccessCapability.AUTHORIZATION,
+  );
+  const modes = [];
+
+  if (hasRemote) {
+    modes.push(AccessPointMode.REMOTE);
+  }
+
+  if (hasAuthorization) {
+    modes.push(AccessPointMode.AUTHORIZATION);
+  }
+
+  if (hasRemote && hasAuthorization) {
+    modes.push(AccessPointMode.BOTH);
+  }
+
+  return modes;
+}
 
 class AccessPoint {
   constructor({
@@ -39,7 +66,9 @@ class AccessPoint {
 
 module.exports = {
   AccessPoint,
+  AccessCapability,
   AccessPointType,
   AccessPointMode,
   AccessPointState,
+  deriveSupportedModes,
 };

@@ -29,6 +29,12 @@ class AccessProvider {
     );
   }
 
+  async getSupportedModes() {
+    throw new Error(
+      `getSupportedModes() is not supported by ${this.constructor.name}`,
+    );
+  }
+
   async registerWebhook(tenant, callbackUrl) {
     throw new Error(
       `registerWebhook() is not supported by ${this.constructor.name}`,

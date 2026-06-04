@@ -9,6 +9,17 @@ const NUKI_ACTIONS = Object.freeze({
   LOCK_N_GO: 4,
 });
 
+const NUKI_DEVICE_TYPES = Object.freeze({
+  SMART_LOCK_1_2: 0,
+  BOX: 1,
+  OPENER: 2,
+  SMART_DOOR: 3,
+  SMART_LOCK_3_4: 4,
+  SMART_LOCK_ULTRA: 5,
+});
+
+const NUKI_NON_REMOTE_TYPES = Object.freeze([NUKI_DEVICE_TYPES.BOX]);
+
 // Nuki smart lock states (state.state) as defined by the Nuki Web API.
 const NUKI_LOCK_STATES = Object.freeze({
   0: "uncalibrated",
@@ -144,6 +155,25 @@ class NukiApiClient extends BaseAccessApiClient {
     return this._request("post", "/callback/remove", { id: notificationId });
   }
 
+  static getCapabilitiesForSmartlock(smartlock) {
+    const config = smartlock?.config || {};
+    const type = smartlock?.type ?? config.deviceType ?? null;
+    const capabilities = [];
+
+    if (
+      smartlock?.virtualDevice !== true &&
+      !NUKI_NON_REMOTE_TYPES.includes(type)
+    ) {
+      capabilities.push("remote");
+    }
+
+    if (config.keypadPaired === true || config.keypad2Paired === true) {
+      capabilities.push("authorization");
+    }
+
+    return capabilities;
+  }
+
   static get capabilities() {
     return [
       "getSmartlocks",
@@ -166,7 +196,7 @@ class NukiApiClient extends BaseAccessApiClient {
     const client = new NukiApiClient(apiToken, apiBaseUrl);
 
     try {
-      await client._request("get", "/account");
+      await client._request("get", "/smartlock");
       return { success: true, message: "Connection successful" };
     } catch (err) {
       return BaseAccessApiClient.handleConnectionError(err);
@@ -204,6 +234,8 @@ class NukiApiClient extends BaseAccessApiClient {
 module.exports = {
   NukiApiClient,
   NUKI_ACTIONS,
+  NUKI_DEVICE_TYPES,
+  NUKI_NON_REMOTE_TYPES,
   NUKI_LOCK_STATES,
   NUKI_DOOR_STATES,
   NUKI_OPEN_LOCK_STATES,

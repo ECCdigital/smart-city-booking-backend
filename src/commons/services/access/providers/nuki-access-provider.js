@@ -1,10 +1,11 @@
 const crypto = require("crypto");
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
+const { createClient } = require("../clients/access-client-registry");
+const { NukiApiClient, NUKI_ACTIONS } = require("../clients/nuki-api-client");
 const {
-  createClient,
-} = require("../clients/access-client-registry");
-const { NUKI_ACTIONS } = require("../clients/nuki-api-client");
+  deriveSupportedModes,
+} = require("../../../entities/access/access-point");
 
 require("../clients");
 
@@ -92,7 +93,11 @@ class NukiAccessProvider extends AccessProvider {
       bookingContext.authorizationId || accessPoint.authorizationId;
 
     if (!authorizationId) {
-      return { success: true, skipped: true, reason: "missing authorizationId" };
+      return {
+        success: true,
+        skipped: true,
+        reason: "missing authorizationId",
+      };
     }
 
     const client = await this._getClient(bookingContext.tenant);
@@ -111,17 +116,33 @@ class NukiAccessProvider extends AccessProvider {
   async listAccessPoints(tenant) {
     const client = await this._getClient(tenant);
     const smartlocks = await client.getSmartlocks();
-    const list = Array.isArray(smartlocks) ? smartlocks : smartlocks?.smartlocks;
+    const list = Array.isArray(smartlocks)
+      ? smartlocks
+      : smartlocks?.smartlocks;
 
-    return (list || []).map((smartlock) => ({
-      id: String(smartlock.smartlockId || smartlock.id),
-      type: "door",
-      provider: PROVIDER_ID,
-      externalId: String(smartlock.smartlockId || smartlock.id),
-      locationId: smartlock.accountId ? String(smartlock.accountId) : null,
-      label: smartlock.name || smartlock.label || "",
-      metadata: smartlock,
-    }));
+    return (list || []).map((smartlock) => {
+      const capabilities = NukiApiClient.getCapabilitiesForSmartlock(smartlock);
+
+      return {
+        id: String(smartlock.smartlockId || smartlock.id),
+        type: "door",
+        provider: PROVIDER_ID,
+        externalId: String(smartlock.smartlockId || smartlock.id),
+        locationId: smartlock.accountId ? String(smartlock.accountId) : null,
+        label: smartlock.name || smartlock.label || "",
+        capabilities,
+        supportedModes: deriveSupportedModes(capabilities),
+        metadata: smartlock,
+      };
+    });
+  }
+
+  async getSupportedModes(accessPoint, tenant) {
+    const client = await this._getClient(tenant);
+    const smartlock = await client.getSmartlock(accessPoint.externalId);
+    const capabilities = NukiApiClient.getCapabilitiesForSmartlock(smartlock);
+
+    return deriveSupportedModes(capabilities);
   }
 
   async registerWebhook(tenant, callbackUrl) {
@@ -221,6 +242,7 @@ class NukiAccessProvider extends AccessProvider {
       "grantAuthorization",
       "revokeAuthorization",
       "listAccessPoints",
+      "getSupportedModes",
       "registerWebhook",
       "unregisterWebhook",
       "parseWebhook",
