@@ -23,6 +23,7 @@ class AccessController {
         user.id,
         tenant,
         bookingId,
+        accessPointId,
       );
       if (!allowed) return response.sendStatus(403);
 
@@ -56,6 +57,7 @@ class AccessController {
         user.id,
         tenant,
         bookingId,
+        accessPointId,
       );
       if (!allowed) return response.sendStatus(403);
 
@@ -89,6 +91,7 @@ class AccessController {
         user.id,
         tenant,
         bookingId,
+        accessPointId,
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -120,6 +123,7 @@ class AccessController {
         user.id,
         tenant,
         bookingId,
+        accessPointId,
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -147,7 +151,7 @@ class AccessController {
       const { bookingId } = request.query;
       const user = request.user;
 
-      const allowed = await AccessController._canOperate(
+      const allowed = await AccessController._canView(
         user.id,
         tenant,
         bookingId,
@@ -170,7 +174,7 @@ class AccessController {
    * or has the manage-bookings permission. The booking conditions apply to
    * everyone, including managers/admins.
    */
-  static async _canOperate(userId, tenant, bookingId) {
+  static async _canOperate(userId, tenant, bookingId, accessPointId) {
     const hasManagePermission = await PermissionService._allowUpdateAny(
       userId,
       tenant,
@@ -178,6 +182,30 @@ class AccessController {
     );
 
     return AccessService.canOperate(
+      userId,
+      tenant,
+      bookingId,
+      accessPointId,
+      hasManagePermission,
+    );
+  }
+
+  /**
+   * @private
+   * Checks that the booking is valid (committed, paid if priced, not rejected)
+   * and that the user is either the booking owner or has the manage-bookings
+   * permission. In contrast to {@link _canOperate} this does NOT check the
+   * (buffered) time window, so the access points assigned to a booking can be
+   * listed at any time.
+   */
+  static async _canView(userId, tenant, bookingId) {
+    const hasManagePermission = await PermissionService._allowUpdateAny(
+      userId,
+      tenant,
+      RolePermission.MANAGE_BOOKINGS,
+    );
+
+    return AccessService.canView(
       userId,
       tenant,
       bookingId,

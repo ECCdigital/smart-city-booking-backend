@@ -105,20 +105,43 @@ class Booking {
     return this.priceEur + this.vatIncludedEur;
   }
 
-  getIsActive() {
-    let bookingActive;
+  /**
+   * Whether the booking is valid independent of the current time, i.e.
+   * committed, paid (if priced) and not rejected.
+   * @returns {boolean} True if the booking is valid
+   */
+  isBookingValid() {
     if (this.priceEur > 0) {
-      bookingActive = this.isPayed && this.isCommitted && !this.isRejected;
-    } else {
-      bookingActive = this.isCommitted && !this.isRejected;
+      return this.isPayed && this.isCommitted && !this.isRejected;
+    }
+    return this.isCommitted && !this.isRejected;
+  }
+
+  getIsActive() {
+    if (!this.isBookingValid()) {
+      return false;
     }
 
-    if (bookingActive) {
-      const now = Date.now();
-      return this.timeBegin <= now && this.timeEnd >= now;
+    const now = Date.now();
+    return this.timeBegin <= now && this.timeEnd >= now;
+  }
+
+  /**
+   * Whether the booking is currently within its access window, i.e. its time
+   * range optionally extended by a lead time before `timeBegin` and a lag
+   * time after `timeEnd`. Used to decide whether the access points linked to
+   * the booking may be operated.
+   * @param {number} beforeMs Lead time before timeBegin (milliseconds)
+   * @param {number} afterMs Lag time after timeEnd (milliseconds)
+   * @param {number} now Reference timestamp (defaults to Date.now())
+   * @returns {boolean} True if within the (buffered) access window
+   */
+  isWithinAccessWindow(beforeMs = 0, afterMs = 0, now = Date.now()) {
+    if (!this.isBookingValid()) {
+      return false;
     }
 
-    return false;
+    return this.timeBegin - beforeMs <= now && this.timeEnd + afterMs >= now;
   }
 
   /**

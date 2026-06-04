@@ -229,6 +229,9 @@ class AccessService {
         isProvisioned: bookingContext.isProvisioned || false,
         provisionedAt: bookingContext.provisionedAt || null,
         lastEvent: bookingContext.lastEvent || null,
+        accessBuffer: bookingContext.accessBuffer || { beforeMs: 0, afterMs: 0 },
+        accessFrom: bookingContext.accessFrom ?? null,
+        accessTo: bookingContext.accessTo ?? null,
       })),
     ];
   }
@@ -413,14 +416,57 @@ class AccessService {
    * with the manage-bookings permission. The permission only replaces the
    * ownership requirement, it does not bypass the booking conditions.
    */
-  static async canOperate(userId, tenant, bookingId, hasManagePermission) {
+  static async canOperate(
+    userId,
+    tenant,
+    bookingId,
+    accessPointId,
+    hasManagePermission,
+  ) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
 
     if (!booking) {
       return false;
     }
 
-    if (!booking.getIsActive()) {
+    const { lockers, doors } = await this._getBookingAccessPointsFromBooking(
+      tenant,
+      booking,
+    );
+
+    const resolved = [...lockers, ...doors].find(
+      ({ accessPoint }) => String(accessPoint.id) === String(accessPointId),
+    );
+    const beforeMs = resolved?.bookingContext?.accessBuffer?.beforeMs || 0;
+    const afterMs = resolved?.bookingContext?.accessBuffer?.afterMs || 0;
+
+    if (!booking.isWithinAccessWindow(beforeMs, afterMs)) {
+      return false;
+    }
+
+    if (hasManagePermission) {
+      return true;
+    }
+
+    return PermissionsService._isOwner(booking, userId, tenant);
+  }
+
+  /**
+   * Checks whether a user may view (list) the access points assigned to a
+   * booking. Unlike {@link canOperate} this does NOT require the booking to
+   * be within its (buffered) time window - the assigned access points should
+   * be visible at any time as long as the booking is valid (committed, paid
+   * if priced, not rejected) and the user is the owner or has the
+   * manage-bookings permission.
+   */
+  static async canView(userId, tenant, bookingId, hasManagePermission) {
+    const booking = await BookingManager.getBooking(bookingId, tenant);
+
+    if (!booking) {
+      return false;
+    }
+
+    if (!booking.isBookingValid()) {
       return false;
     }
 
@@ -488,6 +534,27 @@ class AccessService {
     }));
   }
 
+  /**
+   * @private
+   * Resolves the access buffer (lead/lag time around a booking) for a given
+   * access point. A per access point override
+   * (`point.accessBuffer`) takes precedence over the bookable wide default
+   * (`accessPointDetails.accessBuffer`). Falls back to no buffer.
+   * @returns {{ beforeMs: number, afterMs: number }}
+   */
+  static _resolveAccessBuffer(bookable, point) {
+    const fallback = bookable.accessPointDetails?.accessBuffer || {};
+    const override = point.accessBuffer || {};
+
+    const before = Number(override.before ?? fallback.before ?? 0);
+    const after = Number(override.after ?? fallback.after ?? 0);
+
+    const toMs = (minutes) =>
+      Number.isFinite(minutes) && minutes > 0 ? minutes * 60 * 1000 : 0;
+
+    return { beforeMs: toMs(before), afterMs: toMs(after) };
+  }
+
   static async _getDoorAccessPoints(tenant, booking) {
     const bookableRelations = await this._getBookableRelations(tenant, booking);
     const bookables = await BookableManager.getBookablesByIds(tenant, [
@@ -511,6 +578,11 @@ class AccessService {
           return [];
         }
         seenAccessPointIds.add(accessPointKey);
+
+        const { beforeMs, afterMs } = this._resolveAccessBuffer(
+          bookable,
+          point,
+        );
 
         const accessInfo = (booking.accessInfo || []).find(
           (info) => String(info.accessPointId) === String(point.id),
@@ -538,6 +610,9 @@ class AccessService {
               bookingId: booking.id,
               timeBegin: booking.timeBegin,
               timeEnd: booking.timeEnd,
+              accessBuffer: { beforeMs, afterMs },
+              accessFrom: booking.timeBegin - beforeMs,
+              accessTo: booking.timeEnd + afterMs,
               booking,
               accessInfo,
               authorizationId: accessInfo?.authorizationId || null,

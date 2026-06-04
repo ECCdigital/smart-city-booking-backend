@@ -67,8 +67,12 @@ class NukiAccessProvider extends AccessProvider {
     const authorization = {
       name: this._buildAuthorizationName(accessPoint, bookingContext),
       type: "keypad",
-      allowedFromDate: this._formatDate(bookingContext.timeBegin),
-      allowedUntilDate: this._formatDate(bookingContext.timeEnd),
+      allowedFromDate: this._formatDate(
+        bookingContext.accessFrom ?? bookingContext.timeBegin,
+      ),
+      allowedUntilDate: this._formatDate(
+        bookingContext.accessTo ?? bookingContext.timeEnd,
+      ),
       code: pin,
     };
 

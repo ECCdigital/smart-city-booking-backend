@@ -279,6 +279,7 @@ class BookableController {
         )
       ) {
         await BookableController._validateAccessPointModes(bookable, tenant);
+        BookableController._validateAccessBuffers(bookable);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -344,6 +345,7 @@ class BookableController {
         )
       ) {
         await BookableController._validateAccessPointModes(bookable, tenant);
+        BookableController._validateAccessBuffers(bookable);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
@@ -401,6 +403,61 @@ class BookableController {
         err.statusCode = 400;
         throw err;
       }
+    }
+  }
+
+  /**
+   * Validates the access buffer configuration (lead/lag time around a booking
+   * during which an access point can still be operated). Both the bookable
+   * wide default (`accessPointDetails.accessBuffer`) and the per access point
+   * override (`points[].accessBuffer`) are checked. Values must be
+   * non-negative integers (minutes) and must not exceed the configurable
+   * maximum (`ACCESS_MAX_BUFFER_MINUTES`, default 1440).
+   */
+  static _validateAccessBuffers(bookable) {
+    const details = bookable.accessPointDetails;
+
+    if (!details?.active) {
+      return;
+    }
+
+    const maxMinutes = Number(process.env.ACCESS_MAX_BUFFER_MINUTES) || 1440;
+
+    const validate = (buffer, context) => {
+      if (buffer === undefined || buffer === null) {
+        return;
+      }
+
+      for (const key of ["before", "after"]) {
+        const rawValue = buffer[key];
+
+        if (rawValue === undefined || rawValue === null || rawValue === "") {
+          continue;
+        }
+
+        const value = Number(rawValue);
+
+        if (!Number.isInteger(value) || value < 0 || value > maxMinutes) {
+          const err = new Error(
+            `Invalid access buffer '${key}' (${rawValue}) for ${context}. ` +
+              `Expected an integer between 0 and ${maxMinutes} minutes.`,
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+
+        // Normalize to a number so downstream logic never deals with strings.
+        buffer[key] = value;
+      }
+    };
+
+    validate(details.accessBuffer, "bookable default");
+
+    for (const point of details.points || []) {
+      validate(
+        point.accessBuffer,
+        `access point '${point.label || point.id || point.externalId}'`,
+      );
     }
   }
 

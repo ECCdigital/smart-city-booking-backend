@@ -45,3 +45,57 @@ components:
           items:
             type: string
             enum: [remote, authorization, both]
+        accessBuffer:
+          $ref: "#/components/schemas/ResolvedAccessBuffer"
+        accessFrom:
+          type: integer
+          nullable: true
+          description: >
+            Unix timestamp (ms) from which the access point may be operated for
+            this booking (booking start minus the lead buffer). Doors only.
+        accessTo:
+          type: integer
+          nullable: true
+          description: >
+            Unix timestamp (ms) until which the access point may be operated for
+            this booking (booking end plus the lag buffer). Doors only.
+
+    ResolvedAccessBuffer:
+      type: object
+      description: >
+        Resolved lead/lag time (in milliseconds) around a booking during which
+        the access point can still be operated. Resolved from the bookable
+        configuration (`accessPointDetails.accessBuffer` as default, optionally
+        overridden per access point via `points[].accessBuffer`). Both values
+        default to 0 (no buffer).
+      properties:
+        beforeMs:
+          type: integer
+          minimum: 0
+          description: Milliseconds before the booking start during which access is allowed
+          example: 900000
+        afterMs:
+          type: integer
+          minimum: 0
+          description: Milliseconds after the booking end during which access is allowed
+          example: 900000
+
+    AccessBuffer:
+      type: object
+      description: >
+        Lead/lag time (in minutes) around a booking during which the access
+        point can still be operated. Configured on the bookable
+        (`accessPointDetails.accessBuffer` as default, optionally overridden
+        per access point via `points[].accessBuffer`). Both values default
+        to 0 (no buffer).
+      properties:
+        before:
+          type: integer
+          minimum: 0
+          description: Minutes before the booking start during which access is allowed
+          example: 15
+        after:
+          type: integer
+          minimum: 0
+          description: Minutes after the booking end during which access is allowed
+          example: 15
