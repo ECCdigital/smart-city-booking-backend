@@ -220,6 +220,7 @@ class BookableManager {
           connectToField: "id",
           as: "allRelatedBookables",
           maxDepth: 100,
+          restrictSearchWithMatch: { tenantId: tenantId },
         },
       },
     ];
@@ -257,6 +258,56 @@ class BookableManager {
       relatedBookableIds: { $in: [id] },
     });
     return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get all parent bookables (recursive lookup)
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of parent bookables
+   */
+  static async getAllParentBookables(id, tenantId) {
+    const pipeline = [
+      {
+        $match: {
+          id: id,
+          tenantId: tenantId,
+        },
+      },
+      {
+        $graphLookup: {
+          from: "bookables",
+          startWith: "$id",
+          connectFromField: "id",
+          connectToField: "relatedBookableIds",
+          as: "allParentBookables",
+          maxDepth: 100,
+          restrictSearchWithMatch: { tenantId: tenantId },
+        },
+      },
+    ];
+
+    const results = await BookableModel.aggregate(pipeline).exec();
+
+    if (!results || results.length === 0) {
+      return [];
+    }
+
+    const parentBookables = results[0].allParentBookables || [];
+    const uniqueMap = new Map();
+
+    for (const bookable of parentBookables) {
+      if (bookable.id !== id) {
+        uniqueMap.set(bookable.id, bookable);
+      }
+    }
+
+    return Array.from(uniqueMap.values())
+      .map((obj) => BookableModel.hydrate(obj))
+      .map((doc) => {
+        BookableModel.applyIfbsProvider(doc);
+        return doc.toEntity();
+      });
   }
 
   /**

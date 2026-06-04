@@ -405,16 +405,30 @@ class AccessService {
   }
 
   /**
-   * Checks if user owns the booking and it's currently active.
+   * Checks whether a user may operate (open/close/status) the access points of
+   * a booking.
+   *
+   * The booking must always be active (committed, paid if priced, not rejected
+   * and within its time window) - this applies to everyone, including users
+   * with the manage-bookings permission. The permission only replaces the
+   * ownership requirement, it does not bypass the booking conditions.
    */
-  static async isBookingOwnerAndActive(userId, tenant, bookingId) {
+  static async canOperate(userId, tenant, bookingId, hasManagePermission) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
 
-    const isActive = booking.getIsActive();
+    if (!booking) {
+      return false;
+    }
 
-    const hasPermission = PermissionsService._isOwner(booking, userId, tenant);
+    if (!booking.getIsActive()) {
+      return false;
+    }
 
-    return hasPermission && isActive;
+    if (hasManagePermission) {
+      return true;
+    }
+
+    return PermissionsService._isOwner(booking, userId, tenant);
   }
 
   /**
@@ -475,18 +489,29 @@ class AccessService {
   }
 
   static async _getDoorAccessPoints(tenant, booking) {
-    const bookableIds = this._getBookableIds(booking);
-    const bookables = await BookableManager.getBookablesByIds(
-      tenant,
-      bookableIds,
+    const bookableRelations = await this._getBookableRelations(tenant, booking);
+    const bookables = await BookableManager.getBookablesByIds(tenant, [
+      ...bookableRelations.keys(),
+    ]);
+    const sortedBookables = this._sortBookablesByRelation(
+      bookables,
+      bookableRelations,
     );
+    const seenAccessPointIds = new Set();
 
-    return bookables.flatMap((bookable) => {
+    return sortedBookables.flatMap((bookable) => {
       if (bookable.accessPointDetails?.active !== true) {
         return [];
       }
 
-      return (bookable.accessPointDetails.points || []).map((point) => {
+      return (bookable.accessPointDetails.points || []).flatMap((point) => {
+        const accessPointKey = String(point.id);
+
+        if (seenAccessPointIds.has(accessPointKey)) {
+          return [];
+        }
+        seenAccessPointIds.add(accessPointKey);
+
         const accessInfo = (booking.accessInfo || []).find(
           (info) => String(info.accessPointId) === String(point.id),
         );
@@ -502,23 +527,26 @@ class AccessService {
           config: point.config || {},
           bookableId: bookable.id,
           bookableTitle: bookable.title,
+          relation: bookableRelations.get(bookable.id) || "self",
         };
 
-        return {
-          accessPoint,
-          bookingContext: {
-            tenant,
-            bookingId: booking.id,
-            timeBegin: booking.timeBegin,
-            timeEnd: booking.timeEnd,
-            booking,
-            accessInfo,
-            authorizationId: accessInfo?.authorizationId || null,
-            isProvisioned: accessInfo?.isProvisioned || false,
-            provisionedAt: accessInfo?.provisionedAt || null,
-            lastEvent: accessInfo?.lastEvent || null,
+        return [
+          {
+            accessPoint,
+            bookingContext: {
+              tenant,
+              bookingId: booking.id,
+              timeBegin: booking.timeBegin,
+              timeEnd: booking.timeEnd,
+              booking,
+              accessInfo,
+              authorizationId: accessInfo?.authorizationId || null,
+              isProvisioned: accessInfo?.isProvisioned || false,
+              provisionedAt: accessInfo?.provisionedAt || null,
+              lastEvent: accessInfo?.lastEvent || null,
+            },
           },
-        };
+        ];
       });
     });
   }
@@ -531,6 +559,79 @@ class AccessService {
           .filter(Boolean),
       ),
     ];
+  }
+
+  static async _getBookableRelations(tenant, booking) {
+    const directBookableIds = this._getBookableIds(booking);
+    const bookableRelations = new Map();
+
+    for (const bookableId of directBookableIds) {
+      this._setBookableRelation(bookableRelations, bookableId, "self");
+    }
+
+    const inheritChildren =
+      process.env.ACCESS_POINTS_INHERIT_CHILDREN !== "false";
+    const inheritParents =
+      process.env.ACCESS_POINTS_INHERIT_PARENTS !== "false";
+
+    await Promise.all(
+      directBookableIds.map(async (bookableId) => {
+        if (inheritChildren) {
+          const childBookables = await BookableManager.getRelatedBookables(
+            bookableId,
+            tenant,
+          );
+
+          for (const childBookable of childBookables) {
+            this._setBookableRelation(
+              bookableRelations,
+              childBookable.id,
+              "child",
+            );
+          }
+        }
+
+        if (inheritParents) {
+          const parentBookables = await BookableManager.getAllParentBookables(
+            bookableId,
+            tenant,
+          );
+
+          for (const parentBookable of parentBookables) {
+            this._setBookableRelation(
+              bookableRelations,
+              parentBookable.id,
+              "parent",
+            );
+          }
+        }
+      }),
+    );
+
+    return bookableRelations;
+  }
+
+  static _setBookableRelation(bookableRelations, bookableId, relation) {
+    const relationPriority = { self: 0, parent: 1, child: 2 };
+    const currentRelation = bookableRelations.get(bookableId);
+
+    if (
+      !currentRelation ||
+      relationPriority[relation] < relationPriority[currentRelation]
+    ) {
+      bookableRelations.set(bookableId, relation);
+    }
+  }
+
+  static _sortBookablesByRelation(bookables, bookableRelations) {
+    const relationPriority = { self: 0, parent: 1, child: 2 };
+
+    return [...bookables].sort((a, b) => {
+      const relationA = bookableRelations.get(a.id) || "self";
+      const relationB = bookableRelations.get(b.id) || "self";
+
+      return relationPriority[relationA] - relationPriority[relationB];
+    });
   }
 
   static _usesAuthorization(mode) {

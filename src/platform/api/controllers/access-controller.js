@@ -165,17 +165,24 @@ class AccessController {
 
   /**
    * @private
-   * Checks booking ownership + active time window.
+   * Checks that the booking is active (committed, paid if priced, not rejected
+   * and within its time window) and that the user is either the booking owner
+   * or has the manage-bookings permission. The booking conditions apply to
+   * everyone, including managers/admins.
    */
   static async _canOperate(userId, tenant, bookingId) {
-    const hasPermission = await PermissionService._allowUpdateAny(
+    const hasManagePermission = await PermissionService._allowUpdateAny(
       userId,
       tenant,
       RolePermission.MANAGE_BOOKINGS,
     );
-    if (hasPermission) return true;
 
-    return AccessService.isBookingOwnerAndActive(userId, tenant, bookingId);
+    return AccessService.canOperate(
+      userId,
+      tenant,
+      bookingId,
+      hasManagePermission,
+    );
   }
 }
 

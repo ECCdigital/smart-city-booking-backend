@@ -201,7 +201,7 @@ mitgebaut.
 |---|---|---|---|---|
 | C2.1 | SSE/WebSocket für Echtzeit-Push statt Polling | Phase 11 / 7-Offen | ⬜ | |
 | C2.2 | Pareva-Locker als Access-Provider angleichen | 7-Offen | ⬜ | |
-| C2.3 | Audit-Export (CSV/PDF) pro Tenant | 7-Offen | ⬜ | |
+| C2.3 | Audit-Export (CSV/PDF) pro Tenant | 7-Offen | ✅ | `GET /:tenant/access/audit/export?format=csv\|pdf` (`AccessAuditService` + `AccessAuditController`), Filter (from/to/bookingId/accessPointId/provider/action/result), PIN/Token-Redaction, `MANAGE_BOOKINGS` readAny |
 
 ---
 
