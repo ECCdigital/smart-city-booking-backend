@@ -17,6 +17,12 @@ router.post(
 );
 
 router.post(
+  "/:accessPointId/unlatch",
+  AuthenticationController.isSignedIn,
+  AccessController.unlatch,
+);
+
+router.post(
   "/:accessPointId/close",
   AuthenticationController.isSignedIn,
   AccessController.close,

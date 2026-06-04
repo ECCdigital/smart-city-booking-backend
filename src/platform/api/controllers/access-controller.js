@@ -45,6 +45,40 @@ class AccessController {
   }
 
   /**
+   * POST /:tenant/access/:accessPointId/unlatch
+   */
+  static async unlatch(request, response) {
+    try {
+      const { tenant, accessPointId } = request.params;
+      const { bookingId } = request.query;
+      const user = request.user;
+
+      const allowed = await AccessController._canOperate(
+        user.id,
+        tenant,
+        bookingId,
+        accessPointId,
+      );
+      if (!allowed) return response.sendStatus(403);
+
+      const result = await AccessService.unlatch(
+        tenant,
+        bookingId,
+        accessPointId,
+        user.id,
+      );
+
+      logger.info(
+        `${tenant} -- user ${user.id} unlatched access-point ${accessPointId} (booking ${bookingId})`,
+      );
+      return ApiResponse.ok(response, { data: result });
+    } catch (err) {
+      logger.error(err);
+      return ApiResponse.error(response, "Could not unlatch access point");
+    }
+  }
+
+  /**
    * POST /:tenant/access/:accessPointId/close
    */
   static async close(request, response) {

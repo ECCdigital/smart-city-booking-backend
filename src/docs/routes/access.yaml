@@ -43,6 +43,52 @@
             schema:
               $ref: "#/components/schemas/ErrorResponse"
 
+/api/{tenant}/access/{accessPointId}/unlatch:
+  post:
+    tags:
+      - Access
+    summary: Unlatch an access point
+    description: |
+      Pulls the latch of a specific access point so the door physically opens,
+      instead of only releasing the lock (see `/open`). Requires a provider and
+      device that support unlatching (e.g. a Nuki Smart Lock mounted on a door
+      with a latch).
+      Requires booking ownership or `MANAGE_BOOKINGS` permission.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point to unlatch
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: Access point successfully unlatched
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  $ref: "#/components/schemas/OpenResult"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "500":
+        description: Could not unlatch access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
 /api/{tenant}/access/{accessPointId}/open-status:
   get:
     tags:

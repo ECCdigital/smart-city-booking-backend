@@ -56,6 +56,23 @@ class NukiAccessProvider extends AccessProvider {
     };
   }
 
+  // Pulls the latch so the door physically opens, instead of only releasing
+  // the lock (unlock). Requires a Nuki actor that is mounted on a door with a
+  // latch (i.e. not an Opener/Box).
+  async unlatch(accessPoint, bookingContext) {
+    const client = await this._getClient(bookingContext.tenant);
+    const providerResponse = await client.executeAction(
+      accessPoint.externalId,
+      NUKI_ACTIONS.UNLATCH,
+    );
+
+    return {
+      success: true,
+      state: "open",
+      providerResponse,
+    };
+  }
+
   async getStatus(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
     return client.getSmartlockState(accessPoint.externalId);
@@ -242,6 +259,7 @@ class NukiAccessProvider extends AccessProvider {
     return [
       "open",
       "close",
+      "unlatch",
       "getStatus",
       "grantAuthorization",
       "revokeAuthorization",

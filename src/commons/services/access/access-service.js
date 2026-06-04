@@ -53,6 +53,45 @@ class AccessService {
   }
 
   /**
+   * Unlatches an access point linked to a booking, i.e. pulls the latch so the
+   * door physically opens instead of only releasing the lock.
+   */
+  static async unlatch(tenant, bookingId, accessPointId, userId) {
+    const { accessPoint, bookingContext } = await this._resolve(
+      tenant,
+      bookingId,
+      accessPointId,
+    );
+
+    try {
+      const provider = getAccessProvider(accessPoint.provider);
+      const result = await provider.unlatch(accessPoint, bookingContext);
+
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "unlatch",
+        result: "success",
+        payload: result,
+      });
+      return result;
+    } catch (err) {
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "unlatch",
+        result: "failure",
+        errorMessage: err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
    * Closes an access point linked to a booking.
    */
   static async close(tenant, bookingId, accessPointId, userId) {

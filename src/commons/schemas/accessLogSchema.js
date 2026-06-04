@@ -24,7 +24,15 @@ const accessLogSchemaDefinition = {
   externalId: { type: String, default: null },
   action: {
     type: String,
-    enum: ["open", "close", "provision", "revoke", "status", "webhook"],
+    enum: [
+      "open",
+      "unlatch",
+      "close",
+      "provision",
+      "revoke",
+      "status",
+      "webhook",
+    ],
     required: true,
   },
   actor: {
