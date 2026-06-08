@@ -112,6 +112,7 @@ class CardAuthService {
     nextUrl,
     verifyUrl,
     linkUrl,
+    legalAcceptance,
   }) {
     const app = await CardAuthService.getCardApp(appId);
 
@@ -202,6 +203,7 @@ class CardAuthService {
         cardType: verification.cardType || app.cardType || "",
         linkedAt: Date.now(),
       },
+      legalAcceptance,
     });
     user.secret = undefined;
 

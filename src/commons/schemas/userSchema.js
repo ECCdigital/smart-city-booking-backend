@@ -14,6 +14,10 @@ const userHookSchemaDefinition = {
   payload: { type: Object, default: {} },
 };
 
+// Expected shape of each entry inside `legalAcceptance` (e.g. dataProtection,
+// termsAndConditions):
+//   { accepted: Boolean, url: String, fileName: String, source: String, acceptedAt: ISO-String }
+
 const userSchemaDefinition = {
   id: { type: String, required: true },
   firstName: { type: String, default: "" },
@@ -30,6 +34,10 @@ const userSchemaDefinition = {
   isSuspended: { type: Boolean, default: false },
   authType: { type: String, default: "local" },
   cardAuth: {
+    type: Object,
+    default: null,
+  },
+  legalAcceptance: {
     type: Object,
     default: null,
   },

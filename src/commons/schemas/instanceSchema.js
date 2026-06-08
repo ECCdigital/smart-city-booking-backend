@@ -27,8 +27,18 @@ const instanceSchemaDefinition = {
   mailEnabled: { type: Boolean, default: false },
   contactAddress: { type: String, default: "" },
   contactUrl: { type: String, default: "" },
-  dataProtectionUrl: { type: String, default: "" },
-  legalNoticeUrl: { type: String, default: "" },
+  dataProtection: {
+    type: Object,
+    default: () => ({ source: "url", url: "", fileName: "" }),
+  },
+  legalNotice: {
+    type: Object,
+    default: () => ({ source: "url", url: "", fileName: "" }),
+  },
+  termsAndConditions: {
+    type: Object,
+    default: () => ({ source: "url", url: "", fileName: "" }),
+  },
   allowAllUsersToCreateTenant: { type: Boolean, default: false },
   allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
   ownerUserIds: { type: Array, ref: "User", default: [] },

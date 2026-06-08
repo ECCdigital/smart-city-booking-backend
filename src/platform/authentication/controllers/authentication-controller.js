@@ -220,6 +220,7 @@ class AuthenticationController {
         company,
         nextUrl,
         verifyUrl,
+        legalAcceptance,
       } = request.body;
 
       const existingUser = await UserManager.getUser(userID);
@@ -234,6 +235,7 @@ class AuthenticationController {
         firstName: firstName,
         lastName: lastName,
         company: company,
+        legalAcceptance: legalAcceptance,
       });
       user.setPassword(password);
 
@@ -249,9 +251,9 @@ class AuthenticationController {
   static async ssoSignup(request, response) {
     try {
       const {
-        body: { token },
+        body: { token, legalAcceptance },
       } = request;
-      await SsoService.handleSignup(token);
+      await SsoService.handleSignup(token, legalAcceptance);
       response.sendStatus(201);
     } catch (error) {
       response.status(error.status).send(error.message);
@@ -510,6 +512,7 @@ class AuthenticationController {
         nextUrl,
         verifyUrl,
         linkUrl,
+        legalAcceptance,
       } = request.body;
 
       if (!appId || !publicId || !secret || !email) {
@@ -529,6 +532,7 @@ class AuthenticationController {
         nextUrl,
         verifyUrl,
         linkUrl,
+        legalAcceptance,
       });
 
       if (result.status === "link_requested") {

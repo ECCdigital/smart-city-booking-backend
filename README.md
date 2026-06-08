@@ -747,8 +747,21 @@ Example:
   "mailEnabled": true,
   "contactAddress": "contact@example.com",
   "contactUrl": "https://example.com/contact",
-  "dataProtectionUrl": "https://example.com/privacy",
-  "legalNoticeUrl": "https://example.com/legal",
+  "dataProtection": {
+    "source": "url",
+    "url": "https://example.com/privacy",
+    "fileName": ""
+  },
+  "legalNotice": {
+    "source": "url",
+    "url": "https://example.com/legal",
+    "fileName": ""
+  },
+  "termsAndConditions": {
+    "source": "file",
+    "url": "https://backend.example.com/api/files/get?name=/public/legal/agb.pdf",
+    "fileName": "agb.pdf"
+  },
   "allowAllUsersToCreateTenant": false,
   "allowedUsersToCreateTenant": [],
   "ownerUserIds": ["admin@example.com"],
