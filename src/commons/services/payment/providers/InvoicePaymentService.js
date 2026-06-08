@@ -129,7 +129,7 @@ class InvoicePaymentService extends PaymentService {
     const { invoice, name, invoiceId, revision, timeCreated } =
       await InvoiceService.createAggregatedInvoice(
         this.tenantId,
-        bookings,
+        this.bookingIds,
         this.groupBookingId,
       );
 

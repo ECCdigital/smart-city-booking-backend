@@ -1393,9 +1393,13 @@ class BookingService {
   ) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
-    if (bookings.every((b) => b.isCommitted && b.isPayed)) {
+    if (bookings.every((b) => b.isCommitted)) {
       let attachments = [...additionalAttachments];
-      if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
+
+      const allPayed = bookings.every((b) => b.isPayed);
+      const totalPrice = bookings.reduce((acc, b) => acc + b.priceEur, 0);
+
+      if (totalPrice > 0 && allPayed) {
         const { receipt, name, receiptId, revision, timeCreated } =
           await ReceiptService.createAggregatedReceipt(
             tenantId,
