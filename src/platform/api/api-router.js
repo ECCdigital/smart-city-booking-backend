@@ -8,6 +8,7 @@ const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
 const FileController = require("./controllers/file-controller");
+const MailTemplateController = require("./controllers/mail-template-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
@@ -24,6 +25,11 @@ router.get(
   "/tenants/:id/payment-apps",
   optionalAuth,
   TenantController.getActivePaymentApps,
+);
+router.get(
+  "/tenants/:id/mail/templates/default",
+  AuthenticationController.isSignedIn,
+  MailTemplateController.getDefaultTemplates,
 );
 
 // Protected

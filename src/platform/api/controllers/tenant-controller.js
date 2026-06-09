@@ -18,6 +18,9 @@ const {
   validateMailSnippets,
   validateMailSubjects,
 } = require("../../../commons/mail-service/templates/mail-snippet-overrides");
+const {
+  mergeDefaultMailSnippets,
+} = require("../../../commons/mail-service/templates/default-mail-snippets");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -190,6 +193,7 @@ class TenantController {
         tenant.genericMailTemplate = emailTemplate;
         tenant.receiptTemplate = receiptTemplate;
         tenant.invoiceTemplate = invoiceTemplate;
+        tenant.mailSnippets = mergeDefaultMailSnippets(tenant.mailSnippets);
 
         await TenantManager.storeTenant(tenant);
         await MembershipManager.addMembership(tenant.id, membership);
