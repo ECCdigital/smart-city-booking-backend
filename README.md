@@ -678,12 +678,23 @@ Example:
     "maxAttendees": null,
     "priceCategories": []
   },
-  "eventAddress": {
-    "street": "",
-    "houseNumber": "",
-    "additional": "",
-    "city": "",
-    "zip": ""
+  "location": {
+    "coordinates": {
+      "type": "Point",
+      "points": [null, null]
+    },
+    "display_address": "",
+    "address": {
+      "street": null,
+      "house_number": null,
+      "post_code": null,
+      "city": null,
+      "suburb": null,
+      "state": null,
+      "country": null,
+      "country_code": null
+    },
+    "meta": {}
   },
   "eventLocation": {
     "name": "",

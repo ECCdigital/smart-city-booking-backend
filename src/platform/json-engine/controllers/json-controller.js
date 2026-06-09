@@ -187,7 +187,6 @@ class JSONController {
           .map((ticket) => ticket.exportPublic());
       }
 
-      console.log(publicEvents);
       res.setHeader("content-type", "application/json");
       res.status(200).send(publicEvents);
     } catch {

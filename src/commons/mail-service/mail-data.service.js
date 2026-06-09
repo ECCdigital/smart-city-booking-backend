@@ -38,10 +38,10 @@ class MailDataService {
           endDate: event.information.endDate,
           endTime: event.information.endTime,
           locationName: event.eventLocation.name,
-          locationStreet: event.eventAddress.street,
-          locationHouseNumber: event.eventAddress.houseNumber,
-          locationZip: event.eventAddress.zip,
-          locationCity: event.eventAddress.city,
+          locationStreet: event.location?.address?.street,
+          locationHouseNumber: event.location?.address?.house_number,
+          locationZip: event.location?.address?.post_code,
+          locationCity: event.location?.address?.city,
         };
       }
 

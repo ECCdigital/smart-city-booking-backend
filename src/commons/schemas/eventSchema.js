@@ -10,12 +10,26 @@ const eventSchemaDefinition = {
     priceCategories: { type: Array, default: [] },
   },
   externalBookingUrl: { type: String, default: "" },
-  eventAddress: {
-    street: { type: String, default: "" },
-    houseNumber: { type: String, default: "" },
-    additional: { type: String, default: "" },
-    city: { type: String, default: "" },
-    zip: { type: String, default: "" },
+  location: {
+    type: Object,
+    default: {
+      coordinates: {
+        type: "Point",
+        points: [null, null],
+      },
+      display_address: "",
+      address: {
+        street: null,
+        house_number: null,
+        post_code: null,
+        city: null,
+        suburb: null,
+        state: null,
+        country: null,
+        country_code: null,
+      },
+      meta: {},
+    },
   },
   eventLocation: {
     name: { type: String, default: "" },

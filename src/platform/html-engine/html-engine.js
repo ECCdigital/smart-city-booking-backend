@@ -391,14 +391,19 @@ class HtmlEngine {
     htmlOutput += event.eventLocation.name
       ? `<div class="name">${event.eventLocation.name || ""}</div>`
       : "";
-    htmlOutput += event.eventLocation.street
-      ? `<div class="street">${event.eventAddress.street || ""}</div>`
+    htmlOutput += event.location?.address?.street
+      ? `<div class="street">${[
+          event.location.address.street,
+          event.location.address.house_number,
+        ]
+          .filter(Boolean)
+          .join(" ")}</div>`
       : "";
-    htmlOutput += event.eventLocation.zip
-      ? `<div class="zip">${event.eventAddress.zip || ""}</div>`
+    htmlOutput += event.location?.address?.post_code
+      ? `<div class="zip">${event.location.address.post_code || ""}</div>`
       : "";
-    htmlOutput += event.eventLocation.city
-      ? `<div class="city">${event.eventAddress.city || ""}</div>`
+    htmlOutput += event.location?.address?.city
+      ? `<div class="city">${event.location.address.city || ""}</div>`
       : "";
     htmlOutput += event.eventLocation.phoneNumber
       ? `<div class="phone-number">${
@@ -418,8 +423,8 @@ class HtmlEngine {
 
       htmlOutput += `<div class="room">${eventLocationBookable?.title}</div>`;
     }
-    htmlOutput += event.eventLocation.additional
-      ? `<div class="additional">${event.eventAddress.additional || ""}</div>`
+    htmlOutput += event.location?.meta?.additional
+      ? `<div class="additional">${event.location.meta.additional || ""}</div>`
       : "";
 
     htmlOutput += `</div>`;
