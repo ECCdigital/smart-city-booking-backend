@@ -1,4 +1,49 @@
 class CustomFieldService {
+  /**
+   * Normalize a single field definition's usageOptions so that filter and
+   * detail-display settings stay consistent.
+   * - A field is only filterable when it has a catalogFilterType.
+   * - When not filterable, catalog filter settings are cleared.
+   * @param {Object} definition Custom field definition
+   * @returns {Object} The (mutated) definition
+   */
+  static normalizeUsageOptions(definition) {
+    if (!definition || typeof definition !== "object") {
+      return definition;
+    }
+
+    const usage = definition.usageOptions || (definition.usageOptions = {});
+
+    if (usage.filterable && !usage.catalogFilterType) {
+      usage.filterable = false;
+    }
+
+    if (!usage.filterable) {
+      usage.catalogFilterType = null;
+    }
+
+    const allowedDetailPositions = [
+      "none",
+      "badge",
+      "belowDescription",
+      "moreInfo",
+    ];
+    if (!allowedDetailPositions.includes(usage.detailDisplayPosition)) {
+      usage.detailDisplayPosition = "none";
+    }
+
+    return definition;
+  }
+
+  /**
+   * Normalize a list of field definitions in place.
+   * @param {Array} definitions Custom field definitions
+   * @returns {Array} The normalized definitions
+   */
+  static normalizeDefinitions(definitions = []) {
+    return definitions.map((def) => this.normalizeUsageOptions(def));
+  }
+
   static mergeDefinitions({
     instanceFields = [],
     tenantFields = [],

@@ -1,6 +1,9 @@
 const Tenant = require("../entities/tenant/tenant");
 const TenantModel = require("./models/tenantModel");
 const { CustomFieldCache } = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const rawTenant = require("../schemas/tenantSchema");
 
 /**
@@ -42,6 +45,9 @@ class TenantManager {
    */
   static async storeTenant(tenant, upsert = true) {
     const tenantEntity = tenant instanceof Tenant ? tenant : new Tenant(tenant);
+    CustomFieldService.normalizeDefinitions(
+      tenantEntity.bookableCustomFields || [],
+    );
     tenantEntity.validate();
     await TenantModel.updateOne({ id: tenantEntity.id }, tenantEntity, {
       upsert: upsert,

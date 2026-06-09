@@ -18,6 +18,10 @@ const usageOptionsSchema = new Schema(
 
     requiredInCheckout: { type: Boolean, default: false },
 
+    // Whether the field can be used as a catalog filter. When false, a field
+    // with context "catalog" is shown as info only and catalogFilter* is ignored.
+    filterable: { type: Boolean, default: false },
+
     catalogFilterType: {
       type: String,
       enum: [null, "select", "slider", "range", "checkbox"],
@@ -27,6 +31,14 @@ const usageOptionsSchema = new Schema(
       type: String,
       enum: ["sidebar", "navigation", "searchbar"],
       default: "sidebar",
+    },
+
+    // Where the field is rendered in the bookable detail view.
+    // "none" hides it from the detail view.
+    detailDisplayPosition: {
+      type: String,
+      enum: ["none", "badge", "belowDescription", "moreInfo"],
+      default: "none",
     },
   },
   { _id: false },

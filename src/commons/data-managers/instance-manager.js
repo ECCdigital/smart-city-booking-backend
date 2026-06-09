@@ -3,6 +3,9 @@ const InstanceModel = require("./models/instanceModel");
 const {
   CustomFieldCache,
 } = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const { InstanceCache } = require("../services/instance/instance-cache");
 
 const DEFAULT_BRANDING = Object.freeze({
@@ -36,6 +39,10 @@ class InstanceManager {
     // Übergangslogik: alte und neue Felder spiegeln, damit Konsumenten beider
     // Versionen während des Rollouts konsistente Werte sehen.
     InstanceManager._syncLegacyFields(instanceEntity);
+
+    CustomFieldService.normalizeDefinitions(
+      instanceEntity.bookableCustomFields || [],
+    );
 
     instanceEntity.validate();
 
