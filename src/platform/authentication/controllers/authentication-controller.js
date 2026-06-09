@@ -221,6 +221,8 @@ class AuthenticationController {
         nextUrl,
         verifyUrl,
         legalAcceptance,
+        invitationToken,
+        invitationTenantId,
       } = request.body;
 
       const existingUser = await UserManager.getUser(userID);
@@ -239,7 +241,12 @@ class AuthenticationController {
       });
       user.setPassword(password);
 
-      await UserService.singUpUser(user, nextUrl, verifyUrl);
+      const invitation =
+        invitationToken && invitationTenantId
+          ? { token: invitationToken, tenantId: invitationTenantId }
+          : null;
+
+      await UserService.singUpUser(user, nextUrl, verifyUrl, invitation);
 
       return response.sendStatus(201);
     } catch (error) {

@@ -7,16 +7,44 @@ const logger = bunyan.createLogger({
 });
 
 class UserService {
-  static async singUpUser(user, nextUrl, verifyUrl) {
+  static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {
     const MailController = require("../mail-service/mail-controller");
     const hook = user.addHook(USER_HOOK_TYPES.VERIFY, { nextUrl, verifyUrl });
     const createdUser = await UserManager.createUser(user);
+
+    if (invitation && invitation.token && invitation.tenantId) {
+      await UserService._claimInvitationOnSignup(
+        invitation.tenantId,
+        invitation.token,
+        createdUser.id,
+      );
+    }
+
     await MailController.sendVerificationRequest(
       createdUser.id,
       hook.id,
       verifyUrl,
     );
     await MailController.sendUserCreated(createdUser.id);
+  }
+
+  /**
+   * Persist the invitation context on a pending membership during signup so it
+   * can be recovered after email verification / login, independent of any
+   * redirect. Best-effort: a failure here must never block account creation.
+   */
+  static async _claimInvitationOnSignup(tenantId, token, userId) {
+    const InvitationService = require("./invitation-service");
+    try {
+      await InvitationService.claimInvitationForUser(tenantId, token, userId);
+      logger.info(
+        `Invitation ${token} claimed for newly registered user ${userId}`,
+      );
+    } catch (error) {
+      logger.warn(
+        `Could not claim invitation ${token} for user ${userId}: ${error.message || error}`,
+      );
+    }
   }
 
   static async releaseHook(hookId) {

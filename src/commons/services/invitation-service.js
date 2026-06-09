@@ -108,6 +108,29 @@ class InvitationService {
     return invitation;
   }
 
+  /**
+   * Claim an invitation for a user without accepting it yet.
+   *
+   * Persists the invitation context (tenant + token) on a pending membership so
+   * it can be reliably recovered later via {@link getPendingInvitationsForUser},
+   * independent of any email-verification redirect or device. Does NOT consume a
+   * use of the invitation - that only happens on {@link acceptInvitation}.
+   *
+   * @param {string} tenantID
+   * @param {string} token
+   * @param {string} userID
+   * @returns {Promise<Object>} the validated invitation entity
+   */
+  static async claimInvitationForUser(tenantID, token, userID) {
+    const invitation = await InvitationManager.getInvitationByToken(token);
+
+    validateInvitation(invitation, tenantID, userID);
+
+    await this._ensureMembershipInvite(tenantID, userID, token);
+
+    return invitation;
+  }
+
   static async acceptInvitation(tenantID, token, userID) {
     const invitationEntity =
       await InvitationManager.getInvitationByToken(token);
@@ -453,13 +476,45 @@ class InvitationService {
   }
 
   static async getPendingInvitationsForUser(userID) {
-    const invitations = await InvitationManager.getInvitationByUserID(userID);
-    return invitations.filter(
+    // 1) Invitations directly intended for this user (single invites).
+    const directInvitations =
+      await InvitationManager.getInvitationByUserID(userID);
+
+    // 2) Invitations referenced via the user's memberships. This covers
+    //    multi-use / public-link invites which have no intendedUserId but were
+    //    claimed for the user (e.g. on registration).
+    const memberships = await MembershipManager.getMembershipsByUserID(userID);
+    const membershipTokens = new Set();
+    for (const membership of memberships) {
+      if (membership.status === "suspended") continue;
+      for (const invite of membership.invitations || []) {
+        if (invite.status === "pending" || invite.status === "pending_approval") {
+          membershipTokens.add(invite.token);
+        }
+      }
+    }
+
+    const membershipInvitations = [];
+    for (const token of membershipTokens) {
+      const invitation = await InvitationManager.getInvitationByToken(token);
+      if (invitation) {
+        membershipInvitations.push(invitation);
+      }
+    }
+
+    // Merge unique by token (direct invitations take precedence).
+    const byToken = new Map();
+    for (const invitation of [...membershipInvitations, ...directInvitations]) {
+      byToken.set(invitation.token, invitation);
+    }
+
+    return Array.from(byToken.values()).filter(
       (invitation) =>
         invitation.status === "active" &&
         (!invitation.expiresAt || Date.now() <= invitation.expiresAt) &&
         (invitation.type === "multi"
-          ? invitation.usedCount < invitation.maxUses
+          ? invitation.maxUses == null ||
+            invitation.usedCount < invitation.maxUses
           : invitation.usedCount < 1),
     );
   }
