@@ -9,6 +9,7 @@ const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
 const FileController = require("./controllers/file-controller");
 const { BookingController } = require("./controllers/booking-controller");
+const AccessController = require("./controllers/access-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
@@ -204,6 +205,20 @@ router.get(
   "/bookings/assigned",
   AuthenticationController.isSignedIn,
   BookingController.getAssignedBookings,
+);
+
+// ACCESS (tenant-independent: a user may have bookings across tenants)
+// ===================================================================
+router.get(
+  "/access/bookings",
+  AuthenticationController.isSignedIn,
+  AccessController.getAccessBookings,
+);
+
+router.get(
+  "/access/access-points/:accessPointId/bookings",
+  AuthenticationController.isSignedIn,
+  AccessController.getAccessPointBookings,
 );
 
 router.use("/instances", require("./routes/instance.routes"));

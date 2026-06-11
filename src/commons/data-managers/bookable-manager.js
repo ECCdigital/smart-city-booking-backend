@@ -247,6 +247,38 @@ class BookableManager {
   }
 
   /**
+   * Get all bookables of a tenant that have at least one active access point
+   * configured. Used as the (small) seed set for resolving which bookings
+   * grant an access authorization.
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} Bookables with active access points
+   */
+  static async getBookablesWithAccessPoints(tenantId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      "accessPointDetails.active": true,
+      "accessPointDetails.points.0": { $exists: true },
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get all bookables of a tenant that expose a specific access point (by id)
+   * via their active access point configuration.
+   * @param {string} tenantId Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<Bookable[]>} Bookables exposing the access point
+   */
+  static async getBookablesByAccessPointId(tenantId, accessPointId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      "accessPointDetails.active": true,
+      "accessPointDetails.points.id": accessPointId,
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Get parent bookables (bookables that reference this one)
    * @param {string} id Bookable ID
    * @param {string} tenantId Tenant ID

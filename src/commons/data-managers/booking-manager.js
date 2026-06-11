@@ -273,6 +273,38 @@ class BookingManager {
     });
     return rawBookings.map((doc) => doc.toEntity());
   }
+
+  /**
+   * Get committed, non-rejected bookings of a single user (the assigned user),
+   * narrowed down at the database level. Used by the access/booking queries to
+   * avoid loading the whole tenant.
+   *
+   * The price/payment validity (`isPayed` for priced bookings) is intentionally
+   * NOT enforced here - it depends on `priceEur` and is re-checked in memory via
+   * `Booking.isBookingValid()`.
+   *
+   * @param {string|null} tenantId Tenant ID, or null/undefined to search across all tenants
+   * @param {string} userId Assigned user ID
+   * @param {Object} [opts]
+   * @param {Object} [opts.timeFilter={}] Extra time conditions (e.g. on timeBegin/timeEnd)
+   * @param {Object} [opts.match={}] Extra MongoDB conditions (e.g. bookable/locker $or)
+   * @returns {Promise<Booking[]>} List of bookings
+   */
+  static async getUserBookingsFiltered(
+    tenantId,
+    userId,
+    { timeFilter = {}, match = {} } = {},
+  ) {
+    const rawBookings = await BookingModel.find({
+      ...(tenantId ? { tenantId: tenantId } : {}),
+      assignedUserId: userId,
+      isCommitted: true,
+      isRejected: false,
+      ...timeFilter,
+      ...match,
+    });
+    return rawBookings.map((doc) => doc.toEntity());
+  }
 }
 
 module.exports = BookingManager;

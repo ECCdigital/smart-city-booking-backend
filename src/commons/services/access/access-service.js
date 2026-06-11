@@ -268,7 +268,10 @@ class AccessService {
         isProvisioned: bookingContext.isProvisioned || false,
         provisionedAt: bookingContext.provisionedAt || null,
         lastEvent: bookingContext.lastEvent || null,
-        accessBuffer: bookingContext.accessBuffer || { beforeMs: 0, afterMs: 0 },
+        accessBuffer: bookingContext.accessBuffer || {
+          beforeMs: 0,
+          afterMs: 0,
+        },
         accessFrom: bookingContext.accessFrom ?? null,
         accessTo: bookingContext.accessTo ?? null,
       })),
@@ -514,6 +517,544 @@ class AccessService {
     }
 
     return PermissionsService._isOwner(booking, userId, tenant);
+  }
+
+  /**
+   * Returns all bookings of a user that grant any access authorization
+   * i.e. that resolve to at least one door access point
+   * (and, if requested, locker access points).
+   *
+   * Tenant-independent: a user may have bookings across several tenants. The
+   * user's committed bookings are loaded once (narrowed by status/time) and the
+   * access point inheritance is resolved per tenant via a trigger map.
+   *
+   * @param {string} userId Assigned user ID
+   * @param {Object} [opts]
+   * @param {string} [opts.state="all"] One of "active" | "upcoming" | "past" | "all"
+   * @param {string|null} [opts.capability=null] "authorization" to restrict to provisioned authorizations
+   * @param {boolean} [opts.includeAccessPoints=false] Attach the full access point list per booking
+   * @param {boolean} [opts.includeLockers=false] Treat locker access points as an authorization too
+   * @param {boolean} [opts.includeBuffer=false] Honor the access buffer for state="active"
+   * @param {number} [opts.now=Date.now()] Reference timestamp
+   * @returns {Promise<Object[]>} Matching bookings (sensitive data stripped)
+   */
+  static async getUserBookingsWithAccess(
+    userId,
+    {
+      state = "all",
+      capability = null,
+      includeAccessPoints = false,
+      includeLockers = false,
+      includeBuffer = false,
+      now = Date.now(),
+    } = {},
+  ) {
+    const timeFilter = this._buildTimeFilter(state, now, includeBuffer);
+    const bookings = await BookingManager.getUserBookingsFiltered(
+      null,
+      userId,
+      {
+        timeFilter,
+      },
+    );
+
+    if (!bookings.length) {
+      return [];
+    }
+
+    const triggerMaps = await this._getAccessTriggerMapsForTenants(
+      this._uniqueTenantIds(bookings),
+    );
+
+    return this._buildAccessBookingResults(bookings, {
+      state,
+      capability,
+      includeAccessPoints,
+      includeLockers,
+      includeBuffer,
+      now,
+      resolve: (booking) =>
+        this._resolveBookingAccess(
+          booking,
+          triggerMaps.get(booking.tenantId) || new Map(),
+          { capability, includeLockers },
+        ),
+    });
+  }
+
+  /**
+   * Returns all bookings of a user that grant an access authorization for a
+   * specific access point. The access point may be a door (resolved via the
+   * bookables) or, when `includeLockers` is set, a locker (matched via
+   * `booking.lockerInfo[].processId`).
+   *
+   * Tenant-independent: trigger ids for the access point are resolved per
+   * tenant the user has bookings in.
+   *
+   * @param {string} userId Assigned user ID
+   * @param {string} accessPointId Access point ID
+   * @param {Object} [opts] See {@link getUserBookingsWithAccess}
+   * @returns {Promise<Object[]>} Matching bookings (sensitive data stripped)
+   */
+  static async getUserBookingsForAccessPoint(
+    userId,
+    accessPointId,
+    {
+      state = "all",
+      capability = null,
+      includeAccessPoints = false,
+      includeLockers = false,
+      includeBuffer = false,
+      now = Date.now(),
+    } = {},
+  ) {
+    const timeFilter = this._buildTimeFilter(state, now, includeBuffer);
+    const bookings = await BookingManager.getUserBookingsFiltered(
+      null,
+      userId,
+      {
+        timeFilter,
+      },
+    );
+
+    if (!bookings.length) {
+      return [];
+    }
+
+    const tenantIds = this._uniqueTenantIds(bookings);
+    const triggerByTenant = new Map();
+    await Promise.all(
+      tenantIds.map(async (tenantId) => {
+        triggerByTenant.set(
+          tenantId,
+          await this._getTriggerBookableIdsForAccessPoint(
+            tenantId,
+            accessPointId,
+          ),
+        );
+      }),
+    );
+
+    return this._buildAccessBookingResults(bookings, {
+      state,
+      capability,
+      includeAccessPoints,
+      includeLockers,
+      includeBuffer,
+      now,
+      resolve: (booking) => {
+        const { triggerIds, mode } = triggerByTenant.get(booking.tenantId) || {
+          triggerIds: new Set(),
+          mode: null,
+        };
+        return this._resolveBookingAccessForPoint(
+          booking,
+          accessPointId,
+          mode,
+          { triggerIds, capability, includeLockers },
+        );
+      },
+    });
+  }
+
+  /**
+   * @private
+   * Builds one trigger map per tenant.
+   * @returns {Promise<Map<string, Map<string, Map<string, string>>>>}
+   */
+  static async _getAccessTriggerMapsForTenants(tenantIds) {
+    const entries = await Promise.all(
+      tenantIds.map(async (tenantId) => [
+        tenantId,
+        await this._getAccessTriggerMap(tenantId),
+      ]),
+    );
+    return new Map(entries);
+  }
+
+  /** @private */
+  static _uniqueTenantIds(bookings) {
+    return [...new Set(bookings.map((booking) => booking.tenantId))];
+  }
+
+  /**
+   * @private
+   * Shared post-processing: applies the per-booking access resolution, the
+   * state/validity filter and (optionally) enriches with the full access point
+   * list. Returns plain, sensitive-data-free result objects.
+   */
+  static async _buildAccessBookingResults(
+    bookings,
+    {
+      state,
+      capability,
+      includeAccessPoints,
+      includeLockers,
+      includeBuffer,
+      now,
+      resolve,
+    },
+  ) {
+    const results = [];
+
+    for (const booking of bookings) {
+      if (!booking.isBookingValid()) {
+        continue;
+      }
+
+      const resolved = resolve(booking);
+      if (!resolved || !resolved.accessPointIds.length) {
+        continue;
+      }
+
+      const needsEnrichment =
+        includeAccessPoints || (state === "active" && includeBuffer);
+      let enrichedPoints = null;
+      if (needsEnrichment) {
+        enrichedPoints = await this._getFilteredBookingAccessPoints(
+          booking.tenantId,
+          booking.id,
+          { capability, includeLockers },
+        );
+      }
+
+      if (
+        !this._matchesState(booking, state, now, includeBuffer, enrichedPoints)
+      ) {
+        continue;
+      }
+
+      const result = {
+        id: booking.id,
+        tenantId: booking.tenantId,
+        assignedUserId: booking.assignedUserId,
+        timeBegin: booking.timeBegin,
+        timeEnd: booking.timeEnd,
+        isCommitted: booking.isCommitted,
+        isPayed: booking.isPayed,
+        isRejected: booking.isRejected,
+        priceEur: booking.priceEur,
+        state: this._deriveState(booking, now),
+        accessPointIds: resolved.accessPointIds,
+      };
+
+      if (includeAccessPoints) {
+        result.accessPoints = enrichedPoints;
+      }
+
+      results.push(result);
+    }
+
+    return this._sortResults(results, state);
+  }
+
+  /**
+   * @private
+   * Builds the trigger map for a tenant: a map from a directly bookable id to
+   * the access points that a booking referencing it would inherit. The map
+   * keys are exactly the bookable ids that confer an access authorization.
+   *
+   * Inheritance mirrors {@link _getBookableRelations} but inverted: for each
+   * bookable X with active access points, a booking confers X's points if it
+   * directly references X, an ancestor of X (when children are inherited) or a
+   * descendant of X (when parents are inherited).
+   *
+   * @returns {Promise<Map<string, Map<string, string>>>} bookableId -> (accessPointId -> mode)
+   */
+  static async _getAccessTriggerMap(tenant) {
+    const apBookables =
+      await BookableManager.getBookablesWithAccessPoints(tenant);
+
+    const inheritChildren =
+      process.env.ACCESS_POINTS_INHERIT_CHILDREN !== "false";
+    const inheritParents =
+      process.env.ACCESS_POINTS_INHERIT_PARENTS !== "false";
+
+    const map = new Map();
+    const addPoints = (bookableId, points) => {
+      let pointMap = map.get(bookableId);
+      if (!pointMap) {
+        pointMap = new Map();
+        map.set(bookableId, pointMap);
+      }
+      for (const point of points) {
+        pointMap.set(
+          String(point.id),
+          point.mode || AccessPointMode.AUTHORIZATION,
+        );
+      }
+    };
+
+    await Promise.all(
+      apBookables.map(async (bookable) => {
+        const points = bookable.accessPointDetails?.points || [];
+        if (!points.length) {
+          return;
+        }
+
+        addPoints(bookable.id, points);
+
+        const relatedLookups = [];
+        if (inheritChildren) {
+          relatedLookups.push(
+            BookableManager.getAllParentBookables(bookable.id, tenant),
+          );
+        }
+        if (inheritParents) {
+          relatedLookups.push(
+            BookableManager.getRelatedBookables(bookable.id, tenant),
+          );
+        }
+
+        const relatedGroups = await Promise.all(relatedLookups);
+        for (const group of relatedGroups) {
+          for (const related of group) {
+            addPoints(related.id, points);
+          }
+        }
+      }),
+    );
+
+    return map;
+  }
+
+  /**
+   * @private
+   * Resolves the set of directly bookable ids whose booking would confer the
+   * given access point, plus the access point's mode.
+   * @returns {Promise<{ triggerIds: Set<string>, mode: string|null }>}
+   */
+  static async _getTriggerBookableIdsForAccessPoint(tenant, accessPointId) {
+    const apBookables = await BookableManager.getBookablesByAccessPointId(
+      tenant,
+      accessPointId,
+    );
+
+    const inheritChildren =
+      process.env.ACCESS_POINTS_INHERIT_CHILDREN !== "false";
+    const inheritParents =
+      process.env.ACCESS_POINTS_INHERIT_PARENTS !== "false";
+
+    const triggerIds = new Set();
+    let mode = null;
+
+    await Promise.all(
+      apBookables.map(async (bookable) => {
+        const point = (bookable.accessPointDetails?.points || []).find(
+          (p) => String(p.id) === String(accessPointId),
+        );
+        if (point) {
+          mode = point.mode || AccessPointMode.AUTHORIZATION;
+        }
+
+        triggerIds.add(bookable.id);
+
+        const relatedLookups = [];
+        if (inheritChildren) {
+          relatedLookups.push(
+            BookableManager.getAllParentBookables(bookable.id, tenant),
+          );
+        }
+        if (inheritParents) {
+          relatedLookups.push(
+            BookableManager.getRelatedBookables(bookable.id, tenant),
+          );
+        }
+
+        const relatedGroups = await Promise.all(relatedLookups);
+        for (const group of relatedGroups) {
+          for (const related of group) {
+            triggerIds.add(related.id);
+          }
+        }
+      }),
+    );
+
+    return { triggerIds, mode };
+  }
+
+  /**
+   * @private
+   * Resolves which access point ids a booking confers, using the precomputed
+   * trigger map. Honors the `capability` and `includeLockers` options.
+   */
+  static _resolveBookingAccess(
+    booking,
+    triggerMap,
+    { capability, includeLockers },
+  ) {
+    const directIds = this._getBookableIds(booking);
+    const onlyAuthorization = capability === "authorization";
+    const seen = new Set();
+    const accessPointIds = [];
+
+    for (const bookableId of directIds) {
+      const pointMap = triggerMap.get(bookableId);
+      if (!pointMap) {
+        continue;
+      }
+
+      for (const [accessPointId, mode] of pointMap) {
+        if (seen.has(accessPointId)) {
+          continue;
+        }
+        if (onlyAuthorization && !this._usesAuthorization(mode)) {
+          continue;
+        }
+        seen.add(accessPointId);
+        accessPointIds.push(accessPointId);
+      }
+    }
+
+    if (includeLockers && !onlyAuthorization) {
+      for (const lockerInfo of booking.lockerInfo || []) {
+        const lockerId = lockerInfo.processId;
+        if (lockerId && !seen.has(String(lockerId))) {
+          seen.add(String(lockerId));
+          accessPointIds.push(String(lockerId));
+        }
+      }
+    }
+
+    return { accessPointIds };
+  }
+
+  /**
+   * @private
+   * Resolves whether a booking confers a single, specific access point.
+   */
+  static _resolveBookingAccessForPoint(
+    booking,
+    accessPointId,
+    mode,
+    { triggerIds, capability, includeLockers },
+  ) {
+    const onlyAuthorization = capability === "authorization";
+    const targetId = String(accessPointId);
+
+    const directIds = this._getBookableIds(booking);
+    const matchesDoor =
+      triggerIds.size > 0 &&
+      directIds.some((id) => triggerIds.has(id)) &&
+      !(onlyAuthorization && !this._usesAuthorization(mode));
+
+    const matchesLocker =
+      includeLockers &&
+      !onlyAuthorization &&
+      (booking.lockerInfo || []).some(
+        (info) => String(info.processId) === targetId,
+      );
+
+    if (!matchesDoor && !matchesLocker) {
+      return { accessPointIds: [] };
+    }
+
+    return { accessPointIds: [targetId] };
+  }
+
+  /**
+   * @private
+   * Loads the access points of a booking and applies the capability/locker
+   * filters. Reuses {@link getByBooking} (which never exposes PINs).
+   */
+  static async _getFilteredBookingAccessPoints(
+    tenant,
+    bookingId,
+    { capability, includeLockers },
+  ) {
+    const points = await this.getByBooking(tenant, bookingId);
+    const onlyAuthorization = capability === "authorization";
+
+    return points.filter((point) => {
+      if (point.type === "locker") {
+        return includeLockers && !onlyAuthorization;
+      }
+      if (onlyAuthorization) {
+        return this._usesAuthorization(point.mode);
+      }
+      return true;
+    });
+  }
+
+  /**
+   * @private
+   * Builds the database time filter for a state. Returns `{}` when the filter
+   * cannot be safely expressed at the database level (active + buffer).
+   */
+  static _buildTimeFilter(state, now, includeBuffer) {
+    switch (state) {
+      case "active":
+        if (includeBuffer) {
+          return {};
+        }
+        return { timeBegin: { $lte: now }, timeEnd: { $gte: now } };
+      case "upcoming":
+        return { timeBegin: { $gt: now } };
+      case "past":
+        return { timeEnd: { $lt: now } };
+      default:
+        return {};
+    }
+  }
+
+  /**
+   * @private
+   * In-memory state check (the database filter is only an optimization).
+   */
+  static _matchesState(booking, state, now, includeBuffer, enrichedPoints) {
+    switch (state) {
+      case "active":
+        if (includeBuffer) {
+          const { beforeMs, afterMs } = this._maxBuffer(enrichedPoints);
+          return booking.isWithinAccessWindow(beforeMs, afterMs, now);
+        }
+        return booking.timeBegin <= now && booking.timeEnd >= now;
+      case "upcoming":
+        return booking.timeBegin > now;
+      case "past":
+        return booking.timeEnd < now;
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * @private
+   * Largest access buffer across a booking's resolved door access points.
+   */
+  static _maxBuffer(enrichedPoints) {
+    let beforeMs = 0;
+    let afterMs = 0;
+    for (const point of enrichedPoints || []) {
+      const buffer = point.accessBuffer || {};
+      beforeMs = Math.max(beforeMs, buffer.beforeMs || 0);
+      afterMs = Math.max(afterMs, buffer.afterMs || 0);
+    }
+    return { beforeMs, afterMs };
+  }
+
+  /**
+   * @private
+   */
+  static _deriveState(booking, now) {
+    if (booking.timeBegin <= now && booking.timeEnd >= now) {
+      return "active";
+    }
+    if (booking.timeBegin > now) {
+      return "upcoming";
+    }
+    return "past";
+  }
+
+  /**
+   * @private
+   * Default sort: upcoming/active ascending by start, past descending.
+   */
+  static _sortResults(results, state) {
+    const descending = state === "past";
+    return results.sort((a, b) =>
+      descending ? b.timeBegin - a.timeBegin : a.timeBegin - b.timeBegin,
+    );
   }
 
   /**

@@ -202,6 +202,122 @@ class AccessController {
   }
 
   /**
+   * GET /access/bookings
+   * Tenant-independent: returns all bookings of a person (across all tenants)
+   * that grant an access authorization, optionally filtered by
+   * state/capability/lockers.
+   */
+  static async getAccessBookings(request, response) {
+    try {
+      const options = AccessController._parseAccessBookingQuery(request.query);
+      if (options.error) {
+        return ApiResponse.badRequest(response, options.error);
+      }
+
+      const targetUserId = await AccessController._resolveTargetUser(request);
+      if (!targetUserId) {
+        return response.sendStatus(403);
+      }
+
+      const bookings = await AccessService.getUserBookingsWithAccess(
+        targetUserId,
+        options,
+      );
+
+      return ApiResponse.ok(response, { data: bookings });
+    } catch (err) {
+      logger.error(err);
+      return ApiResponse.error(response, "Could not get access bookings");
+    }
+  }
+
+  /**
+   * GET /access/access-points/:accessPointId/bookings
+   * Tenant-independent: returns all bookings of a person (across all tenants)
+   * that grant an access authorization for a specific access point.
+   */
+  static async getAccessPointBookings(request, response) {
+    try {
+      const { accessPointId } = request.params;
+
+      const options = AccessController._parseAccessBookingQuery(request.query);
+      if (options.error) {
+        return ApiResponse.badRequest(response, options.error);
+      }
+
+      const targetUserId = await AccessController._resolveTargetUser(request);
+      if (!targetUserId) {
+        return response.sendStatus(403);
+      }
+
+      const bookings = await AccessService.getUserBookingsForAccessPoint(
+        targetUserId,
+        accessPointId,
+        options,
+      );
+
+      return ApiResponse.ok(response, { data: bookings });
+    } catch (err) {
+      logger.error(err);
+      return ApiResponse.error(response, "Could not get access point bookings");
+    }
+  }
+
+  /**
+   * @private
+   * Parses and validates the query parameters shared by the access booking
+   * routes. Returns an options object or `{ error }` on invalid input.
+   */
+  static _parseAccessBookingQuery(query = {}) {
+    const allowedStates = ["active", "upcoming", "past", "all"];
+    const state = query.filter || query.state || "all";
+    if (!allowedStates.includes(state)) {
+      return {
+        error: `Invalid filter '${state}'. Allowed: ${allowedStates.join(", ")}`,
+      };
+    }
+
+    let capability = null;
+    if (query.capability !== undefined) {
+      if (query.capability !== "authorization") {
+        return {
+          error: `Invalid capability '${query.capability}'. Allowed: authorization`,
+        };
+      }
+      capability = "authorization";
+    }
+
+    return {
+      state,
+      capability,
+      includeAccessPoints: query.includeAccessPoints === "true",
+      includeLockers: query.includeLockers === "true",
+      includeBuffer: query.includeBuffer === "true",
+    };
+  }
+
+  /**
+   * @private
+   * Resolves the user whose bookings should be returned. Defaults to the
+   * authenticated user. Because the lookup is tenant-independent, querying
+   * another user via `?userId=` requires instance ownership. Returns null when
+   * not allowed.
+   */
+  static async _resolveTargetUser(request) {
+    const requestedUserId = request.query.userId;
+    const currentUserId = request.user.id;
+
+    if (!requestedUserId || requestedUserId === currentUserId) {
+      return currentUserId;
+    }
+
+    const isInstanceOwner =
+      await PermissionService._isInstanceOwner(currentUserId);
+
+    return isInstanceOwner ? requestedUserId : null;
+  }
+
+  /**
    * @private
    * Checks that the booking is active (committed, paid if priced, not rejected
    * and within its time window) and that the user is either the booking owner
