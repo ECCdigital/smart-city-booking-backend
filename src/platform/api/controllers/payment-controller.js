@@ -333,7 +333,7 @@ class PaymentController {
           bookings[0].paymentProvider,
           options,
         );
-        const url = paymentService.paymentResponse();
+        const url = await paymentService.paymentResponse();
         response.redirect(302, url);
       } else {
         const urls = [];

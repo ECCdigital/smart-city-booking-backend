@@ -164,6 +164,13 @@ class InvoicePaymentService extends PaymentService {
     } catch (err) {
       logger.error("Fehler beim Versenden der Sammelrechnung:", err);
     }
+
+    return {
+      bookingIds: this.bookingIds,
+      name,
+      invoiceId,
+      revision,
+    };
   }
 
   async paymentNotification() {

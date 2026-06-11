@@ -135,7 +135,7 @@ const bookableSchemaDefinition = {
     default: [],
   },
   lockerDetails: { type: Object, default: { active: false, units: [] } },
-  requiredFields: { type: [String], default: [] },
+  requiredFields: { type: [String], default: ["address", "zipCode", "city"] },
 
   externalProviders: {
     type: [

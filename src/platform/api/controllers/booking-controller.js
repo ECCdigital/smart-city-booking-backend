@@ -306,6 +306,8 @@ class BookingController {
       const tenantId = request.params.tenant;
       const ids = request.params.ids;
 
+      console.log(ids);
+
       if (ids) {
         const splitIds = ids.split(",");
 
@@ -313,6 +315,11 @@ class BookingController {
           tenantId,
           splitIds,
         );
+
+        for (const id of splitIds) {
+          const tmp = await BookingService.getBookingStatus(tenantId, splitIds);
+
+        }
 
         logger.info(
           `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,
@@ -405,7 +412,11 @@ class BookingController {
           RolePermission.MANAGE_BOOKINGS,
         )
       ) {
-        await BookingService.updateBooking(tenant, booking);
+        const savedBooking = await BookingService.updateBooking(
+          tenant,
+          booking,
+          { requestBody: request.body },
+        );
 
         await WorkflowService.updateTask(
           tenant,
@@ -416,7 +427,7 @@ class BookingController {
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );
-        response.status(201).send(booking);
+        response.status(201).send(savedBooking);
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to update booking.`,

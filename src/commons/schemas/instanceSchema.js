@@ -54,6 +54,13 @@ const instanceSchemaDefinition = {
       path: { type: Array, default: [] },
     },
   },
+  checkout: {
+    type: Object,
+    default: {
+      useLegacyCheckout: true,
+      checkoutUrl: "",
+    },
+  },
   publicOffersEnabled: { type: Boolean, default: false },
   portalUrl: { type: String, default: "" },
   branding: {

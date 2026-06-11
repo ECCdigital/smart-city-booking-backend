@@ -34,11 +34,25 @@ class PaymentService {
     throw new Error("paymentNotification not implemented");
   }
 
-  paymentResponse() {
-    return (
-      `${process.env.FRONTEND_URL}/checkout/status` +
-      `?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}`
-    );
+  async paymentResponse() {
+    const InstanceManager = require("../../../data-managers/instance-manager");
+    const instance = await InstanceManager.getInstance();
+
+    let checkoutUrl;
+
+    if (
+      instance &&
+      !instance.checkout.useLegacyCheckout &&
+      instance.checkout.checkoutUrl
+    ) {
+      checkoutUrl = `${instance.checkout.checkoutUrl}/checkout/status?bookingId=${this.bookingIds.join(",")}&tenantId=${this.tenantId}`;
+    } else {
+      checkoutUrl =
+        `${process.env.FRONTEND_URL}/checkout/status` +
+        `?ids=${this.bookingIds.join(",")}&tenant=${this.tenantId}`;
+    }
+
+    return checkoutUrl;
   }
 
   paymentRequest() {
