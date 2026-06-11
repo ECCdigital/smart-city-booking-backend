@@ -53,14 +53,6 @@ class CatalogController {
     try {
       const bundle = await CatalogService.getCatalogBundle();
 
-      const { enableCatalog } = await InstanceManager.getInstance();
-      if (!enableCatalog) {
-        return response.status(503).send({
-          success: false,
-          message: "Catalog feature is disabled.",
-        });
-      }
-
       if (!bundle) {
         return response.status(404).send({
           success: false,
@@ -68,7 +60,9 @@ class CatalogController {
         });
       }
 
-      if (bundle.catalog.visibility === "private") {
+      // Wenn Offers deaktiviert sind, gibt das Bundle nur Branding + Modus zurück.
+      // Visibility-Prüfung greift nur für den Offers-Modus.
+      if (bundle.offersEnabled && bundle.catalog?.visibility === "private") {
         const user = request.user;
         if (!user) {
           return response.status(401).send({
@@ -80,6 +74,23 @@ class CatalogController {
 
       response.status(200).send(bundle);
     } catch (error) {
+      response.status(error.code || 500).send({
+        success: false,
+        message: error.message || "Internal Server Error",
+      });
+    }
+  }
+
+  /**
+   * Liefert dem Frontend den aktuellen Portal-Modus inkl. Branding. Wird vom
+   * Catalog-Frontend bei jedem Page-Load als Routing-Hint gelesen.
+   */
+  static async getPortalMode(request, response) {
+    try {
+      const mode = await CatalogService.getPortalMode();
+      response.status(200).send(mode);
+    } catch (error) {
+      console.error("Error in CatalogController.getPortalMode:", error);
       response.status(error.code || 500).send({
         success: false,
         message: error.message || "Internal Server Error",
@@ -121,15 +132,21 @@ class CatalogController {
     try {
       const slug = request.params.slug;
 
-      const catalog = await CatalogService.getCatalog(slug);
+      const { publicOffersEnabled } = await InstanceManager.getPortalConfig();
 
-      const { enableCatalog } = await InstanceManager.getInstance();
-      if (!enableCatalog) {
-        return response.status(503).send({
-          success: false,
-          message: "Catalog feature is disabled.",
+      // Wenn die Buchungsangebote deaktiviert sind, bricht der Endpoint nicht
+      // mehr hart ab. Stattdessen erhält das Frontend ein minimales Payload
+      // (`offersEnabled: false`) und schaltet auf den Personal-Modus um.
+      if (!publicOffersEnabled) {
+        const branding = await CatalogService.getBranding();
+        return response.status(200).send({
+          offersEnabled: false,
+          slug,
+          branding,
         });
       }
+
+      const catalog = await CatalogService.getCatalog(slug);
 
       try {
         const user = await authenticateIfNeeded(
@@ -159,34 +176,13 @@ class CatalogController {
     try {
       const slug = request.params.slug;
 
-      const themeData = { theme: null, visibility: null };
-
-      if (!slug) {
-        const { theme, visibility } = await CatalogService.getTheme();
-        themeData.theme = theme;
-        themeData.visibility = visibility;
-      } else {
-        const { theme, visibility } = await CatalogService.getThemeBySlug(slug);
-        themeData.theme = theme;
-        themeData.visibility = visibility;
-      }
-
-      const catalog = await CatalogService.getInstanceCatalog();
-      themeData.logoUrl = catalog.logoUrl;
-      themeData.hero = catalog.hero;
-
-      const { enableCatalog } = await InstanceManager.getInstance();
-      if (!enableCatalog) {
-        return response.status(503).send({
-          success: false,
-          message: "Catalog feature is disabled.",
-        });
-      }
+      const themeData = slug
+        ? await CatalogService.getThemeBySlug(slug)
+        : await CatalogService.getTheme();
 
       response.status(200).send(themeData);
     } catch (error) {
-      console.error("Error in CatalogController.getTheme:", error);
-      response.status(500).send({
+      response.status(error.code || 500).send({
         success: false,
         message: error.message || "Internal Server Error",
       });

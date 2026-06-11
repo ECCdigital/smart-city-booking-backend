@@ -98,6 +98,13 @@ class UserManager {
     }
   }
 
+  static async getUserByCard(appId, publicId) {
+    return await UserModel.findOne({
+      "cardAuth.appId": appId,
+      "cardAuth.publicId": publicId,
+    }).lean();
+  }
+
   static async deleteUser(id) {
     try {
       return await UserModel.deleteOne({ id: id });
@@ -126,7 +133,6 @@ class UserManager {
     if (!rawUser) {
       return null;
     }
-
 
     return rawUser.toEntity();
   }

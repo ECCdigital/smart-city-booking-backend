@@ -151,7 +151,7 @@ router.delete(
   BookingController.removeBooking,
 );
 
-router.get("/bookings/:ids/status", BookingController.getBookingStatus);
+router.get("/bookings/:ids/status", optionalAuth, BookingController.getBookingStatus);
 
 router.get(
   "/bookings/:id/status/public",

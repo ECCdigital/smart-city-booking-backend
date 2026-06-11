@@ -363,6 +363,7 @@ class Bookable {
       attachments: this.attachments,
       customFields: this.customFields,
       customFieldValues: this.customFieldValues,
+      cancellationPolicy: this.cancellationPolicy,
     };
   }
 

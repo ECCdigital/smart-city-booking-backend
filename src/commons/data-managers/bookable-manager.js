@@ -3,6 +3,9 @@ const BookableModel = require("./models/bookableModel");
 const {
   CustomFieldCache,
 } = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const InstanceModel = require("./models/instanceModel");
 const TenantModel = require("./models/tenantModel");
 
@@ -268,6 +271,10 @@ class BookableManager {
   static async storeBookable(bookable, upsert = true) {
     const bookableEntity =
       bookable instanceof Bookable ? bookable : new Bookable(bookable);
+
+    CustomFieldService.normalizeDefinitions(
+      bookableEntity.customFieldDefinitions || [],
+    );
 
     bookableEntity.validate();
 

@@ -98,6 +98,10 @@ const bookingSchemaDefinition = {
     type: [customFieldValueSchema],
     default: [],
   },
+  cancellationPolicy: {
+    type: Object,
+    default: { userCancellable: true },
+  },
 };
 
 module.exports = {

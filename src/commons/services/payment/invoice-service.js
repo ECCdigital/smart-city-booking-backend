@@ -56,7 +56,7 @@ class InvoiceService {
     }
   }
 
-  static async createAggregatedInvoice(tenantId, bookingIds) {
+  static async createAggregatedInvoice(tenantId, bookingIds, groupBookingId) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
       const bookings = await BookingManager.getBookings(tenantId, bookingIds);
@@ -87,6 +87,7 @@ class InvoiceService {
         tenantId,
         bookings.map((b) => b.id),
         invoiceNumber,
+        { groupBookingId },
       );
 
       await NextcloudManager.createFile({

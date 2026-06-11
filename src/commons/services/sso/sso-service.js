@@ -28,7 +28,7 @@ class SsoService {
     return user;
   }
 
-  static async handleSignup(token) {
+  static async handleSignup(token, legalAcceptance) {
     const instance = await InstanceManger.getInstance();
     const app = instance.applications.find((app) => app.id === "keycloak");
     let kcResponse = await SsoService.verifyToken(token, app);
@@ -48,6 +48,7 @@ class SsoService {
       id: kcResponse.email,
       firstName: kcResponse.given_name,
       lastName: kcResponse.family_name,
+      legalAcceptance: legalAcceptance,
     });
 
     newUser.authType = "keycloak";

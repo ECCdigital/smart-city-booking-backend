@@ -313,6 +313,32 @@ class MailController {
     });
   }
 
+  static async sendForgotPasswordRequest(address, hookId, resetUrl) {
+    const instance = await InstanceManager.getInstance(false);
+
+    let resetUrlTemplate;
+
+    if (resetUrl) {
+      resetUrlTemplate = `${resetUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
+    } else {
+      resetUrlTemplate = `${process.env.FRONTEND_URL}/password/reset?token=${hookId}&id=${encodeURIComponent(address)}`;
+    }
+
+    const content = renderSnippet("forgot-password-request", {
+      resetUrl: resetUrlTemplate,
+    });
+
+    await MailerService.send({
+      address,
+      subject: "Kennwort zurücksetzen",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Kennwort zurücksetzen",
+        content,
+      },
+    });
+  }
+
   static async sendUserCreated(userId) {
     const instance = await InstanceManager.getInstance(false);
     const user = await UserManager.getUser(userId);
@@ -383,6 +409,37 @@ class MailController {
         content,
       },
       useInstanceMail: tenant.useInstanceMail,
+    });
+  }
+
+  static async sendCardLinkRequest({
+    address,
+    firstName,
+    hookId,
+    cardLabel,
+    linkUrlBase,
+  }) {
+    const instance = await InstanceManager.getInstance(false);
+
+    const linkUrl = linkUrlBase
+      ? `${linkUrlBase}?token=${hookId}&id=${encodeURIComponent(address)}`
+      : `${process.env.BACKEND_URL}/auth/card/link?token=${hookId}&id=${encodeURIComponent(address)}`;
+
+    const content = renderSnippet("card-link-request", {
+      email: address,
+      firstName,
+      cardLabel,
+      linkUrl,
+    });
+
+    await MailerService.send({
+      address,
+      subject: "Karte mit Ihrem Account verknüpfen",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Karte mit Ihrem Account verknüpfen",
+        content,
+      },
     });
   }
 }

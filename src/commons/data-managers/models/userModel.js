@@ -4,6 +4,11 @@ const { Schema } = mongoose;
 
 const UserSchema = new Schema(userSchemaDefinition);
 
+UserSchema.index(
+  { "cardAuth.appId": 1, "cardAuth.publicId": 1 },
+  { unique: true, sparse: true, name: "cardAuth_app_public_idx" },
+);
+
 UserSchema.methods.toEntity = function () {
   const { User } = require("../../entities/user/user");
   return new User(this.toObject());

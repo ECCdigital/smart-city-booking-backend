@@ -14,6 +14,13 @@ const Membership = require("../../../commons/entities/tenant/membership");
 const InvitationService = require("../../../commons/services/invitation-service");
 const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
+const {
+  validateMailSnippets,
+  validateMailSubjects,
+} = require("../../../commons/mail-service/templates/mail-snippet-overrides");
+const {
+  mergeDefaultMailSnippets,
+} = require("../../../commons/mail-service/templates/default-mail-snippets");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -122,6 +129,22 @@ class TenantController {
       const tenant = new Tenant(request.body);
       tenant.id = uuidv4();
 
+      if (Object.prototype.hasOwnProperty.call(request.body, "mailSnippets")) {
+        try {
+          validateMailSnippets(request.body.mailSnippets);
+        } catch (error) {
+          return response.status(400).send(error.message);
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(request.body, "mailSubjects")) {
+        try {
+          validateMailSubjects(request.body.mailSubjects);
+        } catch (error) {
+          return response.status(400).send(error.message);
+        }
+      }
+
       tenant.ownerUserIds = [user.id];
       if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
@@ -170,6 +193,7 @@ class TenantController {
         tenant.genericMailTemplate = emailTemplate;
         tenant.receiptTemplate = receiptTemplate;
         tenant.invoiceTemplate = invoiceTemplate;
+        tenant.mailSnippets = mergeDefaultMailSnippets(tenant.mailSnippets);
 
         await TenantManager.storeTenant(tenant);
         await MembershipManager.addMembership(tenant.id, membership);
@@ -205,6 +229,8 @@ class TenantController {
           "bookableDetailLink",
           "eventDetailLink",
           "genericMailTemplate",
+          "mailSnippets",
+          "mailSubjects",
           "useInstanceMail",
           "noreplyMail",
           "noreplyDisplayName",
@@ -233,6 +259,26 @@ class TenantController {
           "cancellationTemplate",
           "cancellationNumberPrefix",
         ];
+
+        if (
+          Object.prototype.hasOwnProperty.call(request.body, "mailSnippets")
+        ) {
+          try {
+            validateMailSnippets(request.body.mailSnippets);
+          } catch (error) {
+            return response.status(400).send(error.message);
+          }
+        }
+
+        if (
+          Object.prototype.hasOwnProperty.call(request.body, "mailSubjects")
+        ) {
+          try {
+            validateMailSubjects(request.body.mailSubjects);
+          } catch (error) {
+            return response.status(400).send(error.message);
+          }
+        }
 
         fields.forEach((field) => {
           if (Object.prototype.hasOwnProperty.call(request.body, field)) {

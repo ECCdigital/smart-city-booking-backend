@@ -130,6 +130,7 @@ class InvoicePaymentService extends PaymentService {
       await InvoiceService.createAggregatedInvoice(
         this.tenantId,
         this.bookingIds,
+        this.groupBookingId,
       );
 
     for (const booking of bookings) {
@@ -241,6 +242,7 @@ class InvoicePaymentService extends PaymentService {
       await InvoiceService.createAggregatedInvoice(
         this.tenantId,
         this.bookingIds,
+        this.groupBookingId,
       );
 
     for (const booking of bookings) {

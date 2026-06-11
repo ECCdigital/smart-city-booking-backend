@@ -61,7 +61,7 @@ class Event {
       id: this.id,
       tenantId: this.tenantId,
       attendees: this.attendees,
-      eventAddress: this.eventAddress,
+      location: this.location,
       eventLocation: this.eventLocation,
       eventOrganizer: this.eventOrganizer,
       format: this.format,

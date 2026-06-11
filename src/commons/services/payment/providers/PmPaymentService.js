@@ -13,6 +13,15 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+const PM_CHECKOUT_URL_PROD = "https://www.payment.govconnect.de/payment/secure";
+
+const PM_CHECKOUT_URL_TEST =
+  "https://payment-test.govconnect.de/payment/secure";
+
+const PM_STATUS_URL_PROD = "https://www.payment.govconnect.de/payment/status";
+
+const PM_STATUS_URL_TEST = "https://payment-test.govconnect.de/payment/status";
+
 class PmPaymentService extends PaymentService {
   static PM_SUCCESS_CODE = 1;
 
@@ -31,9 +40,9 @@ class PmPaymentService extends PaymentService {
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_CHECKOUT_URL;
       if (paymentApp.paymentMode === "prod") {
-        PM_CHECKOUT_URL = "https://payment.govconnect.de/payment/secure";
+        PM_CHECKOUT_URL = PM_CHECKOUT_URL_PROD;
       } else {
-        PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
+        PM_CHECKOUT_URL = PM_CHECKOUT_URL_TEST;
       }
 
       const amount = Math.round(booking.priceEur * 100 || 0).toString();
@@ -95,9 +104,9 @@ class PmPaymentService extends PaymentService {
     const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
     let PM_CHECKOUT_URL;
     if (paymentApp.paymentMode === "prod") {
-      PM_CHECKOUT_URL = "https://payment.govconnect.de/payment/secure";
+      PM_CHECKOUT_URL = PM_CHECKOUT_URL_PROD;
     } else {
-      PM_CHECKOUT_URL = "https://payment-test.govconnect.de/payment/secure";
+      PM_CHECKOUT_URL = PM_CHECKOUT_URL_TEST;
     }
 
     const amount = Math.round(
@@ -207,10 +216,10 @@ class PmPaymentService extends PaymentService {
 
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_STATUS_URL;
-      if (paymentApp.paymentProvider === "prod") {
-        PM_STATUS_URL = "https://payment.govconnect.de/payment/status";
+      if (paymentApp.paymentMode === "prod") {
+        PM_STATUS_URL = PM_STATUS_URL_PROD;
       } else {
-        PM_STATUS_URL = "https://payment-test.govconnect.de/payment/status";
+        PM_STATUS_URL = PM_STATUS_URL_TEST;
       }
 
       const config = {
@@ -223,7 +232,9 @@ class PmPaymentService extends PaymentService {
 
       const response = await axios(config);
 
-      if (response.data.status === PmPaymentService.PM_SUCCESS_CODE) {
+      const paymentStatus = Number(response.data?.status);
+
+      if (paymentStatus === PmPaymentService.PM_SUCCESS_CODE) {
         logger.info(
           `${this.tenantId} -- pmPayment responds with status ${PmPaymentService.PM_SUCCESS_CODE} / successfully payed for bookings ${this.bookingIds} .`,
         );
@@ -231,16 +242,18 @@ class PmPaymentService extends PaymentService {
         const paymentMapping = {
           giropay: "GIROPAY",
           sepa: "TRANSFER",
-          creditCard: "CREDIT_CARD",
+          creditcard: "CREDIT_CARD",
           paypal: "PAYPAL",
-          applePay: "APPLE_PAY",
-          googlePay: "GOOGLE_PAY",
+          applepay: "APPLE_PAY",
+          googlepay: "GOOGLE_PAY",
         };
 
         await this.handleSuccessfulPayment({
           bookingIds: this.bookingIds,
           tenantId: this.tenantId,
-          paymentMethod: paymentMapping[paymentProvider] || "OTHER",
+          paymentMethod:
+            paymentMapping[String(paymentProvider || "").toLowerCase()] ||
+            "OTHER",
         });
 
         logger.info(
@@ -251,9 +264,9 @@ class PmPaymentService extends PaymentService {
       } else {
         // TODO: remove booking?
         logger.warn(
-          `${this.tenantId} -- bookings ${this.bookingIds} could not be payed.`,
+          `${this.tenantId} -- bookings ${this.bookingIds} could not be payed. pmPayment status response: ${JSON.stringify(response.data)}`,
         );
-        return true;
+        return false;
       }
     } catch (error) {
       logger.error(

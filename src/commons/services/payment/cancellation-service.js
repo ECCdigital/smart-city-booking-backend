@@ -88,6 +88,7 @@ class CancellationService {
   static async createAggregatedCancellation({
     tenantId,
     bookingIds,
+    groupBookingId,
     options = {},
   }) {
     try {
@@ -146,6 +147,7 @@ class CancellationService {
         {
           ...options,
           originalInvoiceDate,
+          groupBookingId,
         },
       );
 

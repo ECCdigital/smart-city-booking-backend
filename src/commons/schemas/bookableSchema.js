@@ -117,6 +117,12 @@ const bookableSchemaDefinition = {
   freeBookingUsers: { type: [String], default: [] },
   freeBookingRoles: { type: [String], default: [] },
 
+  // Cancellation policy
+  cancellationPolicy: {
+    type: Object,
+    default: { userCancellable: true },
+  },
+
   // Relationship properties
   relatedBookableIds: { type: [String], default: [] },
   checkoutBookableIds: { type: [Object], default: [] },

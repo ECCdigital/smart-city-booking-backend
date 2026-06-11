@@ -56,14 +56,6 @@ const catalogSchemaDefinition = {
     enum: ["public", "private", "unlisted"],
     default: "public",
   },
-  theme: {
-    active: { type: Boolean, default: false },
-    colors: {
-      primary: { type: String, default: "" },
-      secondary: { type: String, default: "" },
-    },
-  },
-  logoUrl: { type: String, default: "" },
   hero: {
     type: Object,
     default: {

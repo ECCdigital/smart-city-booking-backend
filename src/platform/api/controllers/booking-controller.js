@@ -582,7 +582,7 @@ class BookingController {
       const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
-      const { reason, skipCancellation } = request.body;
+      const { reason, skipCancellation, bankDetails } = request.body || {};
       if (!id) {
         return response.sendStatus(400);
       }
@@ -607,6 +607,7 @@ class BookingController {
           null,
           false,
           Boolean(skipCancellation),
+          bankDetails || null,
         );
         return response.sendStatus(200);
       } else {
@@ -627,17 +628,28 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const id = request.params.id;
-      const reason = request.body.reason;
       if (!id) {
         return response.sendStatus(400);
       }
 
-      await BookingService.requestRejectBooking(tenant, id, reason);
+      const payload = request.body || {};
+      const reason = payload.reason ?? request.body?.reason ?? "";
+      const bankDetails = payload.bankDetails ?? null;
+
+      await BookingService.requestRejectBooking(tenant, id, {
+        reason,
+        bankDetails,
+      });
 
       response.sendStatus(201);
     } catch (err) {
       logger.error(err);
       if (!response.headersSent) {
+        if (err && typeof err.statusCode === "number") {
+          return response
+            .status(err.statusCode)
+            .send({ code: err.code, message: err.message });
+        }
         response.status(500).send("Could not reject booking");
       }
     }
@@ -661,8 +673,16 @@ class BookingController {
       const hook = booking.hooks.find((h) => h.id === hookId);
       if (hook) {
         if (hook.type === BOOKING_HOOK_TYPES.REJECT) {
-          const { reason } = hook.payload;
-          await BookingService.rejectBooking(tenant, id, reason, hookId);
+          const { reason, bankDetails } = hook.payload || {};
+          await BookingService.rejectBooking(
+            tenant,
+            id,
+            reason,
+            hookId,
+            false,
+            false,
+            bankDetails || null,
+          );
         } else {
           return response.sendStatus(400);
         }

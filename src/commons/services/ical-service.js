@@ -324,12 +324,16 @@ class ICalService {
     if (event.eventLocation?.name) {
       locationParts.push(event.eventLocation.name);
     }
-    if (event.eventAddress) {
-      const addr = event.eventAddress;
-      const street = [addr.street, addr.houseNumber].filter(Boolean).join(" ");
-      const cityLine = [addr.zip, addr.city].filter(Boolean).join(" ");
+    if (event.location?.address) {
+      const addr = event.location.address;
+      const street = [addr.street, addr.house_number]
+        .filter(Boolean)
+        .join(" ");
+      const cityLine = [addr.post_code, addr.city].filter(Boolean).join(" ");
       if (street) locationParts.push(street);
-      if (addr.additional) locationParts.push(addr.additional);
+      if (event.location.meta?.additional) {
+        locationParts.push(event.location.meta.additional);
+      }
       if (cityLine) locationParts.push(cityLine);
     }
     if (locationParts.length > 0) {

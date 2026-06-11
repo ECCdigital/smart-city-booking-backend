@@ -69,6 +69,16 @@ class User {
   }
 
   /**
+   * Add a forgot-password hook (token-only, password set after email link)
+   * @param {string} [resetUrl] Optional frontend URL for the reset page
+   * @returns {UserHook} The created hook
+   */
+  addForgotPasswordHook(resetUrl) {
+    const payload = resetUrl ? { resetUrl } : {};
+    return this.addHook(USER_HOOK_TYPES.FORGOT_PASSWORD, payload);
+  }
+
+  /**
    * Release a hook
    * @param {string} hookId Hook ID to release
    * @returns {boolean} True if hook was released

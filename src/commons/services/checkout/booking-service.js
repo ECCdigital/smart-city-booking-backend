@@ -173,6 +173,7 @@ class BookingService {
       isRejected,
       bookWithPrice,
       customFieldValues: rawCustomFieldValues,
+      cancellationPolicy,
     } = bookingAttempt;
 
     const customFieldValues =
@@ -279,6 +280,7 @@ class BookingService {
         bookWithPrice,
         checkoutId: providedCheckoutId,
         customFieldValues,
+        cancellationPolicy,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
@@ -647,6 +649,7 @@ class BookingService {
         lockerInfo: oldBooking.lockerInfo,
         checkoutId,
         customFieldValues: updatedBooking.customFieldValues,
+        cancellationPolicy: updatedBooking.cancellationPolicy,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({
@@ -1007,6 +1010,7 @@ class BookingService {
     hookId = null,
     skipWorkflow = false,
     skipCancellation = false,
+    bankDetails = null,
   ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
@@ -1025,7 +1029,11 @@ class BookingService {
       let attachments;
 
       if (booking.priceEur > 0 && !skipCancellation) {
-        const options = { alreadyPaid: booking.isPayed };
+        const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+        const options = {
+          alreadyPaid: booking.isPayed,
+          bankDetails: sanitizedBankDetails || undefined,
+        };
         const { cancellation, name, cancellationId, revision, timeCreated } =
           await CancellationService.createSingleCancellation({
             tenantId,
@@ -1138,6 +1146,7 @@ class BookingService {
         await CancellationService.createAggregatedCancellation({
           tenantId,
           bookingIds: groupBooking.bookingIds,
+          groupBookingId: groupBooking.id,
           options,
         });
 
@@ -1213,17 +1222,29 @@ class BookingService {
     return { success: true };
   }
 
-  static async requestRejectBooking(tenant, bookingId, reason = "") {
+  static async requestRejectBooking(tenant, bookingId, payload = {}) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
 
     if (!booking) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
 
-    try {
-      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, {
-        reason: reason,
+    if (booking.cancellationPolicy?.userCancellable !== true) {
+      throw new ForbiddenError("booking_user_cancellation_disabled", {
+        bookingId,
       });
+    }
+
+    const reason = typeof payload === "string" ? payload : payload.reason || "";
+    const sanitizedBankDetails = sanitizeBankDetails(payload?.bankDetails);
+
+    try {
+      const hookPayload = { reason };
+      if (sanitizedBankDetails) {
+        hookPayload.bankDetails = sanitizedBankDetails;
+      }
+
+      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, hookPayload);
 
       await BookingManager.storeBooking(booking);
 
@@ -1468,9 +1489,13 @@ class BookingService {
   ) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
-    if (bookings.every((b) => b.isCommitted && b.isPayed)) {
+    if (bookings.every((b) => b.isCommitted)) {
       let attachments = [...additionalAttachments];
-      if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
+
+      const allPayed = bookings.every((b) => b.isPayed);
+      const totalPrice = bookings.reduce((acc, b) => acc + b.priceEur, 0);
+
+      if (totalPrice > 0 && allPayed) {
         const { receipt, name, receiptId, revision, timeCreated } =
           await ReceiptService.createAggregatedReceipt(
             tenantId,
@@ -1580,6 +1605,30 @@ async function generateBookingReference(
 
 function isNoPaymentRequired(booking) {
   return !booking.priceEur || booking.priceEur === 0 || booking.isPayed;
+}
+
+function sanitizeBankDetails(bankDetails) {
+  if (!bankDetails || typeof bankDetails !== "object") {
+    return null;
+  }
+
+  const toTrimmedString = (value) =>
+    typeof value === "string" ? value.trim() : "";
+
+  const accountHolder = toTrimmedString(bankDetails.accountHolder);
+  const bankName = toTrimmedString(bankDetails.bankName);
+  const iban = toTrimmedString(bankDetails.iban)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const bic = toTrimmedString(bankDetails.bic)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+
+  if (!accountHolder && !bankName && !iban && !bic) {
+    return null;
+  }
+
+  return { accountHolder, bankName, iban, bic };
 }
 
 function isRejection(booking, hookId) {
