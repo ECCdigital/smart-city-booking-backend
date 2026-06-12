@@ -5,6 +5,10 @@ class AccessApplication extends TenantApplication {
   constructor(params) {
     super({ type: "access", ...params });
     this.apiBaseUrl = params.apiBaseUrl || "";
+    this.webhookCallbackUrl = params.webhookCallbackUrl || null;
+    this.webhookSubscriptionId = params.webhookSubscriptionId || null;
+    this.webhookRegisteredAt = params.webhookRegisteredAt || null;
+    this.webhookRegistrationError = params.webhookRegistrationError || null;
   }
 
   decrypt() {}
@@ -15,6 +19,10 @@ class AccessApplication extends TenantApplication {
     return {
       ...super.Schema,
       apiBaseUrl: { type: String, default: "" },
+      webhookCallbackUrl: { type: String, default: null },
+      webhookSubscriptionId: { type: String, default: null },
+      webhookRegisteredAt: { type: Number, default: null },
+      webhookRegistrationError: { type: String, default: null },
     };
   }
 }

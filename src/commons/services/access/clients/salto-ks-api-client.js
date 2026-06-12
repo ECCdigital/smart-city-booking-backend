@@ -69,6 +69,10 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       scope: this.scope,
     });
 
+    console.log("body", body);
+    console.log("basic", basic);
+    console.log("this.identityUrl", this.identityUrl);
+
     try {
       const response = await axios.request({
         method: "post",
@@ -92,6 +96,7 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       this._tokenExpiresAt = now + (expiresIn || 3600) * 1000;
       return this._token;
     } catch (err) {
+      console.log("Salto KS token request error", err.response?.data || err.message);
       logger.error(`Salto KS token request failed: ${err.message}`);
       throw err;
     }
@@ -150,7 +155,11 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     return this._request("delete", `/sites/${siteId}/users/${userId}`);
   }
 
-  async subscribeNotifications(callbackUrl, eventTypes = [], siteId = this.siteId) {
+  async subscribeNotifications(
+    callbackUrl,
+    eventTypes = [],
+    siteId = this.siteId,
+  ) {
     return this._request("post", `/sites/${siteId}/subscriptions`, {
       callbackUrl,
       eventTypes,
@@ -194,6 +203,14 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     apiBaseUrl = DEFAULT_SALTO_API_BASE_URL,
     options = {},
   ) {
+    console.log(
+      "testConnection",
+      clientId,
+      clientSecret,
+      siteId,
+      apiBaseUrl,
+      options,
+    );
     const client = new SaltoKsApiClient(
       clientId,
       clientSecret,
@@ -201,6 +218,8 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       apiBaseUrl,
       options,
     );
+
+    console.log("testConnection client", client);
 
     try {
       // Token request validates the credentials; listing locks validates the

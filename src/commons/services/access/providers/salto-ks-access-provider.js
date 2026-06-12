@@ -2,9 +2,7 @@ const crypto = require("crypto");
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const { createClient } = require("../clients/access-client-registry");
-const {
-  AccessPointMode,
-} = require("../../../entities/access/access-point");
+const { AccessPointMode } = require("../../../entities/access/access-point");
 
 require("../clients");
 
@@ -123,6 +121,7 @@ class SaltoKsAccessProvider extends AccessProvider {
 
     const client = await this._getClient(bookingContext.tenant);
     const providerResponse = {};
+    let userDeleted = null;
 
     if (accessId) {
       providerResponse.access = await client.revokeAccess(accessId);
@@ -133,8 +132,10 @@ class SaltoKsAccessProvider extends AccessProvider {
     if (saltoUserId) {
       try {
         providerResponse.user = await client.deleteUser(saltoUserId);
+        userDeleted = true;
       } catch (err) {
         providerResponse.userDeleteError = err.message;
+        userDeleted = false;
       }
     }
 
@@ -142,6 +143,8 @@ class SaltoKsAccessProvider extends AccessProvider {
       success: true,
       authorizationId: accessId || null,
       saltoUserId: saltoUserId || null,
+      accessId: accessId || null,
+      userDeleted,
       providerResponse,
     };
   }
@@ -186,17 +189,19 @@ class SaltoKsAccessProvider extends AccessProvider {
     return client.unsubscribeNotifications(subscriptionId);
   }
 
-  parseWebhook(rawPayload, _headers = {}) {
+  parseWebhook(rawPayload) {
     const payload =
       typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
 
     return {
       provider: PROVIDER_ID,
-      externalId: String(
-        payload.lockId || payload.lock_id || payload.id || "",
-      ),
+      externalId: String(payload.lockId || payload.lock_id || payload.id || ""),
       eventType:
-        payload.eventType || payload.event || payload.type || payload.name || null,
+        payload.eventType ||
+        payload.event ||
+        payload.type ||
+        payload.name ||
+        null,
       timestamp:
         payload.timestamp || payload.eventTime || payload.date || Date.now(),
       payload,
@@ -240,7 +245,8 @@ class SaltoKsAccessProvider extends AccessProvider {
     const booking = bookingContext.booking || {};
     const fullName = (booking.name || "").trim();
     const parts = fullName.split(/\s+/).filter(Boolean);
-    const firstName = parts.length > 1 ? parts.slice(0, -1).join(" ") : fullName;
+    const firstName =
+      parts.length > 1 ? parts.slice(0, -1).join(" ") : fullName;
     const lastName = parts.length > 1 ? parts[parts.length - 1] : "";
 
     return {

@@ -14,6 +14,7 @@ const Membership = require("../../../commons/entities/tenant/membership");
 const InvitationService = require("../../../commons/services/invitation-service");
 const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
+const AccessAppLifecycleService = require("../../../commons/services/access/access-app-lifecycle-service");
 const {
   validateMailSnippets,
   validateMailSubjects,
@@ -281,6 +282,11 @@ class TenantController {
             tenant[field] = request.body[field];
           }
         });
+
+        await AccessAppLifecycleService.syncWebhooks(
+          await TenantManager.getTenant(request.body.id),
+          tenant,
+        );
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);

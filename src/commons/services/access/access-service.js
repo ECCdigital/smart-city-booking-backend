@@ -265,6 +265,8 @@ class AccessService {
       ...doors.map(({ accessPoint, bookingContext }) => ({
         ...accessPoint,
         authorizationId: bookingContext.authorizationId || null,
+        accessId: bookingContext.accessId || null,
+        saltoUserId: bookingContext.saltoUserId || null,
         isProvisioned: bookingContext.isProvisioned || false,
         provisionedAt: bookingContext.provisionedAt || null,
         lastEvent: bookingContext.lastEvent || null,
@@ -322,6 +324,8 @@ class AccessService {
 
         this._upsertAccessInfo(booking, accessPoint, {
           authorizationId: result.authorizationId,
+          accessId: result.accessId || result.authorizationId || null,
+          saltoUserId: result.saltoUserId || null,
           pin: result.pin ? SecurityUtils.encrypt(result.pin) : null,
           isProvisioned: true,
           provisionedAt: Date.now(),
@@ -345,6 +349,8 @@ class AccessService {
           result: "success",
           payload: {
             authorizationId: result.authorizationId,
+            accessId: result.accessId || null,
+            saltoUserId: result.saltoUserId || null,
             providerResponse: result.providerResponse || null,
           },
           actor: { source: "system" },
@@ -385,7 +391,11 @@ class AccessService {
         continue;
       }
 
-      if (!bookingContext.authorizationId) {
+      if (
+        !bookingContext.authorizationId &&
+        !bookingContext.accessId &&
+        !bookingContext.saltoUserId
+      ) {
         continue;
       }
 
@@ -400,6 +410,15 @@ class AccessService {
         this._upsertAccessInfo(booking, accessPoint, {
           isProvisioned: false,
           revokedAt: Date.now(),
+          saltoUserDeletedAt:
+            result.userDeleted === true
+              ? Date.now()
+              : bookingContext.saltoUserDeletedAt || null,
+          saltoUserCleanupError:
+            result.userDeleted === false
+              ? result.providerResponse?.userDeleteError ||
+                "Failed to delete Salto KS user"
+              : null,
           providerResponse: result.providerResponse || null,
         });
 
@@ -411,6 +430,8 @@ class AccessService {
           result: "success",
           payload: {
             authorizationId: bookingContext.authorizationId,
+            accessId: bookingContext.accessId || null,
+            saltoUserId: bookingContext.saltoUserId || null,
             providerResponse: result.providerResponse || null,
           },
           actor: { source: "system" },
@@ -1196,8 +1217,12 @@ class AccessService {
               booking,
               accessInfo,
               authorizationId: accessInfo?.authorizationId || null,
+              accessId: accessInfo?.accessId || null,
+              saltoUserId: accessInfo?.saltoUserId || null,
               isProvisioned: accessInfo?.isProvisioned || false,
               provisionedAt: accessInfo?.provisionedAt || null,
+              revokedAt: accessInfo?.revokedAt || null,
+              saltoUserDeletedAt: accessInfo?.saltoUserDeletedAt || null,
               lastEvent: accessInfo?.lastEvent || null,
             },
           },
