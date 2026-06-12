@@ -47,8 +47,45 @@ class NukiAccessApplication extends AccessApplication {
   }
 }
 
+class SaltoKsAccessApplication extends AccessApplication {
+  constructor(params) {
+    super(params);
+    this.clientId = params.clientId || null;
+    this.clientSecret = params.clientSecret || null;
+    this.siteId = params.siteId || null;
+    this.apiBaseUrl =
+      params.apiBaseUrl || "https://clp-accept-user.my-clay.com";
+  }
+
+  decrypt() {
+    if (this.clientSecret?.iv != null && this.clientSecret?.data != null) {
+      this.clientSecret = SecurityUtils.decrypt(this.clientSecret);
+    }
+  }
+
+  encrypt() {
+    if (this.clientSecret && typeof this.clientSecret === "string") {
+      this.clientSecret = SecurityUtils.encrypt(this.clientSecret);
+    }
+  }
+
+  static get Schema() {
+    return {
+      ...super.Schema,
+      clientId: { type: String, default: null },
+      clientSecret: { type: Object, default: null },
+      siteId: { type: String, default: null },
+      apiBaseUrl: {
+        type: String,
+        default: "https://clp-accept-user.my-clay.com",
+      },
+    };
+  }
+}
+
 const accessAppTypes = {
   nuki: NukiAccessApplication,
+  "salto-ks": SaltoKsAccessApplication,
 };
 
 function createAccessApplication(params) {
@@ -63,6 +100,7 @@ function registerAccessAppType(id, AppClass) {
 module.exports = {
   AccessApplication,
   NukiAccessApplication,
+  SaltoKsAccessApplication,
   accessAppTypes,
   createAccessApplication,
   registerAccessAppType,

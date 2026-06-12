@@ -23,7 +23,7 @@ werden so gebaut, dass Salto später ohne Umbau andocken kann.
 | Meilenstein | Status | Fortschritt |
 |---|---|---|
 | **A. Nuki-Integration** | 🟡 | A0-A7 weitgehend fertig · 7.5 / 8 Blöcke (nur A6.6 Auto-Register offen) |
-| **B. Salto-KS-Integration** | ⬜ | 0 / 5 Phasen |
+| **B. Salto-KS-Integration** | 🟡 | B1-B3 fertig · 3 / 5 Phasen |
 | **C. Übergreifend (Tests, Doku)** | ⬜ | 0 / 2 Phasen |
 
 > Felder bei jeder Aufgabe aktuell halten: Status-Symbol, optional
@@ -137,26 +137,26 @@ mitgebaut.
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| B1.1 | `SaltoKsAccessApplication` (`clientId`/`clientSecret` verschlüsselt, `siteId`, `apiBaseUrl`) | Phase 2.1 | ⬜ | |
+| B1.1 | `SaltoKsAccessApplication` (`clientId`/`clientSecret` verschlüsselt, `siteId`, `apiBaseUrl`) | Phase 2.1 | ✅ | nur `clientSecret` encrypt/decrypt, Default `https://clp-accept-user.my-clay.com`, `id: "salto-ks"` registriert, Factory grün |
 
 ### B2 – Salto API-Client
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| B2.1 | `salto-ks-api-client.js`: OAuth2 client-credentials + Token-Caching | Phase 3 | ⬜ | |
-| B2.2 | `getLocks` / `openLock` | Phase 3 | ⬜ | |
-| B2.3 | `createUser` / `assignAccess` / `revokeAccess` / `deleteUser` | Phase 3 | ⬜ | |
-| B2.4 | `subscribeNotifications` / `unsubscribeNotifications` / `testConnection` | Phase 3 | ⬜ | |
-| B2.5 | Salto in `access-client-registry` / `index.js` registrieren | Phase 3 | ⬜ | |
+| B2.1 | `salto-ks-api-client.js`: OAuth2 client-credentials + Token-Caching | Phase 3 | ✅ | `/connect/token`, In-Memory-Cache + 60s-Refresh-Skew, Identity-URL via `SALTO_IDENTITY_URL` konfigurierbar |
+| B2.2 | `getLocks` / `openLock` | Phase 3 | ✅ | `GET /sites/:siteId/locks`, `POST /sites/:siteId/locks/:lockId/open`, `getAccessPoints` Alias |
+| B2.3 | `createUser` / `assignAccess` / `revokeAccess` / `deleteUser` | Phase 3 | ✅ | Connect-API User/Access-Lifecycle, optionale PIN bei `assignAccess` |
+| B2.4 | `subscribeNotifications` / `unsubscribeNotifications` / `testConnection` | Phase 3 | ✅ | Subscriptions + `register/unregisterNotification` Aliases; `testConnection` = Token + Locks |
+| B2.5 | Salto in `access-client-registry` / `index.js` registrieren | Phase 3 | ✅ | `salto-ks` Client + Test-Handler registriert, decrypt-aware `extractArgs` |
 
 ### B3 – Salto Access-Provider
 
 | # | Aufgabe | Plan-Ref | Status | Notiz |
 |---|---|---|---|---|
-| B3.1 | `salto-ks-access-provider.js`: `open` / `getStatus` | Phase 4.3 | ⬜ | |
-| B3.2 | `grantAuthorization` (createUser + assignAccess + PIN) / `revokeAuthorization` | Phase 4.3 | ⬜ | |
-| B3.3 | Webhook (`subscribeNotifications` / `parseWebhook` / `verifyWebhookSignature`) | Phase 4.3 | ⬜ | |
-| B3.4 | Registrierung `salto-ks` in `register-access-providers.js` | Phase 4.4 | ⬜ | |
+| B3.1 | `salto-ks-access-provider.js`: `open` / `getStatus` | Phase 4.3 | ✅ | `open` = `openLock`; `getStatus` aus Locks-Liste (online/Batterie); kein remote `close` (Auto-Lock) |
+| B3.2 | `grantAuthorization` (createUser + assignAccess + PIN) / `revokeAuthorization` | Phase 4.3 | ✅ | grant gibt `authorizationId(=accessId)`/`saltoUserId`/`pin` zurück; revoke = `revokeAccess` + best-effort `deleteUser` |
+| B3.3 | Webhook (`subscribeNotifications` / `parseWebhook` / `verifyWebhookSignature`) | Phase 4.3 | ✅ | `register/unregisterWebhook` via Subscriptions; HMAC-Signaturprüfung (`x-salto-signature`) |
+| B3.4 | Registrierung `salto-ks` in `register-access-providers.js` | Phase 4.4 | ✅ | Provider-Registry-Check grün; inkl. `listAccessPoints`/`getSupportedModes` für UI |
 
 ### B4 – Salto-spezifischer Lifecycle & Webhook-Route
 
