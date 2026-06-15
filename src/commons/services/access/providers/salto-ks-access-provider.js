@@ -35,7 +35,9 @@ class SaltoKsAccessProvider extends AccessProvider {
 
   async open(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
-    const providerResponse = await client.openLock(accessPoint.externalId);
+    const providerResponse = await client.openLock(accessPoint.externalId, {
+      otp: bookingContext.openOptions?.otp || null,
+    });
 
     return {
       success: true,
@@ -52,13 +54,15 @@ class SaltoKsAccessProvider extends AccessProvider {
       (l) => String(l.id || l.lockId) === String(accessPoint.externalId),
     );
 
+    console.log(`getStatus for accessPoint ${accessPoint.externalId}:`, lock);
+
     return {
       lockId: String(accessPoint.externalId),
-      name: lock?.name || lock?.label || accessPoint.label || "",
-      online: lock?.online ?? lock?.isOnline ?? null,
-      batteryLevel: lock?.batteryLevel ?? lock?.battery ?? null,
+      name: lock?.customer_reference || "",
+      online: lock?.online ?? null,
+      batteryLevel: lock?.battery_level ?? null,
       batteryCritical:
-        lock?.batteryLevel != null ? lock.batteryLevel <= 15 : null,
+        lock?.battery_level === "critical" ? true : null,
       providerResponse: lock || null,
     };
   }

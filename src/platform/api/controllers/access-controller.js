@@ -17,6 +17,7 @@ class AccessController {
     try {
       const { tenant, accessPointId } = request.params;
       const { bookingId } = request.query;
+      const otp = request.body?.otp || request.query?.otp || null;
       const user = request.user;
 
       const allowed = await AccessController._canOperate(
@@ -32,6 +33,7 @@ class AccessController {
         bookingId,
         accessPointId,
         user.id,
+        { otp },
       );
 
       logger.info(

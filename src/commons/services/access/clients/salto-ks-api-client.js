@@ -2,9 +2,11 @@ const axios = require("axios");
 const bunyan = require("bunyan");
 const BaseAccessApiClient = require("./base-access-api-client");
 
-const DEFAULT_SALTO_API_BASE_URL = "https://clp-accept-user.my-clay.com";
+const DEFAULT_SALTO_API_BASE_URL = "https://clp-accept-user.saltoks.com";
 const DEFAULT_SALTO_IDENTITY_URL = "https://identity.eu.my-clay.com";
 const DEFAULT_SALTO_SCOPE = "user_api.full_access";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Refresh the access token this many ms before it actually expires so that
 // in-flight requests never run into a token that just became invalid.
@@ -18,9 +20,12 @@ const logger = bunyan.createLogger({
 /**
  * Client for the Salto KS Connect API.
  *
- * Authentication uses the OpenID Connect token endpoint with the
- * client-credentials grant. The retrieved bearer token is cached in-memory
- * and transparently refreshed shortly before it expires.
+ * Authentication uses the OpenID Connect token endpoint with the resource
+ * owner password grant, which is the flow Salto KS requires for non-interactive
+ * backend-server integrations. The client ID/secret are sent as HTTP Basic auth
+ * and the predefined KS system user credentials in the request body. The
+ * retrieved bearer token is cached in-memory and transparently refreshed
+ * shortly before it expires.
  *
  * Resource paths follow the Salto KS Connect API (REST) conventions. The
  * identity server and Connect API base URL are configurable so the same
@@ -38,6 +43,8 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     this.siteId = siteId || null;
+    this.username = options.username || null;
+    this.password = options.password || null;
     this.identityUrl = (
       options.identityUrl ||
       process.env.SALTO_IDENTITY_URL ||
@@ -60,18 +67,22 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       return this._token;
     }
 
+    if (!this.username || !this.password) {
+      throw new Error(
+        "Salto KS requires a system user (username and password) for the password grant",
+      );
+    }
+
     const basic = Buffer.from(
       `${this.clientId}:${this.clientSecret}`,
     ).toString("base64");
 
     const body = new URLSearchParams({
-      grant_type: "client_credentials",
+      grant_type: "password",
+      username: this.username,
+      password: this.password,
       scope: this.scope,
     });
-
-    console.log("body", body);
-    console.log("basic", basic);
-    console.log("this.identityUrl", this.identityUrl);
 
     try {
       const response = await axios.request({
@@ -96,26 +107,73 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       this._tokenExpiresAt = now + (expiresIn || 3600) * 1000;
       return this._token;
     } catch (err) {
-      console.log("Salto KS token request error", err.response?.data || err.message);
       logger.error(`Salto KS token request failed: ${err.message}`);
       throw err;
     }
   }
 
+  async getSites() {
+    return this._request("get", "/v1.2/sites");
+  }
+
+  async _resolveSiteId(siteId = this.siteId) {
+    if (!siteId) {
+      throw new Error("Salto KS siteId is required");
+    }
+
+    const normalizedSiteId = String(siteId).trim();
+    if (UUID_RE.test(normalizedSiteId)) {
+      return normalizedSiteId;
+    }
+
+    const sites = this._extractList(await this.getSites());
+    const requested = normalizedSiteId.toLowerCase();
+    const site = sites.find((item) => {
+      return [item.id, item.site_uid, item.customer_reference]
+        .filter(Boolean)
+        .some((value) => String(value).trim().toLowerCase() === requested);
+    });
+
+    if (!site?.id) {
+      throw new Error(
+        `Salto KS site '${siteId}' was not found. Use the site UUID from /v1.2/sites, or a matching site_uid/customer_reference.`,
+      );
+    }
+
+    return site.id;
+  }
+
   async getLocks(siteId = this.siteId) {
-    return this._request("get", `/sites/${siteId}/locks`);
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request("get", `/v1.2/sites/${resolvedSiteId}/locks`);
   }
 
   async getAccessPoints() {
     return this.getLocks();
   }
 
-  async openLock(lockId, siteId = this.siteId) {
-    return this._request("post", `/sites/${siteId}/locks/${lockId}/open`);
+  async openLock(lockId, siteId = this.siteId, options = {}) {
+    if (siteId && typeof siteId === "object") {
+      options = siteId;
+      siteId = this.siteId;
+    }
+
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    const payload = { locked_state: "unlocked" };
+    if (options.otp) {
+      payload.otp = options.otp;
+    }
+
+    return this._request(
+      "patch",
+      `/v1.2/sites/${resolvedSiteId}/locks/${lockId}/locking`,
+      payload,
+    );
   }
 
   async createUser({ firstName, lastName, email }, siteId = this.siteId) {
-    return this._request("post", `/sites/${siteId}/users`, {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request("post", `/v1.2/sites/${resolvedSiteId}/users`, {
       firstName,
       lastName,
       email,
@@ -130,6 +188,7 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     pin = null,
     siteId = this.siteId,
   ) {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
     const payload = {
       lockIds: Array.isArray(lockIds) ? lockIds : [lockIds],
       validFrom,
@@ -142,17 +201,25 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
     return this._request(
       "post",
-      `/sites/${siteId}/users/${userId}/access`,
+      `/v1.2/sites/${resolvedSiteId}/users/${userId}/access`,
       payload,
     );
   }
 
   async revokeAccess(accessId, siteId = this.siteId) {
-    return this._request("delete", `/sites/${siteId}/access/${accessId}`);
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request(
+      "delete",
+      `/v1.2/sites/${resolvedSiteId}/access/${accessId}`,
+    );
   }
 
   async deleteUser(userId, siteId = this.siteId) {
-    return this._request("delete", `/sites/${siteId}/users/${userId}`);
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request(
+      "delete",
+      `/v1.2/sites/${resolvedSiteId}/users/${userId}`,
+    );
   }
 
   async subscribeNotifications(
@@ -160,16 +227,18 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     eventTypes = [],
     siteId = this.siteId,
   ) {
-    return this._request("post", `/sites/${siteId}/subscriptions`, {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request("post", `/v1.2/sites/${resolvedSiteId}/subscriptions`, {
       callbackUrl,
       eventTypes,
     });
   }
 
   async unsubscribeNotifications(subscriptionId, siteId = this.siteId) {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
     return this._request(
       "delete",
-      `/sites/${siteId}/subscriptions/${subscriptionId}`,
+      `/v1.2/sites/${resolvedSiteId}/subscriptions/${subscriptionId}`,
     );
   }
 
@@ -203,14 +272,6 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     apiBaseUrl = DEFAULT_SALTO_API_BASE_URL,
     options = {},
   ) {
-    console.log(
-      "testConnection",
-      clientId,
-      clientSecret,
-      siteId,
-      apiBaseUrl,
-      options,
-    );
     const client = new SaltoKsApiClient(
       clientId,
       clientSecret,
@@ -219,14 +280,12 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       options,
     );
 
-    console.log("testConnection client", client);
-
     try {
       // Token request validates the credentials; listing locks validates the
       // site scope when a siteId is configured.
       await client._getToken();
       if (siteId) {
-        await client.getLocks(siteId);
+        const test = await client.getLocks(siteId);
       }
       return { success: true, message: "Connection successful" };
     } catch (err) {
@@ -260,6 +319,14 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       );
       throw err;
     }
+  }
+
+  _extractList(value) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    return value?.items || value?.data || value?.locks || [];
   }
 }
 

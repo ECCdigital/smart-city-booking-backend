@@ -139,14 +139,14 @@ mitgebaut.
 
 | #    | Aufgabe                                                                                      | Plan-Ref  | Status | Notiz                                                                                                                                                                    |
 | ---- | -------------------------------------------------------------------------------------------- | --------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| B1.1 | `SaltoKsAccessApplication` (`clientId`/`clientSecret` verschlüsselt, `siteId`, `apiBaseUrl`) | Phase 2.1 | ✅     | nur `clientSecret` encrypt/decrypt, Default `https://clp-accept-user.my-clay.com`, `id: "salto-ks"` registriert, Factory grün |
+| B1.1 | `SaltoKsAccessApplication` (`clientId`/`clientSecret` verschlüsselt, `siteId`, `apiBaseUrl`) | Phase 2.1 | ✅     | `clientSecret`/System-User-`password` encrypt/decrypt, Default `https://clp-accept-user.saltoks.com`, `id: "salto-ks"` registriert, Factory grün |
 
 ### B2 – Salto API-Client
 
 | #    | Aufgabe                                                                  | Plan-Ref | Status | Notiz                                                                                                                                                           |
 | ---- | ------------------------------------------------------------------------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B2.1 | `salto-ks-api-client.js`: OAuth2 client-credentials + Token-Caching      | Phase 3  | ✅     | `/connect/token`, In-Memory-Cache + 60s-Refresh-Skew, Identity-URL via `SALTO_IDENTITY_URL` konfigurierbar                                                    |
-| B2.2 | `getLocks` / `openLock`                                                  | Phase 3  | ✅     | `GET /sites/:siteId/locks`, `POST /sites/:siteId/locks/:lockId/open`, `getAccessPoints` Alias                                                                   |
+| B2.1 | `salto-ks-api-client.js`: OAuth2 Password-Grant + Token-Caching          | Phase 3  | ✅     | `/connect/token`, In-Memory-Cache + 60s-Refresh-Skew, Identity-URL via `SALTO_IDENTITY_URL` konfigurierbar                                                    |
+| B2.2 | `getLocks` / `openLock`                                                  | Phase 3  | ✅     | `GET /v1.2/sites/:siteId/locks`, `PATCH /v1.2/sites/:siteId/locks/:lockId/locking`, `getAccessPoints` Alias; `siteId` wird gegen Salto-Site-UUID aufgelöst       |
 | B2.3 | `createUser` / `assignAccess` / `revokeAccess` / `deleteUser`            | Phase 3  | ✅     | Connect-API User/Access-Lifecycle, optionale PIN bei `assignAccess`                                                                                             |
 | B2.4 | `subscribeNotifications` / `unsubscribeNotifications` / `testConnection` | Phase 3  | ✅     | Subscriptions + `register/unregisterNotification` Aliases; `testConnection` = Token + Locks                                                                     |
 | B2.5 | Salto in `access-client-registry` / `index.js` registrieren              | Phase 3  | ✅     | `salto-ks` Client + Test-Handler registriert, decrypt-aware `extractArgs`                                                                                       |

@@ -29,16 +29,18 @@ registerClient("salto-ks", SaltoKsApiClient, (app) => [
   app.clientSecret,
   app.siteId,
   app.apiBaseUrl || DEFAULT_SALTO_API_BASE_URL,
+  { username: app.username, password: app.password },
 ]);
 
 registerTestHandler("salto-ks", {
-  requiredFields: ["clientId", "clientSecret"],
-  handler: ({ clientId, clientSecret, siteId, apiBaseUrl }) => {
+  requiredFields: ["clientId", "clientSecret", "username", "password"],
+  handler: ({ clientId, clientSecret, siteId, apiBaseUrl, username, password }) => {
     return SaltoKsApiClient.testConnection(
       clientId,
       clientSecret,
       siteId,
       apiBaseUrl || DEFAULT_SALTO_API_BASE_URL,
+      { username, password },
     );
   },
 });

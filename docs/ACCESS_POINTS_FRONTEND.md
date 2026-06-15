@@ -104,8 +104,10 @@ Access-App ist ein Eintrag mit `type: "access"`.
   "active": true,
   "clientId": "<CLIENT-ID>", // Klartext
   "clientSecret": "<CLIENT-SECRET>", // wird verschlüsselt gespeichert
-  "siteId": "<SITE-ID>", // Salto Site
-  "apiBaseUrl": "https://clp-accept-user.my-clay.com", // optional, Default gesetzt
+  "username": "<KS-USER-EMAIL>", // E-Mail des KS-System-Users (Password-Grant)
+  "password": "<KS-USER-PASSWORT>", // wird verschlüsselt gespeichert
+  "siteId": "<SITE-UUID>", // Salto Site UUID; Referenzwerte werden backendseitig aufgelöst
+  "apiBaseUrl": "https://clp-accept-user.saltoks.com", // optional, Default gesetzt
 
   // Vom Backend verwaltet (read-only fürs UI, aber mit-zurückschicken):
   // "webhookCallbackUrl": "...",
@@ -124,11 +126,18 @@ Access-App ist ein Eintrag mit `type: "access"`.
 | `apiToken` (Passwortfeld)         | ✓    | –        |
 | `clientId`                        | –    | ✓        |
 | `clientSecret` (Passwortfeld)     | –    | ✓        |
-| `siteId`                          | –    | ✓        |
+| `username` (E-Mail KS-System-User)| –    | ✓        |
+| `password` (Passwortfeld)         | –    | ✓        |
+| `siteId` (Salto Site UUID)         | –    | ✓        |
 | `apiBaseUrl` (advanced/optional)  | ✓    | ✓        |
 
-Für `clientSecret`/`apiToken`: Wenn bereits gesetzt, im UI maskiert anzeigen
-(z.B. `••••••`) und nur bei tatsächlicher Eingabe überschreiben.
+Für `clientSecret`/`apiToken`/`password`: Wenn bereits gesetzt, im UI maskiert
+anzeigen (z.B. `••••••`) und nur bei tatsächlicher Eingabe überschreiben.
+
+> Salto KS nutzt den OAuth **Password-Grant** (Backend-Server-Integration).
+> Daher sind zusätzlich `username` (E-Mail eines KS-System-Users mit Rolle
+> `site_admin`) und `password` nötig. Details:
+> [SALTO_KS_PASSWORD_GRANT_FRONTEND.md](./SALTO_KS_PASSWORD_GRANT_FRONTEND.md).
 
 ### 1.4 Verbindung testen
 
@@ -142,10 +151,16 @@ Body = die einzugebenden Felder (Klartext), z.B. Salto KS:
 {
   "clientId": "...",
   "clientSecret": "...",
-  "siteId": "DE4520168385",
+  "username": "service-user@example.com",
+  "password": "...",
+  "siteId": "f9616ba5-443a-11e6-a8b9-0050568da097",
   "apiBaseUrl": "..."
 }
 ```
+
+> Salto erwartet in API-Pfaden eine Site-UUID. Referenzwerte wie
+> `DE4520168385` können vom Backend gegen `/v1.2/sites` aufgelöst werden, aber
+> die echte `id` aus der Sites-Liste ist für das UI die robusteste Speicherung.
 
 Nuki:
 
@@ -165,8 +180,9 @@ oder
 { "success": false, "message": "Invalid credentials" }
 ```
 
-Erforderliche Felder: Nuki → `apiToken`; Salto KS → `clientId`, `clientSecret`.
-Fehlen sie, kommt `{ success: false, message: "Missing required fields: ..." }`.
+Erforderliche Felder: Nuki → `apiToken`; Salto KS → `clientId`, `clientSecret`,
+`username`, `password`. Fehlen sie, kommt
+`{ success: false, message: "Missing required fields: ..." }`.
 
 Berechtigung: `MANAGE_TENANTS` (Update).
 
@@ -439,7 +455,7 @@ Antwort: `{ "success": true, "data": [ { booking-ähnliches Objekt, accessPointI
 
 - [ ] Liste der Access-Apps mit Aktiv-Toggle + Anzeigename
 - [ ] Formular Nuki (`apiToken`, `apiBaseUrl`)
-- [ ] Formular Salto KS (`clientId`, `clientSecret`, `siteId`, `apiBaseUrl`)
+- [ ] Formular Salto KS (`clientId`, `clientSecret`, `username`, `password`, `siteId`, `apiBaseUrl`)
 - [ ] Secrets maskiert, nur bei Eingabe überschreiben
 - [ ] „Verbindung testen"-Button (`/access-apps/:provider/test`)
 - [ ] Webhook-Status-Badge für Salto (`webhookRegisteredAt` / `webhookRegistrationError`)

@@ -60,20 +60,30 @@ class SaltoKsAccessApplication extends AccessApplication {
     super(params);
     this.clientId = params.clientId || null;
     this.clientSecret = params.clientSecret || null;
+    // Salto KS backend-server integrations use the OAuth password grant, which
+    // requires the credentials of a predefined KS system user (site_admin).
+    this.username = params.username || null;
+    this.password = params.password || null;
     this.siteId = params.siteId || null;
     this.apiBaseUrl =
-      params.apiBaseUrl || "https://clp-accept-user.my-clay.com";
+      params.apiBaseUrl || "https://clp-accept-user.saltoks.com";
   }
 
   decrypt() {
     if (this.clientSecret?.iv != null && this.clientSecret?.data != null) {
       this.clientSecret = SecurityUtils.decrypt(this.clientSecret);
     }
+    if (this.password?.iv != null && this.password?.data != null) {
+      this.password = SecurityUtils.decrypt(this.password);
+    }
   }
 
   encrypt() {
     if (this.clientSecret && typeof this.clientSecret === "string") {
       this.clientSecret = SecurityUtils.encrypt(this.clientSecret);
+    }
+    if (this.password && typeof this.password === "string") {
+      this.password = SecurityUtils.encrypt(this.password);
     }
   }
 
@@ -82,10 +92,12 @@ class SaltoKsAccessApplication extends AccessApplication {
       ...super.Schema,
       clientId: { type: String, default: null },
       clientSecret: { type: Object, default: null },
+      username: { type: String, default: null },
+      password: { type: Object, default: null },
       siteId: { type: String, default: null },
       apiBaseUrl: {
         type: String,
-        default: "https://clp-accept-user.my-clay.com",
+        default: "https://clp-accept-user.saltoks.com",
       },
     };
   }

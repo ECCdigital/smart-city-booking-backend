@@ -192,7 +192,7 @@ sequenceDiagram
    - `NukiAccessApplication`: `apiToken` (verschlüsselt), `apiBaseUrl`
      (Default `https://api.nuki.io`), optionale OAuth-Variante
    - `SaltoKsAccessApplication`: `clientId`, `clientSecret` (verschlüsselt),
-     `siteId`, `apiBaseUrl` (Default `https://clp-accept-user.my-clay.com`)
+     `siteId`, `apiBaseUrl` (Default `https://clp-accept-user.saltoks.com`)
    - `createAccessApplication`-Factory + `registerAccessAppType`
 
 2. [applicationFactory.js](../src/commons/entities/application/applicationFactory.js):

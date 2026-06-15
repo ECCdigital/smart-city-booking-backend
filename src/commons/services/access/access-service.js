@@ -17,7 +17,7 @@ class AccessService {
   /**
    * Opens an access point linked to a booking.
    */
-  static async open(tenant, bookingId, accessPointId, userId) {
+  static async open(tenant, bookingId, accessPointId, userId, options = {}) {
     const { accessPoint, bookingContext } = await this._resolve(
       tenant,
       bookingId,
@@ -26,7 +26,12 @@ class AccessService {
 
     try {
       const provider = getAccessProvider(accessPoint.provider);
-      const result = await provider.open(accessPoint, bookingContext);
+      const result = await provider.open(accessPoint, {
+        ...bookingContext,
+        openOptions: {
+          otp: options.otp || null,
+        },
+      });
 
       await this._log({
         tenantId: tenant,
