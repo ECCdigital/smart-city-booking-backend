@@ -169,7 +169,7 @@ class SaltoKsAccessProvider extends AccessProvider {
         provider: PROVIDER_ID,
         externalId,
         locationId: lock.siteId ? String(lock.siteId) : null,
-        label: lock.name || lock.label || "",
+        label: lock.customer_reference || "",
         capabilities: ["remote", "authorization"],
         supportedModes: SALTO_SUPPORTED_MODES,
         metadata: lock,
