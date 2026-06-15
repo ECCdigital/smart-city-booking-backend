@@ -54,16 +54,18 @@ class SaltoKsAccessProvider extends AccessProvider {
       (l) => String(l.id || l.lockId) === String(accessPoint.externalId),
     );
 
-    console.log(`getStatus for accessPoint ${accessPoint.externalId}:`, lock);
+    const lockedState = lock?.locked_state ?? null;
 
     return {
       lockId: String(accessPoint.externalId),
       name: lock?.customer_reference || "",
       online: lock?.online ?? null,
+      state: lockedState === "locked" ? "locked" : lockedState === "unlocked" ? "unlocked" : null,
+      lockedState,
       batteryLevel: lock?.battery_level ?? null,
-      batteryCritical:
-        lock?.battery_level === "critical" ? true : null,
-      providerResponse: lock || null,
+      batteryCritical: lock?.battery_level === "critical" ? true : null,
+      leftOpenAlarm: lock?.left_open_alarm ?? null,
+      intrusionAlarm: lock?.intrusion_alarm ?? null,
     };
   }
 
