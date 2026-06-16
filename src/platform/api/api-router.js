@@ -8,6 +8,7 @@ const HolidayController = require("./controllers/holiday-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
+const RuleController = require("./controllers/rule-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -27,6 +28,65 @@ router.put(
   "/instances",
   AuthenticationController.isSignedIn,
   InstanceController.storeInstance,
+);
+
+// RULES
+// =====
+
+router.get(
+  "/rules/meta",
+  AuthenticationController.isSignedIn,
+  RuleController.getMetadata,
+);
+router.get(
+  "/rules/executions",
+  AuthenticationController.isSignedIn,
+  RuleController.getExecutionLogs,
+);
+router.get(
+  "/rules",
+  AuthenticationController.isSignedIn,
+  RuleController.getRules,
+);
+router.post(
+  "/rules",
+  AuthenticationController.isSignedIn,
+  RuleController.createRule,
+);
+router.get(
+  "/rules/:id",
+  AuthenticationController.isSignedIn,
+  RuleController.getRule,
+);
+router.put(
+  "/rules/:id",
+  AuthenticationController.isSignedIn,
+  RuleController.updateRule,
+);
+router.put(
+  "/rules/:id/enabled",
+  AuthenticationController.isSignedIn,
+  RuleController.setRuleEnabled,
+);
+router.delete(
+  "/rules/:id",
+  AuthenticationController.isSignedIn,
+  RuleController.deleteRule,
+);
+router.post(
+  "/rules/:id/run",
+  AuthenticationController.isSignedIn,
+  RuleController.runRule,
+);
+router.post(
+  "/rules/:id/dry-run",
+  AuthenticationController.isSignedIn,
+  RuleController.dryRunRule,
+);
+router.get(
+  "/rules/:id/executions",
+  AuthenticationController.isSignedIn,
+  RuleController.getRuleExecutionLogs,
 );
 
 // TENANTS
