@@ -5,6 +5,7 @@ const actionRegistry = require("./actionRegistry");
 const Rule = require("./RuleModel");
 const RuleExecutionLog = require("./RuleExecutionLogModel");
 const { transformPlaceholders, buildFacts } = require("./utils");
+const { RESOURCE_CATALOG } = require("./ruleMetadata");
 const crypto = require("crypto");
 const bunyan = require("bunyan");
 
@@ -13,7 +14,7 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
-const ALLOWED_RESOURCES = new Set(["Booking"]);
+const ALLOWED_RESOURCES = new Set(Object.keys(RESOURCE_CATALOG));
 const MAX_ACTION_RESULTS = Number(process.env.RULE_MAX_ACTION_RESULTS) || 500;
 
 class RuleEngine {
@@ -22,6 +23,10 @@ class RuleEngine {
 
   static isInitialized() {
     return RuleEngine.initialized === true;
+  }
+
+  static isEngineEnabled() {
+    return process.env.RULE_ENGINE_ENABLED === "true";
   }
 
   static getAllowedResources() {

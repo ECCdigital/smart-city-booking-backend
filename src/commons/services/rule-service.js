@@ -1,5 +1,6 @@
 const RuleManager = require("../data-managers/rule-manager");
 const RuleEngine = require("../../rule-engine/ruleEngine");
+const RuleMetadata = require("../../rule-engine/ruleMetadata");
 
 class RuleValidationError extends Error {
   constructor(errors) {
@@ -13,8 +14,18 @@ class RuleValidationError extends Error {
 class RuleService {
   static getMetadata() {
     return {
+      // Whether the engine is configured to run scheduled rules at all.
+      engineEnabled: RuleEngine.isEngineEnabled(),
+      // Whether the scheduler has actually been initialized in this process.
+      engineInitialized: RuleEngine.isInitialized(),
       allowedResources: RuleEngine.getAllowedResources(),
       allowedActions: RuleEngine.getAllowedActions(),
+      resources: RuleMetadata.getResources(),
+      actions: RuleMetadata.getActions(RuleEngine.getAllowedActions()),
+      conditionOperators: RuleMetadata.CONDITION_OPERATORS,
+      queryOperators: RuleMetadata.QUERY_OPERATORS,
+      computedFacts: RuleMetadata.COMPUTED_FACTS,
+      placeholders: RuleMetadata.PLACEHOLDERS,
     };
   }
 
@@ -84,6 +95,14 @@ class RuleService {
   }
 
   static async runRule(ruleId) {
+    if (!RuleEngine.isEngineEnabled()) {
+      const error = new Error(
+        "Die Rule Engine ist deaktiviert (RULE_ENGINE_ENABLED=false). Regeln können nicht ausgeführt werden. Ein Dry-Run ist weiterhin möglich.",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
     await RuleService.getRule(ruleId);
     return await RuleEngine.runRule(ruleId, { trigger: "manual" });
   }
