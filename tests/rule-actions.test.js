@@ -107,3 +107,78 @@ describe("rule-engine actionRegistry", () => {
     });
   });
 });
+
+describe("rule-engine aggregateActionRegistry", () => {
+  let sandbox;
+  let aggregateActionRegistry;
+  let fakeMailerService;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    fakeMailerService = { send: sandbox.stub().resolves() };
+    mock("../src/commons/mail-service/mail-service", fakeMailerService);
+    aggregateActionRegistry = mock.reRequire(
+      "../src/rule-engine/aggregateActionRegistry",
+    );
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    mock.stopAll();
+  });
+
+  it("sends one email per tenant group with the docs in the model", async () => {
+    const docs = [
+      { id: "b1", tenantId: "t1" },
+      { id: "b2", tenantId: "t1" },
+    ];
+
+    await aggregateActionRegistry.sendAggregatedEmail(
+      docs,
+      { subject: "Offene Buchungen", body: "{{count}}" },
+      { tenantId: "t1", tenantMail: "admin@example.com" },
+    );
+
+    expect(fakeMailerService.send.calledOnce).to.be.true;
+    const args = fakeMailerService.send.firstCall.args[0];
+    expect(args.tenantId).to.equal("t1");
+    expect(args.address).to.equal("admin@example.com");
+    expect(args.model.bookings).to.have.lengthOf(2);
+    expect(args.model.count).to.equal(2);
+  });
+
+  it("prefers params.to over the context tenant mail", async () => {
+    await aggregateActionRegistry.sendAggregatedEmail(
+      [{ id: "b1", tenantId: "t1" }],
+      { to: "override@example.com", subject: "s", body: "b" },
+      { tenantId: "t1", tenantMail: "admin@example.com" },
+    );
+
+    expect(fakeMailerService.send.firstCall.args[0].address).to.equal(
+      "override@example.com",
+    );
+  });
+
+  it("does nothing for an empty doc set", async () => {
+    await aggregateActionRegistry.sendAggregatedEmail(
+      [],
+      { subject: "s", body: "b" },
+      {},
+    );
+    expect(fakeMailerService.send.called).to.be.false;
+  });
+
+  it("throws when no recipient is available", async () => {
+    let error;
+    try {
+      await aggregateActionRegistry.sendAggregatedEmail(
+        [{ id: "b1", tenantId: "t1" }],
+        { subject: "s", body: "b" },
+        { tenantId: "t1" },
+      );
+    } catch (err) {
+      error = err;
+    }
+    expect(error).to.be.an("error");
+  });
+});

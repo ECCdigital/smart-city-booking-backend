@@ -2,10 +2,12 @@ const schedule = require("node-schedule");
 const jsonLogic = require("json-logic-js");
 const mongoose = require("mongoose");
 const actionRegistry = require("./actionRegistry");
+const aggregateActionRegistry = require("./aggregateActionRegistry");
 const Rule = require("./RuleModel");
 const RuleExecutionLog = require("./RuleExecutionLogModel");
 const { transformPlaceholders, buildFacts } = require("./utils");
 const { RESOURCE_CATALOG } = require("./ruleMetadata");
+const TenantManager = require("../commons/data-managers/tenant-manager");
 const crypto = require("crypto");
 const bunyan = require("bunyan");
 
@@ -34,7 +36,14 @@ class RuleEngine {
   }
 
   static getAllowedActions() {
-    return Object.keys(actionRegistry);
+    return [
+      ...Object.keys(actionRegistry),
+      ...Object.keys(aggregateActionRegistry),
+    ];
+  }
+
+  static isAggregateAction(type) {
+    return Boolean(aggregateActionRegistry[type]);
   }
 
   static validateRuleDefinition(rule, { validateSchedule = false } = {}) {
@@ -51,7 +60,10 @@ class RuleEngine {
     }
 
     for (const action of rule?.actions || []) {
-      if (!actionRegistry[action.type]) {
+      if (
+        !actionRegistry[action.type] &&
+        !aggregateActionRegistry[action.type]
+      ) {
         errors.push(`action "${action.type}" is not allowed`);
       }
     }
@@ -178,20 +190,34 @@ async function executeRule(
     const mongoQuery = rule.query ? transformPlaceholders(rule.query, now) : {};
     const docs = await Model.find(mongoQuery).lean();
 
+    const allActions = rule.actions || [];
+    const perDocActions = allActions.filter(
+      (act) => !RuleEngine.isAggregateAction(act.type),
+    );
+    const aggregateActions = allActions.filter((act) =>
+      RuleEngine.isAggregateAction(act.type),
+    );
+
+    // Filter the documents that satisfy the conditions.
+    const matchedDocs = [];
     for (const doc of docs) {
       const facts = buildFacts(doc, now);
       if (rule.conditions && !jsonLogic.apply(rule.conditions, facts)) {
         continue;
       }
+      matchedDocs.push(doc);
+    }
+    summary.matchedCount = matchedDocs.length;
 
-      summary.matchedCount += 1;
+    const tenantMailCache = new Map();
+
+    // Per-document actions: executed once per matched document.
+    for (const doc of matchedDocs) {
       if (!dryRun) {
         summary.processedCount += 1;
       }
 
-      for (const act of rule.actions || []) {
-        const handler = actionRegistry[act.type];
-
+      for (const act of perDocActions) {
         if (dryRun) {
           pushActionResult(summary.actionResults, {
             actionType: act.type,
@@ -203,24 +229,70 @@ async function executeRule(
         }
 
         try {
-          await handler(doc, act.params || {});
+          const params = await resolveActionParams(
+            act.params || {},
+            doc.tenantId,
+            tenantMailCache,
+          );
+          await actionRegistry[act.type](doc, params);
           pushActionResult(summary.actionResults, {
             actionType: act.type,
             docId: getDocId(doc),
             status: "success",
           });
         } catch (err) {
-          const message = getErrorMessage(err);
-          logger.error(
-            `Error executing action "${act.type}" for rule "${rule.name}":`,
-            err,
-          );
+          logActionError(act.type, rule.name, err);
           pushActionResult(summary.actionResults, {
             actionType: act.type,
             docId: getDocId(doc),
             status: "error",
-            message,
+            message: getErrorMessage(err),
           });
+        }
+      }
+    }
+
+    // Aggregate actions: matched documents are grouped by tenant and the
+    // action runs once per tenant group.
+    if (aggregateActions.length > 0) {
+      const groups = groupByTenant(matchedDocs);
+
+      for (const act of aggregateActions) {
+        if (dryRun) {
+          pushActionResult(summary.actionResults, {
+            actionType: act.type,
+            docId: null,
+            status: "skipped",
+            message: `Dry run: action was not executed (${matchedDocs.length} matched in ${groups.size} tenant group(s)).`,
+          });
+          continue;
+        }
+
+        for (const [tenantId, groupDocs] of groups.entries()) {
+          try {
+            const tenantMail = await getTenantMail(tenantId, tenantMailCache);
+            const params = resolvePlaceholdersInParams(
+              act.params || {},
+              tenantMail,
+            );
+            await aggregateActionRegistry[act.type](groupDocs, params, {
+              tenantId,
+              tenantMail,
+            });
+            pushActionResult(summary.actionResults, {
+              actionType: act.type,
+              docId: tenantId,
+              status: "success",
+            });
+          } catch (err) {
+            logActionError(act.type, rule.name, err);
+            pushActionResult(summary.actionResults, {
+              actionType: act.type,
+              docId: tenantId,
+              status: "error",
+              message: getErrorMessage(err),
+            });
+          }
         }
       }
     }
@@ -286,6 +358,78 @@ async function finalizeExecution(
   }
 
   return executionLog;
+}
+
+function groupByTenant(docs) {
+  const groups = new Map();
+  for (const doc of docs) {
+    const tenantId = doc.tenantId || null;
+    if (!groups.has(tenantId)) {
+      groups.set(tenantId, []);
+    }
+    groups.get(tenantId).push(doc);
+  }
+  return groups;
+}
+
+async function getTenantMail(tenantId, cache) {
+  if (!tenantId) return null;
+  if (cache.has(tenantId)) return cache.get(tenantId);
+
+  let mail = null;
+  try {
+    const tenant = await TenantManager.getTenant(tenantId);
+    mail = tenant?.mail || null;
+  } catch (err) {
+    logger.error(`Could not resolve tenant mail for "${tenantId}":`, err);
+  }
+
+  cache.set(tenantId, mail);
+  return mail;
+}
+
+/**
+ * Resolves placeholders in per-document action params. Only performs the
+ * (async) tenant lookup when the params actually reference $$TENANT_MAIL.
+ */
+async function resolveActionParams(params, tenantId, cache) {
+  if (!paramsContainTenantMail(params)) {
+    return params;
+  }
+  const tenantMail = await getTenantMail(tenantId, cache);
+  return resolvePlaceholdersInParams(params, tenantMail);
+}
+
+function paramsContainTenantMail(params) {
+  try {
+    return JSON.stringify(params).includes("$$TENANT_MAIL");
+  } catch {
+    return false;
+  }
+}
+
+function resolvePlaceholdersInParams(value, tenantMail) {
+  if (value === "$$TENANT_MAIL") {
+    return tenantMail || "";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => resolvePlaceholdersInParams(item, tenantMail));
+  }
+  if (value && typeof value === "object") {
+    const result = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = resolvePlaceholdersInParams(val, tenantMail);
+    }
+    return result;
+  }
+  return value;
+}
+
+function logActionError(actionType, ruleName, err) {
+  logger.error(
+    `Error executing action "${actionType}" for rule "${ruleName}":`,
+    err,
+  );
 }
 
 async function resolveRule(ruleOrId) {

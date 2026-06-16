@@ -29,7 +29,6 @@ module.exports = {
     if (!params.body) {
       throw new Error("sendEmail: body is required");
     }
-
     await MailerService.send({
       tenantId,
       address,

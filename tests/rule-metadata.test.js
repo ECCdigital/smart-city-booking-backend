@@ -28,8 +28,27 @@ describe("ruleMetadata", () => {
     const sendEmail = actions.find((a) => a.type === "sendEmail");
 
     expect(sendEmail).to.exist;
+    expect(sendEmail.aggregate).to.equal(false);
     const paramNames = sendEmail.params.map((p) => p.name);
     expect(paramNames).to.include.members(["to", "subject", "body"]);
+  });
+
+  it("exposes sendAggregatedEmail as an aggregate action", () => {
+    const actions = RuleMetadata.getActions(RuleEngine.getAllowedActions());
+    const aggregated = actions.find((a) => a.type === "sendAggregatedEmail");
+
+    expect(aggregated).to.exist;
+    expect(aggregated.aggregate).to.equal(true);
+    expect(RuleEngine.isAggregateAction("sendAggregatedEmail")).to.be.true;
+    expect(RuleEngine.isAggregateAction("sendEmail")).to.be.false;
+  });
+
+  it("includes the $$TENANT_MAIL placeholder for action params", () => {
+    const tenantMail = RuleMetadata.PLACEHOLDERS.find(
+      (p) => p.token === "$$TENANT_MAIL",
+    );
+    expect(tenantMail).to.exist;
+    expect(tenantMail.context).to.equal("actionParams");
   });
 
   it("reports the engine enabled flag based on the environment", () => {

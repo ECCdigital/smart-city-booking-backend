@@ -149,6 +149,13 @@ const PLACEHOLDERS = [
       timeBegin: { $gte: { $$DATE_ADD: { unit: "day", amount: 7 } } },
     },
   },
+  {
+    token: "$$TENANT_MAIL",
+    label: "E-Mail des Mandanten",
+    description:
+      "String-Platzhalter für Action-Parameter (nicht für query). Wird zur Laufzeit durch die E-Mail-Adresse des Mandanten des jeweiligen Dokuments ersetzt. Typisch im Feld 'to' einer E-Mail-Action.",
+    context: "actionParams",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -177,14 +184,14 @@ const ACTION_CATALOG = {
   sendEmail: {
     label: "E-Mail versenden",
     description:
-      "Versendet eine individuelle E-Mail. Betreff und Inhalt werden in der Regel definiert. Im Inhalt können Felder des Dokuments per {{feld}} eingesetzt werden (z. B. {{name}}, {{mail}}).",
+      "Versendet eine individuelle E-Mail je getroffenem Dokument. Betreff und Inhalt werden in der Regel definiert. Im Inhalt können Felder des Dokuments per {{feld}} eingesetzt werden (z. B. {{name}}, {{mail}}).",
     params: [
       {
         name: "to",
         label: "Empfänger",
         type: "string",
         required: false,
-        note: "Optional. Standardmäßig die E-Mail des Dokuments (z. B. Buchung).",
+        note: "Optional. Standardmäßig die E-Mail des Dokuments. Platzhalter $$TENANT_MAIL möglich.",
       },
       {
         name: "subject",
@@ -198,6 +205,40 @@ const ACTION_CATALOG = {
         type: "text",
         required: true,
         note: "Platzhalter wie {{name}} oder {{mail}} werden aus dem Dokument befüllt.",
+      },
+      {
+        name: "useInstanceMail",
+        label: "Instanz-Mailkonto verwenden",
+        type: "boolean",
+        required: false,
+      },
+    ],
+  },
+  sendAggregatedEmail: {
+    label: "Sammel-E-Mail versenden",
+    aggregate: true,
+    description:
+      "Versendet EINE E-Mail pro Mandant mit allen getroffenen Dokumenten. Im Inhalt steht die Liste als {{#each bookings}} … {{/each}} zur Verfügung (auch {{count}}).",
+    params: [
+      {
+        name: "to",
+        label: "Empfänger",
+        type: "string",
+        required: false,
+        note: "Optional. Standard: E-Mail des Mandanten. Platzhalter $$TENANT_MAIL möglich.",
+      },
+      {
+        name: "subject",
+        label: "Betreff",
+        type: "string",
+        required: true,
+      },
+      {
+        name: "body",
+        label: "Inhalt (HTML, Handlebars)",
+        type: "text",
+        required: true,
+        note: "Liste der Treffer per {{#each bookings}}…{{/each}}; Anzahl via {{count}}.",
       },
       {
         name: "useInstanceMail",
@@ -229,6 +270,7 @@ function getActions(actionTypes) {
       type,
       label: definition?.label || type,
       description: definition?.description || "",
+      aggregate: definition?.aggregate === true,
       params: definition?.params || [],
     };
   });
