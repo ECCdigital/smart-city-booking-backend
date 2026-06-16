@@ -721,7 +721,7 @@ class AccessService {
       resolve,
     },
   ) {
-    const results = [];
+    const matched = [];
 
     for (const booking of bookings) {
       if (!booking.isBookingValid()) {
@@ -768,10 +768,75 @@ class AccessService {
         result.accessPoints = enrichedPoints;
       }
 
-      results.push(result);
+      matched.push({ result, booking });
     }
 
+    await this._attachLeadBookables(matched);
+
+    const results = matched.map(({ result }) => result);
+
     return this._sortResults(results, state);
+  }
+
+  /**
+   * @private
+   * Attaches the `leadBookable` (id, title, location) of each booking's first
+   * booked item to its result. Lead bookables are batch-loaded per tenant to
+   * avoid N+1 queries.
+   */
+  static async _attachLeadBookables(matched) {
+    const idsByTenant = new Map();
+    for (const { booking } of matched) {
+      const leadId = this._getLeadBookableId(booking);
+      if (!leadId) {
+        continue;
+      }
+      let ids = idsByTenant.get(booking.tenantId);
+      if (!ids) {
+        ids = new Set();
+        idsByTenant.set(booking.tenantId, ids);
+      }
+      ids.add(leadId);
+    }
+
+    const bookableByKey = new Map();
+    await Promise.all(
+      [...idsByTenant.entries()].map(async ([tenantId, ids]) => {
+        const bookables = await BookableManager.getBookablesByIds(tenantId, [
+          ...ids,
+        ]);
+        for (const bookable of bookables) {
+          bookableByKey.set(`${tenantId}:${bookable.id}`, bookable);
+        }
+      }),
+    );
+
+    for (const { result, booking } of matched) {
+      const leadId = this._getLeadBookableId(booking);
+      const bookable = leadId
+        ? bookableByKey.get(`${booking.tenantId}:${leadId}`)
+        : null;
+
+      result.leadBookable = bookable
+        ? {
+            id: bookable.id,
+            title: bookable.title,
+            location: bookable.location,
+          }
+        : null;
+    }
+  }
+
+  /**
+   * @private
+   * Returns the bookable id of the first item booked in a booking, or null.
+   */
+  static _getLeadBookableId(booking) {
+    const firstItem = (booking.bookableItems || [])[0];
+    if (!firstItem) {
+      return null;
+    }
+    return firstItem.bookableId || firstItem._bookableUsed?.id || null;
   }
 
   /**
