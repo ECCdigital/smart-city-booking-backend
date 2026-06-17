@@ -26,8 +26,6 @@ class CalendarService {
       BookableManager.getRelatedBookables(bookableId, tenantId),
     ]);
 
-    console.log("parentBookables", parentBookables);
-
     if (!bookable) {
       throw new NotFoundError("bookable_not_found", { bookableId, tenantId });
     }
