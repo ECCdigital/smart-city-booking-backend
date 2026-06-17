@@ -41,6 +41,11 @@ router.get(
   optionalAuth,
   CalendarController.getBookableAvailability,
 );
+router.get(
+  "/bookables/:id/availability/v2",
+  optionalAuth,
+  CalendarController.getBookableAvailabilityV2,
+);
 router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
 
 // Protected

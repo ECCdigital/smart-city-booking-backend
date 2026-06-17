@@ -6,6 +6,8 @@ const {
   ItemCheckoutService,
 } = require("../../../commons/services/checkout/item-checkout-service");
 const CalendarService = require("../../../commons/services/calendar-service");
+const CalendarServiceV2 = require("../../../commons/services/calendar-service-v2");
+const { NotFoundError } = require("../../../errors/BaseError");
 
 /**
  * CalendarController class.
@@ -123,6 +125,54 @@ class CalendarController {
 
       response.status(200).send(availability);
     } catch (error) {
+      if (error instanceof NotFoundError) {
+        return response.status(404).send({
+          error: `Bookable with id ${bookableId} not found`,
+          code: error.code,
+        });
+      }
+      console.error(error);
+      response.status(500).send({ error: "Internal server error" });
+    }
+  }
+
+  /**
+   * Optimized availability check (v2) for A/B comparison with getBookableAvailability.
+   *
+   * @example
+   * // GET /api/<tenant>/bookables/<bookableId>/availability/v2?amount=1&startDate=2022-01-01&endDate=2022-01-07
+   */
+  static async getBookableAvailabilityV2(request, response) {
+    const {
+      params: { tenant, id: bookableId },
+      user,
+      query: { amount = 1, startDate: startDateQuery, endDate: endDateQuery },
+    } = request;
+
+    if (!tenant || !bookableId) {
+      return response
+        .status(400)
+        .send({ error: "Tenant ID and bookable ID are required." });
+    }
+
+    try {
+      const availability = await CalendarServiceV2.checkAvailability(
+        String(tenant),
+        String(bookableId).trim(),
+        startDateQuery,
+        endDateQuery,
+        Number(amount),
+        user,
+      );
+
+      response.status(200).send(availability);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return response.status(404).send({
+          error: `Bookable with id ${bookableId} not found`,
+          code: error.code,
+        });
+      }
       console.error(error);
       response.status(500).send({ error: "Internal server error" });
     }
