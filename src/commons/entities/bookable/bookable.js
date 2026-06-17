@@ -25,6 +25,8 @@ class Bookable {
 
     Object.assign(this, defaults, filteredParams);
 
+    this.customFields = params.customFields || undefined;
+
     // Update timestamp on modification
     this.timeUpdated = Date.now();
   }
@@ -269,6 +271,62 @@ class Bookable {
   }
 
   /**
+   * Enrich this bookable with resolved custom fields
+   * @param {{ instanceFields: Array, tenantFields: Array }} definitions
+   * @returns {Bookable} this (for chaining)
+   */
+  enrichCustomFields({ instanceFields, tenantFields }) {
+    const {
+      CustomFieldService,
+    } = require("../../services/custom-field/custom-field-service");
+
+    const mergedDefs = CustomFieldService.mergeDefinitions({
+      instanceFields,
+      tenantFields,
+      bookableFields: this.customFieldDefinitions || [],
+    });
+
+    this.customFields = CustomFieldService.resolveFieldsWithValues(
+      mergedDefs,
+      this.customFieldValues || [],
+    );
+
+    return this;
+  }
+
+  get hasExternalPricing() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("pricing"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalAvailability() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("availability"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalMaxAmount() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("maxAmount"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalBookingDuration() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("availability"),
+      ) ?? false
+    );
+  }
+
+  /**
    * Export public bookable information
    * @returns {Object} Public bookable data
    */
@@ -303,6 +361,9 @@ class Bookable {
       checkoutBookableIds: this.checkoutBookableIds,
       eventId: this.eventId,
       attachments: this.attachments,
+      customFields: this.customFields,
+      customFieldValues: this.customFieldValues,
+      cancellationPolicy: this.cancellationPolicy,
     };
   }
 

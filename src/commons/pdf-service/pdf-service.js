@@ -4,6 +4,8 @@ const TenantManager = require("../data-managers/tenant-manager");
 const bunyan = require("bunyan");
 const Handlebars = require("handlebars");
 const lazyBrowser = require("./LazyBrowser");
+const fs = require("fs");
+const path = require("path");
 
 const logger = bunyan.createLogger({
   name: "mail-service.js",
@@ -62,6 +64,14 @@ class PdfService {
       currency: "EUR",
     });
     return formatter.format(value);
+  }
+
+  static formatAmount(value) {
+    if (value == null) return "-";
+    return new Intl.NumberFormat("de-DE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
   }
 
   static translatePayMethod(value) {
@@ -143,28 +153,85 @@ class PdfService {
       bookedItemsHtml += `<div>Gutschein: ${c.description} (–${c.discount}${c.type === "fixed" ? "€" : "%"})</div>`;
     }
 
-    const bookingEntries = `
-    <table class="booking-detail">
-      <tr><td>Buchungsnummer</td><td>${booking.id}</td></tr>
-      <tr><td>Gesamt (netto)</td><td>${totalNetto}</td></tr>
-      <tr><td>zzgl. MwSt.</td><td>${totalVat}</td></tr>
-      <tr><td>Gesamt (brutto)</td><td>${totalAmount}</td></tr>
-      <tr><td>Zahlungsdatum</td><td>${payDate}</td></tr>
-      <tr><td>Zahlungsmethode</td><td>${paymentMethod}</td></tr>
-      <tr><td>Buchungszeitraum</td><td>${bookingPeriod}</td></tr>
-      <tr><td>Buchungsobjekt</td><td>${bookedItemsHtml}</td></tr>
-    </table>
-  `;
+    let mainContent = `
+      <p>Buchungsnummer: ${booking.id} </br>
+      Bungungszeitraum: ${bookingPeriod}</p>
+      <p>Zahlungsdatum: ${payDate}</br>
+      Zahlungsmethode: ${paymentMethod}</p>
+  
+      <table class="booking-detail" style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #eee; border-bottom: 1px solid #ddd;">
+            <th class='bi-title'>Beschreibung</th>
+            <th class='bi-amount'>Anzahl</th>
+            <th class='bi-price-item'>Einzelpreis</th>
+            <th class='bi-price-total'>Gesamtpreis</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const bookableItem of booking.bookableItems) {
+      const bookable =
+        bookableItem._bookableUsed ||
+        bookables.find((b) => b.id === bookableItem.bookableId);
+
+      const totalItemPrice = bookableItem.userPriceEur * bookableItem.amount;
+      mainContent += `
+        <tr style="border-bottom: 1px solid #eee;">
+          <td class="bi-title">${bookable?.title || "Unbekannt"}</td>
+          <td class="bi-amount">${bookableItem.amount}</td>
+          <td class="bi-price-item">${PdfService.formatCurrency(bookableItem.userPriceEur)}</td>
+          <td class="bi-price-total">${PdfService.formatCurrency(totalItemPrice)}</td>
+        </tr>
+      `;
+    }
+
+    if (booking._couponUsed && Object.keys(booking._couponUsed).length) {
+      mainContent += `
+        <tr class="coupon" style="border-bottom: 1px solid #eee; color: #555;">
+          <td colspan="3">${booking._couponUsed.description}</td>
+          <td>-${booking._couponUsed.discount} 
+            ${booking._couponUsed.type === "fixed" ? "€" : "%"}</td>
+        </tr>
+      `;
+    }
+
+    mainContent += `
+      <tr class="netto" style="border-bottom: 1px solid #eee;">
+        <td colspan="3">Gesamt (netto)</td>
+        <td>${totalNetto}</td>
+      </tr>
+      
+       <tr class="mwst" style="border-bottom: 1px solid #eee;">
+        <td colspan="3">zzgl. MwSt.</td>
+        <td>${totalVat}</td>
+      </tr>
+
+      <tr class="brutto" style="font-weight: bold;">
+        <td colspan="3">Gesamt (brutto)</td>
+        <td>${totalAmount}</td>
+      </tr>
+    `;
+
+    mainContent += `
+        </tbody>
+      </table>
+    `;
 
     const data = {
       isAggregated: false,
       receiptNumber,
       bookingDate,
       receiptAddress,
-      bookingEntries,
+      bookingEntries: mainContent,
     };
 
-    const template = Handlebars.compile(tenant.receiptTemplate);
+    const template = PdfService._loadTemplate(
+      tenant.receiptTemplate,
+      "default-receipt-template.temp.html",
+    );
+
     const renderedHtml = template(data);
     const filename = `Zahlungsbeleg-${receiptNumber}.pdf`;
 
@@ -186,11 +253,11 @@ class PdfService {
       <table class="booking-detail">
         <thead>
           <tr>
-            <th style="text-align:start">ID</th>
+            <th style="text-align:start">Buchungs-ID</th>
             <th>Zeitraum</th>
             <th>Zahlungsdatum</th>
             <th>Bezahlmethode</th>
-            <th style="text-align:right">Betrag</th>
+            <th style="text-align:right">Gesamt (netto)</th>
           </tr>
         </thead>
         <tbody>
@@ -279,7 +346,10 @@ class PdfService {
         bookingEntries: entriesHtml,
       };
 
-      const template = Handlebars.compile(tenant.receiptTemplate);
+      const template = PdfService._loadTemplate(
+        tenant.receiptTemplate,
+        "default-receipt-template.temp.html",
+      );
       const renderedHtml = template(data);
       const filename = `Sammelbeleg-${receiptNumber}.pdf`;
 
@@ -395,13 +465,16 @@ class PdfService {
         invoiceAddress,
         mainContent,
         location: tenant.location,
-        totalAmount: PdfService.formatCurrency(booking.priceEur),
+        totalAmount: PdfService.formatAmount(booking.priceEur),
         invoiceDate: currentDate,
         bookingId: booking.id,
         bookingPeriod,
       };
 
-      const template = Handlebars.compile(tenant.invoiceTemplate);
+      const template = PdfService._loadTemplate(
+        tenant.invoiceTemplate,
+        "default-invoice-template.temp.html",
+      );
       const renderedHtml = template(data);
       const filename = `Rechnung-${invoiceNumber}.pdf`;
 
@@ -411,7 +484,14 @@ class PdfService {
     }
   }
 
-  static async generateAggregatedInvoice(tenantId, bookingIds, invoiceNumber) {
+  static async generateAggregatedInvoice(
+    tenantId,
+    bookingIds,
+    invoiceNumber,
+    options = {},
+  ) {
+    const { groupBookingId } = options;
+
     const [tenant, invoiceApp, bookings] = await Promise.all([
       TenantManager.getTenant(tenantId),
       TenantManager.getTenantApp(tenantId, "invoice"),
@@ -504,7 +584,10 @@ class PdfService {
       ${bookings[0].zipCode || ""} ${bookings[0].location || ""}
     `;
 
-    const template = Handlebars.compile(tenant.invoiceTemplate);
+    const template = PdfService._loadTemplate(
+      tenant.invoiceTemplate,
+      "default-invoice-template.temp.html",
+    );
     const data = {
       title: "Ihre Sammelrechnung",
       invoiceNumber: invoiceNumber,
@@ -517,11 +600,272 @@ class PdfService {
       invoiceAddress,
       mainContent,
       location: tenant.location,
-      totalAmount: PdfService.formatCurrency(totalBrutto),
+      totalAmount: PdfService.formatAmount(totalBrutto),
+      bookingId: groupBookingId,
     };
 
     const renderedHtml = template(data);
     const filename = `Sammelrechnung-${invoiceNumber}.pdf`;
+
+    return await PdfService.convertToPdf(renderedHtml, filename);
+  }
+
+  static async generateSingleCancellationReceipt(
+    tenantId,
+    bookingId,
+    cancellationNumber,
+    originalInvoiceNumber,
+    options = {},
+  ) {
+    const {
+      cancellationReason,
+      alreadyPaid = false,
+      originalInvoiceDate,
+      bankDetails,
+    } = options;
+
+    const [tenant, booking, allBookables] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      BookingManager.getBooking(bookingId, tenantId),
+      BookableManager.getBookables(tenantId),
+    ]);
+
+    const bookables = allBookables.filter((b) =>
+      booking.bookableItems.some((bi) => bi.bookableId === b.id),
+    );
+
+    const netto = booking.priceEur - booking.vatIncludedEur;
+
+    let mainContent = `
+    <table class="booked-items" style="width:100%; border-collapse: collapse;">
+      <thead>
+        <tr style="background: #eee; border-bottom: 1px solid #ddd;">
+          <th class='bi-title'>Beschreibung</th>
+          <th class='bi-amount'>Anzahl</th>
+          <th class='bi-price-item'>Einzelpreis</th>
+          <th class='bi-price-total'>Gesamtpreis</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+    for (const bookableItem of booking.bookableItems) {
+      const bookable =
+        bookableItem._bookableUsed ||
+        bookables.find((b) => b.id === bookableItem.bookableId);
+
+      const totalItemPrice = bookableItem.userPriceEur * bookableItem.amount;
+      mainContent += `
+      <tr style="border-bottom: 1px solid #eee;">
+        <td class="bi-title">${bookable?.title || "Unbekannt"}</td>
+        <td class="bi-amount">${bookableItem.amount}</td>
+        <td class="bi-price-item">${PdfService.formatNegativeCurrency(bookableItem.userPriceEur)}</td>
+        <td class="bi-price-total">${PdfService.formatNegativeCurrency(totalItemPrice)}</td>
+      </tr>
+    `;
+    }
+
+    if (booking._couponUsed && Object.keys(booking._couponUsed).length) {
+      mainContent += `
+      <tr class="coupon" style="border-bottom: 1px solid #eee; color: #555;">
+        <td colspan="3">${booking._couponUsed.description}</td>
+        <td>+${booking._couponUsed.discount}${booking._couponUsed.type === "fixed" ? "€" : "%"}</td>
+      </tr>
+    `;
+    }
+
+    mainContent += `
+      <tr class="netto" style="border-bottom: 1px solid #eee;">
+        <td colspan="3">Gesamt (netto)</td>
+        <td>${PdfService.formatNegativeCurrency(netto)}</td>
+      </tr>
+      <tr class="mwst" style="border-bottom: 1px solid #eee;">
+        <td colspan="3">zzgl. MwSt.</td>
+        <td>${PdfService.formatNegativeCurrency(booking.vatIncludedEur)}</td>
+      </tr>
+      <tr class="brutto" style="font-weight: bold;">
+        <td colspan="3">Gesamt (brutto)</td>
+        <td>${PdfService.formatNegativeCurrency(booking.priceEur)}</td>
+      </tr>
+    </tbody>
+    </table>
+  `;
+
+    const invoiceAddress = `
+    ${booking.company || ""}
+    ${booking.company ? "<br />" : ""}
+    ${booking.name || ""}<br />
+    ${booking.street || ""}<br />
+    ${booking.zipCode || ""} ${booking.location || ""}
+  `;
+
+    const customerBankDetails =
+      PdfService._buildCustomerBankDetails(bankDetails);
+
+    const data = {
+      title: "Stornorechnung",
+      cancellationNumber,
+      originalInvoiceNumber,
+      originalInvoiceDate: originalInvoiceDate
+        ? PdfService.formatDate(originalInvoiceDate)
+        : PdfService.formatDate(new Date(booking.timeCreated)),
+      cancellationDate: PdfService.formatDate(new Date()),
+      cancellationReason,
+      alreadyPaid,
+      refundAmount: PdfService.formatCurrency(booking.priceEur),
+      customerBankDetails,
+      invoiceAddress,
+      mainContent,
+      location: tenant.location,
+      totalAmount: PdfService.formatNegativeCurrency(booking.priceEur),
+      bookingId: booking.id,
+    };
+
+    const template = PdfService._loadTemplate(
+      tenant.cancellationTemplate,
+      "default-cancellation-receipt.temp.html",
+    );
+
+    const renderedHtml = template(data);
+    const filename = `Stornorechnung-${cancellationNumber}.pdf`;
+
+    return await PdfService.convertToPdf(renderedHtml, filename);
+  }
+
+  static async generateAggregatedCancellationReceipt(
+    tenantId,
+    bookingIds,
+    cancellationNumber,
+    originalInvoiceNumber,
+    options = {},
+  ) {
+    const {
+      cancellationReason,
+      alreadyPaid = false,
+      originalInvoiceDate,
+      bankDetails,
+      groupBookingId,
+    } = options;
+
+    const [tenant, bookings, allBookables] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      BookingManager.getBookings(tenantId, bookingIds),
+      BookableManager.getBookables(tenantId),
+    ]);
+
+    let totalBrutto = 0;
+    let totalNetto = 0;
+    let totalVat = 0;
+
+    let mainContent = `<table>
+    <thead>
+      <tr class="heading">
+        <td>Buchungs-ID</td>
+        <td>Zeitraum</td>
+        <td style="text-align: right;">Gesamt (netto)</td>
+      </tr>
+    </thead>
+    <tbody>`;
+
+    for (const booking of bookings) {
+      const netto = booking.priceEur - booking.vatIncludedEur;
+
+      totalBrutto += booking.priceEur;
+      totalNetto += netto;
+      totalVat += booking.vatIncludedEur;
+
+      const period =
+        booking.timeBegin && booking.timeEnd
+          ? `${PdfService.formatDateTime(booking.timeBegin)} - ${PdfService.formatDateTime(booking.timeEnd)}`
+          : "-";
+
+      let bookablesHtml = "<ul style='margin: 0; padding-left: 20px;'>";
+      if (booking.bookableItems && booking.bookableItems.length > 0) {
+        for (const item of booking.bookableItems) {
+          const usedBookable =
+            item._bookableUsed ||
+            allBookables.find((b) => b.id === item.bookableId);
+
+          const totalItemPrice = item.userPriceEur * item.amount;
+          bookablesHtml += `
+          <li>
+            ${usedBookable?.title || "Unbekannt"} 
+            x${item.amount} 
+            (${PdfService.formatNegativeCurrency(totalItemPrice)})
+          </li>`;
+        }
+      } else {
+        bookablesHtml += `<li>Keine Buchungsobjekte vorhanden.</li>`;
+      }
+      bookablesHtml += "</ul>";
+
+      mainContent += `
+      <tr class="item" style="border-bottom: 1px solid #eee;">
+        <td style="padding: 5px;">${booking.id}</td>
+        <td style="padding: 5px;">${period}</td>
+        <td style="padding: 5px; text-align: right;">${PdfService.formatNegativeCurrency(netto)}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="padding: 5px;">
+          <strong>Details / Artikel:</strong><br>
+          ${bookablesHtml}
+        </td>
+      </tr>
+    `;
+    }
+
+    mainContent += `</tbody></table>
+    <table>
+      <tr>
+        <td>Gesamt (netto):</td>
+        <td>${PdfService.formatNegativeCurrency(totalNetto)}</td>
+      </tr>
+      <tr>
+        <td>zzgl. MwSt.:</td>
+        <td>${PdfService.formatNegativeCurrency(totalVat)}</td>
+      </tr>
+      <tr>
+        <td><strong>Gesamt (brutto):</strong></td>
+        <td><strong>${PdfService.formatNegativeCurrency(totalBrutto)}</strong></td>
+      </tr>
+    </table>`;
+
+    const invoiceAddress = `
+    ${bookings[0].company || ""}
+    ${bookings[0].company ? "<br />" : ""}
+    ${bookings[0].name || ""}<br />
+    ${bookings[0].street || ""}<br />
+    ${bookings[0].zipCode || ""} ${bookings[0].location || ""}
+  `;
+
+    const customerBankDetails =
+      PdfService._buildCustomerBankDetails(bankDetails);
+
+    const data = {
+      title: "Sammel-Stornorechnung",
+      cancellationNumber,
+      originalInvoiceNumber,
+      originalInvoiceDate: originalInvoiceDate
+        ? PdfService.formatDate(originalInvoiceDate)
+        : PdfService.formatDate(new Date(bookings[0].timeCreated)),
+      cancellationDate: PdfService.formatDate(new Date()),
+      cancellationReason,
+      alreadyPaid,
+      refundAmount: PdfService.formatCurrency(totalBrutto),
+      customerBankDetails,
+      invoiceAddress,
+      mainContent,
+      location: tenant.location,
+      totalAmount: PdfService.formatNegativeCurrency(totalBrutto),
+      bookingId: groupBookingId,
+    };
+
+    const template = PdfService._loadTemplate(
+      tenant.cancellationTemplate,
+      "default-cancellation-receipt.temp.html",
+    );
+    const renderedHtml = template(data);
+    const filename = `Sammel-Stornorechnung-${cancellationNumber}.pdf`;
 
     return await PdfService.convertToPdf(renderedHtml, filename);
   }
@@ -546,6 +890,71 @@ class PdfService {
     }
 
     return !missingElement;
+  }
+
+  static formatNegativeCurrency(value) {
+    if (!value) return "-";
+    const formatter = new Intl.NumberFormat("de-DE", {
+      style: "currency",
+      currency: "EUR",
+    });
+    const negativeValue = Math.abs(value) * -1;
+    return formatter.format(negativeValue);
+  }
+
+  /**
+   * Build the customer bank details HTML block for the cancellation receipt
+   * template. Returns null when no usable details are provided so the section
+   * can be omitted in the rendered PDF.
+   *
+   * The block is rendered here (and not in the template) to guarantee a
+   * consistent look across the default template and tenant-specific overrides.
+   *
+   * @param {Object|null|undefined} bankDetails - Customer-provided bank details
+   * @returns {string|null} HTML block or null when no details are available
+   */
+  static _buildCustomerBankDetails(bankDetails) {
+    if (!bankDetails || typeof bankDetails !== "object") {
+      return null;
+    }
+
+    const accountHolder = (bankDetails.accountHolder || "").toString().trim();
+    const bank = (bankDetails.bankName || bankDetails.bank || "")
+      .toString()
+      .trim();
+    const iban = (bankDetails.iban || "").toString().trim();
+    const bic = (bankDetails.bic || "").toString().trim();
+
+    if (!accountHolder && !bank && !iban && !bic) {
+      return null;
+    }
+
+    const escape = (value) =>
+      Handlebars.Utils.escapeExpression(value).replace(/\n/g, "<br />");
+
+    const rows = [
+      accountHolder ? `Kontoinhaber: ${escape(accountHolder)}` : null,
+      bank ? escape(bank) : null,
+      iban ? `IBAN: ${escape(iban)}` : null,
+      bic ? `BIC: ${escape(bic)}` : null,
+    ].filter(Boolean);
+
+    return `
+      <div class="information customer-bank-details">
+        <strong>Bankverbindung für die Rückerstattung:</strong><br />
+        ${rows.join("<br />\n        ")}
+      </div>
+    `;
+  }
+
+  static _loadTemplate(customTemplate, defaultTemplateName) {
+    if (customTemplate) {
+      return Handlebars.compile(customTemplate);
+    }
+
+    const templatePath = path.join(__dirname, "templates", defaultTemplateName);
+    const templateContent = fs.readFileSync(templatePath, "utf-8");
+    return Handlebars.compile(templateContent);
   }
 }
 

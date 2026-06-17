@@ -37,11 +37,8 @@ class CatalogController {
   }
 
   static async getPublicCatalog(request, response) {
-    console.log("Getting public catalog...");
     try {
       const catalog = await CatalogService.getInstanceCatalog();
-
-      console.log("Public catalog retrieved:", catalog);
 
       response.status(200).send(catalog);
     } catch (error) {
@@ -54,10 +51,46 @@ class CatalogController {
 
   static async getCatalogBundle(request, response) {
     try {
-      const catalogBundle = await CatalogService.getCatalogBundle();
+      const bundle = await CatalogService.getCatalogBundle();
 
-      response.status(200).send(catalogBundle);
+      if (!bundle) {
+        return response.status(404).send({
+          success: false,
+          message: "Catalog bundle not found.",
+        });
+      }
+
+      // Wenn Offers deaktiviert sind, gibt das Bundle nur Branding + Modus zurück.
+      // Visibility-Prüfung greift nur für den Offers-Modus.
+      if (bundle.offersEnabled && bundle.catalog?.visibility === "private") {
+        const user = request.user;
+        if (!user) {
+          return response.status(401).send({
+            success: false,
+            message: "Authentication required to access this catalog.",
+          });
+        }
+      }
+
+      response.status(200).send(bundle);
     } catch (error) {
+      response.status(error.code || 500).send({
+        success: false,
+        message: error.message || "Internal Server Error",
+      });
+    }
+  }
+
+  /**
+   * Liefert dem Frontend den aktuellen Portal-Modus inkl. Branding. Wird vom
+   * Catalog-Frontend bei jedem Page-Load als Routing-Hint gelesen.
+   */
+  static async getPortalMode(request, response) {
+    try {
+      const mode = await CatalogService.getPortalMode();
+      response.status(200).send(mode);
+    } catch (error) {
+      console.error("Error in CatalogController.getPortalMode:", error);
       response.status(error.code || 500).send({
         success: false,
         message: error.message || "Internal Server Error",
@@ -99,15 +132,21 @@ class CatalogController {
     try {
       const slug = request.params.slug;
 
-      const catalog = await CatalogService.getCatalog(slug);
+      const { publicOffersEnabled } = await InstanceManager.getPortalConfig();
 
-      const { enableCatalog } = await InstanceManager.getInstance();
-      if (!enableCatalog) {
-        return response.status(503).send({
-          success: false,
-          message: "Catalog feature is disabled.",
+      // Wenn die Buchungsangebote deaktiviert sind, bricht der Endpoint nicht
+      // mehr hart ab. Stattdessen erhält das Frontend ein minimales Payload
+      // (`offersEnabled: false`) und schaltet auf den Personal-Modus um.
+      if (!publicOffersEnabled) {
+        const branding = await CatalogService.getBranding();
+        return response.status(200).send({
+          offersEnabled: false,
+          slug,
+          branding,
         });
       }
+
+      const catalog = await CatalogService.getCatalog(slug);
 
       try {
         const user = await authenticateIfNeeded(
@@ -137,44 +176,13 @@ class CatalogController {
     try {
       const slug = request.params.slug;
 
-      const themeData = { theme: null, visibility: null };
-
-      if (!slug) {
-        const { theme, visibility } = await CatalogService.getTheme();
-        themeData.theme = theme;
-        themeData.visibility = visibility;
-      } else {
-        const { theme, visibility } = await CatalogService.getThemeBySlug(slug);
-        themeData.theme = theme;
-        themeData.visibility = visibility;
-      }
-
-      const { enableCatalog } = await InstanceManager.getInstance();
-      if (!enableCatalog) {
-        return response.status(503).send({
-          success: false,
-          message: "Catalog feature is disabled.",
-        });
-      }
-
-      try {
-        const user = await authenticateIfNeeded(
-          request,
-          themeData.visibility === "private",
-        );
-        if (user) request.user = user;
-
-        //TODO: Add permission checks here if needed
-      } catch (error) {
-        console.error("Authentication error:", error);
-
-        return response.status(401).json({ message: error.message });
-      }
+      const themeData = slug
+        ? await CatalogService.getThemeBySlug(slug)
+        : await CatalogService.getTheme();
 
       response.status(200).send(themeData);
     } catch (error) {
-      console.error("Error in CatalogController.getTheme:", error);
-      response.status(500).send({
+      response.status(error.code || 500).send({
         success: false,
         message: error.message || "Internal Server Error",
       });

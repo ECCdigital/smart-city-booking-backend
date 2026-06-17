@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const defaultMailTemplate = fs.readFileSync(
   path.join(
     __dirname,
@@ -26,8 +27,18 @@ const instanceSchemaDefinition = {
   mailEnabled: { type: Boolean, default: false },
   contactAddress: { type: String, default: "" },
   contactUrl: { type: String, default: "" },
-  dataProtectionUrl: { type: String, default: "" },
-  legalNoticeUrl: { type: String, default: "" },
+  dataProtection: {
+    type: Object,
+    default: () => ({ source: "url", url: "", fileName: "" }),
+  },
+  legalNotice: {
+    type: Object,
+    default: () => ({ source: "url", url: "", fileName: "" }),
+  },
+  termsAndConditions: {
+    type: Object,
+    default: () => ({ source: "url", url: "", fileName: "" }),
+  },
   allowAllUsersToCreateTenant: { type: Boolean, default: false },
   allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
   ownerUserIds: { type: Array, ref: "User", default: [] },
@@ -43,8 +54,31 @@ const instanceSchemaDefinition = {
       path: { type: Array, default: [] },
     },
   },
-  enableCatalog: { type: Boolean, default: false },
-  catalogUrl: { type: String, default: "" },
+  checkout: {
+    type: Object,
+    default: {
+      useLegacyCheckout: true,
+      checkoutUrl: "",
+    },
+  },
+  publicOffersEnabled: { type: Boolean, default: false },
+  portalUrl: { type: String, default: "" },
+  branding: {
+    type: Object,
+    default: () => ({
+      active: false,
+      theme: {
+        colors: { primary: "", secondary: "" },
+      },
+      logoUrl: "",
+      faviconUrl: "",
+    }),
+  },
+
+  bookableCustomFields: {
+    type: [customFieldDefinitionSchema],
+    default: [],
+  },
 };
 
 module.exports = {

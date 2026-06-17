@@ -134,15 +134,15 @@ async function isCheckoutAvailable(fixture, params) {
   const originals = installStubs(stubs);
 
   try {
-    const checkout = new ManualItemCheckoutService(
-      params.user ?? "user-1",
-      TENANT_ID,
-      params.timeBegin,
-      params.timeEnd,
-      fixture.bookable.id,
-      params.amount,
-      null,
-    );
+    const checkout = new ManualItemCheckoutService({
+      user: params.user ?? "user-1",
+      tenantId: TENANT_ID,
+      timeBegin: params.timeBegin,
+      timeEnd: params.timeEnd,
+      bookableId: fixture.bookable.id,
+      amount: params.amount,
+      couponCode: null,
+    });
     await checkout.init(fixture.bookable);
 
     await checkout.checkAll();

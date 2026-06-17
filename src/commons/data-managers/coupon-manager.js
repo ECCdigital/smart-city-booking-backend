@@ -118,6 +118,24 @@ class CouponManager {
     return updated.toEntity();
   }
 
+  static async decrementCouponUsage(couponID, tenantID) {
+    if (!couponID || !tenantID) {
+      throw new Error("couponID and tenantID are required.");
+    }
+
+    const updated = await CouponModel.findOneAndUpdate(
+      { id: couponID, tenantId: tenantID },
+      { $inc: { usedAmount: -1 } },
+      { new: true },
+    );
+
+    if (!updated) {
+      throw new Error("Coupon not found for decrementing usage.");
+    }
+
+    return updated.toEntity();
+  }
+
   /**
    * Remove a coupon.
    *

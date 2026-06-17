@@ -34,6 +34,12 @@ class AuthApplication extends TenantApplication {
     }
   }
 
+  removePrivateData() {
+    delete this.privateClientSecret;
+    delete this.roleMapping;
+    delete this.privateClient;
+  }
+
   static get Schema() {
     return {
       ...super.Schema,

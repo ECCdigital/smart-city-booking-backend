@@ -24,6 +24,13 @@ class UserManager {
     return user;
   }
 
+  static async getRawUser(id) {
+    const rawUser = await UserModel.findOne({
+      id: { $regex: id, $options: "i" },
+    });
+    return rawUser;
+  }
+
   static async signupUser(user) {
     try {
       const userEntity = user instanceof User ? user : new User(user);
@@ -160,6 +167,13 @@ class UserManager {
     );
   }
 
+  static async getUserByCard(appId, publicId) {
+    return await UserModel.findOne({
+      "cardAuth.appId": appId,
+      "cardAuth.publicId": publicId,
+    }).lean();
+  }
+
   static async deleteUser(id) {
     try {
       return await UserModel.deleteOne({ id: id });
@@ -186,7 +200,7 @@ class UserManager {
     const rawUser = await UserModel.findOne({ "hooks.id": hookID });
 
     if (!rawUser) {
-      throw new Error("No User found with this hook.");
+      return null;
     }
 
     return rawUser.toEntity();

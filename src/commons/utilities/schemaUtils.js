@@ -5,6 +5,14 @@ const FORMAT_VALIDATORS = {
     const { isEmail } = require("validator");
     return isEmail(value);
   },
+  multiEmail: (value) => {
+    const { isEmail } = require("validator");
+    const emails = value
+      .split(/[,\n]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    return emails.length > 0 && emails.every((e) => isEmail(e));
+  },
 };
 
 const ERROR_CODES = {

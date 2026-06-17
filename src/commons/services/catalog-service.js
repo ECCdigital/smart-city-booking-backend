@@ -1,5 +1,31 @@
 const CatalogManager = require("../data-managers/catalog-manager");
 const TenantManager = require("../data-managers/tenant-manager");
+const InstanceManager = require("../data-managers/instance-manager");
+
+const DEFAULT_HERO = Object.freeze({ title: "", subtitle: "" });
+
+/**
+ * Erstellt eine an Clients ausgelieferte Variante des Brandings.
+ * Bei `branding.active === false` werden weder `theme` noch `logoUrl`/
+ * `faviconUrl` ausgeliefert (jeweils `null`), damit das Frontend bewusst
+ * auf seine Default-Optik (Logo, Favicon, Theme) zurückfällt.
+ */
+function exportBranding(branding) {
+  if (!branding?.active) {
+    return {
+      active: false,
+      theme: null,
+      logoUrl: null,
+      faviconUrl: null,
+    };
+  }
+  return {
+    active: true,
+    logoUrl: branding.logoUrl ?? "",
+    faviconUrl: branding.faviconUrl ?? "",
+    theme: branding.theme ?? null,
+  };
+}
 
 class CatalogService {
   static async getInstanceCatalog() {
@@ -17,12 +43,29 @@ class CatalogService {
 
   static async getCatalogBundle(tenantId = null) {
     if (!tenantId) {
-      const catalog = await CatalogManager.getInstanceCatalog();
+      const [catalog, portal, branding] = await Promise.all([
+        CatalogManager.getInstanceCatalog(),
+        InstanceManager.getPortalConfig(),
+        InstanceManager.getBranding(),
+      ]);
 
       if (!catalog) {
         throw {
           code: 404,
           message: "No Instance Catalog found",
+        };
+      }
+
+      // Wenn die öffentlichen Buchungsangebote deaktiviert sind, liefern wir
+      // nur ein minimales Bundle aus, damit das Frontend in den Personal-Modus
+      // wechseln und trotzdem das Branding rendern kann.
+      if (!portal.publicOffersEnabled) {
+        return {
+          offersEnabled: false,
+          branding: exportBranding(branding),
+          portalUrl: portal.portalUrl,
+          catalog: catalog.exportPublic(),
+          tenants: [],
         };
       }
 
@@ -35,6 +78,9 @@ class CatalogService {
       });
 
       return {
+        offersEnabled: true,
+        branding: exportBranding(branding),
+        portalUrl: portal.portalUrl,
         catalog: catalog.exportPublic(),
         tenants: allowedTenants.map((tenant) => {
           return { id: tenant.id, name: tenant.name };
@@ -74,34 +120,63 @@ class CatalogService {
   }
 
   static async getThemeBySlug(slug) {
-    const catalog = await CatalogManager.getCatalogBySlug(slug);
+    const [catalog, branding] = await Promise.all([
+      CatalogManager.getCatalogBySlug(slug),
+      InstanceManager.getBranding(),
+    ]);
 
-    if (!catalog || !catalog.theme) {
-      throw new Error(`Catalog with slug "${slug}" not found`);
+    if (!catalog) {
+      throw {
+        code: 404,
+        message: `Catalog with slug "${slug}" not found`,
+      };
     }
 
-    if (!catalog.active) {
-      throw new Error(`Catalog with slug "${slug}" is not active`);
-    }
-
-    if (!catalog.theme.active) {
-      throw new Error(`Theme for catalog with slug "${slug}" is not active`);
-    }
-
-    return { theme: catalog.theme, visibility: catalog.visibility };
+    const exported = exportBranding(branding);
+    return {
+      ...exported,
+      hero: catalog.hero ?? DEFAULT_HERO,
+      visibility: catalog.visibility,
+    };
   }
 
   static async getTheme() {
-    const catalog = await CatalogManager.getInstanceCatalog();
+    const [catalog, branding] = await Promise.all([
+      CatalogManager.getInstanceCatalog(),
+      InstanceManager.getBranding(),
+    ]);
 
-    if (!catalog) {
-      throw new Error(`Instance catalog or its theme not found`);
-    }
-    if (!catalog.theme.active) {
-      throw new Error(`Theme for instance catalog is not active`);
-    }
+    const exported = exportBranding(branding);
+    return {
+      ...exported,
+      hero: catalog?.hero ?? DEFAULT_HERO,
+      visibility: catalog?.visibility ?? "public",
+    };
+  }
 
-    return { theme: catalog.theme, visibility: catalog.visibility };
+  /**
+   * Gibt das ausgelieferte Branding zurück (Theme nur bei `branding.active`).
+   */
+  static async getBranding() {
+    const branding = await InstanceManager.getBranding();
+    return exportBranding(branding);
+  }
+
+  /**
+   * Liefert dem Frontend den aktuellen Portal-Modus (`offers` oder `personal`)
+   * inklusive Branding. Wird vom Catalog-Frontend als Routing-Hint genutzt.
+   */
+  static async getPortalMode() {
+    const [portal, branding] = await Promise.all([
+      InstanceManager.getPortalConfig(),
+      InstanceManager.getBranding(),
+    ]);
+
+    return {
+      mode: portal.publicOffersEnabled ? "offers" : "personal",
+      portalUrl: portal.portalUrl,
+      branding: exportBranding(branding),
+    };
   }
 
   static async updateCatalog(catalog) {

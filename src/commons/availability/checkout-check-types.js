@@ -10,6 +10,7 @@ const CHECK_TYPES = Object.freeze({
   MAX_BOOKING_DATE: "max-booking-date",
   TIME_RELATION: "time-relation",
   PRICE_CATEGORY: "price-category",
+  MAX_AMOUNT: "max-amount",
 });
 
 module.exports = { CHECK_TYPES };

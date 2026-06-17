@@ -6,7 +6,6 @@ const CouponService = require("../coupon-service");
 const GroupBookingManager = require("../../data-managers/group-booking-manager");
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
-const { getTenant } = require("../../data-managers/tenant-manager");
 const {
   BundleCheckoutService,
   ManualBundleCheckoutService,
@@ -32,18 +31,106 @@ const {
   checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
+const CancellationService = require("../payment/cancellation-service");
 const {
   BadRequestError,
   NotFoundError,
   BaseError,
   MethodNotAllowedError,
+  ForbiddenError,
 } = require("../../../errors/BaseError");
+const { resolveCheckoutId } = require("../../utilities/checkout-utils");
+const {
+  CustomFieldService,
+} = require("../custom-field/custom-field-service");
+const { CheckoutError } = require("../../../errors/CheckoutError");
+const {
+  CHECKOUT_REASONS,
+} = require("./checkout-reasons");
 
 const logger = bunyan.createLogger({
   name: "booking-service.js",
   level: process.env.LOG_LEVEL,
 });
 class BookingService {
+  static async _resolveCheckoutCustomFieldValues({
+    tenantId,
+    bookableItems,
+    customFieldValues,
+  }) {
+    const values = Array.isArray(customFieldValues) ? customFieldValues : [];
+
+    const { instanceFields, tenantFields } =
+      await BookableManager.getCustomFieldDefinitions(tenantId);
+
+    const bookableIds = [
+      ...new Set(bookableItems.map((item) => item.bookableId)),
+    ];
+    const bookables = await Promise.all(
+      bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
+    );
+
+    const bookableFields = bookables.flatMap(
+      (bookable) => bookable?.customFieldDefinitions || [],
+    );
+
+    const mergedDefinitions = CustomFieldService.mergeDefinitions({
+      instanceFields,
+      tenantFields,
+      bookableFields,
+    });
+
+    const checkoutDefinitions =
+      CustomFieldService.filterCheckoutDefinitions(mergedDefinitions);
+
+    if (checkoutDefinitions.length === 0 && values.length === 0) {
+      return [];
+    }
+
+    const { valid, errors } = CustomFieldService.validateValues(
+      checkoutDefinitions,
+      values,
+    );
+
+    if (!valid) {
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.CUSTOM_FIELDS_INVALID,
+        statusCode: 400,
+        params: { errors },
+      });
+    }
+
+    return values;
+  }
+
+  static _resolveCustomFieldValuesForUpdate(
+    updatedBooking,
+    oldBooking,
+    requestBody = {},
+  ) {
+    if (
+      Array.isArray(requestBody.customFields) &&
+      requestBody.customFields.length > 0
+    ) {
+      return requestBody.customFields.map((field) => ({
+        fieldId: field.id ?? field.fieldId,
+        value: field.value ?? null,
+      }));
+    }
+
+    if ("customFieldValues" in requestBody) {
+      return Array.isArray(requestBody.customFieldValues)
+        ? requestBody.customFieldValues
+        : [];
+    }
+
+    if ("customFields" in requestBody) {
+      return [];
+    }
+
+    return oldBooking.customFieldValues || [];
+  }
+
   /**
    * Creates a booking and stores it in the database.
    * @param tenantId
@@ -52,6 +139,7 @@ class BookingService {
    * @param simulate
    * @param manualBooking
    * @param skipWorkflow
+   * @param providedCheckoutId - Optional checkoutId to use instead of generating a new one
    * @returns {Promise<Booking>}
    */
   static async createBooking({
@@ -61,6 +149,7 @@ class BookingService {
     simulate,
     manualBooking = false,
     skipWorkflow = false,
+    checkoutId: providedCheckoutId,
   }) {
     const checkoutId = uuidV4();
 
@@ -83,7 +172,16 @@ class BookingService {
       isPayed,
       isRejected,
       bookWithPrice,
+      customFieldValues: rawCustomFieldValues,
+      cancellationPolicy,
     } = bookingAttempt;
+
+    const customFieldValues =
+      await BookingService._resolveCheckoutCustomFieldValues({
+        tenantId,
+        bookableItems,
+        customFieldValues: rawCustomFieldValues,
+      });
 
     logger.info(
       `${tenantId}, cid ${checkoutId} -- checkout request by user ${user?.id} with simulate=${simulate}`,
@@ -91,6 +189,19 @@ class BookingService {
     logger.debug(
       `${tenantId}, cid ${checkoutId} -- Checkout Details: timeBegin=${timeBegin}, timeEnd=${timeEnd}, bookableItems=${bookableItems}, couponCode=${couponCode}, name=${name}, company=${company}, street=${street}, zipCode=${zipCode}, location=${location}, email=${mail}, phone=${phone}, comment=${comment}`,
     );
+
+    // Check invoice payment permission
+    if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
+      const isPermitted = await PaymentUtils.checkInvoicePermission(
+        tenantId,
+        user?.id,
+      );
+      if (!isPermitted) {
+        throw new ForbiddenError("invoice_payment_not_permitted", {
+          message: "Sie sind nicht berechtigt, per Rechnung zu bezahlen.",
+        });
+      }
+    }
 
     async function validateMandatoryAddons(bookableItems) {
       const bookableIds = bookableItems.map((item) => item.bookableId);
@@ -167,6 +278,9 @@ class BookingService {
         attachmentStatus,
         paymentProvider,
         bookWithPrice,
+        checkoutId: providedCheckoutId,
+        customFieldValues,
+        cancellationPolicy,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
@@ -190,6 +304,8 @@ class BookingService {
         attachmentStatus,
         paymentProvider,
         bookWithPrice,
+        checkoutId: providedCheckoutId,
+        customFieldValues,
       });
     }
 
@@ -224,16 +340,41 @@ class BookingService {
         `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
       );
 
-      if (booking.isCommitted && booking.isPayed) {
-        try {
-          const lockerServiceInstance = LockerService.getInstance();
+      try {
+        const lockerServiceInstance = LockerService.getInstance();
+
+        if (booking.isCommitted && booking.isPayed) {
           await lockerServiceInstance.handleCreate(
             booking.tenantId,
             booking.id,
           );
-        } catch (err) {
-          logger.error(err);
+        } else {
+          await lockerServiceInstance.handlePreReserve(
+            booking.tenantId,
+            booking.id,
+          );
         }
+      } catch (err) {
+        logger.error(
+          `${tenantId}, cid ${checkoutId} -- Locker reservation failed ` +
+            `for booking ${booking.id}, rolling back: ${err.message}`,
+        );
+
+        try {
+          await BookingManager.removeBooking(booking.id, tenantId);
+          await CouponService.decrementCouponUsage(couponCode, tenantId);
+          logger.info(
+            `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} ` +
+              `rolled back successfully`,
+          );
+        } catch (rollbackErr) {
+          logger.error(
+            `${tenantId}, cid ${checkoutId} -- Rollback failed for ` +
+              `booking ${booking.id}: ${rollbackErr.message}`,
+          );
+        }
+
+        throw err;
       }
     } else {
       logger.info(`${tenantId}, cid ${checkoutId} -- Simulated booking`);
@@ -248,6 +389,7 @@ class BookingService {
    * @param bookingAttempt
    * @param simulate
    * @param manualBooking
+   * @param checkoutId - Optional checkoutId to use instead of generating a new one
    * @returns {Promise<Booking>}
    */
   static async createSingleBooking({
@@ -256,6 +398,7 @@ class BookingService {
     bookingAttempt,
     simulate,
     manualBooking = false,
+    checkoutId,
   }) {
     const booking = await BookingService.createBooking({
       tenantId,
@@ -263,6 +406,7 @@ class BookingService {
       bookingAttempt,
       simulate,
       manualBooking,
+      checkoutId,
     });
 
     if (!simulate) {
@@ -325,6 +469,19 @@ class BookingService {
   }) {
     if (!Array.isArray(bookingAttempts) || bookingAttempts.length === 0) {
       throw new BadRequestError("missing_booking_attempts");
+    }
+
+    // Check invoice payment permission
+    if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
+      const isPermitted = await PaymentUtils.checkInvoicePermission(
+        tenantId,
+        user?.id,
+      );
+      if (!isPermitted) {
+        throw new ForbiddenError("invoice_payment_not_permitted", {
+          message: "Sie sind nicht berechtigt, per Rechnung zu bezahlen.",
+        });
+      }
     }
 
     const checkoutId = uuidV4();
@@ -436,7 +593,7 @@ class BookingService {
     await BookingManager.removeBooking(booking.id, booking.tenantId);
   }
 
-  static async updateBooking(tenantId, updatedBooking) {
+  static async updateBooking(tenantId, updatedBooking, { requestBody } = {}) {
     const oldBooking = await BookingManager.getBooking(
       updatedBooking.id,
       tenantId,
@@ -451,6 +608,12 @@ class BookingService {
         bookingId: updatedBooking.id,
       });
     }
+
+    const { checkoutId } = await resolveCheckoutId(
+      undefined,
+      oldBooking.assignedUserId,
+      tenantId,
+    );
 
     try {
       const bundleCheckoutService = new ManualBundleCheckoutService({
@@ -484,6 +647,9 @@ class BookingService {
         paymentMethod: updatedBooking.paymentMethod,
         attachments: oldBooking.attachments,
         lockerInfo: oldBooking.lockerInfo,
+        checkoutId,
+        customFieldValues: updatedBooking.customFieldValues,
+        cancellationPolicy: updatedBooking.cancellationPolicy,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({
@@ -501,6 +667,9 @@ class BookingService {
       const onCommit = !oldBooking.isCommitted && isCommit;
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
+      const onUnreject = oldBooking.isRejected && !isRejected;
+
+      const lockerServiceInstance = LockerService.getInstance();
 
       if (onCommit) {
         await BookingService.commitBooking(tenantId, booking);
@@ -522,12 +691,23 @@ class BookingService {
         );
       }
 
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.handleUpdate(
-        updatedBooking.tenantId,
-        oldBooking,
-        booking,
-      );
+      if (booking.isCommitted && booking.isPayed && !onUnreject) {
+        await lockerServiceInstance.handleUpdate(
+          updatedBooking.tenantId,
+          oldBooking,
+          booking,
+        );
+      } else if (onUnreject) {
+        await lockerServiceInstance.handleCreate(
+          updatedBooking.tenantId,
+          booking.id,
+        );
+      } else {
+        await lockerServiceInstance.handlePreReserve(
+          updatedBooking.tenantId,
+          booking.id,
+        );
+      }
 
       return booking;
     } catch (error) {
@@ -599,7 +779,7 @@ class BookingService {
         const paymentService = await PaymentUtils.getPaymentService(
           tenantId,
           booking.id,
-          booking.paymentProvider,
+          originBooking.paymentProvider,
           { aggregated: false },
         );
 
@@ -829,6 +1009,8 @@ class BookingService {
     reason = "",
     hookId = null,
     skipWorkflow = false,
+    skipCancellation = false,
+    bankDetails = null,
   ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
@@ -842,6 +1024,38 @@ class BookingService {
 
       if (hookId) {
         booking.removeHook(hookId);
+      }
+
+      let attachments;
+
+      if (booking.priceEur > 0 && !skipCancellation) {
+        const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+        const options = {
+          alreadyPaid: booking.isPayed,
+          bankDetails: sanitizedBankDetails || undefined,
+        };
+        const { cancellation, name, cancellationId, revision, timeCreated } =
+          await CancellationService.createSingleCancellation({
+            tenantId,
+            bookingId,
+            options,
+          });
+
+        attachments = [
+          {
+            filename: cancellation.name,
+            content: cancellation.buffer,
+            contentType: "application/pdf",
+          },
+        ];
+
+        booking.attachments.push({
+          type: "cancellation",
+          title: name,
+          cancellationId: cancellationId,
+          revision: revision,
+          timeCreated,
+        });
       }
 
       await BookingManager.storeBooking(booking);
@@ -868,6 +1082,7 @@ class BookingService {
           booking.id,
           booking.tenantId,
           reason,
+          attachments,
         );
         logger.info(
           `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
@@ -878,6 +1093,7 @@ class BookingService {
           booking.id,
           booking.tenantId,
           reason,
+          attachments,
         );
         logger.info(
           `${tenantId} -- booking ${booking.id} canceled and sent booking rejection to ${booking.mail}`,
@@ -896,6 +1112,7 @@ class BookingService {
     reason = "",
     hookId = null,
     skipWorkflow = false,
+    skipCancellation = false,
   ) {
     const groupBooking = await GroupBookingManager.getGroupBooking(
       tenantId,
@@ -919,9 +1136,44 @@ class BookingService {
       return { success: false, errors };
     }
 
+    let attachments;
+    let bookingAttachment;
+
+    if (groupBooking.getTotalPrice() > 0 && !skipCancellation) {
+      const options = { alreadyPaid: groupBooking.areSomeBookingsPaid() };
+
+      const { cancellation, name, cancellationId, revision, timeCreated } =
+        await CancellationService.createAggregatedCancellation({
+          tenantId,
+          bookingIds: groupBooking.bookingIds,
+          groupBookingId: groupBooking.id,
+          options,
+        });
+
+      attachments = [
+        {
+          filename: cancellation.name,
+          content: cancellation.buffer,
+          contentType: "application/pdf",
+        },
+      ];
+
+      bookingAttachment = {
+        type: "cancellation",
+        title: name,
+        cancellationId: cancellationId,
+        revision: revision,
+        timeCreated,
+      };
+    }
+
     for (const booking of bookings) {
       booking.isRejected = true;
       booking.rejectionReason = reason;
+
+      if (bookingAttachment) {
+        booking.attachments.push(bookingAttachment);
+      }
       await BookingManager.storeBooking(booking);
 
       try {
@@ -947,7 +1199,7 @@ class BookingService {
         groupBooking.bookingIds,
         tenantId,
         reason,
-        undefined,
+        attachments,
         true,
       );
       logger.info(
@@ -959,7 +1211,7 @@ class BookingService {
         groupBooking.bookingIds,
         tenantId,
         reason,
-        undefined,
+        attachments,
         true,
       );
       logger.info(
@@ -970,17 +1222,29 @@ class BookingService {
     return { success: true };
   }
 
-  static async requestRejectBooking(tenant, bookingId, reason = "") {
+  static async requestRejectBooking(tenant, bookingId, payload = {}) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
 
     if (!booking) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
 
-    try {
-      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, {
-        reason: reason,
+    if (booking.cancellationPolicy?.userCancellable !== true) {
+      throw new ForbiddenError("booking_user_cancellation_disabled", {
+        bookingId,
       });
+    }
+
+    const reason = typeof payload === "string" ? payload : payload.reason || "";
+    const sanitizedBankDetails = sanitizeBankDetails(payload?.bankDetails);
+
+    try {
+      const hookPayload = { reason };
+      if (sanitizedBankDetails) {
+        hookPayload.bankDetails = sanitizedBankDetails;
+      }
+
+      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, hookPayload);
 
       await BookingManager.storeBooking(booking);
 
@@ -1003,7 +1267,7 @@ class BookingService {
   }
 
   static async checkBookingStatus(bookingId, name, tenantId) {
-    const tenant = await getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId);
 
     if (!tenant.enablePublicStatusView) {
       throw new BaseError("public_status_view_disabled", {
@@ -1225,9 +1489,13 @@ class BookingService {
   ) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
-    if (bookings.every((b) => b.isCommitted && b.isPayed)) {
+    if (bookings.every((b) => b.isCommitted)) {
       let attachments = [...additionalAttachments];
-      if (bookings.reduce((acc, b) => acc + b.priceEur, 0) > 0) {
+
+      const allPayed = bookings.every((b) => b.isPayed);
+      const totalPrice = bookings.reduce((acc, b) => acc + b.priceEur, 0);
+
+      if (totalPrice > 0 && allPayed) {
         const { receipt, name, receiptId, revision, timeCreated } =
           await ReceiptService.createAggregatedReceipt(
             tenantId,
@@ -1271,6 +1539,15 @@ class BookingService {
     }
 
     return bookings;
+  }
+
+  static async getBookingStatus(tenantId, bookingId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    console.log(booking);
+    return booking
   }
 
   static async getBookedSeatsCount(tenantId, eventId, params) {
@@ -1328,6 +1605,30 @@ async function generateBookingReference(
 
 function isNoPaymentRequired(booking) {
   return !booking.priceEur || booking.priceEur === 0 || booking.isPayed;
+}
+
+function sanitizeBankDetails(bankDetails) {
+  if (!bankDetails || typeof bankDetails !== "object") {
+    return null;
+  }
+
+  const toTrimmedString = (value) =>
+    typeof value === "string" ? value.trim() : "";
+
+  const accountHolder = toTrimmedString(bankDetails.accountHolder);
+  const bankName = toTrimmedString(bankDetails.bankName);
+  const iban = toTrimmedString(bankDetails.iban)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const bic = toTrimmedString(bankDetails.bic)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+
+  if (!accountHolder && !bankName && !iban && !bic) {
+    return null;
+  }
+
+  return { accountHolder, bankName, iban, bic };
 }
 
 function isRejection(booking, hookId) {

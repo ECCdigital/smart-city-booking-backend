@@ -1,19 +1,30 @@
+<p>Hallo{{#if firstName}} {{firstName}}{{/if}},</p>
+
 <p>
-  Um Ihre E-Mail-Adresse zu bestätigen, klicken Sie bitte auf den folgenden
-  Button.
+  vielen Dank für Ihre Registrierung! Um Ihr Konto zu aktivieren, bestätigen
+  Sie bitte Ihre E-Mail-Adresse über den folgenden Button.
 </p>
-<p style="text-align: center;">
+
+<p style="text-align: center; margin: 30px 0;">
   <a
     href="{{verifyUrl}}"
-    style="
-               background-color: #0055a5;
-               color: #ffffff;
-               padding: 12px 24px;
-               border-radius: 4px;
-               text-decoration: none;
-               font-weight: bold;
-               display: inline-block;"
+    style="background-color: #0055a5; color: #ffffff; padding: 12px 24px;
+           border-radius: 4px; text-decoration: none; font-weight: bold;
+           display: inline-block;"
   >
     E-Mail bestätigen
   </a>
+</p>
+
+<p style="font-size: 0.9em; color: #555;">
+  Falls der Button nicht funktioniert, kopieren Sie diesen Link in Ihren
+  Browser:<br />
+  <a href="{{verifyUrl}}" style="word-break: break-all;">{{verifyUrl}}</a>
+</p>
+
+<hr />
+
+<p style="font-size: 0.9em; color: #c62828;">
+  <strong>Sie haben sich nicht registriert?</strong> Dann können Sie diese
+  E-Mail einfach ignorieren. Ohne Bestätigung wird kein Konto aktiviert.
 </p>

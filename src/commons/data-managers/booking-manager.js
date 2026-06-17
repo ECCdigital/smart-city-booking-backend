@@ -2,11 +2,79 @@ const { isRangeOverlap } = require("range-overlap");
 const { Booking } = require("../entities/booking/booking");
 const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
+const {
+  BookableManager,
+} = require("./bookable-manager");
 
 /**
  * Data Manager for Booking objects.
  */
 class BookingManager {
+  static async _toEntities(rawBookings) {
+    const bookings = rawBookings.map((doc) => doc.toEntity());
+    await BookingManager._enrichBookingsWithCustomFields(bookings);
+    return bookings;
+  }
+
+  static async _enrichBookingsWithCustomFields(bookings) {
+    if (!bookings.length) {
+      return bookings;
+    }
+
+    const bookingsByTenant = bookings.reduce((groups, booking) => {
+      if (!groups.has(booking.tenantId)) {
+        groups.set(booking.tenantId, []);
+      }
+      groups.get(booking.tenantId).push(booking);
+      return groups;
+    }, new Map());
+
+    await Promise.all(
+      [...bookingsByTenant.entries()].map(async ([tenantId, tenantBookings]) => {
+        const { instanceFields, tenantFields } =
+          await BookableManager.getCustomFieldDefinitions(tenantId);
+
+        const bookableIds = [
+          ...new Set(
+            tenantBookings.flatMap((booking) =>
+              booking.bookableItems.map((item) => item.bookableId),
+            ),
+          ),
+        ];
+
+        const bookables = await BookableManager.getBookablesByIds(
+          tenantId,
+          bookableIds,
+        );
+        const bookableFieldsById = new Map(
+          bookables.map((bookable) => [
+            bookable.id,
+            bookable.customFieldDefinitions || [],
+          ]),
+        );
+
+        for (const booking of tenantBookings) {
+          const bookingBookableIds = [
+            ...new Set(
+              booking.bookableItems.map((item) => item.bookableId),
+            ),
+          ];
+          const bookableFields = bookingBookableIds.flatMap(
+            (bookableId) => bookableFieldsById.get(bookableId) || [],
+          );
+
+          booking.enrichCustomFields({
+            instanceFields,
+            tenantFields,
+            bookableFields,
+          });
+        }
+      }),
+    );
+
+    return bookings;
+  }
+
   /**
    * Get all bookings related to a tenant
    * @param {string} tenantId Identifier of the tenant
@@ -14,7 +82,7 @@ class BookingManager {
    */
   static async getTenantBookings(tenantId) {
     const rawBookings = await BookingModel.find({ tenantId: tenantId });
-    return rawBookings.map((doc) => doc.toEntity());
+    return BookingManager._toEntities(rawBookings);
   }
 
   /**
@@ -28,7 +96,7 @@ class BookingManager {
       tenantId: tenantId,
       id: { $in: bookingIds },
     });
-    return rawBookings.map((doc) => doc.toEntity());
+    return BookingManager._toEntities(rawBookings);
   }
 
   /**
@@ -42,7 +110,7 @@ class BookingManager {
       tenantId: tenantId,
       "bookableItems.bookableId": bookableId,
     });
-    return rawBookings.map((doc) => doc.toEntity());
+    return BookingManager._toEntities(rawBookings);
   }
 
   /**
@@ -56,21 +124,22 @@ class BookingManager {
       tenantId: tenantId,
       "bookableItems.bookableId": { $in: bookableIds },
     });
-    return rawBookings.map((doc) => doc.toEntity());
+    return BookingManager._toEntities(rawBookings);
   }
 
   /**
    * Get all bookings assigned to a user
-   * @param {string} tenantId Identifier of the tenant
-   * @param {string} userId Identifier of the user
+   * @param {Object} params Parameters object
+   * @param {string} params.userID User ID
+   * @param {Object} [params.filter={}] Additional filter options
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getAssignedBookings(tenantId, userId) {
+  static async getAssignedBookings({ userID, filter = {} }) {
     const rawBookings = await BookingModel.find({
-      tenantId: tenantId,
-      assignedUserId: userId,
+      assignedUserId: userID,
+      ...filter,
     });
-    return rawBookings.map((doc) => doc.toEntity());
+    return BookingManager._toEntities(rawBookings);
   }
 
   /**
@@ -89,7 +158,8 @@ class BookingManager {
       return null;
     }
 
-    return rawBooking.toEntity();
+    const [booking] = await BookingManager._toEntities([rawBooking]);
+    return booking;
   }
 
   /**
@@ -235,7 +305,7 @@ class BookingManager {
         { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
       ],
     });
-    return rawBookings.map((doc) => doc.toEntity());
+    return BookingManager._toEntities(rawBookings);
   }
 
   /**
@@ -360,7 +430,7 @@ class BookingManager {
       tenantId: tenantId,
       ...filter,
     });
-    return rawBookings.map((doc) => doc.toEntity());
+    return BookingManager._toEntities(rawBookings);
   }
 }
 

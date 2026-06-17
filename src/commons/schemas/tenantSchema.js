@@ -1,3 +1,4 @@
+const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const tenantSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
@@ -9,6 +10,8 @@ const tenantSchemaDefinition = {
   bookableDetailLink: { type: String, default: "" },
   eventDetailLink: { type: String, default: "" },
   genericMailTemplate: { type: String, default: "" },
+  mailSnippets: { type: Object, default: {} },
+  mailSubjects: { type: Object, default: {} },
   useInstanceMail: { type: Boolean, default: true },
   noreplyMail: { type: String, default: "" },
   noreplyDisplayName: { type: String, default: "" },
@@ -28,6 +31,9 @@ const tenantSchemaDefinition = {
   invoiceTemplate: { type: String, default: "" },
   invoiceNumberPrefix: { type: String, default: "" },
   invoiceCount: { type: Object, default: {} },
+  cancellationCount: { type: Object, default: {} },
+  cancellationTemplate: { type: String, default: "" },
+  cancellationNumberPrefix: { type: String, default: "" },
   paymentPurposeSuffix: { type: String, default: "" },
   applications: { type: Array, default: [] },
   maxBookingAdvanceInMonths: { type: Number, default: null },
@@ -35,8 +41,16 @@ const tenantSchemaDefinition = {
   enablePublicStatusView: { type: Boolean, default: false },
   notifyOnNewBooking: { type: Boolean, default: true },
   catalogParticipation: {
-    visible: { type: Boolean, default: true },
-    restricted: { type: Boolean, default: false },
+    type: Object,
+    default: {
+      visible: true,
+      restricted: false,
+    },
+  },
+
+  bookableCustomFields: {
+    type: [customFieldDefinitionSchema],
+    default: [],
   },
 };
 

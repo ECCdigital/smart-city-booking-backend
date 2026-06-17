@@ -1,7 +1,6 @@
 const express = require("express");
 const AuthenticationController = require("../authentication/controllers/authentication-controller");
 const { TenantController } = require("./controllers/tenant-controller");
-const InstanceController = require("./controllers/instance-controller");
 const UserController = require("./controllers/user-controller");
 const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
@@ -9,6 +8,11 @@ const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
 const CatalogController = require("./controllers/catalog-controller");
 const RuleController = require("./controllers/rule-controller");
+const FileController = require("./controllers/file-controller");
+const MailTemplateController = require("./controllers/mail-template-controller");
+const { BookingController } = require("./controllers/booking-controller");
+const { optionalAuth } = require("../../middleware/auth-middleware");
+const InstanceController = require("./controllers/instance-controller")
 
 const router = express.Router({ mergeParams: true });
 
@@ -99,7 +103,16 @@ router.get(
   AuthenticationController.isSignedIn,
   TenantController.getTenant,
 );
-router.get("/tenants/:id/payment-apps", TenantController.getActivePaymentApps);
+router.get(
+  "/tenants/:id/payment-apps",
+  optionalAuth,
+  TenantController.getActivePaymentApps,
+);
+router.get(
+  "/tenants/:id/mail/templates/default",
+  AuthenticationController.isSignedIn,
+  MailTemplateController.getDefaultTemplates,
+);
 
 // Protected
 router.get(
@@ -251,7 +264,8 @@ router.get(
   CatalogController.getInstanceCatalog,
 );
 router.get("/catalog/public", CatalogController.getPublicCatalog);
-router.get("/catalog/bundle", CatalogController.getCatalogBundle);
+router.get("/catalog/mode", CatalogController.getPortalMode);
+router.get("/catalog/bundle", optionalAuth, CatalogController.getCatalogBundle);
 
 router.put(
   "/catalog",
@@ -267,5 +281,22 @@ router.get(
   CatalogController.slugAvailability,
 );
 router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
+
+router.get("/files/list", FileController.getFiles);
+router.get("/files/get", FileController.getFile);
+router.post(
+  "/files",
+  AuthenticationController.isSignedIn,
+  FileController.createFile,
+);
+
+//Bookings
+router.get(
+  "/bookings/assigned",
+  AuthenticationController.isSignedIn,
+  BookingController.getAssignedBookings,
+);
+
+router.use("/instances", require("./routes/instance.routes"));
 
 module.exports = router;

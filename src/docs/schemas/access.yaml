@@ -1,0 +1,21 @@
+components:
+  schemas:
+    OpenResult:
+      type: object
+      description: Result returned after triggering an access point open
+      properties:
+        openProcessId:
+          type: string
+          description: Identifier to poll the open status
+
+    OpenStatus:
+      type: object
+      description: Status of a running open process
+      properties:
+        openProcessId:
+          type: string
+
+    AccessPoint:
+      type: object
+      description: An access point linked to a booking
+      properties:
