@@ -242,6 +242,25 @@ The backend offers both public and protected API routes.
   Deletes a bookable resource.  
   _Required Permission:_ bookable.allowDelete
 
+- **GET /api/:tenant/bookables/:id/availability**  
+  Returns availability intervals for a bookable (V2 engine, shared `availability-rules`).  
+  _Query parameters:_ `amount` (default: 1), `startDate`, `endDate` (ISO dates).  
+  _Response headers:_ `X-Availability-Engine: v2`  
+  _Response body:_ `{ title, availability: [{ timeBegin, timeEnd, available }], _metrics? }`
+
+- **GET /api/:tenant/bookables/:id/availability/v2**  
+  Alias for the primary `/availability` endpoint (same V2 engine).
+
+- **GET /api/:tenant/bookables/:id/availability/v1** *(deprecated)*  
+  Legacy iterative checkout-based availability. Prefer `/availability`.  
+  Response includes `Deprecation: true`, `Sunset`, and `Link` successor headers.
+
+  Compare both implementations locally:
+
+  ```bash
+  npm run compare:availability -- -t <tenant> -b <bookable> -s 2026-06-01 -e 2026-06-07
+  ```
+
 - **GET /api/:tenant/bookables/:id/occupancy**  
   Returns occupancy information for a specific bookable resource.  
   _Parameters:_

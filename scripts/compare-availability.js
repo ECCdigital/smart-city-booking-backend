@@ -3,6 +3,15 @@
 /**
  * Compare availability responses from V1 and V2 endpoints.
  *
+ * Known intentional differences (V1 legacy behaviour):
+ * - V1 runs ItemCheckoutService per calendar segment (sums all overlapping booking
+ *   amounts in the window). V2 uses sweep-line peak capacity from availability-rules.
+ *   Results can differ when overlapping bookings do not share the same peak instant.
+ * - V1 is slower due to iterative checkout calls; V2 batches data in AvailabilityContext.
+ *
+ * After phase R4 both paths share the same rule modules; remaining diffs are usually
+ * due to the capacity model above, not divergent rule implementations.
+ *
  * Usage:
  *   node scripts/compare-availability.js \
  *     --tenant my-tenant \
@@ -181,10 +190,10 @@ async function main() {
   if (argv.end) params.endDate = argv.end;
 
   const baseUrl = argv.baseUrl.replace(/\/$/, "");
-  const v1Url = `${baseUrl}/api/${encodeURIComponent(argv.tenant)}/bookables/${encodeURIComponent(argv.bookable)}/availability`;
-  const v2Url = `${baseUrl}/api/${encodeURIComponent(argv.tenant)}/bookables/${encodeURIComponent(argv.bookable)}/availability/v2`;
+  const v1Url = `${baseUrl}/api/${encodeURIComponent(argv.tenant)}/bookables/${encodeURIComponent(argv.bookable)}/availability/v1`;
+  const v2Url = `${baseUrl}/api/${encodeURIComponent(argv.tenant)}/bookables/${encodeURIComponent(argv.bookable)}/availability`;
 
-  console.log("Comparing availability endpoints");
+  console.log("Comparing availability endpoints (V1 legacy vs V2 primary)");
   console.log(`  Base URL : ${baseUrl}`);
   console.log(`  Tenant   : ${argv.tenant}`);
   console.log(`  Bookable : ${argv.bookable}`);
@@ -242,6 +251,12 @@ async function main() {
   if (!diff.match) {
     printDiffSegments("Only in V1", diff.onlyV1);
     printDiffSegments("Only in V2", diff.onlyV2);
+    console.log(
+      "\nNote: V1 and V2 may differ when peak sweep capacity (V2) disagrees with",
+    );
+    console.log(
+      "per-segment checkout sum capacity (V1). See script header for details.",
+    );
   } else {
     console.log("\nAvailability segments are identical.");
   }

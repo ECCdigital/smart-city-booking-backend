@@ -45,10 +45,34 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
     return provider;
   }
 
-  async load() {
+  /**
+   * @param {import("../../services/checkout/item-checkout-service").ItemCheckoutService} checkoutService
+   * @returns {Promise<CheckoutDataProvider>}
+   */
+  static async fromCheckoutService(checkoutService) {
+    const provider = new CheckoutDataProvider({
+      tenantId: checkoutService.tenantId,
+      bookableId: checkoutService.bookableId,
+      timeBegin: checkoutService.timeBegin,
+      timeEnd: checkoutService.timeEnd,
+    });
+
+    await provider.load({
+      bookableOverride: checkoutService.originBookable,
+    });
+
+    return provider;
+  }
+
+  /**
+   * @param {Object} [options]
+   * @param {import("../../entities/bookable/bookable").Bookable|null} [options.bookableOverride]
+   */
+  async load({ bookableOverride = null } = {}) {
     const [bookable, parentBookables, relatedBookables, tenant] =
       await Promise.all([
-        BookableManager.getBookable(this.bookableId, this.tenantId),
+        bookableOverride ??
+          BookableManager.getBookable(this.bookableId, this.tenantId),
         BookableManager.getParentBookables(this.bookableId, this.tenantId),
         BookableManager.getRelatedBookables(this.bookableId, this.tenantId),
         TenantManager.getTenant(this.tenantId),

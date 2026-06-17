@@ -1,6 +1,6 @@
 const {
   CheckoutPermissions,
-} = require("../../services/checkout/item-checkout-service");
+} = require("../../services/checkout/checkout-permissions");
 
 /**
  * @param {import("../../entities/bookable/bookable").Bookable} bookable

@@ -5,7 +5,7 @@ const EventManager = require("../../data-managers/event-manager");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const {
   isTimeRelatedBookable,
-} = require("./capacity-interval-calculator");
+} = require("../../availability/availability-rules/booking-amount");
 
 class AvailabilityContext {
   /**
@@ -24,6 +24,7 @@ class AvailabilityContext {
     this.bookable = null;
     this.parentBookables = [];
     this.relatedBookables = [];
+    this.relatedBookablesByParentId = new Map();
     this.tenant = null;
     this.bookingsByBookableId = new Map();
     this.event = null;
@@ -85,6 +86,10 @@ class AvailabilityContext {
     this.metrics.dbQueryCount += 1;
     this.#indexBookings(bookings);
 
+    if (bookable?.type === BOOKABLE_TYPES.TICKET && parentBookables.length > 0) {
+      await this.#loadTicketParentRelatedBookables(parentBookables, bookableIds);
+    }
+
     const familyBookables = [bookable, ...parentBookables, ...relatedBookables].filter(
       Boolean,
     );
@@ -113,6 +118,62 @@ class AvailabilityContext {
       this.event = event;
       this.eventBookings = eventBookings;
     }
+  }
+
+  async #loadTicketParentRelatedBookables(parentBookables, indexedBookableIds) {
+    const knownIds = new Set(indexedBookableIds);
+    const extraBookableIds = new Set();
+
+    for (const parent of parentBookables) {
+      const children = await BookableManager.getRelatedBookables(
+        parent.id,
+        this.tenantId,
+      );
+      this.metrics.dbQueryCount += 1;
+      this.relatedBookablesByParentId.set(parent.id, children);
+
+      for (const child of children) {
+        if (!knownIds.has(child.id)) {
+          extraBookableIds.add(child.id);
+          knownIds.add(child.id);
+        }
+      }
+    }
+
+    if (extraBookableIds.size === 0) {
+      return;
+    }
+
+    const extraIds = [...extraBookableIds];
+    const extraBookings = await BookingManager.getBookingsForBookableFamily(
+      this.tenantId,
+      extraIds,
+      this.timeBegin,
+      this.timeEnd,
+    );
+    this.metrics.dbQueryCount += 1;
+    this.#indexBookings(extraBookings);
+
+    if (!isTimeRelatedBookable(this.bookable)) {
+      const untimedBookings = await BookingManager.getRelatedBookingsBatch(
+        this.tenantId,
+        extraIds,
+      );
+      this.metrics.dbQueryCount += 1;
+      this.#indexBookings(untimedBookings);
+    }
+  }
+
+  /**
+   * @param {string} bookableId
+   * @returns {import("../../entities/bookable/bookable").Bookable[]}
+   */
+  getRelatedBookablesFor(bookableId) {
+    if (bookableId === this.bookable?.id) {
+      return this.relatedBookables;
+    }
+
+    return this.relatedBookablesByParentId.get(bookableId) ?? [];
   }
 
   #indexBookings(bookings) {

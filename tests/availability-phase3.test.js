@@ -1,8 +1,6 @@
 const assert = require("assert");
-const {
-  isEventDateBookable,
-  getEventReferenceDate,
-} = require("../src/commons/services/availability/availability-rules-checker");
+const { isEventDateBookable } = require("../src/commons/availability/calendar-v2-context-checks");
+const { getEventReferenceDate } = require("../src/commons/availability/availability-rules/event-rules");
 const {
   applyBookingDurationRules,
   isBookingDurationAllowed,

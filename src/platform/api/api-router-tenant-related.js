@@ -37,14 +37,19 @@ router.get(
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
-  "/bookables/:id/availability",
+  "/bookables/:id/availability/v1",
   optionalAuth,
-  CalendarController.getBookableAvailability,
+  CalendarController.getBookableAvailabilityV1,
 );
 router.get(
   "/bookables/:id/availability/v2",
   optionalAuth,
   CalendarController.getBookableAvailabilityV2,
+);
+router.get(
+  "/bookables/:id/availability",
+  optionalAuth,
+  CalendarController.getBookableAvailability,
 );
 router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
 

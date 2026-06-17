@@ -34,8 +34,9 @@ async function getBookingsForCapacityCheck(
   bookable,
   timeBegin,
   timeEnd,
+  { useTimeOverlap = isTimeRelatedBookable(bookable) } = {},
 ) {
-  if (isTimeRelatedBookable(bookable)) {
+  if (useTimeOverlap) {
     return resolve(
       provider.getConcurrentBookings(bookable.id, timeBegin, timeEnd),
     );
@@ -58,6 +59,7 @@ async function sumChildTicketBookedAmount(
   childBookables,
   timeBegin,
   timeEnd,
+  useTimeOverlap,
 ) {
   let amountBooked = 0;
 
@@ -67,6 +69,7 @@ async function sumChildTicketBookedAmount(
       childBookable,
       timeBegin,
       timeEnd,
+      { useTimeOverlap },
     );
     amountBooked += sumBookedAmount(bookings, childBookable.id);
   }
@@ -122,11 +125,14 @@ async function checkWindowAvailability(
     return { available: false, reason: "booking-duration" };
   }
 
+  const useTimeOverlap = isTimeRelatedBookable(bookable);
+
   const originBookings = await getBookingsForCapacityCheck(
     provider,
     bookable,
     timeBegin,
     timeEnd,
+    { useTimeOverlap },
   );
   const originCapacity = evaluateOriginCapacity({
     bookings: originBookings,
@@ -167,6 +173,7 @@ async function checkWindowAvailability(
       parentBookable,
       timeBegin,
       timeEnd,
+      { useTimeOverlap },
     );
     const { amountBooked: parentAmountBooked } = evaluateOriginCapacity({
       bookings: parentBookings,
@@ -184,6 +191,7 @@ async function checkWindowAvailability(
           await resolve(provider.getRelatedBookablesFor(parentBookable.id)),
           timeBegin,
           timeEnd,
+          useTimeOverlap,
         )
       : 0;
 
@@ -210,6 +218,7 @@ async function checkWindowAvailability(
       childBookable,
       timeBegin,
       timeEnd,
+      { useTimeOverlap },
     );
     const { amountBooked: childAmountBooked } = evaluateOriginCapacity({
       bookings: childBookings,

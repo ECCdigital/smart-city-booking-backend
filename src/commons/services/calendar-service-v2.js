@@ -20,7 +20,7 @@ const {
   hasBookingPermission,
   hasEventSeatsAvailable,
   isEventDateBookable,
-} = require("./availability/availability-rules-checker");
+} = require("../availability/calendar-v2-context-checks");
 const {
   applyBookingDurationRules,
 } = require("./availability/availability-duration-filter");
@@ -203,7 +203,7 @@ class CalendarServiceV2 {
       title,
       availability,
       _metrics: {
-        version: "v2-phase3",
+        version: "v2-r5",
         durationMs: Date.now() - startedAt,
         dbQueryCount: context.metrics.dbQueryCount,
         segmentChecks: context.metrics.segmentChecks,

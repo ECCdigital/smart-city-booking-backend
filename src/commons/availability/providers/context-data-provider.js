@@ -29,11 +29,7 @@ class ContextDataProvider extends AvailabilityDataProvider {
   }
 
   getRelatedBookablesFor(bookableId) {
-    if (bookableId === this.context.bookable?.id) {
-      return this.context.relatedBookables;
-    }
-
-    return this.context.relatedBookablesByParentId?.get(bookableId) ?? [];
+    return this.context.getRelatedBookablesFor(bookableId);
   }
 
   getConcurrentBookings(bookableId, timeBegin, timeEnd) {

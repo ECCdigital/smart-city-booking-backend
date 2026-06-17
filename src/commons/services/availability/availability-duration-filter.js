@@ -1,3 +1,8 @@
+const {
+  getBookingDurationHours: getDurationHours,
+  isDurationAllowed,
+} = require("../../availability/availability-rules/duration-rules");
+
 /**
  * @param {import("../../entities/bookable/bookable").Bookable} bookable
  * @param {number} timeBegin
@@ -5,7 +10,7 @@
  * @returns {number}
  */
 function getBookingDurationHours(bookable, timeBegin, timeEnd) {
-  return (timeEnd - timeBegin) / (60 * 60 * 1000);
+  return getDurationHours(timeBegin, timeEnd);
 }
 
 /**
@@ -41,7 +46,6 @@ function applyMinBookingDurationFilter(segments, bookable) {
 
 /**
  * Marks available segments as unavailable when their duration exceeds maxBookingDuration.
- * Relevant when clients treat an availability segment as the full bookable window.
  *
  * @param {Array<{ timeBegin: number, timeEnd: number, available: boolean }>} segments
  * @param {import("../../entities/bookable/bookable").Bookable} bookable
@@ -87,21 +91,7 @@ function applyBookingDurationRules(segments, bookable) {
  * @returns {boolean}
  */
 function isBookingDurationAllowed(bookable, timeBegin, timeEnd) {
-  if (!bookable?.isScheduleRelated) {
-    return true;
-  }
-
-  const hours = getBookingDurationHours(bookable, timeBegin, timeEnd);
-
-  if (bookable.minBookingDuration && hours < Number(bookable.minBookingDuration)) {
-    return false;
-  }
-
-  if (bookable.maxBookingDuration && hours > Number(bookable.maxBookingDuration)) {
-    return false;
-  }
-
-  return true;
+  return isDurationAllowed(bookable, timeBegin, timeEnd);
 }
 
 module.exports = {

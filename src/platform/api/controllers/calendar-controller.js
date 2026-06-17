@@ -2,33 +2,22 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const {
-  ItemCheckoutService,
-} = require("../../../commons/services/checkout/item-checkout-service");
 const CalendarService = require("../../../commons/services/calendar-service");
 const CalendarServiceV2 = require("../../../commons/services/calendar-service-v2");
 const { NotFoundError } = require("../../../errors/BaseError");
+const bunyan = require("bunyan");
+
+const logger = bunyan.createLogger({
+  name: "calendar-controller.js",
+  level: process.env.LOG_LEVEL,
+});
 
 /**
  * CalendarController class.
  *
  * This class is responsible for handling requests related to occupancies in the calendar.
- * It provides a static method `getOccupancies` which fetches occupancies for all bookables for a given tenant.
- * The occupancies are fetched asynchronously using worker threads, one for each bookable.
- * The results from all worker threads are combined into a single array of occupancies, which is then sent as the
- * response.
  */
 class CalendarController {
-  /**
-   * Fetches occupancies for all bookables for a given tenant.
-   * The occupancies are fetched asynchronously and combined into a single array.
-   *
-   * @async
-   * @function getOccupancies
-   * @param {Object} request - The HTTP request object containing tenant and bookable IDs.
-   * @param {Object} response - The HTTP response object to send the result.
-   * @returns {Promise<void>} - A promise that resolves when the occupancies are fetched and sent.
-   */
   static async getOccupancies(request, response) {
     const tenant = request.params.tenant;
     const bookableIds = request.query.ids;
@@ -88,19 +77,28 @@ class CalendarController {
   }
 
   /**
-   * Asynchronously fetches the availability of a specific bookable item for a given tenant.
-   *
-   * @async
-   * @function getBookableAvailability
-   * @param {Object} request - The HTTP request object. The request should contain the tenant and bookable ID in the params, and optionally the amount, startDate, and endDate in the query.
-   * @param {Object} response - The HTTP response object. The response will contain an array of availability periods for the specified bookable item within the specified time range.
-   * @returns {void}
+   * Primary availability endpoint (V2 engine, shared availability-rules).
    *
    * @example
    * // GET /api/<tenant>/bookables/<bookableId>/availability?amount=1&startDate=2022-01-01&endDate=2022-01-07
-   * CalendarController.getBookableAvailability(req, res);
    */
   static async getBookableAvailability(request, response) {
+    return CalendarController.#respondWithAvailabilityV2(request, response);
+  }
+
+  /**
+   * Alias for {@link getBookableAvailability} during client migration.
+   */
+  static async getBookableAvailabilityV2(request, response) {
+    return CalendarController.#respondWithAvailabilityV2(request, response);
+  }
+
+  /**
+   * @deprecated Use GET /availability (V2). Removed in a future release.
+   * @example
+   * // GET /api/<tenant>/bookables/<bookableId>/availability/v1?amount=1&startDate=2022-01-01&endDate=2022-01-07
+   */
+  static async getBookableAvailabilityV1(request, response) {
     const {
       params: { tenant, id: bookableId },
       user,
@@ -112,6 +110,16 @@ class CalendarController {
         .status(400)
         .send({ error: "Tenant ID and bookable ID are required." });
     }
+
+    CalendarController.#setV1DeprecationHeaders(response, tenant, bookableId);
+    logger.warn(
+      {
+        tenantId: tenant,
+        bookableId,
+        path: request.originalUrl,
+      },
+      "deprecated availability v1 endpoint called",
+    );
 
     try {
       const availability = await CalendarService.checkAvailability(
@@ -136,13 +144,25 @@ class CalendarController {
     }
   }
 
-  /**
-   * Optimized availability check (v2) for A/B comparison with getBookableAvailability.
-   *
-   * @example
-   * // GET /api/<tenant>/bookables/<bookableId>/availability/v2?amount=1&startDate=2022-01-01&endDate=2022-01-07
-   */
-  static async getBookableAvailabilityV2(request, response) {
+  static #setV1DeprecationHeaders(response, tenant, bookableId) {
+    response.set("Deprecation", "true");
+    response.set("Sunset", "Thu, 01 Jan 2027 00:00:00 GMT");
+    response.set(
+      "Link",
+      `</api/${encodeURIComponent(tenant)}/bookables/${encodeURIComponent(bookableId)}/availability>; rel="successor-version"`,
+    );
+    response.set(
+      "Warning",
+      '299 - "GET /availability/v1 is deprecated; use GET /availability instead."',
+    );
+    response.set("X-Availability-Engine", "v1-legacy");
+  }
+
+  static #setV2ResponseHeaders(response) {
+    response.set("X-Availability-Engine", "v2");
+  }
+
+  static async #respondWithAvailabilityV2(request, response) {
     const {
       params: { tenant, id: bookableId },
       user,
@@ -165,6 +185,7 @@ class CalendarController {
         user,
       );
 
+      CalendarController.#setV2ResponseHeaders(response);
       response.status(200).send(availability);
     } catch (error) {
       if (error instanceof NotFoundError) {
@@ -176,103 +197,6 @@ class CalendarController {
       console.error(error);
       response.status(500).send({ error: "Internal server error" });
     }
-  }
-
-  static getTimePeriodsPerHour(startDate, endDate, interval = 60000 * 60) {
-    var timePeriodsArray = [];
-    var currentDateTime = new Date(startDate);
-
-    while (currentDateTime <= endDate) {
-      var nextDateTime = new Date(currentDateTime.getTime() + interval);
-      timePeriodsArray.push({
-        timeBegin: currentDateTime.getTime(),
-        timeEnd: nextDateTime.getTime(),
-        available: false,
-      });
-      currentDateTime = nextDateTime;
-    }
-
-    return timePeriodsArray;
-  }
-
-  static async getBookableAvailabilityFixed(request, response) {
-    const {
-      params: { tenant, id: bookableId },
-      user,
-      query: { amount = 1, startDate: startDateQuery, endDate: endDateQuery },
-    } = request;
-
-    if (!tenant || !bookableId) {
-      return response
-        .status(400)
-        .send({ error: "Tenant ID and bookable ID are required." });
-    }
-
-    const startDate = startDateQuery ? new Date(startDateQuery) : new Date();
-    const endDate = endDateQuery
-      ? new Date(endDateQuery)
-      : new Date(startDate.getTime() + 60000 * 60 * 24 * 7);
-
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-
-    const periods = CalendarController.getTimePeriodsPerHour(
-      startDate,
-      endDate,
-    );
-    for (const p of periods) {
-      let itemCheckoutService = null;
-
-      try {
-        itemCheckoutService = new ItemCheckoutService(
-          user?.id,
-          tenant,
-          p.timeBegin,
-          p.timeEnd,
-          bookableId,
-          Number(amount),
-          null,
-        );
-
-        await itemCheckoutService.init();
-        // in order to check calendar availability, we generally need to perform all checks of the checkout service.
-        // EXCEPTION: we do not need to check minimum / maximum durations when checking fixed time periods
-        await itemCheckoutService.checkPermissions();
-        await itemCheckoutService.checkOpeningHours();
-        await itemCheckoutService.checkAvailability();
-        await itemCheckoutService.checkEventDate();
-        await itemCheckoutService.checkEventSeats();
-        await itemCheckoutService.checkParentAvailability();
-        await itemCheckoutService.checkChildBookings();
-        await itemCheckoutService.checkMaxBookingDate();
-        p.available = true;
-      } catch {
-        p.available = false;
-      } finally {
-        if (itemCheckoutService) {
-          itemCheckoutService.cleanup();
-          itemCheckoutService = null;
-        }
-      }
-    }
-
-    periods.sort((a, b) => a.timeBegin - b.timeBegin);
-
-    let combinedPeriods = [];
-    let currentPeriod = periods[0];
-
-    for (let i = 1; i < periods.length; i++) {
-      if (periods[i].available === currentPeriod.available) {
-        currentPeriod.timeEnd = periods[i].timeEnd;
-      } else {
-        combinedPeriods.push(currentPeriod);
-        currentPeriod = periods[i];
-      }
-    }
-
-    combinedPeriods.push(currentPeriod);
-
-    response.status(200).send(combinedPeriods);
   }
 }
 
