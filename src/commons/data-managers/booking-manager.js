@@ -310,6 +310,45 @@ class BookingManager {
     return result.length > 0 ? result[0].totalSeats : 0;
   }
 
+  static async reassignUserReferences(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+
+    await BookingModel.updateMany(
+      { assignedUserId: previousUserId },
+      { $set: { assignedUserId: newUserId } },
+      options,
+    );
+
+    await BookingModel.updateMany(
+      { mail: previousUserId },
+      { $set: { mail: newUserId } },
+      options,
+    );
+
+    await BookingModel.updateMany(
+      { "bookableItems._bookableUsed.ownerUserId": previousUserId },
+      {
+        $set: {
+          "bookableItems.$[item]._bookableUsed.ownerUserId": newUserId,
+        },
+      },
+      {
+        ...options,
+        arrayFilters: [{ "item._bookableUsed.ownerUserId": previousUserId }],
+      },
+    );
+  }
+
+  static async updateAssignedSelfBookingNames(userId, fullName) {
+    await BookingModel.updateMany(
+      {
+        assignedUserId: userId,
+        mail: userId,
+      },
+      { $set: { name: fullName } },
+    );
+  }
+
   /**
    * Get bookings with custom filter
    * @param {string} tenantId Tenant ID

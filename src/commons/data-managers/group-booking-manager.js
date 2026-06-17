@@ -185,6 +185,22 @@ class GroupBookingManager {
     const rawGroupBookings = await query.exec();
     return rawGroupBookings.map((doc) => doc.toEntity());
   }
+
+  static async reassignUserReferences(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+
+    await GroupBookingModel.updateMany(
+      { assignedUserId: previousUserId },
+      { $set: { assignedUserId: newUserId } },
+      options,
+    );
+
+    await GroupBookingModel.updateMany(
+      { mail: previousUserId },
+      { $set: { mail: newUserId } },
+      options,
+    );
+  }
 }
 
 module.exports = GroupBookingManager;

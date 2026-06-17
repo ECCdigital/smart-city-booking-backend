@@ -131,6 +131,15 @@ class CouponManager {
 
     await CouponModel.deleteOne({ id: couponID, tenantId: tenantID });
   }
+
+  static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await CouponModel.updateMany(
+      { ownerUserId: previousUserId },
+      { $set: { ownerUserId: newUserId } },
+      options,
+    );
+  }
 }
 
 module.exports = CouponManager;

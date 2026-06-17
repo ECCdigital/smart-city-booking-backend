@@ -28,6 +28,18 @@ class InstanceManager {
     );
     return updated.toEntity();
   }
+
+  static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await InstanceModel.updateOne(
+      { ownerUserIds: previousUserId },
+      { $set: { "ownerUserIds.$[elem]": newUserId } },
+      {
+        ...options,
+        arrayFilters: [{ elem: previousUserId }],
+      },
+    );
+  }
 }
 
 module.exports = InstanceManager;

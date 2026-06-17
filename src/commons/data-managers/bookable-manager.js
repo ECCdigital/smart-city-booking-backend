@@ -330,6 +330,15 @@ class BookableManager {
       byType: typeCount,
     };
   }
+
+  static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await BookableModel.updateMany(
+      { ownerUserId: previousUserId },
+      { $set: { ownerUserId: newUserId } },
+      options,
+    );
+  }
 }
 
 module.exports = { BookableManager };
