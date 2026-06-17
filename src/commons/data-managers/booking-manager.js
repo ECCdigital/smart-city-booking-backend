@@ -225,7 +225,29 @@ class BookingManager {
       bookableId,
     );
 
-    return relatedBookings.filter(
+    return BookingManager.filterConcurrentBookings(
+      relatedBookings,
+      timeBegin,
+      timeEnd,
+      bookingToIgnore,
+    );
+  }
+
+  /**
+   * Filter bookings that overlap a time window.
+   * @param {Booking[]} bookings
+   * @param {number} timeBegin
+   * @param {number} timeEnd
+   * @param {string|null} bookingToIgnore
+   * @returns {Booking[]}
+   */
+  static filterConcurrentBookings(
+    bookings,
+    timeBegin,
+    timeEnd,
+    bookingToIgnore = null,
+  ) {
+    return bookings.filter(
       (booking) =>
         isRangeOverlap(
           booking.timeBegin,
@@ -237,6 +259,35 @@ class BookingManager {
         !booking.isRejected &&
         booking.id !== bookingToIgnore,
     );
+  }
+
+  /**
+   * Load bookings for a bookable family in a single query, scoped to a time range.
+   * @param {string} tenantId
+   * @param {string[]} bookableIds
+   * @param {number} timeBegin
+   * @param {number} timeEnd
+   * @returns {Promise<Booking[]>}
+   */
+  static async getBookingsForBookableFamily(
+    tenantId,
+    bookableIds,
+    timeBegin,
+    timeEnd,
+  ) {
+    if (!bookableIds.length) {
+      return [];
+    }
+
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      "bookableItems.bookableId": { $in: bookableIds },
+      isRejected: { $ne: true },
+      timeBegin: { $lt: timeEnd },
+      timeEnd: { $gt: timeBegin },
+    });
+
+    return rawBookings.map((doc) => doc.toEntity());
   }
 
   /**
@@ -327,6 +378,45 @@ class BookingManager {
     ]);
 
     return result.length > 0 ? result[0].totalSeats : 0;
+  }
+
+  static async reassignUserReferences(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+
+    await BookingModel.updateMany(
+      { assignedUserId: previousUserId },
+      { $set: { assignedUserId: newUserId } },
+      options,
+    );
+
+    await BookingModel.updateMany(
+      { mail: previousUserId },
+      { $set: { mail: newUserId } },
+      options,
+    );
+
+    await BookingModel.updateMany(
+      { "bookableItems._bookableUsed.ownerUserId": previousUserId },
+      {
+        $set: {
+          "bookableItems.$[item]._bookableUsed.ownerUserId": newUserId,
+        },
+      },
+      {
+        ...options,
+        arrayFilters: [{ "item._bookableUsed.ownerUserId": previousUserId }],
+      },
+    );
+  }
+
+  static async updateAssignedSelfBookingNames(userId, fullName) {
+    await BookingModel.updateMany(
+      {
+        assignedUserId: userId,
+        mail: userId,
+      },
+      { $set: { name: fullName } },
+    );
   }
 
   /**

@@ -11,7 +11,43 @@ class SsoService {
     const app = instance.applications.find((app) => app.id === "keycloak");
     let kcResponse = await SsoService.verifyToken(token, app);
 
-    let user = await UserManager.getUser(kcResponse.email);
+    let user = null;
+    let userKeycloakId = null;
+    let keycloakBoundUserId = null;
+    let emailBoundUserId = null;
+
+    if (kcResponse.sub) {
+      const keycloakUser = await UserManager.getUserBy(
+        { keycloakId: kcResponse.sub },
+        true,
+      );
+      if (keycloakUser) {
+        keycloakBoundUserId = keycloakUser.id;
+        userKeycloakId = keycloakUser.keycloakId;
+        user = keycloakUser.exportPublic();
+      }
+    }
+
+    if (kcResponse.email) {
+      const emailUser = await UserManager.getUser(kcResponse.email);
+      if (emailUser) {
+        emailBoundUserId = emailUser.id;
+        if (!user) {
+          user = emailUser;
+        }
+      }
+    }
+
+    if (
+      keycloakBoundUserId &&
+      emailBoundUserId &&
+      keycloakBoundUserId.toLowerCase() !== emailBoundUserId.toLowerCase()
+    ) {
+      throw {
+        message: "Identity conflict: email already bound to another account",
+        status: 409,
+      };
+    }
 
     if (!user) {
       throw { message: "User not found", status: 404 };
@@ -21,6 +57,16 @@ class SsoService {
 
     if (app.roleMapping.active) {
       await SsoService.mapRoles(user, kcRoles, app);
+    }
+
+    if (kcResponse.sub && userKeycloakId !== kcResponse.sub) {
+      await UserManager.updateUser(
+        {
+          id: user.id,
+          keycloakId: kcResponse.sub,
+        },
+        false,
+      );
     }
 
     user.permissions = await UserManager.getUserPermissions(user.id);
@@ -48,6 +94,7 @@ class SsoService {
       id: kcResponse.email,
       firstName: kcResponse.given_name,
       lastName: kcResponse.family_name,
+      keycloakId: kcResponse.sub || "",
       legalAcceptance: legalAcceptance,
     });
 

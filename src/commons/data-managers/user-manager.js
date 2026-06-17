@@ -4,6 +4,10 @@ const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 class UserManager {
   static async getUser(id, withSensitive = false) {
     const rawUser = await UserModel.findOne({
@@ -96,6 +100,71 @@ class UserManager {
     } catch (err) {
       throw err;
     }
+  }
+
+  static async getUserBy(filter, withSensitive = false) {
+    const rawUser = await UserModel.findOne(filter);
+    if (!rawUser) {
+      return null;
+    }
+
+    let user = rawUser.toEntity();
+    if (!withSensitive) {
+      user = user.exportPublic();
+    }
+    return user;
+  }
+
+  static async getRawUserBy(filter) {
+    return await UserModel.findOne(filter);
+  }
+
+  static async findRawUserByIdOrKeycloak(userId, keycloakId = null) {
+    const normalizedUserId = String(userId || "").trim().toLowerCase();
+    const normalizedKeycloakId = String(keycloakId || "").trim();
+
+    let rawUser = null;
+    if (normalizedUserId) {
+      rawUser = await UserModel.findOne({ id: normalizedUserId });
+      if (!rawUser) {
+        rawUser = await UserModel.findOne({
+          id: { $regex: `^${escapeRegex(normalizedUserId)}$`, $options: "i" },
+        });
+      }
+    }
+
+    if (!rawUser && normalizedKeycloakId) {
+      rawUser = await UserModel.findOne({ keycloakId: normalizedKeycloakId });
+    }
+
+    return rawUser;
+  }
+
+  static async updateUserByMongoId(mongoId, userSet, session = null) {
+    const options = session ? { session } : {};
+    await UserModel.updateOne({ _id: mongoId }, { $set: userSet }, options);
+  }
+
+  static async updateUserNamesByMongoId(
+    mongoId,
+    firstName,
+    lastName,
+    keycloakId = null,
+  ) {
+    const updateSet = {
+      firstName,
+      lastName,
+    };
+
+    if (keycloakId) {
+      updateSet.keycloakId = keycloakId;
+    }
+
+    return await UserModel.findOneAndUpdate(
+      { _id: mongoId },
+      { $set: updateSet },
+      { new: true },
+    );
   }
 
   static async getUserByCard(appId, publicId) {

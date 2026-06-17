@@ -186,30 +186,36 @@ class BookingController {
           tenant,
         );
 
-        let relatedBookings;
+        let relatedBookings = [];
         for (let relatedBookable of relatedBookables) {
-          relatedBookings = await BookingManager.getRelatedBookings(
+          const bookingsForRelated = await BookingManager.getRelatedBookings(
             tenant,
             relatedBookable.id,
           );
+          relatedBookings = relatedBookings.concat(bookingsForRelated || []);
         }
-        bookings = bookings.concat(relatedBookings || []);
+        bookings = bookings.concat(relatedBookings);
       }
 
       if (includeParentBookings) {
-        let parentBookables = await BookableManager.getParentBookables(
+        let parentBookables = await BookableManager.getAncestorBookables(
           bookableId,
           tenant,
         );
-        let parentBookings;
+        let parentBookings = [];
         for (let parentBookable of parentBookables) {
-          parentBookings = await BookingManager.getRelatedBookings(
+          const bookingsForParent = await BookingManager.getRelatedBookings(
             tenant,
             parentBookable.id,
           );
+          parentBookings = parentBookings.concat(bookingsForParent || []);
         }
-        bookings = bookings.concat(parentBookings || []);
+        bookings = bookings.concat(parentBookings);
       }
+
+      bookings = Array.from(
+        new Map(bookings.map((booking) => [booking.id, booking])).values(),
+      );
 
       if (request.query.public === "true") {
         const anonymizedBookings = bookings.map((b) => {

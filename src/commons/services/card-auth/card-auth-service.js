@@ -1,4 +1,3 @@
-// card-auth-service.js
 const axios = require("axios");
 const bunyan = require("bunyan");
 const InstanceManager = require("../../data-managers/instance-manager");

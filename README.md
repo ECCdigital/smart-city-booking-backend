@@ -49,11 +49,12 @@
 
 1. [Installation & Setup](#installation--setup)
 2. [Database Configuration](#database-configuration)
-3. [Initial Admin User](#initial-admin-user)
-4. [Authentication](#authentication)
-5. [API Overview](#api-overview)
-6. [Entities](#entities)
-7. [Web Integration](#web-integration)
+3. [Production Deployment](#production-deployment)
+4. [Initial Admin User](#initial-admin-user)
+5. [Authentication](#authentication)
+6. [API Overview](#api-overview)
+7. [Entities](#entities)
+8. [Web Integration](#web-integration)
 
 ---
 
@@ -63,9 +64,9 @@
 
 Ensure you have the following software installed on your system:
 
-- [Node.js](https://nodejs.org/) (v14.17.0 or higher)
-- [npm](https://www.npmjs.com/) (v6.14.13 or higher)
-- [MongoDB](https://www.mongodb.com/) (v4.4 or higher)
+- [Node.js](https://nodejs.org/) (recommended: v22 LTS, minimum: v20)
+- [npm](https://www.npmjs.com/) (recommended: v10 or higher)
+- [MongoDB](https://www.mongodb.com/) (recommended: v6 or higher)
 
 ### Installation Steps
 
@@ -89,21 +90,20 @@ Ensure you have the following software installed on your system:
 
 4. **Set Up Configuration:**
 
-   Copy the `.env.example` file to `.env` and adjust the values to suit your environment:
+   Copy the `.env-example` file to `.env` and adjust the values to suit your environment:
 
    ```bash
-   cp .env.example .env
+   cp .env-example .env
    ```
 
    For example, configure your database settings in the `.env` file:
 
    ```bash
-   DB_HOST=localhost
-   DB_PORT=27017
-   DB_NAME=smart-city-booking
+   DB_URL=mongodb://localhost:27017/booking-manager
+   DB_NAME=booking-manager
    ```
 
-   **Important:** Set the `CRYPTO_SECRET` variable to a secure value. This secret is used to encrypt sensitive data.
+   **Important:** Set secure values for `CRYPTO_SECRET`, `JWT_SECRET`, and `JWT_REFRESH_SECRET`.
 
 5. **Start the Application in Development Mode:**
 
@@ -122,6 +122,63 @@ Create a new database with the name specified in the `.env` file (using the `DB_
 
 ---
 
+## Production Deployment
+
+For production environments, plan your setup around secure secrets, stable process management, and observability.
+
+### Production Requirements
+
+- A reachable MongoDB instance (`DB_URL`, `DB_NAME`)
+- Strong secrets for `CRYPTO_SECRET`, `JWT_SECRET`, `JWT_REFRESH_SECRET`
+- Proper public URLs for `FRONTEND_URL` and `BACKEND_URL`
+- SMTP/Graph mail settings if email-based flows are used
+- A reverse proxy with TLS termination (e.g. Nginx, Traefik, cloud load balancer)
+
+### Recommended Environment Settings
+
+Set at least the following in production:
+
+```bash
+NODE_ENV=production
+LOG_LEVEL=info
+DISABLE_EMAIL_CHECK=false
+PORT=8081
+```
+
+### Run in Production (Node.js)
+
+1. Install dependencies for production only:
+
+   ```bash
+   npm ci --omit=dev
+   ```
+
+2. Start the backend:
+
+   ```bash
+   npm start
+   ```
+
+3. Run it with a process manager (recommended), e.g. `systemd` or PM2, so the service restarts automatically.
+
+### Run in Production (Docker)
+
+Build and run with your environment file:
+
+```bash
+docker build -t smart-city-booking-backend .
+docker run -d \
+  --name smart-city-booking-backend \
+  --restart unless-stopped \
+  --env-file .env \
+  -p 8081:8081 \
+  smart-city-booking-backend
+```
+
+> Note: Keep MongoDB data on persistent storage and rotate secrets regularly.
+
+---
+
 ## Initial Admin User
 
 When starting the application for the first time, a default admin user is created.
@@ -137,12 +194,17 @@ You can change these defaults by setting the `INIT_ADMIN` and `INIT_ADMIN_SECRET
 
 ## Authentication
 
-The backend uses a local authentication strategy. User credentials (email and password) are verified against records stored in the database. Upon successful authentication, a session cookie is generated and stored on the user's device to maintain authentication across requests.
+The backend uses JWT-based authentication. On successful sign-in, the API returns an `accessToken` and `refreshToken`.  
+For protected routes, send the access token in the `Authorization` header:
+
+```http
+Authorization: Bearer <accessToken>
+```
 
 ### Available Authentication Routes
 
 - **POST /auth/signin**  
-  _Purpose:_ Sign in a user  
+  _Purpose:_ Sign in a user and receive JWT tokens  
   _Example Request Body:_
 
   ```json
@@ -152,8 +214,18 @@ The backend uses a local authentication strategy. User credentials (email and pa
   }
   ```
 
-- **GET /auth/signout**  
-  _Purpose:_ Sign out the currently authenticated user
+- **POST /auth/refresh**  
+  _Purpose:_ Exchange a refresh token for new `accessToken` + `refreshToken`  
+  _Example Request Body:_
+
+  ```json
+  {
+    "refreshToken": "your-refresh-token"
+  }
+  ```
+
+- **POST /auth/signout**  
+  _Purpose:_ Sign out the currently authenticated user (revokes active token, optional refresh token in body)
 
 - **POST /auth/signup**  
   _Purpose:_ Register a new user  
@@ -195,7 +267,7 @@ The backend uses a local authentication strategy. User credentials (email and pa
 The backend offers both public and protected API routes.
 
 - **Public Routes:** Accessible without authentication.
-- **Protected Routes:** Require a valid session or proper permissions.
+- **Protected Routes:** Require a valid JWT and proper permissions.
 
 ### Example Endpoints
 
@@ -241,6 +313,25 @@ The backend offers both public and protected API routes.
 - **DELETE /api/:tenant/bookables/:id**  
   Deletes a bookable resource.  
   _Required Permission:_ bookable.allowDelete
+
+- **GET /api/:tenant/bookables/:id/availability**  
+  Returns availability intervals for a bookable (V2 engine, shared `availability-rules`).  
+  _Query parameters:_ `amount` (default: 1), `startDate`, `endDate` (ISO dates).  
+  _Response headers:_ `X-Availability-Engine: v2`  
+  _Response body:_ `{ title, availability: [{ timeBegin, timeEnd, available }], _metrics? }`
+
+- **GET /api/:tenant/bookables/:id/availability/v2**  
+  Alias for the primary `/availability` endpoint (same V2 engine).
+
+- **GET /api/:tenant/bookables/:id/availability/v1** *(deprecated)*  
+  Legacy iterative checkout-based availability. Prefer `/availability`.  
+  Response includes `Deprecation: true`, `Sunset`, and `Link` successor headers.
+
+  Compare both implementations locally:
+
+  ```bash
+  npm run compare:availability -- -t <tenant> -b <bookable> -s 2026-06-01 -e 2026-06-07
+  ```
 
 - **GET /api/:tenant/bookables/:id/occupancy**  
   Returns occupancy information for a specific bookable resource.  

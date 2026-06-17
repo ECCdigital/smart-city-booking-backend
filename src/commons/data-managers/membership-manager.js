@@ -80,6 +80,15 @@ class MembershipManager {
       { $set: updates },
     );
   }
+
+  static async reassignUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await MembershipModel.updateMany(
+      { userId: previousUserId },
+      { $set: { userId: newUserId } },
+      options,
+    );
+  }
 }
 
 module.exports = MembershipManager;

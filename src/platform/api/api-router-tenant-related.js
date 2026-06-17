@@ -36,6 +36,16 @@ router.get(
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
+  "/bookables/:id/availability/v1",
+  optionalAuth,
+  CalendarController.getBookableAvailabilityV1,
+);
+router.get(
+  "/bookables/:id/availability/v2",
+  optionalAuth,
+  CalendarController.getBookableAvailabilityV2,
+);
+router.get(
   "/bookables/:id/availability",
   optionalAuth,
   CalendarController.getBookableAvailability,

@@ -263,6 +263,55 @@ class BookableManager {
   }
 
   /**
+   * Get all ancestor bookables recursively (parents, grandparents, ...).
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of ancestors without duplicates
+   */
+  static async getAncestorBookables(id, tenantId) {
+    const pipeline = [
+      {
+        $match: {
+          id: id,
+          tenantId: tenantId,
+        },
+      },
+      {
+        $graphLookup: {
+          from: "bookables",
+          startWith: "$id",
+          connectFromField: "id",
+          connectToField: "relatedBookableIds",
+          as: "allAncestors",
+          maxDepth: 100,
+          restrictSearchWithMatch: {
+            tenantId: tenantId,
+          },
+        },
+      },
+    ];
+
+    const results = await BookableModel.aggregate(pipeline).exec();
+
+    if (!results || results.length === 0) {
+      return [];
+    }
+
+    const ancestors = results[0].allAncestors || [];
+    const uniqueMap = new Map();
+
+    for (const ancestor of ancestors) {
+      if (ancestor.id !== id) {
+        uniqueMap.set(ancestor.id, ancestor);
+      }
+    }
+
+    return Array.from(uniqueMap.values())
+      .map((obj) => BookableModel.hydrate(obj))
+      .map((doc) => doc.toEntity());
+  }
+
+  /**
    * Store a bookable (create or update)
    * @param {Bookable|Object} bookable Bookable to store
    * @param {boolean} upsert Whether to create if not exists
@@ -366,6 +415,15 @@ class BookableManager {
       bookable: stats.bookable,
       byType: typeCount,
     };
+  }
+
+  static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await BookableModel.updateMany(
+      { ownerUserId: previousUserId },
+      { $set: { ownerUserId: newUserId } },
+      options,
+    );
   }
 }
 

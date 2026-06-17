@@ -1,6 +1,7 @@
 const { BookableManager } = require("../data-managers/bookable-manager");
 const { ItemCheckoutService } = require("./checkout/item-checkout-service");
 const TenantManager = require("../data-managers/tenant-manager");
+const { NotFoundError } = require("../../errors/BaseError");
 
 class CalendarService {
   static async checkAvailability(
@@ -22,11 +23,15 @@ class CalendarService {
 
     const [bookable, parentBookables, relatedBookables] = await Promise.all([
       BookableManager.getBookable(bookableId, tenantId),
-      BookableManager.getParentBookables(bookableId, tenantId),
+      BookableManager.getAncestorBookables(bookableId, tenantId),
       BookableManager.getRelatedBookables(bookableId, tenantId),
     ]);
 
-    if (bookable && bookable.isBookable === false) {
+    if (!bookable) {
+      throw new NotFoundError("bookable_not_found", { bookableId, tenantId });
+    }
+
+    if (bookable.isBookable === false) {
       return {
         title: bookable.title,
         availability: [
@@ -61,7 +66,7 @@ class CalendarService {
 
     const maxBookingAdvanceInMonths = await TenantManager.getTenant(
       tenantId,
-    ).then((tenant) => tenant.maxBookingAdvanceInMonths);
+    ).then((tenant) => tenant?.maxBookingAdvanceInMonths);
 
     const maxBookingAdvancePeriods = generateTimePeriodsFromMaxBookingAdvance(
       startDate,
@@ -591,6 +596,10 @@ function mergeOpeningHours(periods) {
 }
 
 function generateTimePeriodsFromTimePeriods(startDate, endDate, bookable) {
+  if (!bookable) {
+    return buildPeriodsFromMergedHours(startDate, endDate, [], true);
+  }
+
   const allTimePeriods =
     bookable.isTimePeriodRelated && bookable.timePeriods.length > 0
       ? bookable.timePeriods
@@ -611,7 +620,7 @@ function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
 
   for (const bookable of bookables) {
     if (
-      bookable.isOpeningHoursRelated &&
+      bookable?.isOpeningHoursRelated &&
       bookable.openingHours &&
       bookable.openingHours.length > 0
     ) {
@@ -782,7 +791,7 @@ function generateTimePeriodsFromSpecialOpeningHours(
 
   for (const bookable of bookables) {
     if (
-      bookable.isSpecialOpeningHoursRelated &&
+      bookable?.isSpecialOpeningHoursRelated &&
       bookable.specialOpeningHours &&
       bookable.specialOpeningHours.length > 0
     ) {
@@ -1096,3 +1105,13 @@ function combineSegments(segments) {
 }
 
 module.exports = CalendarService;
+module.exports.periodHelpers = {
+  generateTimePeriodsFromMaxBookingAdvance,
+  generateTimePeriodsFromOpeningHours,
+  generateTimePeriodsFromTimePeriods,
+  generateTimePeriodsFromSpecialOpeningHours,
+  getUnavailablePeriods,
+  mergePeriods,
+  combineSegments,
+  splitByOverlapThreshold,
+};

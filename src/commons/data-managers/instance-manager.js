@@ -36,8 +36,6 @@ class InstanceManager {
     const instanceEntity =
       instance instanceof Instance ? instance : new Instance(instance);
 
-    // Übergangslogik: alte und neue Felder spiegeln, damit Konsumenten beider
-    // Versionen während des Rollouts konsistente Werte sehen.
     InstanceManager._syncLegacyFields(instanceEntity);
 
     CustomFieldService.normalizeDefinitions(
@@ -60,6 +58,18 @@ class InstanceManager {
     InstanceCache.invalidate();
 
     return updated.toEntity();
+  }
+
+  static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await InstanceModel.updateOne(
+      { ownerUserIds: previousUserId },
+      { $set: { "ownerUserIds.$[elem]": newUserId } },
+      {
+        ...options,
+        arrayFilters: [{ elem: previousUserId }],
+      },
+    );
   }
 
   static async getBookableCustomFields() {
