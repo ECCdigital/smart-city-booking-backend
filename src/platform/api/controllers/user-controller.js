@@ -2,6 +2,7 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
+const UserService = require("../../../commons/services/user-service");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const { RolePermission } = require("../../../commons/entities/role/role");
 
@@ -43,6 +44,39 @@ class UserPermissions {
  * Web Controller for Events.
  */
 class UserController {
+  static async _findRawUserByIdOrKeycloak(userId, keycloakId = null) {
+    return await UserManager.findRawUserByIdOrKeycloak(userId, keycloakId);
+  }
+
+  static async _allowSyncManageUsers(actorId, tenantId, action = "update") {
+    const normalizedActorId = String(actorId || "").trim().toLowerCase();
+    const normalizedTenantId = String(tenantId || "").trim();
+
+    if (!normalizedActorId || !normalizedTenantId) {
+      return false;
+    }
+
+    if (await PermissionService._isInstanceOwner(normalizedActorId)) {
+      return true;
+    }
+    if (
+      await PermissionService._isTenantOwner(
+        normalizedActorId,
+        normalizedTenantId,
+      )
+    ) {
+      return true;
+    }
+
+    const accessLevel = action === "delete" ? "deleteAny" : "updateAny";
+    return await UserManager.hasPermission(
+      normalizedActorId,
+      normalizedTenantId,
+      RolePermission.MANAGE_USERS,
+      accessLevel,
+    );
+  }
+
   /**
    * Retrieves a list of users that the current user is allowed to read.
    *
@@ -193,8 +227,10 @@ class UserController {
   static async updateUser(request, response) {
     try {
       const user = request.user;
+      const tenantId = request.query.tenant || request.body?.tenantId;
 
       const newInfos = { id: request.body.id };
+      const keycloakId = String(request.body.keycloakId || "").trim();
 
       const fields = [
         "firstName",
@@ -214,8 +250,35 @@ class UserController {
         }
       });
 
-      if (await UserPermissions._allowUpdate(newInfos, user.id)) {
+      if (keycloakId) {
+        newInfos.keycloakId = keycloakId;
+      }
+
+      const hasUserUpdatePermission = await UserPermissions._allowUpdate(
+        newInfos,
+        user.id,
+      );
+      const hasSyncManagePermission = await UserController._allowSyncManageUsers(
+        user.id,
+        tenantId,
+        "update",
+      );
+
+      if (hasUserUpdatePermission || hasSyncManagePermission) {
         await UserManager.updateUser(newInfos);
+
+        if (
+          Object.prototype.hasOwnProperty.call(newInfos, "firstName") &&
+          Object.prototype.hasOwnProperty.call(newInfos, "lastName")
+        ) {
+          await UserService.updateUserNames({
+            userId: newInfos.id,
+            firstName: newInfos.firstName,
+            lastName: newInfos.lastName,
+            keycloakId: keycloakId || null,
+          });
+        }
+
         logger.info(`updated user ${newInfos.id} by user ${user?.id}`);
         response.sendStatus(200);
       } else {
@@ -229,6 +292,59 @@ class UserController {
   }
 
   /**
+   * Changes a user's id (email) and updates all relevant references.
+   */
+  static async changeUserId(request, response) {
+    try {
+      const actor = request.user;
+      const currentId = request.params.id;
+      const { newId, keycloakId = null, anonymize = false } = request.body;
+      const tenantId = request.query.tenant || request.body?.tenantId;
+      const currentUser = await UserController._findRawUserByIdOrKeycloak(
+        currentId,
+        keycloakId,
+      );
+      if (!currentUser) {
+        response.status(404).send("User not found");
+        return;
+      }
+
+      const hasUserUpdatePermission = await UserPermissions._allowUpdate(
+        { id: currentUser.id },
+        actor.id,
+      );
+      const hasSyncManagePermission = await UserController._allowSyncManageUsers(
+        actor.id,
+        tenantId,
+        "update",
+      );
+
+      if (!hasUserUpdatePermission && !hasSyncManagePermission) {
+        logger.warn(`User ${actor?.id} not allowed to change user id`);
+        response.sendStatus(403);
+        return;
+      }
+
+      const changeResult = await UserService.changeUserId({
+        currentId,
+        newId,
+        keycloakId,
+        anonymize,
+      });
+
+      logger.info(
+        `changed user id ${changeResult.previousId} -> ${changeResult.id} by user ${actor?.id}`,
+      );
+      response.status(200).send(changeResult);
+    } catch (error) {
+      logger.error(error);
+      response
+        .status(error.status || 500)
+        .send(error.message || "could not change user id");
+    }
+  }
+
+  /**
    * Removes a user.
    *
    * @param {Object} request - The request object.
@@ -237,15 +353,32 @@ class UserController {
    */
   static async removeUser(request, response) {
     try {
-      const tenantId = request.params.tenant;
+      const tenantId = request.query.tenant || request.body?.tenantId;
       const user = request.user;
 
       const id = request.params.id;
+      const keycloakId = request.query.keycloakId || request.body?.keycloakId;
       if (id) {
-        const userObject = await UserManager.getUser(id);
-        if (await UserPermissions._allowDelete(userObject, user.id)) {
-          await UserManager.deleteUser(id);
-          logger.info(`${tenantId} -- removed user ${id} by user ${user?.id}`);
+        const rawUser = await UserController._findRawUserByIdOrKeycloak(
+          id,
+          keycloakId,
+        );
+        if (!rawUser) {
+          response.sendStatus(404);
+          return;
+        }
+
+        const userObject = rawUser.toEntity();
+        const hasUserDeletePermission = await UserPermissions._allowDelete(
+          userObject,
+          user.id,
+        );
+
+        if (hasUserDeletePermission) {
+          await UserManager.deleteUser(userObject.id);
+          logger.info(
+            `${tenantId} -- removed user ${userObject.id} by user ${user?.id}`,
+          );
           response.sendStatus(200);
         } else {
           logger.warn(
@@ -293,6 +426,17 @@ class UserController {
       });
 
       await UserManager.updateUser(user);
+
+      if (
+        Object.prototype.hasOwnProperty.call(request.body, "firstName") ||
+        Object.prototype.hasOwnProperty.call(request.body, "lastName")
+      ) {
+        await UserService.updateUserNames({
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        });
+      }
 
       const updatedUser = await UserManager.getUser(user.id, false);
 

@@ -84,6 +84,13 @@ class EventManager {
     });
     return !(maxEvents && count >= maxEvents);
   }
+
+  static async reassignOwnerUserId(previousUserId, newUserId) {
+    await EventModel.updateMany(
+      { ownerUserId: previousUserId },
+      { $set: { ownerUserId: newUserId } },
+    );
+  }
 }
 
 module.exports = EventManager;
