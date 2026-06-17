@@ -170,7 +170,7 @@ function createCheckoutStubs(fixture) {
       getEventBookings: async () => fixture.eventBookings ?? [],
     },
     BookableManager: {
-      getParentBookables: async () => fixture.parentBookables ?? [],
+      getAncestorBookables: async () => fixture.parentBookables ?? [],
       getRelatedBookables: async (bookableId) => {
         if (bookableId === fixture.bookable.id) {
           return fixture.relatedBookables ?? [];

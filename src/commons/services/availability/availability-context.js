@@ -58,7 +58,7 @@ class AvailabilityContext {
     const [bookable, parentBookables, relatedBookables, tenant] =
       await Promise.all([
         BookableManager.getBookable(this.bookableId, this.tenantId),
-        BookableManager.getParentBookables(this.bookableId, this.tenantId),
+        BookableManager.getAncestorBookables(this.bookableId, this.tenantId),
         BookableManager.getRelatedBookables(this.bookableId, this.tenantId),
         TenantManager.getTenant(this.tenantId),
       ]);

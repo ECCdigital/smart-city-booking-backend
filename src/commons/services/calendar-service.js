@@ -22,9 +22,11 @@ class CalendarService {
 
     const [bookable, parentBookables, relatedBookables] = await Promise.all([
       BookableManager.getBookable(bookableId, tenantId),
-      BookableManager.getParentBookables(bookableId, tenantId),
+      BookableManager.getAncestorBookables(bookableId, tenantId),
       BookableManager.getRelatedBookables(bookableId, tenantId),
     ]);
+
+    console.log("parentBookables", parentBookables);
 
     if (!bookable) {
       throw new NotFoundError("bookable_not_found", { bookableId, tenantId });

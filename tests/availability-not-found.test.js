@@ -15,7 +15,7 @@ describe("availability not-found handling", () => {
 
   it("V1 throws NotFoundError when bookable does not exist", async () => {
     sinon.stub(BookableManager, "getBookable").resolves(null);
-    sinon.stub(BookableManager, "getParentBookables").resolves([]);
+    sinon.stub(BookableManager, "getAncestorBookables").resolves([]);
     sinon.stub(BookableManager, "getRelatedBookables").resolves([]);
 
     await assert.rejects(

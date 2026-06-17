@@ -73,7 +73,7 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
       await Promise.all([
         bookableOverride ??
           BookableManager.getBookable(this.bookableId, this.tenantId),
-        BookableManager.getParentBookables(this.bookableId, this.tenantId),
+        BookableManager.getAncestorBookables(this.bookableId, this.tenantId),
         BookableManager.getRelatedBookables(this.bookableId, this.tenantId),
         TenantManager.getTenant(this.tenantId),
       ]);
@@ -83,10 +83,7 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
     this.relatedBookables = relatedBookables;
     this.tenant = tenant;
 
-    if (
-      bookable?.type === BOOKABLE_TYPES.TICKET &&
-      bookable?.eventId
-    ) {
+    if (bookable?.type === BOOKABLE_TYPES.TICKET && bookable?.eventId) {
       const [event, eventBookings] = await Promise.all([
         EventManager.getEvent(bookable.eventId, this.tenantId),
         BookingManager.getEventBookings(this.tenantId, bookable.eventId),

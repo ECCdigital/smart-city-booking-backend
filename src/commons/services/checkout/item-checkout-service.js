@@ -450,7 +450,7 @@ class ItemCheckoutService {
       return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
-    const parentBookables = await BookableManager.getParentBookables(
+    const parentBookables = await BookableManager.getAncestorBookables(
       this.originBookable.id,
       this.originBookable.tenantId,
     );
