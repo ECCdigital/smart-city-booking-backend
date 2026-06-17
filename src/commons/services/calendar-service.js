@@ -1108,6 +1108,7 @@ module.exports.periodHelpers = {
   generateTimePeriodsFromOpeningHours,
   generateTimePeriodsFromTimePeriods,
   generateTimePeriodsFromSpecialOpeningHours,
+  getUnavailablePeriods,
   mergePeriods,
   combineSegments,
   splitByOverlapThreshold,

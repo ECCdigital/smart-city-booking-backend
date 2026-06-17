@@ -4,6 +4,7 @@ const {
     generateTimePeriodsFromOpeningHours,
     generateTimePeriodsFromTimePeriods,
     generateTimePeriodsFromSpecialOpeningHours,
+    getUnavailablePeriods,
     mergePeriods,
   },
 } = require("./calendar-service");
@@ -172,6 +173,18 @@ class CalendarServiceV2 {
 
       items.push(...capacitySegments);
     }
+
+    const closedPeriods = getUnavailablePeriods(
+      availableOpeningHoursPeriods,
+      availableSpecialOpeningHoursPeriods,
+    );
+    items.push(
+      ...closedPeriods.map((period) => ({
+        timeBegin: period.start,
+        timeEnd: period.end,
+        available: false,
+      })),
+    );
 
     const segments = mergeAvailabilitySegments(
       applyBookingDurationRules(items, bookable),
