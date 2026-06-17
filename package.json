@@ -18,7 +18,8 @@
     "format:write": "prettier --write .",
     "lint:check": "eslint .",
     "lint:fix": "eslint --fix .",
-    "test": "mocha --recursive \"tests/**/*.js\""
+    "test": "mocha --recursive \"tests/**/*.js\"",
+    "compare:availability": "node scripts/compare-availability.js"
   },
   "keywords": [
     "smartcity",
