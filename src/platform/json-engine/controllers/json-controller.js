@@ -5,8 +5,28 @@ const EventManager = require("../../../commons/data-managers/event-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const InstanceManager = require("../../../commons/data-managers/instance-manager");
 const ExternalPriceService = require("../../../commons/services/external-price-service");
+const {
+  enforceTenantCatalogAccess,
+} = require("../../../commons/utilities/catalog-participation-utils");
 
 class JSONController {
+  static _sendCatalogAccessError(res, error) {
+    return res.status(error.code || 500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+
+  static async _enforceCatalogAccess(res, tenantId, identity) {
+    try {
+      await enforceTenantCatalogAccess(tenantId, identity?.id);
+      return true;
+    } catch (error) {
+      JSONController._sendCatalogAccessError(res, error);
+      return false;
+    }
+  }
+
   static async _checkoutUrl(bookableId, tenantId, instance) {
     const checkoutInstance = instance || (await InstanceManager.getInstance());
 
@@ -35,8 +55,11 @@ class JSONController {
     const { tenant: tenantId } = req.params;
     const { type, ids } = req.query;
 
-
     const identity = req.user;
+
+    if (!(await JSONController._enforceCatalogAccess(res, tenantId, identity))) {
+      return;
+    }
 
     try {
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
@@ -123,6 +146,11 @@ class JSONController {
     const { tenant: tenantId, id } = req.params;
 
     const identity = req.user;
+
+    if (!(await JSONController._enforceCatalogAccess(res, tenantId, identity))) {
+      return;
+    }
+
     const userRoles = await JSONController.getUserRoles(tenantId, identity);
 
     try {
@@ -192,6 +220,10 @@ class JSONController {
     const { tenant: tenantId } = req.params;
     const { ids } = req.query;
 
+    if (!(await JSONController._enforceCatalogAccess(res, tenantId, req.user))) {
+      return;
+    }
+
     try {
       let events = await EventManager.getEvents(tenantId);
       const checkoutInstance = await InstanceManager.getInstance();
@@ -248,6 +280,11 @@ class JSONController {
 
   static async getEvent(req, res) {
     const { tenant: tenantId, id } = req.params;
+
+    if (!(await JSONController._enforceCatalogAccess(res, tenantId, req.user))) {
+      return;
+    }
+
     try {
       const event = await EventManager.getEvent(id, tenantId);
       const checkoutInstance = await InstanceManager.getInstance();

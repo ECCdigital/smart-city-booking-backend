@@ -280,14 +280,14 @@ router.put(
   CatalogController.storeInstanceCatalog,
 );
 
-router.get("/catalog/themes/:slug", CatalogController.getTheme);
+router.get("/catalog/themes/:slug", optionalAuth, CatalogController.getTheme);
 router.get("/catalog/themes", CatalogController.getTheme);
 router.get(
   "/catalog/availability/:slug",
   AuthenticationController.isSignedIn,
   CatalogController.slugAvailability,
 );
-router.get("/catalog/:slug", CatalogController.getCatalogBySlug);
+router.get("/catalog/:slug", optionalAuth, CatalogController.getCatalogBySlug);
 
 router.get("/files/list", FileController.getFiles);
 router.get("/files/get", FileController.getFile);
