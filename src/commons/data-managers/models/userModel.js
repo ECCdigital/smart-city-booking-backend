@@ -9,6 +9,15 @@ UserSchema.index(
   { unique: true, sparse: true, name: "cardAuth_app_public_idx" },
 );
 
+UserSchema.index(
+  { keycloakId: 1 },
+  {
+    unique: true,
+    name: "keycloakId_unique_idx",
+    partialFilterExpression: { keycloakId: { $type: "string", $ne: "" } },
+  },
+);
+
 UserSchema.methods.toEntity = function () {
   const { User } = require("../../entities/user/user");
   return new User(this.toObject());
