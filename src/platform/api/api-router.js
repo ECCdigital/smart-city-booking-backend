@@ -257,6 +257,13 @@ router.get(
   AuthenticationController.isSignedIn,
   MembershipController.getMyPendingMemberships,
 );
+
+router.get(
+  "/memberships/my",
+  AuthenticationController.isSignedIn,
+  MembershipController.getMyMemberships,
+);
+
 // Catalog
 router.get(
   "/catalog",
