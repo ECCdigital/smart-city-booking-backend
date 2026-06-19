@@ -1,5 +1,9 @@
 const { BookableManager } = require("../data-managers/bookable-manager");
 const { ItemCheckoutService } = require("./checkout/item-checkout-service");
+const {
+  generateBlockPeriodInstances,
+  isBlockPeriodBookable,
+} = require("../utilities/block-period-generator");
 const TenantManager = require("../data-managers/tenant-manager");
 const { NotFoundError } = require("../../errors/BaseError");
 
@@ -74,6 +78,8 @@ class CalendarService {
       maxBookingAdvanceInMonths,
     );
 
+    const blockPeriodBookable = isBlockPeriodBookable(bookable);
+
     /**
      * Represents the available opening hours periods for a specific date range and bookable items.
      *
@@ -83,17 +89,17 @@ class CalendarService {
      *
      * @type {Array<Object>}
      */
-    const availableOpeningHoursPeriods = generateTimePeriodsFromOpeningHours(
-      startDate,
-      endDate,
-      [bookable, ...parentBookables],
-    );
+    const availableOpeningHoursPeriods = blockPeriodBookable
+      ? []
+      : generateTimePeriodsFromOpeningHours(
+          startDate,
+          endDate,
+          [bookable, ...parentBookables],
+        );
 
-    const availableTimePeriods = generateTimePeriodsFromTimePeriods(
-      startDate,
-      endDate,
-      bookable,
-    );
+    const availableTimePeriods = blockPeriodBookable
+      ? generateTimePeriodsFromBlockPeriods(startDate, endDate, bookable)
+      : generateTimePeriodsFromTimePeriods(startDate, endDate, bookable);
 
     /**
      * Represents the available special opening hours periods for a specific entity or location.
@@ -106,11 +112,12 @@ class CalendarService {
      *
      * @type {Array} An array of time periods representing the special opening hours.
      */
-    const availableSpecialOpeningHoursPeriods =
-      generateTimePeriodsFromSpecialOpeningHours(startDate, endDate, [
-        bookable,
-        ...parentBookables,
-      ]);
+    const availableSpecialOpeningHoursPeriods = blockPeriodBookable
+      ? []
+      : generateTimePeriodsFromSpecialOpeningHours(startDate, endDate, [
+          bookable,
+          ...parentBookables,
+        ]);
 
     const availablePeriods = mergePeriods(
       availableOpeningHoursPeriods,
@@ -141,10 +148,12 @@ class CalendarService {
         });
       }
     }
-    const closedPeriods = getUnavailablePeriods(
-      availableOpeningHoursPeriods,
-      availableSpecialOpeningHoursPeriods,
-    );
+    const closedPeriods = blockPeriodBookable
+      ? []
+      : getUnavailablePeriods(
+          availableOpeningHoursPeriods,
+          availableSpecialOpeningHoursPeriods,
+        );
 
     items.push(
       ...closedPeriods.map((p) => ({
@@ -613,6 +622,26 @@ function generateTimePeriodsFromTimePeriods(startDate, endDate, bookable) {
     mergedTimePeriods,
     true,
   );
+}
+
+function generateTimePeriodsFromBlockPeriods(startDate, endDate, bookable) {
+  if (!isBlockPeriodBookable(bookable) || !bookable.blockPeriods?.length) {
+    return [];
+  }
+
+  const instances = generateBlockPeriodInstances(
+    startDate,
+    endDate,
+    bookable.blockPeriods,
+  );
+
+  return instances.map((instance) => ({
+    start: instance.timeBegin,
+    end: instance.timeEnd,
+    available: true,
+    blockPeriodId: instance.blockPeriodId,
+    label: instance.label,
+  }));
 }
 
 function generateTimePeriodsFromOpeningHours(startDate, endDate, bookables) {
@@ -1109,6 +1138,7 @@ module.exports.periodHelpers = {
   generateTimePeriodsFromMaxBookingAdvance,
   generateTimePeriodsFromOpeningHours,
   generateTimePeriodsFromTimePeriods,
+  generateTimePeriodsFromBlockPeriods,
   generateTimePeriodsFromSpecialOpeningHours,
   getUnavailablePeriods,
   mergePeriods,

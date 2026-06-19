@@ -14,6 +14,7 @@ const {
   hasBookingPermission,
   isWithinMaxBookingAdvance,
   CAPACITY_MODES,
+  isBlockPeriodBookingValid,
 } = require("./availability-rules");
 
 const logger = bunyan.createLogger({
@@ -401,6 +402,26 @@ function runBookingDurationCheck({ originBookable, timeBegin, timeEnd }) {
 
 /**
  * @param {Object} params
+ * @returns {Object}
+ */
+function runBlockPeriodCheck({ originBookable, timeBegin, timeEnd }) {
+  if (!originBookable?.isBlockPeriodRelated) {
+    return { checkType: CHECK_TYPES.BLOCK_PERIOD, available: true };
+  }
+
+  if (!isBlockPeriodBookingValid(originBookable, timeBegin, timeEnd)) {
+    throw {
+      checkType: CHECK_TYPES.BLOCK_PERIOD,
+      available: false,
+      message: `Für das Objekt ${originBookable.title} muss eine vollständige Block-Periode gebucht werden.`,
+    };
+  }
+
+  return { checkType: CHECK_TYPES.BLOCK_PERIOD, available: true };
+}
+
+/**
+ * @param {Object} params
  * @returns {Promise<Object>}
  */
 async function runEventDateCheck({ provider, originBookable }) {
@@ -466,6 +487,7 @@ module.exports = {
   runChildBookingsCheck,
   runEventSeatsCheck,
   runBookingDurationCheck,
+  runBlockPeriodCheck,
   runEventDateCheck,
   runMaxBookingDateCheck,
 };

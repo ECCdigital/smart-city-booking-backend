@@ -3,6 +3,7 @@ const capacityRules = require("./capacity-rules");
 const parentChildRules = require("./parent-child-rules");
 const eventRules = require("./event-rules");
 const durationRules = require("./duration-rules");
+const blockPeriodRules = require("./block-period-rules");
 const permissionRules = require("./permission-rules");
 const maxBookingDateRules = require("./max-booking-date-rules");
 const { CAPACITY_MODES } = require("./types");
@@ -13,6 +14,7 @@ module.exports = {
   ...parentChildRules,
   ...eventRules,
   ...durationRules,
+  ...blockPeriodRules,
   ...permissionRules,
   ...maxBookingDateRules,
   CAPACITY_MODES,
