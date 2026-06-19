@@ -4,7 +4,8 @@ const {
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const CalendarService = require("../../../commons/services/calendar-service");
 const CalendarServiceV2 = require("../../../commons/services/calendar-service-v2");
-const { NotFoundError } = require("../../../errors/BaseError");
+const BlockPeriodService = require("../../../commons/services/block-period-service");
+const { NotFoundError, BadRequestError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -84,6 +85,56 @@ class CalendarController {
    */
   static async getBookableAvailabilityV2(request, response) {
     return CalendarController.#respondWithAvailabilityV2(request, response);
+  }
+
+  /**
+   * Lists available block-period instances for a block-period bookable.
+   *
+   * @example
+   * // GET /api/<tenant>/bookables/<bookableId>/block-periods?amount=1&startDate=2026-01-01&endDate=2026-01-31
+   */
+  static async getBookableBlockPeriods(request, response) {
+    const {
+      params: { tenant, id: bookableId },
+      user,
+      query: { amount = 1, startDate: startDateQuery, endDate: endDateQuery },
+    } = request;
+
+    if (!tenant || !bookableId) {
+      return response
+        .status(400)
+        .send({ error: "Tenant ID and bookable ID are required." });
+    }
+
+    try {
+      const result = await BlockPeriodService.getAvailableBlockPeriods(
+        String(tenant),
+        String(bookableId).trim(),
+        startDateQuery,
+        endDateQuery,
+        Number(amount),
+        user,
+      );
+
+      response.status(200).send(result);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return response.status(404).send({
+          error: `Bookable with id ${bookableId} not found`,
+          code: error.code,
+        });
+      }
+
+      if (error instanceof BadRequestError) {
+        return response.status(400).send({
+          error: "Bookable is not configured for block-period bookings",
+          code: error.code,
+        });
+      }
+
+      console.error(error);
+      response.status(500).send({ error: "Internal server error" });
+    }
   }
 
   /**

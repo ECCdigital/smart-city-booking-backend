@@ -50,6 +50,11 @@ router.get(
   optionalAuth,
   CalendarController.getBookableAvailability,
 );
+router.get(
+  "/bookables/:id/block-periods",
+  optionalAuth,
+  CalendarController.getBookableBlockPeriods,
+);
 router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
 
 router.get(
