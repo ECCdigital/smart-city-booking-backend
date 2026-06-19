@@ -32,6 +32,15 @@ const customFieldValueSchema = new Schema(
   { _id: false },
 );
 
+const blockPeriodSchemaDefinition = {
+  id: { type: String, required: true },
+  label: { type: String, required: true },
+  startWeekday: { type: Number, required: true },
+  startTime: { type: String, required: true },
+  endWeekday: { type: Number, required: true },
+  endTime: { type: String, required: true },
+};
+
 const bookableSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true, ref: "Tenant" },
@@ -88,6 +97,11 @@ const bookableSchemaDefinition = {
   specialOpeningHours: { type: [Object], default: [] },
   isLongRange: { type: Boolean, default: false },
   longRangeOptions: { type: Object, default: null },
+  isBlockPeriodRelated: { type: Boolean, default: false },
+  blockPeriods: {
+    type: [new Schema(blockPeriodSchemaDefinition, { _id: false })],
+    default: [],
+  },
 
   // Price properties
   priceCategories: {
@@ -173,4 +187,5 @@ const bookableSchemaDefinition = {
 
 module.exports = {
   bookableSchemaDefinition,
+  blockPeriodSchemaDefinition,
 };

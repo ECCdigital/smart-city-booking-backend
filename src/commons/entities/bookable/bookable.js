@@ -1,5 +1,9 @@
 const { bookableSchemaDefinition } = require("../../schemas/bookableSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
+const {
+  validateBlockPeriods,
+  validateBookingModeExclusivity,
+} = require("../../utilities/block-period-validation");
 
 const BOOKABLE_TYPES = Object.freeze({
   EVENT_LOCATION: "event-location",
@@ -354,6 +358,8 @@ class Bookable {
       isSpecialOpeningHoursRelated: this.isSpecialOpeningHoursRelated,
       specialOpeningHours: this.specialOpeningHours,
       isLongRange: this.isLongRange,
+      isBlockPeriodRelated: this.isBlockPeriodRelated,
+      blockPeriods: this.blockPeriods,
       priceValueAddedTax: this.priceValueAddedTax,
       priceCategories: this.priceCategories,
       priceType: this.priceType,
@@ -401,6 +407,9 @@ class Bookable {
         );
       }
     }
+
+    validateBookingModeExclusivity(this);
+    validateBlockPeriods(this);
 
     return true;
   }

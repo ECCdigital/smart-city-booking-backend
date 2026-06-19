@@ -37,10 +37,11 @@ function item(bookableId, amount) {
 }
 
 describe("availability rules R1 — booking-amount", () => {
-  it("detects time-related bookables by schedule, period, or long-range flags", () => {
+  it("detects time-related bookables by schedule, period, long-range, or block-period flags", () => {
     assert.strictEqual(isTimeRelatedBookable({ isScheduleRelated: true }), true);
     assert.strictEqual(isTimeRelatedBookable({ isTimePeriodRelated: true }), true);
     assert.strictEqual(isTimeRelatedBookable({ isLongRange: true }), true);
+    assert.strictEqual(isTimeRelatedBookable({ isBlockPeriodRelated: true }), true);
     assert.strictEqual(isTimeRelatedBookable({ isScheduleRelated: false }), false);
     assert.strictEqual(isTimeRelatedBookable(null), false);
   });
