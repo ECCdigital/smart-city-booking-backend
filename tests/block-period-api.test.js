@@ -2,7 +2,9 @@ const assert = require("assert");
 const sinon = require("sinon");
 const BlockPeriodService = require("../src/commons/services/block-period-service");
 const CalendarController = require("../src/platform/api/controllers/calendar-controller");
-const { BookableManager } = require("../src/commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 const {
   AvailabilityContext,
 } = require("../src/commons/services/availability/availability-context");
@@ -10,7 +12,9 @@ const checkWindowAvailabilityModule = require("../src/commons/availability/check
 const {
   ManualItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
-const { generateBlockPeriodInstances } = require("../src/commons/utilities/block-period-generator");
+const {
+  generateBlockPeriodInstances,
+} = require("../src/commons/utilities/block-period-generator");
 const { BadRequestError, NotFoundError } = require("../src/errors/BaseError");
 
 const weekendPeriod = {
@@ -193,7 +197,8 @@ describe("BlockPeriodService", () => {
           null,
         ),
       (error) =>
-        error instanceof BadRequestError && error.code === "date_range_too_large",
+        error instanceof BadRequestError &&
+        error.code === "date_range_too_large",
     );
   });
 });
