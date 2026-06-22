@@ -126,8 +126,15 @@ class CalendarController {
       }
 
       if (error instanceof BadRequestError) {
+        const messages = {
+          not_block_period_bookable:
+            "Bookable is not configured for block-period bookings",
+          invalid_date_range: "Invalid date range provided",
+          date_range_too_large: "Date range exceeds maximum limit",
+        };
+
         return response.status(400).send({
-          error: "Bookable is not configured for block-period bookings",
+          error: messages[error.code] || "Bad request",
           code: error.code,
         });
       }

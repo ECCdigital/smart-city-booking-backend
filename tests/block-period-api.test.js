@@ -175,8 +175,7 @@ describe("BlockPeriodService", () => {
           null,
         ),
       (error) =>
-        error instanceof BadRequestError &&
-        error.code === "invalid_date_range",
+        error instanceof BadRequestError && error.code === "invalid_date_range",
     );
   });
 
@@ -194,8 +193,7 @@ describe("BlockPeriodService", () => {
           null,
         ),
       (error) =>
-        error instanceof BadRequestError &&
-        error.code === "date_range_too_large",
+        error instanceof BadRequestError && error.code === "date_range_too_large",
     );
   });
 });
@@ -256,6 +254,10 @@ describe("block periods API", () => {
 
     assert.strictEqual(response.statusCode, 400);
     assert.strictEqual(response.body.code, "not_block_period_bookable");
+    assert.strictEqual(
+      response.body.error,
+      "Bookable is not configured for block-period bookings",
+    );
   });
 
   it("returns 404 when the bookable is missing", async () => {
@@ -294,6 +296,7 @@ describe("block periods API", () => {
 
     assert.strictEqual(response.statusCode, 400);
     assert.strictEqual(response.body.code, "invalid_date_range");
+    assert.strictEqual(response.body.error, "Invalid date range provided");
   });
 
   it("returns 400 when the date range is too large", async () => {
@@ -313,5 +316,6 @@ describe("block periods API", () => {
 
     assert.strictEqual(response.statusCode, 400);
     assert.strictEqual(response.body.code, "date_range_too_large");
+    assert.strictEqual(response.body.error, "Date range exceeds maximum limit");
   });
 });
