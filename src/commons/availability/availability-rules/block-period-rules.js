@@ -24,13 +24,16 @@ function isBlockPeriodBookingValid(bookable, timeBegin, timeEnd) {
     return true;
   }
 
-  if (!timeBegin || !timeEnd) {
+  const parsedTimeBegin = Number(timeBegin);
+  const parsedTimeEnd = Number(timeEnd);
+
+  if (!Number.isFinite(parsedTimeBegin) || !Number.isFinite(parsedTimeEnd)) {
     return false;
   }
 
   return matchesBlockPeriodInstance(
-    Number(timeBegin),
-    Number(timeEnd),
+    parsedTimeBegin,
+    parsedTimeEnd,
     bookable.blockPeriods,
   );
 }

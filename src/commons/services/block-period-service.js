@@ -14,6 +14,8 @@ const {
 const { NotFoundError, BadRequestError } = require("../../errors/BaseError");
 
 class BlockPeriodService {
+  static MAX_RANGE_DAYS = 62;
+
   /**
    * @param {string} tenantId
    * @param {string} bookableId
@@ -46,11 +48,26 @@ class BlockPeriodService {
       ? new Date(end)
       : new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(endDate.getTime()) ||
+      endDate <= startDate
+    ) {
+      throw new BadRequestError("invalid_date_range", { start, end });
+    }
+
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(24, 0, 0, 0);
 
     const timeBegin = startDate.getTime();
     const timeEnd = endDate.getTime();
+    const rangeDays = (timeEnd - timeBegin) / (24 * 60 * 60 * 1000);
+
+    if (rangeDays > BlockPeriodService.MAX_RANGE_DAYS) {
+      throw new BadRequestError("date_range_too_large", {
+        maxDays: BlockPeriodService.MAX_RANGE_DAYS,
+      });
+    }
 
     const instances = generateBlockPeriodInstances(
       startDate,

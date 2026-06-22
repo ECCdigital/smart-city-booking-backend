@@ -160,6 +160,44 @@ describe("BlockPeriodService", () => {
       NotFoundError,
     );
   });
+
+  it("throws for invalid date range input", async () => {
+    sinon.stub(BookableManager, "getBookable").resolves(blockPeriodBookable());
+
+    await assert.rejects(
+      () =>
+        BlockPeriodService.getAvailableBlockPeriods(
+          "tenant-1",
+          "camping-a",
+          "not-a-date",
+          "2026-06-30",
+          1,
+          null,
+        ),
+      (error) =>
+        error instanceof BadRequestError &&
+        error.code === "invalid_date_range",
+    );
+  });
+
+  it("throws when the date range exceeds the maximum horizon", async () => {
+    sinon.stub(BookableManager, "getBookable").resolves(blockPeriodBookable());
+
+    await assert.rejects(
+      () =>
+        BlockPeriodService.getAvailableBlockPeriods(
+          "tenant-1",
+          "camping-a",
+          "2026-01-01",
+          "2026-12-31",
+          1,
+          null,
+        ),
+      (error) =>
+        error instanceof BadRequestError &&
+        error.code === "date_range_too_large",
+    );
+  });
 });
 
 describe("block periods API", () => {
@@ -237,5 +275,43 @@ describe("block periods API", () => {
 
     assert.strictEqual(response.statusCode, 404);
     assert.strictEqual(response.body.code, "bookable_not_found");
+  });
+
+  it("returns 400 for invalid date range input", async () => {
+    sinon
+      .stub(BlockPeriodService, "getAvailableBlockPeriods")
+      .rejects(new BadRequestError("invalid_date_range"));
+
+    const response = createMockResponse();
+    await CalendarController.getBookableBlockPeriods(
+      {
+        params: { tenant: "tenant-1", id: "camping-a" },
+        query: { startDate: "not-a-date", endDate: "2026-06-30" },
+        user: null,
+      },
+      response,
+    );
+
+    assert.strictEqual(response.statusCode, 400);
+    assert.strictEqual(response.body.code, "invalid_date_range");
+  });
+
+  it("returns 400 when the date range is too large", async () => {
+    sinon
+      .stub(BlockPeriodService, "getAvailableBlockPeriods")
+      .rejects(new BadRequestError("date_range_too_large"));
+
+    const response = createMockResponse();
+    await CalendarController.getBookableBlockPeriods(
+      {
+        params: { tenant: "tenant-1", id: "camping-a" },
+        query: { startDate: "2026-01-01", endDate: "2026-12-31" },
+        user: null,
+      },
+      response,
+    );
+
+    assert.strictEqual(response.statusCode, 400);
+    assert.strictEqual(response.body.code, "date_range_too_large");
   });
 });

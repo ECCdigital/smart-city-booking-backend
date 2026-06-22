@@ -41,7 +41,7 @@ Wenn keines `true` ist → nicht zeitabhängig.
 
 ### Routing im Frontend
 
-```
+```text
 bookable.isBlockPeriodRelated === true  →  Block-Period-Checkout-UI
 bookable.isScheduleRelated === true     →  Kalender / freie Zeitauswahl
 bookable.isTimePeriodRelated === true   →  Slot-Auswahl
@@ -146,7 +146,7 @@ Regel für die UI-Hilfe:
 
 ### 3.6 UI-Empfehlung Admin
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │ Buchungstyp:  ( ) Freie Zeit                        │
 │               ( ) Feste Slots                       │
@@ -217,7 +217,7 @@ flowchart LR
 
 ### 5.2 API: Verfügbare Block Periods laden
 
-```
+```bash
 GET /api/:tenant/bookables/:bookableId/block-periods
     ?startDate=2026-06-01
     &endDate=2026-06-30
@@ -280,7 +280,7 @@ Auth: optional (wie `/availability`).
 
 Der bestehende Endpoint funktioniert ebenfalls:
 
-```
+```bash
 GET /api/:tenant/bookables/:id/availability?startDate=…&endDate=…&amount=1
 ```
 
@@ -347,7 +347,7 @@ Weitere `reason`-Werte aus `/block-periods` (wenn `available: false`):
 
 ## 6. UI-Empfehlung Checkout
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │ Camping Stellplatz A                                │
 ├─────────────────────────────────────────────────────┤
@@ -404,6 +404,7 @@ Weitere `reason`-Werte aus `/block-periods` (wenn `available: false`):
 - [ ] Preisanzeige aus `priceEur` der Instanz (oder Checkout-Preis-Endpoint)
 
 ### i18n-Keys (neu)
+
 | Key | Kontext |
 |-----|---------|
 | `checkout.block_period_mismatch` | Checkout: unvollständige Periode gewählt |
@@ -438,7 +439,7 @@ Weitere `reason`-Werte aus `/block-periods` (wenn `available: false`):
 
 **Frontend lädt:**
 
-```
+```bash
 GET /api/my-tenant/bookables/camping-a/block-periods?startDate=2026-06-01&endDate=2026-06-30&amount=1
 ```
 

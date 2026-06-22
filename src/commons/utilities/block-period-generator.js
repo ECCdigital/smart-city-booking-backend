@@ -75,6 +75,15 @@ function generateBlockPeriodInstancesForDefinition(
 ) {
   const rangeStartMs = new Date(rangeStart).getTime();
   const rangeEndMs = new Date(rangeEnd).getTime();
+
+  if (
+    !Number.isFinite(rangeStartMs) ||
+    !Number.isFinite(rangeEndMs) ||
+    rangeEndMs <= rangeStartMs
+  ) {
+    return [];
+  }
+
   const instances = [];
 
   let anchor = findFirstWeekdayOnOrAfter(
@@ -149,8 +158,15 @@ function isBlockPeriodBookable(bookable) {
  * @returns {boolean}
  */
 function matchesBlockPeriodInstance(timeBegin, timeEnd, blockPeriods) {
-  const searchStart = timeBegin - 8 * 24 * 60 * 60 * 1000;
-  const searchEnd = timeEnd + 24 * 60 * 60 * 1000;
+  const beginMs = Number(timeBegin);
+  const endMs = Number(timeEnd);
+
+  if (!Number.isFinite(beginMs) || !Number.isFinite(endMs) || endMs <= beginMs) {
+    return false;
+  }
+
+  const searchStart = beginMs - 8 * 24 * 60 * 60 * 1000;
+  const searchEnd = endMs + 24 * 60 * 60 * 1000;
   const instances = generateBlockPeriodInstances(
     searchStart,
     searchEnd,
@@ -159,8 +175,7 @@ function matchesBlockPeriodInstance(timeBegin, timeEnd, blockPeriods) {
 
   return instances.some(
     (instance) =>
-      instance.timeBegin === Number(timeBegin) &&
-      instance.timeEnd === Number(timeEnd),
+      instance.timeBegin === beginMs && instance.timeEnd === endMs,
   );
 }
 

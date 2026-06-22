@@ -147,6 +147,10 @@ describe("block period generator", () => {
       ),
       false,
     );
+    assert.strictEqual(
+      matchesBlockPeriodInstance(Number.NaN, instances[0].timeEnd, [weekend]),
+      false,
+    );
   });
 });
 

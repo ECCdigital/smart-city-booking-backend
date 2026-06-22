@@ -35,10 +35,36 @@ const customFieldValueSchema = new Schema(
 const blockPeriodSchemaDefinition = {
   id: { type: String, required: true },
   label: { type: String, required: true },
-  startWeekday: { type: Number, required: true },
-  startTime: { type: String, required: true },
-  endWeekday: { type: Number, required: true },
-  endTime: { type: String, required: true },
+  startWeekday: {
+    type: Number,
+    required: true,
+    min: 0,
+    max: 6,
+    validate: {
+      validator: Number.isInteger,
+      message: "startWeekday must be an integer",
+    },
+  },
+  startTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
+  endWeekday: {
+    type: Number,
+    required: true,
+    min: 0,
+    max: 6,
+    validate: {
+      validator: Number.isInteger,
+      message: "endWeekday must be an integer",
+    },
+  },
+  endTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
 };
 
 const bookableSchemaDefinition = {
