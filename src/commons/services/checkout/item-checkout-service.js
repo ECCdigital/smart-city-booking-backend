@@ -19,10 +19,14 @@ const {
   runChildBookingsCheck,
   runEventSeatsCheck,
   runBookingDurationCheck,
+  runBlockPeriodCheck,
   runEventDateCheck,
   runMaxBookingDateCheck,
 } = require("../../availability/checkout-availability-checks");
-const { isTimeRelatedBookable } = require("../../availability/availability-rules");
+const {
+  isTimeRelatedBookable,
+  shouldSkipOpeningHoursCheck,
+} = require("../../availability/availability-rules");
 const { CheckoutPermissions } = require("./checkout-permissions");
 
 const logger = bunyan.createLogger({
@@ -624,12 +628,20 @@ class ItemCheckoutService {
     });
   }
 
+  async checkBlockPeriod() {
+    return runBlockPeriodCheck({
+      originBookable: this.originBookable,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+    });
+  }
+
   async checkOpeningHours() {
     if (!(await this.isTimeRelated())) {
       return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
-    if (this.originBookable.isLongRange === true) {
+    if (shouldSkipOpeningHoursCheck(this.originBookable)) {
       return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
@@ -717,6 +729,7 @@ class ItemCheckoutService {
         this.checkPermissions(),
         this.checkOpeningHours(),
         this.checkMaxAmount(),
+        this.checkBlockPeriod(),
         this.checkBookingDuration(),
         this.checkAvailability(),
         this.checkEventDate(),
@@ -731,6 +744,7 @@ class ItemCheckoutService {
       this.checkPermissions(),
       this.checkMaxAmount(),
       this.checkOpeningHours(),
+      this.checkBlockPeriod(),
       this.checkBookingDuration(),
       this.checkAvailability(),
       this.checkEventDate(),
