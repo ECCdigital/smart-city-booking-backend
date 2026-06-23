@@ -123,6 +123,80 @@ class PermissionService {
   }
 
   /**
+   * Preloads permission data for repeated read checks (e.g. booking lists).
+   *
+   * @param {string} userId
+   * @param {string} tenantId
+   * @param {string} resource
+   * @returns {Promise<Object>}
+   */
+  static async createReadContext(userId, tenantId, resource) {
+    const [instance, membership, userPermissions] = await Promise.all([
+      InstanceManager.getInstance(),
+      MembershipManager.getMembershipByTenantAndUserID(tenantId, userId),
+      UserManager.getUserPermissions(userId),
+    ]);
+
+    const tenantPermissions = userPermissions.tenants.find(
+      (permissions) => permissions.tenantId === tenantId,
+    );
+    const resourcePermissions = tenantPermissions?.[resource] ?? {};
+
+    return {
+      userId,
+      tenantId,
+      isInstanceOwner: instance.ownerUserIds.includes(userId),
+      isTenantOwner: membership?.owner === true,
+      hasReadAny:
+        tenantPermissions?.isOwner === true ||
+        resourcePermissions.readAny === true,
+      hasReadOwn:
+        tenantPermissions?.isOwner === true ||
+        resourcePermissions.readOwn === true,
+    };
+  }
+
+  /**
+   * Synchronous read check using a preloaded context from createReadContext.
+   *
+   * @param {Object} object
+   * @param {Object} context
+   * @returns {boolean}
+   */
+  static allowReadWithContext(object, context) {
+    if (context.isInstanceOwner || context.isTenantOwner) {
+      return true;
+    }
+
+    if (object.tenantId !== context.tenantId) {
+      return false;
+    }
+
+    if (context.hasReadAny) {
+      return true;
+    }
+
+    return (
+      PermissionService._isOwner(object, context.userId, context.tenantId) &&
+      context.hasReadOwn
+    );
+  }
+
+  /**
+   * Whether all objects in a tenant can be read without per-object checks.
+   *
+   * @param {Object} context
+   * @returns {boolean}
+   */
+  static canReadAllWithContext(context) {
+    return (
+      context.isInstanceOwner ||
+      context.isTenantOwner ||
+      context.hasReadAny
+    );
+  }
+
+  /**
    * Checks if the user has read permissions for any object.
    *
    * @param {string} userId - The ID of the user.

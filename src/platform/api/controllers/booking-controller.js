@@ -33,15 +33,41 @@ const logger = bunyan.createLogger({
  * Web Controller for Bookings.
  */
 class BookingController {
+  static _resolvePrimaryBookableId(booking) {
+    if (booking.bookableId) {
+      return booking.bookableId;
+    }
+
+    return booking.bookableItems?.[0]?.bookableId ?? null;
+  }
+
   static async _populate(bookings) {
-    for (let booking of bookings) {
+    if (!bookings.length) {
+      return;
+    }
+
+    const tenantId = bookings[0].tenantId;
+    const bookableIds = [
+      ...new Set(
+        bookings
+          .map((booking) => BookingController._resolvePrimaryBookableId(booking))
+          .filter(Boolean),
+      ),
+    ];
+
+    const [bookables, workflowStatusMap] = await Promise.all([
+      BookableManager.getBookablesByIdsWithCustomFields(tenantId, bookableIds),
+      WorkflowService.getWorkflowStatusMap(tenantId),
+    ]);
+
+    const bookableById = new Map(bookables.map((bookable) => [bookable.id, bookable]));
+
+    for (const booking of bookings) {
+      const bookableId = BookingController._resolvePrimaryBookableId(booking);
       booking._populated = {
-        bookable: await BookableManager.getBookable(
-          booking.bookableId,
-          booking.tenantId,
-        ),
-        workflowStatus: await WorkflowService.getWorkflowStatus(
-          booking.tenantId,
+        bookable: bookableId ? bookableById.get(bookableId) ?? null : null,
+        workflowStatus: WorkflowService.resolveWorkflowStatus(
+          workflowStatusMap,
           booking.id,
         ),
       };
@@ -81,35 +107,22 @@ class BookingController {
         );
         response.status(200).send(anonymizedBookings);
       } else if (user) {
-        if (request.query.populate === "true") {
-          await BookingController._populate(bookings);
-        }
-
-        // Check once whether the user has readAny permission; if so, avoid per-booking checks
-        const hasReadAny = await UserManager.hasPermission(
+        const readContext = await PermissionsService.createReadContext(
           user.id,
           tenant,
           RolePermission.MANAGE_BOOKINGS,
-          "readAny",
         );
 
-        let allowedBookings = [];
-        if (hasReadAny) {
-          allowedBookings = bookings;
-        } else {
-          for (const booking of bookings) {
-            if (
-              user &&
-              (await PermissionsService._allowRead(
-                booking,
-                user.id,
-                tenant,
-                RolePermission.MANAGE_BOOKINGS,
-              ))
-            ) {
-              allowedBookings.push(booking);
-            }
-          }
+        const allowedBookings = PermissionsService.canReadAllWithContext(
+          readContext,
+        )
+          ? bookings
+          : bookings.filter((booking) =>
+              PermissionsService.allowReadWithContext(booking, readContext),
+            );
+
+        if (request.query.populate === "true") {
+          await BookingController._populate(allowedBookings);
         }
 
         logger.info(

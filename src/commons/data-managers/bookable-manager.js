@@ -90,6 +90,26 @@ class BookableManager {
   }
 
   /**
+   * Batch-load bookables with merged custom field definitions.
+   * @param {string} tenantId
+   * @param {string[]} ids
+   * @returns {Promise<Bookable[]>}
+   */
+  static async getBookablesByIdsWithCustomFields(tenantId, ids) {
+    if (!ids?.length) return [];
+
+    const [rawBookables, defs] = await Promise.all([
+      BookableModel.find({
+        tenantId: tenantId,
+        id: { $in: ids },
+      }),
+      this.getCustomFieldDefinitions(tenantId),
+    ]);
+
+    return this._toEntitiesWithCustomFields(rawBookables, defs);
+  }
+
+  /**
    * Get public bookables for a tenant
    * @param {string} tenantId Tenant ID
    * @returns {Promise<Bookable[]>} List of public bookables
