@@ -52,13 +52,13 @@ components:
           nullable: true
           description: >
             Unix timestamp (ms) from which the access point may be operated for
-            this booking (booking start minus the lead buffer). Doors only.
+            this booking (booking start minus the lead buffer).
         accessTo:
           type: integer
           nullable: true
           description: >
             Unix timestamp (ms) until which the access point may be operated for
-            this booking (booking end plus the lag buffer). Doors only.
+            this booking (booking end plus the lag buffer).
 
     ResolvedAccessBuffer:
       type: object

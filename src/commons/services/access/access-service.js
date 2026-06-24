@@ -266,6 +266,12 @@ class AccessService {
         externalBookingId: bookingContext.externalBookingId,
         lastOpenBoxId: bookingContext.lastOpenBoxId,
         isProvisioned: true,
+        accessBuffer: bookingContext.accessBuffer || {
+          beforeMs: 0,
+          afterMs: 0,
+        },
+        accessFrom: bookingContext.accessFrom ?? null,
+        accessTo: bookingContext.accessTo ?? null,
       })),
       ...doors.map(({ accessPoint, bookingContext }) => ({
         ...accessPoint,
@@ -293,6 +299,28 @@ class AccessService {
     const provisionedAccessPoints = [];
 
     for (const { accessPoint, bookingContext } of doors) {
+      if (accessPoint.mode === AccessPointMode.REMOTE) {
+        if (bookingContext.isProvisioned) {
+          continue;
+        }
+
+        this._upsertAccessInfo(booking, accessPoint, {
+          isProvisioned: true,
+          provisionedAt: Date.now(),
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "provision",
+          result: "success",
+          payload: { mode: AccessPointMode.REMOTE },
+          actor: { source: "system" },
+        });
+        continue;
+      }
+
       if (!this._usesAuthorization(accessPoint.mode)) {
         continue;
       }
@@ -392,6 +420,28 @@ class AccessService {
 
   static async _revokeResolvedDoors(tenant, booking, doors) {
     for (const { accessPoint, bookingContext } of doors) {
+      if (accessPoint.mode === AccessPointMode.REMOTE) {
+        if (!bookingContext.isProvisioned) {
+          continue;
+        }
+
+        this._upsertAccessInfo(booking, accessPoint, {
+          isProvisioned: false,
+          revokedAt: Date.now(),
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId: booking.id,
+          action: "revoke",
+          result: "success",
+          payload: { mode: AccessPointMode.REMOTE },
+          actor: { source: "system" },
+        });
+        continue;
+      }
+
       if (!this._usesAuthorization(accessPoint.mode)) {
         continue;
       }
@@ -1189,18 +1239,27 @@ class AccessService {
   }
 
   static _getLockerAccessPoints(tenant, booking) {
+    const beforeMs = 0;
+    const afterMs = 0;
+
     return (booking.lockerInfo || []).map((lockerInfo) => ({
       accessPoint: {
         id: lockerInfo.processId,
         tenant,
         provider: lockerInfo.lockerSystem,
         type: "locker",
+        mode: AccessPointMode.REMOTE,
       },
       bookingContext: {
         tenant,
         bookingId: booking.id,
+        timeBegin: booking.timeBegin,
+        timeEnd: booking.timeEnd,
         externalBookingId: lockerInfo.processId,
         lastOpenBoxId: lockerInfo.ifbsMetadata?.lastOpenBoxId,
+        accessBuffer: { beforeMs, afterMs },
+        accessFrom: booking.timeBegin - beforeMs,
+        accessTo: booking.timeEnd + afterMs,
       },
     }));
   }
