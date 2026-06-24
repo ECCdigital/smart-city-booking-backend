@@ -12,6 +12,7 @@ const {
   isWithinMaxBookingAdvance,
   CAPACITY_MODES,
   isBlockPeriodBookingValid,
+  isTimePeriodBookingValid,
   shouldSkipOpeningHoursCheck,
 } = require("./availability-rules");
 
@@ -129,6 +130,10 @@ async function checkWindowAvailability(
 
   if (!isBlockPeriodBookingValid(bookable, timeBegin, timeEnd)) {
     return { available: false, reason: "block-period-mismatch" };
+  }
+
+  if (!isTimePeriodBookingValid(bookable, timeBegin, timeEnd)) {
+    return { available: false, reason: "time-period-mismatch" };
   }
 
   const useTimeOverlap = isTimeRelatedBookable(bookable);

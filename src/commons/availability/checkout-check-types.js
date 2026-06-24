@@ -12,6 +12,7 @@ const CHECK_TYPES = Object.freeze({
   PRICE_CATEGORY: "price-category",
   MAX_AMOUNT: "max-amount",
   BLOCK_PERIOD: "block-period",
+  TIME_PERIOD: "time-period",
 });
 
 module.exports = { CHECK_TYPES };

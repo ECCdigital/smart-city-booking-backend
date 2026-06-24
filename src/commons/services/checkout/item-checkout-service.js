@@ -20,6 +20,7 @@ const {
   runEventSeatsCheck,
   runBookingDurationCheck,
   runBlockPeriodCheck,
+  runTimePeriodCheck,
   runEventDateCheck,
   runMaxBookingDateCheck,
 } = require("../../availability/checkout-availability-checks");
@@ -28,6 +29,7 @@ const {
   shouldSkipOpeningHoursCheck,
 } = require("../../availability/availability-rules");
 const { CheckoutPermissions } = require("./checkout-permissions");
+const { log } = require("qrcode/lib/core/galois-field");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -636,6 +638,14 @@ class ItemCheckoutService {
     });
   }
 
+  async checkTimePeriod() {
+    return runTimePeriodCheck({
+      originBookable: this.originBookable,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+    });
+  }
+
   async checkOpeningHours() {
     if (!(await this.isTimeRelated())) {
       return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
@@ -730,6 +740,7 @@ class ItemCheckoutService {
         this.checkOpeningHours(),
         this.checkMaxAmount(),
         this.checkBlockPeriod(),
+        this.checkTimePeriod(),
         this.checkBookingDuration(),
         this.checkAvailability(),
         this.checkEventDate(),
@@ -745,6 +756,7 @@ class ItemCheckoutService {
       this.checkMaxAmount(),
       this.checkOpeningHours(),
       this.checkBlockPeriod(),
+      this.checkTimePeriod(),
       this.checkBookingDuration(),
       this.checkAvailability(),
       this.checkEventDate(),
