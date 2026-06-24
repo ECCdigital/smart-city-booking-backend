@@ -177,6 +177,60 @@ describe("AccessService.canOperate with buffer", () => {
     );
     expect(allowed).to.be.false;
   });
+
+  it("allows the owner to operate a locker within the booking window", async () => {
+    const now = Date.now();
+    const booking = createBooking({
+      timeBegin: now - 10 * MINUTE,
+      timeEnd: now + 60 * MINUTE,
+      lockerInfo: [
+        {
+          processId: "ifbs-booking-99",
+          lockerSystem: "ifbs",
+          id: "location-1",
+        },
+      ],
+    });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([]);
+    sandbox.stub(PermissionsService, "_isOwner").resolves(true);
+
+    const allowed = await AccessService.canOperate(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      "ifbs-booking-99",
+      false,
+    );
+    expect(allowed).to.be.true;
+  });
+
+  it("denies locker operation outside the booking window", async () => {
+    const now = Date.now();
+    const booking = createBooking({
+      timeBegin: now + 30 * MINUTE,
+      timeEnd: now + 60 * MINUTE,
+      lockerInfo: [
+        {
+          processId: "ifbs-booking-99",
+          lockerSystem: "ifbs",
+          id: "location-1",
+        },
+      ],
+    });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([]);
+    sandbox.stub(PermissionsService, "_isOwner").resolves(true);
+
+    const allowed = await AccessService.canOperate(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      "ifbs-booking-99",
+      false,
+    );
+    expect(allowed).to.be.false;
+  });
 });
 
 describe("AccessService.canView", () => {

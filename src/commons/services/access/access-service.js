@@ -266,6 +266,12 @@ class AccessService {
         externalBookingId: bookingContext.externalBookingId,
         lastOpenBoxId: bookingContext.lastOpenBoxId,
         isProvisioned: true,
+        accessBuffer: bookingContext.accessBuffer || {
+          beforeMs: 0,
+          afterMs: 0,
+        },
+        accessFrom: bookingContext.accessFrom ?? null,
+        accessTo: bookingContext.accessTo ?? null,
       })),
       ...doors.map(({ accessPoint, bookingContext }) => ({
         ...accessPoint,
@@ -1233,18 +1239,27 @@ class AccessService {
   }
 
   static _getLockerAccessPoints(tenant, booking) {
+    const beforeMs = 0;
+    const afterMs = 0;
+
     return (booking.lockerInfo || []).map((lockerInfo) => ({
       accessPoint: {
         id: lockerInfo.processId,
         tenant,
         provider: lockerInfo.lockerSystem,
         type: "locker",
+        mode: AccessPointMode.REMOTE,
       },
       bookingContext: {
         tenant,
         bookingId: booking.id,
+        timeBegin: booking.timeBegin,
+        timeEnd: booking.timeEnd,
         externalBookingId: lockerInfo.processId,
         lastOpenBoxId: lockerInfo.ifbsMetadata?.lastOpenBoxId,
+        accessBuffer: { beforeMs, afterMs },
+        accessFrom: booking.timeBegin - beforeMs,
+        accessTo: booking.timeEnd + afterMs,
       },
     }));
   }
