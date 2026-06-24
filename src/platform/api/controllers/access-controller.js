@@ -169,7 +169,6 @@ class AccessController {
         bookingId,
         accessPointId,
       );
-
       return ApiResponse.ok(response, { data: status });
     } catch (err) {
       logger.error(err);
