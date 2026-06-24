@@ -225,7 +225,6 @@ class AccessController {
         targetUserId,
         options,
       );
-
       return ApiResponse.ok(response, { data: bookings });
     } catch (err) {
       logger.error(err);

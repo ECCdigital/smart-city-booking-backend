@@ -293,6 +293,28 @@ class AccessService {
     const provisionedAccessPoints = [];
 
     for (const { accessPoint, bookingContext } of doors) {
+      if (accessPoint.mode === AccessPointMode.REMOTE) {
+        if (bookingContext.isProvisioned) {
+          continue;
+        }
+
+        this._upsertAccessInfo(booking, accessPoint, {
+          isProvisioned: true,
+          provisionedAt: Date.now(),
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "provision",
+          result: "success",
+          payload: { mode: AccessPointMode.REMOTE },
+          actor: { source: "system" },
+        });
+        continue;
+      }
+
       if (!this._usesAuthorization(accessPoint.mode)) {
         continue;
       }
@@ -392,6 +414,28 @@ class AccessService {
 
   static async _revokeResolvedDoors(tenant, booking, doors) {
     for (const { accessPoint, bookingContext } of doors) {
+      if (accessPoint.mode === AccessPointMode.REMOTE) {
+        if (!bookingContext.isProvisioned) {
+          continue;
+        }
+
+        this._upsertAccessInfo(booking, accessPoint, {
+          isProvisioned: false,
+          revokedAt: Date.now(),
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId: booking.id,
+          action: "revoke",
+          result: "success",
+          payload: { mode: AccessPointMode.REMOTE },
+          actor: { source: "system" },
+        });
+        continue;
+      }
+
       if (!this._usesAuthorization(accessPoint.mode)) {
         continue;
       }

@@ -2,9 +2,12 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 
 const AccessService = require("../src/commons/services/access/access-service");
+const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
+const MailController = require("../src/commons/mail-service/mail-controller");
+const AccessLogService = require("../src/commons/services/access/access-log-service");
 
 describe("AccessService bookable access point inheritance", () => {
   let sandbox;
@@ -137,5 +140,75 @@ describe("AccessService bookable access point inheritance", () => {
       id: "door-self",
       relation: "self",
     });
+  });
+});
+
+describe("AccessService provisionForBooking", () => {
+  let sandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("records remote access points in accessInfo without provider authorization", async () => {
+    const booking = {
+      id: "booking-1",
+      tenantId: "tenant-1",
+      timeBegin: 1,
+      timeEnd: 2,
+      bookableItems: [{ bookableId: "room" }],
+      accessInfo: [],
+      mail: "user@example.com",
+    };
+    const accessPoint = {
+      id: "door-remote",
+      tenant: "tenant-1",
+      type: "door",
+      provider: "nuki",
+      externalId: "22756246871",
+      label: "Lab",
+      mode: "remote",
+      config: {},
+      bookableId: "room",
+      bookableTitle: "Room",
+      relation: "self",
+    };
+
+    sandbox.stub(AccessService, "_getBookingAccessPoints").resolves({
+      booking,
+      doors: [
+        {
+          accessPoint,
+          bookingContext: {
+            tenant: "tenant-1",
+            bookingId: "booking-1",
+            isProvisioned: false,
+            authorizationId: null,
+          },
+        },
+      ],
+    });
+    sandbox.stub(BookingManager, "storeBooking").resolves(booking);
+    sandbox.stub(MailController, "sendAccessProvisioned").resolves();
+    sandbox.stub(AccessLogService, "log").resolves();
+
+    const result = await AccessService.provisionForBooking(
+      "tenant-1",
+      "booking-1",
+    );
+
+    expect(result).to.have.length(1);
+    expect(result[0]).to.include({
+      accessPointId: "door-remote",
+      provider: "nuki",
+      mode: "remote",
+      isProvisioned: true,
+    });
+    expect(result[0].provisionedAt).to.be.a("number");
+    expect(BookingManager.storeBooking.calledOnce).to.be.true;
   });
 });
