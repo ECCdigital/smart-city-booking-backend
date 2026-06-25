@@ -662,7 +662,7 @@ class AccessService {
    * Returns all bookings of a user that grant an access authorization for a
    * specific access point. The access point may be a door (resolved via the
    * bookables) or, when `includeLockers` is set, a locker (matched via
-   * `booking.lockerInfo[].processId`).
+   * {@link _getLockerAccessPointId}).
    *
    * Tenant-independent: trigger ids for the access point are resolved per
    * tenant the user has bookings in.
@@ -1049,7 +1049,7 @@ class AccessService {
 
     if (includeLockers && !onlyAuthorization) {
       for (const lockerInfo of booking.lockerInfo || []) {
-        const lockerId = lockerInfo.processId;
+        const lockerId = this._getLockerAccessPointId(lockerInfo);
         if (lockerId && !seen.has(String(lockerId))) {
           seen.add(String(lockerId));
           accessPointIds.push(String(lockerId));
@@ -1083,7 +1083,7 @@ class AccessService {
       includeLockers &&
       !onlyAuthorization &&
       (booking.lockerInfo || []).some(
-        (info) => String(info.processId) === targetId,
+        (info) => String(this._getLockerAccessPointId(info)) === targetId,
       );
 
     if (!matchesDoor && !matchesLocker) {
@@ -1238,13 +1238,29 @@ class AccessService {
     return { booking, lockers, doors };
   }
 
+  /**
+   * @private
+   * Returns the access-point id exposed for a locker. For iFBS lockers this is
+   * the box number (`ifbsMetadata.nummer`); other providers keep `processId`.
+   */
+  static _getLockerAccessPointId(lockerInfo) {
+    if (
+      lockerInfo.lockerSystem === "ifbs" &&
+      lockerInfo.ifbsMetadata?.nummer != null
+    ) {
+      return String(lockerInfo.ifbsMetadata.nummer);
+    }
+
+    return lockerInfo.processId;
+  }
+
   static _getLockerAccessPoints(tenant, booking) {
     const beforeMs = 0;
     const afterMs = 0;
 
     return (booking.lockerInfo || []).map((lockerInfo) => ({
       accessPoint: {
-        id: lockerInfo.processId,
+        id: this._getLockerAccessPointId(lockerInfo),
         tenant,
         provider: lockerInfo.lockerSystem,
         type: "locker",

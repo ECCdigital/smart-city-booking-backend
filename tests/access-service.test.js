@@ -187,6 +187,31 @@ describe("AccessService locker access window", () => {
     });
   });
 
+  it("uses ifbsMetadata.nummer as the access point id for iFBS lockers", () => {
+    const booking = {
+      id: "booking-1",
+      tenantId: "tenant-1",
+      timeBegin: 1000,
+      timeEnd: 2000,
+      lockerInfo: [
+        {
+          processId: "27473",
+          lockerSystem: "ifbs",
+          ifbsMetadata: {
+            boxId: "239",
+            nummer: "62100103",
+            bookingId: 27473,
+          },
+        },
+      ],
+    };
+
+    const lockers = AccessService._getLockerAccessPoints("tenant-1", booking);
+
+    expect(lockers[0].accessPoint.id).to.equal("62100103");
+    expect(lockers[0].bookingContext.externalBookingId).to.equal("27473");
+  });
+
   it("exposes locker access window fields via getByBooking", async () => {
     const bookingContext = {
       tenant: "tenant-1",
