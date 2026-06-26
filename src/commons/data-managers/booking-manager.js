@@ -288,17 +288,18 @@ class BookingManager {
    * @param {Object} [opts]
    * @param {Object} [opts.timeFilter={}] Extra time conditions (e.g. on timeBegin/timeEnd)
    * @param {Object} [opts.match={}] Extra MongoDB conditions (e.g. bookable/locker $or)
+   * @param {boolean} [opts.requireCommitted=true] When false, also returns uncommitted bookings
    * @returns {Promise<Booking[]>} List of bookings
    */
   static async getUserBookingsFiltered(
     tenantId,
     userId,
-    { timeFilter = {}, match = {} } = {},
+    { timeFilter = {}, match = {}, requireCommitted = true } = {},
   ) {
     const rawBookings = await BookingModel.find({
       ...(tenantId ? { tenantId: tenantId } : {}),
       assignedUserId: userId,
-      isCommitted: true,
+      ...(requireCommitted ? { isCommitted: true } : {}),
       isRejected: false,
       ...timeFilter,
       ...match,

@@ -224,6 +224,7 @@ class AccessController {
         targetUserId,
         options,
       );
+
       return ApiResponse.ok(response, { data: bookings });
     } catch (err) {
       logger.error(err);
@@ -293,6 +294,7 @@ class AccessController {
       includeAccessPoints: query.includeAccessPoints === "true",
       includeLockers: query.includeLockers === "true",
       includeBuffer: query.includeBuffer === "true",
+      includeEligibility: query.includeEligibility === "true",
     };
   }
 

@@ -6,7 +6,30 @@ const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const AccessLogService = require("./access-log-service");
 const { AccessPointMode } = require("../../entities/access/access-point");
+const { RolePermission } = require("../../entities/role/role");
 const MailController = require("../../mail-service/mail-controller");
+
+const ACCESS_BLOCKING_REASONS = Object.freeze({
+  REJECTED: "rejected",
+  NOT_COMMITTED: "not_committed",
+  PAYMENT_REQUIRED: "payment_required",
+  AUTHORIZATION_REVOKED: "authorization_revoked",
+  OUTSIDE_ACCESS_WINDOW: "outside_access_window",
+  NOT_PROVISIONED: "not_provisioned",
+  LOCKER_NOT_READY: "locker_not_ready",
+  NO_REMOTE_ACCESS: "no_remote_access",
+});
+
+const ACCESS_BLOCKING_REASON_PRIORITY = Object.freeze([
+  ACCESS_BLOCKING_REASONS.REJECTED,
+  ACCESS_BLOCKING_REASONS.NOT_COMMITTED,
+  ACCESS_BLOCKING_REASONS.PAYMENT_REQUIRED,
+  ACCESS_BLOCKING_REASONS.AUTHORIZATION_REVOKED,
+  ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW,
+  ACCESS_BLOCKING_REASONS.NOT_PROVISIONED,
+  ACCESS_BLOCKING_REASONS.LOCKER_NOT_READY,
+  ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
+]);
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -555,18 +578,170 @@ class AccessService {
     const resolved = [...lockers, ...doors].find(
       ({ accessPoint }) => String(accessPoint.id) === String(accessPointId),
     );
-    const beforeMs = resolved?.bookingContext?.accessBuffer?.beforeMs || 0;
-    const afterMs = resolved?.bookingContext?.accessBuffer?.afterMs || 0;
 
-    if (!booking.isWithinAccessWindow(beforeMs, afterMs)) {
+    if (!resolved) {
       return false;
     }
 
-    if (hasManagePermission) {
-      return true;
+    const accessPoints = [
+      this._toEligibilityAccessPoint(resolved.accessPoint, resolved.bookingContext),
+    ];
+    const eligibility = this.evaluateBookingAccessEligibility(
+      booking,
+      accessPoints,
+      { userId, hasManagePermission },
+    );
+
+    return eligibility.operableAccessPointIds.includes(String(accessPointId));
+  }
+
+  /**
+   * Evaluates whether a booking's access points can be viewed or operated at a
+   * given point in time. Centralises the rules used by {@link canOperate} and
+   * the access-bookings list API.
+   *
+   * @param {import("../../entities/booking/booking").Booking} booking
+   * @param {Object[]} accessPoints Access points as returned by {@link getByBooking}
+   * @param {Object} [opts]
+   * @param {number} [opts.now=Date.now()]
+   * @param {string|null} [opts.userId=null]
+   * @param {boolean} [opts.hasManagePermission=false]
+   * @returns {{
+   *   canView: boolean,
+   *   canOperate: boolean,
+   *   canOperateRemote: boolean,
+   *   canUseAuthorization: boolean,
+   *   blockingReasons: string[],
+   *   primaryBlockingReason: string|null,
+   *   operableAccessPointIds: string[],
+   * }}
+   */
+  static evaluateBookingAccessEligibility(
+    booking,
+    accessPoints = [],
+    { now = Date.now(), userId = null, hasManagePermission = false } = {},
+  ) {
+    const blockingReasons = [];
+
+    if (booking.isRejected) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.REJECTED);
+    }
+    if (!booking.isCommitted) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.NOT_COMMITTED);
+    }
+    if (booking.priceEur > 0 && !booking.isPayed) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.PAYMENT_REQUIRED);
     }
 
-    return PermissionsService._isOwner(booking, userId, tenant);
+    const hasPermission =
+      hasManagePermission ||
+      Boolean(
+        userId && PermissionsService._isOwner(booking, userId, booking.tenantId),
+      );
+
+    const canView = booking.isBookingValid() && hasPermission;
+    const operableAccessPointIds = [];
+    const remoteOperableAccessPointIds = [];
+
+    let anyInWindow = false;
+    let anyRevoked = false;
+    let anyNeedsAuthUnprovisioned = false;
+    let anyLockerNotReady = false;
+    let anyAuthUsable = false;
+    let hasRemoteCapablePoint = false;
+
+    for (const point of accessPoints) {
+      const pointId = String(point.id);
+      const beforeMs = point.accessBuffer?.beforeMs ?? 0;
+      const afterMs = point.accessBuffer?.afterMs ?? 0;
+      const inBufferedTimeWindow = this._isWithinBufferedTimeWindow(
+        booking,
+        beforeMs,
+        afterMs,
+        now,
+      );
+      const inWindow =
+        booking.isBookingValid() &&
+        booking.isWithinAccessWindow(beforeMs, afterMs, now);
+
+      if (inBufferedTimeWindow) {
+        anyInWindow = true;
+      }
+
+      if (this._supportsRemoteMode(point.mode)) {
+        hasRemoteCapablePoint = true;
+      }
+
+      const accessInfo = this._findAccessInfo(booking, pointId);
+      const revokedAt = accessInfo?.revokedAt ?? point.revokedAt ?? null;
+      if (revokedAt) {
+        anyRevoked = true;
+      }
+
+      if (point.type === "locker" && point.isProvisioned === false) {
+        anyLockerNotReady = true;
+      }
+
+      if (this._usesAuthorization(point.mode)) {
+        const isProvisioned =
+          point.isProvisioned === true || accessInfo?.isProvisioned === true;
+        const hasAuthorizationId = Boolean(
+          point.authorizationId || accessInfo?.authorizationId,
+        );
+        if (!isProvisioned || !hasAuthorizationId) {
+          anyNeedsAuthUnprovisioned = true;
+        } else if (!revokedAt) {
+          anyAuthUsable = true;
+        }
+      }
+
+      if (!booking.isBookingValid() || !inWindow || !hasPermission) {
+        continue;
+      }
+
+      operableAccessPointIds.push(pointId);
+
+      if (this._supportsRemoteMode(point.mode)) {
+        remoteOperableAccessPointIds.push(pointId);
+      }
+    }
+
+    if (
+      hasPermission &&
+      accessPoints.length > 0 &&
+      !anyInWindow
+    ) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW);
+    }
+    if (anyRevoked) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.AUTHORIZATION_REVOKED);
+    }
+    if (anyNeedsAuthUnprovisioned) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.NOT_PROVISIONED);
+    }
+    if (anyLockerNotReady) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.LOCKER_NOT_READY);
+    }
+    if (
+      canView &&
+      anyInWindow &&
+      !hasRemoteCapablePoint &&
+      accessPoints.length > 0
+    ) {
+      blockingReasons.push(ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS);
+    }
+
+    const prioritized = this._prioritizeBlockingReasons(blockingReasons);
+
+    return {
+      canView,
+      canOperate: operableAccessPointIds.length > 0,
+      canOperateRemote: remoteOperableAccessPointIds.length > 0,
+      canUseAuthorization: anyAuthUsable,
+      blockingReasons: prioritized,
+      primaryBlockingReason: prioritized[0] ?? null,
+      operableAccessPointIds,
+    };
   }
 
   /**
@@ -611,6 +786,8 @@ class AccessService {
    * @param {boolean} [opts.includeAccessPoints=false] Attach the full access point list per booking
    * @param {boolean} [opts.includeLockers=false] Treat locker access points as an authorization too
    * @param {boolean} [opts.includeBuffer=false] Honor the access buffer for state="active"
+   * @param {boolean} [opts.includeEligibility=false] Attach per-booking access eligibility
+   *   (implicitly honors access buffers for `state="active"` filtering and evaluation)
    * @param {number} [opts.now=Date.now()] Reference timestamp
    * @returns {Promise<Object[]>} Matching bookings (sensitive data stripped)
    */
@@ -622,15 +799,18 @@ class AccessService {
       includeAccessPoints = false,
       includeLockers = false,
       includeBuffer = false,
+      includeEligibility = false,
       now = Date.now(),
     } = {},
   ) {
-    const timeFilter = this._buildTimeFilter(state, now, includeBuffer);
+    const honorBuffer = includeBuffer || includeEligibility;
+    const timeFilter = this._buildTimeFilter(state, now, honorBuffer);
     const bookings = await BookingManager.getUserBookingsFiltered(
       null,
       userId,
       {
         timeFilter,
+        requireCommitted: !includeEligibility,
       },
     );
 
@@ -642,12 +822,22 @@ class AccessService {
       this._uniqueTenantIds(bookings),
     );
 
+    const managePermissionByTenant = includeEligibility
+      ? await this._resolveManagePermissionByTenant(
+          userId,
+          this._uniqueTenantIds(bookings),
+        )
+      : null;
+
     return this._buildAccessBookingResults(bookings, {
       state,
       capability,
       includeAccessPoints,
       includeLockers,
-      includeBuffer,
+      includeBuffer: honorBuffer,
+      includeEligibility,
+      userId,
+      managePermissionByTenant,
       now,
       resolve: (booking) =>
         this._resolveBookingAccess(
@@ -681,15 +871,18 @@ class AccessService {
       includeAccessPoints = false,
       includeLockers = false,
       includeBuffer = false,
+      includeEligibility = false,
       now = Date.now(),
     } = {},
   ) {
-    const timeFilter = this._buildTimeFilter(state, now, includeBuffer);
+    const honorBuffer = includeBuffer || includeEligibility;
+    const timeFilter = this._buildTimeFilter(state, now, honorBuffer);
     const bookings = await BookingManager.getUserBookingsFiltered(
       null,
       userId,
       {
         timeFilter,
+        requireCommitted: !includeEligibility,
       },
     );
 
@@ -716,7 +909,12 @@ class AccessService {
       capability,
       includeAccessPoints,
       includeLockers,
-      includeBuffer,
+      includeBuffer: honorBuffer,
+      includeEligibility,
+      userId,
+      managePermissionByTenant: includeEligibility
+        ? await this._resolveManagePermissionByTenant(userId, tenantIds)
+        : null,
       now,
       resolve: (booking) => {
         const { triggerIds, mode } = triggerByTenant.get(booking.tenantId) || {
@@ -767,6 +965,9 @@ class AccessService {
       includeAccessPoints,
       includeLockers,
       includeBuffer,
+      includeEligibility,
+      userId,
+      managePermissionByTenant,
       now,
       resolve,
     },
@@ -774,7 +975,7 @@ class AccessService {
     const matched = [];
 
     for (const booking of bookings) {
-      if (!booking.isBookingValid()) {
+      if (!includeEligibility && !booking.isBookingValid()) {
         continue;
       }
 
@@ -784,7 +985,9 @@ class AccessService {
       }
 
       const needsEnrichment =
-        includeAccessPoints || (state === "active" && includeBuffer);
+        includeAccessPoints ||
+        (state === "active" && includeBuffer) ||
+        includeEligibility;
       let enrichedPoints = null;
       if (needsEnrichment) {
         enrichedPoints = await this._getFilteredBookingAccessPoints(
@@ -795,7 +998,14 @@ class AccessService {
       }
 
       if (
-        !this._matchesState(booking, state, now, includeBuffer, enrichedPoints)
+        !this._matchesState(
+          booking,
+          state,
+          now,
+          includeBuffer,
+          enrichedPoints,
+          includeEligibility,
+        )
       ) {
         continue;
       }
@@ -816,6 +1026,16 @@ class AccessService {
 
       if (includeAccessPoints) {
         result.accessPoints = enrichedPoints;
+      }
+
+      if (includeEligibility) {
+        const hasManagePermission =
+          managePermissionByTenant?.get(booking.tenantId) ?? false;
+        result.accessEligibility = this.evaluateBookingAccessEligibility(
+          booking,
+          enrichedPoints || [],
+          { now, userId, hasManagePermission },
+        );
       }
 
       matched.push({ result, booking });
@@ -1142,11 +1362,26 @@ class AccessService {
    * @private
    * In-memory state check (the database filter is only an optimization).
    */
-  static _matchesState(booking, state, now, includeBuffer, enrichedPoints) {
+  static _matchesState(
+    booking,
+    state,
+    now,
+    includeBuffer,
+    enrichedPoints,
+    includeEligibility = false,
+  ) {
     switch (state) {
       case "active":
         if (includeBuffer) {
           const { beforeMs, afterMs } = this._maxBuffer(enrichedPoints);
+          if (includeEligibility) {
+            return this._isWithinBufferedTimeWindow(
+              booking,
+              beforeMs,
+              afterMs,
+              now,
+            );
+          }
           return booking.isWithinAccessWindow(beforeMs, afterMs, now);
         }
         return booking.timeBegin <= now && booking.timeEnd >= now;
@@ -1172,6 +1407,17 @@ class AccessService {
       afterMs = Math.max(afterMs, buffer.afterMs || 0);
     }
     return { beforeMs, afterMs };
+  }
+
+  /**
+   * @private
+   * Whether `now` falls inside the booking time range extended by a buffer,
+   * independent of booking validity (committed/paid/rejected).
+   */
+  static _isWithinBufferedTimeWindow(booking, beforeMs = 0, afterMs = 0, now) {
+    return (
+      booking.timeBegin - beforeMs <= now && booking.timeEnd + afterMs >= now
+    );
   }
 
   /**
@@ -1465,6 +1711,64 @@ class AccessService {
     );
   }
 
+  static _supportsRemoteMode(mode) {
+    return mode === AccessPointMode.REMOTE || mode === AccessPointMode.BOTH;
+  }
+
+  static _findAccessInfo(booking, accessPointId) {
+    return (booking.accessInfo || []).find(
+      (info) => String(info.accessPointId) === String(accessPointId),
+    );
+  }
+
+  static _toEligibilityAccessPoint(accessPoint, bookingContext) {
+    if (accessPoint.type === "locker") {
+      return {
+        ...accessPoint,
+        isProvisioned: true,
+        accessBuffer: bookingContext.accessBuffer || {
+          beforeMs: 0,
+          afterMs: 0,
+        },
+        accessFrom: bookingContext.accessFrom ?? null,
+        accessTo: bookingContext.accessTo ?? null,
+      };
+    }
+
+    return {
+      ...accessPoint,
+      authorizationId: bookingContext.authorizationId || null,
+      isProvisioned: bookingContext.isProvisioned || false,
+      revokedAt: bookingContext.revokedAt || null,
+      accessBuffer: bookingContext.accessBuffer || { beforeMs: 0, afterMs: 0 },
+      accessFrom: bookingContext.accessFrom ?? null,
+      accessTo: bookingContext.accessTo ?? null,
+    };
+  }
+
+  static _prioritizeBlockingReasons(reasons) {
+    const unique = [...new Set(reasons)];
+    return unique.sort(
+      (a, b) =>
+        ACCESS_BLOCKING_REASON_PRIORITY.indexOf(a) -
+        ACCESS_BLOCKING_REASON_PRIORITY.indexOf(b),
+    );
+  }
+
+  static async _resolveManagePermissionByTenant(userId, tenantIds) {
+    const entries = await Promise.all(
+      tenantIds.map(async (tenantId) => [
+        tenantId,
+        await PermissionsService._allowUpdateAny(
+          userId,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ),
+      ]),
+    );
+    return new Map(entries);
+  }
+
   static async _getSupportedModes(provider, accessPoint, tenant) {
     if (!provider.constructor.capabilities.includes("getSupportedModes")) {
       return null;
@@ -1570,3 +1874,4 @@ class AccessService {
 }
 
 module.exports = AccessService;
+module.exports.ACCESS_BLOCKING_REASONS = ACCESS_BLOCKING_REASONS;
