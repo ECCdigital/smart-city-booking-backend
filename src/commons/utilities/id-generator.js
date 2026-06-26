@@ -40,6 +40,17 @@ class IdGenerator {
           [year]: newId,
         },
       };
+    } else if (idType === "cancellation") {
+      const idForCurrentYear =
+        (tenant.cancellationCount && tenant.cancellationCount[year]) || 0;
+      newId = idForCurrentYear + 1;
+      updatedTenant = {
+        ...tenant,
+        cancellationCount: {
+          ...tenant.cancellationCount,
+          [year]: newId,
+        }
+      }
     }
 
     await TenantManager.storeTenant(updatedTenant);

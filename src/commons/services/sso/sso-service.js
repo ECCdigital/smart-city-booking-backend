@@ -9,64 +9,26 @@ class SsoService {
   static async handleLogin(token) {
     const instance = await InstanceManger.getInstance();
     const app = instance.applications.find((app) => app.id === "keycloak");
-    let kcResponse = await SsoService.verifyToken(token, app);
-
-    let user = null;
-    let userKeycloakId = null;
-    let keycloakBoundUserId = null;
-    let emailBoundUserId = null;
-
-    if (kcResponse.sub) {
-      const keycloakUser = await UserManager.getUserBy(
-        { keycloakId: kcResponse.sub },
-        true,
-      );
-      if (keycloakUser) {
-        keycloakBoundUserId = keycloakUser.id;
-        userKeycloakId = keycloakUser.keycloakId;
-        user = keycloakUser.exportPublic();
-      }
+    if (!app) {
+      throw { message: "Keycloak not configured", status: 500 };
     }
 
-    if (kcResponse.email) {
-      const emailUser = await UserManager.getUser(kcResponse.email);
-      if (emailUser) {
-        emailBoundUserId = emailUser.id;
-        if (!user) {
-          user = emailUser;
-        }
-      }
+    const kcResponse = await SsoService.verifyToken(token, app);
+
+    if (kcResponse.active === false) {
+      throw { message: "User not active", status: 403 };
     }
 
-    if (
-      keycloakBoundUserId &&
-      emailBoundUserId &&
-      keycloakBoundUserId.toLowerCase() !== emailBoundUserId.toLowerCase()
-    ) {
-      throw {
-        message: "Identity conflict: email already bound to another account",
-        status: 409,
-      };
-    }
+    const user = await UserManager.resolveKeycloakUser(kcResponse);
 
-    if (!user) {
-      throw { message: "User not found", status: 404 };
+    if (user.isSuspended) {
+      throw { message: "User account is suspended", status: 403 };
     }
 
     const kcRoles = extractRoles(kcResponse.resource_access);
 
-    if (app.roleMapping.active) {
+    if (app.roleMapping?.active) {
       await SsoService.mapRoles(user, kcRoles, app);
-    }
-
-    if (kcResponse.sub && userKeycloakId !== kcResponse.sub) {
-      await UserManager.updateUser(
-        {
-          id: user.id,
-          keycloakId: kcResponse.sub,
-        },
-        false,
-      );
     }
 
     user.permissions = await UserManager.getUserPermissions(user.id);
@@ -74,7 +36,7 @@ class SsoService {
     return user;
   }
 
-  static async handleSignup(token) {
+  static async handleSignup(token, legalAcceptance) {
     const instance = await InstanceManger.getInstance();
     const app = instance.applications.find((app) => app.id === "keycloak");
     let kcResponse = await SsoService.verifyToken(token, app);
@@ -83,9 +45,15 @@ class SsoService {
       throw { message: "User not active", status: 404 };
     }
 
-    let user = await UserManager.getUser(kcResponse.email);
-    if (user) {
+    try {
+      await UserManager.resolveKeycloakUser(kcResponse, {
+        syncKeycloakId: false,
+      });
       throw { message: "User already exist", status: 409 };
+    } catch (error) {
+      if (error.status !== 404) {
+        throw error;
+      }
     }
 
     const kcRoles = extractRoles(kcResponse.resource_access);
@@ -95,12 +63,13 @@ class SsoService {
       firstName: kcResponse.given_name,
       lastName: kcResponse.family_name,
       keycloakId: kcResponse.sub || "",
+      legalAcceptance: legalAcceptance,
     });
 
     newUser.authType = "keycloak";
     newUser.isVerified = true;
 
-    if (app.roleMapping.active) {
+    if (app.roleMapping?.active) {
       await SsoService.mapRoles(newUser, kcRoles, app);
     }
 

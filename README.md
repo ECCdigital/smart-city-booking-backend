@@ -769,12 +769,23 @@ Example:
     "maxAttendees": null,
     "priceCategories": []
   },
-  "eventAddress": {
-    "street": "",
-    "houseNumber": "",
-    "additional": "",
-    "city": "",
-    "zip": ""
+  "location": {
+    "coordinates": {
+      "type": "Point",
+      "points": [null, null]
+    },
+    "display_address": "",
+    "address": {
+      "street": null,
+      "house_number": null,
+      "post_code": null,
+      "city": null,
+      "suburb": null,
+      "state": null,
+      "country": null,
+      "country_code": null
+    },
+    "meta": {}
   },
   "eventLocation": {
     "name": "",
@@ -838,8 +849,21 @@ Example:
   "mailEnabled": true,
   "contactAddress": "contact@example.com",
   "contactUrl": "https://example.com/contact",
-  "dataProtectionUrl": "https://example.com/privacy",
-  "legalNoticeUrl": "https://example.com/legal",
+  "dataProtection": {
+    "source": "url",
+    "url": "https://example.com/privacy",
+    "fileName": ""
+  },
+  "legalNotice": {
+    "source": "url",
+    "url": "https://example.com/legal",
+    "fileName": ""
+  },
+  "termsAndConditions": {
+    "source": "file",
+    "url": "https://backend.example.com/api/files/get?name=/public/legal/agb.pdf",
+    "fileName": "agb.pdf"
+  },
   "allowAllUsersToCreateTenant": false,
   "allowedUsersToCreateTenant": [],
   "ownerUserIds": ["admin@example.com"],

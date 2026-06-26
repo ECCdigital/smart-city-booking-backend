@@ -8,6 +8,14 @@ const bookingHookSchemaDefinition = {
   payload: { type: Object, default: {} },
 };
 
+const customFieldValueSchema = new Schema(
+  {
+    fieldId: { type: String, required: true },
+    value: { type: Schema.Types.Mixed, default: null },
+  },
+  { _id: false },
+);
+
 const attachmentSchemaDefinition = {
   type: {
     type: String,
@@ -20,6 +28,7 @@ const attachmentSchemaDefinition = {
   accepted: { type: Boolean },
   invoiceId: { type: String },
   receiptId: { type: String },
+  cancellationId: { type: String },
   revision: { type: Number },
   timeCreated: { type: Double },
   mailAttach: { type: Boolean },
@@ -52,7 +61,7 @@ const bookingSchemaDefinition = {
   mail: {
     type: String,
     required: true,
-    format: "email",
+    format: "multiEmail",
   },
   name: { type: String, default: "" },
   paymentProvider: {
@@ -85,6 +94,14 @@ const bookingSchemaDefinition = {
   zipCode: { type: String, default: "" },
   _couponUsed: { type: Object, default: {} },
   hooks: { type: [bookingHookSchemaDefinition], default: [] },
+  customFieldValues: {
+    type: [customFieldValueSchema],
+    default: [],
+  },
+  cancellationPolicy: {
+    type: Object,
+    default: { userCancellable: true },
+  },
 };
 
 module.exports = {

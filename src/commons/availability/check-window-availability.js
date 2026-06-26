@@ -11,6 +11,9 @@ const {
   hasBookingPermission,
   isWithinMaxBookingAdvance,
   CAPACITY_MODES,
+  isBlockPeriodBookingValid,
+  isTimePeriodBookingValid,
+  shouldSkipOpeningHoursCheck,
 } = require("./availability-rules");
 
 /**
@@ -105,7 +108,7 @@ async function checkWindowAvailability(
     return { available: false, reason: "permission" };
   }
 
-  if (isTimeRelatedBookable(bookable) && bookable.isLongRange !== true) {
+  if (isTimeRelatedBookable(bookable) && !shouldSkipOpeningHoursCheck(bookable)) {
     const parentBookables = await resolve(provider.getParentBookables());
 
     for (const candidate of [bookable, ...parentBookables]) {
@@ -123,6 +126,14 @@ async function checkWindowAvailability(
 
   if (!isDurationAllowed(bookable, timeBegin, timeEnd)) {
     return { available: false, reason: "booking-duration" };
+  }
+
+  if (!isBlockPeriodBookingValid(bookable, timeBegin, timeEnd)) {
+    return { available: false, reason: "block-period-mismatch" };
+  }
+
+  if (!isTimePeriodBookingValid(bookable, timeBegin, timeEnd)) {
+    return { available: false, reason: "time-period-mismatch" };
   }
 
   const useTimeOverlap = isTimeRelatedBookable(bookable);

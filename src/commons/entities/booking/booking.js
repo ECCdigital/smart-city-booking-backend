@@ -7,6 +7,9 @@ class Booking {
     const defaults = SchemaUtils.createDefaults(bookingSchemaDefinition);
     Object.assign(this, defaults, params);
 
+    this.customFieldDefinitions = params.customFieldDefinitions;
+    this.customFields = params.customFields;
+
     // Convert hooks to BookingHook entities
     if (this.hooks && Array.isArray(this.hooks)) {
       this.hooks = this.hooks.map((hook) =>
@@ -105,6 +108,22 @@ class Booking {
     return this.priceEur + this.vatIncludedEur;
   }
 
+  getIsActive() {
+    let bookingActive;
+    if (this.priceEur > 0) {
+      bookingActive = this.isPayed && this.isCommitted && !this.isRejected;
+    } else {
+      bookingActive = this.isCommitted && !this.isRejected;
+    }
+
+    if (bookingActive) {
+      const now = Date.now();
+      return this.timeBegin <= now && this.timeEnd >= now;
+    }
+
+    return false;
+  }
+
   /**
    * Export booking status information
    * @returns {Object} Status information
@@ -118,6 +137,7 @@ class Booking {
       isCommitted: this.isCommitted,
       isPayed: this.isPayed,
       isRejected: this.isRejected,
+      cancellationPolicy: this.cancellationPolicy,
     };
   }
 
@@ -135,7 +155,35 @@ class Booking {
       isRejected: this.isRejected,
       priceEur: this.priceEur,
       bookableItems: this.bookableItems,
+      cancellationPolicy: this.cancellationPolicy,
     };
+  }
+
+  /**
+   * Enrich this booking with merged checkout custom field definitions and resolved values.
+   * @param {{ instanceFields: Array, tenantFields: Array, bookableFields: Array }} definitions
+   * @returns {Booking} this (for chaining)
+   */
+  enrichCustomFields({ instanceFields, tenantFields, bookableFields = [] }) {
+    const {
+      CustomFieldService,
+    } = require("../../services/custom-field/custom-field-service");
+
+    const mergedDefs = CustomFieldService.mergeDefinitions({
+      instanceFields,
+      tenantFields,
+      bookableFields,
+    });
+
+    this.customFieldDefinitions =
+      CustomFieldService.filterCheckoutDefinitions(mergedDefs);
+
+    this.customFields = CustomFieldService.resolveFieldsWithValues(
+      this.customFieldDefinitions,
+      this.customFieldValues || [],
+    );
+
+    return this;
   }
 
   validate() {

@@ -6,19 +6,18 @@ const {
   getBooking,
   getBookingsByTimeRange,
 } = require("../../data-managers/booking-manager");
-const { ParevaLocker } = require("./locker");
+const { createLocker } = require("./locker-registry");
+require("./index");
 const bunyan = require("bunyan");
 
 const APP_TYPE = "locker";
-
-const LOCKER_TYPE = {
-  PAREVA: "pareva",
-};
 
 const logger = bunyan.createLogger({
   name: "locker-service.js",
   level: process.env.LOG_LEVEL,
 });
+
+const externalSystems = new Set(["ifbs"]);
 
 /**
  * LockerService is a singleton class that provides methods for managing lockers.
@@ -117,6 +116,16 @@ class LockerService {
         };
 
         const availableUnits = possibleUnits.flatMap((unit) => {
+          if (
+            externalSystems.has(unit.lockerSystem) &&
+            activeLockerAppIds.includes(unit.lockerSystem)
+          ) {
+            return Array(Number(unit.amount)).fill({
+              id: unit.lockerSystem === "ifbs" ? unit.locationId : unit.id,
+              lockerSystem: unit.lockerSystem,
+            });
+          }
+
           const remainingAmount = calculateRemainingAmount(unit);
           const isOccupied = remainingAmount <= 0;
           const isReserved = LockerService.isLockerReserved(
@@ -154,6 +163,7 @@ class LockerService {
         }));
 
         units.forEach((unit) => {
+          if (externalSystems.has(unit.lockerSystem)) return;
           LockerService.reserveLocker(
             tenantId,
             bookableId,
@@ -201,6 +211,114 @@ class LockerService {
   }
 
   /**
+   * Handles the pre-reservation of iFBS lockers for unpaid bookings.
+   * Calls getBox to hold the box for ~2 minutes without confirming (bookIt).
+   *
+   * @async
+   * @param {string} tenantId - The ID of the tenant.
+   * @param {string} bookingId - The ID of the booking.
+   */
+  async handlePreReserve(tenantId, bookingId) {
+    try {
+      const booking = await getBooking(bookingId, tenantId);
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+
+      const lockerUnits = LockerService.assignedLocker(booking);
+      const unconfirmedUnits = lockerUnits.filter((unit) => !unit.isConfirmed);
+
+      if (unconfirmedUnits.length === 0) {
+        return;
+      }
+
+      for (const unit of unconfirmedUnits) {
+        const locker = createLocker(
+          unit.lockerSystem,
+          booking.tenantId,
+          booking.id,
+          unit.id,
+        );
+
+        const updatedLockerInfo = await locker.preReserve(
+          booking.timeBegin,
+          booking.timeEnd,
+        );
+
+        booking.lockerInfo = booking.lockerInfo.map((l) =>
+          l.id === updatedLockerInfo.id &&
+          l.lockerSystem === updatedLockerInfo.lockerSystem
+            ? updatedLockerInfo
+            : l,
+        );
+
+        LockerService.freeReservedLocker(
+          booking.tenantId,
+          unit.id,
+          unit.lockerSystem,
+          booking.timeBegin,
+          booking.timeEnd,
+        );
+      }
+
+      logger.info(
+        `Pre-reserved lockers for booking ${bookingId}: ` +
+          JSON.stringify(booking.lockerInfo),
+      );
+
+      await BookingManager.storeBooking(booking);
+    } catch (error) {
+      throw new Error(`Error in pre-reserving lockers: ${error.message}`);
+    }
+  }
+
+  /**
+   * Refreshes all iFBS pre-reservations for the given bookings.
+   * Calls preReserve again to get a fresh 2-min hold.
+   * Throws if no box is available anymore.
+   *
+   * @async
+   * @param {string} tenantId
+   * @param {string[]} bookingIds
+   */
+  async refreshPreReservations(tenantId, bookingIds) {
+    for (const bookingId of bookingIds) {
+      const booking = await getBooking(bookingId, tenantId);
+      if (!booking) continue;
+
+      const lockerUnits = LockerService.assignedLocker(booking);
+      const ifbsUnits = lockerUnits.filter(
+        (unit) => unit.lockerSystem === "ifbs" && !unit.isConfirmed,
+      );
+
+      if (ifbsUnits.length === 0) continue;
+
+      for (const unit of ifbsUnits) {
+        const locker = createLocker(
+          unit.lockerSystem,
+          booking.tenantId,
+          booking.id,
+          unit.id,
+        );
+
+        const updatedLockerInfo = await locker.preReserve(
+          booking.timeBegin,
+          booking.timeEnd,
+        );
+
+        booking.lockerInfo = booking.lockerInfo.map((l) =>
+          l.id === updatedLockerInfo.id &&
+          l.lockerSystem === updatedLockerInfo.lockerSystem
+            ? updatedLockerInfo
+            : l,
+        );
+      }
+
+      await BookingManager.storeBooking(booking);
+    }
+  }
+
+  /**
    * Handles the creation of the locker for the given tenantId and bookingId.
    * It throws an error if the booking is not found or if there is an error in getting the booking.
    * @param {string} tenantId - The ID of the tenant.
@@ -218,14 +336,12 @@ class LockerService {
       }
 
       for (const unit of lockerUnitsToBeAssigned) {
-        let locker;
-        switch (unit.lockerSystem) {
-          case LOCKER_TYPE.PAREVA:
-            locker = new ParevaLocker(booking.tenantId, booking.id, unit.id);
-            break;
-          default:
-            throw new Error("Unsupported locker type");
-        }
+        const locker = createLocker(
+          unit.lockerSystem,
+          booking.tenantId,
+          booking.id,
+          unit.id,
+        );
         const updatedLockerInfo = await locker.startReservation(
           booking.timeBegin,
           booking.timeEnd,
@@ -347,20 +463,22 @@ class LockerService {
         timeBegin,
         timeEnd,
       ) => {
-        let locker;
-        switch (unit.lockerSystem) {
-          case LOCKER_TYPE.PAREVA:
-            locker = new ParevaLocker(tenantId, bookingId, unit.id);
-            break;
-          default:
-            throw new Error("Unsupported locker type");
-        }
+        const locker = createLocker(
+          unit.lockerSystem,
+          tenantId,
+          bookingId,
+          unit.id,
+        );
         if (action === "cancel") {
-          return await locker.cancelReservation(unit.id);
+          return await locker.cancelReservation(unit.processId);
         } else if (action === "start") {
           return await locker.startReservation(timeBegin, timeEnd);
         } else if (action === "update") {
-          return await locker.updateReservation(timeBegin, timeEnd);
+          return await locker.updateReservation(
+            unit.processId,
+            timeBegin,
+            timeEnd,
+          );
         }
       };
 
@@ -602,29 +720,33 @@ class LockerService {
     const results = [];
 
     for (const unit of lockerUnitsToBeCanceled) {
-      let locker;
-      switch (unit.lockerSystem) {
-        case LOCKER_TYPE.PAREVA:
-          locker = new ParevaLocker(tenantId, bookingId, unit.id);
-          break;
-        default:
-          throw new Error("Unsupported locker type");
-      }
+      const locker = createLocker(
+        unit.lockerSystem,
+        tenantId,
+        bookingId,
+        unit.id,
+      );
       results.push(await locker.cancelReservation(unit.processId));
     }
 
     logger.info(`Locker cancellation results: ${JSON.stringify(results)}`);
 
     for (const result of results) {
-      if (result.success) {
-        const locker = booking.lockerInfo.find(
-          (locker) => locker.processId === result.processId,
-        );
-        if (locker) {
-          locker.isConfirmed = false;
-          locker.processId = null;
-        }
+      if (!result.success) {
+        continue;
       }
+
+      booking.lockerInfo = booking.lockerInfo.map((locker) =>
+        locker.processId === result.processId
+          ? {
+              isConfirmed: false,
+              processId: null,
+              lockerSystem: locker.lockerSystem,
+              id: locker.id,
+              bookableId: locker.bookableId,
+            }
+          : locker,
+      );
     }
 
     await BookingManager.storeBooking(booking);
@@ -675,12 +797,12 @@ class LockerService {
   static freeReservedLocker(tenantId, id, lockerSystem, startTime, endTime) {
     LockerService.reservedLockers = LockerService.reservedLockers.filter(
       (locker) => {
-        return (
-          locker.tenantId !== tenantId &&
-          locker.id !== id &&
-          locker.lockerSystem !== lockerSystem &&
-          locker.startTime !== startTime &&
-          locker.endTime !== endTime
+        return !(
+          locker.tenantId === tenantId &&
+          locker.id === id &&
+          locker.lockerSystem === lockerSystem &&
+          locker.startTime === startTime &&
+          locker.endTime === endTime
         );
       },
     );

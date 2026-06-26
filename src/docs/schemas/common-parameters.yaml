@@ -1,0 +1,17 @@
+components:
+  parameters:
+    TenantParam:
+      name: tenant
+      in: path
+      required: true
+      description: Tenant identifier
+      schema:
+        type: string
+
+    BookingIdQueryParam:
+      name: bookingId
+      in: query
+      required: true
+      description: Unique identifier of the booking
+      schema:
+        type: string

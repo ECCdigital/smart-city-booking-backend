@@ -20,9 +20,24 @@ class MembershipController {
         return response.sendStatus(403);
       }
 
-
       const memberships = await MembershipManager.getMemberships();
 
+      response.status(200).send(memberships);
+    } catch (error) {
+      logger.error(error);
+      return response
+        .status(error.code || 500)
+        .send(error.message || "Could not retrieve memberships");
+    }
+  }
+
+  static async getMyMemberships(request, response) {
+    try {
+      const user = request.user;
+
+      const memberships = await MembershipManager.getMembershipsByUserID(
+        user.id,
+      );
 
       response.status(200).send(memberships);
     } catch (error) {

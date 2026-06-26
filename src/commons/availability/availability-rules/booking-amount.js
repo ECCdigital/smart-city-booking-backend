@@ -10,7 +10,8 @@ function isTimeRelatedBookable(bookable) {
   return (
     bookable.isScheduleRelated === true ||
     bookable.isTimePeriodRelated === true ||
-    bookable.isLongRange === true
+    bookable.isLongRange === true ||
+    bookable.isBlockPeriodRelated === true
   );
 }
 
