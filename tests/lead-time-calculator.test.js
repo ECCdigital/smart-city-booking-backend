@@ -2,7 +2,7 @@ const assert = require("assert");
 const {
   hasSufficientPreparationLeadTime,
   getEarliestBookableStart,
-  generateTimePeriodsFromLeadTime,
+  generateLeadTimeBlockedPeriods,
   isLeadTimeConfigured,
 } = require("../src/commons/availability/lead-time-calculator");
 
@@ -29,7 +29,10 @@ function at(isoString) {
 
 describe("lead-time-calculator", () => {
   it("treats unconfigured bookables as always allowed", () => {
-    assert.strictEqual(isLeadTimeConfigured({ isScheduleRelated: true }), false);
+    assert.strictEqual(
+      isLeadTimeConfigured({ isScheduleRelated: true }),
+      false,
+    );
     assert.strictEqual(
       hasSufficientPreparationLeadTime(
         { isScheduleRelated: true },
@@ -88,11 +91,20 @@ describe("lead-time-calculator", () => {
     );
   });
 
+  it("returns Monday 11:00 as earliest start when booking same-day at 09:00", () => {
+    const now = new Date("2026-06-15T09:00:00");
+
+    assert.strictEqual(
+      getEarliestBookableStart(bookable(), now),
+      at("2026-06-15T11:00:00"),
+    );
+  });
+
   it("marks calendar periods before earliest start as unavailable", () => {
     const now = new Date("2026-06-12T18:00:00");
     const startDate = new Date("2026-06-15T00:00:00");
     const endDate = new Date("2026-06-15T23:59:59");
-    const periods = generateTimePeriodsFromLeadTime(
+    const periods = generateLeadTimeBlockedPeriods(
       startDate,
       endDate,
       bookable(),
@@ -103,14 +115,29 @@ describe("lead-time-calculator", () => {
       {
         start: startDate.getTime(),
         end: at("2026-06-15T10:00:00"),
-        available: false,
-      },
-      {
-        start: at("2026-06-15T10:00:00"),
-        end: endDate.getTime(),
-        available: true,
       },
     ]);
+  });
+
+  it("marks the full queried range unavailable when no valid window exists", () => {
+    const now = new Date("2026-06-12T18:00:00");
+    const startDate = new Date("2026-06-15T00:00:00");
+    const endDate = new Date("2026-06-15T23:59:59");
+    const impossibleBookable = bookable({
+      preparationLeadTimeMinutes: 600,
+      serviceHours: [{ weekdays: [1], startTime: "08:00", endTime: "10:00" }],
+    });
+
+    assert.strictEqual(getEarliestBookableStart(impossibleBookable, now), null);
+    assert.deepStrictEqual(
+      generateLeadTimeBlockedPeriods(
+        startDate,
+        endDate,
+        impossibleBookable,
+        now,
+      ),
+      [{ start: startDate.getTime(), end: endDate.getTime() }],
+    );
   });
 
   it("ignores lead time for non schedule-related bookables", () => {

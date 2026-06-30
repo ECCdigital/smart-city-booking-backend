@@ -9,10 +9,10 @@ const {
     mergePeriods,
   },
 } = require("./calendar-service");
-const { isBlockPeriodBookable } = require("../utilities/block-period-generator");
 const {
-  AvailabilityContext,
-} = require("./availability/availability-context");
+  isBlockPeriodBookable,
+} = require("../utilities/block-period-generator");
+const { AvailabilityContext } = require("./availability/availability-context");
 const {
   computeWindowAvailability,
 } = require("./availability/capacity-interval-calculator");
@@ -28,7 +28,7 @@ const {
   applyBookingDurationRules,
 } = require("./availability/availability-duration-filter");
 const {
-  generateTimePeriodsFromLeadTime,
+  generateLeadTimeBlockedPeriods,
 } = require("../availability/lead-time-calculator");
 const { NotFoundError } = require("../../errors/BaseError");
 const bunyan = require("bunyan");
@@ -128,11 +128,10 @@ class CalendarServiceV2 {
 
     const availableOpeningHoursPeriods = blockPeriodBookable
       ? []
-      : generateTimePeriodsFromOpeningHours(
-          startDate,
-          endDate,
-          [bookable, ...context.parentBookables],
-        );
+      : generateTimePeriodsFromOpeningHours(startDate, endDate, [
+          bookable,
+          ...context.parentBookables,
+        ]);
 
     const availableTimePeriods = blockPeriodBookable
       ? generateTimePeriodsFromBlockPeriods(startDate, endDate, bookable)
@@ -151,18 +150,17 @@ class CalendarServiceV2 {
       maxBookingAdvanceInMonths,
     );
 
-    const leadTimePeriods = generateTimePeriodsFromLeadTime(
-      startDate,
-      endDate,
-      bookable,
-    );
-
     const availablePeriods = mergePeriods(
       availableOpeningHoursPeriods,
       availableSpecialOpeningHoursPeriods,
       availableTimePeriods,
       maxBookingAdvancePeriods,
-      leadTimePeriods,
+    );
+
+    const leadTimeBlockedPeriods = generateLeadTimeBlockedPeriods(
+      startDate,
+      endDate,
+      bookable,
     );
 
     const items = [];
@@ -196,6 +194,11 @@ class CalendarServiceV2 {
         );
     items.push(
       ...closedPeriods.map((period) => ({
+        timeBegin: period.start,
+        timeEnd: period.end,
+        available: false,
+      })),
+      ...leadTimeBlockedPeriods.map((period) => ({
         timeBegin: period.start,
         timeEnd: period.end,
         available: false,

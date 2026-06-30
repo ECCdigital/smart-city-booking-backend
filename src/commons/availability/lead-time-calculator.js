@@ -61,13 +61,16 @@ function getServiceWindowsForWeekday(serviceHours, weekday) {
  * @param {Date} [now]
  * @returns {boolean}
  */
-function hasSufficientPreparationLeadTime(bookable, timeBegin, now = new Date()) {
+function hasSufficientPreparationLeadTime(
+  bookable,
+  timeBegin,
+  now = new Date(),
+) {
   if (!isLeadTimeConfigured(bookable)) {
     return true;
   }
 
-  const preparationMs =
-    Number(bookable.preparationLeadTimeMinutes) * 60 * 1000;
+  const preparationMs = Number(bookable.preparationLeadTimeMinutes) * 60 * 1000;
   const nowMs = now.getTime();
   const timeBeginMs = Number(timeBegin);
 
@@ -126,15 +129,14 @@ function hasSufficientPreparationLeadTime(bookable, timeBegin, now = new Date())
 /**
  * @param {import("../entities/bookable/bookable").Bookable|Object} bookable
  * @param {Date} [now]
- * @returns {number}
+ * @returns {number|null}
  */
 function getEarliestBookableStart(bookable, now = new Date()) {
   if (!isLeadTimeConfigured(bookable)) {
     return now.getTime();
   }
 
-  const preparationMs =
-    Number(bookable.preparationLeadTimeMinutes) * 60 * 1000;
+  const preparationMs = Number(bookable.preparationLeadTimeMinutes) * 60 * 1000;
   const nowMs = now.getTime();
   const candidates = new Set();
 
@@ -154,6 +156,7 @@ function getEarliestBookableStart(bookable, now = new Date()) {
       const serviceEndMs = dayStartMs + window.endMinutes * 60 * 1000;
 
       candidates.add(serviceStartMs + preparationMs);
+      candidates.add(Math.max(nowMs, serviceStartMs) + preparationMs);
       candidates.add(serviceEndMs);
     }
 
@@ -170,20 +173,21 @@ function getEarliestBookableStart(bookable, now = new Date()) {
     }
   }
 
-  return searchEnd.getTime();
+  return null;
 }
 
 /**
- * Generates calendar periods marking slots before the earliest bookable start
- * as unavailable. Returns an empty array when lead time is not configured.
+ * Returns only the blocked periods before the earliest bookable start.
+ * When no valid service window exists within the search horizon, the full
+ * queried range is marked unavailable.
  *
  * @param {Date} startDate
  * @param {Date} endDate
  * @param {import("../entities/bookable/bookable").Bookable|Object} bookable
  * @param {Date} [now]
- * @returns {Array<{ start: number, end: number, available: boolean }>}
+ * @returns {Array<{ start: number, end: number }>}
  */
-function generateTimePeriodsFromLeadTime(
+function generateLeadTimeBlockedPeriods(
   startDate,
   endDate,
   bookable,
@@ -197,25 +201,22 @@ function generateTimePeriodsFromLeadTime(
   const rangeStart = startDate.getTime();
   const rangeEnd = endDate.getTime();
 
-  if (rangeEnd <= earliestStart) {
-    return [{ start: rangeStart, end: rangeEnd, available: false }];
+  if (earliestStart === null) {
+    return [{ start: rangeStart, end: rangeEnd }];
   }
 
   if (rangeStart >= earliestStart) {
-    return [{ start: rangeStart, end: rangeEnd, available: true }];
+    return [];
   }
 
-  return [
-    { start: rangeStart, end: earliestStart, available: false },
-    { start: earliestStart, end: rangeEnd, available: true },
-  ];
+  return [{ start: rangeStart, end: Math.min(earliestStart, rangeEnd) }];
 }
 
 module.exports = {
   isLeadTimeConfigured,
   hasSufficientPreparationLeadTime,
   getEarliestBookableStart,
-  generateTimePeriodsFromLeadTime,
+  generateLeadTimeBlockedPeriods,
   getServiceWindowsForWeekday,
   parseTimeToMinutes,
 };

@@ -5,7 +5,10 @@ const bunyan = require("bunyan");
 const { getTenantAppById } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
-const { BOOKABLE_TYPES, Bookable } = require("../../entities/bookable/bookable");
+const {
+  BOOKABLE_TYPES,
+  Bookable,
+} = require("../../entities/bookable/bookable");
 const CouponService = require("../coupon-service");
 const providerRegistry = require("./providers/checkout-provider-registry");
 const { createClient } = require("../locker/clients/locker-client-registry");
@@ -770,6 +773,7 @@ class ItemCheckoutService {
       this.checkParentAvailability(),
       this.checkChildBookings(),
       this.checkMaxBookingDate(),
+      this.checkMinBookingLeadTime(),
     ]);
   }
 

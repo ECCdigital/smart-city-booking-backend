@@ -3,7 +3,9 @@ const sinon = require("sinon");
 const {
   runMinBookingLeadTimeCheck,
 } = require("../src/commons/availability/checkout-availability-checks");
-const { CHECK_TYPES } = require("../src/commons/availability/checkout-check-types");
+const {
+  CHECK_TYPES,
+} = require("../src/commons/availability/checkout-check-types");
 
 const SERVICE_HOURS = [
   {
@@ -58,8 +60,12 @@ describe("runMinBookingLeadTimeCheck", () => {
           timeBegin: new Date("2026-06-15T08:00:00").getTime(),
         }),
       (error) => {
-        assert.strictEqual(error.checkType, CHECK_TYPES.INSUFFICIENT_LEAD_TIME);
-        assert.match(error.message, /Vorbereitungszeit/);
+        assert.deepStrictEqual(error, {
+          checkType: CHECK_TYPES.INSUFFICIENT_LEAD_TIME,
+          available: false,
+          message:
+            "Die Buchung für das Objekt Meeting Room erfordert eine Vorbereitungszeit von 120 Minuten innerhalb der Servicezeiten.",
+        });
         return true;
       },
     );
@@ -71,6 +77,9 @@ describe("runMinBookingLeadTimeCheck", () => {
       timeBegin: Date.now(),
     });
 
-    assert.strictEqual(result.available, true);
+    assert.deepStrictEqual(result, {
+      checkType: CHECK_TYPES.INSUFFICIENT_LEAD_TIME,
+      available: true,
+    });
   });
 });

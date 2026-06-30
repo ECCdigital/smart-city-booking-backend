@@ -67,6 +67,33 @@ const blockPeriodSchemaDefinition = {
   },
 };
 
+const serviceHoursSchemaDefinition = {
+  weekdays: {
+    type: [Number],
+    required: true,
+    validate: {
+      validator: (value) =>
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.every(
+          (weekday) =>
+            Number.isInteger(weekday) && weekday >= 0 && weekday <= 6,
+        ),
+      message: "weekdays must contain integers between 0 and 6",
+    },
+  },
+  startTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
+  endTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
+};
+
 const bookableSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true, ref: "Tenant" },
@@ -120,7 +147,10 @@ const bookableSchemaDefinition = {
   isOpeningHoursRelated: { type: Boolean, default: false },
   openingHours: { type: [Object], default: [] },
   preparationLeadTimeMinutes: { type: Number, default: null, min: 0 },
-  serviceHours: { type: [Object], default: [] },
+  serviceHours: {
+    type: [new Schema(serviceHoursSchemaDefinition, { _id: false })],
+    default: [],
+  },
   isSpecialOpeningHoursRelated: { type: Boolean, default: false },
   specialOpeningHours: { type: [Object], default: [] },
   isLongRange: { type: Boolean, default: false },
@@ -216,4 +246,5 @@ const bookableSchemaDefinition = {
 module.exports = {
   bookableSchemaDefinition,
   blockPeriodSchemaDefinition,
+  serviceHoursSchemaDefinition,
 };

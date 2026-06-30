@@ -314,8 +314,8 @@ Key fields of a bookable:
 | timePeriods           | Weekly repeating time windows when the bookable can be used.                                                                                               |
 | isOpeningHoursRelated | If `true`, availability is derived from `openingHours`.                                                                                                     |
 | openingHours          | Regular opening hours per weekday.                                                                                                                          |
-| preparationLeadTimeMinutes | Minimum preparation time in minutes before booking start (schedule-related only). Requires `serviceHours`.                                            |
-| serviceHours          | Service windows when preparation can take place (same structure as `openingHours`, independent of opening hours).                                          |
+| preparationLeadTimeMinutes | Minimum preparation time in minutes before booking start. Lead-time enforcement is active only when `isScheduleRelated` is `true`, `preparationLeadTimeMinutes` is greater than `0`, and `serviceHours` is non-empty. |
+| serviceHours          | Service windows when preparation can take place (same structure as `openingHours`, independent of opening hours). Only evaluated together with `preparationLeadTimeMinutes` on schedule-related bookables. |
 | isSpecialOpeningHoursRelated | If `true`, `specialOpeningHours` override the regular opening hours for specific dates.                                                              |
 | specialOpeningHours   | Special opening hours for specific dates.                                                                                                                   |
 | isLongRange           | If `true`, long-range bookings (e.g. weeks/months) are enabled.                                                                                            |
