@@ -5,7 +5,10 @@ const bunyan = require("bunyan");
 const { getTenantAppById } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
-const { BOOKABLE_TYPES, Bookable } = require("../../entities/bookable/bookable");
+const {
+  BOOKABLE_TYPES,
+  Bookable,
+} = require("../../entities/bookable/bookable");
 const CouponService = require("../coupon-service");
 const providerRegistry = require("./providers/checkout-provider-registry");
 const { createClient } = require("../locker/clients/locker-client-registry");
@@ -23,6 +26,7 @@ const {
   runTimePeriodCheck,
   runEventDateCheck,
   runMaxBookingDateCheck,
+  runMinBookingLeadTimeCheck,
 } = require("../../availability/checkout-availability-checks");
 const {
   isTimeRelatedBookable,
@@ -684,6 +688,10 @@ class ItemCheckoutService {
     return runMaxBookingDateCheck(await this._availabilityParams());
   }
 
+  async checkMinBookingLeadTime() {
+    return runMinBookingLeadTimeCheck(await this._availabilityParams());
+  }
+
   async checkEventDate() {
     const provider = await this._getAvailabilityProvider();
     return runEventDateCheck({
@@ -748,6 +756,7 @@ class ItemCheckoutService {
         this.checkParentAvailability(),
         this.checkChildBookings(),
         this.checkMaxBookingDate(),
+        this.checkMinBookingLeadTime(),
       ]);
     }
 
@@ -764,6 +773,7 @@ class ItemCheckoutService {
       this.checkParentAvailability(),
       this.checkChildBookings(),
       this.checkMaxBookingDate(),
+      this.checkMinBookingLeadTime(),
     ]);
   }
 

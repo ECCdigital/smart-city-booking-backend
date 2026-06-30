@@ -10,6 +10,7 @@ const {
   isDurationAllowed,
   hasBookingPermission,
   isWithinMaxBookingAdvance,
+  isWithinMinBookingLeadTime,
   CAPACITY_MODES,
   isBlockPeriodBookingValid,
   isTimePeriodBookingValid,
@@ -252,6 +253,10 @@ async function checkWindowAvailability(
 
   if (!isWithinMaxBookingAdvance(timeBegin, tenant)) {
     return { available: false, reason: "max-booking-date" };
+  }
+
+  if (!isWithinMinBookingLeadTime(timeBegin, bookable)) {
+    return { available: false, reason: "insufficient-lead-time" };
   }
 
   return { available: true };
