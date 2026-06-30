@@ -28,9 +28,7 @@ class HtmlEngine {
   }
 
   static async _checkoutUrl(bookableId, tenantId, instance) {
-    console.log("HtmlEngine._checkoutUrl", bookableId, tenantId, instance);
     const checkoutInstance = instance || (await InstanceManager.getInstance());
-    console.log("checkoutInstance", checkoutInstance);
     if (
       checkoutInstance &&
       !checkoutInstance.checkout.useLegacyCheckout &&
