@@ -2,6 +2,7 @@ const {
   getBookedAmountForBookableSet,
   sumBookedAmountForBookableSet,
 } = require("./booking-amount");
+const { expandBlockedInterval } = require("../booking-buffer");
 const { evaluateOriginCapacity } = require("./capacity-rules");
 const { CAPACITY_MODES } = require("./types");
 const {
@@ -71,6 +72,8 @@ function evaluateChildCapacity({
  * @param {import("../../entities/bookable/bookable").Bookable[]} params.relatedBookables
  * @param {number} params.requestedAmount
  * @param {boolean} params.useTimeOverlap
+ * @param {number} [params.bufferBeforeMs]
+ * @param {number} [params.bufferAfterMs]
  * @returns {import("./types").AvailabilityInterval[]}
  */
 function evaluateTicketParentCapacityIntervals({
@@ -81,6 +84,8 @@ function evaluateTicketParentCapacityIntervals({
   relatedBookables,
   requestedAmount,
   useTimeOverlap,
+  bufferBeforeMs = 0,
+  bufferAfterMs = 0,
 }) {
   const capacity = parentBookable.amount;
   if (!capacity) {
@@ -125,8 +130,14 @@ function evaluateTicketParentCapacityIntervals({
       start = windowStart;
       end = windowEnd;
     } else {
-      start = Math.max(start, windowStart);
-      end = Math.min(end, windowEnd);
+      const blocked = expandBlockedInterval(
+        start,
+        end,
+        bufferBeforeMs,
+        bufferAfterMs,
+      );
+      start = Math.max(blocked.timeBegin, windowStart);
+      end = Math.min(blocked.timeEnd, windowEnd);
       if (start >= end) {
         continue;
       }

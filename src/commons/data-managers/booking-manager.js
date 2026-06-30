@@ -1,10 +1,12 @@
 const { isRangeOverlap } = require("range-overlap");
+const {
+  overlapsBufferedInterval,
+  widenQueryWindow,
+} = require("../availability/booking-buffer");
 const { Booking } = require("../entities/booking/booking");
 const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
-const {
-  BookableManager,
-} = require("./bookable-manager");
+const { BookableManager } = require("./bookable-manager");
 
 /**
  * Data Manager for Booking objects.
@@ -30,46 +32,46 @@ class BookingManager {
     }, new Map());
 
     await Promise.all(
-      [...bookingsByTenant.entries()].map(async ([tenantId, tenantBookings]) => {
-        const { instanceFields, tenantFields } =
-          await BookableManager.getCustomFieldDefinitions(tenantId);
+      [...bookingsByTenant.entries()].map(
+        async ([tenantId, tenantBookings]) => {
+          const { instanceFields, tenantFields } =
+            await BookableManager.getCustomFieldDefinitions(tenantId);
 
-        const bookableIds = [
-          ...new Set(
-            tenantBookings.flatMap((booking) =>
-              booking.bookableItems.map((item) => item.bookableId),
-            ),
-          ),
-        ];
-
-        const bookables = await BookableManager.getBookablesByIds(
-          tenantId,
-          bookableIds,
-        );
-        const bookableFieldsById = new Map(
-          bookables.map((bookable) => [
-            bookable.id,
-            bookable.customFieldDefinitions || [],
-          ]),
-        );
-
-        for (const booking of tenantBookings) {
-          const bookingBookableIds = [
+          const bookableIds = [
             ...new Set(
-              booking.bookableItems.map((item) => item.bookableId),
+              tenantBookings.flatMap((booking) =>
+                booking.bookableItems.map((item) => item.bookableId),
+              ),
             ),
           ];
-          const bookableFields = bookingBookableIds.flatMap(
-            (bookableId) => bookableFieldsById.get(bookableId) || [],
+
+          const bookables = await BookableManager.getBookablesByIds(
+            tenantId,
+            bookableIds,
+          );
+          const bookableFieldsById = new Map(
+            bookables.map((bookable) => [
+              bookable.id,
+              bookable.customFieldDefinitions || [],
+            ]),
           );
 
-          booking.enrichCustomFields({
-            instanceFields,
-            tenantFields,
-            bookableFields,
-          });
-        }
-      }),
+          for (const booking of tenantBookings) {
+            const bookingBookableIds = [
+              ...new Set(booking.bookableItems.map((item) => item.bookableId)),
+            ];
+            const bookableFields = bookingBookableIds.flatMap(
+              (bookableId) => bookableFieldsById.get(bookableId) || [],
+            );
+
+            booking.enrichCustomFields({
+              instanceFields,
+              tenantFields,
+              bookableFields,
+            });
+          }
+        },
+      ),
     );
 
     return bookings;
@@ -239,6 +241,7 @@ class BookingManager {
    * @param {number} timeBegin
    * @param {number} timeEnd
    * @param {string|null} bookingToIgnore
+   * @param {{ beforeMs?: number, afterMs?: number }} [buffer]
    * @returns {Booking[]}
    */
   static filterConcurrentBookings(
@@ -246,19 +249,38 @@ class BookingManager {
     timeBegin,
     timeEnd,
     bookingToIgnore = null,
+    buffer = { beforeMs: 0, afterMs: 0 },
   ) {
-    return bookings.filter(
-      (booking) =>
-        isRangeOverlap(
-          booking.timeBegin,
-          booking.timeEnd,
+    const { beforeMs = 0, afterMs = 0 } = buffer;
+    const useBuffer = beforeMs > 0 || afterMs > 0;
+    const queryWindow = useBuffer
+      ? widenQueryWindow(timeBegin, timeEnd, beforeMs, afterMs)
+      : { timeBegin, timeEnd };
+
+    return bookings.filter((booking) => {
+      if (booking.isRejected || booking.id === bookingToIgnore) {
+        return false;
+      }
+
+      if (useBuffer) {
+        return overlapsBufferedInterval(
           timeBegin,
           timeEnd,
-          true,
-        ) &&
-        !booking.isRejected &&
-        booking.id !== bookingToIgnore,
-    );
+          booking.timeBegin,
+          booking.timeEnd,
+          beforeMs,
+          afterMs,
+        );
+      }
+
+      return isRangeOverlap(
+        booking.timeBegin,
+        booking.timeEnd,
+        queryWindow.timeBegin,
+        queryWindow.timeEnd,
+        true,
+      );
+    });
   }
 
   /**
@@ -380,7 +402,11 @@ class BookingManager {
     return result.length > 0 ? result[0].totalSeats : 0;
   }
 
-  static async reassignUserReferences(previousUserId, newUserId, session = null) {
+  static async reassignUserReferences(
+    previousUserId,
+    newUserId,
+    session = null,
+  ) {
     const options = session ? { session } : {};
 
     await BookingModel.updateMany(
