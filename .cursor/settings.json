@@ -1,7 +1,0 @@
-{
-  "plugins": {
-    "notion-workspace": {
-      "enabled": true
-    }
-  }
-}
