@@ -13,7 +13,9 @@ const {
   widenQueryWindow,
 } = require("../../availability/booking-buffer");
 const BookingManager = require("../../data-managers/booking-manager");
-const { CAPACITY_MODES } = require("../../availability/availability-rules/types");
+const {
+  CAPACITY_MODES,
+} = require("../../availability/availability-rules/types");
 const { intersectAvailability } = require("./availability-interval-merger");
 
 /** @deprecated Use evaluateCapacityIntervals from availability-rules */

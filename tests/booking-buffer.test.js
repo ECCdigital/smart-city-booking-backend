@@ -5,22 +5,18 @@ const {
   overlapsBufferedInterval,
   expandBlockedInterval,
 } = require("../src/commons/availability/booking-buffer");
-const { evaluateCapacityIntervals } = require("../src/commons/availability/availability-rules/capacity-rules");
+const {
+  evaluateCapacityIntervals,
+} = require("../src/commons/availability/availability-rules/capacity-rules");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
-
-function bookable(overrides = {}) {
-  return {
-    isScheduleRelated: true,
-    bufferTimeBeforeMinutes: 0,
-    bufferTimeAfterMinutes: 30,
-    ...overrides,
-  };
-}
 
 describe("booking-buffer", () => {
   it("ignores buffer for non schedule-related bookables", () => {
     assert.deepStrictEqual(
-      getBookingBufferMs({ isScheduleRelated: false, bufferTimeAfterMinutes: 30 }),
+      getBookingBufferMs({
+        isScheduleRelated: false,
+        bufferTimeAfterMinutes: 30,
+      }),
       { beforeMs: 0, afterMs: 0 },
     );
     assert.strictEqual(

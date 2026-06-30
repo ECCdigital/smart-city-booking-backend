@@ -1,9 +1,6 @@
 const OpeningHoursManager = require("../utilities/opening-hours-manager");
 const BookingManager = require("../data-managers/booking-manager");
-const {
-  getBookingBufferMs,
-  widenQueryWindow,
-} = require("./booking-buffer");
+const { getBookingBufferMs, widenQueryWindow } = require("./booking-buffer");
 const {
   isTimeRelatedBookable,
   sumBookedAmount,
@@ -133,7 +130,10 @@ async function checkWindowAvailability(
     return { available: false, reason: "permission" };
   }
 
-  if (isTimeRelatedBookable(bookable) && !shouldSkipOpeningHoursCheck(bookable)) {
+  if (
+    isTimeRelatedBookable(bookable) &&
+    !shouldSkipOpeningHoursCheck(bookable)
+  ) {
     const parentBookables = await resolve(provider.getParentBookables());
 
     for (const candidate of [bookable, ...parentBookables]) {
