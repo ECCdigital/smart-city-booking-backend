@@ -227,6 +227,8 @@ Example:
       "endTime": "18:00"
     }
   ],
+  "bufferTimeBeforeMinutes": 0,
+  "bufferTimeAfterMinutes": 30,
   "isSpecialOpeningHoursRelated": false,
   "specialOpeningHours": [
     {
@@ -316,6 +318,8 @@ Key fields of a bookable:
 | openingHours          | Regular opening hours per weekday.                                                                                                                          |
 | preparationLeadTimeMinutes | Minimum preparation time in minutes before booking start. Lead-time enforcement is active only when `isScheduleRelated` is `true`, `preparationLeadTimeMinutes` is greater than `0`, and `serviceHours` is non-empty. |
 | serviceHours          | Service windows when preparation can take place (same structure as `openingHours`, independent of opening hours). Only evaluated together with `preparationLeadTimeMinutes` on schedule-related bookables. |
+| bufferTimeBeforeMinutes | Optional capacity buffer before each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`. Blocks back-to-back bookings in calendar and checkout capacity checks. |
+| bufferTimeAfterMinutes | Optional capacity buffer after each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`. |
 | isSpecialOpeningHoursRelated | If `true`, `specialOpeningHours` override the regular opening hours for specific dates.                                                              |
 | specialOpeningHours   | Special opening hours for specific dates.                                                                                                                   |
 | isLongRange           | If `true`, long-range bookings (e.g. weeks/months) are enabled.                                                                                            |

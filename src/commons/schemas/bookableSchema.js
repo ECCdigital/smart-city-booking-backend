@@ -151,6 +151,8 @@ const bookableSchemaDefinition = {
     type: [new Schema(serviceHoursSchemaDefinition, { _id: false })],
     default: [],
   },
+  bufferTimeBeforeMinutes: { type: Number, default: null, min: 0 },
+  bufferTimeAfterMinutes: { type: Number, default: null, min: 0 },
   isSpecialOpeningHoursRelated: { type: Boolean, default: false },
   specialOpeningHours: { type: [Object], default: [] },
   isLongRange: { type: Boolean, default: false },

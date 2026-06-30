@@ -357,6 +357,8 @@ class Bookable {
       openingHours: this.openingHours,
       preparationLeadTimeMinutes: this.preparationLeadTimeMinutes,
       serviceHours: this.serviceHours,
+      bufferTimeBeforeMinutes: this.bufferTimeBeforeMinutes,
+      bufferTimeAfterMinutes: this.bufferTimeAfterMinutes,
       isSpecialOpeningHoursRelated: this.isSpecialOpeningHoursRelated,
       specialOpeningHours: this.specialOpeningHours,
       isLongRange: this.isLongRange,

@@ -1,4 +1,9 @@
 const { isRangeOverlap } = require("range-overlap");
+const {
+  getBookingBufferMs,
+  overlapsBufferedInterval,
+  widenQueryWindow,
+} = require("../availability/booking-buffer");
 const { Booking } = require("../entities/booking/booking");
 const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
@@ -239,6 +244,7 @@ class BookingManager {
    * @param {number} timeBegin
    * @param {number} timeEnd
    * @param {string|null} bookingToIgnore
+   * @param {{ beforeMs?: number, afterMs?: number }} [buffer]
    * @returns {Booking[]}
    */
   static filterConcurrentBookings(
@@ -246,19 +252,38 @@ class BookingManager {
     timeBegin,
     timeEnd,
     bookingToIgnore = null,
+    buffer = { beforeMs: 0, afterMs: 0 },
   ) {
-    return bookings.filter(
-      (booking) =>
-        isRangeOverlap(
-          booking.timeBegin,
-          booking.timeEnd,
+    const { beforeMs = 0, afterMs = 0 } = buffer;
+    const useBuffer = beforeMs > 0 || afterMs > 0;
+    const queryWindow = useBuffer
+      ? widenQueryWindow(timeBegin, timeEnd, beforeMs, afterMs)
+      : { timeBegin, timeEnd };
+
+    return bookings.filter((booking) => {
+      if (booking.isRejected || booking.id === bookingToIgnore) {
+        return false;
+      }
+
+      if (useBuffer) {
+        return overlapsBufferedInterval(
           timeBegin,
           timeEnd,
-          true,
-        ) &&
-        !booking.isRejected &&
-        booking.id !== bookingToIgnore,
-    );
+          booking.timeBegin,
+          booking.timeEnd,
+          beforeMs,
+          afterMs,
+        );
+      }
+
+      return isRangeOverlap(
+        booking.timeBegin,
+        booking.timeEnd,
+        queryWindow.timeBegin,
+        queryWindow.timeEnd,
+        true,
+      );
+    });
   }
 
   /**

@@ -8,6 +8,11 @@ const {
 const {
   evaluateTicketParentCapacityIntervals,
 } = require("../../availability/availability-rules/parent-child-rules");
+const {
+  getBookingBufferMs,
+  widenQueryWindow,
+} = require("../../availability/booking-buffer");
+const BookingManager = require("../../data-managers/booking-manager");
 const { CAPACITY_MODES } = require("../../availability/availability-rules/types");
 const { intersectAvailability } = require("./availability-interval-merger");
 
@@ -33,8 +38,29 @@ function getBookingsForCapacityCheck(
   windowStart,
   windowEnd,
 ) {
-  if (isTimeRelatedBookable(originBookable)) {
-    return context.getConcurrentBookings(bookable.id, windowStart, windowEnd);
+  const useTimeOverlap = isTimeRelatedBookable(originBookable);
+
+  if (useTimeOverlap) {
+    const buffer = getBookingBufferMs(bookable);
+    const queryWindow = widenQueryWindow(
+      windowStart,
+      windowEnd,
+      buffer.beforeMs,
+      buffer.afterMs,
+    );
+    const bookings = context.getConcurrentBookings(
+      bookable.id,
+      queryWindow.timeBegin,
+      queryWindow.timeEnd,
+    );
+
+    return BookingManager.filterConcurrentBookings(
+      bookings,
+      windowStart,
+      windowEnd,
+      null,
+      buffer,
+    );
   }
 
   return context.getRelatedBookings(bookable.id);
@@ -110,6 +136,7 @@ function computeWindowAvailability(
 ) {
   const useTimeOverlap = isTimeRelatedBookable(originBookable);
   const constraintSets = [];
+  const originBuffer = getBookingBufferMs(originBookable);
 
   constraintSets.push(
     evaluateCapacityIntervals({
@@ -127,10 +154,14 @@ function computeWindowAvailability(
       requestedAmount: amount,
       mode: CAPACITY_MODES.ADDITIVE,
       useTimeOverlap,
+      bufferBeforeMs: originBuffer.beforeMs,
+      bufferAfterMs: originBuffer.afterMs,
     }),
   );
 
   for (const parentBookable of context.parentBookables) {
+    const parentBuffer = getBookingBufferMs(parentBookable);
+
     if (originBookable.type === "ticket") {
       constraintSets.push(
         evaluateTicketParentCapacityIntervals({
@@ -147,6 +178,8 @@ function computeWindowAvailability(
           relatedBookables: context.getRelatedBookablesFor(parentBookable.id),
           requestedAmount: amount,
           useTimeOverlap,
+          bufferBeforeMs: parentBuffer.beforeMs,
+          bufferAfterMs: parentBuffer.afterMs,
         }),
       );
     } else {
@@ -166,6 +199,8 @@ function computeWindowAvailability(
           requestedAmount: 1,
           mode: CAPACITY_MODES.EXCLUSIVE,
           useTimeOverlap,
+          bufferBeforeMs: parentBuffer.beforeMs,
+          bufferAfterMs: parentBuffer.afterMs,
         }),
       );
     }
@@ -175,6 +210,8 @@ function computeWindowAvailability(
     if (childBookable.id === originBookable.id) {
       continue;
     }
+
+    const childBuffer = getBookingBufferMs(childBookable);
 
     constraintSets.push(
       evaluateCapacityIntervals({
@@ -192,6 +229,8 @@ function computeWindowAvailability(
         requestedAmount: amount,
         mode: CAPACITY_MODES.ADDITIVE,
         useTimeOverlap,
+        bufferBeforeMs: childBuffer.beforeMs,
+        bufferAfterMs: childBuffer.afterMs,
       }),
     );
   }

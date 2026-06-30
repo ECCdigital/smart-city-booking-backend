@@ -1,4 +1,9 @@
 const OpeningHoursManager = require("../utilities/opening-hours-manager");
+const BookingManager = require("../data-managers/booking-manager");
+const {
+  getBookingBufferMs,
+  widenQueryWindow,
+} = require("./booking-buffer");
 const {
   isTimeRelatedBookable,
   sumBookedAmount,
@@ -41,8 +46,27 @@ async function getBookingsForCapacityCheck(
   { useTimeOverlap = isTimeRelatedBookable(bookable) } = {},
 ) {
   if (useTimeOverlap) {
-    return resolve(
-      provider.getConcurrentBookings(bookable.id, timeBegin, timeEnd),
+    const buffer = getBookingBufferMs(bookable);
+    const queryWindow = widenQueryWindow(
+      timeBegin,
+      timeEnd,
+      buffer.beforeMs,
+      buffer.afterMs,
+    );
+    const bookings = await resolve(
+      provider.getConcurrentBookings(
+        bookable.id,
+        queryWindow.timeBegin,
+        queryWindow.timeEnd,
+      ),
+    );
+
+    return BookingManager.filterConcurrentBookings(
+      bookings,
+      timeBegin,
+      timeEnd,
+      null,
+      buffer,
     );
   }
 
