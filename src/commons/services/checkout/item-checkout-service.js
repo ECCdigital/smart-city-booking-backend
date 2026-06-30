@@ -23,6 +23,7 @@ const {
   runTimePeriodCheck,
   runEventDateCheck,
   runMaxBookingDateCheck,
+  runMinBookingLeadTimeCheck,
 } = require("../../availability/checkout-availability-checks");
 const {
   isTimeRelatedBookable,
@@ -684,6 +685,10 @@ class ItemCheckoutService {
     return runMaxBookingDateCheck(await this._availabilityParams());
   }
 
+  async checkMinBookingLeadTime() {
+    return runMinBookingLeadTimeCheck(await this._availabilityParams());
+  }
+
   async checkEventDate() {
     const provider = await this._getAvailabilityProvider();
     return runEventDateCheck({
@@ -748,6 +753,7 @@ class ItemCheckoutService {
         this.checkParentAvailability(),
         this.checkChildBookings(),
         this.checkMaxBookingDate(),
+        this.checkMinBookingLeadTime(),
       ]);
     }
 

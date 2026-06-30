@@ -27,6 +27,9 @@ const {
 const {
   applyBookingDurationRules,
 } = require("./availability/availability-duration-filter");
+const {
+  generateTimePeriodsFromLeadTime,
+} = require("../availability/lead-time-calculator");
 const { NotFoundError } = require("../../errors/BaseError");
 const bunyan = require("bunyan");
 
@@ -148,11 +151,18 @@ class CalendarServiceV2 {
       maxBookingAdvanceInMonths,
     );
 
+    const leadTimePeriods = generateTimePeriodsFromLeadTime(
+      startDate,
+      endDate,
+      bookable,
+    );
+
     const availablePeriods = mergePeriods(
       availableOpeningHoursPeriods,
       availableSpecialOpeningHoursPeriods,
       availableTimePeriods,
       maxBookingAdvancePeriods,
+      leadTimePeriods,
     );
 
     const items = [];

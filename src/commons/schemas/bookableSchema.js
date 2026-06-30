@@ -119,6 +119,8 @@ const bookableSchemaDefinition = {
   timePeriods: { type: [Object], default: [] },
   isOpeningHoursRelated: { type: Boolean, default: false },
   openingHours: { type: [Object], default: [] },
+  preparationLeadTimeMinutes: { type: Number, default: null, min: 0 },
+  serviceHours: { type: [Object], default: [] },
   isSpecialOpeningHoursRelated: { type: Boolean, default: false },
   specialOpeningHours: { type: [Object], default: [] },
   isLongRange: { type: Boolean, default: false },

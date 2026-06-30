@@ -219,6 +219,14 @@ Example:
       "endTime": "18:00"
     }
   ],
+  "preparationLeadTimeMinutes": 120,
+  "serviceHours": [
+    {
+      "weekdays": [1, 2, 3, 4, 5],
+      "startTime": "08:00",
+      "endTime": "18:00"
+    }
+  ],
   "isSpecialOpeningHoursRelated": false,
   "specialOpeningHours": [
     {
@@ -306,6 +314,8 @@ Key fields of a bookable:
 | timePeriods           | Weekly repeating time windows when the bookable can be used.                                                                                               |
 | isOpeningHoursRelated | If `true`, availability is derived from `openingHours`.                                                                                                     |
 | openingHours          | Regular opening hours per weekday.                                                                                                                          |
+| preparationLeadTimeMinutes | Minimum preparation time in minutes before booking start (schedule-related only). Requires `serviceHours`.                                            |
+| serviceHours          | Service windows when preparation can take place (same structure as `openingHours`, independent of opening hours).                                          |
 | isSpecialOpeningHoursRelated | If `true`, `specialOpeningHours` override the regular opening hours for specific dates.                                                              |
 | specialOpeningHours   | Special opening hours for specific dates.                                                                                                                   |
 | isLongRange           | If `true`, long-range bookings (e.g. weeks/months) are enabled.                                                                                            |
