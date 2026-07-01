@@ -5,6 +5,12 @@ Notable changes for the Smart City Booking Backend.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Releases are tagged `v4.x.x` from branch `version/4.x`.
 
+## [4.1.1] — 2026-07-01
+
+### Fixed
+
+- Invoice number generation now uses `invoiceNumberPrefix` instead of `receiptNumberPrefix`
+
 ## [4.1.0] — 2026-06-30
 
 ### Added
@@ -47,6 +53,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.1.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/ECCdigital/smart-city-booking-backend/releases/tag/v4.0.0
