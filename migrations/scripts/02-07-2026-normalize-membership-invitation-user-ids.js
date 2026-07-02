@@ -204,7 +204,7 @@ module.exports = {
           type: "single",
           status: "active",
           usedCount: { $lt: 1 },
-          intendedUserId: { $exists: true, $ne: "" },
+          intendedUserId: { $exists: true, $type: "string", $gt: "" },
         },
       },
     );
