@@ -7,7 +7,7 @@ const formatters = require("./pdf-formatters");
  * repeating table headers and page footers in the editor.
  */
 
-const SAMPLE_ITEM_COUNT = 30;
+const SAMPLE_ITEM_COUNT = 60;
 
 function renderPartial(name, data) {
   return Handlebars.compile(`{{> ${name} }}`)(data);
@@ -72,10 +72,10 @@ function buildReceiptSampleData() {
   const coupon = null;
 
   const bookingEntries =
-    `<p>Buchungsnummer: BK-2026-0042 <br/>` +
-    `Buchungszeitraum: 01.08.2026, 09:00 – 01.08.2026, 17:00</p>` +
-    `<p>Zahlungsdatum: 15.07.2026, 10:24<br/>` +
-    `Zahlungsmethode: Überweisung</p>` +
+    '<p style="font-size: 10px; color: #444; margin: 0 0 6px; line-height: 1.5">' +
+    "Buchung <strong>BK-2026-0042</strong> &nbsp;·&nbsp; " +
+    "01.08.2026, 09:00 – 01.08.2026, 17:00 &nbsp;·&nbsp; " +
+    "bezahlt am 15.07.2026, 10:24 per Überweisung</p>" +
     renderPartial("pdfBookingItemsTable", {
       tableClass: "booking-detail",
       items,

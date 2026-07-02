@@ -5,6 +5,10 @@
  */
 
 function formatDateTime(value) {
+  const date = new Date(value);
+  // Bereits formatierte Strings (z. B. "15.07.2026, 10:24") unverändert
+  // durchreichen statt mit "Invalid time value" zu werfen.
+  if (isNaN(date.getTime())) return String(value);
   const formatter = new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
@@ -13,16 +17,18 @@ function formatDateTime(value) {
     minute: "2-digit",
     timeZone: "Europe/Berlin",
   });
-  return formatter.format(new Date(value));
+  return formatter.format(date);
 }
 
 function formatDate(value) {
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return String(value);
   const formatter = new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
-  return formatter.format(new Date(value));
+  return formatter.format(date);
 }
 
 function formatCurrency(value) {

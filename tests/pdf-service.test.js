@@ -158,7 +158,8 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("Sitzungsraum"));
     assert.ok(html.includes("Beamer"));
     assert.ok(html.includes("Musterfirma GmbH"));
-    assert.ok(html.includes("Buchungszeitraum"));
+    assert.ok(html.includes("Buchung <strong>booking-1</strong>"));
+    assert.ok(html.includes("bezahlt am"));
     assert.ok(html.includes("Gesamt (brutto)"));
     assert.ok(html.includes("100,00"));
     assert.ok(html.includes("119,00"));

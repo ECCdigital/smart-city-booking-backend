@@ -1,44 +1,34 @@
-<table style="width: 100%">
+<table class="pdf-items booked-items">
   <thead>
-    <tr class="heading">
-      <td>Buchungs-ID</td>
-      <td>Zeitraum</td>
-      <td style="text-align: right">Gesamt (netto)</td>
+    <tr>
+      <th>Buchungs-ID</th>
+      <th>Zeitraum</th>
+      <th class="num">Gesamt (netto)</th>
     </tr>
   </thead>
   <tbody>
     {{#each bookings}}
-    <tr class="item" style="border-bottom: 1px solid #eee">
-      <td style="padding: 5px">{{id}}</td>
-      <td style="padding: 5px">{{period}}</td>
-      <td style="padding: 5px; text-align: right">{{netto}}</td>
+    <tr class="item">
+      <td>{{id}}</td>
+      <td>{{period}}</td>
+      <td class="num">{{netto}}</td>
     </tr>
     <tr>
-      <td colspan="3" style="padding: 5px">
-        <strong>Details / Artikel:</strong><br />
-        <ul style="margin: 0; padding-left: 20px">
-          {{#each items}}
-          <li>{{title}} x{{amount}} ({{totalPrice}})</li>
-          {{else}}
-          <li>Keine Buchungsobjekte vorhanden.</li>
-          {{/each}}
-        </ul>
+      <td colspan="3" class="sub">
+        {{#each items}}{{title}} ×{{amount}} ({{totalPrice}}){{#unless @last}}
+        &nbsp;·&nbsp; {{/unless}}{{else}}Keine Buchungsobjekte
+        vorhanden.{{/each}}
       </td>
     </tr>
     {{/each}}
+    <tr class="totals-sub netto">
+      <td colspan="3">
+        Gesamt (netto) {{totals.netto}} &nbsp;·&nbsp; zzgl. MwSt. {{totals.vat}}
+      </td>
+    </tr>
+    <tr class="brutto">
+      <td colspan="2">Gesamt (brutto)</td>
+      <td class="num">{{totals.brutto}}</td>
+    </tr>
   </tbody>
-</table>
-<table style="width: 100%">
-  <tr>
-    <td>Gesamt (netto):</td>
-    <td>{{totals.netto}}</td>
-  </tr>
-  <tr>
-    <td>zzgl. MwSt.:</td>
-    <td>{{totals.vat}}</td>
-  </tr>
-  <tr>
-    <td><strong>Gesamt (brutto):</strong></td>
-    <td><strong>{{totals.brutto}}</strong></td>
-  </tr>
 </table>

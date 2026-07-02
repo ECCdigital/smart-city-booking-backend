@@ -32,32 +32,10 @@
       .invoice-box table tr.item td {
         border-bottom: 1px solid #eee;
       }
-      .booked-items .bi-amount,
-      .booked-items .bi-price-item,
-      .booked-items .bi-price-total {
-        text-align: right;
-      }
-      .booked-items .bi-title {
-        text-align: left;
-      }
-      .booked-items .netto td,
-      .booked-items .mwst td,
-      .booked-items .brutto td {
-        text-align: right;
-      }
-      .booked-items .netto td:first-child,
-      .booked-items .mwst td:first-child,
-      .booked-items .brutto td:first-child {
-        text-align: left;
-      }
-      .booked-items .netto td {
-        padding-top: 12px;
-        border-top: 2px solid #000;
-      }
-      .booked-items .brutto td {
-        border-top: 2px solid #000;
-        border-bottom: 2px solid #000;
-      }
+      /* Die Positionstabelle ({{{mainContent}}}) bringt ihr kompaktes
+         Standard-Styling selbst mit (table.pdf-items). Eigene Anpassungen
+         sind mit spezifischeren Selektoren möglich, z. B.
+         table.pdf-items.booked-items td { ... } */
       .header {
         font-weight: bold;
         font-size: x-large;

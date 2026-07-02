@@ -22,6 +22,11 @@ const logger = bunyan.createLogger({
  * - table rows are kept on one page,
  * - table headers repeat on every page,
  * - `.page-break` / `.avoid-break` utility classes for template authors.
+ * - Compact styling for the built-in item table partials (`table.pdf-items`),
+ *   so the partial output looks consistent even in tenant templates that only
+ *   render {{{bookingEntries}}} / {{{mainContent}}}. Template authors can
+ *   override these rules with more specific selectors, e.g.
+ *   `table.pdf-items.booking-detail td { ... }`.
  */
 const PRINT_CSS = `
   thead { display: table-header-group; }
@@ -29,6 +34,47 @@ const PRINT_CSS = `
   tr { page-break-inside: avoid; }
   .page-break { page-break-before: always; }
   .avoid-break { page-break-inside: avoid; }
+
+  table.pdf-items { width: 100%; border-collapse: collapse; }
+  table.pdf-items th,
+  table.pdf-items td {
+    padding: 2px 6px;
+    font-size: 9px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items .num { text-align: right; white-space: nowrap; }
+  table.pdf-items td.sub {
+    color: #555;
+    font-size: 8px;
+    padding-top: 0;
+    padding-bottom: 4px;
+  }
+  table.pdf-items tr.coupon td { color: #555; }
+  table.pdf-items tr.totals-sub td {
+    padding-top: 4px;
+    border-top: 2px solid #000;
+    text-align: right;
+    color: #444;
+  }
+  table.pdf-items tr.brutto td {
+    font-weight: bold;
+    font-size: 10px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+    background: none;
+    text-align: right;
+  }
+  table.pdf-items tr.brutto td:first-child,
+  table.pdf-items tr.totals-sub td:first-child { text-align: left; }
 `;
 
 const BASE_MARGIN = "10mm";
@@ -193,10 +239,12 @@ class PdfService {
     const paymentMethod = formatters.translatePayMethod(booking.paymentMethod);
 
     const bookingEntries =
-      `<p>Buchungsnummer: ${PdfService._escape(booking.id)} <br/>` +
-      `Buchungszeitraum: ${bookingPeriod}</p>` +
-      `<p>Zahlungsdatum: ${payDate}<br/>` +
-      `Zahlungsmethode: ${paymentMethod}</p>` +
+      PdfService._buildBookingMetaHtml({
+        id: booking.id,
+        period: bookingPeriod,
+        paymentDate: payDate,
+        paymentMethod,
+      }) +
       PdfService._renderPartial("pdfBookingItemsTable", {
         tableClass: "booking-detail",
         items,
@@ -617,6 +665,21 @@ class PdfService {
     lines.push(esc(booking.street || ""));
     lines.push(`${esc(booking.zipCode || "")} ${esc(booking.location || "")}`);
     return lines.join("<br/>\n");
+  }
+
+  /**
+   * Builds the compact one-line booking metadata block that precedes the
+   * item table in {{{bookingEntries}}}. Uses inline styles because the HTML
+   * is injected into arbitrary tenant templates.
+   */
+  static _buildBookingMetaHtml({ id, period, paymentDate, paymentMethod }) {
+    return (
+      '<p style="font-size: 10px; color: #444; margin: 0 0 6px; line-height: 1.5">' +
+      `Buchung <strong>${PdfService._escape(id)}</strong> &nbsp;·&nbsp; ` +
+      `${PdfService._escape(period)} &nbsp;·&nbsp; ` +
+      `bezahlt am ${PdfService._escape(paymentDate)} per ${PdfService._escape(paymentMethod)}` +
+      "</p>"
+    );
   }
 
   /**
