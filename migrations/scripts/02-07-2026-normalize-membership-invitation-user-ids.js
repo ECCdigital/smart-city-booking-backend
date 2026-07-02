@@ -191,5 +191,22 @@ module.exports = {
     console.log(
       `Normalized ${normalizedInvitations} invitation intendedUserId(s)`,
     );
+
+    // Build invitation indexes after deduplication/normalization so startup
+    // cannot fail on legacy duplicates before this migration has run.
+    await Invitation.collection.createIndex({ token: 1 }, { unique: true });
+    await Invitation.collection.createIndex(
+      { tenantId: 1, intendedUserId: 1 },
+      {
+        unique: true,
+        collation: { locale: "en", strength: 2 },
+        partialFilterExpression: {
+          type: "single",
+          status: "active",
+          usedCount: { $lt: 1 },
+          intendedUserId: { $exists: true, $ne: "" },
+        },
+      },
+    );
   },
 };
