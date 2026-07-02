@@ -7,9 +7,20 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- User ID normalization utility for case-insensitive email/user matching across invitation and membership flows
+- Migration `02-07-2026-normalize-membership-invitation-user-ids` to normalize invitation/membership user IDs and deduplicate conflicting membership and single-use invitation records
+
 ### Changed
 
 - Preparation lead time (`preparationLeadTimeMinutes` / `serviceHours`) now also applies to time-period- and block-period-related bookables, not only schedule-related ones
+
+### Fixed
+
+- Invitation acceptance, rejection, and verification now compare intended user IDs case-insensitively
+- Tenant user onboarding and invitation resend endpoints now normalize user IDs before membership/invitation lookups
+- Prevent creating duplicate active single-use invitations for the same tenant and intended user
 
 ## [4.1.1] — 2026-07-01
 

@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const InvitationManager = require("../data-managers/invitation-manager");
 const ChallengeManager = require("../data-managers/challenge-manager");
 const ChallengeService = require("./challenge/challenge-service");
+const { normalizeUserId, userIdsMatch } = require("../utilities/user-id-utils");
 
 class InvitationService {
   static async createInvitation(
@@ -20,6 +21,30 @@ class InvitationService {
   ) {
     if (!params.tenantId) {
       throw new Error("Tenant ID is required to create an invitation");
+    }
+
+    if (params.intendedUserId) {
+      params.intendedUserId = normalizeUserId(params.intendedUserId);
+    }
+
+    if (params.type === "single" && params.intendedUserId) {
+      const existingInvitations =
+        await InvitationManager.getInvitationsByTenantIDAndUserID(
+          params.tenantId,
+          params.intendedUserId,
+        );
+      const activeDuplicate = existingInvitations.find(
+        (invitation) =>
+          invitation.type === "single" &&
+          invitation.status === "active" &&
+          invitation.usedCount < 1,
+      );
+      if (activeDuplicate) {
+        throw {
+          message: "Active invitation already exists for this user",
+          code: 409,
+        };
+      }
     }
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -40,10 +65,25 @@ class InvitationService {
       challenges: challengeRefs,
     });
 
-    return await InvitationManager.createInvitation(
-      params.tenantId,
-      invitation,
-    );
+    try {
+      return await InvitationManager.createInvitation(
+        params.tenantId,
+        invitation,
+      );
+    } catch (error) {
+      if (
+        params.type === "single" &&
+        params.intendedUserId &&
+        isDuplicateSingleInvitationError(error)
+      ) {
+        throw {
+          message: "Active invitation already exists for this user",
+          code: 409,
+        };
+      }
+
+      throw error;
+    }
   }
 
   static async sendInvitationMail(tenantID, token, recipientEmail = null) {
@@ -442,7 +482,7 @@ class InvitationService {
 
     if (
       invitation &&
-      invitation.intendedUserId === userID &&
+      userIdsMatch(invitation.intendedUserId, userID) &&
       invitation.type === "single"
     ) {
       await InvitationManager.deleteInvitation(tenantID, token);
@@ -488,7 +528,10 @@ class InvitationService {
     for (const membership of memberships) {
       if (membership.status === "suspended") continue;
       for (const invite of membership.invitations || []) {
-        if (invite.status === "pending" || invite.status === "pending_approval") {
+        if (
+          invite.status === "pending" ||
+          invite.status === "pending_approval"
+        ) {
           membershipTokens.add(invite.token);
         }
       }
@@ -524,7 +567,7 @@ class InvitationService {
 
     validateInvitation(invitation, tenantID, userID);
 
-    if (invitation.intendedUserId !== userID) {
+    if (!userIdsMatch(invitation.intendedUserId, userID)) {
       throw new Error("This invitation is not intended for you");
     }
 
@@ -744,6 +787,10 @@ class InvitationService {
 
 module.exports = InvitationService;
 
+function isDuplicateSingleInvitationError(error) {
+  return error && error.code === 11000;
+}
+
 function validateInvitation(invitation, tenantID, userID = null) {
   if (!invitation) {
     throw { message: "Invalid invitation token", code: 404 };
@@ -776,7 +823,7 @@ function validateInvitation(invitation, tenantID, userID = null) {
   if (
     userID &&
     invitation.intendedUserId &&
-    invitation.intendedUserId !== userID
+    !userIdsMatch(invitation.intendedUserId, userID)
   ) {
     throw { message: "This invitation is not intended for you", code: 403 };
   }

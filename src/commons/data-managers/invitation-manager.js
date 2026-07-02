@@ -1,4 +1,5 @@
 const InvitationModel = require("./models/invitationModel");
+const { normalizeUserId } = require("../utilities/user-id-utils");
 
 class InvitationManager {
   static async getInvitationsByTenantID(tenantID) {
@@ -17,14 +18,14 @@ class InvitationManager {
   static async getInvitationsByTenantIDAndUserID(tenantID, userID) {
     const rawInvitation = await InvitationModel.find({
       tenantId: tenantID,
-      intendedUserId: userID,
+      intendedUserId: normalizeUserId(userID),
     });
     return rawInvitation.map((raw) => raw.toEntity());
   }
 
   static async getInvitationByUserID(userID) {
     const rawInvitation = await InvitationModel.find({
-      intendedUserId: userID,
+      intendedUserId: normalizeUserId(userID),
     });
     return rawInvitation.map((raw) => raw.toEntity());
   }
