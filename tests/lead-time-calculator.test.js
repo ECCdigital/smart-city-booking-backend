@@ -4,6 +4,7 @@ const {
   getEarliestBookableStart,
   generateLeadTimeBlockedPeriods,
   isLeadTimeConfigured,
+  isLeadTimeApplicableBookable,
 } = require("../src/commons/availability/lead-time-calculator");
 
 const SERVICE_HOURS = [
@@ -140,15 +141,82 @@ describe("lead-time-calculator", () => {
     );
   });
 
-  it("ignores lead time for non schedule-related bookables", () => {
+  it("ignores lead time for bookables without an applicable booking mode", () => {
     const configured = bookable({ isScheduleRelated: false });
 
+    assert.strictEqual(isLeadTimeApplicableBookable(configured), false);
     assert.strictEqual(isLeadTimeConfigured(configured), false);
     assert.strictEqual(
       hasSufficientPreparationLeadTime(
         configured,
         at("2026-06-15T08:00:00"),
         new Date("2026-06-12T18:00:00"),
+      ),
+      true,
+    );
+  });
+
+  it("ignores lead time for long-range bookables", () => {
+    const configured = bookable({
+      isScheduleRelated: false,
+      isLongRange: true,
+    });
+
+    assert.strictEqual(isLeadTimeApplicableBookable(configured), false);
+    assert.strictEqual(isLeadTimeConfigured(configured), false);
+  });
+
+  it("applies lead time to time-period-related bookables", () => {
+    const timePeriodBookable = bookable({
+      isScheduleRelated: false,
+      isTimePeriodRelated: true,
+    });
+
+    assert.strictEqual(isLeadTimeApplicableBookable(timePeriodBookable), true);
+    assert.strictEqual(isLeadTimeConfigured(timePeriodBookable), true);
+
+    const now = new Date("2026-06-12T18:00:00");
+    assert.strictEqual(
+      hasSufficientPreparationLeadTime(
+        timePeriodBookable,
+        at("2026-06-15T08:00:00"),
+        now,
+      ),
+      false,
+    );
+    assert.strictEqual(
+      hasSufficientPreparationLeadTime(
+        timePeriodBookable,
+        at("2026-06-15T10:00:00"),
+        now,
+      ),
+      true,
+    );
+  });
+
+  it("applies lead time to block-period-related bookables", () => {
+    const blockPeriodBookable = bookable({
+      isScheduleRelated: false,
+      isBlockPeriodRelated: true,
+    });
+
+    assert.strictEqual(isLeadTimeApplicableBookable(blockPeriodBookable), true);
+    assert.strictEqual(isLeadTimeConfigured(blockPeriodBookable), true);
+
+    const now = new Date("2026-06-05T17:30:00");
+    assert.strictEqual(
+      hasSufficientPreparationLeadTime(
+        blockPeriodBookable,
+        at("2026-06-06T08:00:00"),
+        now,
+      ),
+      false,
+    );
+    assert.strictEqual(
+      hasSufficientPreparationLeadTime(
+        blockPeriodBookable,
+        at("2026-06-06T08:00:00"),
+        new Date("2026-06-05T10:00:00"),
       ),
       true,
     );

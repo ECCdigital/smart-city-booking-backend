@@ -1,4 +1,5 @@
 const assert = require("assert");
+const sinon = require("sinon");
 const { generateTimePeriodInstances } = require("../src/commons/utilities/time-period-generator");
 const {
   isTimePeriodBookingValid,
@@ -21,6 +22,14 @@ const { normalizeCheckError } = require("../src/commons/services/checkout/normal
 const { CHECKOUT_REASONS } = require("../src/commons/services/checkout/checkout-reasons");
 
 const TENANT_ID = "tenant-1";
+
+const SERVICE_HOURS = [
+  {
+    weekdays: [1, 2, 3, 4, 5],
+    startTime: "08:00",
+    endTime: "18:00",
+  },
+];
 
 const morningSlot = {
   weekdays: [1, 2, 3, 4, 5],
@@ -198,5 +207,46 @@ describe("time period checkout and availability rules", () => {
     await checkout.init(bookable);
     const result = await checkout.checkTimePeriod();
     assert.strictEqual(result.available, true);
+  });
+
+  it("returns insufficient-lead-time from checkWindowAvailability", async () => {
+    const bookable = timePeriodBookable({
+      preparationLeadTimeMinutes: 120,
+      serviceHours: SERVICE_HOURS,
+    });
+    const mondaySlot = generateTimePeriodInstances(
+      localDate("2026-06-15"),
+      localDate("2026-06-16"),
+      [morningSlot],
+    ).find((slot) => new Date(slot.timeBegin).getDay() === 1);
+    const provider = buildProvider(bookable);
+    const originalMembershipLookup =
+      MembershipManager.getMembershipsByTenantAndRoles;
+    const clock = sinon.useFakeTimers(localDate("2026-06-15", "09:30").getTime());
+
+    MembershipManager.getMembershipsByTenantAndRoles = async () => [];
+
+    try {
+      const insufficient = await checkWindowAvailability(provider, {
+        timeBegin: mondaySlot.timeBegin,
+        timeEnd: mondaySlot.timeEnd,
+        amount: 1,
+        user: "user-1",
+      });
+      clock.setSystemTime(localDate("2026-06-15", "08:00").getTime());
+      const sufficient = await checkWindowAvailability(provider, {
+        timeBegin: mondaySlot.timeBegin,
+        timeEnd: mondaySlot.timeEnd,
+        amount: 1,
+        user: "user-1",
+      });
+
+      assert.strictEqual(insufficient.available, false);
+      assert.strictEqual(insufficient.reason, "insufficient-lead-time");
+      assert.strictEqual(sufficient.available, true);
+    } finally {
+      clock.restore();
+      MembershipManager.getMembershipsByTenantAndRoles = originalMembershipLookup;
+    }
   });
 });

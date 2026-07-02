@@ -5,6 +5,12 @@ Notable changes for the Smart City Booking Backend.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Releases are tagged `v4.x.x` from branch `version/4.x`.
 
+## [Unreleased]
+
+### Changed
+
+- Preparation lead time (`preparationLeadTimeMinutes` / `serviceHours`) now also applies to time-period- and block-period-related bookables, not only schedule-related ones
+
 ## [4.1.1] — 2026-07-01
 
 ### Fixed

@@ -1,5 +1,6 @@
 /**
- * Preparation lead-time calculation for schedule-related bookables.
+ * Preparation lead-time calculation for schedule-, time-period-, and
+ * block-period-related bookables.
  *
  * A booking is allowed when, between now and timeBegin, at least one service
  * window contains a contiguous preparation block of preparationLeadTimeMinutes
@@ -11,9 +12,21 @@
  * @param {import("../entities/bookable/bookable").Bookable|Object|null|undefined} bookable
  * @returns {boolean}
  */
+function isLeadTimeApplicableBookable(bookable) {
+  return (
+    bookable?.isScheduleRelated === true ||
+    bookable?.isTimePeriodRelated === true ||
+    bookable?.isBlockPeriodRelated === true
+  );
+}
+
+/**
+ * @param {import("../entities/bookable/bookable").Bookable|Object|null|undefined} bookable
+ * @returns {boolean}
+ */
 function isLeadTimeConfigured(bookable) {
   return (
-    bookable?.isScheduleRelated === true &&
+    isLeadTimeApplicableBookable(bookable) &&
     Number(bookable.preparationLeadTimeMinutes) > 0 &&
     Array.isArray(bookable.serviceHours) &&
     bookable.serviceHours.length > 0
@@ -213,6 +226,7 @@ function generateLeadTimeBlockedPeriods(
 }
 
 module.exports = {
+  isLeadTimeApplicableBookable,
   isLeadTimeConfigured,
   hasSufficientPreparationLeadTime,
   getEarliestBookableStart,
