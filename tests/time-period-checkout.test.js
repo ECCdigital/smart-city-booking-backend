@@ -222,7 +222,9 @@ describe("time period checkout and availability rules", () => {
     const provider = buildProvider(bookable);
     const originalMembershipLookup =
       MembershipManager.getMembershipsByTenantAndRoles;
-    const clock = sinon.useFakeTimers(localDate("2026-06-15", "09:30").getTime());
+    const clock = sinon.useFakeTimers(
+      localDate("2026-06-15", "09:30").getTime(),
+    );
 
     MembershipManager.getMembershipsByTenantAndRoles = async () => [];
 
@@ -246,7 +248,8 @@ describe("time period checkout and availability rules", () => {
       assert.strictEqual(sufficient.available, true);
     } finally {
       clock.restore();
-      MembershipManager.getMembershipsByTenantAndRoles = originalMembershipLookup;
+      MembershipManager.getMembershipsByTenantAndRoles =
+        originalMembershipLookup;
     }
   });
 });
