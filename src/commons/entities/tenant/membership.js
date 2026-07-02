@@ -8,7 +8,11 @@ class Membership {
 
     Object.keys(membershipSchemaDefinition).forEach((key) => {
       if (params[key] !== undefined) {
-        this[key] = params[key];
+        if (key === "userId" && typeof params[key] === "string") {
+          this[key] = params[key].trim().toLowerCase();
+        } else {
+          this[key] = params[key];
+        }
       }
     });
   }

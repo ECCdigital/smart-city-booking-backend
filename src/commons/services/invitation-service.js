@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const InvitationManager = require("../data-managers/invitation-manager");
 const ChallengeManager = require("../data-managers/challenge-manager");
 const ChallengeService = require("./challenge/challenge-service");
+const { normalizeUserId, userIdsMatch } = require("../utilities/user-id-utils");
 
 class InvitationService {
   static async createInvitation(
@@ -20,6 +21,30 @@ class InvitationService {
   ) {
     if (!params.tenantId) {
       throw new Error("Tenant ID is required to create an invitation");
+    }
+
+    if (params.intendedUserId) {
+      params.intendedUserId = normalizeUserId(params.intendedUserId);
+    }
+
+    if (params.type === "single" && params.intendedUserId) {
+      const existingInvitations =
+        await InvitationManager.getInvitationsByTenantIDAndUserID(
+          params.tenantId,
+          params.intendedUserId,
+        );
+      const activeDuplicate = existingInvitations.find(
+        (invitation) =>
+          invitation.type === "single" &&
+          invitation.status === "active" &&
+          invitation.usedCount < 1,
+      );
+      if (activeDuplicate) {
+        throw {
+          message: "Active invitation already exists for this user",
+          code: 409,
+        };
+      }
     }
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -442,7 +467,7 @@ class InvitationService {
 
     if (
       invitation &&
-      invitation.intendedUserId === userID &&
+      userIdsMatch(invitation.intendedUserId, userID) &&
       invitation.type === "single"
     ) {
       await InvitationManager.deleteInvitation(tenantID, token);
@@ -524,7 +549,7 @@ class InvitationService {
 
     validateInvitation(invitation, tenantID, userID);
 
-    if (invitation.intendedUserId !== userID) {
+    if (!userIdsMatch(invitation.intendedUserId, userID)) {
       throw new Error("This invitation is not intended for you");
     }
 
@@ -776,7 +801,7 @@ function validateInvitation(invitation, tenantID, userID = null) {
   if (
     userID &&
     invitation.intendedUserId &&
-    invitation.intendedUserId !== userID
+    !userIdsMatch(invitation.intendedUserId, userID)
   ) {
     throw { message: "This invitation is not intended for you", code: 403 };
   }
