@@ -21,6 +21,10 @@ const {
 const {
   mergeDefaultMailSnippets,
 } = require("../../../commons/mail-service/templates/default-mail-snippets");
+const {
+  normalizeUserId,
+  userIdsMatch,
+} = require("../../../commons/utilities/user-id-utils");
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -414,8 +418,12 @@ class TenantController {
 
       const roles = body.roles;
       const challenges = body.challenges || [];
-      const userId = body.userId;
+      const userId = normalizeUserId(body.userId);
       const type = body.type || "manually";
+
+      if (!userId) {
+        return response.status(400).send("User ID is required");
+      }
 
       if (
         await PermissionService._allowUpdateAny(
@@ -427,7 +435,9 @@ class TenantController {
         const membership =
           await MembershipManager.getMembershipsByTenantID(tenantId);
 
-        const userAlreadyInTenant = membership.find((m) => m.userId === userId);
+        const userAlreadyInTenant = membership.find((m) =>
+          userIdsMatch(m.userId, userId),
+        );
         if (userAlreadyInTenant) {
           return response.status(400).send("User already in tenant");
         }
@@ -493,7 +503,9 @@ class TenantController {
       }
     } catch (error) {
       logger.error(error);
-      response.status(500).send("Could not add user to tenant");
+      response
+        .status(error.code || 500)
+        .send(error.message || "Could not add user to tenant");
     }
   }
 
@@ -663,8 +675,12 @@ class TenantController {
   static async addOwner(request, response) {
     try {
       const tenantId = request.params.id;
-      const { userId } = request.body;
+      const userId = normalizeUserId(request.body.userId);
       const user = request.user;
+
+      if (!userId) {
+        return response.status(400).send("User ID is required");
+      }
 
       if (
         (await PermissionService._isTenantOwner(user.id, tenantId)) ||

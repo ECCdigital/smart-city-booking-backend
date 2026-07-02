@@ -362,3 +362,5 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,windows,visualstudiocode,intellij,node,git
 test.js
+
+.cursor/

@@ -13,6 +13,7 @@ const {
   getBookingDurationHours,
   hasBookingPermission,
   isWithinMaxBookingAdvance,
+  isWithinMinBookingLeadTime,
   CAPACITY_MODES,
   isBlockPeriodBookingValid,
   isTimePeriodBookingValid,
@@ -500,6 +501,26 @@ async function runMaxBookingDateCheck({ provider, originBookable, timeBegin }) {
   };
 }
 
+/**
+ * @param {Object} params
+ * @returns {Promise<Object>}
+ */
+async function runMinBookingLeadTimeCheck({ originBookable, timeBegin }) {
+  if (isWithinMinBookingLeadTime(timeBegin, originBookable)) {
+    return { checkType: CHECK_TYPES.INSUFFICIENT_LEAD_TIME, available: true };
+  }
+
+  const preparationLeadTimeMinutes = Number(
+    originBookable.preparationLeadTimeMinutes,
+  );
+
+  throw {
+    checkType: CHECK_TYPES.INSUFFICIENT_LEAD_TIME,
+    available: false,
+    message: `Die Buchung für das Objekt ${originBookable.title} erfordert eine Vorbereitungszeit von ${preparationLeadTimeMinutes} Minuten innerhalb der Servicezeiten.`,
+  };
+}
+
 module.exports = {
   getBookedAmountForBookableWindow,
   runPermissionCheck,
@@ -512,4 +533,5 @@ module.exports = {
   runTimePeriodCheck,
   runEventDateCheck,
   runMaxBookingDateCheck,
+  runMinBookingLeadTimeCheck,
 };

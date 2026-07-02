@@ -219,6 +219,16 @@ Example:
       "endTime": "18:00"
     }
   ],
+  "preparationLeadTimeMinutes": 120,
+  "serviceHours": [
+    {
+      "weekdays": [1, 2, 3, 4, 5],
+      "startTime": "08:00",
+      "endTime": "18:00"
+    }
+  ],
+  "bufferTimeBeforeMinutes": 0,
+  "bufferTimeAfterMinutes": 30,
   "isSpecialOpeningHoursRelated": false,
   "specialOpeningHours": [
     {
@@ -306,6 +316,10 @@ Key fields of a bookable:
 | timePeriods           | Weekly repeating time windows when the bookable can be used.                                                                                               |
 | isOpeningHoursRelated | If `true`, availability is derived from `openingHours`.                                                                                                     |
 | openingHours          | Regular opening hours per weekday.                                                                                                                          |
+| preparationLeadTimeMinutes | Minimum preparation time in minutes before booking start. Lead-time enforcement is active when `isScheduleRelated`, `isTimePeriodRelated`, or `isBlockPeriodRelated` is `true`, `preparationLeadTimeMinutes` is greater than `0`, and `serviceHours` is non-empty. |
+| serviceHours          | Service windows when preparation can take place (same structure as `openingHours`, independent of opening hours). Only evaluated together with `preparationLeadTimeMinutes` on schedule-, time-period-, and block-period-related bookables. |
+| bufferTimeBeforeMinutes | Optional capacity buffer before each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`. Blocks back-to-back bookings in calendar and checkout capacity checks. |
+| bufferTimeAfterMinutes | Optional capacity buffer after each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`. |
 | isSpecialOpeningHoursRelated | If `true`, `specialOpeningHours` override the regular opening hours for specific dates.                                                              |
 | specialOpeningHours   | Special opening hours for specific dates.                                                                                                                   |
 | isLongRange           | If `true`, long-range bookings (e.g. weeks/months) are enabled.                                                                                            |

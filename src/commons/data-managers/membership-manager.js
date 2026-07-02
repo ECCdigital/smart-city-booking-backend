@@ -1,5 +1,6 @@
 const MembershipModel = require("./models/membershipModel");
 const Membership = require("../entities/tenant/membership");
+const { normalizeUserId } = require("../utilities/user-id-utils");
 
 class MembershipManager {
   static async getMemberships() {
@@ -13,7 +14,9 @@ class MembershipManager {
   }
 
   static async getMembershipsByUserID(userID) {
-    const rawMembership = await MembershipModel.find({ userId: userID });
+    const rawMembership = await MembershipModel.find({
+      userId: normalizeUserId(userID),
+    });
     if (!rawMembership) return [];
     return rawMembership.map((raw) => raw.toEntity());
   }
@@ -21,7 +24,7 @@ class MembershipManager {
   static async getMembershipByTenantAndUserID(tenantID, userID) {
     const rawMembership = await MembershipModel.findOne({
       tenantId: tenantID,
-      userId: userID,
+      userId: normalizeUserId(userID),
     });
     if (!rawMembership) {
       return null;
@@ -48,21 +51,21 @@ class MembershipManager {
 
   static async addRoleToMembership(tenantID, userID, role) {
     await MembershipModel.updateOne(
-      { tenantId: tenantID, userId: userID },
+      { tenantId: tenantID, userId: normalizeUserId(userID) },
       { $addToSet: { roles: role } },
     );
   }
 
   static async setRolesForMembership(tenantID, userID, roles) {
     await MembershipModel.updateOne(
-      { tenantId: tenantID, userId: userID },
+      { tenantId: tenantID, userId: normalizeUserId(userID) },
       { $set: { roles: roles } },
     );
   }
 
   static async removeRoleFromMembership(tenantID, userID, role) {
     await MembershipModel.updateOne(
-      { tenantId: tenantID, userId: userID },
+      { tenantId: tenantID, userId: normalizeUserId(userID) },
       { $pull: { roles: role } },
     );
   }
@@ -70,13 +73,13 @@ class MembershipManager {
   static async removeMembership(tenantID, userID) {
     await MembershipModel.deleteOne({
       tenantId: tenantID,
-      userId: userID,
+      userId: normalizeUserId(userID),
     });
   }
 
   static async updateMembership(tenantID, userID, updates) {
     await MembershipModel.updateOne(
-      { tenantId: tenantID, userId: userID },
+      { tenantId: tenantID, userId: normalizeUserId(userID) },
       { $set: updates },
     );
   }
@@ -84,8 +87,8 @@ class MembershipManager {
   static async reassignUserId(previousUserId, newUserId, session = null) {
     const options = session ? { session } : {};
     await MembershipModel.updateMany(
-      { userId: previousUserId },
-      { $set: { userId: newUserId } },
+      { userId: normalizeUserId(previousUserId) },
+      { $set: { userId: normalizeUserId(newUserId) } },
       options,
     );
   }

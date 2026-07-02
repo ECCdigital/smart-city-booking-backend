@@ -2,6 +2,7 @@ const {
   getBookedAmountForBookable,
   sumBookedAmount,
 } = require("./booking-amount");
+const { expandBlockedInterval } = require("../booking-buffer");
 const { CAPACITY_MODES } = require("./types");
 const {
   combineAdjacentIntervals,
@@ -54,6 +55,8 @@ function evaluateOriginCapacity({
  * @param {number} params.requestedAmount
  * @param {import("./types").CapacityMode} [params.mode]
  * @param {boolean} [params.useTimeOverlap]
+ * @param {number} [params.bufferBeforeMs]
+ * @param {number} [params.bufferAfterMs]
  * @returns {import("./types").AvailabilityInterval[]}
  */
 function evaluateCapacityIntervals({
@@ -65,6 +68,8 @@ function evaluateCapacityIntervals({
   requestedAmount,
   mode = CAPACITY_MODES.ADDITIVE,
   useTimeOverlap = true,
+  bufferBeforeMs = 0,
+  bufferAfterMs = 0,
 }) {
   if (!capacity) {
     return [
@@ -109,8 +114,14 @@ function evaluateCapacityIntervals({
       start = windowStart;
       end = windowEnd;
     } else {
-      start = Math.max(start, windowStart);
-      end = Math.min(end, windowEnd);
+      const blocked = expandBlockedInterval(
+        start,
+        end,
+        bufferBeforeMs,
+        bufferAfterMs,
+      );
+      start = Math.max(blocked.timeBegin, windowStart);
+      end = Math.min(blocked.timeEnd, windowEnd);
       if (start >= end) {
         continue;
       }

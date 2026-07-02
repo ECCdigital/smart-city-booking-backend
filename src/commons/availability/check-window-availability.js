@@ -1,4 +1,6 @@
 const OpeningHoursManager = require("../utilities/opening-hours-manager");
+const BookingManager = require("../data-managers/booking-manager");
+const { getBookingBufferMs, widenQueryWindow } = require("./booking-buffer");
 const {
   isTimeRelatedBookable,
   sumBookedAmount,
@@ -10,6 +12,7 @@ const {
   isDurationAllowed,
   hasBookingPermission,
   isWithinMaxBookingAdvance,
+  isWithinMinBookingLeadTime,
   CAPACITY_MODES,
   isBlockPeriodBookingValid,
   isTimePeriodBookingValid,
@@ -40,8 +43,27 @@ async function getBookingsForCapacityCheck(
   { useTimeOverlap = isTimeRelatedBookable(bookable) } = {},
 ) {
   if (useTimeOverlap) {
-    return resolve(
-      provider.getConcurrentBookings(bookable.id, timeBegin, timeEnd),
+    const buffer = getBookingBufferMs(bookable);
+    const queryWindow = widenQueryWindow(
+      timeBegin,
+      timeEnd,
+      buffer.beforeMs,
+      buffer.afterMs,
+    );
+    const bookings = await resolve(
+      provider.getConcurrentBookings(
+        bookable.id,
+        queryWindow.timeBegin,
+        queryWindow.timeEnd,
+      ),
+    );
+
+    return BookingManager.filterConcurrentBookings(
+      bookings,
+      timeBegin,
+      timeEnd,
+      null,
+      buffer,
     );
   }
 
@@ -108,7 +130,10 @@ async function checkWindowAvailability(
     return { available: false, reason: "permission" };
   }
 
-  if (isTimeRelatedBookable(bookable) && !shouldSkipOpeningHoursCheck(bookable)) {
+  if (
+    isTimeRelatedBookable(bookable) &&
+    !shouldSkipOpeningHoursCheck(bookable)
+  ) {
     const parentBookables = await resolve(provider.getParentBookables());
 
     for (const candidate of [bookable, ...parentBookables]) {
@@ -252,6 +277,10 @@ async function checkWindowAvailability(
 
   if (!isWithinMaxBookingAdvance(timeBegin, tenant)) {
     return { available: false, reason: "max-booking-date" };
+  }
+
+  if (!isWithinMinBookingLeadTime(timeBegin, bookable)) {
+    return { available: false, reason: "insufficient-lead-time" };
   }
 
   return { available: true };
