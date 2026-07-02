@@ -208,6 +208,21 @@ class MailController {
     });
   }
 
+  static async sendSupervisorBookingNotification(
+    address,
+    bookingIds,
+    tenantId,
+    aggregated = false,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.SUPERVISOR_BOOKING_NOTIFICATION,
+      address,
+      bookingIds,
+      tenantId,
+      aggregated,
+    });
+  }
+
   static async sendNewBooking(address, bookingId, tenantId) {
     await MailSenderService.dispatch({
       mailType: MailType.NEW_BOOKING,

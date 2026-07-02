@@ -14,6 +14,7 @@ const Membership = require("../../../commons/entities/tenant/membership");
 const InvitationService = require("../../../commons/services/invitation-service");
 const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
+const SupervisorNotificationService = require("../../../commons/services/supervisor-notification-service");
 const {
   validateMailSnippets,
   validateMailSubjects,
@@ -258,6 +259,7 @@ class TenantController {
           "defaultEventCreationMode",
           "enablePublicStatusView",
           "notifyOnNewBooking",
+          "notifySupervisorsOnBooking",
           "catalogParticipation",
           "bookableCustomFields",
           "cancellationTemplate",
@@ -851,6 +853,80 @@ class TenantController {
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not update user status in tenant");
+    }
+  }
+
+  static async updateUserBookingNotificationRecipients(request, response) {
+    try {
+      const tenantId = request.params.id;
+      const { userId, bookingNotificationRecipients } = request.body;
+      const user = request.user;
+
+      if (!userId) {
+        return response.status(400).send("User ID is required");
+      }
+
+      if (
+        await PermissionService._allowUpdateAny(
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_USERS,
+        )
+      ) {
+        const membership =
+          await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            userId,
+          );
+
+        if (!membership) {
+          return response.status(404).send("Membership not found");
+        }
+
+        let recipients;
+        try {
+          recipients =
+            await SupervisorNotificationService.prepareRecipientsForWrite(
+              tenantId,
+              bookingNotificationRecipients,
+            );
+        } catch (error) {
+          logger.warn(
+            `${tenantId} - Invalid booking notification recipients provided by user ${user?.id}: ${error.message}`,
+          );
+          return response.status(400).send(error.message);
+        }
+
+        await MembershipManager.updateMembership(tenantId, userId, {
+          bookingNotificationRecipients: recipients,
+        });
+
+        const updatedMemberships =
+          await MembershipManager.getMembershipsByTenantID(tenantId);
+
+        const userDetails = await UserManager.getUsersById(
+          updatedMemberships.map((m) => m.userId),
+        );
+
+        logger.info(
+          `${tenantId} - User ${user?.id} updated booking notification recipients for user ${userId}`,
+        );
+
+        response.status(200).send({
+          users: updatedMemberships,
+          userDetails: userDetails,
+        });
+      } else {
+        logger.warn(
+          `${tenantId} - User ${user?.id} not allowed to update booking notification recipients`,
+        );
+        response.sendStatus(403);
+      }
+    } catch (error) {
+      logger.error(error);
+      response
+        .status(500)
+        .send("Could not update booking notification recipients");
     }
   }
 

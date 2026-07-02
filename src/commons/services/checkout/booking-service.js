@@ -22,6 +22,7 @@ const WorkflowService = require("../workflow/workflow-service");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
 const TenantManager = require("../../data-managers/tenant-manager");
+const SupervisorNotificationService = require("../supervisor-notification-service");
 const PaymentUtils = require("../../utilities/payment-utils");
 const {
   BookingConsistencyService,
@@ -439,6 +440,12 @@ class BookingService {
             booking.tenantId,
           );
         }
+
+        await SupervisorNotificationService.notifySupervisorsOnBookingCreated({
+          tenantId: booking.tenantId,
+          userId: booking.assignedUserId,
+          bookingIds: booking.id,
+        });
       } catch (err) {
         logger.error(err);
       }
@@ -574,6 +581,13 @@ class BookingService {
             true,
           );
         }
+
+        await SupervisorNotificationService.notifySupervisorsOnBookingCreated({
+          tenantId: newGroupBooking.tenantId,
+          userId: newGroupBooking.assignedUserId,
+          bookingIds: newGroupBooking.bookingIds,
+          aggregated: true,
+        });
       } catch (err) {
         logger.error(`Error while sending email: ${err}`);
       }

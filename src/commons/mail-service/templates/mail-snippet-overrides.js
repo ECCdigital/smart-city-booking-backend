@@ -15,6 +15,7 @@ const OVERRIDABLE_SNIPPETS = Object.freeze([
   "invoice",
   "invoice-after-approval",
   "payment-link-after-approval",
+  "supervisor-booking-notification",
 ]);
 
 const OVERRIDE_TEMPLATE_VARIABLES = Object.freeze([
