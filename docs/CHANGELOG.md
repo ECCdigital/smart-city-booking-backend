@@ -7,6 +7,12 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+## [4.1.3] — 2026-07-02
+
+### Fixed
+
+- Invitation partial unique index definitions now use MongoDB-compatible predicates in partial filters to avoid startup failures on environments that reject `$ne` in partial index expressions
+
 ## [4.1.2] — 2026-07-02
 
 ### Added
@@ -72,6 +78,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.1.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.2...v4.1.3
 [4.1.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.1...v4.1.2
 [4.1.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.0.1...v4.1.0
