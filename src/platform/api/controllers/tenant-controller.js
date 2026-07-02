@@ -25,6 +25,32 @@ const {
   normalizeUserId,
   userIdsMatch,
 } = require("../../../commons/utilities/user-id-utils");
+const PdfService = require("../../../commons/pdf-service/pdf-service");
+
+const PDF_TEMPLATE_FIELDS = {
+  receiptTemplate: "receipt",
+  invoiceTemplate: "invoice",
+  cancellationTemplate: "cancellation",
+};
+
+/**
+ * Validates all PDF templates contained in a request body. Returns an error
+ * message or null when all provided templates are valid. Empty templates are
+ * allowed (the default template is used in that case).
+ */
+function validatePdfTemplates(body) {
+  for (const field of Object.keys(PDF_TEMPLATE_FIELDS)) {
+    if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+    const template = body[field];
+    if (!template) continue;
+
+    const errors = PdfService.validateTemplate(template);
+    if (errors.length) {
+      return `Invalid PDF template "${field}": ${errors.join("; ")}`;
+    }
+  }
+  return null;
+}
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -147,6 +173,11 @@ class TenantController {
         } catch (error) {
           return response.status(400).send(error.message);
         }
+      }
+
+      const templateError = validatePdfTemplates(request.body);
+      if (templateError) {
+        return response.status(400).send(templateError);
       }
 
       tenant.ownerUserIds = [user.id];
@@ -284,6 +315,11 @@ class TenantController {
           }
         }
 
+        const templateError = validatePdfTemplates(request.body);
+        if (templateError) {
+          return response.status(400).send(templateError);
+        }
+
         fields.forEach((field) => {
           if (Object.prototype.hasOwnProperty.call(request.body, field)) {
             tenant[field] = request.body[field];
@@ -331,6 +367,58 @@ class TenantController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not remove tenant");
+    }
+  }
+
+  /**
+   * Renders a preview PDF for a template with generated sample data
+   * (including enough line items to span multiple pages). The template can be
+   * passed in the request body to preview unsaved changes; otherwise the
+   * template stored on the tenant (or the default template) is used.
+   */
+  static async previewPdfTemplate(request, response) {
+    try {
+      const user = request.user;
+      const tenantId = request.params.id;
+      const { templateType, template } = request.body;
+
+      if (
+        !(await PermissionService._isTenantOwner(user.id, tenantId)) &&
+        !(await PermissionService._isInstanceOwner(user.id))
+      ) {
+        return response.sendStatus(403);
+      }
+
+      if (!["receipt", "invoice", "cancellation"].includes(templateType)) {
+        return response
+          .status(400)
+          .send("templateType must be one of: receipt, invoice, cancellation");
+      }
+
+      if (template) {
+        const errors = PdfService.validateTemplate(template);
+        if (errors.length) {
+          return response
+            .status(400)
+            .send(`Invalid PDF template: ${errors.join("; ")}`);
+        }
+      }
+
+      const pdfData = await PdfService.generatePreview(
+        tenantId,
+        templateType,
+        template || null,
+      );
+
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `inline; filename="${pdfData.name}"`,
+      );
+      response.status(200).send(pdfData.buffer);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not generate PDF preview");
     }
   }
 

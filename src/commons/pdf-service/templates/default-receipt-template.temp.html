@@ -47,6 +47,25 @@
     </style>
   </head>
   <body>
+    <template data-pdf-footer>
+      <div
+        style="
+          width: 100%;
+          font-size: 8px;
+          color: #666;
+          padding: 0 10mm;
+          display: flex;
+          justify-content: space-between;
+        "
+      >
+        <span>Zahlungsbeleg {{receiptNumber}}</span>
+        <span>
+          Seite <span class="pageNumber"></span> von
+          <span class="totalPages"></span>
+        </span>
+      </div>
+    </template>
+
     <p class="receipt-data">
       Belegnummer: {{receiptNumber}}<br />
       Buchungsdatum: {{bookingDate}}

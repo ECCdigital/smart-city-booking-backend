@@ -1,0 +1,46 @@
+<table class="booking-detail" style="width: 100%; border-collapse: collapse">
+  <thead>
+    <tr>
+      <th style="text-align: start">Buchungs-ID</th>
+      <th>Zeitraum</th>
+      <th>Zahlungsdatum</th>
+      <th>Bezahlmethode</th>
+      <th style="text-align: right">Gesamt (netto)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each bookings}}
+    <tr>
+      <td style="text-align: start">{{id}}</td>
+      <td style="text-align: center">{{period}}</td>
+      <td style="text-align: center">{{paymentDate}}</td>
+      <td style="text-align: center">{{paymentMethod}}</td>
+      <td style="text-align: right">{{netto}}</td>
+    </tr>
+    <tr>
+      <td colspan="5">
+        <strong>Details / Artikel:</strong><br />
+        <ul style="margin: 0; padding-left: 20px">
+          {{#each items}}
+          <li>{{title}} ×{{amount}} ({{totalPrice}})</li>
+          {{else}}
+          <li>Keine Artikel</li>
+          {{/each}}
+        </ul>
+      </td>
+    </tr>
+    {{/each}}
+    <tr class="netto" style="border-bottom: 1px solid #eee">
+      <td colspan="4">Gesamt (netto)</td>
+      <td style="text-align: right">{{totals.netto}}</td>
+    </tr>
+    <tr class="mwst" style="border-bottom: 1px solid #eee">
+      <td colspan="4">zzgl. MwSt.</td>
+      <td style="text-align: right">{{totals.vat}}</td>
+    </tr>
+    <tr class="brutto" style="font-weight: bold">
+      <td colspan="4">Gesamt (brutto)</td>
+      <td style="text-align: right">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>

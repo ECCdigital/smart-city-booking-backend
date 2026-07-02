@@ -1,0 +1,316 @@
+const assert = require("assert");
+const sinon = require("sinon");
+const fs = require("fs");
+const path = require("path");
+const Handlebars = require("../src/commons/pdf-service/pdf-handlebars");
+const PdfService = require("../src/commons/pdf-service/pdf-service");
+const formatters = require("../src/commons/pdf-service/pdf-formatters");
+const {
+  buildSampleData,
+} = require("../src/commons/pdf-service/pdf-sample-data");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const BookingManager = require("../src/commons/data-managers/booking-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+
+const TEMPLATES_DIR = path.join(
+  __dirname,
+  "../src/commons/pdf-service/templates",
+);
+
+function loadDefaultTemplate(name) {
+  return fs.readFileSync(path.join(TEMPLATES_DIR, name), "utf-8");
+}
+
+function makeBooking(overrides = {}) {
+  return {
+    id: "booking-1",
+    tenantId: "tenant-1",
+    priceEur: 119,
+    vatIncludedEur: 19,
+    timeBegin: Date.parse("2026-08-01T09:00:00+02:00"),
+    timeEnd: Date.parse("2026-08-01T17:00:00+02:00"),
+    timePaid: Date.parse("2026-07-15T10:24:00+02:00"),
+    timeCreated: Date.parse("2026-07-01T08:00:00+02:00"),
+    paymentMethod: "TRANSFER",
+    company: "Musterfirma GmbH",
+    name: "Max Mustermann",
+    street: "Musterstraße 12",
+    zipCode: "12345",
+    location: "Musterstadt",
+    bookableItems: [
+      { bookableId: "bookable-1", amount: 2, userPriceEur: 50 },
+      { bookableId: "bookable-2", amount: 1, userPriceEur: 19 },
+    ],
+    attachments: [],
+    ...overrides,
+  };
+}
+
+const BOOKABLES = [
+  { id: "bookable-1", title: "Sitzungsraum" },
+  { id: "bookable-2", title: "Beamer" },
+];
+
+describe("pdf-formatters", () => {
+  it("formats zero as currency instead of a dash", () => {
+    assert.notStrictEqual(formatters.formatCurrency(0), "-");
+    assert.ok(formatters.formatCurrency(0).includes("0,00"));
+  });
+
+  it("keeps the dash for missing values", () => {
+    assert.strictEqual(formatters.formatCurrency(null), "-");
+    assert.strictEqual(formatters.formatCurrency(undefined), "-");
+    assert.strictEqual(formatters.formatAmount(null), "-");
+    assert.strictEqual(formatters.formatNegativeCurrency(null), "-");
+  });
+
+  it("formats negative currency from absolute values", () => {
+    assert.ok(formatters.formatNegativeCurrency(10).startsWith("-"));
+    assert.ok(formatters.formatNegativeCurrency(-10).startsWith("-"));
+    assert.ok(formatters.formatNegativeCurrency(0).includes("0,00"));
+  });
+
+  it("translates payment methods", () => {
+    assert.strictEqual(formatters.translatePayMethod("CASH"), "Bar");
+    assert.strictEqual(formatters.translatePayMethod("NOPE"), "Unbekannt");
+  });
+});
+
+describe("PdfService.validateTemplate", () => {
+  it("accepts all default templates", () => {
+    for (const name of [
+      "default-receipt-template.temp.html",
+      "default-invoice-template.temp.html",
+      "default-cancellation-receipt.temp.html",
+    ]) {
+      const errors = PdfService.validateTemplate(loadDefaultTemplate(name));
+      assert.deepStrictEqual(errors, [], `${name}: ${errors.join("; ")}`);
+    }
+  });
+
+  it("rejects templates without a document structure", () => {
+    const errors = PdfService.validateTemplate("<p>hello</p>");
+    assert.ok(errors.length > 0);
+  });
+
+  it("rejects templates with broken handlebars syntax", () => {
+    const template =
+      "<!DOCTYPE html><html><head></head><body>{{#if foo}}{{/each}}</body></html>";
+    const errors = PdfService.validateTemplate(template);
+    assert.ok(errors.some((e) => e.includes("Handlebars")));
+  });
+});
+
+describe("PdfService._prepareDocument", () => {
+  it("injects pagination CSS into the document head", () => {
+    const html =
+      "<!DOCTYPE html><html><head></head><body><p>x</p></body></html>";
+    const { documentHtml } = PdfService._prepareDocument(html);
+    assert.ok(documentHtml.includes("data-pdf-print-css"));
+    assert.ok(documentHtml.includes("page-break-inside: avoid"));
+  });
+
+  it("extracts page footer templates", () => {
+    const html =
+      "<!DOCTYPE html><html><head></head><body>" +
+      '<template data-pdf-footer><span class="pageNumber"></span></template>' +
+      "<p>content</p></body></html>";
+    const { documentHtml, footerTemplate, headerTemplate } =
+      PdfService._prepareDocument(html);
+    assert.ok(footerTemplate.includes("pageNumber"));
+    assert.strictEqual(headerTemplate, null);
+    assert.ok(!documentHtml.includes("data-pdf-footer"));
+  });
+});
+
+describe("PdfService document generation (rendering only)", () => {
+  beforeEach(() => {
+    sinon
+      .stub(PdfService, "convertToPdf")
+      .callsFake(async (html, filename) => ({
+        buffer: Buffer.from(html),
+        name: filename,
+      }));
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it("renders a single receipt with items, totals and address", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      receiptTemplate: "",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleReceipt(
+      "tenant-1",
+      "booking-1",
+      "BLG-1-1",
+    );
+
+    const html = result.buffer.toString();
+    assert.strictEqual(result.name, "Zahlungsbeleg-BLG-1-1.pdf");
+    assert.ok(html.includes("Sitzungsraum"));
+    assert.ok(html.includes("Beamer"));
+    assert.ok(html.includes("Musterfirma GmbH"));
+    assert.ok(html.includes("Buchungszeitraum"));
+    assert.ok(html.includes("Gesamt (brutto)"));
+    assert.ok(html.includes("100,00"));
+    assert.ok(html.includes("119,00"));
+  });
+
+  it("renders an aggregated invoice without _bookableUsed (regression)", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      invoiceTemplate: "",
+      paymentPurposeSuffix: "Musterstadt",
+      location: "Musterstadt",
+    });
+    sinon.stub(TenantManager, "getTenantApp").resolves({
+      daysUntilPaymentDue: 14,
+      bank: "Musterbank",
+      iban: "DE00",
+      bic: "XXX",
+    });
+    sinon
+      .stub(BookingManager, "getBookings")
+      .resolves([makeBooking(), makeBooking({ id: "booking-2" })]);
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateAggregatedInvoice(
+      "tenant-1",
+      ["booking-1", "booking-2"],
+      "RE-1-1",
+      { groupBookingId: "group-1" },
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("booking-1"));
+    assert.ok(html.includes("booking-2"));
+    assert.ok(html.includes("Sitzungsraum"));
+    assert.ok(html.includes("238,00"));
+  });
+
+  it("renders a cancellation receipt with negative amounts", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "",
+      location: "Musterstadt",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleCancellationReceipt(
+      "tenant-1",
+      "booking-1",
+      "ST-1-1",
+      "RE-1-1",
+      { cancellationReason: "Absage", alreadyPaid: true },
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("Stornorechnung"));
+    assert.ok(html.includes("Absage"));
+    assert.ok(html.includes("-119,00"));
+  });
+
+  it("legacy templates using only bookingEntries still render", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      receiptTemplate:
+        "<!DOCTYPE html><html><head></head><body>" +
+        "<p>{{{receiptAddress}}}</p>{{{bookingEntries}}}</body></html>",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleReceipt(
+      "tenant-1",
+      "booking-1",
+      "BLG-1-1",
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("Sitzungsraum"));
+    assert.ok(html.includes("booking-detail"));
+  });
+
+  it("escapes HTML in booking data", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      receiptTemplate: "",
+    });
+    sinon
+      .stub(BookingManager, "getBooking")
+      .resolves(makeBooking({ name: "<script>alert(1)</script>" }));
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleReceipt(
+      "tenant-1",
+      "booking-1",
+      "BLG-1-1",
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(!html.includes("<script>alert(1)</script>"));
+  });
+});
+
+describe("PdfService.generatePreview", () => {
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it("renders previews for all template types with sample data", async () => {
+    sinon.stub(PdfService, "convertToPdf").callsFake(async (html, name) => ({
+      buffer: Buffer.from(html),
+      name,
+    }));
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      receiptTemplate: "",
+      invoiceTemplate: "",
+      cancellationTemplate: "",
+    });
+
+    for (const type of ["receipt", "invoice", "cancellation"]) {
+      const result = await PdfService.generatePreview("tenant-1", type, null);
+      const html = result.buffer.toString();
+      assert.ok(html.includes("Position 30"), `${type} preview has items`);
+      assert.ok(html.includes("Musterstadt"), `${type} preview has address`);
+    }
+  });
+
+  it("rejects unknown template types", async () => {
+    await assert.rejects(
+      () => PdfService.generatePreview("tenant-1", "unknown", null),
+      /Unknown template type/,
+    );
+  });
+});
+
+describe("pdf sample data", () => {
+  it("contains enough items to span multiple pages", () => {
+    const data = buildSampleData("receipt");
+    assert.ok(data.items.length >= 25);
+    assert.ok(data.bookingEntries.includes("Position 1"));
+  });
+
+  it("default templates render with sample data without errors", () => {
+    const templates = {
+      receipt: "default-receipt-template.temp.html",
+      invoice: "default-invoice-template.temp.html",
+      cancellation: "default-cancellation-receipt.temp.html",
+    };
+    for (const [type, file] of Object.entries(templates)) {
+      const template = Handlebars.compile(loadDefaultTemplate(file));
+      const html = template(buildSampleData(type));
+      assert.ok(html.includes("Position 1"), `${type} renders items`);
+    }
+  });
+});

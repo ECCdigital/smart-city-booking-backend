@@ -1,0 +1,37 @@
+<table class="{{tableClass}}" style="width: 100%; border-collapse: collapse">
+  <thead>
+    <tr style="background: #eee; border-bottom: 1px solid #ddd">
+      <th class="bi-title">Beschreibung</th>
+      <th class="bi-amount">Anzahl</th>
+      <th class="bi-price-item">Einzelpreis</th>
+      <th class="bi-price-total">Gesamtpreis</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr style="border-bottom: 1px solid #eee">
+      <td class="bi-title">{{title}}</td>
+      <td class="bi-amount">{{amount}}</td>
+      <td class="bi-price-item">{{unitPrice}}</td>
+      <td class="bi-price-total">{{totalPrice}}</td>
+    </tr>
+    {{/each}} {{#if coupon}}
+    <tr class="coupon" style="border-bottom: 1px solid #eee; color: #555">
+      <td colspan="3">{{coupon.description}}</td>
+      <td>{{coupon.discountLabel}}</td>
+    </tr>
+    {{/if}}
+    <tr class="netto" style="border-bottom: 1px solid #eee">
+      <td colspan="3">Gesamt (netto)</td>
+      <td>{{totals.netto}}</td>
+    </tr>
+    <tr class="mwst" style="border-bottom: 1px solid #eee">
+      <td colspan="3">zzgl. MwSt.</td>
+      <td>{{totals.vat}}</td>
+    </tr>
+    <tr class="brutto" style="font-weight: bold">
+      <td colspan="3">Gesamt (brutto)</td>
+      <td>{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
