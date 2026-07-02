@@ -65,10 +65,25 @@ class InvitationService {
       challenges: challengeRefs,
     });
 
-    return await InvitationManager.createInvitation(
-      params.tenantId,
-      invitation,
-    );
+    try {
+      return await InvitationManager.createInvitation(
+        params.tenantId,
+        invitation,
+      );
+    } catch (error) {
+      if (
+        params.type === "single" &&
+        params.intendedUserId &&
+        isDuplicateSingleInvitationError(error)
+      ) {
+        throw {
+          message: "Active invitation already exists for this user",
+          code: 409,
+        };
+      }
+
+      throw error;
+    }
   }
 
   static async sendInvitationMail(tenantID, token, recipientEmail = null) {
@@ -513,7 +528,10 @@ class InvitationService {
     for (const membership of memberships) {
       if (membership.status === "suspended") continue;
       for (const invite of membership.invitations || []) {
-        if (invite.status === "pending" || invite.status === "pending_approval") {
+        if (
+          invite.status === "pending" ||
+          invite.status === "pending_approval"
+        ) {
           membershipTokens.add(invite.token);
         }
       }
@@ -768,6 +786,10 @@ class InvitationService {
 }
 
 module.exports = InvitationService;
+
+function isDuplicateSingleInvitationError(error) {
+  return error && error.code === 11000;
+}
 
 function validateInvitation(invitation, tenantID, userID = null) {
   if (!invitation) {

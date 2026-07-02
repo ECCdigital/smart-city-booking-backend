@@ -8,6 +8,18 @@ const InvitationSchema = new Schema(invitationSchemaDefinition, {
 });
 
 InvitationSchema.index({ token: 1 }, { unique: true });
+InvitationSchema.index(
+  { tenantId: 1, intendedUserId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      type: "single",
+      status: "active",
+      usedCount: { $lt: 1 },
+      intendedUserId: { $exists: true, $ne: "" },
+    },
+  },
+);
 
 InvitationSchema.methods.toEntity = function () {
   const Invitation = require("../../entities/tenant/invitation");

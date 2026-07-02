@@ -1,5 +1,7 @@
 function normalizeUserId(userId) {
-  return String(userId || "").trim().toLowerCase();
+  return String(userId || "")
+    .trim()
+    .toLowerCase();
 }
 
 function getMembershipTimestamp(membership) {
@@ -17,8 +19,7 @@ function isAcceptedMembership(membership) {
  */
 function pickMembershipToKeep(memberships) {
   const accepted = memberships.filter(isAcceptedMembership);
-  const candidates =
-    accepted.length > 0 ? accepted : [...memberships];
+  const candidates = accepted.length > 0 ? accepted : [...memberships];
 
   return candidates.sort(
     (a, b) => getMembershipTimestamp(b) - getMembershipTimestamp(a),
@@ -30,9 +31,7 @@ function getInvitationTimestamp(invitation) {
 }
 
 function isConsumedInvitation(invitation) {
-  return (
-    (invitation.usedCount || 0) >= 1 || invitation.status === "exhausted"
-  );
+  return (invitation.usedCount || 0) >= 1 || invitation.status === "exhausted";
 }
 
 function isActiveSingleInvitation(invitation) {
@@ -95,13 +94,12 @@ module.exports = {
 
       const toKeep = pickMembershipToKeep(group);
       const toDelete = group.filter(
-        (membership) =>
-          membership._id.toString() !== toKeep._id.toString(),
+        (membership) => membership._id.toString() !== toKeep._id.toString(),
       );
 
       for (const membership of toDelete) {
         console.log(
-          `  Removing duplicate membership ${membership._id} (${membership.userId}, status=${membership.status}) – keeping ${toKeep._id} (${toKeep.userId}, status=${toKeep.status}) for ${key}`,
+          `  Removing duplicate membership ${membership._id} (status=${membership.status}) - keeping ${toKeep._id} (status=${toKeep.status}) for ${key}`,
         );
         await Membership.deleteOne({ _id: membership._id });
         deletedDuplicates += 1;
@@ -153,13 +151,12 @@ module.exports = {
 
       const toKeep = pickInvitationToKeep(group);
       const toDelete = group.filter(
-        (invitation) =>
-          invitation._id.toString() !== toKeep._id.toString(),
+        (invitation) => invitation._id.toString() !== toKeep._id.toString(),
       );
 
       for (const invitation of toDelete) {
         console.log(
-          `  Removing duplicate invitation ${invitation._id} (token=${invitation.token}, status=${invitation.status}) – keeping ${toKeep._id} (token=${toKeep.token}, status=${toKeep.status}) for ${key}`,
+          `  Removing duplicate invitation ${invitation._id} (status=${invitation.status}) - keeping ${toKeep._id} (status=${toKeep.status}) for ${key}`,
         );
         await Invitation.deleteOne({ _id: invitation._id });
         await Membership.updateMany(

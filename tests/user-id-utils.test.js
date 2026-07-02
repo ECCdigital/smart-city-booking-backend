@@ -21,6 +21,12 @@ describe("user-id-utils", () => {
     expect(userIdsMatch("A@test.de", "a@test.de")).to.equal(true);
     expect(userIdsMatch("a@test.de", "b@test.de")).to.equal(false);
   });
+
+  it("normalizes nullish user ids to an empty string", () => {
+    expect(normalizeUserId(null)).to.equal("");
+    expect(normalizeUserId(undefined)).to.equal("");
+    expect(userIdsMatch(null, undefined)).to.equal(false);
+  });
 });
 
 describe("Invitation entity", () => {
