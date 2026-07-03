@@ -11,7 +11,7 @@ const { DEFAULT_PDF_BOOKING_LAYOUT } = require("./pdf-booking-layout");
 const SAMPLE_ITEM_COUNT = 60;
 
 function renderPartial(name, data) {
-  return Handlebars.compile(`{{> ${name} }}`)(data);
+  return Handlebars.renderPartial(name, data);
 }
 
 function buildTotals(bruttoEur, vatEur, { negative = false } = {}) {
@@ -80,32 +80,57 @@ const SAMPLE_BOOKING = {
   hasPayment: true,
 };
 
-function buildReceiptSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
-  const items = buildSampleItems();
+function buildBaseSampleData(
+  layout,
+  { negative = false, tableClass, includePayment = false, bookingOverrides = {} } = {},
+) {
+  const items = buildSampleItems({ negative });
   const bruttoEur = sumItems(items);
   const vatEur = bruttoEur * 0.19;
-  const totals = buildTotals(bruttoEur, vatEur);
+  const totals = buildTotals(bruttoEur, vatEur, { negative });
   const coupon = null;
   const booking = {
-    ...SAMPLE_BOOKING,
+    id: SAMPLE_BOOKING.id,
+    period: SAMPLE_BOOKING.period,
     summaryItems: buildSampleSummaryItems(items),
+    ...(includePayment
+      ? {
+          paymentDate: SAMPLE_BOOKING.paymentDate,
+          paymentMethod: SAMPLE_BOOKING.paymentMethod,
+          hasPayment: true,
+        }
+      : { hasPayment: false }),
+    ...bookingOverrides,
   };
 
-  const bookingEntries = renderPartial("pdfBookingItemsTable", {
+  const renderedTable = renderPartial("pdfBookingItemsTable", {
     layout,
-    tableClass: "booking-detail",
+    tableClass,
     items,
     coupon,
     totals,
     booking,
   });
 
+  return { items, totals, coupon, booking, renderedTable, bruttoEur };
+}
+
+function buildReceiptSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
+  const { items, totals, coupon, booking, renderedTable } = buildBaseSampleData(
+    layout,
+    {
+      tableClass: "booking-detail",
+      includePayment: true,
+      bookingOverrides: { ...SAMPLE_BOOKING },
+    },
+  );
+
   return {
     isAggregated: false,
     receiptNumber: "BLG-1042-1",
     bookingDate: formatters.formatDate(new Date()),
     receiptAddress: SAMPLE_ADDRESS,
-    bookingEntries,
+    bookingEntries: renderedTable,
     booking,
     items,
     coupon,
@@ -114,26 +139,10 @@ function buildReceiptSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
 }
 
 function buildInvoiceSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
-  const items = buildSampleItems();
-  const bruttoEur = sumItems(items);
-  const vatEur = bruttoEur * 0.19;
-  const totals = buildTotals(bruttoEur, vatEur);
-  const coupon = null;
-  const booking = {
-    id: SAMPLE_BOOKING.id,
-    period: "01.08.2026, 09:00 - 01.08.2026, 17:00",
-    hasPayment: false,
-    summaryItems: buildSampleSummaryItems(items),
-  };
-
-  const mainContent = renderPartial("pdfBookingItemsTable", {
-    layout,
-    tableClass: "booked-items",
-    items,
-    coupon,
-    totals,
-    booking,
-  });
+  const { items, totals, coupon, booking, renderedTable, bruttoEur } =
+    buildBaseSampleData(layout, {
+      tableClass: "booked-items",
+    });
 
   return {
     title: "Ihre Rechnung",
@@ -146,7 +155,7 @@ function buildInvoiceSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
     iban: "DE02 1203 0000 0000 2020 51",
     bic: "BYLADEM1001",
     invoiceAddress: SAMPLE_ADDRESS,
-    mainContent,
+    mainContent: renderedTable,
     location: "Musterstadt",
     totalAmount: formatters.formatAmount(bruttoEur),
     bookingId: SAMPLE_BOOKING.id,
@@ -159,26 +168,11 @@ function buildInvoiceSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
 }
 
 function buildCancellationSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
-  const items = buildSampleItems({ negative: true });
-  const bruttoEur = sumItems(items);
-  const vatEur = bruttoEur * 0.19;
-  const totals = buildTotals(bruttoEur, vatEur, { negative: true });
-  const coupon = null;
-  const booking = {
-    id: SAMPLE_BOOKING.id,
-    period: SAMPLE_BOOKING.period,
-    hasPayment: false,
-    summaryItems: buildSampleSummaryItems(items),
-  };
-
-  const mainContent = renderPartial("pdfBookingItemsTable", {
-    layout,
-    tableClass: "booked-items",
-    items,
-    coupon,
-    totals,
-    booking,
-  });
+  const { items, totals, coupon, booking, renderedTable, bruttoEur } =
+    buildBaseSampleData(layout, {
+      negative: true,
+      tableClass: "booked-items",
+    });
 
   return {
     title: "Stornorechnung",
@@ -195,7 +189,7 @@ function buildCancellationSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
       "Kontoinhaber: Max Mustermann<br />Musterbank<br />" +
       "IBAN: DE02 1203 0000 0000 2020 51<br />BIC: BYLADEM1001</div>",
     invoiceAddress: SAMPLE_ADDRESS,
-    mainContent,
+    mainContent: renderedTable,
     location: "Musterstadt",
     totalAmount: formatters.formatNegativeCurrency(bruttoEur),
     bookingId: SAMPLE_BOOKING.id,

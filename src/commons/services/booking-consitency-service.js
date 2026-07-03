@@ -92,7 +92,9 @@ function checkSamePaymentProvider(bookings) {
  * @throws {ConsistencyError} If any booking does not use invoice payment.
  */
 function checkInvoicePaymentProvider(bookings) {
-  const bad = bookings.find((b) => b.paymentProvider !== "invoice");
+  const bad = bookings.find(
+    (b) => String(b.paymentProvider || "").toLowerCase() !== "invoice",
+  );
   if (bad) {
     throw new ConsistencyError(
       "INVOICE_PAYMENT_REQUIRED",

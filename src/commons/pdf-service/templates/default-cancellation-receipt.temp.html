@@ -79,10 +79,7 @@
     <template data-pdf-footer>
       <div style="display: flex; justify-content: space-between; width: 100%">
         <span>{{ title }} {{ cancellationNumber }}</span>
-        <span>
-          Seite <span class="pageNumber"></span> von
-          <span class="totalPages"></span>
-        </span>
+        <span>{{> pdfPageNumbers }}</span>
       </div>
     </template>
 

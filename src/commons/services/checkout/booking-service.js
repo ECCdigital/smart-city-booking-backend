@@ -1448,6 +1448,7 @@ class BookingService {
       tenantId,
       bookings.map((b) => b.id),
       groupBookingId,
+      bookings,
     );
 
     return {

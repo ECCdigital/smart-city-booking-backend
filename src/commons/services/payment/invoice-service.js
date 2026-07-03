@@ -56,16 +56,22 @@ class InvoiceService {
     }
   }
 
-  static async createAggregatedInvoice(tenantId, bookingIds, groupBookingId) {
+  static async createAggregatedInvoice(
+    tenantId,
+    bookingIds,
+    groupBookingId,
+    bookings = null,
+  ) {
     try {
       const tenant = await TenantManager.getTenant(tenantId);
-      const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+      const resolvedBookings =
+        bookings ?? (await BookingManager.getBookings(tenantId, bookingIds));
 
-      if (!bookings || !tenant) {
+      if (!resolvedBookings || !tenant) {
         throw new Error("Booking or tenant not found.");
       }
 
-      const allAttachments = bookings.flatMap(
+      const allAttachments = resolvedBookings.flatMap(
         (b) => b.attachments?.filter((a) => a.type === "invoice") || [],
       );
       const existingIds = new Set(
@@ -80,14 +86,14 @@ class InvoiceService {
 
       const { invoiceNumber, invoiceId, revision } = await _createInvoiceNumber(
         tenantId,
-        bookings[0].id,
+        resolvedBookings[0].id,
       );
 
       const pdfData = await PdfService.generateAggregatedInvoice(
         tenantId,
-        bookings.map((b) => b.id),
+        resolvedBookings.map((b) => b.id),
         invoiceNumber,
-        { groupBookingId },
+        { groupBookingId, bookings: resolvedBookings },
       );
 
       await NextcloudManager.createFile({
@@ -129,20 +135,27 @@ class InvoiceService {
    * @param {string|null} [groupBookingId]
    * @returns {Promise<{ invoice: object, name: string, invoiceId: string, revision: number, mail: string, bookingIds: string[] }>}
    */
-  static async issueAggregatedInvoice(tenantId, bookingIds, groupBookingId) {
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+  static async issueAggregatedInvoice(
+    tenantId,
+    bookingIds,
+    groupBookingId,
+    bookings = null,
+  ) {
+    const resolvedBookings =
+      bookings ?? (await BookingManager.getBookings(tenantId, bookingIds));
     const invoiceData = await InvoiceService.createAggregatedInvoice(
       tenantId,
       bookingIds,
       groupBookingId,
+      resolvedBookings,
     );
 
-    await _attachAggregatedInvoiceToBookings(bookings, invoiceData);
+    await _attachAggregatedInvoiceToBookings(resolvedBookings, invoiceData);
 
     return {
       ...invoiceData,
-      mail: bookings[0].mail,
-      bookingIds: bookings.map((b) => b.id),
+      mail: resolvedBookings[0].mail,
+      bookingIds: resolvedBookings.map((b) => b.id),
     };
   }
 

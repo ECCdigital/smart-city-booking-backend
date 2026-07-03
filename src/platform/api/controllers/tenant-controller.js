@@ -407,21 +407,15 @@ class TenantController {
       const { templateType, template, pdfBookingLayout } = request.body;
 
       if (
-        pdfBookingLayout &&
-        !isValidBookingLayout(pdfBookingLayout)
-      ) {
-        return response
-          .status(400)
-          .send(
-            `Invalid pdfBookingLayout "${pdfBookingLayout}". Allowed values: summary, compact, detailed`,
-          );
-      }
-
-      if (
         !(await PermissionService._isTenantOwner(user.id, tenantId)) &&
         !(await PermissionService._isInstanceOwner(user.id))
       ) {
         return response.sendStatus(403);
+      }
+
+      const layoutError = validatePdfBookingLayout(request.body);
+      if (layoutError) {
+        return response.status(400).send(layoutError);
       }
 
       if (!["receipt", "invoice", "cancellation"].includes(templateType)) {

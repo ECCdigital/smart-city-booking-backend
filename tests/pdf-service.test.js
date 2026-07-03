@@ -70,6 +70,14 @@ describe("pdf-formatters", () => {
     assert.ok(formatters.formatNegativeCurrency(10).startsWith("-"));
     assert.ok(formatters.formatNegativeCurrency(-10).startsWith("-"));
     assert.ok(formatters.formatNegativeCurrency(0).includes("0,00"));
+    assert.ok(!formatters.formatNegativeCurrency(0).startsWith("-0"));
+  });
+
+  it("returns a dash for nullish date values", () => {
+    assert.strictEqual(formatters.formatDateTime(null), "-");
+    assert.strictEqual(formatters.formatDateTime(undefined), "-");
+    assert.strictEqual(formatters.formatDate(null), "-");
+    assert.strictEqual(formatters.formatDate(undefined), "-");
   });
 
   it("translates payment methods", () => {

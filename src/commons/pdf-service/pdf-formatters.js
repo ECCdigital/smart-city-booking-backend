@@ -5,6 +5,7 @@
  */
 
 function formatDateTime(value) {
+  if (value == null) return "-";
   const date = new Date(value);
   // Bereits formatierte Strings (z. B. "15.07.2026, 10:24") unverändert
   // durchreichen statt mit "Invalid time value" zu werfen.
@@ -21,6 +22,7 @@ function formatDateTime(value) {
 }
 
 function formatDate(value) {
+  if (value == null) return "-";
   const date = new Date(value);
   if (isNaN(date.getTime())) return String(value);
   const formatter = new Intl.DateTimeFormat("de-DE", {
@@ -42,11 +44,15 @@ function formatCurrency(value) {
 
 function formatNegativeCurrency(value) {
   if (value == null || isNaN(value)) return "-";
+  let amount = Math.abs(value) * -1;
+  if (Object.is(amount, -0)) {
+    amount = 0;
+  }
   const formatter = new Intl.NumberFormat("de-DE", {
     style: "currency",
     currency: "EUR",
   });
-  return formatter.format(Math.abs(value) * -1);
+  return formatter.format(amount);
 }
 
 function formatAmount(value) {

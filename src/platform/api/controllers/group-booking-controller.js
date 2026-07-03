@@ -430,7 +430,10 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
+        const invoiceApp = await TenantManager.getTenantApp(
+          tenantId,
+          "invoice",
+        );
         if (!invoiceApp || !invoiceApp.active) {
           return res.status(400).send({
             message: "Invoice app not found or inactive.",

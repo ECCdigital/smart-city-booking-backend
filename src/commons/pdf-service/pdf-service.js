@@ -197,6 +197,8 @@ const DEFAULT_TEMPLATES = {
 // (src/components/PDF/pdfTemplateCatalog.js).
 const MAX_TEMPLATE_SIZE_BYTES = 200 * 1024;
 
+const DEFAULT_TEMPLATE_CACHE = new Map();
+
 class PdfService {
   /**
    * Renders a full HTML document to a PDF buffer.
@@ -214,43 +216,46 @@ class PdfService {
 
     return await lazyBrowser.execute(async (browser) => {
       const context = await browser.newContext();
-      const page = await context.newPage();
+      try {
+        const page = await context.newPage();
 
-      await page.setContent(documentHtml, {
-        waitUntil: "load",
-        timeout: 10000,
-      });
+        await page.setContent(documentHtml, {
+          waitUntil: "load",
+          timeout: 10000,
+        });
 
-      // Web fonts (e.g. Google Fonts via @import) may finish loading after
-      // the load event. Wait for them so text does not render in a fallback
-      // font, but never block PDF generation on it.
-      await page
-        .evaluate(() => (document.fonts ? document.fonts.ready : null))
-        .catch(() => {});
+        // Web fonts (e.g. Google Fonts via @import) may finish loading after
+        // the load event. Wait for them so text does not render in a fallback
+        // font, but never block PDF generation on it.
+        await page
+          .evaluate(() => (document.fonts ? document.fonts.ready : null))
+          .catch(() => {});
 
-      const pdfOptions = {
-        format: "A4",
-        printBackground: true,
-        margin: {
-          top: headerTemplate ? HEADER_MARGIN : BASE_MARGIN,
-          bottom: footerTemplate ? FOOTER_MARGIN : BASE_MARGIN,
-          left: BASE_MARGIN,
-          right: BASE_MARGIN,
-        },
-      };
+        const pdfOptions = {
+          format: "A4",
+          printBackground: true,
+          margin: {
+            top: headerTemplate ? HEADER_MARGIN : BASE_MARGIN,
+            bottom: footerTemplate ? FOOTER_MARGIN : BASE_MARGIN,
+            left: BASE_MARGIN,
+            right: BASE_MARGIN,
+          },
+        };
 
-      if (headerTemplate || footerTemplate) {
-        pdfOptions.displayHeaderFooter = true;
-        pdfOptions.headerTemplate = headerTemplate || "<span></span>";
-        pdfOptions.footerTemplate = footerTemplate || "<span></span>";
+        if (headerTemplate || footerTemplate) {
+          pdfOptions.displayHeaderFooter = true;
+          pdfOptions.headerTemplate = headerTemplate || "<span></span>";
+          pdfOptions.footerTemplate = footerTemplate || "<span></span>";
+        }
+
+        const buffer = await page.pdf(pdfOptions);
+
+        logger.info(`Generated PDF: ${filename} (${buffer.length} bytes)`);
+
+        return { buffer, name: filename };
+      } finally {
+        await context.close().catch(() => {});
       }
-
-      const buffer = await page.pdf(pdfOptions);
-
-      await context.close();
-      logger.info(`Generated PDF: ${filename} (${buffer.length} bytes)`);
-
-      return { buffer, name: filename };
     });
   }
 
@@ -438,19 +443,12 @@ class PdfService {
       booking.vatIncludedEur,
     );
 
-    const bookingPeriod =
-      booking.timeBegin && booking.timeEnd
-        ? `${formatters.formatDateTime(booking.timeBegin)} - ${formatters.formatDateTime(booking.timeEnd)}`
-        : "-";
-
     const bookingContext = PdfService._buildBookingContext(
       booking,
       allBookables,
-      {
-        period: bookingPeriod,
-        includePayment: false,
-      },
+      { includePayment: false },
     );
+    const bookingPeriod = bookingContext.period;
 
     const mainContent = PdfService._renderBookingItemsTable(tenant, {
       tableClass: "booked-items",
@@ -497,12 +495,16 @@ class PdfService {
     invoiceNumber,
     options = {},
   ) {
-    const { groupBookingId } = options;
+    const { groupBookingId, bookings: providedBookings } = options;
+
+    const bookingsPromise = providedBookings
+      ? Promise.resolve(providedBookings)
+      : BookingManager.getBookings(tenantId, bookingIds);
 
     const [tenant, invoiceApp, bookings, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
       TenantManager.getTenantApp(tenantId, "invoice"),
-      BookingManager.getBookings(tenantId, bookingIds),
+      bookingsPromise,
       BookableManager.getBookables(tenantId),
     ]);
 
@@ -778,7 +780,7 @@ class PdfService {
   }
 
   static _renderPartial(name, data) {
-    return Handlebars.compile(`{{> ${name} }}`)(data);
+    return Handlebars.renderPartial(name, data);
   }
 
   /**
@@ -1013,9 +1015,20 @@ class PdfService {
       return Handlebars.compile(customTemplate);
     }
 
-    const templatePath = path.join(__dirname, "templates", defaultTemplateName);
-    const templateContent = fs.readFileSync(templatePath, "utf-8");
-    return Handlebars.compile(templateContent);
+    if (!DEFAULT_TEMPLATE_CACHE.has(defaultTemplateName)) {
+      const templatePath = path.join(
+        __dirname,
+        "templates",
+        defaultTemplateName,
+      );
+      const templateContent = fs.readFileSync(templatePath, "utf-8");
+      DEFAULT_TEMPLATE_CACHE.set(
+        defaultTemplateName,
+        Handlebars.compile(templateContent),
+      );
+    }
+
+    return DEFAULT_TEMPLATE_CACHE.get(defaultTemplateName);
   }
 }
 

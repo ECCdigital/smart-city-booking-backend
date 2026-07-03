@@ -47,11 +47,28 @@ const PARTIALS = {
   pdfBookingItemsTable: "booking-items-table.temp.html",
   pdfAggregatedReceiptTable: "aggregated-receipt-table.temp.html",
   pdfAggregatedBookingsTable: "aggregated-bookings-table.temp.html",
+  pdfPageNumbers: "page-numbers.temp.html",
 };
 
 for (const [name, filename] of Object.entries(PARTIALS)) {
   const partialPath = path.join(__dirname, "templates", "partials", filename);
   Handlebars.registerPartial(name, fs.readFileSync(partialPath, "utf-8"));
 }
+
+const ALLOWED_PARTIALS = new Set(Object.keys(PARTIALS));
+const partialRenderers = new Map();
+
+function renderPartial(name, data) {
+  if (!ALLOWED_PARTIALS.has(name)) {
+    throw new Error(`Unknown PDF partial: ${name}`);
+  }
+  if (!partialRenderers.has(name)) {
+    partialRenderers.set(name, Handlebars.compile(`{{> ${name} }}`));
+  }
+  return partialRenderers.get(name)(data);
+}
+
+Handlebars.renderPartial = renderPartial;
+Handlebars.ALLOWED_PARTIALS = ALLOWED_PARTIALS;
 
 module.exports = Handlebars;
