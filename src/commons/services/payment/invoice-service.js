@@ -122,6 +122,30 @@ class InvoiceService {
     }
   }
 
+  /**
+   * Creates an aggregated invoice and attaches it to all bookings in the group.
+   * @param {string} tenantId
+   * @param {string[]} bookingIds
+   * @param {string|null} [groupBookingId]
+   * @returns {Promise<{ invoice: object, name: string, invoiceId: string, revision: number, mail: string, bookingIds: string[] }>}
+   */
+  static async issueAggregatedInvoice(tenantId, bookingIds, groupBookingId) {
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+    const invoiceData = await InvoiceService.createAggregatedInvoice(
+      tenantId,
+      bookingIds,
+      groupBookingId,
+    );
+
+    await _attachAggregatedInvoiceToBookings(bookings, invoiceData);
+
+    return {
+      ...invoiceData,
+      mail: bookings[0].mail,
+      bookingIds: bookings.map((b) => b.id),
+    };
+  }
+
   static async getInvoice(tenantId, invoiceName) {
     try {
       return await NextcloudManager.getFile({
@@ -147,6 +171,23 @@ class InvoiceService {
 }
 
 module.exports = InvoiceService;
+
+async function _attachAggregatedInvoiceToBookings(
+  bookings,
+  { name, invoiceId, revision, timeCreated },
+) {
+  for (const booking of bookings) {
+    booking.attachments.push({
+      type: "invoice",
+      name,
+      invoiceId,
+      revision,
+      timeCreated,
+      aggregated: true,
+    });
+    await BookingManager.storeBooking(booking);
+  }
+}
 
 async function _createInvoiceNumber(tenantId, bookingId) {
   const tenant = await TenantManager.getTenant(tenantId);

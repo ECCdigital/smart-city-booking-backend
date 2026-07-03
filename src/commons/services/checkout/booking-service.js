@@ -11,6 +11,7 @@ const {
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
 const ReceiptService = require("../payment/receipt-service");
+const InvoiceService = require("../payment/invoice-service");
 const LockerService = require("../locker/locker-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
@@ -28,6 +29,7 @@ const {
   checkSameContactDetails,
   checkSameStatus,
   checkSamePaymentProvider,
+  checkInvoicePaymentProvider,
   checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
@@ -1398,6 +1400,65 @@ class BookingService {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Creates an aggregated invoice for a group booking and attaches it to all bookings.
+   * @param {string} tenantId
+   * @param {string[]} bookingIds
+   * @param {string|null} groupBookingId
+   * @param {{ validate?: boolean }} [options]
+   * @returns {Promise<{ success: boolean, errors?: object[], invoice?: object, name?: string, invoiceId?: string, revision?: number, mail?: string, bookingIds?: string[] }>}
+   */
+  static async createAggregatedInvoice(
+    tenantId,
+    bookingIds,
+    groupBookingId = null,
+    { validate = true } = {},
+  ) {
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+
+    if (validate) {
+      const validator = new BookingConsistencyService([
+        checkSameContactDetails,
+        checkSameStatus,
+        checkSamePaymentProvider,
+        checkInvoicePaymentProvider,
+      ]);
+
+      const errors = validator.validate(bookings);
+      if (errors.length > 0) {
+        logger.error(
+          `${tenantId} -- bookings ${bookingIds} cannot create invoice: ${JSON.stringify(
+            errors,
+          )}`,
+        );
+        return { success: false, errors };
+      }
+    }
+
+    const {
+      invoice,
+      name,
+      invoiceId,
+      revision,
+      mail,
+      bookingIds: updatedBookingIds,
+    } = await InvoiceService.issueAggregatedInvoice(
+      tenantId,
+      bookings.map((b) => b.id),
+      groupBookingId,
+    );
+
+    return {
+      success: true,
+      invoice,
+      name,
+      invoiceId,
+      revision,
+      mail,
+      bookingIds: updatedBookingIds,
+    };
   }
 
   static async handleSingleBookingRequestConfirmation(
