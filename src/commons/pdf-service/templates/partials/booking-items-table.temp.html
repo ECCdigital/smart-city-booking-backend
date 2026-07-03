@@ -1,0 +1,135 @@
+{{#if (eq layout "summary")}}
+<table class="pdf-items pdf-items--summary {{tableClass}}">
+  <tbody>
+    {{#if booking}} {{#if tableMeta.showBookingId}}
+    <tr>
+      <td class="label">Buchungsnummer</td>
+      <td class="value">{{booking.id}}</td>
+    </tr>
+    {{/if}} {{/if}}
+    <tr>
+      <td class="label">Gesamt (netto)</td>
+      <td class="value">{{totals.netto}}</td>
+    </tr>
+    <tr>
+      <td class="label">zzgl. MwSt.</td>
+      <td class="value">{{totals.vat}}</td>
+    </tr>
+    <tr class="totals">
+      <td class="label">Gesamt (brutto)</td>
+      <td class="value">{{totals.brutto}}</td>
+    </tr>
+    {{#if booking}} {{#if booking.hasPayment}} {{#if tableMeta.showPaymentDate}}
+    <tr>
+      <td class="label">Zahlungsdatum</td>
+      <td class="value">{{booking.paymentDate}}</td>
+    </tr>
+    {{/if}} {{#if tableMeta.showPaymentMethod}}
+    <tr>
+      <td class="label">Zahlungsmethode</td>
+      <td class="value">{{booking.paymentMethod}}</td>
+    </tr>
+    {{/if}} {{/if}} {{#if tableMeta.showBookingPeriod}}
+    <tr>
+      <td class="label">Buchungszeitraum</td>
+      <td class="value">{{booking.period}}</td>
+    </tr>
+    {{/if}} {{/if}} {{#if coupon}}
+    <tr>
+      <td class="label">{{coupon.description}}</td>
+      <td class="value">{{coupon.discountLabel}}</td>
+    </tr>
+    {{/if}}
+    <tr class="objects">
+      <td class="label">Buchungsobjekt</td>
+      <td class="value">
+        {{#if booking.summaryItems}}{{#each booking.summaryItems}}{{label}}, Menge: {{amount}}{{#unless @last}}<br />{{/unless}}{{/each}}{{else}}{{#each items}}{{title}}, Menge: {{amount}}{{#unless @last}}<br />{{/unless}}{{/each}}{{/if}}
+      </td>
+    </tr>
+  </tbody>
+</table>
+{{else if (eq layout "compact")}}
+<table class="pdf-items pdf-items--compact {{tableClass}}">
+  <thead>
+    {{#if compactMetaHtml}}
+    <tr class="meta">
+      <td colspan="3">{{{compactMetaHtml}}}</td>
+    </tr>
+    {{/if}}
+    <tr>
+      <th class="bi-title">Beschreibung</th>
+      <th class="bi-price-item num">Menge × Einzelpreis</th>
+      <th class="bi-price-total num">Gesamt</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr class="item">
+      <td class="bi-title">{{title}}</td>
+      <td class="bi-price-item num">{{amount}} × {{unitPrice}}</td>
+      <td class="bi-price-total num">{{totalPrice}}</td>
+    </tr>
+    {{/each}} {{#if coupon}}
+    <tr class="coupon">
+      <td colspan="2">{{coupon.description}}</td>
+      <td class="num">{{coupon.discountLabel}}</td>
+    </tr>
+    {{/if}}
+    <tr class="totals-sub netto">
+      <td colspan="3">
+        Gesamt (netto) {{totals.netto}} &nbsp;·&nbsp; zzgl. MwSt. {{totals.vat}}
+      </td>
+    </tr>
+    <tr class="brutto">
+      <td colspan="2">Gesamt (brutto)</td>
+      <td class="num">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{else}} {{#if booking}} {{#if tableMeta.showSingleBookingHeader}}
+<div class="pdf-booking-meta">
+  {{#if tableMeta.showBookingId}}Buchungsnummer: {{booking.id}}<br />{{/if}}
+  {{#if tableMeta.showBookingPeriod}}Buchungszeitraum: {{booking.period}}<br />{{/if}}
+  {{#if booking.hasPayment}} {{#if tableMeta.showPaymentDate}}Zahlungsdatum:
+  {{booking.paymentDate}}<br />{{/if}} {{#if tableMeta.showPaymentMethod}}Zahlungsmethode:
+  {{booking.paymentMethod}}<br />{{/if}} {{/if}}
+</div>
+{{/if}} {{/if}}
+<table class="pdf-items pdf-items--detailed {{tableClass}}">
+  <thead>
+    <tr>
+      <th class="bi-title">Beschreibung</th>
+      <th class="bi-amount num">Anzahl</th>
+      <th class="bi-price-item num">Einzelpreis</th>
+      <th class="bi-price-total num">Gesamtpreis</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr class="item">
+      <td class="bi-title">{{title}}</td>
+      <td class="bi-amount num">{{amount}}</td>
+      <td class="bi-price-item num">{{unitPrice}}</td>
+      <td class="bi-price-total num">{{totalPrice}}</td>
+    </tr>
+    {{/each}} {{#if coupon}}
+    <tr class="coupon">
+      <td colspan="3">{{coupon.description}}</td>
+      <td class="num">{{coupon.discountLabel}}</td>
+    </tr>
+    {{/if}}
+    <tr class="netto">
+      <td colspan="3">Gesamt (netto)</td>
+      <td class="num">{{totals.netto}}</td>
+    </tr>
+    <tr class="mwst">
+      <td colspan="3">zzgl. MwSt.</td>
+      <td class="num">{{totals.vat}}</td>
+    </tr>
+    <tr class="brutto">
+      <td colspan="3">Gesamt (brutto)</td>
+      <td class="num">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{/if}}

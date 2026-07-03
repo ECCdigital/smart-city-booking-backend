@@ -1,0 +1,126 @@
+{{#if (eq layout "summary")}}
+<table class="pdf-items pdf-items--summary booked-items">
+  <tbody>
+    {{#each bookings}} {{#unless @first}}
+    <tr class="booking-sep">
+      <td colspan="2"></td>
+    </tr>
+    {{/unless}} {{#if ../tableMeta.showBookingId}}
+    <tr>
+      <td class="label">Buchungsnummer</td>
+      <td class="value">{{id}}</td>
+    </tr>
+    {{/if}} {{#if ../tableMeta.showBookingPeriod}}
+    <tr>
+      <td class="label">Buchungszeitraum</td>
+      <td class="value">{{period}}</td>
+    </tr>
+    {{/if}}
+    <tr class="objects">
+      <td class="label">Buchungsobjekt</td>
+      <td class="value">
+        {{#each summaryItems}}{{label}}, Menge: {{amount}}{{#unless @last}}<br />{{/unless}}{{else}}Keine
+        Buchungsobjekte vorhanden.{{/each}}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">Gesamt (netto)</td>
+      <td class="value">{{netto}}</td>
+    </tr>
+    {{/each}}
+    <tr class="booking-sep">
+      <td colspan="2"></td>
+    </tr>
+    <tr class="totals">
+      <td class="label">Gesamt (netto)</td>
+      <td class="value">{{totals.netto}}</td>
+    </tr>
+    <tr>
+      <td class="label">zzgl. MwSt.</td>
+      <td class="value">{{totals.vat}}</td>
+    </tr>
+    <tr class="totals">
+      <td class="label">Gesamt (brutto)</td>
+      <td class="value">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{else if (eq layout "compact")}}
+<table class="pdf-items pdf-items--compact booked-items">
+  <thead>
+    <tr>
+      {{#if tableMeta.showBookingId}}<th>Buchungs-ID</th>{{/if}}
+      {{#if tableMeta.showBookingPeriod}}<th>Zeitraum</th>{{/if}}
+      <th class="num">Gesamt (netto)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each bookings}}
+    <tr class="item">
+      {{#if ../tableMeta.showBookingId}}<td>{{id}}</td>{{/if}}
+      {{#if ../tableMeta.showBookingPeriod}}<td>{{period}}</td>{{/if}}
+      <td class="num">{{netto}}</td>
+    </tr>
+    <tr>
+      <td colspan="{{../tableMeta.aggregatedInvoiceColumnCount}}" class="sub">
+        {{#each items}}{{title}} ×{{amount}} ({{totalPrice}}){{#unless @last}}
+        &nbsp;·&nbsp; {{/unless}}{{else}}Keine Buchungsobjekte
+        vorhanden.{{/each}}
+      </td>
+    </tr>
+    {{/each}}
+    <tr class="totals-sub netto">
+      <td colspan="{{tableMeta.aggregatedInvoiceColumnCount}}">
+        Gesamt (netto) {{totals.netto}} &nbsp;·&nbsp; zzgl. MwSt. {{totals.vat}}
+      </td>
+    </tr>
+    <tr class="brutto">
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">Gesamt (brutto)</td>
+      <td class="num">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{else}}
+<table class="pdf-items pdf-items--detailed booked-items">
+  <thead>
+    <tr>
+      {{#if tableMeta.showBookingId}}<th>Buchungs-ID</th>{{/if}}
+      {{#if tableMeta.showBookingPeriod}}<th>Zeitraum</th>{{/if}}
+      <th class="num">Gesamt (netto)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each bookings}}
+    <tr class="item">
+      {{#if ../tableMeta.showBookingId}}<td>{{id}}</td>{{/if}}
+      {{#if ../tableMeta.showBookingPeriod}}<td>{{period}}</td>{{/if}}
+      <td class="num">{{netto}}</td>
+    </tr>
+    <tr>
+      <td colspan="{{../tableMeta.aggregatedInvoiceColumnCount}}" class="sub">
+        <strong>Details / Artikel:</strong><br />
+        <ul class="item-list">
+          {{#each items}}
+          <li>{{title}} x{{amount}} ({{totalPrice}})</li>
+          {{else}}
+          <li>Keine Buchungsobjekte vorhanden.</li>
+          {{/each}}
+        </ul>
+      </td>
+    </tr>
+    {{/each}}
+    <tr class="netto">
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">Gesamt (netto)</td>
+      <td class="num">{{totals.netto}}</td>
+    </tr>
+    <tr class="mwst">
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">zzgl. MwSt.</td>
+      <td class="num">{{totals.vat}}</td>
+    </tr>
+    <tr class="brutto">
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">Gesamt (brutto)</td>
+      <td class="num">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{/if}}

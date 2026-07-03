@@ -7,6 +7,18 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Preview for receipt, invoice, and cancellation PDF templates before saving
+- Configurable layout for booking tables in PDFs (summary, compact, detailed)
+- Option to show or hide booking number, period, and payment details in PDF tables
+- Manual collective invoice for all bookings in a group booking, with optional email delivery
+- Page numbers and repeating headers/footers on multi-page PDFs
+
+### Changed
+
+- Updated default templates for receipts, invoices, and cancellations
+
 ## [4.1.3] — 2026-07-02
 
 ### Fixed
