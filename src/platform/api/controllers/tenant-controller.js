@@ -29,6 +29,9 @@ const PdfService = require("../../../commons/pdf-service/pdf-service");
 const {
   isValidBookingLayout,
 } = require("../../../commons/pdf-service/pdf-booking-layout");
+const {
+  validatePdfBookingTableMeta,
+} = require("../../../commons/pdf-service/pdf-booking-table-meta");
 
 const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
@@ -63,6 +66,13 @@ function validatePdfBookingLayout(body) {
     return null;
   }
   return `Invalid pdfBookingLayout "${body.pdfBookingLayout}". Allowed values: summary, compact, detailed`;
+}
+
+function validatePdfBookingTableMetaField(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "pdfBookingTableMeta")) {
+    return null;
+  }
+  return validatePdfBookingTableMeta(body.pdfBookingTableMeta);
 }
 
 const logger = bunyan.createLogger({
@@ -198,6 +208,11 @@ class TenantController {
         return response.status(400).send(layoutError);
       }
 
+      const tableMetaError = validatePdfBookingTableMetaField(request.body);
+      if (tableMetaError) {
+        return response.status(400).send(tableMetaError);
+      }
+
       tenant.ownerUserIds = [user.id];
       if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
@@ -312,6 +327,7 @@ class TenantController {
           "cancellationTemplate",
           "cancellationNumberPrefix",
           "pdfBookingLayout",
+          "pdfBookingTableMeta",
         ];
 
         if (
@@ -342,6 +358,11 @@ class TenantController {
         const layoutError = validatePdfBookingLayout(request.body);
         if (layoutError) {
           return response.status(400).send(layoutError);
+        }
+
+        const tableMetaError = validatePdfBookingTableMetaField(request.body);
+        if (tableMetaError) {
+          return response.status(400).send(tableMetaError);
         }
 
         fields.forEach((field) => {
@@ -404,7 +425,8 @@ class TenantController {
     try {
       const user = request.user;
       const tenantId = request.params.id;
-      const { templateType, template, pdfBookingLayout } = request.body;
+      const { templateType, template, pdfBookingLayout, pdfBookingTableMeta } =
+        request.body;
 
       if (
         !(await PermissionService._isTenantOwner(user.id, tenantId)) &&
@@ -416,6 +438,11 @@ class TenantController {
       const layoutError = validatePdfBookingLayout(request.body);
       if (layoutError) {
         return response.status(400).send(layoutError);
+      }
+
+      const tableMetaError = validatePdfBookingTableMetaField(request.body);
+      if (tableMetaError) {
+        return response.status(400).send(tableMetaError);
       }
 
       if (!["receipt", "invoice", "cancellation"].includes(templateType)) {
@@ -438,6 +465,7 @@ class TenantController {
         templateType,
         template || null,
         pdfBookingLayout || null,
+        pdfBookingTableMeta || null,
       );
 
       response.setHeader("Content-Type", "application/pdf");

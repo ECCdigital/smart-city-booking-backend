@@ -10,6 +10,10 @@ const path = require("path");
 const formatters = require("./pdf-formatters");
 const { buildSampleData } = require("./pdf-sample-data");
 const { resolveBookingLayout } = require("./pdf-booking-layout");
+const {
+  resolveBookingTableMeta,
+  buildCompactMetaHtml,
+} = require("./pdf-booking-table-meta");
 
 const logger = bunyan.createLogger({
   name: "pdf-service.js",
@@ -706,6 +710,7 @@ class PdfService {
     templateType,
     templateOverride,
     layoutOverride = null,
+    tableMetaOverride = null,
   ) {
     if (!DEFAULT_TEMPLATES[templateType]) {
       throw new Error(`Unknown template type: ${templateType}`);
@@ -723,9 +728,11 @@ class PdfService {
       DEFAULT_TEMPLATES[templateType],
     );
 
+    const tableMeta = resolveBookingTableMeta(tenant, tableMetaOverride);
     const data = buildSampleData(
       templateType,
       resolveBookingLayout(tenant, layoutOverride),
+      tableMeta,
     );
 
     const renderedHtml = template(data);
@@ -799,27 +806,53 @@ class PdfService {
     return lines.join("<br/>\n");
   }
 
-  static _renderBookingItemsTable(tenant, data, layoutOverride) {
+  static _renderBookingItemsTable(tenant, data, layoutOverride, tableMetaOverride) {
     const layout = resolveBookingLayout(tenant, layoutOverride || data.layout);
+    const tableMeta = resolveBookingTableMeta(
+      tenant,
+      tableMetaOverride || data.tableMeta,
+    );
     return PdfService._renderPartial("pdfBookingItemsTable", {
       ...data,
       layout,
+      tableMeta,
+      compactMetaHtml: buildCompactMetaHtml(data.booking, tableMeta),
     });
   }
 
-  static _renderAggregatedReceiptTable(tenant, data, layoutOverride) {
+  static _renderAggregatedReceiptTable(
+    tenant,
+    data,
+    layoutOverride,
+    tableMetaOverride,
+  ) {
     const layout = resolveBookingLayout(tenant, layoutOverride || data.layout);
+    const tableMeta = resolveBookingTableMeta(
+      tenant,
+      tableMetaOverride || data.tableMeta,
+    );
     return PdfService._renderPartial("pdfAggregatedReceiptTable", {
       ...data,
       layout,
+      tableMeta,
     });
   }
 
-  static _renderAggregatedBookingsTable(tenant, data, layoutOverride) {
+  static _renderAggregatedBookingsTable(
+    tenant,
+    data,
+    layoutOverride,
+    tableMetaOverride,
+  ) {
     const layout = resolveBookingLayout(tenant, layoutOverride || data.layout);
+    const tableMeta = resolveBookingTableMeta(
+      tenant,
+      tableMetaOverride || data.tableMeta,
+    );
     return PdfService._renderPartial("pdfAggregatedBookingsTable", {
       ...data,
       layout,
+      tableMeta,
     });
   }
 

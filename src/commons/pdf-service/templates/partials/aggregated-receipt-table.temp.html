@@ -5,23 +5,27 @@
     <tr class="booking-sep">
       <td colspan="2"></td>
     </tr>
-    {{/unless}}
+    {{/unless}} {{#if ../tableMeta.showBookingId}}
     <tr>
       <td class="label">Buchungsnummer</td>
       <td class="value">{{id}}</td>
     </tr>
+    {{/if}} {{#if ../tableMeta.showBookingPeriod}}
     <tr>
       <td class="label">Buchungszeitraum</td>
       <td class="value">{{period}}</td>
     </tr>
+    {{/if}} {{#if ../tableMeta.showPaymentDate}}
     <tr>
       <td class="label">Zahlungsdatum</td>
       <td class="value">{{paymentDate}}</td>
     </tr>
+    {{/if}} {{#if ../tableMeta.showPaymentMethod}}
     <tr>
       <td class="label">Zahlungsmethode</td>
       <td class="value">{{paymentMethod}}</td>
     </tr>
+    {{/if}}
     <tr class="objects">
       <td class="label">Buchungsobjekt</td>
       <td class="value">
@@ -55,34 +59,36 @@
 <table class="pdf-items pdf-items--compact booking-detail">
   <thead>
     <tr>
-      <th>Buchungs-ID</th>
-      <th>Zeitraum</th>
-      <th>Zahlung</th>
+      {{#if tableMeta.showBookingId}}<th>Buchungs-ID</th>{{/if}}
+      {{#if tableMeta.showBookingPeriod}}<th>Zeitraum</th>{{/if}}
+      {{#if tableMeta.showAggregatedPaymentColumn}}<th>Zahlung</th>{{/if}}
       <th class="num">Gesamt (netto)</th>
     </tr>
   </thead>
   <tbody>
     {{#each bookings}}
     <tr class="item">
-      <td>{{id}}</td>
-      <td>{{period}}</td>
-      <td>{{paymentDate}} · {{paymentMethod}}</td>
+      {{#if ../tableMeta.showBookingId}}<td>{{id}}</td>{{/if}}
+      {{#if ../tableMeta.showBookingPeriod}}<td>{{period}}</td>{{/if}}
+      {{#if ../tableMeta.showAggregatedPaymentColumn}}
+      <td>{{#if ../tableMeta.showPaymentDate}}{{paymentDate}}{{/if}}{{#if ../tableMeta.showPaymentDate}}{{#if ../tableMeta.showPaymentMethod}} · {{/if}}{{/if}}{{#if ../tableMeta.showPaymentMethod}}{{paymentMethod}}{{/if}}</td>
+      {{/if}}
       <td class="num">{{netto}}</td>
     </tr>
     <tr>
-      <td colspan="4" class="sub">
+      <td colspan="{{../tableMeta.aggregatedReceiptColumnCount}}" class="sub">
         {{#each items}}{{title}} ×{{amount}} ({{totalPrice}}){{#unless @last}}
         &nbsp;·&nbsp; {{/unless}}{{else}}Keine Artikel{{/each}}
       </td>
     </tr>
     {{/each}}
     <tr class="totals-sub netto">
-      <td colspan="4">
+      <td colspan="{{tableMeta.aggregatedReceiptColumnCount}}">
         Gesamt (netto) {{totals.netto}} &nbsp;·&nbsp; zzgl. MwSt. {{totals.vat}}
       </td>
     </tr>
     <tr class="brutto">
-      <td colspan="3">Gesamt (brutto)</td>
+      <td colspan="{{tableMeta.aggregatedReceiptLabelColspan}}">Gesamt (brutto)</td>
       <td class="num">{{totals.brutto}}</td>
     </tr>
   </tbody>
@@ -91,24 +97,24 @@
 <table class="pdf-items pdf-items--detailed booking-detail">
   <thead>
     <tr>
-      <th>Buchungs-ID</th>
-      <th>Zeitraum</th>
-      <th>Zahlungsdatum</th>
-      <th>Bezahlmethode</th>
+      {{#if tableMeta.showBookingId}}<th>Buchungs-ID</th>{{/if}}
+      {{#if tableMeta.showBookingPeriod}}<th>Zeitraum</th>{{/if}}
+      {{#if tableMeta.showPaymentDate}}<th>Zahlungsdatum</th>{{/if}}
+      {{#if tableMeta.showPaymentMethod}}<th>Bezahlmethode</th>{{/if}}
       <th class="num">Gesamt (netto)</th>
     </tr>
   </thead>
   <tbody>
     {{#each bookings}}
     <tr class="item">
-      <td>{{id}}</td>
-      <td>{{period}}</td>
-      <td>{{paymentDate}}</td>
-      <td>{{paymentMethod}}</td>
+      {{#if ../tableMeta.showBookingId}}<td>{{id}}</td>{{/if}}
+      {{#if ../tableMeta.showBookingPeriod}}<td>{{period}}</td>{{/if}}
+      {{#if ../tableMeta.showPaymentDate}}<td>{{paymentDate}}</td>{{/if}}
+      {{#if ../tableMeta.showPaymentMethod}}<td>{{paymentMethod}}</td>{{/if}}
       <td class="num">{{netto}}</td>
     </tr>
     <tr>
-      <td colspan="5" class="sub">
+      <td colspan="{{../tableMeta.aggregatedReceiptColumnCount}}" class="sub">
         <strong>Details / Artikel:</strong><br />
         <ul class="item-list">
           {{#each items}}
@@ -121,15 +127,15 @@
     </tr>
     {{/each}}
     <tr class="netto">
-      <td colspan="4">Gesamt (netto)</td>
+      <td colspan="{{tableMeta.aggregatedReceiptLabelColspan}}">Gesamt (netto)</td>
       <td class="num">{{totals.netto}}</td>
     </tr>
     <tr class="mwst">
-      <td colspan="4">zzgl. MwSt.</td>
+      <td colspan="{{tableMeta.aggregatedReceiptLabelColspan}}">zzgl. MwSt.</td>
       <td class="num">{{totals.vat}}</td>
     </tr>
     <tr class="brutto">
-      <td colspan="4">Gesamt (brutto)</td>
+      <td colspan="{{tableMeta.aggregatedReceiptLabelColspan}}">Gesamt (brutto)</td>
       <td class="num">{{totals.brutto}}</td>
     </tr>
   </tbody>

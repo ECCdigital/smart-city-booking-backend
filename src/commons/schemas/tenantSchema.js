@@ -39,6 +39,15 @@ const tenantSchemaDefinition = {
     enum: ["summary", "compact", "detailed"],
     default: "detailed",
   },
+  pdfBookingTableMeta: {
+    type: Object,
+    default: () => ({
+      showBookingId: true,
+      showBookingPeriod: true,
+      showPaymentDate: true,
+      showPaymentMethod: true,
+    }),
+  },
   paymentPurposeSuffix: { type: String, default: "" },
   applications: { type: Array, default: [] },
   maxBookingAdvanceInMonths: { type: Number, default: null },

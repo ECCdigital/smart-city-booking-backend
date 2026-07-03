@@ -5,15 +5,17 @@
     <tr class="booking-sep">
       <td colspan="2"></td>
     </tr>
-    {{/unless}}
+    {{/unless}} {{#if ../tableMeta.showBookingId}}
     <tr>
       <td class="label">Buchungsnummer</td>
       <td class="value">{{id}}</td>
     </tr>
+    {{/if}} {{#if ../tableMeta.showBookingPeriod}}
     <tr>
       <td class="label">Buchungszeitraum</td>
       <td class="value">{{period}}</td>
     </tr>
+    {{/if}}
     <tr class="objects">
       <td class="label">Buchungsobjekt</td>
       <td class="value">
@@ -47,20 +49,20 @@
 <table class="pdf-items pdf-items--compact booked-items">
   <thead>
     <tr>
-      <th>Buchungs-ID</th>
-      <th>Zeitraum</th>
+      {{#if tableMeta.showBookingId}}<th>Buchungs-ID</th>{{/if}}
+      {{#if tableMeta.showBookingPeriod}}<th>Zeitraum</th>{{/if}}
       <th class="num">Gesamt (netto)</th>
     </tr>
   </thead>
   <tbody>
     {{#each bookings}}
     <tr class="item">
-      <td>{{id}}</td>
-      <td>{{period}}</td>
+      {{#if ../tableMeta.showBookingId}}<td>{{id}}</td>{{/if}}
+      {{#if ../tableMeta.showBookingPeriod}}<td>{{period}}</td>{{/if}}
       <td class="num">{{netto}}</td>
     </tr>
     <tr>
-      <td colspan="3" class="sub">
+      <td colspan="{{../tableMeta.aggregatedInvoiceColumnCount}}" class="sub">
         {{#each items}}{{title}} ×{{amount}} ({{totalPrice}}){{#unless @last}}
         &nbsp;·&nbsp; {{/unless}}{{else}}Keine Buchungsobjekte
         vorhanden.{{/each}}
@@ -68,12 +70,12 @@
     </tr>
     {{/each}}
     <tr class="totals-sub netto">
-      <td colspan="3">
+      <td colspan="{{tableMeta.aggregatedInvoiceColumnCount}}">
         Gesamt (netto) {{totals.netto}} &nbsp;·&nbsp; zzgl. MwSt. {{totals.vat}}
       </td>
     </tr>
     <tr class="brutto">
-      <td colspan="2">Gesamt (brutto)</td>
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">Gesamt (brutto)</td>
       <td class="num">{{totals.brutto}}</td>
     </tr>
   </tbody>
@@ -82,20 +84,20 @@
 <table class="pdf-items pdf-items--detailed booked-items">
   <thead>
     <tr>
-      <th>Buchungs-ID</th>
-      <th>Zeitraum</th>
+      {{#if tableMeta.showBookingId}}<th>Buchungs-ID</th>{{/if}}
+      {{#if tableMeta.showBookingPeriod}}<th>Zeitraum</th>{{/if}}
       <th class="num">Gesamt (netto)</th>
     </tr>
   </thead>
   <tbody>
     {{#each bookings}}
     <tr class="item">
-      <td>{{id}}</td>
-      <td>{{period}}</td>
+      {{#if ../tableMeta.showBookingId}}<td>{{id}}</td>{{/if}}
+      {{#if ../tableMeta.showBookingPeriod}}<td>{{period}}</td>{{/if}}
       <td class="num">{{netto}}</td>
     </tr>
     <tr>
-      <td colspan="3" class="sub">
+      <td colspan="{{../tableMeta.aggregatedInvoiceColumnCount}}" class="sub">
         <strong>Details / Artikel:</strong><br />
         <ul class="item-list">
           {{#each items}}
@@ -108,15 +110,15 @@
     </tr>
     {{/each}}
     <tr class="netto">
-      <td colspan="2">Gesamt (netto)</td>
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">Gesamt (netto)</td>
       <td class="num">{{totals.netto}}</td>
     </tr>
     <tr class="mwst">
-      <td colspan="2">zzgl. MwSt.</td>
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">zzgl. MwSt.</td>
       <td class="num">{{totals.vat}}</td>
     </tr>
     <tr class="brutto">
-      <td colspan="2">Gesamt (brutto)</td>
+      <td colspan="{{tableMeta.aggregatedInvoiceLabelColspan}}">Gesamt (brutto)</td>
       <td class="num">{{totals.brutto}}</td>
     </tr>
   </tbody>

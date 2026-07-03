@@ -1,12 +1,12 @@
 {{#if (eq layout "summary")}}
 <table class="pdf-items pdf-items--summary {{tableClass}}">
   <tbody>
-    {{#if booking}}
+    {{#if booking}} {{#if tableMeta.showBookingId}}
     <tr>
       <td class="label">Buchungsnummer</td>
       <td class="value">{{booking.id}}</td>
     </tr>
-    {{/if}}
+    {{/if}} {{/if}}
     <tr class="totals">
       <td class="label">Gesamt (netto)</td>
       <td class="value">{{totals.netto}}</td>
@@ -19,21 +19,22 @@
       <td class="label">Gesamt (brutto)</td>
       <td class="value">{{totals.brutto}}</td>
     </tr>
-    {{#if booking.hasPayment}}
+    {{#if booking}} {{#if booking.hasPayment}} {{#if tableMeta.showPaymentDate}}
     <tr>
       <td class="label">Zahlungsdatum</td>
       <td class="value">{{booking.paymentDate}}</td>
     </tr>
+    {{/if}} {{#if tableMeta.showPaymentMethod}}
     <tr>
       <td class="label">Zahlungsmethode</td>
       <td class="value">{{booking.paymentMethod}}</td>
     </tr>
-    {{/if}} {{#if booking.period}}
+    {{/if}} {{/if}} {{#if tableMeta.showBookingPeriod}}
     <tr>
       <td class="label">Buchungszeitraum</td>
       <td class="value">{{booking.period}}</td>
     </tr>
-    {{/if}} {{#if coupon}}
+    {{/if}} {{/if}} {{#if coupon}}
     <tr>
       <td class="label">{{coupon.description}}</td>
       <td class="value">{{coupon.discountLabel}}</td>
@@ -50,13 +51,9 @@
 {{else if (eq layout "compact")}}
 <table class="pdf-items pdf-items--compact {{tableClass}}">
   <thead>
-    {{#if booking}}
+    {{#if compactMetaHtml}}
     <tr class="meta">
-      <td colspan="3">
-        Buchung <strong>{{booking.id}}</strong> &nbsp;·&nbsp; {{booking.period}}
-        {{#if booking.hasPayment}} &nbsp;·&nbsp; bezahlt am
-        {{booking.paymentDate}} per {{booking.paymentMethod}}{{/if}}
-      </td>
+      <td colspan="3">{{{compactMetaHtml}}}</td>
     </tr>
     {{/if}}
     <tr>
@@ -89,15 +86,15 @@
     </tr>
   </tbody>
 </table>
-{{else}} {{#if booking}}
+{{else}} {{#if booking}} {{#if tableMeta.showSingleBookingHeader}}
 <div class="pdf-booking-meta">
-  Buchungsnummer: {{booking.id}}<br />
-  Buchungszeitraum: {{booking.period}}<br />
-  {{#if booking.hasPayment}} Zahlungsdatum: {{booking.paymentDate}}<br />
-  Zahlungsmethode: {{booking.paymentMethod}}<br />
-  {{/if}}
+  {{#if tableMeta.showBookingId}}Buchungsnummer: {{booking.id}}<br />{{/if}}
+  {{#if tableMeta.showBookingPeriod}}Buchungszeitraum: {{booking.period}}<br />{{/if}}
+  {{#if booking.hasPayment}} {{#if tableMeta.showPaymentDate}}Zahlungsdatum:
+  {{booking.paymentDate}}<br />{{/if}} {{#if tableMeta.showPaymentMethod}}Zahlungsmethode:
+  {{booking.paymentMethod}}<br />{{/if}} {{/if}}
 </div>
-{{/if}}
+{{/if}} {{/if}}
 <table class="pdf-items pdf-items--detailed {{tableClass}}">
   <thead>
     <tr>

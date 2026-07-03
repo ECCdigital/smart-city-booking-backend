@@ -349,6 +349,118 @@ describe("PdfService.generatePreview", () => {
   });
 });
 
+describe("pdf booking table meta", () => {
+  const {
+    resolveBookingTableMeta,
+    validatePdfBookingTableMeta,
+    DEFAULT_PDF_BOOKING_TABLE_META,
+  } = require("../src/commons/pdf-service/pdf-booking-table-meta");
+
+  it("defaults all table meta flags to true", () => {
+    assert.deepStrictEqual(resolveBookingTableMeta({}), {
+      ...DEFAULT_PDF_BOOKING_TABLE_META,
+      showPaymentInTable: true,
+      showSingleBookingHeader: true,
+      aggregatedMetaColumnCount: 4,
+      aggregatedReceiptColumnCount: 5,
+      aggregatedInvoiceColumnCount: 3,
+      aggregatedReceiptLabelColspan: 4,
+      aggregatedInvoiceLabelColspan: 2,
+      showAggregatedPaymentColumn: true,
+    });
+  });
+
+  it("merges tenant and override flags", () => {
+    const meta = resolveBookingTableMeta(
+      {
+        pdfBookingTableMeta: {
+          showBookingId: false,
+          showPaymentDate: false,
+        },
+      },
+      { showBookingPeriod: false },
+    );
+    assert.strictEqual(meta.showBookingId, false);
+    assert.strictEqual(meta.showBookingPeriod, false);
+    assert.strictEqual(meta.showPaymentDate, false);
+    assert.strictEqual(meta.showPaymentMethod, true);
+    assert.strictEqual(meta.showSingleBookingHeader, true);
+  });
+
+  it("validates pdfBookingTableMeta objects", () => {
+    assert.strictEqual(validatePdfBookingTableMeta(null), null);
+    assert.ok(validatePdfBookingTableMeta({ unknown: true }));
+    assert.ok(validatePdfBookingTableMeta({ showBookingId: "yes" }));
+    assert.strictEqual(
+      validatePdfBookingTableMeta({ showBookingId: false }),
+      null,
+    );
+  });
+
+  it("hides booking metadata in detailed receipt tables when disabled", () => {
+    const tableMeta = resolveBookingTableMeta({
+      pdfBookingTableMeta: {
+        showBookingId: false,
+        showBookingPeriod: false,
+        showPaymentDate: false,
+        showPaymentMethod: false,
+      },
+    });
+    const html = Handlebars.renderPartial("pdfBookingItemsTable", {
+      layout: "detailed",
+      tableClass: "booking-detail",
+      items: [
+        {
+          title: "Sitzungsraum",
+          amount: 2,
+          unitPrice: "50,00 €",
+          totalPrice: "100,00 €",
+        },
+      ],
+      coupon: null,
+      totals: {
+        netto: "100,00 €",
+        vat: "19,00 €",
+        brutto: "119,00 €",
+      },
+      booking: {
+        id: "booking-1",
+        period: "01.08.2026, 09:00 – 01.08.2026, 17:00",
+        paymentDate: "15.07.2026, 10:24",
+        paymentMethod: "Überweisung",
+        hasPayment: true,
+      },
+      tableMeta,
+      compactMetaHtml: null,
+    });
+
+    assert.ok(!html.includes("pdf-booking-meta"));
+    assert.ok(!html.includes("Buchungsnummer:"));
+    assert.ok(!html.includes("Buchungszeitraum:"));
+    assert.ok(!html.includes("Zahlungsdatum:"));
+    assert.ok(!html.includes("Zahlungsmethode:"));
+    assert.ok(html.includes("Sitzungsraum"));
+  });
+
+  it("keeps booking variables available when table meta is hidden", () => {
+    const data = buildSampleData("receipt", "detailed", {
+      showBookingId: false,
+      showBookingPeriod: false,
+      showPaymentDate: false,
+      showPaymentMethod: false,
+    });
+    const template = Handlebars.compile(
+      "<p>Ref: {{booking.id}} · {{booking.period}} · {{booking.paymentDate}} · {{booking.paymentMethod}}</p>{{{bookingEntries}}}",
+    );
+    const html = template(data);
+
+    assert.ok(html.includes("Ref: BK-2026-0042"));
+    assert.ok(html.includes("01.08.2026"));
+    assert.ok(html.includes("Überweisung"));
+    assert.ok(!html.includes("pdf-booking-meta"));
+  });
+});
+
 describe("pdf booking layout", () => {
   it("defaults to detailed when tenant has no layout configured", () => {
     const {
@@ -379,6 +491,19 @@ describe("pdf sample data", () => {
     const data = buildSampleData("receipt", "summary");
     assert.ok(data.bookingEntries.includes("Buchungsobjekt"));
     assert.ok(!data.bookingEntries.includes("Einzelpreis"));
+  });
+
+  it("hides configured booking metadata in sample tables", () => {
+    const data = buildSampleData("receipt", "detailed", {
+      showBookingId: false,
+      showBookingPeriod: false,
+      showPaymentDate: false,
+      showPaymentMethod: false,
+    });
+    assert.ok(!data.bookingEntries.includes("pdf-booking-meta"));
+    assert.ok(!data.bookingEntries.includes("Buchungsnummer:"));
+    assert.strictEqual(data.booking.id, "BK-2026-0042");
+    assert.ok(data.booking.paymentDate);
   });
 
   it("default templates render with sample data without errors", () => {

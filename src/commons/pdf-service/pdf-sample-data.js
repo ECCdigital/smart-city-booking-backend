@@ -1,6 +1,10 @@
 const Handlebars = require("./pdf-handlebars");
 const formatters = require("./pdf-formatters");
 const { DEFAULT_PDF_BOOKING_LAYOUT } = require("./pdf-booking-layout");
+const {
+  resolveBookingTableMeta,
+  buildCompactMetaHtml,
+} = require("./pdf-booking-table-meta");
 
 /**
  * Sample data for PDF template previews. Intentionally contains enough line
@@ -82,6 +86,7 @@ const SAMPLE_BOOKING = {
 
 function buildBaseSampleData(
   layout,
+  tableMeta,
   { negative = false, tableClass, includePayment = false, bookingOverrides = {} } = {},
 ) {
   const items = buildSampleItems({ negative });
@@ -103,6 +108,10 @@ function buildBaseSampleData(
     ...bookingOverrides,
   };
 
+  const resolvedTableMeta =
+    tableMeta && tableMeta.aggregatedReceiptColumnCount != null
+      ? tableMeta
+      : resolveBookingTableMeta(null, tableMeta);
   const renderedTable = renderPartial("pdfBookingItemsTable", {
     layout,
     tableClass,
@@ -110,14 +119,20 @@ function buildBaseSampleData(
     coupon,
     totals,
     booking,
+    tableMeta: resolvedTableMeta,
+    compactMetaHtml: buildCompactMetaHtml(booking, resolvedTableMeta),
   });
 
-  return { items, totals, coupon, booking, renderedTable, bruttoEur };
+  return { items, totals, coupon, booking, renderedTable, bruttoEur, tableMeta: resolvedTableMeta };
 }
 
-function buildReceiptSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
+function buildReceiptSampleData(
+  layout = DEFAULT_PDF_BOOKING_LAYOUT,
+  tableMeta = null,
+) {
   const { items, totals, coupon, booking, renderedTable } = buildBaseSampleData(
     layout,
+    tableMeta,
     {
       tableClass: "booking-detail",
       includePayment: true,
@@ -138,9 +153,12 @@ function buildReceiptSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
   };
 }
 
-function buildInvoiceSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
+function buildInvoiceSampleData(
+  layout = DEFAULT_PDF_BOOKING_LAYOUT,
+  tableMeta = null,
+) {
   const { items, totals, coupon, booking, renderedTable, bruttoEur } =
-    buildBaseSampleData(layout, {
+    buildBaseSampleData(layout, tableMeta, {
       tableClass: "booked-items",
     });
 
@@ -167,9 +185,12 @@ function buildInvoiceSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
   };
 }
 
-function buildCancellationSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
+function buildCancellationSampleData(
+  layout = DEFAULT_PDF_BOOKING_LAYOUT,
+  tableMeta = null,
+) {
   const { items, totals, coupon, booking, renderedTable, bruttoEur } =
-    buildBaseSampleData(layout, {
+    buildBaseSampleData(layout, tableMeta, {
       negative: true,
       tableClass: "booked-items",
     });
@@ -200,14 +221,18 @@ function buildCancellationSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
   };
 }
 
-function buildSampleData(templateType, layout = DEFAULT_PDF_BOOKING_LAYOUT) {
+function buildSampleData(
+  templateType,
+  layout = DEFAULT_PDF_BOOKING_LAYOUT,
+  tableMetaOverride = null,
+) {
   switch (templateType) {
     case "receipt":
-      return buildReceiptSampleData(layout);
+      return buildReceiptSampleData(layout, tableMetaOverride);
     case "invoice":
-      return buildInvoiceSampleData(layout);
+      return buildInvoiceSampleData(layout, tableMetaOverride);
     case "cancellation":
-      return buildCancellationSampleData(layout);
+      return buildCancellationSampleData(layout, tableMetaOverride);
     default:
       throw new Error(`Unknown template type: ${templateType}`);
   }
