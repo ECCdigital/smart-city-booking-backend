@@ -120,6 +120,9 @@ describe("PdfService._prepareDocument", () => {
     const { documentHtml, footerTemplate, headerTemplate } =
       PdfService._prepareDocument(html);
     assert.ok(footerTemplate.includes("pageNumber"));
+    assert.ok(footerTemplate.includes("pdf-hf"));
+    assert.ok(footerTemplate.includes("Helvetica Neue"));
+    assert.ok(footerTemplate.includes("font-size: 10px"));
     assert.strictEqual(headerTemplate, null);
     assert.ok(!documentHtml.includes("data-pdf-footer"));
   });

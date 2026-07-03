@@ -156,6 +156,27 @@ const BASE_MARGIN = "10mm";
 const HEADER_MARGIN = "30mm";
 const FOOTER_MARGIN = "22mm";
 
+/** Matches the default body font in PDF templates. */
+const PDF_FONT_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+/** Slightly below body text (12px) but above the previous 8px footer size. */
+const PDF_HEADER_FOOTER_FONT_SIZE = "10px";
+
+const HEADER_FOOTER_STYLE_BLOCK = `<style>
+.pdf-hf {
+  width: 100%;
+  font-family: ${PDF_FONT_FAMILY};
+  font-size: ${PDF_HEADER_FOOTER_FONT_SIZE};
+  line-height: 1.4;
+  color: #666;
+  padding: 0 10mm;
+  box-sizing: border-box;
+}
+.pdf-hf, .pdf-hf * {
+  font-family: ${PDF_FONT_FAMILY} !important;
+  font-size: ${PDF_HEADER_FOOTER_FONT_SIZE} !important;
+}
+</style>`;
+
 const TEMPLATE_REQUIRED_PATTERNS = [
   { pattern: /<!DOCTYPE html>/i, label: "<!DOCTYPE html>" },
   { pattern: /<html[\s>]/i, label: "<html>" },
@@ -247,11 +268,15 @@ class PdfService {
 
       const headerEl = $("template[data-pdf-header]").first();
       if (headerEl.length) {
-        headerTemplate = headerEl.html()?.trim() || null;
+        headerTemplate = PdfService._styleHeaderFooterTemplate(
+          headerEl.html()?.trim() || null,
+        );
       }
       const footerEl = $("template[data-pdf-footer]").first();
       if (footerEl.length) {
-        footerTemplate = footerEl.html()?.trim() || null;
+        footerTemplate = PdfService._styleHeaderFooterTemplate(
+          footerEl.html()?.trim() || null,
+        );
       }
       $("template[data-pdf-header], template[data-pdf-footer]").remove();
 
@@ -265,6 +290,18 @@ class PdfService {
     }
 
     return { documentHtml, headerTemplate, footerTemplate };
+  }
+
+  /**
+   * Chromium renders header/footer templates in an isolated context without
+   * access to the document's stylesheets. Inject matching typography here so
+   * tenant templates inherit the same font as the PDF body.
+   */
+  static _styleHeaderFooterTemplate(html) {
+    if (!html) {
+      return html;
+    }
+    return `${HEADER_FOOTER_STYLE_BLOCK}<div class="pdf-hf">${html}</div>`;
   }
 
   static formatDateTime(value) {
