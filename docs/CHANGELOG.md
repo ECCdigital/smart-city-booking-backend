@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Admins can manually create a collective invoice for all bookings in a group booking, with optional email delivery
+
 ## [4.1.3] — 2026-07-02
 
 ### Fixed
