@@ -1,5 +1,64 @@
-<table class="pdf-items {{tableClass}}">
+{{#if (eq layout "summary")}}
+<table class="pdf-items pdf-items--summary {{tableClass}}">
+  <tbody>
+    {{#if booking}}
+    <tr>
+      <td class="label">Buchungsnummer</td>
+      <td class="value">{{booking.id}}</td>
+    </tr>
+    {{/if}}
+    <tr class="totals">
+      <td class="label">Gesamt (netto)</td>
+      <td class="value">{{totals.netto}}</td>
+    </tr>
+    <tr>
+      <td class="label">zzgl. MwSt.</td>
+      <td class="value">{{totals.vat}}</td>
+    </tr>
+    <tr class="totals">
+      <td class="label">Gesamt (brutto)</td>
+      <td class="value">{{totals.brutto}}</td>
+    </tr>
+    {{#if booking.hasPayment}}
+    <tr>
+      <td class="label">Zahlungsdatum</td>
+      <td class="value">{{booking.paymentDate}}</td>
+    </tr>
+    <tr>
+      <td class="label">Zahlungsmethode</td>
+      <td class="value">{{booking.paymentMethod}}</td>
+    </tr>
+    {{/if}} {{#if booking.period}}
+    <tr>
+      <td class="label">Buchungszeitraum</td>
+      <td class="value">{{booking.period}}</td>
+    </tr>
+    {{/if}} {{#if coupon}}
+    <tr>
+      <td class="label">{{coupon.description}}</td>
+      <td class="value">{{coupon.discountLabel}}</td>
+    </tr>
+    {{/if}}
+    <tr class="objects">
+      <td class="label">Buchungsobjekt</td>
+      <td class="value">
+        {{#if booking.summaryItems}}{{#each booking.summaryItems}}{{label}}, Menge: {{amount}}{{#unless @last}}<br />{{/unless}}{{/each}}{{else}}{{#each items}}{{title}}, Menge: {{amount}}{{#unless @last}}<br />{{/unless}}{{/each}}{{/if}}
+      </td>
+    </tr>
+  </tbody>
+</table>
+{{else if (eq layout "compact")}}
+<table class="pdf-items pdf-items--compact {{tableClass}}">
   <thead>
+    {{#if booking}}
+    <tr class="meta">
+      <td colspan="3">
+        Buchung <strong>{{booking.id}}</strong> &nbsp;·&nbsp; {{booking.period}}
+        {{#if booking.hasPayment}} &nbsp;·&nbsp; bezahlt am
+        {{booking.paymentDate}} per {{booking.paymentMethod}}{{/if}}
+      </td>
+    </tr>
+    {{/if}}
     <tr>
       <th class="bi-title">Beschreibung</th>
       <th class="bi-price-item num">Menge × Einzelpreis</th>
@@ -30,3 +89,50 @@
     </tr>
   </tbody>
 </table>
+{{else}} {{#if booking}}
+<div class="pdf-booking-meta">
+  Buchungsnummer: {{booking.id}}<br />
+  Buchungszeitraum: {{booking.period}}<br />
+  {{#if booking.hasPayment}} Zahlungsdatum: {{booking.paymentDate}}<br />
+  Zahlungsmethode: {{booking.paymentMethod}}<br />
+  {{/if}}
+</div>
+{{/if}}
+<table class="pdf-items pdf-items--detailed {{tableClass}}">
+  <thead>
+    <tr>
+      <th class="bi-title">Beschreibung</th>
+      <th class="bi-amount num">Anzahl</th>
+      <th class="bi-price-item num">Einzelpreis</th>
+      <th class="bi-price-total num">Gesamtpreis</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr class="item">
+      <td class="bi-title">{{title}}</td>
+      <td class="bi-amount num">{{amount}}</td>
+      <td class="bi-price-item num">{{unitPrice}}</td>
+      <td class="bi-price-total num">{{totalPrice}}</td>
+    </tr>
+    {{/each}} {{#if coupon}}
+    <tr class="coupon">
+      <td colspan="3">{{coupon.description}}</td>
+      <td class="num">{{coupon.discountLabel}}</td>
+    </tr>
+    {{/if}}
+    <tr class="netto">
+      <td colspan="3">Gesamt (netto)</td>
+      <td class="num">{{totals.netto}}</td>
+    </tr>
+    <tr class="mwst">
+      <td colspan="3">zzgl. MwSt.</td>
+      <td class="num">{{totals.vat}}</td>
+    </tr>
+    <tr class="brutto">
+      <td colspan="3">Gesamt (brutto)</td>
+      <td class="num">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{/if}}

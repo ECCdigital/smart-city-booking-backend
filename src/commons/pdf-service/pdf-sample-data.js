@@ -1,5 +1,6 @@
 const Handlebars = require("./pdf-handlebars");
 const formatters = require("./pdf-formatters");
+const { DEFAULT_PDF_BOOKING_LAYOUT } = require("./pdf-booking-layout");
 
 /**
  * Sample data for PDF template previews. Intentionally contains enough line
@@ -57,6 +58,13 @@ function buildSampleItems({ negative = false } = {}) {
   });
 }
 
+function buildSampleSummaryItems(items) {
+  return items.map((item) => ({
+    label: item.title,
+    amount: item.amount,
+  }));
+}
+
 function sumItems(items) {
   return items.reduce((sum, item) => sum + item.totalPriceEur, 0);
 }
@@ -64,24 +72,33 @@ function sumItems(items) {
 const SAMPLE_ADDRESS =
   "Musterfirma GmbH<br/>\nMax Mustermann<br/>\nMusterstraße 12<br/>\n12345 Musterstadt";
 
-function buildReceiptSampleData() {
+const SAMPLE_BOOKING = {
+  id: "BK-2026-0042",
+  period: "01.08.2026, 09:00 – 01.08.2026, 17:00",
+  paymentDate: "15.07.2026, 10:24",
+  paymentMethod: "Überweisung",
+  hasPayment: true,
+};
+
+function buildReceiptSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
   const items = buildSampleItems();
   const bruttoEur = sumItems(items);
   const vatEur = bruttoEur * 0.19;
   const totals = buildTotals(bruttoEur, vatEur);
   const coupon = null;
+  const booking = {
+    ...SAMPLE_BOOKING,
+    summaryItems: buildSampleSummaryItems(items),
+  };
 
-  const bookingEntries =
-    '<p style="font-size: 10px; color: #444; margin: 0 0 6px; line-height: 1.5">' +
-    "Buchung <strong>BK-2026-0042</strong> &nbsp;·&nbsp; " +
-    "01.08.2026, 09:00 – 01.08.2026, 17:00 &nbsp;·&nbsp; " +
-    "bezahlt am 15.07.2026, 10:24 per Überweisung</p>" +
-    renderPartial("pdfBookingItemsTable", {
-      tableClass: "booking-detail",
-      items,
-      coupon,
-      totals,
-    });
+  const bookingEntries = renderPartial("pdfBookingItemsTable", {
+    layout,
+    tableClass: "booking-detail",
+    items,
+    coupon,
+    totals,
+    booking,
+  });
 
   return {
     isAggregated: false,
@@ -89,30 +106,33 @@ function buildReceiptSampleData() {
     bookingDate: formatters.formatDate(new Date()),
     receiptAddress: SAMPLE_ADDRESS,
     bookingEntries,
-    booking: {
-      id: "BK-2026-0042",
-      period: "01.08.2026, 09:00 – 01.08.2026, 17:00",
-      paymentDate: "15.07.2026, 10:24",
-      paymentMethod: "Überweisung",
-    },
+    booking,
     items,
     coupon,
     totals,
   };
 }
 
-function buildInvoiceSampleData() {
+function buildInvoiceSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
   const items = buildSampleItems();
   const bruttoEur = sumItems(items);
   const vatEur = bruttoEur * 0.19;
   const totals = buildTotals(bruttoEur, vatEur);
   const coupon = null;
+  const booking = {
+    id: SAMPLE_BOOKING.id,
+    period: "01.08.2026, 09:00 - 01.08.2026, 17:00",
+    hasPayment: false,
+    summaryItems: buildSampleSummaryItems(items),
+  };
 
   const mainContent = renderPartial("pdfBookingItemsTable", {
+    layout,
     tableClass: "booked-items",
     items,
     coupon,
     totals,
+    booking,
   });
 
   return {
@@ -129,26 +149,35 @@ function buildInvoiceSampleData() {
     mainContent,
     location: "Musterstadt",
     totalAmount: formatters.formatAmount(bruttoEur),
-    bookingId: "BK-2026-0042",
-    bookingPeriod: "01.08.2026, 09:00 - 01.08.2026, 17:00",
+    bookingId: SAMPLE_BOOKING.id,
+    bookingPeriod: booking.period,
+    booking,
     items,
     coupon,
     totals,
   };
 }
 
-function buildCancellationSampleData() {
+function buildCancellationSampleData(layout = DEFAULT_PDF_BOOKING_LAYOUT) {
   const items = buildSampleItems({ negative: true });
   const bruttoEur = sumItems(items);
   const vatEur = bruttoEur * 0.19;
   const totals = buildTotals(bruttoEur, vatEur, { negative: true });
   const coupon = null;
+  const booking = {
+    id: SAMPLE_BOOKING.id,
+    period: SAMPLE_BOOKING.period,
+    hasPayment: false,
+    summaryItems: buildSampleSummaryItems(items),
+  };
 
   const mainContent = renderPartial("pdfBookingItemsTable", {
+    layout,
     tableClass: "booked-items",
     items,
     coupon,
     totals,
+    booking,
   });
 
   return {
@@ -169,24 +198,25 @@ function buildCancellationSampleData() {
     mainContent,
     location: "Musterstadt",
     totalAmount: formatters.formatNegativeCurrency(bruttoEur),
-    bookingId: "BK-2026-0042",
+    bookingId: SAMPLE_BOOKING.id,
+    booking,
     items,
     coupon,
     totals,
   };
 }
 
-function buildSampleData(templateType) {
+function buildSampleData(templateType, layout = DEFAULT_PDF_BOOKING_LAYOUT) {
   switch (templateType) {
     case "receipt":
-      return buildReceiptSampleData();
+      return buildReceiptSampleData(layout);
     case "invoice":
-      return buildInvoiceSampleData();
+      return buildInvoiceSampleData(layout);
     case "cancellation":
-      return buildCancellationSampleData();
+      return buildCancellationSampleData(layout);
     default:
       throw new Error(`Unknown template type: ${templateType}`);
   }
 }
 
-module.exports = { buildSampleData };
+module.exports = { buildSampleData, DEFAULT_PDF_BOOKING_LAYOUT };

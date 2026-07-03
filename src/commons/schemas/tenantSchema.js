@@ -34,6 +34,11 @@ const tenantSchemaDefinition = {
   cancellationCount: { type: Object, default: {} },
   cancellationTemplate: { type: String, default: "" },
   cancellationNumberPrefix: { type: String, default: "" },
+  pdfBookingLayout: {
+    type: String,
+    enum: ["summary", "compact", "detailed"],
+    default: "detailed",
+  },
   paymentPurposeSuffix: { type: String, default: "" },
   applications: { type: Array, default: [] },
   maxBookingAdvanceInMonths: { type: Number, default: null },

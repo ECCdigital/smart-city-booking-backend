@@ -1,4 +1,50 @@
-<table class="pdf-items booked-items">
+{{#if (eq layout "summary")}}
+<table class="pdf-items pdf-items--summary booked-items">
+  <tbody>
+    {{#each bookings}} {{#unless @first}}
+    <tr class="booking-sep">
+      <td colspan="2"></td>
+    </tr>
+    {{/unless}}
+    <tr>
+      <td class="label">Buchungsnummer</td>
+      <td class="value">{{id}}</td>
+    </tr>
+    <tr>
+      <td class="label">Buchungszeitraum</td>
+      <td class="value">{{period}}</td>
+    </tr>
+    <tr class="objects">
+      <td class="label">Buchungsobjekt</td>
+      <td class="value">
+        {{#each summaryItems}}{{label}}, Menge: {{amount}}{{#unless @last}}<br />{{/unless}}{{else}}Keine
+        Buchungsobjekte vorhanden.{{/each}}
+      </td>
+    </tr>
+    <tr>
+      <td class="label">Gesamt (netto)</td>
+      <td class="value">{{netto}}</td>
+    </tr>
+    {{/each}}
+    <tr class="booking-sep">
+      <td colspan="2"></td>
+    </tr>
+    <tr class="totals">
+      <td class="label">Gesamt (netto)</td>
+      <td class="value">{{totals.netto}}</td>
+    </tr>
+    <tr>
+      <td class="label">zzgl. MwSt.</td>
+      <td class="value">{{totals.vat}}</td>
+    </tr>
+    <tr class="totals">
+      <td class="label">Gesamt (brutto)</td>
+      <td class="value">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{else if (eq layout "compact")}}
+<table class="pdf-items pdf-items--compact booked-items">
   <thead>
     <tr>
       <th>Buchungs-ID</th>
@@ -32,3 +78,47 @@
     </tr>
   </tbody>
 </table>
+{{else}}
+<table class="pdf-items pdf-items--detailed booked-items">
+  <thead>
+    <tr>
+      <th>Buchungs-ID</th>
+      <th>Zeitraum</th>
+      <th class="num">Gesamt (netto)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each bookings}}
+    <tr class="item">
+      <td>{{id}}</td>
+      <td>{{period}}</td>
+      <td class="num">{{netto}}</td>
+    </tr>
+    <tr>
+      <td colspan="3" class="sub">
+        <strong>Details / Artikel:</strong><br />
+        <ul class="item-list">
+          {{#each items}}
+          <li>{{title}} x{{amount}} ({{totalPrice}})</li>
+          {{else}}
+          <li>Keine Buchungsobjekte vorhanden.</li>
+          {{/each}}
+        </ul>
+      </td>
+    </tr>
+    {{/each}}
+    <tr class="netto">
+      <td colspan="2">Gesamt (netto)</td>
+      <td class="num">{{totals.netto}}</td>
+    </tr>
+    <tr class="mwst">
+      <td colspan="2">zzgl. MwSt.</td>
+      <td class="num">{{totals.vat}}</td>
+    </tr>
+    <tr class="brutto">
+      <td colspan="2">Gesamt (brutto)</td>
+      <td class="num">{{totals.brutto}}</td>
+    </tr>
+  </tbody>
+</table>
+{{/if}}

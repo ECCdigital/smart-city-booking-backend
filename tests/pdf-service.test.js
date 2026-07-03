@@ -158,11 +158,54 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("Sitzungsraum"));
     assert.ok(html.includes("Beamer"));
     assert.ok(html.includes("Musterfirma GmbH"));
-    assert.ok(html.includes("Buchung <strong>booking-1</strong>"));
-    assert.ok(html.includes("bezahlt am"));
+    assert.ok(html.includes("Buchungszeitraum"));
+    assert.ok(html.includes("Einzelpreis"));
     assert.ok(html.includes("Gesamt (brutto)"));
     assert.ok(html.includes("100,00"));
     assert.ok(html.includes("119,00"));
+  });
+
+  it("renders a single receipt in summary layout", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      receiptTemplate: "",
+      pdfBookingLayout: "summary",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleReceipt(
+      "tenant-1",
+      "booking-1",
+      "BLG-1-1",
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("pdf-items--summary"));
+    assert.ok(html.includes("Buchungsobjekt"));
+    assert.ok(html.includes("Sitzungsraum, Menge: 2"));
+    assert.ok(!html.includes("Einzelpreis"));
+  });
+
+  it("renders a single receipt in compact layout", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      receiptTemplate: "",
+      pdfBookingLayout: "compact",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleReceipt(
+      "tenant-1",
+      "booking-1",
+      "BLG-1-1",
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("pdf-items--compact"));
+    assert.ok(html.includes("Menge × Einzelpreis"));
+    assert.ok(html.includes("bezahlt am"));
   });
 
   it("renders an aggregated invoice without _bookableUsed (regression)", async () => {
@@ -295,11 +338,36 @@ describe("PdfService.generatePreview", () => {
   });
 });
 
+describe("pdf booking layout", () => {
+  it("defaults to detailed when tenant has no layout configured", () => {
+    const {
+      resolveBookingLayout,
+    } = require("../src/commons/pdf-service/pdf-booking-layout");
+    assert.strictEqual(resolveBookingLayout({}), "detailed");
+    assert.strictEqual(resolveBookingLayout({}, "summary"), "summary");
+    assert.strictEqual(
+      resolveBookingLayout({ pdfBookingLayout: "compact" }),
+      "compact",
+    );
+    assert.strictEqual(
+      resolveBookingLayout({ pdfBookingLayout: "invalid" }),
+      "detailed",
+    );
+  });
+});
+
 describe("pdf sample data", () => {
   it("contains enough items to span multiple pages", () => {
-    const data = buildSampleData("receipt");
+    const data = buildSampleData("receipt", "detailed");
     assert.ok(data.items.length >= 25);
     assert.ok(data.bookingEntries.includes("Position 1"));
+    assert.ok(data.bookingEntries.includes("pdf-items--detailed"));
+  });
+
+  it("renders summary sample data without item price columns", () => {
+    const data = buildSampleData("receipt", "summary");
+    assert.ok(data.bookingEntries.includes("Buchungsobjekt"));
+    assert.ok(!data.bookingEntries.includes("Einzelpreis"));
   });
 
   it("default templates render with sample data without errors", () => {

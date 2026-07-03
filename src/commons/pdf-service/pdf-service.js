@@ -9,6 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const formatters = require("./pdf-formatters");
 const { buildSampleData } = require("./pdf-sample-data");
+const { resolveBookingLayout } = require("./pdf-booking-layout");
 
 const logger = bunyan.createLogger({
   name: "pdf-service.js",
@@ -36,8 +37,26 @@ const PRINT_CSS = `
   .avoid-break { page-break-inside: avoid; }
 
   table.pdf-items { width: 100%; border-collapse: collapse; }
-  table.pdf-items th,
-  table.pdf-items td {
+
+  table.pdf-items--summary td {
+    padding: 3px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border-bottom: 1px solid #ddd;
+  }
+  table.pdf-items--summary td.label { width: 40%; color: #333; }
+  table.pdf-items--summary td.value { text-align: right; }
+  table.pdf-items--summary tr.totals td { font-weight: bold; }
+  table.pdf-items--summary tr.objects td.value { line-height: 1.5; }
+  table.pdf-items--summary tr.booking-sep td {
+    border-top: 2px solid #bbb;
+    padding-top: 6px;
+    border-bottom: none;
+  }
+
+  table.pdf-items--compact th,
+  table.pdf-items--compact td {
     padding: 2px 6px;
     font-size: 9px;
     line-height: 1.4;
@@ -45,27 +64,27 @@ const PRINT_CSS = `
     border: none;
     text-align: left;
   }
-  table.pdf-items thead th {
+  table.pdf-items--compact thead th {
     background: #eee;
     border-bottom: 1px solid #bbb;
     font-weight: bold;
   }
-  table.pdf-items tbody tr.item:nth-child(even) td { background: #f5f5f5; }
-  table.pdf-items .num { text-align: right; white-space: nowrap; }
-  table.pdf-items td.sub {
+  table.pdf-items--compact tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--compact .num { text-align: right; white-space: nowrap; }
+  table.pdf-items--compact td.sub {
     color: #555;
     font-size: 8px;
     padding-top: 0;
     padding-bottom: 4px;
   }
-  table.pdf-items tr.coupon td { color: #555; }
-  table.pdf-items tr.totals-sub td {
+  table.pdf-items--compact tr.coupon td { color: #555; }
+  table.pdf-items--compact tr.totals-sub td {
     padding-top: 4px;
     border-top: 2px solid #000;
     text-align: right;
     color: #444;
   }
-  table.pdf-items tr.brutto td {
+  table.pdf-items--compact tr.brutto td {
     font-weight: bold;
     font-size: 10px;
     border-bottom: 2px solid #000;
@@ -73,8 +92,64 @@ const PRINT_CSS = `
     background: none;
     text-align: right;
   }
-  table.pdf-items tr.brutto td:first-child,
-  table.pdf-items tr.totals-sub td:first-child { text-align: left; }
+  table.pdf-items--compact tr.brutto td:first-child,
+  table.pdf-items--compact tr.totals-sub td:first-child { text-align: left; }
+  table.pdf-items--compact tr.meta td {
+    font-size: 10px;
+    color: #444;
+    background: none;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+  }
+
+  table.pdf-items--detailed th,
+  table.pdf-items--detailed td {
+    padding: 4px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    vertical-align: top;
+    border: none;
+    text-align: left;
+  }
+  table.pdf-items--detailed thead th {
+    background: #eee;
+    border-bottom: 1px solid #bbb;
+    font-weight: bold;
+  }
+  table.pdf-items--detailed tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--detailed .num { text-align: right; white-space: nowrap; }
+  .pdf-booking-meta {
+    font-size: 10px;
+    color: #666;
+    line-height: 1.6;
+    margin: 0 0 8px;
+  }
+  table.pdf-items--detailed td.sub {
+    color: #555;
+    font-size: 9px;
+    padding-top: 0;
+    padding-bottom: 6px;
+  }
+  table.pdf-items--detailed ul.item-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+  }
+  table.pdf-items--detailed tr.coupon td { color: #555; }
+  table.pdf-items--detailed tr.netto td {
+    padding-top: 8px;
+    border-top: 2px solid #000;
+  }
+  table.pdf-items--detailed tr.netto td,
+  table.pdf-items--detailed tr.mwst td,
+  table.pdf-items--detailed tr.brutto td { text-align: right; }
+  table.pdf-items--detailed tr.netto td:first-child,
+  table.pdf-items--detailed tr.mwst td:first-child,
+  table.pdf-items--detailed tr.brutto td:first-child { text-align: left; }
+  table.pdf-items--detailed tr.brutto td {
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    padding-bottom: 4px;
+  }
 `;
 
 const BASE_MARGIN = "10mm";
@@ -230,27 +305,21 @@ class PdfService {
       booking.vatIncludedEur,
     );
 
-    const bookingPeriod =
-      booking.timeBegin && booking.timeEnd
-        ? `${formatters.formatDateTime(booking.timeBegin)} – ${formatters.formatDateTime(booking.timeEnd)}`
-        : "-";
-    const payDate =
-      booking.timePaid > 0 ? formatters.formatDateTime(booking.timePaid) : "-";
-    const paymentMethod = formatters.translatePayMethod(booking.paymentMethod);
+    const bookingContext = PdfService._buildBookingContext(
+      booking,
+      allBookables,
+      {
+        includePayment: true,
+      },
+    );
 
-    const bookingEntries =
-      PdfService._buildBookingMetaHtml({
-        id: booking.id,
-        period: bookingPeriod,
-        paymentDate: payDate,
-        paymentMethod,
-      }) +
-      PdfService._renderPartial("pdfBookingItemsTable", {
-        tableClass: "booking-detail",
-        items,
-        coupon,
-        totals,
-      });
+    const bookingEntries = PdfService._renderBookingItemsTable(tenant, {
+      tableClass: "booking-detail",
+      items,
+      coupon,
+      totals,
+      booking: bookingContext,
+    });
 
     const data = {
       isAggregated: false,
@@ -258,12 +327,7 @@ class PdfService {
       bookingDate: formatters.formatDate(new Date()),
       receiptAddress: PdfService._buildAddressHtml(booking),
       bookingEntries,
-      booking: {
-        id: booking.id,
-        period: bookingPeriod,
-        paymentDate: payDate,
-        paymentMethod,
-      },
+      booking: bookingContext,
       items,
       coupon,
       totals,
@@ -293,10 +357,10 @@ class PdfService {
         allBookables,
       );
 
-      const bookingEntries = PdfService._renderPartial(
-        "pdfAggregatedReceiptTable",
-        { bookings: bookingRows, totals },
-      );
+      const bookingEntries = PdfService._renderAggregatedReceiptTable(tenant, {
+        bookings: bookingRows,
+        totals,
+      });
 
       const data = {
         isAggregated: true,
@@ -342,11 +406,21 @@ class PdfService {
         ? `${formatters.formatDateTime(booking.timeBegin)} - ${formatters.formatDateTime(booking.timeEnd)}`
         : "-";
 
-    const mainContent = PdfService._renderPartial("pdfBookingItemsTable", {
+    const bookingContext = PdfService._buildBookingContext(
+      booking,
+      allBookables,
+      {
+        period: bookingPeriod,
+        includePayment: false,
+      },
+    );
+
+    const mainContent = PdfService._renderBookingItemsTable(tenant, {
       tableClass: "booked-items",
       items,
       coupon,
       totals,
+      booking: bookingContext,
     });
 
     const data = {
@@ -400,10 +474,10 @@ class PdfService {
       allBookables,
     );
 
-    const mainContent = PdfService._renderPartial(
-      "pdfAggregatedBookingsTable",
-      { bookings: bookingRows, totals },
-    );
+    const mainContent = PdfService._renderAggregatedBookingsTable(tenant, {
+      bookings: bookingRows,
+      totals,
+    });
 
     const data = {
       title: "Ihre Sammelrechnung",
@@ -463,11 +537,20 @@ class PdfService {
       { negative: true },
     );
 
-    const mainContent = PdfService._renderPartial("pdfBookingItemsTable", {
+    const bookingContext = PdfService._buildBookingContext(
+      booking,
+      allBookables,
+      {
+        includePayment: false,
+      },
+    );
+
+    const mainContent = PdfService._renderBookingItemsTable(tenant, {
       tableClass: "booked-items",
       items,
       coupon,
       totals,
+      booking: bookingContext,
     });
 
     const data = {
@@ -530,10 +613,10 @@ class PdfService {
       { negative: true },
     );
 
-    const mainContent = PdfService._renderPartial(
-      "pdfAggregatedBookingsTable",
-      { bookings: bookingRows, totals },
-    );
+    const mainContent = PdfService._renderAggregatedBookingsTable(tenant, {
+      bookings: bookingRows,
+      totals,
+    });
 
     const data = {
       title: "Sammel-Stornorechnung",
@@ -575,9 +658,16 @@ class PdfService {
    * @param {string} templateType - "receipt" | "invoice" | "cancellation"
    * @param {string|null} templateOverride - Template to preview. Falls back
    *   to the template stored on the tenant, then to the default template.
+   * @param {string|null} [layoutOverride] - Optional layout override for
+   *   preview (summary | compact | detailed).
    * @returns {Promise<{buffer: Buffer, name: string}>}
    */
-  static async generatePreview(tenantId, templateType, templateOverride) {
+  static async generatePreview(
+    tenantId,
+    templateType,
+    templateOverride,
+    layoutOverride = null,
+  ) {
     if (!DEFAULT_TEMPLATES[templateType]) {
       throw new Error(`Unknown template type: ${templateType}`);
     }
@@ -594,7 +684,10 @@ class PdfService {
       DEFAULT_TEMPLATES[templateType],
     );
 
-    const data = buildSampleData(templateType);
+    const data = buildSampleData(
+      templateType,
+      resolveBookingLayout(tenant, layoutOverride),
+    );
 
     const renderedHtml = template(data);
     return await PdfService.convertToPdf(
@@ -667,19 +760,63 @@ class PdfService {
     return lines.join("<br/>\n");
   }
 
+  static _renderBookingItemsTable(tenant, data, layoutOverride) {
+    const layout = resolveBookingLayout(tenant, layoutOverride || data.layout);
+    return PdfService._renderPartial("pdfBookingItemsTable", {
+      ...data,
+      layout,
+    });
+  }
+
+  static _renderAggregatedReceiptTable(tenant, data, layoutOverride) {
+    const layout = resolveBookingLayout(tenant, layoutOverride || data.layout);
+    return PdfService._renderPartial("pdfAggregatedReceiptTable", {
+      ...data,
+      layout,
+    });
+  }
+
+  static _renderAggregatedBookingsTable(tenant, data, layoutOverride) {
+    const layout = resolveBookingLayout(tenant, layoutOverride || data.layout);
+    return PdfService._renderPartial("pdfAggregatedBookingsTable", {
+      ...data,
+      layout,
+    });
+  }
+
   /**
-   * Builds the compact one-line booking metadata block that precedes the
-   * item table in {{{bookingEntries}}}. Uses inline styles because the HTML
-   * is injected into arbitrary tenant templates.
+   * Builds the booking metadata object passed into the item table partials.
    */
-  static _buildBookingMetaHtml({ id, period, paymentDate, paymentMethod }) {
-    return (
-      '<p style="font-size: 10px; color: #444; margin: 0 0 6px; line-height: 1.5">' +
-      `Buchung <strong>${PdfService._escape(id)}</strong> &nbsp;·&nbsp; ` +
-      `${PdfService._escape(period)} &nbsp;·&nbsp; ` +
-      `bezahlt am ${PdfService._escape(paymentDate)} per ${PdfService._escape(paymentMethod)}` +
-      "</p>"
-    );
+  static _buildBookingContext(booking, allBookables, options = {}) {
+    const period =
+      options.period ||
+      (booking.timeBegin && booking.timeEnd
+        ? `${formatters.formatDateTime(booking.timeBegin)} – ${formatters.formatDateTime(booking.timeEnd)}`
+        : "-");
+    const paymentDate =
+      booking.timePaid > 0 ? formatters.formatDateTime(booking.timePaid) : "-";
+
+    return {
+      id: booking.id,
+      period,
+      paymentDate,
+      paymentMethod: formatters.translatePayMethod(booking.paymentMethod),
+      hasPayment: options.includePayment === true && booking.timePaid > 0,
+      summaryItems: PdfService._buildSummaryItems(booking, allBookables),
+    };
+  }
+
+  static _buildSummaryItems(booking, allBookables) {
+    return (booking.bookableItems || []).map((item) => {
+      const bookable =
+        item._bookableUsed ||
+        allBookables.find((b) => b.id === item.bookableId);
+
+      return {
+        label: bookable?.title || "Unbekannt",
+        amount: item.amount,
+      };
+    });
   }
 
   /**
@@ -779,6 +916,7 @@ class PdfService {
           booking.priceEur - booking.vatIncludedEur,
         ),
         items: PdfService._buildItems(booking, allBookables, options),
+        summaryItems: PdfService._buildSummaryItems(booking, allBookables),
       };
     });
 

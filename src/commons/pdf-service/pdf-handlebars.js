@@ -41,6 +41,7 @@ registerHelperIfMissing("formatNegativeCurrency", (value) =>
 );
 registerHelperIfMissing("formatAmount", (value) => formatAmount(value));
 registerHelperIfMissing("payMethod", (value) => translatePayMethod(value));
+registerHelperIfMissing("eq", (a, b) => a === b);
 
 const PARTIALS = {
   pdfBookingItemsTable: "booking-items-table.temp.html",
