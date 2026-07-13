@@ -8,6 +8,9 @@ const {
 } = require("../../../../commons/data-managers/bookable-manager");
 const MembershipManager = require("../../../../commons/data-managers/membership-manager");
 const {
+  GroupBookingPermissions,
+} = require("../../../../commons/utilities/group-booking-permissions");
+const {
   resolveCheckoutId,
 } = require("../../../../commons/utilities/checkout-utils");
 const {
@@ -287,29 +290,29 @@ class CheckoutControllerV2 {
       const permitted = Array.isArray(gb.permittedRoles)
         ? gb.permittedRoles
         : [];
-      if (permitted.length > 0) {
-        if (!user) {
-          throw new CheckoutError({
-            reason: CHECKOUT_REASONS.UNAUTHORIZED,
-            statusCode: 401,
-          });
-        }
+      if (permitted.length > 0 && !user) {
+        throw new CheckoutError({
+          reason: CHECKOUT_REASONS.UNAUTHORIZED,
+          statusCode: 401,
+        });
+      }
 
+      let userRoles = [];
+      if (user) {
         const membership =
           await MembershipManager.getMembershipByTenantAndUserID(
             tenantId,
             user.id,
           );
-        const userRoles = membership?.roles || [];
-        const allowed = userRoles.some((r) => permitted.includes(r));
+        userRoles = membership?.roles || [];
+      }
 
-        if (!allowed) {
-          throw new CheckoutError({
-            reason: CHECKOUT_REASONS.GROUP_BOOKING_ROLE_REQUIRED,
-            statusCode: 403,
-            params: { requiredRoles: permitted },
-          });
-        }
+      if (!GroupBookingPermissions.isAllowed(bookable, user, userRoles)) {
+        throw new CheckoutError({
+          reason: CHECKOUT_REASONS.GROUP_BOOKING_ROLE_REQUIRED,
+          statusCode: 403,
+          params: { requiredRoles: permitted },
+        });
       }
 
       const bookingAttempts = rawAttempts.map((attempt) => ({
