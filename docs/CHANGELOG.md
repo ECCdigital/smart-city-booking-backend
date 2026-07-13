@@ -15,6 +15,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 
 ### Added
+- JSON catalog bookables expose aggregated `groupBookingAllowed` flag indicating whether the current user may create series bookings (combines `groupBooking.enabled` and `groupBooking.permittedRoles`)
+- Shared `GroupBookingPermissions` utility reused by JSON catalog and checkout controllers for consistent series-booking permission checks
 - Supervisor booking notifications: per-membership `bookingNotificationRecipients` (types `user`, `role`, `email`; max. 10 entries) resolved and mailed on booking creation for single and group bookings
 - Tenant feature flag `notifySupervisorsOnBooking` (default `false`) to enable supervisor notifications per tenant
 - Admin endpoint `POST /tenants/:id/update-user-booking-notification-recipients` (requires `manageUsers.updateAny`) to manage recipients on memberships

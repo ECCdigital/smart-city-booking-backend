@@ -8,6 +8,9 @@ const ExternalPriceService = require("../../../commons/services/external-price-s
 const {
   enforceTenantCatalogAccess,
 } = require("../../../commons/utilities/catalog-participation-utils");
+const {
+  GroupBookingPermissions,
+} = require("../../../commons/utilities/group-booking-permissions");
 
 class JSONController {
   static _sendCatalogAccessError(res, error) {
@@ -41,12 +44,22 @@ class JSONController {
     return `${process.env.FRONTEND_URL}/checkout/?id=${bookableId}&tenant=${tenantId}`;
   }
 
-  static async _exportPublicBookable(bookable, tenantId, instance) {
+  static async _exportPublicBookable(
+    bookable,
+    tenantId,
+    instance,
+    { identity, userRoles } = {},
+  ) {
     const pub = bookable.exportPublic();
     pub.checkoutUrl = await JSONController._checkoutUrl(
       bookable.id,
       tenantId,
       instance,
+    );
+    pub.groupBookingAllowed = GroupBookingPermissions.isAllowed(
+      bookable,
+      identity,
+      userRoles,
     );
     return pub;
   }
@@ -104,6 +117,7 @@ class JSONController {
           bookable,
           tenantId,
           checkoutInstance,
+          { identity, userRoles },
         );
 
         const extPrices = await ExternalPriceService.resolve(
@@ -126,7 +140,10 @@ class JSONController {
           );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
-            JSONController._exportPublicBookable(b, tenantId, checkoutInstance),
+            JSONController._exportPublicBookable(b, tenantId, checkoutInstance, {
+              identity,
+              userRoles,
+            }),
           ),
         );
         return pub;
@@ -171,6 +188,7 @@ class JSONController {
           bookable,
           tenantId,
           checkoutInstance,
+          { identity, userRoles },
         );
 
         const extPrices = await ExternalPriceService.resolve(
@@ -196,7 +214,10 @@ class JSONController {
           );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
-            JSONController._exportPublicBookable(b, tenantId, checkoutInstance),
+            JSONController._exportPublicBookable(b, tenantId, checkoutInstance, {
+              identity,
+              userRoles,
+            }),
           ),
         );
 
@@ -225,6 +246,8 @@ class JSONController {
     }
 
     try {
+      const identity = req.user;
+      const userRoles = await JSONController.getUserRoles(tenantId, identity);
       let events = await EventManager.getEvents(tenantId);
       const checkoutInstance = await InstanceManager.getInstance();
 
@@ -266,6 +289,7 @@ class JSONController {
                 ticket,
                 tenantId,
                 checkoutInstance,
+                { identity, userRoles },
               ),
             ),
         );
@@ -286,6 +310,8 @@ class JSONController {
     }
 
     try {
+      const identity = req.user;
+      const userRoles = await JSONController.getUserRoles(tenantId, identity);
       const event = await EventManager.getEvent(id, tenantId);
       const checkoutInstance = await InstanceManager.getInstance();
 
@@ -304,6 +330,7 @@ class JSONController {
                 ticket,
                 tenantId,
                 checkoutInstance,
+                { identity, userRoles },
               ),
             ),
         );
