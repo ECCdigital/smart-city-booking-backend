@@ -6,6 +6,7 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
 const LockerService = require("../locker/locker-service");
+const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
 
 /**
  * Class representing a bundle checkout service.
@@ -517,6 +518,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
 
   async prepareBooking(options = {}) {
     const booking = await super.prepareBooking(options);
+    booking.assignedUserId = primaryEmailFromMail(this.email);
     booking.internalComments = this.internalComments;
     booking.rejectionReason = this.rejectionReason;
 
