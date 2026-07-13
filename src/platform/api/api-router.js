@@ -194,6 +194,12 @@ router.post(
   TenantController.updateUserStatus,
 );
 
+router.post(
+  "/tenants/:id/update-user-booking-notification-recipients",
+  AuthenticationController.isSignedIn,
+  TenantController.updateUserBookingNotificationRecipients,
+);
+
 // USERS
 // =====
 

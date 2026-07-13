@@ -11,6 +11,13 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 - Manual admin bookings now set `assignedUserId` from the booking email so the assigned user can see the booking in their personal booking list
 
+
+### Added
+- Supervisor booking notifications: per-membership `bookingNotificationRecipients` (types `user`, `role`, `email`; max. 10 entries) resolved and mailed on booking creation for single and group bookings
+- Tenant feature flag `notifySupervisorsOnBooking` (default `false`) to enable supervisor notifications per tenant
+- Admin endpoint `POST /tenants/:id/update-user-booking-notification-recipients` (requires `manageUsers.updateAny`) to manage recipients on memberships
+- New mail type `SUPERVISOR_BOOKING_NOTIFICATION` with overridable snippet `supervisor-booking-notification` (tenant mail UI), reusing the existing booking details block
+
 ## [4.1.4] — 2026-07-03
 
 ### Added

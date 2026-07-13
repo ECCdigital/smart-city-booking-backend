@@ -54,6 +54,7 @@ const tenantSchemaDefinition = {
   defaultEventCreationMode: { type: String, default: "" },
   enablePublicStatusView: { type: Boolean, default: false },
   notifyOnNewBooking: { type: Boolean, default: true },
+  notifySupervisorsOnBooking: { type: Boolean, default: false },
   catalogParticipation: {
     type: Object,
     default: {

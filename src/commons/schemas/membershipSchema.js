@@ -1,3 +1,7 @@
+const {
+  validateBookingNotificationRecipients,
+} = require("../utilities/booking-notification-utils");
+
 const membershipSchemaDefinition = {
   userId: { type: String, required: true },
   tenantId: { type: String, required: true },
@@ -12,6 +16,17 @@ const membershipSchemaDefinition = {
     type: String,
     enum: ["invite", "public", "manually"],
     required: true,
+  },
+  bookingNotificationRecipients: {
+    type: [
+      {
+        type: { type: String, enum: ["user", "role", "email"], required: true },
+        value: { type: String, required: true },
+        label: { type: String, default: "" },
+      },
+    ],
+    default: [],
+    validate: validateBookingNotificationRecipients,
   },
   invitations: {
     type: [
