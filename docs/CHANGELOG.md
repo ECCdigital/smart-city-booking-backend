@@ -9,12 +9,15 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Booking emails no longer show a cancel button when `cancellationPolicy.userCancellable` is `false`; an optional `contactHint` is shown instead when configured
 - `authenticateIfNeeded` now verifies Keycloak access tokens in addition to local JWTs, fixing `invalid algorithm` errors for SSO users on routes such as related bookings, protected files, and private catalogs
 - Token type detection (`classifyToken`) extracted into a shared utility used by auth middleware and `authenticateIfNeeded`
 - Manual admin bookings now set `assignedUserId` from the booking email so the assigned user can see the booking in their personal booking list
 
 
 ### Added
+- Optional `cancellationPolicy.contactHint` on bookables and bookings for cancellation contact instructions in emails when user self-cancellation is disabled; bundle bookings aggregate all relevant hints from non-cancellable items
+- Migration `13-07-2026-add-cancellation-contact-hint` to backfill `contactHint` on existing bookables and bookings
 - JSON catalog bookables expose aggregated `groupBookingAllowed` flag indicating whether the current user may create series bookings (combines `groupBooking.enabled` and `groupBooking.permittedRoles`)
 - Shared `GroupBookingPermissions` utility reused by JSON catalog and checkout controllers for consistent series-booking permission checks
 - Supervisor booking notifications: per-membership `bookingNotificationRecipients` (types `user`, `role`, `email`; max. 10 entries) resolved and mailed on booking creation for single and group bookings
