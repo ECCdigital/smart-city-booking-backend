@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Manual admin bookings now set `assignedUserId` from the booking email so the assigned user can see the booking in their personal booking list
+
 ## [4.1.4] — 2026-07-03
 
 ### Added
