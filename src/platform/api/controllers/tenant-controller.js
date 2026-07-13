@@ -26,6 +26,55 @@ const {
   normalizeUserId,
   userIdsMatch,
 } = require("../../../commons/utilities/user-id-utils");
+const PdfService = require("../../../commons/pdf-service/pdf-service");
+const {
+  isValidBookingLayout,
+} = require("../../../commons/pdf-service/pdf-booking-layout");
+const {
+  validatePdfBookingTableMeta,
+} = require("../../../commons/pdf-service/pdf-booking-table-meta");
+
+const PDF_TEMPLATE_FIELDS = {
+  receiptTemplate: "receipt",
+  invoiceTemplate: "invoice",
+  cancellationTemplate: "cancellation",
+};
+
+/**
+ * Validates all PDF templates contained in a request body. Returns an error
+ * message or null when all provided templates are valid. Empty templates are
+ * allowed (the default template is used in that case).
+ */
+function validatePdfTemplates(body) {
+  for (const field of Object.keys(PDF_TEMPLATE_FIELDS)) {
+    if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+    const template = body[field];
+    if (!template) continue;
+
+    const errors = PdfService.validateTemplate(template);
+    if (errors.length) {
+      return `Invalid PDF template "${field}": ${errors.join("; ")}`;
+    }
+  }
+  return null;
+}
+
+function validatePdfBookingLayout(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "pdfBookingLayout")) {
+    return null;
+  }
+  if (!body.pdfBookingLayout || isValidBookingLayout(body.pdfBookingLayout)) {
+    return null;
+  }
+  return `Invalid pdfBookingLayout "${body.pdfBookingLayout}". Allowed values: summary, compact, detailed`;
+}
+
+function validatePdfBookingTableMetaField(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "pdfBookingTableMeta")) {
+    return null;
+  }
+  return validatePdfBookingTableMeta(body.pdfBookingTableMeta);
+}
 
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
@@ -150,6 +199,21 @@ class TenantController {
         }
       }
 
+      const templateError = validatePdfTemplates(request.body);
+      if (templateError) {
+        return response.status(400).send(templateError);
+      }
+
+      const layoutError = validatePdfBookingLayout(request.body);
+      if (layoutError) {
+        return response.status(400).send(layoutError);
+      }
+
+      const tableMetaError = validatePdfBookingTableMetaField(request.body);
+      if (tableMetaError) {
+        return response.status(400).send(tableMetaError);
+      }
+
       tenant.ownerUserIds = [user.id];
       if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
@@ -264,6 +328,8 @@ class TenantController {
           "bookableCustomFields",
           "cancellationTemplate",
           "cancellationNumberPrefix",
+          "pdfBookingLayout",
+          "pdfBookingTableMeta",
         ];
 
         if (
@@ -284,6 +350,21 @@ class TenantController {
           } catch (error) {
             return response.status(400).send(error.message);
           }
+        }
+
+        const templateError = validatePdfTemplates(request.body);
+        if (templateError) {
+          return response.status(400).send(templateError);
+        }
+
+        const layoutError = validatePdfBookingLayout(request.body);
+        if (layoutError) {
+          return response.status(400).send(layoutError);
+        }
+
+        const tableMetaError = validatePdfBookingTableMetaField(request.body);
+        if (tableMetaError) {
+          return response.status(400).send(tableMetaError);
         }
 
         fields.forEach((field) => {
@@ -333,6 +414,71 @@ class TenantController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not remove tenant");
+    }
+  }
+
+  /**
+   * Renders a preview PDF for a template with generated sample data
+   * (including enough line items to span multiple pages). The template can be
+   * passed in the request body to preview unsaved changes; otherwise the
+   * template stored on the tenant (or the default template) is used.
+   */
+  static async previewPdfTemplate(request, response) {
+    try {
+      const user = request.user;
+      const tenantId = request.params.id;
+      const { templateType, template, pdfBookingLayout, pdfBookingTableMeta } =
+        request.body;
+
+      if (
+        !(await PermissionService._isTenantOwner(user.id, tenantId)) &&
+        !(await PermissionService._isInstanceOwner(user.id))
+      ) {
+        return response.sendStatus(403);
+      }
+
+      const layoutError = validatePdfBookingLayout(request.body);
+      if (layoutError) {
+        return response.status(400).send(layoutError);
+      }
+
+      const tableMetaError = validatePdfBookingTableMetaField(request.body);
+      if (tableMetaError) {
+        return response.status(400).send(tableMetaError);
+      }
+
+      if (!["receipt", "invoice", "cancellation"].includes(templateType)) {
+        return response
+          .status(400)
+          .send("templateType must be one of: receipt, invoice, cancellation");
+      }
+
+      if (template) {
+        const errors = PdfService.validateTemplate(template);
+        if (errors.length) {
+          return response
+            .status(400)
+            .send(`Invalid PDF template: ${errors.join("; ")}`);
+        }
+      }
+
+      const pdfData = await PdfService.generatePreview(
+        tenantId,
+        templateType,
+        template || null,
+        pdfBookingLayout || null,
+        pdfBookingTableMeta || null,
+      );
+
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader(
+        "Content-Disposition",
+        `inline; filename="${pdfData.name}"`,
+      );
+      response.status(200).send(pdfData.buffer);
+    } catch (error) {
+      logger.error(error);
+      response.status(500).send("Could not generate PDF preview");
     }
   }
 

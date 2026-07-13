@@ -1,6 +1,19 @@
 const { v4: uuidv4 } = require("uuid");
 const UserManager = require("../data-managers/user-manager");
 
+function primaryEmailFromMail(mail) {
+  if (!mail) {
+    return "";
+  }
+
+  const primary = mail
+    .split(/[,\n]+/)
+    .map((email) => email.trim())
+    .filter(Boolean)[0];
+
+  return primary ? primary.toLowerCase() : "";
+}
+
 async function resolveCheckoutId(checkoutId, userID, tenantId) {
     if (checkoutId) {
     return { checkoutId, generated: false };
@@ -20,4 +33,4 @@ async function resolveCheckoutId(checkoutId, userID, tenantId) {
   return { checkoutId: "01" + uuidv4(), generated: true };
 }
 
-module.exports = { resolveCheckoutId };
+module.exports = { resolveCheckoutId, primaryEmailFromMail };

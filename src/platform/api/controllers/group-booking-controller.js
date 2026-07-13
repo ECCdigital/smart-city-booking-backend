@@ -4,6 +4,8 @@ const PermissionsService = require("../../../commons/services/permission-service
 const { RolePermission } = require("../../../commons/entities/role/role");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const MailController = require("../../../commons/mail-service/mail-controller");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -400,6 +402,102 @@ class GroupBookingController {
         );
         res.status(403).send({
           message: "User not allowed to create group booking receipt",
+        });
+      }
+    } catch (error) {
+      res.status(500).send({ message: error.message });
+    }
+  }
+
+  static async createGroupBookingInvoice(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const user = req.user;
+      const groupBookingId = req.params.id;
+      const shouldSendEmail = req.query.sendEmail !== "false";
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+
+      if (
+        user &&
+        (await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        const invoiceApp = await TenantManager.getTenantApp(
+          tenantId,
+          "invoice",
+        );
+        if (!invoiceApp || !invoiceApp.active) {
+          return res.status(400).send({
+            message: "Invoice app not found or inactive.",
+          });
+        }
+
+        const result = await BookingService.createAggregatedInvoice(
+          tenantId,
+          groupBooking.bookingIds,
+          groupBookingId,
+        );
+
+        if (!result.success) {
+          return res.status(200).json({
+            success: false,
+            data: null,
+            errors: result.errors,
+          });
+        }
+
+        if (shouldSendEmail) {
+          const attachments = [
+            {
+              filename: result.name,
+              content: result.invoice.buffer,
+              contentType: "application/pdf",
+            },
+          ];
+
+          try {
+            await MailController.sendInvoice(
+              result.mail,
+              result.bookingIds,
+              tenantId,
+              attachments,
+              true,
+            );
+          } catch (err) {
+            logger.error(
+              "Error while sending aggregated invoice:",
+              groupBookingId,
+              err,
+            );
+          }
+        }
+
+        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+          tenantId,
+          groupBookingId,
+          true,
+        );
+
+        return res.status(200).json({
+          success: true,
+          data: updatedGroupBooking,
+          errors: [],
+        });
+      } else {
+        logger.error(
+          { tenantId: tenantId, user: user.id },
+          "User not allowed to create group booking invoice",
+        );
+        res.status(403).send({
+          message: "User not allowed to create group booking invoice",
         });
       }
     } catch (error) {

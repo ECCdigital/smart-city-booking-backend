@@ -8,45 +8,20 @@
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
         font-size: 1rem;
       }
-      .booking-detail {
-        border-collapse: collapse;
-        width: 100%;
-      }
-      .booking-detail .bi-amount,
-      .booking-detail .bi-price-item,
-      .booking-detail .bi-price-total {
-        text-align: right;
-      }
-
-      .booking-detail .netto td {
-        padding-top: 12px;
-        border-top: 2px solid #000;
-      }
-
-      .booking-detail .brutto td {
-        border-top: 2px solid #000;
-        border-bottom: 2px solid #000;
-      }
-
-      .booking-detail th,
-      .booking-detail td {
-        padding: 4px 6px;
-        font-size: 10px;
-      }
-
-      .booking-detail .bi-title {
-        text-align: left;
-      }
-
-      .booking-detail .netto td:last-child,
-      .booking-detail .mwst td:last-child,
-      .booking-detail .brutto td:last-child,
-      .booking-detail .coupon td:last-child {
-        text-align: right;
-      }
+      /* Die Positionstabelle ({{{bookingEntries}}}) bringt ihr kompaktes
+         Standard-Styling selbst mit (table.pdf-items). Eigene Anpassungen
+         sind mit spezifischeren Selektoren möglich, z. B.
+         table.pdf-items.booking-detail td { ... } */
     </style>
   </head>
   <body>
+    <template data-pdf-footer>
+      <div style="display: flex; justify-content: space-between; width: 100%">
+        <span>Zahlungsbeleg {{receiptNumber}}</span>
+        <span>{{> pdfPageNumbers }}</span>
+      </div>
+    </template>
+
     <p class="receipt-data">
       Belegnummer: {{receiptNumber}}<br />
       Buchungsdatum: {{bookingDate}}

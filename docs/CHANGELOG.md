@@ -7,12 +7,30 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
-- Supervisor booking notifications (DEV-779): per-membership `bookingNotificationRecipients` (types `user`, `role`, `email`; max. 10 entries) resolved and mailed on booking creation for single and group bookings
+- Manual admin bookings now set `assignedUserId` from the booking email so the assigned user can see the booking in their personal booking list
+
+
+### Added
+- Supervisor booking notifications: per-membership `bookingNotificationRecipients` (types `user`, `role`, `email`; max. 10 entries) resolved and mailed on booking creation for single and group bookings
 - Tenant feature flag `notifySupervisorsOnBooking` (default `false`) to enable supervisor notifications per tenant
 - Admin endpoint `POST /tenants/:id/update-user-booking-notification-recipients` (requires `manageUsers.updateAny`) to manage recipients on memberships
 - New mail type `SUPERVISOR_BOOKING_NOTIFICATION` with overridable snippet `supervisor-booking-notification` (tenant mail UI), reusing the existing booking details block
+
+## [4.1.4] — 2026-07-03
+
+### Added
+
+- Preview for receipt, invoice, and cancellation PDF templates before saving
+- Configurable layout for booking tables in PDFs (summary, compact, detailed)
+- Option to show or hide booking number, period, and payment details in PDF tables
+- Manual collective invoice for all bookings in a group booking, with optional email delivery
+- Page numbers and repeating headers/footers on multi-page PDFs
+
+### Changed
+
+- Updated default templates for receipts, invoices, and cancellations
 
 ## [4.1.3] — 2026-07-02
 
@@ -85,6 +103,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.1.4]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.3...v4.1.4
 [4.1.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.2...v4.1.3
 [4.1.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.1...v4.1.2
 [4.1.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.0...v4.1.1
