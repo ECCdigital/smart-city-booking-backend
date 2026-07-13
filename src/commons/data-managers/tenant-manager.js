@@ -1,10 +1,12 @@
 const Tenant = require("../entities/tenant/tenant");
 const TenantModel = require("./models/tenantModel");
-const { CustomFieldCache } = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldCache,
+} = require("../services/custom-field/custom-field-cache");
 const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
-const rawTenant = require("../schemas/tenantSchema");
+const { BookableManager } = require("./bookable-manager");
 
 /**
  * Data Manager for Tenant objects.
@@ -45,6 +47,12 @@ class TenantManager {
    */
   static async storeTenant(tenant, upsert = true) {
     const tenantEntity = tenant instanceof Tenant ? tenant : new Tenant(tenant);
+
+    const existingTenant = await TenantModel.findOne(
+      { id: tenantEntity.id },
+      { bookableCustomFields: 1 },
+    ).lean();
+
     CustomFieldService.normalizeDefinitions(
       tenantEntity.bookableCustomFields || [],
     );
@@ -53,6 +61,16 @@ class TenantManager {
       upsert: upsert,
       setDefaultsOnInsert: true,
     });
+
+    const removedFieldIds = CustomFieldService.getRemovedFieldIds(
+      existingTenant?.bookableCustomFields || [],
+      tenantEntity.bookableCustomFields || [],
+    );
+    if (removedFieldIds.length > 0) {
+      await BookableManager.removeCustomFieldValues(removedFieldIds, {
+        tenantId: tenantEntity.id,
+      });
+    }
 
     CustomFieldCache.invalidateTenant(tenantEntity.id);
 
