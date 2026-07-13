@@ -194,7 +194,7 @@ const bookableSchemaDefinition = {
   // Cancellation policy
   cancellationPolicy: {
     type: Object,
-    default: { userCancellable: true },
+    default: { userCancellable: true, contactHint: "" },
   },
 
   // Relationship properties

@@ -5,6 +5,27 @@ const QRCode = require("qrcode");
 const { renderSnippet } = require("./templates/template-loader");
 
 class MailDataService {
+  static buildCancellationMailContext(booking, tenantId, addRejectionLink = false) {
+    if (!addRejectionLink || !booking) {
+      return { rejectionUrl: null, cancellationContactHint: null };
+    }
+
+    const userCancellable = booking.cancellationPolicy?.userCancellable === true;
+
+    if (userCancellable) {
+      return {
+        rejectionUrl: `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${booking.id}`,
+        cancellationContactHint: null,
+      };
+    }
+
+    const contactHint = booking.cancellationPolicy?.contactHint?.trim();
+    return {
+      rejectionUrl: null,
+      cancellationContactHint: contactHint || null,
+    };
+  }
+
   static async getPopulatedBookables(bookingId, tenant) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
     const bookables = (await BookableManager.getBookables(tenant)).filter((b) =>
@@ -90,14 +111,14 @@ class MailDataService {
       return { amount: item.amount, bookableTitle: bookable.title };
     });
 
-    const rejectionUrl = addRejectionLink
-      ? `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}`
-      : null;
+    const { rejectionUrl, cancellationContactHint } =
+      this.buildCancellationMailContext(booking, tenantId, addRejectionLink);
 
     return renderSnippet("short-booking-details", {
       booking,
       bookingItems,
       rejectionUrl,
+      cancellationContactHint,
     });
   }
 

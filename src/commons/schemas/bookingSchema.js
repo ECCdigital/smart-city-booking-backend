@@ -100,7 +100,7 @@ const bookingSchemaDefinition = {
   },
   cancellationPolicy: {
     type: Object,
-    default: { userCancellable: true },
+    default: { userCancellable: true, contactHint: "" },
   },
 };
 

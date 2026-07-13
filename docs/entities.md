@@ -262,7 +262,7 @@ Example:
   "permittedRoles": ["role1", "role2"],
   "freeBookingUsers": ["user3"],
   "freeBookingRoles": ["role3"],
-  "cancellationPolicy": { "userCancellable": true },
+  "cancellationPolicy": { "userCancellable": true, "contactHint": "" },
 
   "relatedBookableIds": ["bookable1", "bookable2"],
   "checkoutBookableIds": [{ "bookableId": "bookable2", "mandatory": false }],
@@ -335,7 +335,7 @@ Key fields of a bookable:
 | relatedBookableIds    | IDs of bookables related to this bookable.                                                                                                                 |
 | checkoutBookableIds   | Additional bookables for checkout: `{ bookableId, mandatory }`.                                                                                          |
 | requiresLogin         | If `true`, only authenticated users may book.                                                                                                              |
-| cancellationPolicy    | e.g. `{ userCancellable: true }` — whether users can cancel bookings themselves.                                                                           |
+| cancellationPolicy    | e.g. `{ userCancellable: true, contactHint: "" }` — whether users can cancel bookings themselves; `contactHint` is an optional message shown in emails when user cancellation is disabled.                                                                           |
 | permittedUsers        | List of user IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
 | permittedRoles        | List of role IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
 | freeBookingUsers      | Users who can book this bookable for free.                                                                                                                 |
@@ -388,7 +388,7 @@ Example:
   "vatIncludedEur": 19,
   "_couponUsed": {},
   "customFieldValues": [],
-  "cancellationPolicy": { "userCancellable": true },
+  "cancellationPolicy": { "userCancellable": true, "contactHint": "" },
   "hooks": []
 }
 ```
