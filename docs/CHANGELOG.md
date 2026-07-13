@@ -9,6 +9,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- `authenticateIfNeeded` now verifies Keycloak access tokens in addition to local JWTs, fixing `invalid algorithm` errors for SSO users on routes such as related bookings, protected files, and private catalogs
+- Token type detection (`classifyToken`) extracted into a shared utility used by auth middleware and `authenticateIfNeeded`
 - Manual admin bookings now set `assignedUserId` from the booking email so the assigned user can see the booking in their personal booking list
 
 
