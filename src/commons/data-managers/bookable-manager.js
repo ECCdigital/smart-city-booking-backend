@@ -46,6 +46,30 @@ class BookableManager {
   }
 
   /**
+   * Remove stored custom field values for the given field IDs.
+   * @param {string[]} fieldIds Custom field IDs to remove from bookables
+   * @param {{ tenantId?: string, bookableId?: string }} [scope] Optional scope
+   * @returns {Promise<void>}
+   */
+  static async removeCustomFieldValues(fieldIds, scope = {}) {
+    if (!Array.isArray(fieldIds) || fieldIds.length === 0) {
+      return;
+    }
+
+    const filter = {};
+    if (scope.tenantId) {
+      filter.tenantId = scope.tenantId;
+    }
+    if (scope.bookableId) {
+      filter.id = scope.bookableId;
+    }
+
+    await BookableModel.updateMany(filter, {
+      $pull: { customFieldValues: { fieldId: { $in: fieldIds } } },
+    });
+  }
+
+  /**
    * Get all bookables for a tenant
    * @param {string} tenantId Tenant ID
    * @returns {Promise<Bookable[]>} List of bookables
@@ -341,6 +365,11 @@ class BookableManager {
     const bookableEntity =
       bookable instanceof Bookable ? bookable : new Bookable(bookable);
 
+    const existingBookable = await BookableModel.findOne(
+      { id: bookableEntity.id, tenantId: bookableEntity.tenantId },
+      { customFieldDefinitions: 1 },
+    ).lean();
+
     CustomFieldService.normalizeDefinitions(
       bookableEntity.customFieldDefinitions || [],
     );
@@ -352,6 +381,17 @@ class BookableManager {
       bookableEntity,
       { upsert: upsert },
     );
+
+    const removedFieldIds = CustomFieldService.getRemovedFieldIds(
+      existingBookable?.customFieldDefinitions || [],
+      bookableEntity.customFieldDefinitions || [],
+    );
+    if (removedFieldIds.length > 0) {
+      await BookableManager.removeCustomFieldValues(removedFieldIds, {
+        tenantId: bookableEntity.tenantId,
+        bookableId: bookableEntity.id,
+      });
+    }
 
     return bookableEntity;
   }
