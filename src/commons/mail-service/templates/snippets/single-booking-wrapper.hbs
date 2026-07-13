@@ -52,6 +52,14 @@
   </a>
 {{/if}}
 
+{{#if cancellationContactHint}}
+  <br /><br />
+  <p>
+    <strong>Hinweis zur Stornierung:</strong>
+    {{sanitizeString cancellationContactHint}}
+  </p>
+{{/if}}
+
 {{#if qrContent}}
   <br />
   {{{qrContent}}}

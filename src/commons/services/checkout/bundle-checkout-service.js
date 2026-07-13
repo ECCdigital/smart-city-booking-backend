@@ -232,14 +232,40 @@ class BundleCheckoutService {
    * Restrictive rule: every item must allow user cancellation, otherwise the
    * resulting booking is not user-cancellable.
    * @param {Array} bookableItems Bookable items with `_bookableUsed` populated.
-   * @returns {{userCancellable: boolean}} Aggregated policy.
+   * @returns {{userCancellable: boolean, contactHint?: string}} Aggregated policy.
    */
   aggregateCancellationPolicy(bookableItems) {
     const userCancellable = bookableItems.every(
       (item) =>
         item._bookableUsed?.cancellationPolicy?.userCancellable === true,
     );
-    return { userCancellable };
+
+    if (userCancellable) {
+      return { userCancellable };
+    }
+
+    const contactHints = [
+      ...new Set(
+        bookableItems
+          .filter(
+            (item) =>
+              item._bookableUsed?.cancellationPolicy?.userCancellable !== true,
+          )
+          .map((item) =>
+            item._bookableUsed?.cancellationPolicy?.contactHint?.trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    if (contactHints.length === 0) {
+      return { userCancellable };
+    }
+
+    return {
+      userCancellable,
+      contactHint: contactHints.join("\n\n"),
+    };
   }
 
   processAttachments(bookableItems, attachmentStatus) {
