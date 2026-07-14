@@ -30,7 +30,7 @@ class CheckoutController {
       timeEnd,
       amount,
       couponCode,
-      bookWithPrice,
+      bookWithoutDiscount,
     } = request.body;
 
     if (!bookableId || !amount) {
@@ -59,7 +59,7 @@ class CheckoutController {
         bookableId,
         amount: parseInt(amount),
         couponCode,
-        bookWithPrice,
+        bookWithoutDiscount,
         checkoutId,
       });
 
@@ -89,6 +89,8 @@ class CheckoutController {
         userGrossPriceEur:
           (await itemCheckoutService.userGrossPriceEur()) * multiplier,
         freeBookingAllowed: await itemCheckoutService.freeBookingAllowed(),
+        bookingDiscountPercent:
+          await itemCheckoutService.bookingDiscountPercent(),
       };
 
       return response.status(200).json(payload);

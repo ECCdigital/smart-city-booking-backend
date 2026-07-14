@@ -260,8 +260,10 @@ Example:
   "requiresLogin": false,
   "permittedUsers": ["user1", "user2"],
   "permittedRoles": ["role1", "role2"],
-  "freeBookingUsers": ["user3"],
-  "freeBookingRoles": ["role3"],
+  "bookingDiscounts": {
+    "users": [{ "userId": "user3", "discountPercent": 100 }],
+    "roles": [{ "roleId": "role3", "discountPercent": 50 }]
+  },
   "cancellationPolicy": { "userCancellable": true, "contactHint": "" },
 
   "relatedBookableIds": ["bookable1", "bookable2"],
@@ -338,8 +340,7 @@ Key fields of a bookable:
 | cancellationPolicy    | e.g. `{ userCancellable: true, contactHint: "" }` — whether users can cancel bookings themselves; `contactHint` is an optional message shown in emails when user cancellation is disabled.                                                                           |
 | permittedUsers        | List of user IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
 | permittedRoles        | List of role IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
-| freeBookingUsers      | Users who can book this bookable for free.                                                                                                                 |
-| freeBookingRoles      | Roles that can book this bookable for free.                                                                                                                |
+| bookingDiscounts      | Per-user and per-role booking discounts (`users[].userId`, `users[].discountPercent`, `roles[].roleId`, `roles[].discountPercent`; integer 0–100). Highest matching discount applies. |
 | attachments           | Attachments: `id`, `title`, `caption`, `type`, `url`, `show`, `required`, `mailAttach`.                                                                     |
 | lockerDetails         | Configuration for locker integrations (e.g. units).                                                                                                       |
 | requiredFields        | Checkout fields required from the user (default: `address`, `zipCode`, `city`).                                                                            |

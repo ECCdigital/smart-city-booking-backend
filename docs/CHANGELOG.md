@@ -17,6 +17,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 
 ### Added
+- Per-user and per-role percentage booking discounts on bookables via `bookingDiscounts` (replaces `freeBookingUsers` / `freeBookingRoles`); highest matching discount applies, then coupons
+- Checkout validate-item responses now include `bookingDiscountPercent`; `freeBookingAllowed` remains `true` when discount is 100%
+- Checkout request flag renamed from `bookWithPrice` to `bookWithoutDiscount` (inverted semantics; default `false`)
+- Migration `14-07-2026-migrate-booking-discounts` to convert existing free-booking lists to 100% discounts
 - Optional `cancellationPolicy.contactHint` on bookables and bookings for cancellation contact instructions in emails when user self-cancellation is disabled; bundle bookings aggregate all relevant hints from non-cancellable items
 - Migration `13-07-2026-add-cancellation-contact-hint` to backfill `contactHint` on existing bookables and bookings
 - JSON catalog bookables expose aggregated `groupBookingAllowed` flag indicating whether the current user may create series bookings (combines `groupBooking.enabled` and `groupBooking.permittedRoles`)
