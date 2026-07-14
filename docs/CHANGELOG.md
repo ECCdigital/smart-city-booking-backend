@@ -9,6 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Rule-engine aggregate email action tests mock `TenantManager.getTenant` and validate tenant existence before reading `tenant.name`, fixing timeouts in `rule-actions.test.js`
 - Fixed-amount coupons are now deducted from the gross checkout price instead of the net price (percentage coupons and booking discounts unchanged)
 - Multi-item bundle checkouts apply fixed-amount coupons once at booking level instead of per line item
 - Invoice and receipt PDFs show coupon line items at regular net prices, label coupon lines as Rabatt, and list fixed and percentage discounts after VAT; aggregated documents and legacy bookings without stored regular prices use the same presentation

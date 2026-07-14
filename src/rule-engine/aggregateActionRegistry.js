@@ -21,12 +21,13 @@ module.exports = {
     const tenantId = context.tenantId || docs[0].tenantId;
     const address = params.to || context.tenantMail;
 
-    const tenant = await TenantManager.getTenant(tenantId)
-    const tenantName = tenant.name;
+    const tenant = await TenantManager.getTenant(tenantId);
 
     if (!tenant) {
       throw new Error("sendAggregatedEmail: tenant not found");
     }
+
+    const tenantName = tenant.name;
 
     if (!address) {
       throw new Error(
