@@ -9,7 +9,9 @@ module.exports = {
         { freeBookingUsers: { $exists: true, $not: { $size: 0 } } },
         { freeBookingRoles: { $exists: true, $not: { $size: 0 } } },
       ],
-    }).cursor();
+    })
+      .lean()
+      .cursor();
 
     for await (const bookable of cursor) {
       const users = (bookable.freeBookingUsers || []).map((userId) => ({
