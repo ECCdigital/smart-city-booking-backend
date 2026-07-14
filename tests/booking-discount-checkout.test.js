@@ -76,9 +76,13 @@ describe("ItemCheckoutService booking discount pricing", function () {
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ roles: ["role-member"] });
     sinon
-      .stub(CouponService, "applyCoupon")
-      .callsFake(async (_code, _tenant, price) => {
-        return Math.max(0, price - 10);
+      .stub(CouponService, "applyCouponToCheckoutPrices")
+      .callsFake(async (_code, _tenant, netPrice, vatRate) => {
+        const net = Math.max(0, netPrice - 10);
+        return {
+          netPrice: net,
+          grossPrice: Math.round(net * (1 + vatRate) * 100) / 100,
+        };
       });
 
     const bookable = discountBookable({
@@ -103,8 +107,11 @@ describe("ItemCheckoutService booking discount pricing", function () {
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ roles: [] });
     sinon
-      .stub(CouponService, "applyCoupon")
-      .callsFake(async (_code, _tenant, price) => price);
+      .stub(CouponService, "applyCouponToCheckoutPrices")
+      .callsFake(async (_code, _tenant, netPrice, vatRate) => ({
+        netPrice,
+        grossPrice: Math.round(netPrice * (1 + vatRate) * 100) / 100,
+      }));
 
     const bookable = discountBookable({
       bookingDiscounts: {
@@ -125,8 +132,11 @@ describe("ItemCheckoutService booking discount pricing", function () {
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ roles: [] });
     sinon
-      .stub(CouponService, "applyCoupon")
-      .callsFake(async (_code, _tenant, price) => price);
+      .stub(CouponService, "applyCouponToCheckoutPrices")
+      .callsFake(async (_code, _tenant, netPrice, vatRate) => ({
+        netPrice,
+        grossPrice: Math.round(netPrice * (1 + vatRate) * 100) / 100,
+      }));
 
     const bookable = discountBookable({
       bookingDiscounts: {

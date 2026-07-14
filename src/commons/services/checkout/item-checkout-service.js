@@ -519,34 +519,35 @@ class ItemCheckoutService {
     return Math.round(price * 100) / 100;
   }
 
-  async userPriceEur() {
-    return this._cached("userPriceEur", async () => {
-      let price = await this.regularPriceEur();
+  async _userPricesAfterCoupons() {
+    return this._cached("userPricesAfterCoupons", async () => {
+      let netPrice = await this.regularPriceEur();
 
       const discountPercent = await this.bookingDiscountPercent();
       if (discountPercent > 0 && !this.bookWithoutDiscount) {
-        price = Math.max(
+        netPrice = Math.max(
           0,
-          Math.round(price * (1 - discountPercent / 100) * 100) / 100,
+          Math.round(netPrice * (1 - discountPercent / 100) * 100) / 100,
         );
       }
 
-      const total = await CouponService.applyCoupon(
+      return CouponService.applyCouponToCheckoutPrices(
         this.originBookable.enableCoupons ? this.couponCode : null,
         this.tenantId,
-        price,
+        netPrice,
+        await this.priceValueAddedTax(),
       );
-
-      return Math.round(total * 100) / 100;
     });
   }
 
+  async userPriceEur() {
+    const { netPrice } = await this._userPricesAfterCoupons();
+    return netPrice;
+  }
+
   async userGrossPriceEur() {
-    return this._cached("userGrossPriceEur", async () => {
-      const price =
-        (await this.userPriceEur()) * (1 + (await this.priceValueAddedTax()));
-      return Math.round(price * 100) / 100;
-    });
+    const { grossPrice } = await this._userPricesAfterCoupons();
+    return grossPrice;
   }
 
   async checkPermissions() {

@@ -9,6 +9,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Fixed-amount coupons are now deducted from the gross checkout price instead of the net price (percentage coupons and booking discounts unchanged)
+- Invoice and receipt PDFs show coupon line items at regular net prices, label coupon lines as Rabatt, and list fixed and percentage discounts after VAT
 - Deleting custom field definitions at instance, tenant, or bookable level now removes the corresponding `customFieldValues` entries from affected bookables (no backfill migration for existing orphaned values)
 - Booking emails no longer show a cancel button when `cancellationPolicy.userCancellable` is `false`; an optional `contactHint` is shown instead when configured
 - `authenticateIfNeeded` now verifies Keycloak access tokens in addition to local JWTs, fixing `invalid algorithm` errors for SSO users on routes such as related bookings, protected files, and private catalogs

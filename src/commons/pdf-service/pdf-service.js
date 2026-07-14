@@ -8,6 +8,7 @@ const lazyBrowser = require("./LazyBrowser");
 const fs = require("fs");
 const path = require("path");
 const formatters = require("./pdf-formatters");
+const { COUPON_TYPE } = require("../entities/coupon/coupon");
 const { buildSampleData } = require("./pdf-sample-data");
 const { resolveBookingLayout } = require("./pdf-booking-layout");
 const {
@@ -82,6 +83,12 @@ const PRINT_CSS = `
     padding-bottom: 4px;
   }
   table.pdf-items--compact tr.coupon td { color: #555; }
+  table.pdf-items--compact tr.gross-subtotal td {
+    font-weight: bold;
+    text-align: right;
+    border-top: 1px solid #bbb;
+  }
+  table.pdf-items--compact tr.gross-subtotal td:first-child { text-align: left; }
   table.pdf-items--compact tr.totals-sub td {
     padding-top: 4px;
     border-top: 2px solid #000;
@@ -139,9 +146,21 @@ const PRINT_CSS = `
     padding-left: 18px;
   }
   table.pdf-items--detailed tr.coupon td { color: #555; }
+  table.pdf-items--detailed tr.gross-subtotal td {
+    font-weight: bold;
+    text-align: right;
+    border-top: 1px solid #bbb;
+  }
+  table.pdf-items--detailed tr.gross-subtotal td:first-child { text-align: left; }
   table.pdf-items--detailed tr.netto td {
     padding-top: 8px;
     border-top: 2px solid #000;
+  }
+  table.pdf-items--detailed tr.netto.tax-breakdown td {
+    padding-top: 4px;
+    border-top: none;
+    color: #444;
+    font-size: 9px;
   }
   table.pdf-items--detailed tr.netto td,
   table.pdf-items--detailed tr.mwst td,
@@ -346,10 +365,7 @@ class PdfService {
 
     const items = PdfService._buildItems(booking, allBookables);
     const coupon = PdfService._buildCoupon(booking);
-    const totals = PdfService._buildTotals(
-      booking.priceEur,
-      booking.vatIncludedEur,
-    );
+    const totals = PdfService._buildTableTotals(booking);
 
     const bookingContext = PdfService._buildBookingContext(
       booking,
@@ -442,10 +458,7 @@ class PdfService {
 
     const items = PdfService._buildItems(booking, allBookables);
     const coupon = PdfService._buildCoupon(booking);
-    const totals = PdfService._buildTotals(
-      booking.priceEur,
-      booking.vatIncludedEur,
-    );
+    const totals = PdfService._buildTableTotals(booking);
 
     const bookingContext = PdfService._buildBookingContext(
       booking,
@@ -574,11 +587,7 @@ class PdfService {
       negative: true,
     });
     const coupon = PdfService._buildCoupon(booking, { negative: true });
-    const totals = PdfService._buildTotals(
-      booking.priceEur,
-      booking.vatIncludedEur,
-      { negative: true },
-    );
+    const totals = PdfService._buildTableTotals(booking, { negative: true });
 
     const bookingContext = PdfService._buildBookingContext(
       booking,
@@ -891,6 +900,130 @@ class PdfService {
     });
   }
 
+  static _bookingVatRate(booking) {
+    const nettoEur = booking.priceEur - booking.vatIncludedEur;
+    if (!nettoEur) {
+      return 0;
+    }
+    return booking.vatIncludedEur / nettoEur;
+  }
+
+  static _resolveUserGrossPriceEur(item, booking) {
+    if (item.userGrossPriceEur != null) {
+      return item.userGrossPriceEur;
+    }
+    const vatRate = PdfService._bookingVatRate(booking);
+    return Math.round(item.userPriceEur * (1 + vatRate) * 100) / 100;
+  }
+
+  static _resolveRegularGrossPriceEur(item, booking) {
+    if (item.regularGrossPriceEur != null) {
+      return item.regularGrossPriceEur;
+    }
+
+    const coupon = booking._couponUsed;
+    const userGross = PdfService._resolveUserGrossPriceEur(item, booking);
+
+    if (coupon?.type === COUPON_TYPE.FIXED) {
+      return Math.round((userGross + coupon.discount) * 100) / 100;
+    }
+
+    if (
+      coupon?.type === COUPON_TYPE.PERCENTAGE &&
+      coupon.discount > 0 &&
+      coupon.discount < 100
+    ) {
+      return Math.round((userGross / (1 - coupon.discount / 100)) * 100) / 100;
+    }
+
+    return userGross;
+  }
+
+  static _resolveRegularNetPriceEur(item, booking) {
+    if (item.regularPriceEur != null) {
+      return item.regularPriceEur;
+    }
+
+    if (item.regularGrossPriceEur != null) {
+      const vatRate = PdfService._bookingVatRate(booking);
+      return Math.round((item.regularGrossPriceEur / (1 + vatRate)) * 100) / 100;
+    }
+
+    const coupon = booking._couponUsed;
+    if (coupon?.type === COUPON_TYPE.FIXED) {
+      const vatRate = PdfService._bookingVatRate(booking);
+      const regularGross = PdfService._resolveRegularGrossPriceEur(item, booking);
+      return Math.round((regularGross / (1 + vatRate)) * 100) / 100;
+    }
+
+    if (
+      coupon?.type === COUPON_TYPE.PERCENTAGE &&
+      coupon.discount > 0 &&
+      coupon.discount < 100
+    ) {
+      return Math.round(
+        (item.userPriceEur / (1 - coupon.discount / 100)) * 100,
+      ) / 100;
+    }
+
+    return item.userPriceEur;
+  }
+
+  static _usesPreDiscountCouponDisplay(coupon) {
+    return (
+      coupon &&
+      Object.keys(coupon).length > 0 &&
+      (coupon.type === COUPON_TYPE.FIXED ||
+        coupon.type === COUPON_TYPE.PERCENTAGE)
+    );
+  }
+
+  static _calculatePreDiscountNetTotal(booking) {
+    let nettoEur = 0;
+    for (const item of booking.bookableItems || []) {
+      nettoEur +=
+        PdfService._resolveRegularNetPriceEur(item, booking) *
+        PdfService._itemAmountMultiplier(item);
+    }
+    return Math.round(nettoEur * 100) / 100;
+  }
+
+  static _itemAmountMultiplier(item) {
+    return item.ignoreAmount ? 1 : item.amount;
+  }
+
+  static _buildTableTotals(booking, options = {}) {
+    const coupon = booking._couponUsed;
+
+    if (!PdfService._usesPreDiscountCouponDisplay(coupon)) {
+      return PdfService._buildTotals(
+        booking.priceEur,
+        booking.vatIncludedEur,
+        options,
+      );
+    }
+
+    const nettoEur = PdfService._calculatePreDiscountNetTotal(booking);
+    const vatRate = PdfService._bookingVatRate(booking);
+    const vatEur = Math.round(nettoEur * vatRate * 100) / 100;
+    const finalTotals = PdfService._buildTotals(
+      booking.priceEur,
+      booking.vatIncludedEur,
+      options,
+    );
+    const format = options.negative
+      ? formatters.formatNegativeCurrency
+      : formatters.formatCurrency;
+
+    return {
+      ...finalTotals,
+      nettoEur,
+      vatEur,
+      netto: format(nettoEur),
+      vat: format(vatEur),
+    };
+  }
+
   /**
    * Builds the structured line items of a booking.
    *
@@ -904,22 +1037,46 @@ class PdfService {
     const format = options.negative
       ? formatters.formatNegativeCurrency
       : formatters.formatCurrency;
+    const coupon = booking._couponUsed;
+    const showRegularNetPrice =
+      PdfService._usesPreDiscountCouponDisplay(coupon);
 
     return (booking.bookableItems || []).map((item) => {
       const bookable =
         item._bookableUsed ||
         allBookables.find((b) => b.id === item.bookableId);
-      const totalPriceEur = item.userPriceEur * item.amount;
+      const unitPriceEur = showRegularNetPrice
+        ? PdfService._resolveRegularNetPriceEur(item, booking)
+        : item.userPriceEur;
+      const multiplier = PdfService._itemAmountMultiplier(item);
+      const totalPriceEur = unitPriceEur * multiplier;
 
       return {
         title: bookable?.title || "Unbekannt",
         amount: item.amount,
-        unitPriceEur: item.userPriceEur,
+        unitPriceEur,
         totalPriceEur,
-        unitPrice: format(item.userPriceEur),
+        unitPrice: format(unitPriceEur),
         totalPrice: format(totalPriceEur),
       };
     });
+  }
+
+  static _formatCouponDescription(coupon) {
+    const description = (coupon.description || "").trim();
+    const discountText = String(coupon.discount);
+
+    if (coupon.type === COUPON_TYPE.FIXED) {
+      if (!description || description === discountText) {
+        return "Rabatt";
+      }
+      return `Rabatt (${description})`;
+    }
+
+    if (!description) {
+      return "Rabatt";
+    }
+    return `Rabatt (${description})`;
   }
 
   static _buildCoupon(booking, options = {}) {
@@ -929,13 +1086,24 @@ class PdfService {
     }
 
     const sign = options.negative ? "+" : "-";
-    const unit = coupon.type === "fixed" ? "€" : "%";
+    let discountLabel;
+
+    if (coupon.type === COUPON_TYPE.FIXED) {
+      discountLabel = (options.negative
+        ? formatters.formatCurrency
+        : formatters.formatNegativeCurrency)(coupon.discount);
+    } else if (coupon.type === COUPON_TYPE.PERCENTAGE) {
+      discountLabel = `${sign}${coupon.discount} %`;
+    } else {
+      return null;
+    }
 
     return {
-      description: coupon.description,
+      description: PdfService._formatCouponDescription(coupon),
       discount: coupon.discount,
       type: coupon.type,
-      discountLabel: `${sign}${coupon.discount} ${unit}`,
+      discountLabel,
+      showAfterVat: true,
     };
   }
 
