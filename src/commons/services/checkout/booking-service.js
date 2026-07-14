@@ -174,7 +174,7 @@ class BookingService {
       isCommitted,
       isPayed,
       isRejected,
-      bookWithPrice,
+      bookWithoutDiscount,
       customFieldValues: rawCustomFieldValues,
       cancellationPolicy,
     } = bookingAttempt;
@@ -280,7 +280,7 @@ class BookingService {
         isRejected: Boolean(isRejected),
         attachmentStatus,
         paymentProvider,
-        bookWithPrice,
+        bookWithoutDiscount,
         checkoutId: providedCheckoutId,
         customFieldValues,
         cancellationPolicy,
@@ -306,7 +306,7 @@ class BookingService {
         comment,
         attachmentStatus,
         paymentProvider,
-        bookWithPrice,
+        bookWithoutDiscount,
         checkoutId: providedCheckoutId,
         customFieldValues,
       });

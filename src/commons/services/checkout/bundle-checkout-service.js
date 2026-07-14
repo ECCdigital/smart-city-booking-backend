@@ -33,7 +33,7 @@ class BundleCheckoutService {
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
    * @param {Array} attachments - The attachments.
-   * @param {boolean} bookWithPrice - Whether to book with price.
+   * @param {boolean} bookWithoutDiscount - When true, booking discounts are ignored.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} customFieldValues - Checkout custom field values.
    */
@@ -57,7 +57,7 @@ class BundleCheckoutService {
     attachmentStatus,
     paymentProvider,
     attachments,
-    bookWithPrice,
+    bookWithoutDiscount,
     checkoutId,
     customFieldValues,
   }) {
@@ -80,7 +80,7 @@ class BundleCheckoutService {
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
-    this.bookWithPrice = bookWithPrice;
+    this.bookWithoutDiscount = bookWithoutDiscount;
     this.checkoutId = checkoutId;
     this.customFieldValues = Array.isArray(customFieldValues)
       ? customFieldValues
@@ -96,7 +96,7 @@ class BundleCheckoutService {
       bookableId: bookableItem.bookableId,
       amount: bookableItem.amount,
       couponCode: this.couponCode,
-      bookWithPrice: this.bookWithPrice,
+      bookWithoutDiscount: this.bookWithoutDiscount,
       checkoutId: this.checkoutId,
     });
     await itemCheckoutService.init();
@@ -418,7 +418,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} paymentMethod - The payment method.
    * @param {Array} hooks - The hooks.
    * @param {Array} attachments - The attachments.
-   * @param {boolean} bookWithPrice - Whether to book with price.
+   * @param {boolean} bookWithoutDiscount - When true, booking discounts are ignored.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} lockerInfo - The locker info.
    * @param {Array} customFieldValues - Checkout custom field values.
@@ -453,7 +453,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     paymentMethod,
     hooks,
     attachments,
-    bookWithPrice,
+    bookWithoutDiscount,
     checkoutId,
     lockerInfo,
     customFieldValues,
@@ -479,7 +479,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachmentStatus,
       paymentProvider,
       attachments,
-      bookWithPrice,
+      bookWithoutDiscount,
       checkoutId,
       customFieldValues,
     });
@@ -503,7 +503,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       bookableId: bookableItem.bookableId,
       amount: bookableItem.amount,
       couponCode: this.couponCode,
-      bookWithPrice: this.bookWithPrice,
+      bookWithoutDiscount: this.bookWithoutDiscount,
     });
 
     await itemCheckoutService.init(bookableItem._bookableUsed);

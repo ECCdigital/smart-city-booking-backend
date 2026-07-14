@@ -50,7 +50,7 @@ class CheckoutControllerV2 {
       end,
       amount,
       couponCode,
-      bookWithPrice,
+      bookWithoutDiscount,
     } = req.body;
 
     const { checkoutId, generated } = await resolveCheckoutId(
@@ -88,7 +88,7 @@ class CheckoutControllerV2 {
       bookableId,
       amount: parseInt(amount),
       couponCode,
-      bookWithPrice,
+      bookWithoutDiscount,
       checkoutId,
     });
 
@@ -135,6 +135,7 @@ class CheckoutControllerV2 {
           (await service.regularGrossPriceEur()) * multiplier,
         userGrossPriceEur: (await service.userGrossPriceEur()) * multiplier,
         freeBookingAllowed: await service.freeBookingAllowed(),
+        bookingDiscountPercent: await service.bookingDiscountPercent(),
       };
 
       logger.info(
@@ -237,7 +238,7 @@ class CheckoutControllerV2 {
       const {
         bookableItems: rawBookableItems,
         bookingAttempts: rawBookingAttempts,
-        bookWithPrice,
+        bookWithoutDiscount,
         paymentProvider,
         customFieldValues,
         couponCode,
@@ -319,7 +320,7 @@ class CheckoutControllerV2 {
         timeBegin: attempt?.timeBegin,
         timeEnd: attempt?.timeEnd,
         bookableItems,
-        bookWithPrice,
+        bookWithoutDiscount,
         customFieldValues,
         couponCode,
       }));
