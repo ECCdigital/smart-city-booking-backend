@@ -363,4 +363,10 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/macos,windows,visualstudiocode,intellij,node,git
 test.js
 
-.cursor/
+# Cursor: commit shared rules, ignore local IDE state
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+
+# Codex: local-only agent overrides (not committed)
+AGENTS.override.md

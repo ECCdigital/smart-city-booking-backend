@@ -1,0 +1,13 @@
+---
+description: Database migration script conventions
+globs: migrations/**/*.js
+alwaysApply: false
+---
+
+# Migrations
+
+See `docs/agents/migrations.md` for full conventions.
+
+- Format: `DD-MM-YYYY-description.js` with `name`, `up`, `down`
+- Use `mongoose.model()` — prefer idempotent operations
+- Document breaking changes in `docs/CHANGELOG.md`
