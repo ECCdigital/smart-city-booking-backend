@@ -461,6 +461,248 @@ describe("pdf booking table meta", () => {
   });
 });
 
+describe("PdfService fixed coupon display", () => {
+  const bookables = [{ id: "week-room", title: "Week" }];
+
+  function makeFixedCouponBooking(overrides = {}) {
+    return makeBooking({
+      priceEur: 109,
+      vatIncludedEur: 17.4,
+      _couponUsed: {
+        description: "Sommeraktion",
+        type: "fixed",
+        discount: 10,
+      },
+      bookableItems: [
+        {
+          bookableId: "week-room",
+          amount: 1,
+          regularPriceEur: 100,
+          regularGrossPriceEur: 119,
+          userPriceEur: 91.6,
+          userGrossPriceEur: 109,
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it("shows regular net prices on line items", () => {
+    const items = PdfService._buildItems(makeFixedCouponBooking(), bookables);
+
+    assert.strictEqual(items[0].unitPriceEur, 100);
+    assert.strictEqual(items[0].totalPriceEur, 100);
+  });
+
+  it("labels fixed coupons explicitly as Rabatt", () => {
+    const coupon = PdfService._buildCoupon(makeFixedCouponBooking());
+
+    assert.strictEqual(coupon.description, "Rabatt (Sommeraktion)");
+  });
+
+  it("uses Rabatt without suffix when the description equals the discount amount", () => {
+    const coupon = PdfService._buildCoupon(
+      makeFixedCouponBooking({
+        _couponUsed: {
+          description: "10",
+          type: "fixed",
+          discount: 10,
+        },
+      }),
+    );
+
+    assert.strictEqual(coupon.description, "Rabatt");
+  });
+
+  it("shows the fixed coupon after VAT with a euro discount", () => {
+    const coupon = PdfService._buildCoupon(makeFixedCouponBooking());
+
+    assert.ok(coupon.discountLabel.includes("-10,00"));
+  });
+
+  it("shows pre-discount net and VAT totals before the coupon", () => {
+    const totals = PdfService._buildTableTotals(makeFixedCouponBooking());
+
+    assert.strictEqual(totals.nettoEur, 100);
+    assert.strictEqual(totals.vatEur, 19);
+    assert.strictEqual(totals.bruttoEur, 109);
+  });
+
+  it("renders a detailed invoice table with net items and coupon after VAT", () => {
+    const booking = makeFixedCouponBooking();
+    const html = Handlebars.renderPartial("pdfBookingItemsTable", {
+      layout: "detailed",
+      tableClass: "booked-items",
+      items: PdfService._buildItems(booking, bookables),
+      coupon: PdfService._buildCoupon(booking),
+      totals: PdfService._buildTableTotals(booking),
+      booking: null,
+      tableMeta: {},
+      compactMetaHtml: null,
+    });
+
+    const nettoIndex = html.indexOf("Gesamt (netto)");
+    const mwstIndex = html.indexOf("zzgl. MwSt.");
+    const couponIndex = html.indexOf("Rabatt (Sommeraktion)");
+    const bruttoIndex = html.lastIndexOf("Gesamt (brutto)");
+
+    assert.ok(/100,00/.test(html));
+    assert.ok(/-10,00/.test(html));
+    assert.ok(/109,00/.test(html));
+    assert.ok(nettoIndex < mwstIndex);
+    assert.ok(mwstIndex < couponIndex);
+    assert.ok(couponIndex < bruttoIndex);
+  });
+
+  it("derives the regular net price for legacy bookings without stored values", () => {
+    const booking = makeFixedCouponBooking({
+      bookableItems: [
+        {
+          bookableId: "week-room",
+          amount: 1,
+          userPriceEur: 91.6,
+          userGrossPriceEur: 109,
+        },
+      ],
+    });
+
+    const items = PdfService._buildItems(booking, bookables);
+
+    assert.strictEqual(items[0].unitPriceEur, 100);
+  });
+
+  it("uses a plus prefix for fixed coupons on cancellation receipts", () => {
+    const coupon = PdfService._buildCoupon(makeFixedCouponBooking(), {
+      negative: true,
+    });
+
+    assert.strictEqual(coupon.discountLabel, "+10,00 €");
+  });
+
+  it("allocates legacy fixed coupon discount proportionally across items", () => {
+    const bookables = [
+      { id: "room-a", title: "Room A" },
+      { id: "room-b", title: "Room B" },
+    ];
+    const booking = makeFixedCouponBooking({
+      priceEur: 168.5,
+      vatIncludedEur: 26.9,
+      bookableItems: [
+        {
+          bookableId: "room-a",
+          amount: 1,
+          userPriceEur: 100,
+          userGrossPriceEur: 119,
+        },
+        {
+          bookableId: "room-b",
+          amount: 1,
+          userPriceEur: 50,
+          userGrossPriceEur: 59.5,
+        },
+      ],
+    });
+
+    const items = PdfService._buildItems(booking, bookables);
+
+    assert.strictEqual(items[0].unitPriceEur, 100);
+    assert.strictEqual(items[1].unitPriceEur, 50);
+  });
+});
+
+describe("PdfService percentage coupon display", () => {
+  const bookables = [{ id: "week-room", title: "Week" }];
+
+  function makePercentageCouponBooking(overrides = {}) {
+    return makeBooking({
+      priceEur: 107.1,
+      vatIncludedEur: 17.1,
+      _couponUsed: {
+        description: "Prozent",
+        type: "percentage",
+        discount: 10,
+      },
+      bookableItems: [
+        {
+          bookableId: "week-room",
+          amount: 1,
+          regularPriceEur: 100,
+          userPriceEur: 90,
+          userGrossPriceEur: 107.1,
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it("shows regular net prices on line items", () => {
+    const items = PdfService._buildItems(
+      makePercentageCouponBooking(),
+      bookables,
+    );
+
+    assert.strictEqual(items[0].unitPriceEur, 100);
+  });
+
+  it("shows the percentage coupon after VAT", () => {
+    const coupon = PdfService._buildCoupon(makePercentageCouponBooking());
+
+    assert.strictEqual(coupon.description, "Rabatt (Prozent)");
+    assert.strictEqual(coupon.discountLabel, "-10 %");
+  });
+
+  it("shows pre-discount net and VAT totals before the coupon", () => {
+    const totals = PdfService._buildTableTotals(makePercentageCouponBooking());
+
+    assert.strictEqual(totals.nettoEur, 100);
+    assert.strictEqual(totals.vatEur, 19);
+    assert.strictEqual(totals.bruttoEur, 107.1);
+  });
+});
+
+describe("PdfService aggregated coupon display", () => {
+  const bookables = [{ id: "week-room", title: "Week" }];
+
+  function makeFixedCouponBooking(overrides = {}) {
+    return makeBooking({
+      priceEur: 109,
+      vatIncludedEur: 17.4,
+      _couponUsed: {
+        description: "Sommeraktion",
+        type: "fixed",
+        discount: 10,
+      },
+      bookableItems: [
+        {
+          bookableId: "week-room",
+          amount: 1,
+          regularPriceEur: 100,
+          regularGrossPriceEur: 119,
+          userPriceEur: 91.6,
+          userGrossPriceEur: 109,
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it("shows pre-discount net totals and coupon data per booking row", () => {
+    const booking = makeFixedCouponBooking();
+    const { bookingRows } = PdfService._buildAggregatedData(
+      [booking],
+      bookables,
+    );
+
+    assert.strictEqual(bookingRows[0].nettoEur, 100);
+    assert.strictEqual(
+      bookingRows[0].coupon.description,
+      "Rabatt (Sommeraktion)",
+    );
+    assert.ok(bookingRows[0].coupon.discountLabel.includes("-10,00"));
+    assert.strictEqual(bookingRows[0].items[0].unitPriceEur, 100);
+  });
+});
+
 describe("pdf booking layout", () => {
   it("defaults to detailed when tenant has no layout configured", () => {
     const {
