@@ -5,6 +5,7 @@ const {
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
+const { COUPON_TYPE } = require("../../entities/coupon/coupon");
 const LockerService = require("../locker/locker-service");
 const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
 
@@ -87,6 +88,38 @@ class BundleCheckoutService {
       : [];
   }
 
+  async _getUsedCoupon() {
+    if (!this.couponCode) {
+      return null;
+    }
+    if (this._usedCoupon !== undefined) {
+      return this._usedCoupon;
+    }
+    this._usedCoupon = await CouponManager.getCoupon(
+      this.couponCode,
+      this.tenant,
+    );
+    return this._usedCoupon;
+  }
+
+  async _isMultiItemFixedCoupon() {
+    if (!this.couponCode || this.bookableItems.length <= 1) {
+      return false;
+    }
+    const coupon = await this._getUsedCoupon();
+    return coupon?.type === COUPON_TYPE.FIXED;
+  }
+
+  async _itemCouponCode() {
+    if (!this.couponCode) {
+      return null;
+    }
+    if (await this._isMultiItemFixedCoupon()) {
+      return null;
+    }
+    return this.couponCode;
+  }
+
   async createItemCheckoutService(bookableItem) {
     const itemCheckoutService = new ItemCheckoutService({
       user: this.user,
@@ -95,7 +128,7 @@ class BundleCheckoutService {
       timeEnd: this.timeEnd,
       bookableId: bookableItem.bookableId,
       amount: bookableItem.amount,
-      couponCode: this.couponCode,
+      couponCode: await this._itemCouponCode(),
       bookWithoutDiscount: this.bookWithoutDiscount,
       checkoutId: this.checkoutId,
     });
@@ -164,8 +197,23 @@ class BundleCheckoutService {
       const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
       total += bookableItem.userPriceEur * multiplier;
     }
+    total = Math.round(total * 100) / 100;
 
-    return Math.round(total * 100) / 100;
+    if (await this._isMultiItemFixedCoupon()) {
+      const grossAfter = await this.userGrossPriceEur();
+      let grossBefore = 0;
+      for (const bookableItem of this.bookableItems) {
+        const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
+        grossBefore += bookableItem.userGrossPriceEur * multiplier;
+      }
+      grossBefore = Math.round(grossBefore * 100) / 100;
+      if (!grossBefore) {
+        return 0;
+      }
+      return Math.round(((total * grossAfter) / grossBefore) * 100) / 100;
+    }
+
+    return total;
   }
 
   async userGrossPriceEur() {
@@ -174,7 +222,14 @@ class BundleCheckoutService {
       const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
       total += bookableItem.userGrossPriceEur * multiplier;
     }
-    return Math.round(total * 100) / 100;
+    total = Math.round(total * 100) / 100;
+
+    if (await this._isMultiItemFixedCoupon()) {
+      const coupon = await this._getUsedCoupon();
+      return Math.max(0, Math.round((total - coupon.discount) * 100) / 100);
+    }
+
+    return total;
   }
 
   async vatIncludedEur() {
@@ -502,7 +557,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       timeEnd: this.timeEnd,
       bookableId: bookableItem.bookableId,
       amount: bookableItem.amount,
-      couponCode: this.couponCode,
+      couponCode: await this._itemCouponCode(),
       bookWithoutDiscount: this.bookWithoutDiscount,
     });
 

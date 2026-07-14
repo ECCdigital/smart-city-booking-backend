@@ -15,12 +15,12 @@
       <td class="label">zzgl. MwSt.</td>
       <td class="value">{{totals.vat}}</td>
     </tr>
-    {{#if coupon}}{{#if coupon.showAfterVat}}
+    {{#if coupon}}
     <tr>
       <td class="label">{{coupon.description}}</td>
       <td class="value">{{coupon.discountLabel}}</td>
     </tr>
-    {{/if}}{{/if}}
+    {{/if}}
     <tr class="totals">
       <td class="label">Gesamt (brutto)</td>
       <td class="value">{{totals.brutto}}</td>
@@ -40,12 +40,7 @@
       <td class="label">Buchungszeitraum</td>
       <td class="value">{{booking.period}}</td>
     </tr>
-    {{/if}} {{/if}} {{#if coupon}}{{#unless coupon.showAfterVat}}
-    <tr>
-      <td class="label">{{coupon.description}}</td>
-      <td class="value">{{coupon.discountLabel}}</td>
-    </tr>
-    {{/unless}}{{/if}}
+    {{/if}} {{/if}}
     <tr class="objects">
       <td class="label">Buchungsobjekt</td>
       <td class="value">
@@ -75,23 +70,18 @@
       <td class="bi-price-item num">{{amount}} × {{unitPrice}}</td>
       <td class="bi-price-total num">{{totalPrice}}</td>
     </tr>
-    {{/each}} {{#if coupon}}{{#unless coupon.showAfterVat}}
-    <tr class="coupon">
-      <td colspan="2">{{coupon.description}}</td>
-      <td class="num">{{coupon.discountLabel}}</td>
-    </tr>
-    {{/unless}}{{/if}}
+    {{/each}}
     <tr class="totals-sub netto">
       <td colspan="3">
         Gesamt (netto) {{totals.netto}} &nbsp;·&nbsp; zzgl. MwSt. {{totals.vat}}
       </td>
     </tr>
-    {{#if coupon}}{{#if coupon.showAfterVat}}
+    {{#if coupon}}
     <tr class="coupon">
       <td colspan="2">{{coupon.description}}</td>
       <td class="num">{{coupon.discountLabel}}</td>
     </tr>
-    {{/if}}{{/if}}
+    {{/if}}
     <tr class="brutto">
       <td colspan="2">Gesamt (brutto)</td>
       <td class="num">{{totals.brutto}}</td>
@@ -124,12 +114,7 @@
       <td class="bi-price-item num">{{unitPrice}}</td>
       <td class="bi-price-total num">{{totalPrice}}</td>
     </tr>
-    {{/each}} {{#if coupon}}{{#unless coupon.showAfterVat}}
-    <tr class="coupon">
-      <td colspan="3">{{coupon.description}}</td>
-      <td class="num">{{coupon.discountLabel}}</td>
-    </tr>
-    {{/unless}}{{/if}}
+    {{/each}}
     <tr class="netto">
       <td colspan="3">Gesamt (netto)</td>
       <td class="num">{{totals.netto}}</td>
@@ -138,12 +123,12 @@
       <td colspan="3">zzgl. MwSt.</td>
       <td class="num">{{totals.vat}}</td>
     </tr>
-    {{#if coupon}}{{#if coupon.showAfterVat}}
+    {{#if coupon}}
     <tr class="coupon">
       <td colspan="3">{{coupon.description}}</td>
       <td class="num">{{coupon.discountLabel}}</td>
     </tr>
-    {{/if}}{{/if}}
+    {{/if}}
     <tr class="brutto">
       <td colspan="3">Gesamt (brutto)</td>
       <td class="num">{{totals.brutto}}</td>

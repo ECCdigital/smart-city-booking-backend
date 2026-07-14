@@ -7,6 +7,14 @@ class CouponService {
     return Math.round(value * 100) / 100;
   }
 
+  static _unchangedCheckoutPrices(netPrice, vatRate) {
+    const roundedNet = CouponService._roundEur(netPrice);
+    return {
+      netPrice: roundedNet,
+      grossPrice: CouponService._roundEur(roundedNet * (1 + vatRate)),
+    };
+  }
+
   static async applyCoupon(couponID, tenantID, bookingPrice) {
     if (!couponID) {
       return bookingPrice;
@@ -53,19 +61,13 @@ class CouponService {
     const roundedNet = CouponService._roundEur(netPrice);
 
     if (!couponID) {
-      return {
-        netPrice: roundedNet,
-        grossPrice: CouponService._roundEur(roundedNet * (1 + vatRate)),
-      };
+      return CouponService._unchangedCheckoutPrices(netPrice, vatRate);
     }
 
     const coupon = await CouponManager.getCoupon(couponID, tenantID);
 
     if (!coupon) {
-      return {
-        netPrice: roundedNet,
-        grossPrice: CouponService._roundEur(roundedNet * (1 + vatRate)),
-      };
+      return CouponService._unchangedCheckoutPrices(netPrice, vatRate);
     }
 
     if (coupon.type === COUPON_TYPE.PERCENTAGE) {
@@ -91,10 +93,7 @@ class CouponService {
       };
     }
 
-    return {
-      netPrice: roundedNet,
-      grossPrice: CouponService._roundEur(roundedNet * (1 + vatRate)),
-    };
+    return CouponService._unchangedCheckoutPrices(netPrice, vatRate);
   }
 
   static async incrementCouponUsage(couponID, tenantID) {

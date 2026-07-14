@@ -6,6 +6,9 @@ const {
 } = require("../src/commons/services/checkout/item-checkout-service");
 const CouponManager = require("../src/commons/data-managers/coupon-manager");
 const CouponService = require("../src/commons/services/coupon-service");
+const {
+  BundleCheckoutService,
+} = require("../src/commons/services/checkout/bundle-checkout-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const { COUPON_TYPE } = require("../src/commons/entities/coupon/coupon");
 
@@ -113,5 +116,64 @@ describe("ItemCheckoutService fixed coupon pricing", function () {
 
     assert.strictEqual(await service.userGrossPriceEur(), 109);
     assert.strictEqual(await service.userPriceEur(), 91.6);
+  });
+});
+
+describe("BundleCheckoutService fixed coupon pricing", function () {
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("applies fixed-amount coupons once across multiple items", async function () {
+    sinon.stub(CouponManager, "getCoupon").resolves({
+      type: COUPON_TYPE.FIXED,
+      discount: 10,
+    });
+
+    const service = new BundleCheckoutService({
+      user: USER_ID,
+      tenant: TENANT_ID,
+      timeBegin: Date.now(),
+      timeEnd: Date.now() + 3600000,
+      bookableItems: [
+        {
+          bookableId: "a",
+          amount: 1,
+          userPriceEur: 100,
+          userGrossPriceEur: 119,
+        },
+        {
+          bookableId: "b",
+          amount: 1,
+          userPriceEur: 50,
+          userGrossPriceEur: 59.5,
+        },
+      ],
+      couponCode: "SAVE10",
+    });
+
+    assert.strictEqual(await service.userGrossPriceEur(), 168.5);
+    assert.strictEqual(await service.userPriceEur(), 141.6);
+  });
+
+  it("does not pass fixed coupons to per-item checkout for multi-item bundles", async function () {
+    sinon.stub(CouponManager, "getCoupon").resolves({
+      type: COUPON_TYPE.FIXED,
+      discount: 10,
+    });
+
+    const service = new BundleCheckoutService({
+      user: USER_ID,
+      tenant: TENANT_ID,
+      timeBegin: Date.now(),
+      timeEnd: Date.now() + 3600000,
+      bookableItems: [
+        { bookableId: "a", amount: 1 },
+        { bookableId: "b", amount: 1 },
+      ],
+      couponCode: "SAVE10",
+    });
+
+    assert.strictEqual(await service._itemCouponCode(), null);
   });
 });

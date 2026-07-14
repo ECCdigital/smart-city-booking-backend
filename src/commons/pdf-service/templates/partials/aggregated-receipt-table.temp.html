@@ -37,6 +37,12 @@
       <td class="label">Gesamt (netto)</td>
       <td class="value">{{netto}}</td>
     </tr>
+    {{#if coupon}}
+    <tr>
+      <td class="label">{{coupon.description}}</td>
+      <td class="value">{{coupon.discountLabel}}</td>
+    </tr>
+    {{/if}}
     {{/each}}
     <tr class="booking-sep">
       <td colspan="2"></td>
@@ -78,7 +84,8 @@
     <tr>
       <td colspan="{{../tableMeta.aggregatedReceiptColumnCount}}" class="sub">
         {{#each items}}{{title}} ×{{amount}} ({{totalPrice}}){{#unless @last}}
-        &nbsp;·&nbsp; {{/unless}}{{else}}Keine Artikel{{/each}}
+        &nbsp;·&nbsp; {{/unless}}{{else}}Keine Artikel{{/each}}{{#if coupon}}
+        &nbsp;·&nbsp; {{coupon.description}}: {{coupon.discountLabel}}{{/if}}
       </td>
     </tr>
     {{/each}}
@@ -122,6 +129,9 @@
           {{else}}
           <li>Keine Artikel</li>
           {{/each}}
+          {{#if coupon}}
+          <li>{{coupon.description}}: {{coupon.discountLabel}}</li>
+          {{/if}}
         </ul>
       </td>
     </tr>
