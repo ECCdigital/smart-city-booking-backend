@@ -259,11 +259,12 @@ class KeycloakVerifier {
   }
 }
 
-setInterval(
+const cachePruneInterval = setInterval(
   () => {
     KeycloakVerifier.pruneCache();
   },
   5 * 60 * 1000,
 );
+cachePruneInterval.unref();
 
 module.exports = KeycloakVerifier;
