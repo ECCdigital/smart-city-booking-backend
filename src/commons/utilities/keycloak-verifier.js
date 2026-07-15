@@ -69,7 +69,6 @@ class KeycloakVerifier {
     return `${config.serverUrl}/realms/${config.realm}`;
   }
 
-
   static getClient(issuerUrl) {
     if (!this._clients.has(issuerUrl)) {
       this._clients.set(
@@ -210,12 +209,9 @@ class KeycloakVerifier {
     const expectedClientId = config.publicClient;
 
     if (expectedClientId) {
-      const audience = Array.isArray(decoded.aud)
-        ? decoded.aud
-        : [decoded.aud];
+      const audience = Array.isArray(decoded.aud) ? decoded.aud : [decoded.aud];
       const hasValidAudience =
-        audience.includes(expectedClientId) ||
-        decoded.azp === expectedClientId;
+        audience.includes(expectedClientId) || decoded.azp === expectedClientId;
 
       if (!hasValidAudience) {
         throw new Error("Keycloak token audience mismatch");
@@ -228,9 +224,7 @@ class KeycloakVerifier {
       throw new Error("Keycloak session has been revoked");
     }
 
-    logger.debug(
-      `Keycloak token verified for ${decoded.email || decoded.sub}`,
-    );
+    logger.debug(`Keycloak token verified for ${decoded.email || decoded.sub}`);
 
     return decoded;
   }
