@@ -70,7 +70,9 @@ class JSONController {
 
     const identity = req.user;
 
-    if (!(await JSONController._enforceCatalogAccess(res, tenantId, identity))) {
+    if (
+      !(await JSONController._enforceCatalogAccess(res, tenantId, identity))
+    ) {
       return;
     }
 
@@ -140,10 +142,15 @@ class JSONController {
           );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
-            JSONController._exportPublicBookable(b, tenantId, checkoutInstance, {
-              identity,
-              userRoles,
-            }),
+            JSONController._exportPublicBookable(
+              b,
+              tenantId,
+              checkoutInstance,
+              {
+                identity,
+                userRoles,
+              },
+            ),
           ),
         );
         return pub;
@@ -164,7 +171,9 @@ class JSONController {
 
     const identity = req.user;
 
-    if (!(await JSONController._enforceCatalogAccess(res, tenantId, identity))) {
+    if (
+      !(await JSONController._enforceCatalogAccess(res, tenantId, identity))
+    ) {
       return;
     }
 
@@ -207,17 +216,20 @@ class JSONController {
               )
             : [];
 
-        pub.relatedBookables = relatedBookables
-          .filter(
-            (b) =>
-              b.isPublic && JSONController.hasAccess(b, identity, userRoles),
-          );
+        pub.relatedBookables = relatedBookables.filter(
+          (b) => b.isPublic && JSONController.hasAccess(b, identity, userRoles),
+        );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
-            JSONController._exportPublicBookable(b, tenantId, checkoutInstance, {
-              identity,
-              userRoles,
-            }),
+            JSONController._exportPublicBookable(
+              b,
+              tenantId,
+              checkoutInstance,
+              {
+                identity,
+                userRoles,
+              },
+            ),
           ),
         );
 
@@ -241,7 +253,9 @@ class JSONController {
     const { tenant: tenantId } = req.params;
     const { ids } = req.query;
 
-    if (!(await JSONController._enforceCatalogAccess(res, tenantId, req.user))) {
+    if (
+      !(await JSONController._enforceCatalogAccess(res, tenantId, req.user))
+    ) {
       return;
     }
 
@@ -305,7 +319,9 @@ class JSONController {
   static async getEvent(req, res) {
     const { tenant: tenantId, id } = req.params;
 
-    if (!(await JSONController._enforceCatalogAccess(res, tenantId, req.user))) {
+    if (
+      !(await JSONController._enforceCatalogAccess(res, tenantId, req.user))
+    ) {
       return;
     }
 

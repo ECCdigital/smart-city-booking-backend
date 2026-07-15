@@ -14,14 +14,18 @@ class AvailabilityDataProvider {
    * @returns {string|Promise<string>}
    */
   getTenantId() {
-    throw new Error("AvailabilityDataProvider.getTenantId() is not implemented");
+    throw new Error(
+      "AvailabilityDataProvider.getTenantId() is not implemented",
+    );
   }
 
   /**
    * @returns {Bookable|null|Promise<Bookable|null>}
    */
   getBookable() {
-    throw new Error("AvailabilityDataProvider.getBookable() is not implemented");
+    throw new Error(
+      "AvailabilityDataProvider.getBookable() is not implemented",
+    );
   }
 
   /**

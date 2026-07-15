@@ -38,7 +38,10 @@ describe("BookingManager.filterConcurrentBookings", () => {
       2500,
     );
 
-    assert.deepStrictEqual(result.map((b) => b.id), ["b1"]);
+    assert.deepStrictEqual(
+      result.map((b) => b.id),
+      ["b1"],
+    );
   });
 
   it("excludes rejected bookings and ignored booking ids", () => {
@@ -49,7 +52,10 @@ describe("BookingManager.filterConcurrentBookings", () => {
       "b1",
     );
 
-    assert.deepStrictEqual(result.map((b) => b.id), ["b3"]);
+    assert.deepStrictEqual(
+      result.map((b) => b.id),
+      ["b3"],
+    );
   });
 });
 

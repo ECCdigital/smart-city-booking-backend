@@ -87,7 +87,12 @@ const SAMPLE_BOOKING = {
 function buildBaseSampleData(
   layout,
   tableMeta,
-  { negative = false, tableClass, includePayment = false, bookingOverrides = {} } = {},
+  {
+    negative = false,
+    tableClass,
+    includePayment = false,
+    bookingOverrides = {},
+  } = {},
 ) {
   const items = buildSampleItems({ negative });
   const bruttoEur = sumItems(items);
@@ -123,7 +128,15 @@ function buildBaseSampleData(
     compactMetaHtml: buildCompactMetaHtml(booking, resolvedTableMeta),
   });
 
-  return { items, totals, coupon, booking, renderedTable, bruttoEur, tableMeta: resolvedTableMeta };
+  return {
+    items,
+    totals,
+    coupon,
+    booking,
+    renderedTable,
+    bruttoEur,
+    tableMeta: resolvedTableMeta,
+  };
 }
 
 function buildReceiptSampleData(

@@ -49,14 +49,14 @@ describe("CalendarOccupancyService", () => {
       .stub(BookingManager, "getRelatedBookingsBatch")
       .resolves([sharedBooking, unrelatedBooking]);
 
-    const occupancies = await CalendarOccupancyService.getOccupancies("tenant-1");
+    const occupancies =
+      await CalendarOccupancyService.getOccupancies("tenant-1");
 
     assert.strictEqual(batchStub.callCount, 1);
-    assert.deepStrictEqual(new Set(batchStub.firstCall.args[1]), new Set([
-      "room-a",
-      "room-b",
-      "room-c",
-    ]));
+    assert.deepStrictEqual(
+      new Set(batchStub.firstCall.args[1]),
+      new Set(["room-a", "room-b", "room-c"]),
+    );
 
     assert.deepStrictEqual(occupancies, [
       {
@@ -101,10 +101,13 @@ describe("CalendarOccupancyService", () => {
         },
       ]);
 
-    const occupancies = await CalendarOccupancyService.getOccupancies("tenant-1", {
-      timeBegin: 500,
-      timeEnd: 2500,
-    });
+    const occupancies = await CalendarOccupancyService.getOccupancies(
+      "tenant-1",
+      {
+        timeBegin: 500,
+        timeEnd: 2500,
+      },
+    );
 
     assert.strictEqual(familyStub.callCount, 1);
     assert.deepStrictEqual(familyStub.firstCall.args, [

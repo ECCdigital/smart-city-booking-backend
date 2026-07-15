@@ -3,7 +3,6 @@ const router = express.Router({ mergeParams: true });
 const AuthenticationController = require("../../authentication/controllers/authentication-controller");
 const LockerController = require("../controllers/locker-controller");
 
-
 router.get(
   "/:provider/locations",
   AuthenticationController.isSignedIn,
@@ -37,6 +36,6 @@ router.post(
 router.get(
   "/:provider/customer-service-info",
   LockerController.getCustomerServiceInfo,
-)
+);
 
 module.exports = router;

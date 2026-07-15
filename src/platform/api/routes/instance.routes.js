@@ -6,7 +6,10 @@ const router = asyncRouter();
 
 router.get("/public", InstanceController.getPublicInstance);
 
-router.get("/bookable-custom-fields", InstanceController.getBookableCustomFields)
+router.get(
+  "/bookable-custom-fields",
+  InstanceController.getBookableCustomFields,
+);
 
 router.get(
   "/",

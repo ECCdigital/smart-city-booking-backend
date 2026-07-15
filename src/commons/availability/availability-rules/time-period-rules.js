@@ -21,7 +21,10 @@ function isTimePeriodBookingValid(bookable, timeBegin, timeEnd) {
     return false;
   }
 
-  if (!Array.isArray(bookable.timePeriods) || bookable.timePeriods.length === 0) {
+  if (
+    !Array.isArray(bookable.timePeriods) ||
+    bookable.timePeriods.length === 0
+  ) {
     return false;
   }
 

@@ -15,7 +15,7 @@ function primaryEmailFromMail(mail) {
 }
 
 async function resolveCheckoutId(checkoutId, userID, tenantId) {
-    if (checkoutId) {
+  if (checkoutId) {
     return { checkoutId, generated: false };
   }
 
@@ -23,9 +23,7 @@ async function resolveCheckoutId(checkoutId, userID, tenantId) {
     const rawUser = await UserManager.getRawUser(userID, tenantId);
     if (rawUser) {
       const id =
-        typeof rawUser._id === "string"
-          ? rawUser._id
-          : rawUser._id.toString();
+        typeof rawUser._id === "string" ? rawUser._id : rawUser._id.toString();
 
       return { checkoutId: "01" + id, generated: false };
     }

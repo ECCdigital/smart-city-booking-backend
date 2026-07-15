@@ -11,7 +11,9 @@ function isWithinMaxBookingAdvance(timeBegin, tenant, now = new Date()) {
   }
 
   const maxBookingDate = new Date(now);
-  maxBookingDate.setMonth(maxBookingDate.getMonth() + maxBookingAdvanceInMonths);
+  maxBookingDate.setMonth(
+    maxBookingDate.getMonth() + maxBookingAdvanceInMonths,
+  );
 
   return timeBegin <= maxBookingDate.getTime();
 }

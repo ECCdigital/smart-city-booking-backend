@@ -43,13 +43,9 @@ const {
   ForbiddenError,
 } = require("../../../errors/BaseError");
 const { resolveCheckoutId } = require("../../utilities/checkout-utils");
-const {
-  CustomFieldService,
-} = require("../custom-field/custom-field-service");
+const { CustomFieldService } = require("../custom-field/custom-field-service");
 const { CheckoutError } = require("../../../errors/CheckoutError");
-const {
-  CHECKOUT_REASONS,
-} = require("./checkout-reasons");
+const { CHECKOUT_REASONS } = require("./checkout-reasons");
 
 const logger = bunyan.createLogger({
   name: "booking-service.js",
@@ -1623,7 +1619,7 @@ class BookingService {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
     console.log(booking);
-    return booking
+    return booking;
   }
 
   static async getBookedSeatsCount(tenantId, eventId, params) {

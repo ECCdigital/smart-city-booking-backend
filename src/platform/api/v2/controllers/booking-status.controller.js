@@ -17,7 +17,6 @@ class BookingStatusControllerV2 {
    * Always HTTP 200; failures use success: false (see {@link BookingStatusError}).
    */
   static async getBookingStatus(req, res) {
-
     const fail = (bookingStatusError) =>
       res.status(200).json(bookingStatusError.toJSON());
 
@@ -57,7 +56,10 @@ class BookingStatusControllerV2 {
     try {
       bookings = await BookingManager.getBookings(tenantId, splitIds);
     } catch (err) {
-      logger.error({ err, tenantId, splitIds }, "getBookingStatus: load failed");
+      logger.error(
+        { err, tenantId, splitIds },
+        "getBookingStatus: load failed",
+      );
       return fail(
         new BookingStatusError({
           reason: BOOKING_STATUS_REASONS.INTERNAL_ERROR,
@@ -96,10 +98,7 @@ class BookingStatusControllerV2 {
       };
     });
 
-    logger.info(
-      { tenantId, count: items.length },
-      "getBookingStatus: ok",
-    );
+    logger.info({ tenantId, count: items.length }, "getBookingStatus: ok");
 
     return res.status(200).json({
       success: true,

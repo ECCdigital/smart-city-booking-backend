@@ -50,7 +50,9 @@ class BookingController {
     const bookableIds = [
       ...new Set(
         bookings
-          .map((booking) => BookingController._resolvePrimaryBookableId(booking))
+          .map((booking) =>
+            BookingController._resolvePrimaryBookableId(booking),
+          )
           .filter(Boolean),
       ),
     ];
@@ -60,7 +62,9 @@ class BookingController {
       WorkflowService.getWorkflowStatusMap(tenantId),
     ]);
 
-    const bookableById = new Map(bookables.map((bookable) => [bookable.id, bookable]));
+    const bookableById = new Map(
+      bookables.map((bookable) => [bookable.id, bookable]),
+    );
 
     for (const booking of bookings) {
       const bookableId = BookingController._resolvePrimaryBookableId(booking);
@@ -337,7 +341,6 @@ class BookingController {
 
         for (const id of splitIds) {
           const tmp = await BookingService.getBookingStatus(tenantId, splitIds);
-
         }
 
         logger.info(

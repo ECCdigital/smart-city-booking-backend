@@ -118,7 +118,11 @@ function matchesTimePeriodInstance(timeBegin, timeEnd, timePeriods) {
   const beginMs = Number(timeBegin);
   const endMs = Number(timeEnd);
 
-  if (!Number.isFinite(beginMs) || !Number.isFinite(endMs) || endMs <= beginMs) {
+  if (
+    !Number.isFinite(beginMs) ||
+    !Number.isFinite(endMs) ||
+    endMs <= beginMs
+  ) {
     return false;
   }
 
@@ -131,8 +135,7 @@ function matchesTimePeriodInstance(timeBegin, timeEnd, timePeriods) {
   );
 
   return instances.some(
-    (instance) =>
-      instance.timeBegin === beginMs && instance.timeEnd === endMs,
+    (instance) => instance.timeBegin === beginMs && instance.timeEnd === endMs,
   );
 }
 

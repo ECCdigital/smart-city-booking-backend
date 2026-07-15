@@ -20,7 +20,10 @@ module.exports = {
       });
 
       if (hasChanges) {
-        await Tenant.updateOne({ id: tenant.id }, { $set: { mailSnippets: merged } });
+        await Tenant.updateOne(
+          { id: tenant.id },
+          { $set: { mailSnippets: merged } },
+        );
       }
     }
   },

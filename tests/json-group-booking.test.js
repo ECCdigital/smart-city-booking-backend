@@ -83,7 +83,10 @@ describe("json-controller groupBookingAllowed", () => {
         .stub(BookableManager, "getBookable")
         .resolves(bookable);
 
-      const req = { params: { tenant: "tenant-1", id: "bookable-1" }, user: null };
+      const req = {
+        params: { tenant: "tenant-1", id: "bookable-1" },
+        user: null,
+      };
       const res = createMockResponse();
 
       await JSONController.getBookable(req, res);
@@ -102,7 +105,10 @@ describe("json-controller groupBookingAllowed", () => {
         .stub(BookableManager, "getBookable")
         .resolves(bookable);
 
-      const req = { params: { tenant: "tenant-1", id: "bookable-1" }, user: null };
+      const req = {
+        params: { tenant: "tenant-1", id: "bookable-1" },
+        user: null,
+      };
       const res = createMockResponse();
 
       await JSONController.getBookable(req, res);

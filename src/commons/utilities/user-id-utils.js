@@ -4,7 +4,9 @@
  * @returns {string}
  */
 function normalizeUserId(userId) {
-  return String(userId || "").trim().toLowerCase();
+  return String(userId || "")
+    .trim()
+    .toLowerCase();
 }
 
 /**

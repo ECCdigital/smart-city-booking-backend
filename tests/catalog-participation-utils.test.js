@@ -24,7 +24,9 @@ describe("catalog-participation-utils", () => {
 
   describe("hasRestrictedCatalogAccess", () => {
     it("allows access to unrestricted tenants without membership", () => {
-      expect(hasRestrictedCatalogAccess(publicTenant, new Set())).to.equal(true);
+      expect(hasRestrictedCatalogAccess(publicTenant, new Set())).to.equal(
+        true,
+      );
     });
 
     it("denies access to restricted tenants without membership", () => {
@@ -45,9 +47,9 @@ describe("catalog-participation-utils", () => {
 
   describe("isTenantListedInCatalog", () => {
     it("excludes tenants that are not visible", () => {
-      expect(isTenantListedInCatalog(hiddenTenant, catalog, new Set())).to.equal(
-        false,
-      );
+      expect(
+        isTenantListedInCatalog(hiddenTenant, catalog, new Set()),
+      ).to.equal(false);
     });
 
     it("excludes tenants listed in excludedTenantIds", () => {
@@ -56,13 +58,15 @@ describe("catalog-participation-utils", () => {
         catalogParticipation: { visible: true, restricted: false },
       };
 
-      expect(isTenantListedInCatalog(tenant, catalog, new Set())).to.equal(false);
+      expect(isTenantListedInCatalog(tenant, catalog, new Set())).to.equal(
+        false,
+      );
     });
 
     it("includes unrestricted visible tenants", () => {
-      expect(isTenantListedInCatalog(publicTenant, catalog, new Set())).to.equal(
-        true,
-      );
+      expect(
+        isTenantListedInCatalog(publicTenant, catalog, new Set()),
+      ).to.equal(true);
     });
 
     it("excludes restricted tenants without membership", () => {

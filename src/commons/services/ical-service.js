@@ -336,9 +336,7 @@ class ICalService {
     }
     if (event.location?.address) {
       const addr = event.location.address;
-      const street = [addr.street, addr.house_number]
-        .filter(Boolean)
-        .join(" ");
+      const street = [addr.street, addr.house_number].filter(Boolean).join(" ");
       const cityLine = [addr.post_code, addr.city].filter(Boolean).join(" ");
       if (street) locationParts.push(street);
       if (event.location.meta?.additional) {

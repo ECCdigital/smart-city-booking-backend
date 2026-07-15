@@ -1,6 +1,4 @@
-const {
-  BookableManager,
-} = require("../data-managers/bookable-manager");
+const { BookableManager } = require("../data-managers/bookable-manager");
 const BookingManager = require("../data-managers/booking-manager");
 
 /**
@@ -52,7 +50,9 @@ class CalendarOccupancyService {
     { bookableIds = [], timeBegin, timeEnd } = {},
   ) {
     const allBookables = await BookableManager.getBookables(tenantId);
-    const bookableById = new Map(allBookables.map((bookable) => [bookable.id, bookable]));
+    const bookableById = new Map(
+      allBookables.map((bookable) => [bookable.id, bookable]),
+    );
 
     let targetBookables = allBookables;
     if (bookableIds.length > 0) {
@@ -80,9 +80,8 @@ class CalendarOccupancyService {
       timeEnd,
     );
 
-    const bookingsByBookableId = CalendarOccupancyService.#indexBookingsByBookableId(
-      bookings,
-    );
+    const bookingsByBookableId =
+      CalendarOccupancyService.#indexBookingsByBookableId(bookings);
 
     const occupancies = [];
     for (const bookable of targetBookables) {

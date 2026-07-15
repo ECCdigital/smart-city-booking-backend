@@ -30,7 +30,6 @@ class IfbsLocker extends BaseLocker {
     return createClient(rawApp);
   }
 
-
   async startReservation(timeBegin, timeEnd) {
     const booking = await this.getBooking();
     const locker = this.getLocker(booking);

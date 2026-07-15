@@ -3,7 +3,9 @@ const sinon = require("sinon");
 const { NotFoundError } = require("../src/errors/BaseError");
 const CalendarService = require("../src/commons/services/calendar-service");
 const CalendarServiceV2 = require("../src/commons/services/calendar-service-v2");
-const { BookableManager } = require("../src/commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 const {
   AvailabilityContext,
 } = require("../src/commons/services/availability/availability-context");

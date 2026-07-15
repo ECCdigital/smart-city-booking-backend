@@ -26,12 +26,14 @@ function createClient(rawApp) {
   }
 
   let app;
-  if (typeof rawApp.decrypt === 'function' && typeof rawApp.encrypt === 'function') {
+  if (
+    typeof rawApp.decrypt === "function" &&
+    typeof rawApp.encrypt === "function"
+  ) {
     app = rawApp;
   } else {
     app = createLockerApplication(rawApp);
   }
-
 
   const args = entry.extractArgs(app);
   return new entry.ClientClass(...args);

@@ -7,7 +7,9 @@ const {
   ManualItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
-const { BookableManager } = require("../src/commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");

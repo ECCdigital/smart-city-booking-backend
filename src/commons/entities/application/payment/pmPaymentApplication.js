@@ -15,14 +15,10 @@ class PmPaymentApplication extends PaymentApplication {
       this.paymentSecret = SecurityUtils.decrypt(this.paymentSecret);
     }
     if (this.paymentMerchantId) {
-      this.paymentMerchantId = SecurityUtils.decrypt(
-        this.paymentMerchantId,
-      );
+      this.paymentMerchantId = SecurityUtils.decrypt(this.paymentMerchantId);
     }
     if (this.paymentProjectId) {
-      this.paymentProjectId = SecurityUtils.decrypt(
-        this.paymentProjectId,
-      );
+      this.paymentProjectId = SecurityUtils.decrypt(this.paymentProjectId);
     }
   }
 
@@ -31,14 +27,10 @@ class PmPaymentApplication extends PaymentApplication {
       this.paymentSecret = SecurityUtils.encrypt(this.paymentSecret);
     }
     if (this.paymentMerchantId) {
-      this.paymentMerchantId = SecurityUtils.encrypt(
-        this.paymentMerchantId,
-      );
+      this.paymentMerchantId = SecurityUtils.encrypt(this.paymentMerchantId);
     }
     if (this.paymentProjectId) {
-      this.paymentProjectId = SecurityUtils.encrypt(
-        this.paymentProjectId,
-      );
+      this.paymentProjectId = SecurityUtils.encrypt(this.paymentProjectId);
     }
   }
 
