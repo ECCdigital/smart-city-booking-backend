@@ -190,9 +190,7 @@ class PermissionService {
    */
   static canReadAllWithContext(context) {
     return (
-      context.isInstanceOwner ||
-      context.isTenantOwner ||
-      context.hasReadAny
+      context.isInstanceOwner || context.isTenantOwner || context.hasReadAny
     );
   }
 

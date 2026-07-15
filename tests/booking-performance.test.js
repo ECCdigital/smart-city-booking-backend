@@ -1,6 +1,8 @@
 const assert = require("assert");
 const sinon = require("sinon");
-const { BookingController } = require("../src/platform/api/controllers/booking-controller");
+const {
+  BookingController,
+} = require("../src/platform/api/controllers/booking-controller");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
@@ -90,7 +92,10 @@ describe("Phase 1 booking performance", () => {
         "manageBookings",
       );
 
-      assert.strictEqual(PermissionsService.canReadAllWithContext(context), true);
+      assert.strictEqual(
+        PermissionsService.canReadAllWithContext(context),
+        true,
+      );
     });
   });
 
@@ -146,9 +151,7 @@ describe("Phase 1 booking performance", () => {
         hasReadAny: false,
         hasReadOwn: true,
       });
-      sinon
-        .stub(PermissionsService, "canReadAllWithContext")
-        .returns(false);
+      sinon.stub(PermissionsService, "canReadAllWithContext").returns(false);
       sinon
         .stub(PermissionsService, "allowReadWithContext")
         .callsFake((booking) => booking.id === "booking-allowed");
@@ -176,7 +179,9 @@ describe("Phase 1 booking performance", () => {
       assert.strictEqual(response.body[0]._populated.bookable.id, "bookable-1");
       assert.strictEqual(response.body[0]._populated.workflowStatus, "open");
       assert.strictEqual(getBookablesStub.callCount, 1);
-      assert.deepStrictEqual(getBookablesStub.firstCall.args[1], ["bookable-1"]);
+      assert.deepStrictEqual(getBookablesStub.firstCall.args[1], [
+        "bookable-1",
+      ]);
       assert.strictEqual(getWorkflowMapStub.callCount, 1);
     });
   });

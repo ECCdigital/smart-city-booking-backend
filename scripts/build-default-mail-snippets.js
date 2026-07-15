@@ -155,23 +155,26 @@ const DEFAULT_MAIL_SNIPPETS = {
       ],
     },
   ]),
-  "invoice-after-approval": buildSnippet("425ef5e7-3486-4c63-9ac7-b542bb181d3f", [
-    {
-      width: 12,
-      blocks: [
-        textBlock(
-          "5fde5d1c-ebf6-4dfe-8784-45b61d0c7c0f",
-          `<p>Vielen Dank für Ihre Buchungsanfrage im <strong>${tenantNameChip()}</strong>. Wir haben diese erfolgreich geprüft und freigegeben.</p>`,
-          `<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Vielen Dank für Ihre Buchungsanfrage im <strong><span data-variable="tenantName" class="mail-variable-chip">{{tenantName}}</span></strong>. Wir haben diese erfolgreich geprüft und freigegeben.</p></div>`,
-        ),
-        textBlock(
-          "6e862c3d-208e-4d34-87ff-c7b9096a94bd",
-          "<p>Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto.</p>",
-          `<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto.</p></div>`,
-        ),
-      ],
-    },
-  ]),
+  "invoice-after-approval": buildSnippet(
+    "425ef5e7-3486-4c63-9ac7-b542bb181d3f",
+    [
+      {
+        width: 12,
+        blocks: [
+          textBlock(
+            "5fde5d1c-ebf6-4dfe-8784-45b61d0c7c0f",
+            `<p>Vielen Dank für Ihre Buchungsanfrage im <strong>${tenantNameChip()}</strong>. Wir haben diese erfolgreich geprüft und freigegeben.</p>`,
+            `<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Vielen Dank für Ihre Buchungsanfrage im <strong><span data-variable="tenantName" class="mail-variable-chip">{{tenantName}}</span></strong>. Wir haben diese erfolgreich geprüft und freigegeben.</p></div>`,
+          ),
+          textBlock(
+            "6e862c3d-208e-4d34-87ff-c7b9096a94bd",
+            "<p>Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto.</p>",
+            `<div style="text-align:left; color:#222222; font-size:16px; line-height:1.5;"><p>Bitte überweisen Sie zur Vervollständigung Ihrer Buchung den im Anhang aufgeführten Betrag auf das angegebene Konto.</p></div>`,
+          ),
+        ],
+      },
+    ],
+  ),
   "payment-link-after-approval": buildSnippet(
     "c3c41018-4342-40ae-8bce-31377e0ed4ba",
     [
@@ -200,4 +203,6 @@ const targetPath = path.join(
 );
 fs.writeFileSync(targetPath, JSON.stringify(DEFAULT_MAIL_SNIPPETS, null, 2));
 
-console.log(`Wrote ${Object.keys(DEFAULT_MAIL_SNIPPETS).length} snippets to ${targetPath}`);
+console.log(
+  `Wrote ${Object.keys(DEFAULT_MAIL_SNIPPETS).length} snippets to ${targetPath}`,
+);

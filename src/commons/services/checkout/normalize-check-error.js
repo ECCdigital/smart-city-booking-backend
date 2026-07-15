@@ -20,9 +20,12 @@ function resolveReason(rawErr) {
       return CHECKOUT_REASONS.DURATION_TOO_SHORT;
     if (message.includes("nicht überschreiten"))
       return CHECKOUT_REASONS.DURATION_TOO_LONG;
-  } else if(checkType === CHECK_TYPES.PERMISSION && typeof message === "string") {
-      if(message.includes("nicht buchbar"))
-          return CHECKOUT_REASONS.BOOKABLE_NOT_BOOKABLE;
+  } else if (
+    checkType === CHECK_TYPES.PERMISSION &&
+    typeof message === "string"
+  ) {
+    if (message.includes("nicht buchbar"))
+      return CHECKOUT_REASONS.BOOKABLE_NOT_BOOKABLE;
   }
 
   return REASON_BY_CHECK_TYPE[checkType] || CHECKOUT_REASONS.UNKNOWN;

@@ -71,8 +71,7 @@ class CouponControllerV2 {
     const tenantId = req.params.tenant;
     const couponId = req.params.id;
 
-    const fail = (couponError) =>
-      res.status(200).json(couponError.toJSON());
+    const fail = (couponError) => res.status(200).json(couponError.toJSON());
 
     if (!couponId) {
       return fail(

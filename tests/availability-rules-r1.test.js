@@ -38,11 +38,23 @@ function item(bookableId, amount) {
 
 describe("availability rules R1 — booking-amount", () => {
   it("detects time-related bookables by schedule, period, long-range, or block-period flags", () => {
-    assert.strictEqual(isTimeRelatedBookable({ isScheduleRelated: true }), true);
-    assert.strictEqual(isTimeRelatedBookable({ isTimePeriodRelated: true }), true);
+    assert.strictEqual(
+      isTimeRelatedBookable({ isScheduleRelated: true }),
+      true,
+    );
+    assert.strictEqual(
+      isTimeRelatedBookable({ isTimePeriodRelated: true }),
+      true,
+    );
     assert.strictEqual(isTimeRelatedBookable({ isLongRange: true }), true);
-    assert.strictEqual(isTimeRelatedBookable({ isBlockPeriodRelated: true }), true);
-    assert.strictEqual(isTimeRelatedBookable({ isScheduleRelated: false }), false);
+    assert.strictEqual(
+      isTimeRelatedBookable({ isBlockPeriodRelated: true }),
+      true,
+    );
+    assert.strictEqual(
+      isTimeRelatedBookable({ isScheduleRelated: false }),
+      false,
+    );
     assert.strictEqual(isTimeRelatedBookable(null), false);
   });
 
@@ -367,19 +379,11 @@ describe("availability rules R1 — permission-rules", () => {
     assert.strictEqual(isUserPermitted("user-a", permitted), true);
     assert.strictEqual(isUserPermitted("user-c", permitted), false);
     assert.strictEqual(
-      hasBookingPermissionSync(
-        { isBookable: true },
-        "user-a",
-        permitted,
-      ),
+      hasBookingPermissionSync({ isBookable: true }, "user-a", permitted),
       true,
     );
     assert.strictEqual(
-      hasBookingPermissionSync(
-        { isBookable: false },
-        "user-a",
-        permitted,
-      ),
+      hasBookingPermissionSync({ isBookable: false }, "user-a", permitted),
       false,
     );
   });

@@ -22,9 +22,7 @@ class BaseLockerApiClient {
   }
 
   async getPrice(_locationId) {
-    throw new Error(
-      `getPrice() is not supported by ${this.constructor.name}`,
-    );
+    throw new Error(`getPrice() is not supported by ${this.constructor.name}`);
   }
 
   static get capabilities() {

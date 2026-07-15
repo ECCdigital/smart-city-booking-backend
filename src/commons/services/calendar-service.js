@@ -91,11 +91,10 @@ class CalendarService {
      */
     const availableOpeningHoursPeriods = blockPeriodBookable
       ? []
-      : generateTimePeriodsFromOpeningHours(
-          startDate,
-          endDate,
-          [bookable, ...parentBookables],
-        );
+      : generateTimePeriodsFromOpeningHours(startDate, endDate, [
+          bookable,
+          ...parentBookables,
+        ]);
 
     const availableTimePeriods = blockPeriodBookable
       ? generateTimePeriodsFromBlockPeriods(startDate, endDate, bookable)
@@ -138,7 +137,7 @@ class CalendarService {
           bookableId,
           user,
           Number(amount),
-          externalCache
+          externalCache,
         );
       } else {
         items.push({
@@ -232,7 +231,7 @@ async function checkAvailabilityIterative(
   bookableId,
   user,
   amount,
-  externalCache
+  externalCache,
 ) {
   const SEGMENT_MIN_LENGTH = 10 * 60 * 1000;
   const queue = [{ start: initialStart, end: initialEnd }];
@@ -255,7 +254,7 @@ async function checkAvailabilityIterative(
         timeEnd: end,
         bookableId,
         amount,
-        externalCache
+        externalCache,
       });
       await ics.init();
 

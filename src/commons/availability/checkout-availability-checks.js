@@ -158,9 +158,7 @@ async function runAvailabilityCheck({
       totalCapacity: originBookable.amount,
       booked: amountBooked,
       remaining:
-        originBookable.amount > 0
-          ? originBookable.amount - amountBooked
-          : null,
+        originBookable.amount > 0 ? originBookable.amount - amountBooked : null,
       concurrentBookings: summarizeBookings(bookings),
     };
   }
@@ -171,9 +169,7 @@ async function runAvailabilityCheck({
     totalCapacity: originBookable.amount,
     booked: amountBooked,
     remaining:
-      originBookable.amount > 0
-        ? originBookable.amount - amountBooked
-        : null,
+      originBookable.amount > 0 ? originBookable.amount - amountBooked : null,
   };
 }
 

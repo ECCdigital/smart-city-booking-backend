@@ -5,12 +5,17 @@ const QRCode = require("qrcode");
 const { renderSnippet } = require("./templates/template-loader");
 
 class MailDataService {
-  static buildCancellationMailContext(booking, tenantId, addRejectionLink = false) {
+  static buildCancellationMailContext(
+    booking,
+    tenantId,
+    addRejectionLink = false,
+  ) {
     if (!addRejectionLink || !booking) {
       return { rejectionUrl: null, cancellationContactHint: null };
     }
 
-    const userCancellable = booking.cancellationPolicy?.userCancellable === true;
+    const userCancellable =
+      booking.cancellationPolicy?.userCancellable === true;
 
     if (userCancellable) {
       return {

@@ -1,6 +1,8 @@
 const assert = require("assert");
 const sinon = require("sinon");
-const { BookingController } = require("../src/platform/api/controllers/booking-controller");
+const {
+  BookingController,
+} = require("../src/platform/api/controllers/booking-controller");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
@@ -31,28 +33,41 @@ describe("BookingController.getRelatedBookings", () => {
   });
 
   it("includes bookings from all ancestors when ?parent=true", async () => {
-    sinon.stub(BookingManager, "getRelatedBookings").callsFake(async (_tenant, id) => {
-      if (id === "child-1") {
-        return [{ id: "booking-child", tenantId: "tenant-1", bookableId: "child-1" }];
-      }
-      if (id === "parent-1") {
-        return [{ id: "booking-parent", tenantId: "tenant-1", bookableId: "parent-1" }];
-      }
-      if (id === "grandparent-1") {
-        return [
-          {
-            id: "booking-grandparent",
-            tenantId: "tenant-1",
-            bookableId: "grandparent-1",
-          },
-        ];
-      }
-      return [];
-    });
-    sinon.stub(BookableManager, "getAncestorBookables").resolves([
-      { id: "parent-1" },
-      { id: "grandparent-1" },
-    ]);
+    sinon
+      .stub(BookingManager, "getRelatedBookings")
+      .callsFake(async (_tenant, id) => {
+        if (id === "child-1") {
+          return [
+            {
+              id: "booking-child",
+              tenantId: "tenant-1",
+              bookableId: "child-1",
+            },
+          ];
+        }
+        if (id === "parent-1") {
+          return [
+            {
+              id: "booking-parent",
+              tenantId: "tenant-1",
+              bookableId: "parent-1",
+            },
+          ];
+        }
+        if (id === "grandparent-1") {
+          return [
+            {
+              id: "booking-grandparent",
+              tenantId: "tenant-1",
+              bookableId: "grandparent-1",
+            },
+          ];
+        }
+        return [];
+      });
+    sinon
+      .stub(BookableManager, "getAncestorBookables")
+      .resolves([{ id: "parent-1" }, { id: "grandparent-1" }]);
 
     const response = createMockResponse();
     await BookingController.getRelatedBookings(
@@ -64,9 +79,10 @@ describe("BookingController.getRelatedBookings", () => {
     );
 
     assert.strictEqual(response.statusCode, 200);
-    assert.deepStrictEqual(
-      response.body.map((booking) => booking.id).sort(),
-      ["booking-child", "booking-grandparent", "booking-parent"],
-    );
+    assert.deepStrictEqual(response.body.map((booking) => booking.id).sort(), [
+      "booking-child",
+      "booking-grandparent",
+      "booking-parent",
+    ]);
   });
 });

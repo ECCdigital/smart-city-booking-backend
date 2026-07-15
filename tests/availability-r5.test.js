@@ -89,7 +89,10 @@ describe("availability R5 — API rollout", () => {
 
     assert.strictEqual(response.statusCode, 200);
     assert.strictEqual(response.headers.get("Deprecation"), "true");
-    assert.strictEqual(response.headers.get("X-Availability-Engine"), "v1-legacy");
+    assert.strictEqual(
+      response.headers.get("X-Availability-Engine"),
+      "v1-legacy",
+    );
     assert.ok(response.headers.get("Link")?.includes("/availability"));
     assert.strictEqual(CalendarService.checkAvailability.calledOnce, true);
   });

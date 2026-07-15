@@ -94,7 +94,8 @@ function hasEventSeats(
     )
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-  const available = Number(amountBooked) + Number(requestedAmount) <= Number(maxAttendees);
+  const available =
+    Number(amountBooked) + Number(requestedAmount) <= Number(maxAttendees);
 
   return {
     available,

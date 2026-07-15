@@ -218,8 +218,12 @@ class UserService {
     keycloakId = null,
     anonymize = false,
   }) {
-    const normalizedCurrentId = String(currentId || "").trim().toLowerCase();
-    const normalizedNewId = String(newId || "").trim().toLowerCase();
+    const normalizedCurrentId = String(currentId || "")
+      .trim()
+      .toLowerCase();
+    const normalizedNewId = String(newId || "")
+      .trim()
+      .toLowerCase();
     const normalizedKeycloakId = String(keycloakId || "").trim();
 
     if (!normalizedNewId) {
@@ -305,7 +309,11 @@ class UserService {
       }
 
       if (Object.keys(userSet).length > 0) {
-        await UserManager.updateUserByMongoId(currentUser._id, userSet, session);
+        await UserManager.updateUserByMongoId(
+          currentUser._id,
+          userSet,
+          session,
+        );
       }
     };
 
@@ -330,7 +338,9 @@ class UserService {
     lastName,
     keycloakId = null,
   }) {
-    const normalizedUserId = String(userId || "").trim().toLowerCase();
+    const normalizedUserId = String(userId || "")
+      .trim()
+      .toLowerCase();
     const normalizedKeycloakId = String(keycloakId || "").trim();
     const normalizedFirstName = String(firstName || "").trim();
     const normalizedLastName = String(lastName || "").trim();

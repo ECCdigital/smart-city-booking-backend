@@ -155,7 +155,7 @@ class CatalogService {
       visibility: catalog?.visibility ?? "public",
     };
   }
-  
+
   static async getBranding() {
     const branding = await InstanceManager.getBranding();
     return exportBranding(branding);

@@ -87,9 +87,9 @@ describe("group-booking-permissions", () => {
     });
 
     it("returns false when groupBooking is missing", () => {
-      expect(GroupBookingPermissions.isAllowed({}, identity, ["staff"])).to.equal(
-        false,
-      );
+      expect(
+        GroupBookingPermissions.isAllowed({}, identity, ["staff"]),
+      ).to.equal(false);
     });
   });
 });

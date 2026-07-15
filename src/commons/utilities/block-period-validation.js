@@ -23,12 +23,7 @@ function parseTimeToMinutes(time) {
  * @param {string} endTime
  * @returns {number} Day offset from start weekday to end weekday.
  */
-function getBlockPeriodDayOffset(
-  startWeekday,
-  startTime,
-  endWeekday,
-  endTime,
-) {
+function getBlockPeriodDayOffset(startWeekday, startTime, endWeekday, endTime) {
   const startMinutes = parseTimeToMinutes(startTime);
   const endMinutes = parseTimeToMinutes(endTime);
 
@@ -99,8 +94,7 @@ function assertValidTime(time, fieldName) {
  * @param {number} [index]
  */
 function validateBlockPeriod(period, index = 0) {
-  const prefix =
-    index > 0 ? `blockPeriods[${index}]` : "blockPeriods entry";
+  const prefix = index > 0 ? `blockPeriods[${index}]` : "blockPeriods entry";
 
   if (!period || typeof period !== "object") {
     throw new Error(`${prefix} must be an object`);
@@ -160,9 +154,7 @@ function validateBlockPeriods(bookable) {
     validateBlockPeriod(period, index);
 
     if (seenIds.has(period.id)) {
-      throw new Error(
-        `blockPeriods contains duplicate id "${period.id}"`,
-      );
+      throw new Error(`blockPeriods contains duplicate id "${period.id}"`);
     }
 
     seenIds.add(period.id);

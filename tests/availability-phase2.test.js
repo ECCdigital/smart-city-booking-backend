@@ -162,9 +162,7 @@ describe("capacity-interval-calculator", () => {
 
 describe("availability-interval-merger", () => {
   it("intersects availability sets with AND semantics", () => {
-    const a = [
-      { timeBegin: 0, timeEnd: 5000, available: true },
-    ];
+    const a = [{ timeBegin: 0, timeEnd: 5000, available: true }];
     const b = [
       { timeBegin: 0, timeEnd: 2000, available: true },
       { timeBegin: 2000, timeEnd: 5000, available: false },

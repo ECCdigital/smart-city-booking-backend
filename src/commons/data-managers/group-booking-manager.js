@@ -95,7 +95,6 @@ class GroupBookingManager {
   }
 
   static async updateGroupBooking(tenantID, gID, groupBooking) {
-
     if (!gID || !tenantID) {
       throw new Error("id and tenantId are required");
     }
@@ -186,7 +185,11 @@ class GroupBookingManager {
     return rawGroupBookings.map((doc) => doc.toEntity());
   }
 
-  static async reassignUserReferences(previousUserId, newUserId, session = null) {
+  static async reassignUserReferences(
+    previousUserId,
+    newUserId,
+    session = null,
+  ) {
     const options = session ? { session } : {};
 
     await GroupBookingModel.updateMany(

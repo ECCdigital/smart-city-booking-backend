@@ -29,7 +29,9 @@ function getIntervalStatus(segments, start, end) {
  * @returns {Array<{ timeBegin: number, timeEnd: number, available: boolean }>}
  */
 function intersectAvailability(segmentSets) {
-  const sets = segmentSets.filter((set) => Array.isArray(set) && set.length > 0);
+  const sets = segmentSets.filter(
+    (set) => Array.isArray(set) && set.length > 0,
+  );
   if (sets.length === 0) {
     return [];
   }

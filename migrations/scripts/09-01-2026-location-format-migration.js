@@ -46,7 +46,7 @@ module.exports = {
             fetched_at: new Date().toISOString(),
           },
         };
-      } else if ( oldLocation === null || oldLocation === undefined) {
+      } else if (oldLocation === null || oldLocation === undefined) {
         // Fall 3: location ist null oder undefined
         newLocation = {
           coordinates: {
@@ -86,32 +86,32 @@ module.exports = {
             oldLocation.display_name || oldLocation.display_address || "",
           address: oldLocation.address
             ? {
-              street: oldLocation.address.road || null,
-              house_number: oldLocation.address.house_number || null,
-              post_code: oldLocation.address.postcode || null,
-              city:
-                oldLocation.address.city ||
-                oldLocation.address.town ||
-                oldLocation.address.village ||
-                null,
-              suburb:
-                oldLocation.address.suburb ||
-                oldLocation.address.neighbourhood ||
-                null,
-              state: oldLocation.address.state || null,
-              country: oldLocation.address.country || null,
-              country_code: oldLocation.address.country_code || null,
-            }
+                street: oldLocation.address.road || null,
+                house_number: oldLocation.address.house_number || null,
+                post_code: oldLocation.address.postcode || null,
+                city:
+                  oldLocation.address.city ||
+                  oldLocation.address.town ||
+                  oldLocation.address.village ||
+                  null,
+                suburb:
+                  oldLocation.address.suburb ||
+                  oldLocation.address.neighbourhood ||
+                  null,
+                state: oldLocation.address.state || null,
+                country: oldLocation.address.country || null,
+                country_code: oldLocation.address.country_code || null,
+              }
             : {
-              street: null,
-              house_number: null,
-              post_code: null,
-              city: null,
-              suburb: null,
-              state: null,
-              country: null,
-              country_code: null,
-            },
+                street: null,
+                house_number: null,
+                post_code: null,
+                city: null,
+                suburb: null,
+                state: null,
+                country: null,
+                country_code: null,
+              },
           meta: {
             source: "legacy",
             place_id: oldLocation.place_id || null,
@@ -126,7 +126,7 @@ module.exports = {
       // Direkt überschreiben - kein Konflikt da wir location komplett ersetzen
       await Model.updateOne(
         { _id: doc._id },
-        { $set: { location: newLocation } }
+        { $set: { location: newLocation } },
       );
 
       migrated++;
@@ -156,7 +156,7 @@ module.exports = {
 
       await Model.updateOne(
         { _id: doc._id },
-        { $set: { location: oldFormat } }
+        { $set: { location: oldFormat } },
       );
 
       reverted++;

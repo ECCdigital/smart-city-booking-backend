@@ -26,11 +26,6 @@ registerTestHandler("ifbs", {
 registerTestHandler("pareva", {
   requiredFields: ["serverUrl", "lockerId", "user", "password"],
   handler: ({ serverUrl, lockerId, user, password }) => {
-    return ParevaApiClient.testConnection(
-      serverUrl,
-      lockerId,
-      user,
-      password,
-    );
+    return ParevaApiClient.testConnection(serverUrl, lockerId, user, password);
   },
 });

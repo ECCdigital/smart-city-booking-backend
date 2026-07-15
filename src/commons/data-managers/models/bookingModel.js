@@ -4,7 +4,10 @@ const { Schema } = mongoose;
 
 const BookingSchema = new Schema(bookingSchemaDefinition);
 
-BookingSchema.index({ tenantId: 1, timeBegin: -1 }, { name: "tenantId_1_timeBegin_-1" });
+BookingSchema.index(
+  { tenantId: 1, timeBegin: -1 },
+  { name: "tenantId_1_timeBegin_-1" },
+);
 BookingSchema.index(
   { tenantId: 1, assignedUserId: 1 },
   { name: "tenantId_1_assignedUserId_1" },

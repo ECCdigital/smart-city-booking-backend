@@ -1,6 +1,10 @@
 const assert = require("assert");
-const { isEventDateBookable } = require("../src/commons/availability/calendar-v2-context-checks");
-const { getEventReferenceDate } = require("../src/commons/availability/availability-rules/event-rules");
+const {
+  isEventDateBookable,
+} = require("../src/commons/availability/calendar-v2-context-checks");
+const {
+  getEventReferenceDate,
+} = require("../src/commons/availability/availability-rules/event-rules");
 const {
   applyBookingDurationRules,
   isBookingDurationAllowed,
@@ -42,9 +46,7 @@ describe("availability phase 3 rules", () => {
     };
 
     assert.strictEqual(isEventDateBookable(context), true);
-    assert.ok(
-      getEventReferenceDate(futureEvent).getFullYear() >= 2099,
-    );
+    assert.ok(getEventReferenceDate(futureEvent).getFullYear() >= 2099);
   });
 
   it("marks available segments shorter than minBookingDuration as unavailable", () => {
@@ -56,16 +58,32 @@ describe("availability phase 3 rules", () => {
     const segments = applyBookingDurationRules(
       [
         { timeBegin: 0, timeEnd: 60 * 60 * 1000, available: true },
-        { timeBegin: 60 * 60 * 1000, timeEnd: 4 * 60 * 60 * 1000, available: true },
-        { timeBegin: 4 * 60 * 60 * 1000, timeEnd: 5 * 60 * 60 * 1000, available: false },
+        {
+          timeBegin: 60 * 60 * 1000,
+          timeEnd: 4 * 60 * 60 * 1000,
+          available: true,
+        },
+        {
+          timeBegin: 4 * 60 * 60 * 1000,
+          timeEnd: 5 * 60 * 60 * 1000,
+          available: false,
+        },
       ],
       bookable,
     );
 
     assert.deepStrictEqual(segments, [
       { timeBegin: 0, timeEnd: 60 * 60 * 1000, available: false },
-      { timeBegin: 60 * 60 * 1000, timeEnd: 4 * 60 * 60 * 1000, available: true },
-      { timeBegin: 4 * 60 * 60 * 1000, timeEnd: 5 * 60 * 60 * 1000, available: false },
+      {
+        timeBegin: 60 * 60 * 1000,
+        timeEnd: 4 * 60 * 60 * 1000,
+        available: true,
+      },
+      {
+        timeBegin: 4 * 60 * 60 * 1000,
+        timeEnd: 5 * 60 * 60 * 1000,
+        available: false,
+      },
     ]);
   });
 
@@ -79,7 +97,11 @@ describe("availability phase 3 rules", () => {
       applyBookingDurationRules(
         [
           { timeBegin: 0, timeEnd: 60 * 60 * 1000, available: true },
-          { timeBegin: 60 * 60 * 1000, timeEnd: 5 * 60 * 60 * 1000, available: true },
+          {
+            timeBegin: 60 * 60 * 1000,
+            timeEnd: 5 * 60 * 60 * 1000,
+            available: true,
+          },
         ],
         bookable,
       ),
@@ -87,7 +109,11 @@ describe("availability phase 3 rules", () => {
 
     assert.deepStrictEqual(segments, [
       { timeBegin: 0, timeEnd: 60 * 60 * 1000, available: false },
-      { timeBegin: 60 * 60 * 1000, timeEnd: 5 * 60 * 60 * 1000, available: true },
+      {
+        timeBegin: 60 * 60 * 1000,
+        timeEnd: 5 * 60 * 60 * 1000,
+        available: true,
+      },
     ]);
   });
 

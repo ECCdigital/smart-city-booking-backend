@@ -6,7 +6,9 @@ const {
   validateBlockPeriod,
   validateBookingModeExclusivity,
 } = require("../src/commons/utilities/block-period-validation");
-const { isTimeRelatedBookable } = require("../src/commons/availability/availability-rules/booking-amount");
+const {
+  isTimeRelatedBookable,
+} = require("../src/commons/availability/availability-rules/booking-amount");
 
 function baseBookable(overrides = {}) {
   return {
@@ -45,14 +47,15 @@ describe("block period validation utilities", () => {
 
   it("rejects zero-duration block periods", () => {
     assert.throws(
-      () => validateBlockPeriod({
-        id: "invalid",
-        label: "Invalid",
-        startWeekday: 1,
-        startTime: "08:00",
-        endWeekday: 1,
-        endTime: "08:00",
-      }),
+      () =>
+        validateBlockPeriod({
+          id: "invalid",
+          label: "Invalid",
+          startWeekday: 1,
+          startTime: "08:00",
+          endWeekday: 1,
+          endTime: "08:00",
+        }),
       /duration greater than zero/,
     );
   });
