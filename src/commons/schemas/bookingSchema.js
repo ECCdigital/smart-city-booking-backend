@@ -146,9 +146,11 @@ const bookingSchemaDefinition = {
     type: Object,
     default: { userCancellable: true, contactHint: "" },
   },
+  cancellationRefund: { type: cancellationAuditSchema, default: undefined },
 };
 
 module.exports = {
   bookingSchemaDefinition,
   bookingHookSchemaDefinition,
+  cancellationAuditSchema,
 };

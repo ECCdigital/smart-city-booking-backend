@@ -429,6 +429,7 @@ Key fields of a booking:
 | comment          | Comment or special requests from the customer.                                                                      |
 | internalComments | Internal comments visible only to administrators.                                                                   |
 | rejectionReason  | Reason why a booking has been rejected (if applicable).                                                             |
+| cancellationRefund | Persisted refund audit for the latest cancellation while the booking is rejected. Cleared when the cancellation is reverted. |
 | attachments      | Attachments related to the booking. Cancellation attachments include the applied refund audit data described below. |
 | lockerInfo       | Information about locker assignments associated with this booking.                                                  |
 | paymentProvider  | Identifier of the payment provider used (if any).                                                                   |

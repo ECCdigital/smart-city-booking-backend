@@ -111,6 +111,16 @@ describe("CancellationRefundService", function () {
     assert.strictEqual(days, 2);
   });
 
+  it("coerces MongoDB Double timestamps before calculating days", function () {
+    const { Double } = require("mongodb");
+    const days = CancellationRefundService.calculateDaysBeforeStart(
+      new Double(berlinMillis("2026-08-10T10:00:00")),
+      berlinMillis("2026-08-09T18:00:00"),
+    );
+
+    assert.strictEqual(days, 1);
+  });
+
   it("applies and audits an admin override using integer cents", function () {
     const result = CancellationRefundService.calculate({
       tenant: { cancellationRefundTiers: tiers },

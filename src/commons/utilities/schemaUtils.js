@@ -30,6 +30,15 @@ const ERROR_CODES = {
   validate: "invalid_custom",
 };
 
+function isMongooseSubdocumentSchema(type) {
+  return (
+    type &&
+    typeof type === "object" &&
+    type.constructor?.name === "Schema" &&
+    typeof type.paths === "object"
+  );
+}
+
 class SchemaUtils {
   static createDefaults(schemaDefinition) {
     const defaults = {};
@@ -44,6 +53,8 @@ class SchemaUtils {
           typeof field.default === "function" ? field.default() : field.default;
       } else if (field.type === Array) {
         defaults[key] = [];
+      } else if (isMongooseSubdocumentSchema(field.type)) {
+        // Optional embedded subdocuments must stay unset, not "".
       } else if (field.type === Object) {
         defaults[key] = {};
       } else if (field.type === Boolean) {

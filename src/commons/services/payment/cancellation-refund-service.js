@@ -101,14 +101,16 @@ class CancellationRefundService {
   }
 
   static calculateDaysBeforeStart(timeBegin, cancelledAt) {
-    if (!Number.isFinite(timeBegin) || !Number.isFinite(cancelledAt)) {
+    const beginMs = Number(timeBegin);
+    const cancelledMs = Number(cancelledAt);
+    if (!Number.isFinite(beginMs) || !Number.isFinite(cancelledMs)) {
       return null;
     }
 
-    const bookingDay = DateTime.fromMillis(timeBegin, {
+    const bookingDay = DateTime.fromMillis(beginMs, {
       zone: CANCELLATION_TIME_ZONE,
     }).startOf("day");
-    const cancellationDay = DateTime.fromMillis(cancelledAt, {
+    const cancellationDay = DateTime.fromMillis(cancelledMs, {
       zone: CANCELLATION_TIME_ZONE,
     }).startOf("day");
 

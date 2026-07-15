@@ -625,6 +625,8 @@ class BookingService {
       });
     }
 
+    const onUnreject = oldBooking.isRejected && !isRejected;
+
     const { checkoutId } = await resolveCheckoutId(
       undefined,
       oldBooking.assignedUserId,
@@ -676,6 +678,17 @@ class BookingService {
       if (!(booking instanceof Booking)) {
         booking = new Booking(booking);
       }
+
+      if (onUnreject) {
+        booking.priceEur = oldBooking.priceEur;
+        booking.vatIncludedEur = oldBooking.vatIncludedEur;
+        booking.bookableItems = oldBooking.bookableItems;
+        booking.couponCode = oldBooking.couponCode;
+        booking._couponUsed = oldBooking._couponUsed;
+        booking.rejectionReason = "";
+        booking.cancellationRefund = undefined;
+      }
+
       booking.validate();
 
       await BookingManager.storeBooking(booking);
@@ -683,7 +696,6 @@ class BookingService {
       const onCommit = !oldBooking.isCommitted && isCommit;
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
-      const onUnreject = oldBooking.isRejected && !isRejected;
 
       const lockerServiceInstance = LockerService.getInstance();
 
@@ -1049,7 +1061,7 @@ class BookingService {
   static async getGroupCancellationRefundPreview(tenantId, groupBookingId) {
     const [tenant, groupBooking] = await Promise.all([
       TenantManager.getTenant(tenantId),
-      GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true),
+      GroupBookingManager.getGroupBooking(tenantId, groupBookingId, false),
     ]);
 
     if (!tenant) {
@@ -1059,8 +1071,18 @@ class BookingService {
       throw new NotFoundError("group_booking_not_found", { groupBookingId });
     }
 
+    const bookings = await BookingManager.getBookings(
+      tenantId,
+      groupBooking.bookingIds,
+    );
+    if (bookings.length !== groupBooking.bookingIds.length) {
+      throw new NotFoundError("booking_not_found", {
+        groupBookingId,
+      });
+    }
+
     const cancelledAt = Date.now();
-    const bookings = groupBooking.bookings.map((booking) => ({
+    const previewBookings = bookings.map((booking) => ({
       bookingId: booking.id,
       ...CancellationRefundService.calculate({
         tenant,
@@ -1073,20 +1095,20 @@ class BookingService {
     return {
       groupBookingId,
       cancelledAt,
-      bookings,
+      bookings: previewBookings,
       originalAmountEur:
-        bookings.reduce(
+        previewBookings.reduce(
           (total, booking) =>
             total + Math.round(booking.originalAmountEur * 100),
           0,
         ) / 100,
       refundAmountEur:
-        bookings.reduce(
+        previewBookings.reduce(
           (total, booking) => total + Math.round(booking.refundAmountEur * 100),
           0,
         ) / 100,
       cancellationFeeEur:
-        bookings.reduce(
+        previewBookings.reduce(
           (total, booking) =>
             total + Math.round(booking.cancellationFeeEur * 100),
           0,
@@ -1124,17 +1146,19 @@ class BookingService {
         booking.removeHook(hookId);
       }
 
+      const refundCalculation = CancellationRefundService.calculate({
+        tenant,
+        booking,
+        cancelledAt: cancellationContext.cancelledAt ?? Date.now(),
+        origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
+        refundPercentage: cancellationContext.refundPercentage,
+        cancelledByUserId: cancellationContext.cancelledByUserId,
+      });
+      booking.cancellationRefund = { ...refundCalculation };
+
       let attachments;
 
       if (booking.priceEur > 0 && !skipCancellation) {
-        const refundCalculation = CancellationRefundService.calculate({
-          tenant,
-          booking,
-          cancelledAt: cancellationContext.cancelledAt ?? Date.now(),
-          origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
-          refundPercentage: cancellationContext.refundPercentage,
-          cancelledByUserId: cancellationContext.cancelledByUserId,
-        });
         const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
         const options = {
           alreadyPaid: booking.isPayed,
@@ -1268,21 +1292,20 @@ class BookingService {
 
     let attachments;
     let cancellationDocument;
-    let refundCalculations = [];
+    const cancelledAt = cancellationContext.cancelledAt ?? Date.now();
+    const refundCalculations = bookings.map((booking) => ({
+      bookingId: booking.id,
+      ...CancellationRefundService.calculate({
+        tenant,
+        booking,
+        cancelledAt,
+        origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
+        refundPercentage: cancellationContext.refundPercentage,
+        cancelledByUserId: cancellationContext.cancelledByUserId,
+      }),
+    }));
 
     if (groupBooking.getTotalPrice() > 0 && !skipCancellation) {
-      const cancelledAt = cancellationContext.cancelledAt ?? Date.now();
-      refundCalculations = bookings.map((booking) => ({
-        bookingId: booking.id,
-        ...CancellationRefundService.calculate({
-          tenant,
-          booking,
-          cancelledAt,
-          origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
-          refundPercentage: cancellationContext.refundPercentage,
-          cancelledByUserId: cancellationContext.cancelledByUserId,
-        }),
-      }));
       const options = {
         alreadyPaid: groupBooking.areSomeBookingsPaid(),
         cancellationReason: reason,
@@ -1311,10 +1334,16 @@ class BookingService {
       booking.isRejected = true;
       booking.rejectionReason = reason;
 
-      if (cancellationDocument) {
-        const refundCalculation = refundCalculations.find(
-          (calculation) => calculation.bookingId === booking.id,
-        );
+      const refundCalculation = refundCalculations.find(
+        (calculation) => calculation.bookingId === booking.id,
+      );
+      if (refundCalculation) {
+        const refundAudit = { ...refundCalculation };
+        delete refundAudit.bookingId;
+        booking.cancellationRefund = refundAudit;
+      }
+
+      if (cancellationDocument && refundCalculation) {
         const refundAudit = { ...refundCalculation };
         delete refundAudit.bookingId;
         booking.attachments.push({

@@ -11,6 +11,10 @@ const MailController = require("../src/commons/mail-service/mail-controller");
 const {
   CANCELLATION_ORIGINS,
 } = require("../src/commons/services/payment/cancellation-refund-service");
+const {
+  ManualBundleCheckoutService,
+} = require("../src/commons/services/checkout/bundle-checkout-service");
+const { Booking } = require("../src/commons/entities/booking/booking");
 
 function booking(overrides = {}) {
   return {
@@ -89,6 +93,8 @@ describe("BookingService cancellation refunds", function () {
     assert.strictEqual(attachment.cancellation.refundAmountEur, 25);
     assert.strictEqual(attachment.cancellation.cancellationFeeEur, 75);
     assert.strictEqual(attachment.cancellation.adminOverride, true);
+    assert.strictEqual(storedBooking.cancellationRefund.refundAmountEur, 25);
+    assert.strictEqual(storedBooking.cancellationRefund.adminOverride, true);
     assert.strictEqual(
       attachment.cancellation.originalDocumentRef.number,
       "INV-1-1",
@@ -99,7 +105,53 @@ describe("BookingService cancellation refunds", function () {
     );
   });
 
+  it("stores cancellation refund audit on the booking when skipping the document", async function () {
+    const storedBooking = booking();
+    sinon.stub(BookingManager, "getBooking").resolves(storedBooking);
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
+    });
+    const createCancellation = sinon.stub(
+      CancellationService,
+      "createSingleCancellation",
+    );
+    stubCancellationSideEffects();
+
+    await BookingService.rejectBooking(
+      "tenant-1",
+      "booking-1",
+      "Customer request",
+      null,
+      false,
+      true,
+      null,
+      {
+        origin: CANCELLATION_ORIGINS.ADMIN,
+        cancelledAt: Date.UTC(2026, 7, 20, 8),
+      },
+    );
+
+    assert.strictEqual(createCancellation.called, false);
+    assert.strictEqual(storedBooking.attachments.length, 0);
+    assert.strictEqual(storedBooking.cancellationRefund.refundAmountEur, 50);
+    assert.strictEqual(storedBooking.cancellationRefund.originalAmountEur, 100);
+  });
+
   it("returns a group preview with per-booking and aggregate amounts", async function () {
+    const cancelledAt = Date.UTC(2026, 6, 15, 8);
+    const groupBookings = [
+      booking({
+        id: "booking-1",
+        priceEur: 10,
+        timeBegin: cancelledAt + 30 * 86400000,
+      }),
+      booking({
+        id: "booking-2",
+        priceEur: 20,
+        timeBegin: cancelledAt + 5 * 86400000,
+      }),
+    ];
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
       cancellationRefundTiers: [
@@ -109,28 +161,25 @@ describe("BookingService cancellation refunds", function () {
     });
     sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
       id: "group-1",
-      bookings: [
-        booking({
-          id: "booking-1",
-          priceEur: 10,
-          timeBegin: Date.now() + 30 * 86400000,
-        }),
-        booking({
-          id: "booking-2",
-          priceEur: 20,
-          timeBegin: Date.now() + 5 * 86400000,
-        }),
-      ],
+      bookingIds: groupBookings.map((entry) => entry.id),
     });
+    sinon.stub(BookingManager, "getBookings").resolves(groupBookings);
+    const clock = sinon.useFakeTimers({ now: cancelledAt, toFake: ["Date"] });
 
     const preview = await BookingService.getGroupCancellationRefundPreview(
       "tenant-1",
       "group-1",
     );
 
+    clock.restore();
+
     assert.deepStrictEqual(
       preview.bookings.map((entry) => entry.appliedRefundPercentage),
       [100, 50],
+    );
+    assert.deepStrictEqual(
+      preview.bookings.map((entry) => entry.daysBeforeStart),
+      [30, 5],
     );
     assert.strictEqual(preview.originalAmountEur, 30);
     assert.strictEqual(preview.refundAmountEur, 20);
@@ -209,5 +258,49 @@ describe("BookingService cancellation refunds", function () {
       bookings[0].attachments[0].cancellation.originalDocumentRef.number,
       "INV-GROUP-1",
     );
+  });
+
+  it("preserves price and bookable items when unrejecting a booking", async function () {
+    const oldBooking = booking({
+      isRejected: true,
+      rejectionReason: "Changed plans",
+      priceEur: 97.5,
+      vatIncludedEur: 10.5,
+      paymentProvider: "invoice",
+      bookableItems: [
+        { bookableId: "room-1", amount: 1, userGrossPriceEur: 97.5 },
+      ],
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(oldBooking);
+    const storeBooking = sinon
+      .stub(BookingManager, "storeBooking")
+      .callsFake(async (value) => value);
+    sinon.stub(LockerService, "getInstance").returns({
+      handleCreate: sinon.stub().resolves(),
+    });
+    sinon
+      .stub(ManualBundleCheckoutService.prototype, "prepareBooking")
+      .resolves(
+        new Booking({
+          ...oldBooking,
+          isRejected: false,
+          rejectionReason: "",
+          priceEur: 0,
+          vatIncludedEur: 0,
+          bookableItems: [],
+        }),
+      );
+
+    await BookingService.updateBooking("tenant-1", {
+      ...oldBooking,
+      isRejected: false,
+      rejectionReason: "",
+    });
+
+    const storedBooking = storeBooking.firstCall.args[0];
+    assert.strictEqual(storedBooking.priceEur, 97.5);
+    assert.strictEqual(storedBooking.vatIncludedEur, 10.5);
+    assert.strictEqual(storedBooking.bookableItems.length, 1);
+    assert.strictEqual(storedBooking.isRejected, false);
   });
 });
