@@ -66,8 +66,9 @@ class CancellationService {
         cancellationId,
         cancellationNumber,
         originalInvoiceNumber,
+        originalInvoiceDate,
         revision,
-        timeCreated: Date.now(),
+        timeCreated: options.refundCalculation?.cancelledAt ?? Date.now(),
       };
     } catch (err) {
       if (err.isNextcloudError) {
@@ -166,8 +167,9 @@ class CancellationService {
         cancellationId,
         cancellationNumber,
         originalInvoiceNumber,
+        originalInvoiceDate,
         revision,
-        timeCreated: Date.now(),
+        timeCreated: options.refundCalculations?.[0]?.cancelledAt ?? Date.now(),
       };
     } catch (err) {
       if (err.isNextcloudError) {

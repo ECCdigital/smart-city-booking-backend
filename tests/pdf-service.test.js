@@ -274,6 +274,104 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("-119,00"));
   });
 
+  it("renders a partial cancellation with scaled amounts and audit details", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "",
+      location: "Musterstadt",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleCancellationReceipt(
+      "tenant-1",
+      "booking-1",
+      "ST-1-1",
+      "RE-1-1",
+      {
+        alreadyPaid: true,
+        refundCalculation: {
+          cancelledAt: Date.parse("2026-07-20T12:00:00+02:00"),
+          daysBeforeStart: 12,
+          originalAmountEur: 119,
+          suggestedRefundPercentage: 50,
+          appliedRefundPercentage: 50,
+          refundAmountEur: 59.5,
+          cancellationFeeEur: 59.5,
+          appliedTierDays: 0,
+          origin: "user",
+          adminOverride: false,
+        },
+      },
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("50 % Erstattung"));
+    assert.ok(html.includes("12 Kalendertage"));
+    assert.ok(html.includes("Automatisch nach Mandantenregel"));
+    assert.ok(html.includes("-59,50"));
+    assert.ok(html.includes("59,50"));
+    assert.ok(!html.includes("-119,00"));
+  });
+
+  it("renders aggregated cancellations using each booking refund", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "",
+      location: "Musterstadt",
+    });
+    sinon
+      .stub(BookingManager, "getBookings")
+      .resolves([makeBooking(), makeBooking({ id: "booking-2" })]);
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const cancelledAt = Date.parse("2026-07-20T12:00:00+02:00");
+    const result = await PdfService.generateAggregatedCancellationReceipt(
+      "tenant-1",
+      ["booking-1", "booking-2"],
+      "ST-1-1",
+      "RE-1-1",
+      {
+        alreadyPaid: true,
+        groupBookingId: "group-1",
+        refundCalculations: [
+          {
+            bookingId: "booking-1",
+            cancelledAt,
+            daysBeforeStart: 12,
+            originalAmountEur: 119,
+            suggestedRefundPercentage: 100,
+            appliedRefundPercentage: 100,
+            refundAmountEur: 119,
+            cancellationFeeEur: 0,
+            appliedTierDays: 20,
+            origin: "admin",
+            adminOverride: false,
+          },
+          {
+            bookingId: "booking-2",
+            cancelledAt,
+            daysBeforeStart: 5,
+            originalAmountEur: 119,
+            suggestedRefundPercentage: 50,
+            appliedRefundPercentage: 50,
+            refundAmountEur: 59.5,
+            cancellationFeeEur: 59.5,
+            appliedTierDays: 0,
+            origin: "admin",
+            adminOverride: false,
+          },
+        ],
+      },
+    );
+
+    const html = result.buffer.toString();
+    assert.match(html, /Buchung\s+booking-1/);
+    assert.match(html, /Buchung\s+booking-2/);
+    assert.ok(html.includes("-178,50"));
+    assert.ok(html.includes("59,50"));
+  });
+
   it("legacy templates using only bookingEntries still render", async () => {
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",

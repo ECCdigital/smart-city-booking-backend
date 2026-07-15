@@ -187,6 +187,11 @@ router.post(
   AuthenticationController.isSignedIn,
   BookingController.payBooking,
 );
+router.get(
+  "/bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  BookingController.getCancellationRefundPreview,
+);
 router.post(
   "/bookings/:id/reject",
   AuthenticationController.isSignedIn,
@@ -268,6 +273,11 @@ router.post(
   "/group-bookings/:id/pay",
   AuthenticationController.isSignedIn,
   GroupBookingController.payGroupBooking,
+);
+router.get(
+  "/group-bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getCancellationRefundPreview,
 );
 router.post(
   "/group-bookings/:id/reject",

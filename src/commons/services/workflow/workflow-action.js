@@ -1,6 +1,9 @@
 const MailController = require("../../mail-service/mail-controller");
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
+const {
+  CANCELLATION_ORIGINS,
+} = require("../payment/cancellation-refund-service");
 
 class WorkflowAction {
   constructor(action) {
@@ -102,6 +105,9 @@ class BookingStatusAction extends WorkflowAction {
           "",
           null,
           true,
+          false,
+          null,
+          { origin: CANCELLATION_ORIGINS.SYSTEM },
         );
       }
     }

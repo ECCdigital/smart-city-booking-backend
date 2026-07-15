@@ -1,0 +1,237 @@
+/api/{tenant}/bookings/{bookingId}/cancellation-refund-preview:
+  get:
+    tags:
+      - Bookings
+    summary: Preview a booking cancellation refund
+    description: Returns the current tenant-policy refund proposed to an administrator.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationBookingIdParam"
+    responses:
+      "200":
+        description: Current refund preview
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancellationRefundCalculation"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Booking not found
+
+/api/{tenant}/bookings/{bookingId}/reject:
+  post:
+    tags:
+      - Bookings
+    summary: Reject or cancel a booking
+    description: |
+      Administrators may accept the current tenant-policy refund or override it
+      with an integer percentage from 0 through 100. Omitting
+      `refundPercentage` applies the current policy proposal.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationBookingIdParam"
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BookingCancellationRequest"
+    responses:
+      "200":
+        description: Booking cancelled
+      "400":
+        description: Invalid refund percentage
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Booking not found
+
+/api/{tenant}/group-bookings/{groupBookingId}/cancellation-refund-preview:
+  get:
+    tags:
+      - Group bookings
+    summary: Preview a group booking cancellation refund
+    description: Returns policy calculations per booking and aggregate amounts.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationGroupBookingIdParam"
+    responses:
+      "200":
+        description: Current group refund preview
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupCancellationRefundPreview"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Group booking not found
+
+/api/{tenant}/group-bookings/{groupBookingId}/reject:
+  post:
+    tags:
+      - Group bookings
+    summary: Reject or cancel a group booking
+    description: |
+      Without an override, each booking uses its current policy proposal. An
+      optional `refundPercentage` applies uniformly to every booking in the group.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationGroupBookingIdParam"
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BookingCancellationRequest"
+    responses:
+      "200":
+        description: Group booking cancelled
+      "400":
+        description: Invalid refund percentage or inconsistent group booking
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Group booking not found
+
+components:
+  parameters:
+    CancellationTenantParam:
+      name: tenant
+      in: path
+      required: true
+      description: Tenant identifier
+      schema:
+        type: string
+    CancellationBookingIdParam:
+      name: bookingId
+      in: path
+      required: true
+      description: Booking identifier
+      schema:
+        type: string
+    CancellationGroupBookingIdParam:
+      name: groupBookingId
+      in: path
+      required: true
+      description: Group booking identifier
+      schema:
+        type: string
+
+  schemas:
+    BookingCancellationRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+        skipCancellation:
+          type: boolean
+          description: Skip generation of the cancellation document.
+        refundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Optional administrator override.
+        bankDetails:
+          type: object
+          description: Optional bank details used only while rendering the document.
+          properties:
+            accountHolder:
+              type: string
+            bankName:
+              type: string
+            iban:
+              type: string
+            bic:
+              type: string
+
+    CancellationRefundCalculation:
+      type: object
+      required:
+        - cancelledAt
+        - originalAmountEur
+        - suggestedRefundPercentage
+        - appliedRefundPercentage
+        - refundAmountEur
+        - cancellationFeeEur
+        - origin
+        - adminOverride
+      properties:
+        bookingId:
+          type: string
+        cancelledAt:
+          type: integer
+          format: int64
+          description: Calculation timestamp in epoch milliseconds.
+        daysBeforeStart:
+          type: integer
+          nullable: true
+          description: Calendar days in Europe/Berlin.
+        originalAmountEur:
+          type: number
+          format: double
+        suggestedRefundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        appliedRefundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        refundAmountEur:
+          type: number
+          format: double
+        cancellationFeeEur:
+          type: number
+          format: double
+        appliedTierDays:
+          type: integer
+          nullable: true
+        origin:
+          type: string
+          enum:
+            - user
+            - admin
+            - system
+        adminOverride:
+          type: boolean
+        cancelledByUserId:
+          type: string
+          nullable: true
+
+    GroupCancellationRefundPreview:
+      type: object
+      properties:
+        groupBookingId:
+          type: string
+        cancelledAt:
+          type: integer
+          format: int64
+        bookings:
+          type: array
+          items:
+            $ref: "#/components/schemas/CancellationRefundCalculation"
+        originalAmountEur:
+          type: number
+          format: double
+        refundAmountEur:
+          type: number
+          format: double
+        cancellationFeeEur:
+          type: number
+          format: double

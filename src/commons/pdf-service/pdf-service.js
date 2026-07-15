@@ -557,6 +557,7 @@ class PdfService {
       alreadyPaid = false,
       originalInvoiceDate,
       bankDetails,
+      refundCalculation,
     } = options;
 
     const [tenant, booking, allBookables] = await Promise.all([
@@ -565,11 +566,34 @@ class PdfService {
       BookableManager.getBookables(tenantId),
     ]);
 
-    const items = PdfService._buildItems(booking, allBookables, {
+    const calculation = refundCalculation || {
+      cancelledAt: Date.now(),
+      daysBeforeStart: null,
+      originalAmountEur: booking.priceEur,
+      suggestedRefundPercentage: 100,
+      appliedRefundPercentage: 100,
+      refundAmountEur: booking.priceEur,
+      cancellationFeeEur: 0,
+      appliedTierDays: null,
+      origin: "system",
+      adminOverride: false,
+    };
+    const scale = calculation.appliedRefundPercentage / 100;
+    const documentOptions = {
       negative: true,
-    });
-    const coupon = PdfService._buildCoupon(booking, { negative: true });
-    const totals = PdfService._buildTableTotals(booking, { negative: true });
+      scale,
+      targetBruttoEur: calculation.refundAmountEur,
+      targetVatEur: PdfService._scaleCurrency(booking.vatIncludedEur, scale),
+    };
+    const items = PdfService._buildItems(
+      booking,
+      allBookables,
+      documentOptions,
+    );
+    const coupon = PdfService._buildCoupon(booking, documentOptions);
+    const totals = PdfService._buildTableTotals(booking, documentOptions);
+    const calculationData =
+      PdfService._buildCancellationCalculationData(calculation);
 
     const bookingContext = PdfService._buildBookingContext(
       booking,
@@ -594,15 +618,21 @@ class PdfService {
       originalInvoiceDate: originalInvoiceDate
         ? formatters.formatDate(originalInvoiceDate)
         : formatters.formatDate(new Date(booking.timeCreated)),
-      cancellationDate: formatters.formatDate(new Date()),
+      cancellationDate: formatters.formatDateTime(calculation.cancelledAt),
       cancellationReason,
       alreadyPaid,
-      refundAmount: formatters.formatCurrency(booking.priceEur),
+      refundAmount: formatters.formatCurrency(calculation.refundAmountEur),
+      cancellationFee: formatters.formatCurrency(
+        calculation.cancellationFeeEur,
+      ),
+      ...calculationData,
       customerBankDetails: PdfService._buildCustomerBankDetails(bankDetails),
       invoiceAddress: PdfService._buildAddressHtml(booking),
       mainContent,
       location: tenant.location,
-      totalAmount: formatters.formatNegativeCurrency(booking.priceEur),
+      totalAmount: formatters.formatNegativeCurrency(
+        calculation.refundAmountEur,
+      ),
       bookingId: booking.id,
       items,
       coupon,
@@ -633,6 +663,7 @@ class PdfService {
       originalInvoiceDate,
       bankDetails,
       groupBookingId,
+      refundCalculations,
     } = options;
 
     const [tenant, bookings, allBookables] = await Promise.all([
@@ -641,10 +672,42 @@ class PdfService {
       BookableManager.getBookables(tenantId),
     ]);
 
+    const calculations =
+      refundCalculations ||
+      bookings.map((booking) => ({
+        bookingId: booking.id,
+        cancelledAt: Date.now(),
+        daysBeforeStart: null,
+        originalAmountEur: booking.priceEur,
+        suggestedRefundPercentage: 100,
+        appliedRefundPercentage: 100,
+        refundAmountEur: booking.priceEur,
+        cancellationFeeEur: 0,
+        appliedTierDays: null,
+        origin: "system",
+        adminOverride: false,
+      }));
     const { bookingRows, totals } = PdfService._buildAggregatedData(
       bookings,
       allBookables,
-      { negative: true },
+      { negative: true, refundCalculations: calculations },
+    );
+    const formattedCalculations = calculations.map((calculation) => ({
+      bookingId: calculation.bookingId,
+      ...PdfService._buildCancellationCalculationData(calculation),
+      refundAmount: formatters.formatCurrency(calculation.refundAmountEur),
+      cancellationFee: formatters.formatCurrency(
+        calculation.cancellationFeeEur,
+      ),
+    }));
+    const cancellationFeeEur =
+      calculations.reduce(
+        (total, calculation) =>
+          total + Math.round(calculation.cancellationFeeEur * 100),
+        0,
+      ) / 100;
+    const isFullRefund = calculations.every(
+      (calculation) => calculation.appliedRefundPercentage === 100,
     );
 
     const mainContent = PdfService._renderAggregatedBookingsTable(tenant, {
@@ -659,10 +722,16 @@ class PdfService {
       originalInvoiceDate: originalInvoiceDate
         ? formatters.formatDate(originalInvoiceDate)
         : formatters.formatDate(new Date(bookings[0].timeCreated)),
-      cancellationDate: formatters.formatDate(new Date()),
+      cancellationDate: formatters.formatDateTime(
+        calculations[0]?.cancelledAt ?? Date.now(),
+      ),
       cancellationReason,
       alreadyPaid,
       refundAmount: formatters.formatCurrency(totals.bruttoEur),
+      cancellationFee: formatters.formatCurrency(cancellationFeeEur),
+      refundCalculations: formattedCalculations,
+      isFullRefund,
+      hasCancellationFee: cancellationFeeEur > 0,
       customerBankDetails: PdfService._buildCustomerBankDetails(bankDetails),
       invoiceAddress: PdfService._buildAddressHtml(bookings[0]),
       mainContent,
@@ -1042,21 +1111,27 @@ class PdfService {
 
   static _buildTableTotals(booking, options = {}) {
     const coupon = booking._couponUsed;
+    const scale = options.scale ?? 1;
+    const bruttoEur =
+      options.targetBruttoEur ??
+      PdfService._scaleCurrency(booking.priceEur, scale);
+    const finalVatEur =
+      options.targetVatEur ??
+      PdfService._scaleCurrency(booking.vatIncludedEur, scale);
 
     if (!PdfService._usesPreDiscountCouponDisplay(coupon)) {
-      return PdfService._buildTotals(
-        booking.priceEur,
-        booking.vatIncludedEur,
-        options,
-      );
+      return PdfService._buildTotals(bruttoEur, finalVatEur, options);
     }
 
-    const nettoEur = PdfService._calculatePreDiscountNetTotal(booking);
+    const nettoEur = PdfService._scaleCurrency(
+      PdfService._calculatePreDiscountNetTotal(booking),
+      scale,
+    );
     const vatRate = PdfService._bookingVatRate(booking);
     const vatEur = Math.round(nettoEur * vatRate * 100) / 100;
     const finalTotals = PdfService._buildTotals(
-      booking.priceEur,
-      booking.vatIncludedEur,
+      bruttoEur,
+      finalVatEur,
       options,
     );
     const format = options.negative
@@ -1086,18 +1161,26 @@ class PdfService {
       ? formatters.formatNegativeCurrency
       : formatters.formatCurrency;
     const coupon = booking._couponUsed;
+    const scale = options.scale ?? 1;
     const showRegularNetPrice =
       PdfService._usesPreDiscountCouponDisplay(coupon);
 
-    return (booking.bookableItems || []).map((item) => {
+    const items = (booking.bookableItems || []).map((item) => {
       const bookable =
         item._bookableUsed ||
         allBookables.find((b) => b.id === item.bookableId);
-      const unitPriceEur = showRegularNetPrice
+      const originalUnitPriceEur = showRegularNetPrice
         ? PdfService._resolveRegularNetPriceEur(item, booking)
         : item.userPriceEur;
       const multiplier = PdfService._itemAmountMultiplier(item);
-      const totalPriceEur = unitPriceEur * multiplier;
+      const unitPriceEur = PdfService._scaleCurrency(
+        originalUnitPriceEur,
+        scale,
+      );
+      const totalPriceEur = PdfService._scaleCurrency(
+        originalUnitPriceEur * multiplier,
+        scale,
+      );
 
       return {
         title: bookable?.title || "Unbekannt",
@@ -1108,6 +1191,32 @@ class PdfService {
         totalPrice: format(totalPriceEur),
       };
     });
+
+    if (items.length > 0 && scale !== 1) {
+      const originalTotal = (booking.bookableItems || []).reduce(
+        (total, item) => {
+          const unitPriceEur = showRegularNetPrice
+            ? PdfService._resolveRegularNetPriceEur(item, booking)
+            : item.userPriceEur;
+          return total + unitPriceEur * PdfService._itemAmountMultiplier(item);
+        },
+        0,
+      );
+      const targetTotal = PdfService._scaleCurrency(originalTotal, scale);
+      const currentTotal = items.reduce(
+        (total, item) => total + item.totalPriceEur,
+        0,
+      );
+      const remainder = Math.round((targetTotal - currentTotal) * 100) / 100;
+      if (remainder !== 0) {
+        const lastItem = items[items.length - 1];
+        lastItem.totalPriceEur =
+          Math.round((lastItem.totalPriceEur + remainder) * 100) / 100;
+        lastItem.totalPrice = format(lastItem.totalPriceEur);
+      }
+    }
+
+    return items;
   }
 
   static _formatCouponDescription(coupon) {
@@ -1135,11 +1244,13 @@ class PdfService {
 
     const sign = options.negative ? "+" : "-";
     let discountLabel;
+    let discount = coupon.discount;
 
     if (coupon.type === COUPON_TYPE.FIXED) {
+      discount = PdfService._scaleCurrency(coupon.discount, options.scale ?? 1);
       discountLabel = options.negative
-        ? `+${formatters.formatAmount(coupon.discount)} €`
-        : formatters.formatNegativeCurrency(coupon.discount);
+        ? `+${formatters.formatAmount(discount)} €`
+        : formatters.formatNegativeCurrency(discount);
     } else if (coupon.type === COUPON_TYPE.PERCENTAGE) {
       discountLabel = `${sign}${coupon.discount} %`;
     } else {
@@ -1148,7 +1259,7 @@ class PdfService {
 
     return {
       description: PdfService._formatCouponDescription(coupon),
-      discount: coupon.discount,
+      discount,
       type: coupon.type,
       discountLabel,
     };
@@ -1170,6 +1281,10 @@ class PdfService {
     };
   }
 
+  static _scaleCurrency(value, scale) {
+    return Math.round((Number(value) || 0) * scale * 100) / 100;
+  }
+
   /**
    * Builds the structured rows and totals for aggregated documents
    * (Sammelbeleg, Sammelrechnung, Sammel-Stornorechnung).
@@ -1177,10 +1292,26 @@ class PdfService {
   static _buildAggregatedData(bookings, allBookables, options = {}) {
     let bruttoEur = 0;
     let vatEur = 0;
+    const refundCalculationsByBookingId = new Map(
+      (options.refundCalculations || []).map((calculation) => [
+        calculation.bookingId,
+        calculation,
+      ]),
+    );
 
     const bookingRows = bookings.map((booking) => {
-      bruttoEur += booking.priceEur;
-      vatEur += booking.vatIncludedEur;
+      const refundCalculation = refundCalculationsByBookingId.get(booking.id);
+      const scale = refundCalculation
+        ? refundCalculation.appliedRefundPercentage / 100
+        : options.scale;
+      const bookingOptions = {
+        ...options,
+        scale,
+        targetBruttoEur: refundCalculation?.refundAmountEur,
+        targetVatEur: refundCalculation
+          ? PdfService._scaleCurrency(booking.vatIncludedEur, scale)
+          : undefined,
+      };
 
       const period =
         booking.timeBegin && booking.timeEnd
@@ -1190,8 +1321,10 @@ class PdfService {
         booking.timePaid > 0
           ? formatters.formatDateTime(booking.timePaid)
           : "-";
-      const tableTotals = PdfService._buildTableTotals(booking, options);
-      const coupon = PdfService._buildCoupon(booking, options);
+      const tableTotals = PdfService._buildTableTotals(booking, bookingOptions);
+      const coupon = PdfService._buildCoupon(booking, bookingOptions);
+      bruttoEur += tableTotals.bruttoEur;
+      vatEur += tableTotals.vatEur;
 
       return {
         id: booking.id,
@@ -1204,8 +1337,10 @@ class PdfService {
         vatEur: tableTotals.vatEur,
         brutto: tableTotals.brutto,
         bruttoEur: tableTotals.bruttoEur,
+        refundPercentage: refundCalculation?.appliedRefundPercentage,
+        daysBeforeStart: refundCalculation?.daysBeforeStart,
         coupon,
-        items: PdfService._buildItems(booking, allBookables, options),
+        items: PdfService._buildItems(booking, allBookables, bookingOptions),
         summaryItems: PdfService._buildSummaryItems(booking, allBookables),
       };
     });
@@ -1213,6 +1348,34 @@ class PdfService {
     return {
       bookingRows,
       totals: PdfService._buildTotals(bruttoEur, vatEur, options),
+    };
+  }
+
+  static _buildCancellationCalculationData(calculation) {
+    let calculationMode = "Automatisch durch das System";
+    if (calculation.origin === "user") {
+      calculationMode = "Automatisch nach Mandantenregel";
+    } else if (calculation.origin === "admin" && calculation.adminOverride) {
+      calculationMode =
+        "Manuell durch Administration (Regelvorschlag überschrieben)";
+    } else if (calculation.origin === "admin") {
+      calculationMode =
+        "Manuell durch Administration (Regelvorschlag übernommen)";
+    }
+
+    return {
+      daysBeforeStart: calculation.daysBeforeStart,
+      daysBeforeStartLabel:
+        calculation.daysBeforeStart === null
+          ? "nicht verfügbar"
+          : String(calculation.daysBeforeStart),
+      suggestedRefundPercentage: calculation.suggestedRefundPercentage,
+      refundPercentage: calculation.appliedRefundPercentage,
+      appliedTierDays: calculation.appliedTierDays,
+      calculationMode,
+      adminOverride: calculation.adminOverride,
+      isFullRefund: calculation.appliedRefundPercentage === 100,
+      hasCancellationFee: calculation.cancellationFeeEur > 0,
     };
   }
 
