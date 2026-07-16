@@ -75,12 +75,15 @@ const PRINT_CSS = `
     font-weight: bold;
   }
   table.pdf-items--compact tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--compact tbody tr.item td { border-bottom: 1px solid #eee; }
   table.pdf-items--compact .num { text-align: right; white-space: nowrap; }
   table.pdf-items--compact td.sub {
     color: #555;
     font-size: 8px;
     padding-top: 0;
     padding-bottom: 4px;
+    border-bottom: 1px solid #ddd;
+    background: #fafafa;
   }
   table.pdf-items--compact tr.coupon td { color: #555; }
   table.pdf-items--compact tr.totals-sub td {
@@ -122,6 +125,7 @@ const PRINT_CSS = `
     font-weight: bold;
   }
   table.pdf-items--detailed tbody tr.item:nth-child(even) td { background: #f5f5f5; }
+  table.pdf-items--detailed tbody tr.item td { border-bottom: 1px solid #eee; }
   table.pdf-items--detailed .num { text-align: right; white-space: nowrap; }
   .pdf-booking-meta {
     font-size: 10px;
@@ -134,6 +138,8 @@ const PRINT_CSS = `
     font-size: 9px;
     padding-top: 0;
     padding-bottom: 6px;
+    border-bottom: 1px solid #ddd;
+    background: #fafafa;
   }
   table.pdf-items--detailed ul.item-list {
     margin: 4px 0 0;
@@ -144,12 +150,18 @@ const PRINT_CSS = `
     padding-top: 8px;
     border-top: 2px solid #000;
   }
-  table.pdf-items--detailed tr.netto td,
-  table.pdf-items--detailed tr.mwst td,
-  table.pdf-items--detailed tr.brutto td { text-align: right; }
-  table.pdf-items--detailed tr.netto td:first-child,
-  table.pdf-items--detailed tr.mwst td:first-child,
-  table.pdf-items--detailed tr.brutto td:first-child { text-align: left; }
+  table.pdf-items--detailed tr.netto td:not(.num),
+  table.pdf-items--detailed tr.mwst td:not(.num),
+  table.pdf-items--detailed tr.brutto td:not(.num) { text-align: left; }
+  table.pdf-items--detailed tr.netto td.num,
+  table.pdf-items--detailed tr.mwst td.num,
+  table.pdf-items--detailed tr.brutto td.num,
+  table.pdf-items--detailed tr.coupon td.num { text-align: right; }
+  table.pdf-items--detailed tr.netto td:not(.num) .num,
+  table.pdf-items--detailed tr.mwst td:not(.num) .num,
+  table.pdf-items--detailed tr.brutto td:not(.num) .num {
+    float: right;
+  }
   table.pdf-items--detailed tr.brutto td {
     font-weight: bold;
     border-bottom: 2px solid #000;
@@ -645,7 +657,10 @@ class PdfService {
     );
 
     const renderedHtml = template(data);
-    const filename = `Stornorechnung-${cancellationNumber}.pdf`;
+    const filename = PdfService._buildCancellationFilename(
+      "single",
+      cancellationNumber,
+    );
 
     return await PdfService.convertToPdf(renderedHtml, filename);
   }
@@ -747,7 +762,10 @@ class PdfService {
       DEFAULT_TEMPLATES.cancellation,
     );
     const renderedHtml = template(data);
-    const filename = `Sammel-Stornorechnung-${cancellationNumber}.pdf`;
+    const filename = PdfService._buildCancellationFilename(
+      "aggregated",
+      cancellationNumber,
+    );
 
     return await PdfService.convertToPdf(renderedHtml, filename);
   }
@@ -1286,6 +1304,17 @@ class PdfService {
   }
 
   /**
+   * Builds cancellation PDF filenames from the cancellation number. The number
+   * already includes an optional tenant prefix when configured.
+   */
+  static _buildCancellationFilename(documentType, cancellationNumber) {
+    if (documentType === "aggregated") {
+      return `Sammel-Stornorechnung-${cancellationNumber}.pdf`;
+    }
+    return `Stornorechnung-${cancellationNumber}.pdf`;
+  }
+
+  /**
    * Builds the structured rows and totals for aggregated documents
    * (Sammelbeleg, Sammelrechnung, Sammel-Stornorechnung).
    */
@@ -1355,12 +1384,8 @@ class PdfService {
     let calculationMode = "Automatisch durch das System";
     if (calculation.origin === "user") {
       calculationMode = "Automatisch nach Mandantenregel";
-    } else if (calculation.origin === "admin" && calculation.adminOverride) {
-      calculationMode =
-        "Manuell durch Administration (Regelvorschlag überschrieben)";
     } else if (calculation.origin === "admin") {
-      calculationMode =
-        "Manuell durch Administration (Regelvorschlag übernommen)";
+      calculationMode = "Manuell durch Administration";
     }
 
     return {

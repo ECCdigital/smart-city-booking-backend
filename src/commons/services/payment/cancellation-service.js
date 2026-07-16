@@ -242,8 +242,8 @@ async function _createCancellationNumber(tenantId, bookingId) {
     cancellationId = await IdGenerator.next(tenantId, 4, "cancellation");
   }
 
-  const prefix = tenant.cancellationNumberPrefix || "Storno";
-  const cancellationNumber = `${prefix}-${cancellationId}-${revision}`;
+  const prefix = (tenant.cancellationNumberPrefix || "").trim();
+  const cancellationNumber = `${prefix ? `${prefix}-` : ""}${cancellationId}-${revision}`;
 
   return { cancellationNumber, cancellationId, revision };
 }
