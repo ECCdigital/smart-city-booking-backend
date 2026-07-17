@@ -7,42 +7,29 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
-### Fixed
-
-- Cancellation PDFs label policy-driven administrator refunds as automatic tenant-rule calculations; “Manuell durch Administration” only appears when an admin override was applied
-- Unrejecting a booking clears persisted `cancellationRefund` via `$unset` so the audit field is removed from MongoDB
-- Aggregated PDF item tables keep article detail rows visually connected to booking rows and render valid single-column totals when booking metadata columns are hidden; single-booking total amounts stay right-aligned in detailed tables
-- Cancellation numbers no longer default to a `Storno` prefix; an optional `cancellationNumberPrefix` is included in the cancellation number and PDF filename only when configured on the tenant (same pattern as invoice numbers)
-- Rule-engine aggregate email action tests mock `TenantManager.getTenant` and validate tenant existence before reading `tenant.name`, fixing timeouts in `rule-actions.test.js`
-- `npm test` no longer hangs after all tests pass; Keycloak cache prune interval uses `unref()` so it does not keep the Node process alive
-- Fixed-amount coupons are now deducted from the gross checkout price instead of the net price (percentage coupons and booking discounts unchanged)
-- Multi-item bundle checkouts apply fixed-amount coupons once at booking level instead of per line item
-- Invoice and receipt PDFs show coupon line items at regular net prices, label coupon lines as Rabatt, and list fixed and percentage discounts after VAT; aggregated documents and legacy bookings without stored regular prices use the same presentation
-- Deleting custom field definitions at instance, tenant, or bookable level now removes the corresponding `customFieldValues` entries from affected bookables (no backfill migration for existing orphaned values)
-- Booking emails no longer show a cancel button when `cancellationPolicy.userCancellable` is `false`; an optional `contactHint` is shown instead when configured
-- `authenticateIfNeeded` now verifies Keycloak access tokens in addition to local JWTs, fixing `invalid algorithm` errors for SSO users on routes such as related bookings, protected files, and private catalogs
-- Token type detection (`classifyToken`) extracted into a shared utility used by auth middleware and `authenticateIfNeeded`
-- Manual admin bookings now set `assignedUserId` from the booking email so the assigned user can see the booking in their personal booking list
+## [4.2.0] — 2026-07-17
 
 ### Added
 
-- Optional request body flag `syncSelfBookingNames` (default `true`) on user name updates (`PUT /user`, `PUT /users`, `updateUserNames`) to skip syncing assigned self-booking names when set to `false`
-- Group booking cancellations accept optional `bankDetails` for the aggregated cancellation PDF (same fields as single-booking reject)
-- Public and hook-scoped cancellation refund preview endpoints for customer self-cancellation, plus refund amounts in verify-rejection and booking-cancel mails
-- Tenant-wide cancellation refund tiers with calendar-day calculation, administrator previews and overrides, per-cancellation audit data, and partial single/group cancellation documents
-- Booking field `cancellationRefund` persists applied refund audit data on rejection, including when cancellation documents are skipped
-- Per-user and per-role percentage booking discounts on bookables via `bookingDiscounts` (replaces `freeBookingUsers` / `freeBookingRoles`); highest matching discount applies, then coupons
-- Checkout validate-item responses now include `bookingDiscountPercent`; `freeBookingAllowed` remains `true` when discount is 100%
-- Checkout request flag renamed from `bookWithPrice` to `bookWithoutDiscount` (inverted semantics; default `false`)
-- Migration `14-07-2026-migrate-booking-discounts` to convert existing free-booking lists to 100% discounts
-- Optional `cancellationPolicy.contactHint` on bookables and bookings for cancellation contact instructions in emails when user self-cancellation is disabled; bundle bookings aggregate all relevant hints from non-cancellable items
-- Migration `13-07-2026-add-cancellation-contact-hint` to backfill `contactHint` on existing bookables and bookings
-- JSON catalog bookables expose aggregated `groupBookingAllowed` flag indicating whether the current user may create series bookings (combines `groupBooking.enabled` and `groupBooking.permittedRoles`)
-- Shared `GroupBookingPermissions` utility reused by JSON catalog and checkout controllers for consistent series-booking permission checks
-- Supervisor booking notifications: per-membership `bookingNotificationRecipients` (types `user`, `role`, `email`; max. 10 entries) resolved and mailed on booking creation for single and group bookings
-- Tenant feature flag `notifySupervisorsOnBooking` (default `false`) to enable supervisor notifications per tenant
-- Admin endpoint `POST /tenants/:id/update-user-booking-notification-recipients` (requires `manageUsers.updateAny`) to manage recipients on memberships
-- New mail type `SUPERVISOR_BOOKING_NOTIFICATION` with overridable snippet `supervisor-booking-notification` (tenant mail UI), reusing the existing booking details block
+- Configurable cancellation refund tiers: refund share can depend on how many days before the booking the cancellation happens; admins can preview and override amounts
+- Customers see expected refund amounts before and after self-cancellation (preview and confirmation emails)
+- Percentage booking discounts per user or role on bookables (replaces free-booking-only lists); coupons still apply afterwards
+- Optional contact hint in booking emails when self-cancellation is disabled, so customers know how to get in touch
+- Supervisor notifications on new bookings (single and series), with configurable recipients per membership
+- Catalog indicates whether the current user may create series bookings
+- Bank details can be included on group booking cancellations (as with single bookings)
+- Renaming a user can optionally skip updating names on assigned self-bookings
+
+### Fixed
+
+- Fixed-amount coupons are applied correctly to the total (gross) price and only once per checkout, also for multi-item bookings
+- Invoices and receipts present coupon and discount lines more clearly (regular prices, Rabatt labels, discounts after VAT)
+- Cancellation PDFs: clearer refund labels, improved table layout, and optional cancellation number prefix only when configured
+- No cancel button in booking emails when self-cancellation is turned off
+- Deleting custom field definitions also removes their values from affected bookables
+- SSO users can again access related bookings, protected files, and private catalogs without token errors
+- Bookings created manually by an admin appear in the assigned user’s personal booking list
+- Restoring a previously cancelled booking clears stored refund audit data
 
 ## [4.1.4] — 2026-07-03
 
@@ -129,6 +116,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.2.0]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.4...v4.2.0
 [4.1.4]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.3...v4.1.4
 [4.1.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.2...v4.1.3
 [4.1.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.1...v4.1.2
