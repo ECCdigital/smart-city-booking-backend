@@ -26,6 +26,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- Group booking cancellations accept optional `bankDetails` for the aggregated cancellation PDF (same fields as single-booking reject)
 - Public and hook-scoped cancellation refund preview endpoints for customer self-cancellation, plus refund amounts in verify-rejection and booking-cancel mails
 - Tenant-wide cancellation refund tiers with calendar-day calculation, administrator previews and overrides, per-cancellation audit data, and partial single/group cancellation documents
 - Booking field `cancellationRefund` persists applied refund audit data on rejection, including when cancellation documents are skipped

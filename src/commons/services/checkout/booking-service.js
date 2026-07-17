@@ -1340,6 +1340,7 @@ class BookingService {
     hookId = null,
     skipWorkflow = false,
     skipCancellation = false,
+    bankDetails = null,
     cancellationContext = {},
   ) {
     const [groupBooking, tenant] = await Promise.all([
@@ -1386,10 +1387,12 @@ class BookingService {
     }));
 
     if (groupBooking.getTotalPrice() > 0 && !skipCancellation) {
+      const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
       const options = {
         alreadyPaid: groupBooking.areSomeBookingsPaid(),
         cancellationReason: reason,
         refundCalculations,
+        bankDetails: sanitizedBankDetails || undefined,
       };
 
       cancellationDocument =

@@ -230,9 +230,6 @@ components:
 
     GroupBookingCancellationRequest:
       type: object
-      description: |
-        Group cancellation body. `bankDetails` is not supported for aggregated
-        group cancellation documents.
       properties:
         reason:
           type: string
@@ -244,6 +241,18 @@ components:
           minimum: 0
           maximum: 100
           description: Optional administrator override applied to every booking.
+        bankDetails:
+          type: object
+          description: Optional bank details used while rendering the aggregated cancellation document.
+          properties:
+            accountHolder:
+              type: string
+            bankName:
+              type: string
+            iban:
+              type: string
+            bic:
+              type: string
 
     CancellationRefundCalculation:
       type: object

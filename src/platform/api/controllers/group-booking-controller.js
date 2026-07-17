@@ -334,7 +334,8 @@ class GroupBookingController {
       const tenantId = req.params.tenant;
       const user = req.user;
       const groupBookingId = req.params.id;
-      const { reason, skipCancellation, refundPercentage } = req.body || {};
+      const { reason, skipCancellation, bankDetails, refundPercentage } =
+        req.body || {};
       if (refundPercentage !== undefined) {
         try {
           CancellationRefundService.validateRefundPercentage(refundPercentage);
@@ -364,6 +365,7 @@ class GroupBookingController {
           null,
           false,
           Boolean(skipCancellation),
+          bankDetails || null,
           {
             origin: CANCELLATION_ORIGINS.ADMIN,
             refundPercentage,

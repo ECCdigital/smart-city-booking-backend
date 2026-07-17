@@ -233,6 +233,7 @@ describe("BookingService cancellation refunds", function () {
       null,
       false,
       false,
+      null,
       {
         origin: CANCELLATION_ORIGINS.ADMIN,
         refundPercentage: 25,
@@ -267,6 +268,80 @@ describe("BookingService cancellation refunds", function () {
     assert.strictEqual(
       bookings[0].attachments[0].cancellation.originalDocumentRef.number,
       "INV-GROUP-1",
+    );
+  });
+
+  it("forwards bank details to aggregated group cancellation documents", async function () {
+    const cancelledAt = Date.UTC(2026, 7, 1, 8);
+    const bookings = [
+      booking({
+        id: "booking-1",
+        timeBegin: cancelledAt + 30 * 86400000,
+      }),
+      booking({
+        id: "booking-2",
+        timeBegin: cancelledAt + 5 * 86400000,
+      }),
+    ];
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationRefundTiers: [
+        { daysBeforeStart: 0, refundPercentage: 100 },
+      ],
+    });
+    sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
+      id: "group-1",
+      bookingIds: bookings.map((entry) => entry.id),
+      bookings,
+      getTotalPrice: () => 200,
+      areSomeBookingsPaid: () => true,
+    });
+    const createAggregatedCancellation = sinon
+      .stub(CancellationService, "createAggregatedCancellation")
+      .resolves({
+        cancellation: {
+          name: "group-cancellation.pdf",
+          buffer: Buffer.from("pdf"),
+        },
+        name: "group-cancellation.pdf",
+        cancellationId: "13",
+        revision: 1,
+        timeCreated: cancelledAt,
+        originalInvoiceNumber: "INV-GROUP-1",
+        originalInvoiceDate: Date.UTC(2026, 6, 1, 8),
+      });
+    stubCancellationSideEffects();
+
+    const result = await BookingService.rejectGroupBooking(
+      "tenant-1",
+      "group-1",
+      "Group cancellation",
+      null,
+      false,
+      false,
+      {
+        accountHolder: " Max Mustermann ",
+        bankName: " Musterbank ",
+        iban: "de89 3704 0044 0532 0130 00",
+        bic: " coba deff xxx ",
+      },
+      {
+        origin: CANCELLATION_ORIGINS.ADMIN,
+        refundPercentage: 100,
+        cancelledByUserId: "admin-1",
+        cancelledAt,
+      },
+    );
+
+    assert.strictEqual(result.success, true);
+    assert.deepStrictEqual(
+      createAggregatedCancellation.firstCall.args[0].options.bankDetails,
+      {
+        accountHolder: "Max Mustermann",
+        bankName: "Musterbank",
+        iban: "DE89370400440532013000",
+        bic: "COBADEFFXXX",
+      },
     );
   });
 

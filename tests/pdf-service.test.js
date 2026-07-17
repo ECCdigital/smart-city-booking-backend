@@ -334,6 +334,12 @@ describe("PdfService document generation (rendering only)", () => {
       {
         alreadyPaid: true,
         groupBookingId: "group-1",
+        bankDetails: {
+          accountHolder: "Max Mustermann",
+          bankName: "Musterbank",
+          iban: "DE89370400440532013000",
+          bic: "COBADEFFXXX",
+        },
         refundCalculations: [
           {
             bookingId: "booking-1",
@@ -372,6 +378,8 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("Details / Artikel:"));
     assert.ok(html.includes("Automatisch nach Mandantenregel"));
     assert.ok(!html.includes("Manuell durch Administration"));
+    assert.ok(html.includes("Bankverbindung für die Rückerstattung"));
+    assert.ok(html.includes("IBAN: DE89370400440532013000"));
     assert.match(html, /Buchung\s+booking-1/);
     assert.match(html, /Buchung\s+booking-2/);
     assert.ok(html.includes("-178,50"));
