@@ -50,8 +50,7 @@ const tenantSchemaDefinition = {
   cancellationRefundTiers: {
     type: [cancellationRefundTierSchema],
     default: [],
-    validate: (tiers) =>
-      getCancellationRefundTiersError(tiers) ? "validate" : true,
+    validate: (tiers) => !getCancellationRefundTiersError(tiers),
   },
   pdfBookingLayout: {
     type: String,

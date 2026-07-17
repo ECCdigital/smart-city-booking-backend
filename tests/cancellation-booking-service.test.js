@@ -254,6 +254,16 @@ describe("BookingService cancellation refunds", function () {
       ),
       [100, 50],
     );
+    assert.deepStrictEqual(
+      bookings.map((entry) => entry.cancellationRefund.appliedRefundPercentage),
+      [25, 25],
+    );
+    assert.deepStrictEqual(
+      bookings.map(
+        (entry) => entry.cancellationRefund.suggestedRefundPercentage,
+      ),
+      [100, 50],
+    );
     assert.strictEqual(
       bookings[0].attachments[0].cancellation.originalDocumentRef.number,
       "INV-GROUP-1",
@@ -264,6 +274,19 @@ describe("BookingService cancellation refunds", function () {
     const oldBooking = booking({
       isRejected: true,
       rejectionReason: "Changed plans",
+      cancellationRefund: {
+        cancelledAt: Date.UTC(2026, 6, 1, 8),
+        daysBeforeStart: 10,
+        originalAmountEur: 97.5,
+        suggestedRefundPercentage: 50,
+        appliedRefundPercentage: 25,
+        refundAmountEur: 24.38,
+        cancellationFeeEur: 73.12,
+        appliedTierDays: 0,
+        origin: "admin",
+        adminOverride: true,
+        cancelledByUserId: "admin-1",
+      },
       priceEur: 97.5,
       vatIncludedEur: 10.5,
       paymentProvider: "invoice",
@@ -302,5 +325,9 @@ describe("BookingService cancellation refunds", function () {
     assert.strictEqual(storedBooking.vatIncludedEur, 10.5);
     assert.strictEqual(storedBooking.bookableItems.length, 1);
     assert.strictEqual(storedBooking.isRejected, false);
+    assert.strictEqual(storedBooking.cancellationRefund, undefined);
+    assert.deepStrictEqual(storeBooking.firstCall.args[2], {
+      unset: ["cancellationRefund"],
+    });
   });
 });

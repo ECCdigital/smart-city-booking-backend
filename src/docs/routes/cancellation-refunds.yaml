@@ -151,6 +151,8 @@
     description: |
       Without an override, each booking uses its current policy proposal. An
       optional `refundPercentage` applies uniformly to every booking in the group.
+      Consistency validation failures return HTTP 200 with `success: false`
+      (same envelope as other group-booking mutation endpoints).
     security:
       - bearerAuth: []
     parameters:
@@ -160,12 +162,14 @@
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/BookingCancellationRequest"
+            $ref: "#/components/schemas/GroupBookingCancellationRequest"
     responses:
       "200":
-        description: Group booking cancelled
+        description: |
+          Group booking cancelled (`success: true`) or consistency validation
+          failed (`success: false` with `errors`).
       "400":
-        description: Invalid refund percentage or inconsistent group booking
+        description: Invalid refund percentage
       "401":
         description: Not authenticated
       "403":
@@ -223,6 +227,23 @@ components:
               type: string
             bic:
               type: string
+
+    GroupBookingCancellationRequest:
+      type: object
+      description: |
+        Group cancellation body. `bankDetails` is not supported for aggregated
+        group cancellation documents.
+      properties:
+        reason:
+          type: string
+        skipCancellation:
+          type: boolean
+          description: Skip generation of the cancellation document.
+        refundPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Optional administrator override applied to every booking.
 
     CancellationRefundCalculation:
       type: object

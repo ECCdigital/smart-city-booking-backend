@@ -308,6 +308,7 @@ describe("PdfService document generation (rendering only)", () => {
     const html = result.buffer.toString();
     assert.ok(html.includes("50 % Erstattung"));
     assert.ok(html.includes("12 Kalendertage"));
+    assert.ok(html.includes("Automatisch nach Mandantenregel"));
     assert.ok(html.includes("-59,50"));
     assert.ok(html.includes("59,50"));
     assert.ok(!html.includes("-119,00"));
@@ -369,6 +370,8 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("2026-0014-1"));
     assert.ok(html.includes("pdf-items--detailed booked-items"));
     assert.ok(html.includes("Details / Artikel:"));
+    assert.ok(html.includes("Automatisch nach Mandantenregel"));
+    assert.ok(!html.includes("Manuell durch Administration"));
     assert.match(html, /Buchung\s+booking-1/);
     assert.match(html, /Buchung\s+booking-2/);
     assert.ok(html.includes("-178,50"));

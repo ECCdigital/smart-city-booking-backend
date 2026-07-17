@@ -9,6 +9,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Cancellation PDFs label policy-driven administrator refunds as automatic tenant-rule calculations; “Manuell durch Administration” only appears when an admin override was applied
+- Unrejecting a booking clears persisted `cancellationRefund` via `$unset` so the audit field is removed from MongoDB
 - Aggregated PDF item tables keep article detail rows visually connected to booking rows and render valid single-column totals when booking metadata columns are hidden; single-booking total amounts stay right-aligned in detailed tables
 - Cancellation numbers no longer default to a `Storno` prefix; an optional `cancellationNumberPrefix` is included in the cancellation number and PDF filename only when configured on the tenant (same pattern as invoice numbers)
 - Rule-engine aggregate email action tests mock `TenantManager.getTenant` and validate tenant existence before reading `tenant.name`, fixing timeouts in `rule-actions.test.js`

@@ -687,12 +687,16 @@ class BookingService {
         booking.couponCode = oldBooking.couponCode;
         booking._couponUsed = oldBooking._couponUsed;
         booking.rejectionReason = "";
-        booking.cancellationRefund = undefined;
+        delete booking.cancellationRefund;
       }
 
       booking.validate();
 
-      await BookingManager.storeBooking(booking);
+      await BookingManager.storeBooking(
+        booking,
+        true,
+        onUnreject ? { unset: ["cancellationRefund"] } : undefined,
+      );
 
       const onCommit = !oldBooking.isCommitted && isCommit;
       const onPay = !oldBooking.isPayed && isPayed;

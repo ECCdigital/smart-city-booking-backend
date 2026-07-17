@@ -119,7 +119,7 @@
           {{refundPercentage}} % Erstattung ({{refundAmount}}),
           {{calculationMode}}{{#unless @last}}<br />{{/unless}} {{/each}}
           {{else}} {{daysBeforeStartLabel}} Kalendertage vor Buchungsbeginn,
-          {{refundPercentage}} % Erstattung.{{/if}}
+          {{refundPercentage}} % Erstattung, {{calculationMode}}.{{/if}}
         </div>
         {{#if alreadyPaid}}
         <div class="refund-note">

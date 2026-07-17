@@ -1382,7 +1382,10 @@ class PdfService {
 
   static _buildCancellationCalculationData(calculation) {
     let calculationMode = "Automatisch durch das System";
-    if (calculation.origin === "user") {
+    if (
+      calculation.origin === "user" ||
+      (calculation.origin === "admin" && !calculation.adminOverride)
+    ) {
       calculationMode = "Automatisch nach Mandantenregel";
     } else if (calculation.origin === "admin") {
       calculationMode = "Manuell durch Administration";

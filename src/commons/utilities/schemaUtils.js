@@ -96,7 +96,9 @@ class SchemaUtils {
       if (typeof field.validate === "function") {
         const result = field.validate(value, obj);
         if (result !== true) {
-          addError(key, result);
+          // `false` is the Mongoose-compatible failure signal; map it to the
+          // SchemaUtils error code used by shared schema definitions.
+          addError(key, result === false ? "validate" : result);
         }
       }
 
