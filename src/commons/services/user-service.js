@@ -337,6 +337,7 @@ class UserService {
     firstName,
     lastName,
     keycloakId = null,
+    syncSelfBookingNames = true,
   }) {
     const normalizedUserId = String(userId || "")
       .trim()
@@ -367,11 +368,13 @@ class UserService {
       throw { message: "User not found", status: 404 };
     }
 
-    await UserService.syncSelfBookingNames(
-      updated.id,
-      normalizedFirstName,
-      normalizedLastName,
-    );
+    if (syncSelfBookingNames !== false) {
+      await UserService.syncSelfBookingNames(
+        updated.id,
+        normalizedFirstName,
+        normalizedLastName,
+      );
+    }
 
     return {
       id: updated.id,
