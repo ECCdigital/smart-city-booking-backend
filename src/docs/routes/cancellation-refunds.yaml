@@ -1,3 +1,67 @@
+/api/{tenant}/bookings/{bookingId}/cancellation-refund-preview/public:
+  get:
+    tags:
+      - Bookings
+    summary: Preview cancellation refund for a customer
+    description: |
+      Returns the current tenant-policy refund for a user self-cancellation.
+      Requires the booking owner name (same check as verify-ownership). No JWT.
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationBookingIdParam"
+      - name: name
+        in: query
+        required: true
+        description: Booking owner name used for ownership verification
+        schema:
+          type: string
+    responses:
+      "200":
+        description: Customer-safe refund preview
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCancellationRefundPreview"
+      "400":
+        description: Missing required parameters
+      "401":
+        description: Booking name mismatch
+      "403":
+        description: User cancellation disabled or booking already rejected
+      "404":
+        description: Booking not found
+
+/api/{tenant}/bookings/{bookingId}/hooks/{hookId}/cancellation-refund-preview:
+  get:
+    tags:
+      - Bookings
+    summary: Preview cancellation refund via reject hook
+    description: |
+      Returns the current tenant-policy refund for a pending REJECT hook.
+      Access is gated by a valid hook id from the verification email. No JWT.
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationBookingIdParam"
+      - name: hookId
+        in: path
+        required: true
+        description: Pending REJECT hook identifier
+        schema:
+          type: string
+    responses:
+      "200":
+        description: Customer-safe refund preview
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerCancellationRefundPreview"
+      "400":
+        description: Missing required parameters
+      "403":
+        description: User cancellation disabled or booking already rejected
+      "404":
+        description: Booking or hook not found
+
 /api/{tenant}/bookings/{bookingId}/cancellation-refund-preview:
   get:
     tags:

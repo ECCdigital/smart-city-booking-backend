@@ -637,6 +637,54 @@ class BookingController {
     }
   }
 
+  static async getPublicCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const name = request.query.name;
+
+      if (!tenantId || !bookingId || !name) {
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const preview = await BookingService.getPublicCancellationRefundPreview(
+        tenantId,
+        bookingId,
+        name,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
+  static async getHookCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const hookId = request.params.hookId;
+
+      if (!tenantId || !bookingId || !hookId) {
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const preview = await BookingService.getHookCancellationRefundPreview(
+        tenantId,
+        bookingId,
+        hookId,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
   static async rejectBooking(request, response) {
     try {
       const tenantId = request.params.tenant;

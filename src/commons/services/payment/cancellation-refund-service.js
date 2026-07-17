@@ -132,6 +132,48 @@ class CancellationRefundService {
       });
     }
   }
+
+  /**
+   * Build Handlebars-friendly refund fields for cancellation mails.
+   * Accepts a full calculation or a customer preview object.
+   */
+  static toMailTemplateData(calculation) {
+    if (!calculation || typeof calculation !== "object") {
+      return {
+        hasRefundPreview: false,
+        originalAmountEur: 0,
+        refundAmountEur: 0,
+        cancellationFeeEur: 0,
+        refundPercentage: 0,
+        daysBeforeStart: null,
+        hasCancellationFee: false,
+      };
+    }
+
+    const originalAmountEur = Number(calculation.originalAmountEur) || 0;
+    const refundAmountEur = Number(calculation.refundAmountEur) || 0;
+    const cancellationFeeEur = Number(calculation.cancellationFeeEur) || 0;
+    const refundPercentage = Number(
+      calculation.appliedRefundPercentage ??
+        calculation.suggestedRefundPercentage ??
+        0,
+    );
+    const daysBeforeStart =
+      calculation.daysBeforeStart === undefined ||
+      calculation.daysBeforeStart === null
+        ? null
+        : Number(calculation.daysBeforeStart);
+
+    return {
+      hasRefundPreview: originalAmountEur > 0,
+      originalAmountEur,
+      refundAmountEur,
+      cancellationFeeEur,
+      refundPercentage,
+      daysBeforeStart,
+      hasCancellationFee: cancellationFeeEur > 0,
+    };
+  }
 }
 
 module.exports = {

@@ -116,4 +116,80 @@ describe("cancellation refund controllers", function () {
     assert.strictEqual(res.status.calledWith(200), true);
     assert.strictEqual(res.send.calledWith(preview), true);
   });
+
+  it("returns a public refund preview when ownership matches", async function () {
+    const preview = {
+      bookingId: "booking-1",
+      originalAmountEur: 100,
+      refundAmountEur: 50,
+      cancellationFeeEur: 50,
+      suggestedRefundPercentage: 50,
+      appliedRefundPercentage: 50,
+      daysBeforeStart: 5,
+      appliedTierDays: 0,
+    };
+    sandbox
+      .stub(BookingService, "getPublicCancellationRefundPreview")
+      .resolves(preview);
+    const res = response(sandbox);
+
+    await BookingController.getPublicCancellationRefundPreview(
+      {
+        params: { tenant: "tenant-1", id: "booking-1" },
+        query: { name: "Max Mustermann" },
+      },
+      res,
+    );
+
+    assert.strictEqual(res.status.calledWith(200), true);
+    assert.strictEqual(res.send.calledWith(preview), true);
+  });
+
+  it("rejects a public refund preview without a name", async function () {
+    const preview = sandbox.stub(
+      BookingService,
+      "getPublicCancellationRefundPreview",
+    );
+    const res = response(sandbox);
+
+    await BookingController.getPublicCancellationRefundPreview(
+      {
+        params: { tenant: "tenant-1", id: "booking-1" },
+        query: {},
+      },
+      res,
+    );
+
+    assert.strictEqual(res.status.calledWith(400), true);
+    assert.strictEqual(preview.called, false);
+  });
+
+  it("returns a hook-scoped refund preview", async function () {
+    const preview = {
+      bookingId: "booking-1",
+      originalAmountEur: 80,
+      refundAmountEur: 80,
+      cancellationFeeEur: 0,
+      suggestedRefundPercentage: 100,
+      appliedRefundPercentage: 100,
+    };
+    sandbox
+      .stub(BookingService, "getHookCancellationRefundPreview")
+      .resolves(preview);
+    const res = response(sandbox);
+
+    await BookingController.getHookCancellationRefundPreview(
+      {
+        params: {
+          tenant: "tenant-1",
+          id: "booking-1",
+          hookId: "hook-1",
+        },
+      },
+      res,
+    );
+
+    assert.strictEqual(res.status.calledWith(200), true);
+    assert.strictEqual(res.send.calledWith(preview), true);
+  });
 });

@@ -227,14 +227,43 @@ class MailSenderService {
     const sendBCC = this.resolve(mailType.sendBCC, ctx);
     const addRejectionLink = this.resolve(mailType.addRejectionLink, ctx);
     const overrideSource = getSnippetOverride(tenant, mailType.templateName);
-    const { paymentUrl, cancelReason, rejectionReason, verifyRejectionUrl } =
-      templateData;
+    const {
+      paymentUrl,
+      cancelReason,
+      rejectionReason,
+      verifyRejectionUrl,
+      hasRefundPreview,
+      originalAmountEur,
+      refundAmountEur,
+      cancellationFeeEur,
+      refundPercentage,
+      daysBeforeStart,
+      hasCancellationFee,
+    } = templateData;
 
     const renderForBooking = (booking) => {
+      const refundVars =
+        typeof hasRefundPreview === "boolean"
+          ? {
+              hasRefundPreview,
+              originalAmountEur,
+              refundAmountEur,
+              cancellationFeeEur,
+              refundPercentage,
+              daysBeforeStart,
+              hasCancellationFee,
+            }
+          : {};
+
       const variables = buildOverrideTemplateVariables({
         tenant,
         booking,
-        extra: { verifyRejectionUrl },
+        extra: {
+          verifyRejectionUrl,
+          cancelReason,
+          rejectionReason,
+          ...refundVars,
+        },
       });
 
       const message = renderSnippet(mailType.templateName, variables, {

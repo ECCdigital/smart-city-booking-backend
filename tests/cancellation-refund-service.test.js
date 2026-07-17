@@ -187,4 +187,31 @@ describe("CancellationRefundService", function () {
         error.code === "invalid_refund_percentage" && error.statusCode === 400,
     );
   });
+
+  it("maps refund calculations to mail template variables", function () {
+    const mailData = CancellationRefundService.toMailTemplateData({
+      originalAmountEur: 100,
+      refundAmountEur: 50,
+      cancellationFeeEur: 50,
+      appliedRefundPercentage: 50,
+      daysBeforeStart: 7,
+    });
+
+    assert.strictEqual(mailData.hasRefundPreview, true);
+    assert.strictEqual(mailData.refundPercentage, 50);
+    assert.strictEqual(mailData.hasCancellationFee, true);
+    assert.strictEqual(mailData.daysBeforeStart, 7);
+  });
+
+  it("marks zero-amount bookings as without refund preview", function () {
+    const mailData = CancellationRefundService.toMailTemplateData({
+      originalAmountEur: 0,
+      refundAmountEur: 0,
+      cancellationFeeEur: 0,
+      suggestedRefundPercentage: 100,
+    });
+
+    assert.strictEqual(mailData.hasRefundPreview, false);
+    assert.strictEqual(mailData.hasCancellationFee, false);
+  });
 });

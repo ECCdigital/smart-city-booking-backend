@@ -180,6 +180,14 @@ Tenant owners configure `cancellationRefundTiers` through the existing tenant cr
 
 Returns the current policy proposal for an administrator. **Requires JWT and booking update permission.**
 
+### GET /api/:tenant/bookings/:id/cancellation-refund-preview/public?name=
+
+Returns a customer-safe refund preview for self-cancellation. **Requires matching booking owner name. No JWT.**
+
+### GET /api/:tenant/bookings/:id/hooks/:hookId/cancellation-refund-preview
+
+Returns a customer-safe refund preview for a pending REJECT verification hook. **No JWT.**
+
 ### POST /api/:tenant/bookings/:id/reject
 
 Cancels or rejects a booking. Administrators may send an integer `refundPercentage` from 0 through 100. If omitted, the current policy proposal is used.
@@ -192,7 +200,7 @@ Returns per-booking calculations and aggregate amounts for a group booking. **Re
 
 Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group.
 
-Customer self-cancellations always use the current tenant policy when the verification link is released. Rule-engine and workflow cancellations retain a full refund. Refunds are documented for manual processing; payment providers are not called automatically.
+Customer self-cancellations always use the current tenant policy when the verification link is released. Expected refund amounts are exposed via the public/hook preview endpoints and included in verify-rejection and booking-cancel mails. Rule-engine and workflow cancellations retain a full refund. Refunds are documented for manual processing; payment providers are not called automatically.
 
 ## Other categories
 

@@ -45,6 +45,7 @@ const {
   BaseError,
   MethodNotAllowedError,
   ForbiddenError,
+  UnauthorizedError,
 } = require("../../../errors/BaseError");
 const { resolveCheckoutId } = require("../../utilities/checkout-utils");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
@@ -1058,6 +1059,81 @@ class BookingService {
     };
   }
 
+  static toCustomerCancellationRefundPreview(calculation, bookingId) {
+    return {
+      bookingId,
+      originalAmountEur: calculation.originalAmountEur,
+      refundAmountEur: calculation.refundAmountEur,
+      cancellationFeeEur: calculation.cancellationFeeEur,
+      suggestedRefundPercentage: calculation.suggestedRefundPercentage,
+      appliedRefundPercentage: calculation.appliedRefundPercentage,
+      daysBeforeStart: calculation.daysBeforeStart,
+      appliedTierDays: calculation.appliedTierDays,
+    };
+  }
+
+  static async getUserCancellationRefundPreview(tenantId, bookingId) {
+    const [tenant, booking] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      BookingManager.getBooking(bookingId, tenantId),
+    ]);
+
+    if (!tenant) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
+    }
+    if (!booking || !booking.id) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    if (booking.isRejected === true) {
+      throw new ForbiddenError("booking_already_rejected", { bookingId });
+    }
+    if (booking.cancellationPolicy?.userCancellable !== true) {
+      throw new ForbiddenError("booking_user_cancellation_disabled", {
+        bookingId,
+      });
+    }
+
+    const calculation = CancellationRefundService.calculate({
+      tenant,
+      booking,
+      origin: CANCELLATION_ORIGINS.USER,
+    });
+
+    return this.toCustomerCancellationRefundPreview(calculation, bookingId);
+  }
+
+  static async getPublicCancellationRefundPreview(tenantId, bookingId, name) {
+    if (!name || typeof name !== "string" || !name.trim()) {
+      throw new BadRequestError("missing_name");
+    }
+
+    const ownsBooking = await this.verifyBookingOwnership(
+      tenantId,
+      bookingId,
+      name,
+    );
+    if (!ownsBooking) {
+      throw new UnauthorizedError("booking_name_mismatch", { bookingId });
+    }
+
+    return this.getUserCancellationRefundPreview(tenantId, bookingId);
+  }
+
+  static async getHookCancellationRefundPreview(tenantId, bookingId, hookId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking || !booking.id) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
+    const hook = booking.getHook ? booking.getHook(hookId) : null;
+    if (!hook || hook.type !== BOOKING_HOOK_TYPES.REJECT) {
+      throw new NotFoundError("booking_hook_not_found", { bookingId, hookId });
+    }
+
+    return this.getUserCancellationRefundPreview(tenantId, bookingId);
+  }
+
   static async getGroupCancellationRefundPreview(tenantId, groupBookingId) {
     const [tenant, groupBooking] = await Promise.all([
       TenantManager.getTenant(tenantId),
@@ -1436,12 +1512,24 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
+      const tenantEntity = await TenantManager.getTenant(tenant);
+      const refundPreview = this.toCustomerCancellationRefundPreview(
+        CancellationRefundService.calculate({
+          tenant: tenantEntity,
+          booking,
+          origin: CANCELLATION_ORIGINS.USER,
+        }),
+        booking.id,
+      );
+
       await MailController.sendVerifyBookingRejection(
         booking.mail,
         booking.id,
         booking.tenantId,
         hook.id,
         reason,
+        undefined,
+        refundPreview,
       );
 
       logger.info(
