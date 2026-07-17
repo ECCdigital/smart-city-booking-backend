@@ -179,18 +179,34 @@ class BookingManager {
    * Store a booking (create or update)
    * @param {Booking|Object} booking Booking to store
    * @param {boolean} upsert Whether to create if not exists
+   * @param {{ unset?: string[] }} [options] Optional fields to remove via $unset
    * @returns {Promise<Booking>} The stored booking
    */
-  static async storeBooking(booking, upsert = true) {
+  static async storeBooking(booking, upsert = true, options = {}) {
     const bookingEntity =
       booking instanceof Booking ? booking : new Booking(booking);
 
     bookingEntity.validate();
 
+    const unsetFields = Array.isArray(options.unset) ? options.unset : [];
+    const filter = { id: bookingEntity.id, tenantId: bookingEntity.tenantId };
+
+    if (unsetFields.length === 0) {
+      await BookingModel.updateOne(filter, bookingEntity, { upsert });
+      return bookingEntity;
+    }
+
+    for (const field of unsetFields) {
+      delete bookingEntity[field];
+    }
+
     await BookingModel.updateOne(
-      { id: bookingEntity.id, tenantId: bookingEntity.tenantId },
-      bookingEntity,
-      { upsert: upsert },
+      filter,
+      {
+        $set: bookingEntity,
+        $unset: Object.fromEntries(unsetFields.map((field) => [field, ""])),
+      },
+      { upsert },
     );
 
     return bookingEntity;

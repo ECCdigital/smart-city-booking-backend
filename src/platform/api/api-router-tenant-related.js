@@ -187,6 +187,15 @@ router.post(
   AuthenticationController.isSignedIn,
   BookingController.payBooking,
 );
+router.get(
+  "/bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  BookingController.getCancellationRefundPreview,
+);
+router.get(
+  "/bookings/:id/cancellation-refund-preview/public",
+  BookingController.getPublicCancellationRefundPreview,
+);
 router.post(
   "/bookings/:id/reject",
   AuthenticationController.isSignedIn,
@@ -199,6 +208,10 @@ router.post(
 router.get(
   "/bookings/:id/verify-ownership",
   BookingController.verifyBookingOwnership,
+);
+router.get(
+  "/bookings/:id/hooks/:hookId/cancellation-refund-preview",
+  BookingController.getHookCancellationRefundPreview,
 );
 router.get(
   "/bookings/:id/hooks/:hookId/release",
@@ -268,6 +281,11 @@ router.post(
   "/group-bookings/:id/pay",
   AuthenticationController.isSignedIn,
   GroupBookingController.payGroupBooking,
+);
+router.get(
+  "/group-bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getCancellationRefundPreview,
 );
 router.post(
   "/group-bookings/:id/reject",

@@ -216,7 +216,15 @@ function buildCancellationSampleData(
     cancellationDate: formatters.formatDate(new Date()),
     cancellationReason: "Veranstaltung wurde abgesagt",
     alreadyPaid: true,
+    daysBeforeStartLabel: "20",
+    suggestedRefundPercentage: 100,
+    refundPercentage: 100,
+    calculationMode: "Automatisch nach Mandantenregel",
+    adminOverride: false,
+    isFullRefund: true,
+    hasCancellationFee: false,
     refundAmount: formatters.formatCurrency(bruttoEur),
+    cancellationFee: formatters.formatCurrency(0),
     customerBankDetails:
       '<div class="information customer-bank-details">' +
       "<strong>Bankverbindung für die Rückerstattung:</strong><br />" +

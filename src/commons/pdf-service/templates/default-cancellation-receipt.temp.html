@@ -29,13 +29,7 @@
         border-bottom: 1px solid #ddd;
         font-weight: bold;
       }
-      .invoice-box table tr.item td {
-        border-bottom: 1px solid #eee;
-      }
-      /* Die Positionstabelle ({{{mainContent}}}) bringt ihr kompaktes
-         Standard-Styling selbst mit (table.pdf-items). Eigene Anpassungen
-         sind mit spezifischeren Selektoren möglich, z. B.
-         table.pdf-items.booked-items td { ... } */
+      /* Position tables ({{{mainContent}}}) use table.pdf-items styling from PRINT_CSS */
       .header {
         font-weight: bold;
         font-size: x-large;
@@ -107,7 +101,8 @@
           hiermit stornieren wir die Rechnung mit der Nummer
           <strong>{{originalInvoiceNumber}}</strong> vom
           {{originalInvoiceDate}}. Die nachfolgend aufgeführten Positionen
-          werden Ihnen in voller Höhe gutgeschrieben.
+          werden Ihnen {{#if isFullRefund}}in voller Höhe{{else}}anteilig gemäß
+          der nachfolgenden Berechnung{{/if}} gutgeschrieben.
         </p>
 
         {{#if cancellationReason}}
@@ -115,17 +110,32 @@
           <strong>Grund der Stornierung:</strong>
           {{cancellationReason}}
         </div>
-        {{/if}} {{#if alreadyPaid}}
+        {{/if}}
+        <div class="cancellation-note">
+          <strong>Berechnung der Erstattung:</strong><br />
+          Stornierungszeitpunkt: {{cancellationDate}}<br />
+          {{#if refundCalculations}} {{#each refundCalculations}} Buchung
+          {{bookingId}}: {{daysBeforeStartLabel}} Kalendertage vor Beginn,
+          {{refundPercentage}} % Erstattung ({{refundAmount}}),
+          {{calculationMode}}{{#unless @last}}<br />{{/unless}} {{/each}}
+          {{else}} {{daysBeforeStartLabel}} Kalendertage vor Buchungsbeginn,
+          {{refundPercentage}} % Erstattung, {{calculationMode}}.{{/if}}
+        </div>
+        {{#if alreadyPaid}}
         <div class="refund-note">
           Der bereits gezahlte Betrag in Höhe von
-          <strong>{{refundAmount}}</strong> wird Ihnen erstattet.
+          <strong>{{refundAmount}}</strong> wird Ihnen erstattet. {{#if
+          hasCancellationFee}} Der einbehaltene Betrag beläuft sich auf
+          <strong>{{cancellationFee}}</strong>.{{/if}}
         </div>
         {{#if customerBankDetails}}{{{ customerBankDetails }}}{{/if}} {{else}}
         <p>
-          Sofern noch keine Zahlung erfolgt ist, entfällt die
-          Zahlungsverpflichtung aus der ursprünglichen Rechnung. Bitte beachten
-          Sie, dass diese Stornorechnung die Rechnung
-          <strong>{{originalInvoiceNumber}}</strong> vollständig aufhebt.
+          Sofern noch keine Zahlung erfolgt ist, reduziert sich die
+          Zahlungsverpflichtung um <strong>{{refundAmount}}</strong>. {{#if
+          isFullRefund}}Die ursprüngliche Rechnung
+          <strong>{{originalInvoiceNumber}}</strong> wird damit vollständig
+          aufgehoben.{{else}}Der verbleibende Betrag in Höhe von
+          <strong>{{cancellationFee}}</strong> bleibt bestehen.{{/if}}
         </p>
         {{/if}}
       </div>

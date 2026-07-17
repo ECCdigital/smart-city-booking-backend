@@ -9,6 +9,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Cancellation PDFs label policy-driven administrator refunds as automatic tenant-rule calculations; “Manuell durch Administration” only appears when an admin override was applied
+- Unrejecting a booking clears persisted `cancellationRefund` via `$unset` so the audit field is removed from MongoDB
+- Aggregated PDF item tables keep article detail rows visually connected to booking rows and render valid single-column totals when booking metadata columns are hidden; single-booking total amounts stay right-aligned in detailed tables
+- Cancellation numbers no longer default to a `Storno` prefix; an optional `cancellationNumberPrefix` is included in the cancellation number and PDF filename only when configured on the tenant (same pattern as invoice numbers)
 - Rule-engine aggregate email action tests mock `TenantManager.getTenant` and validate tenant existence before reading `tenant.name`, fixing timeouts in `rule-actions.test.js`
 - `npm test` no longer hangs after all tests pass; Keycloak cache prune interval uses `unref()` so it does not keep the Node process alive
 - Fixed-amount coupons are now deducted from the gross checkout price instead of the net price (percentage coupons and booking discounts unchanged)
@@ -20,8 +24,12 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 - Token type detection (`classifyToken`) extracted into a shared utility used by auth middleware and `authenticateIfNeeded`
 - Manual admin bookings now set `assignedUserId` from the booking email so the assigned user can see the booking in their personal booking list
 
-
 ### Added
+
+- Group booking cancellations accept optional `bankDetails` for the aggregated cancellation PDF (same fields as single-booking reject)
+- Public and hook-scoped cancellation refund preview endpoints for customer self-cancellation, plus refund amounts in verify-rejection and booking-cancel mails
+- Tenant-wide cancellation refund tiers with calendar-day calculation, administrator previews and overrides, per-cancellation audit data, and partial single/group cancellation documents
+- Booking field `cancellationRefund` persists applied refund audit data on rejection, including when cancellation documents are skipped
 - Per-user and per-role percentage booking discounts on bookables via `bookingDiscounts` (replaces `freeBookingUsers` / `freeBookingRoles`); highest matching discount applies, then coupons
 - Checkout validate-item responses now include `bookingDiscountPercent`; `freeBookingAllowed` remains `true` when discount is 100%
 - Checkout request flag renamed from `bookWithPrice` to `bookWithoutDiscount` (inverted semantics; default `false`)

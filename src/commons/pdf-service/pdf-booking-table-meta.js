@@ -74,6 +74,8 @@ function enrichBookingTableMeta(tableMeta) {
       aggregatedInvoiceColumnCount - 1,
       0,
     ),
+    useSplitAggregatedReceiptTotals: aggregatedReceiptColumnCount > 1,
+    useSplitAggregatedInvoiceTotals: aggregatedInvoiceColumnCount > 1,
     showAggregatedPaymentColumn: showPaymentInTable,
   };
 }

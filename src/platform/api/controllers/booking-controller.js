@@ -23,6 +23,10 @@ const {
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  CancellationRefundService,
+  CANCELLATION_ORIGINS,
+} = require("../../../commons/services/payment/cancellation-refund-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -599,14 +603,104 @@ class BookingController {
     }
   }
 
+  static async getCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const user = request.user;
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+      if (!booking) {
+        return response.sendStatus(404);
+      }
+
+      const hasPermission = await PermissionsService._allowUpdate(
+        booking,
+        user.id,
+        tenantId,
+        RolePermission.MANAGE_BOOKINGS,
+      );
+      if (!hasPermission) {
+        return response.sendStatus(403);
+      }
+
+      const preview = await BookingService.getCancellationRefundPreview(
+        tenantId,
+        bookingId,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
+  static async getPublicCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const name = request.query.name;
+
+      if (!tenantId || !bookingId || !name) {
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const preview = await BookingService.getPublicCancellationRefundPreview(
+        tenantId,
+        bookingId,
+        name,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
+  static async getHookCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const hookId = request.params.hookId;
+
+      if (!tenantId || !bookingId || !hookId) {
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const preview = await BookingService.getHookCancellationRefundPreview(
+        tenantId,
+        bookingId,
+        hookId,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
   static async rejectBooking(request, response) {
     try {
       const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
-      const { reason, skipCancellation, bankDetails } = request.body || {};
+      const { reason, skipCancellation, bankDetails, refundPercentage } =
+        request.body || {};
       if (!id) {
         return response.sendStatus(400);
+      }
+      if (refundPercentage !== undefined) {
+        try {
+          CancellationRefundService.validateRefundPercentage(refundPercentage);
+        } catch (error) {
+          return response.status(400).send(error.code);
+        }
       }
 
       const booking = await BookingManager.getBooking(id, tenantId);
@@ -630,6 +724,11 @@ class BookingController {
           false,
           Boolean(skipCancellation),
           bankDetails || null,
+          {
+            origin: CANCELLATION_ORIGINS.ADMIN,
+            refundPercentage,
+            cancelledByUserId: user.id,
+          },
         );
         return response.sendStatus(200);
       } else {
@@ -704,6 +803,7 @@ class BookingController {
             false,
             false,
             bankDetails || null,
+            { origin: CANCELLATION_ORIGINS.USER },
           );
         } else {
           return response.sendStatus(400);

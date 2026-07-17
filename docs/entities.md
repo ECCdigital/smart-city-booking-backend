@@ -43,6 +43,10 @@ Example:
   "invoiceTemplate": "<html>...</html>",
   "invoiceNumberPrefix": "exmp",
   "invoiceCount": { "2024": 1 },
+  "cancellationRefundTiers": [
+    { "daysBeforeStart": 20, "refundPercentage": 100 },
+    { "daysBeforeStart": 0, "refundPercentage": 50 }
+  ],
   "paymentPurposeSuffix": "Example 123 4 56",
   "applications": [],
   "maxBookingAdvanceInMonths": 12,
@@ -57,6 +61,8 @@ Example:
 ```
 
 > **Note:** Sensitive information (e.g. `noreplyPassword`, payment-related secrets) is stored encrypted in the database.
+
+`cancellationRefundTiers` defines the tenant-wide refund proposal at cancellation time. Thresholds use calendar days in `Europe/Berlin`. An empty array preserves the default full refund. Below the lowest configured threshold, that tier continues to apply.
 
 ### Roles
 
@@ -299,58 +305,58 @@ Example:
 
 Key fields of a bookable:
 
-| Field                 | Description                                                                                                                                                 |
-|-----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| id                    | Unique identifier of the bookable.                                                                                                                          |
-| tenantId              | Tenant to which the bookable belongs.                                                                                                                       |
-| type                  | Type of the bookable (e.g. `room`, `location`, `resource`, `ticket`).                                                                                       |
-| title                 | Human readable title/name.                                                                                                                                  |
-| description           | Description of the bookable.                                                                                                                                |
-| location              | Geo object with `coordinates`, `display_address`, `address`, and `meta` (same shape as Event location). |
-| isPublic              | If `false`, the bookable is hidden from public listings.                                                                                                    |
-| isBookable            | If `false`, the bookable cannot be checked out.                                                                                                             |
-| amount                | Available capacity/amount. `null` means unlimited.                                                                                                         |
-| minBookingDuration    | Minimum booking duration in minutes (if schedule-related).                                                                                                  |
-| maxBookingDuration    | Maximum booking duration in minutes (if schedule-related).                                                                                                  |
-| autoCommitBooking     | If `true`, bookings are automatically committed / forwarded to payment.                                                                                    |
-| isScheduleRelated     | If `true`, the user is asked to choose a booking time during checkout.                                                                                    |
-| isTimePeriodRelated   | If `true`, the user selects one of the predefined `timePeriods`.                                                                                           |
-| timePeriods           | Weekly repeating time windows when the bookable can be used.                                                                                               |
-| isOpeningHoursRelated | If `true`, availability is derived from `openingHours`.                                                                                                     |
-| openingHours          | Regular opening hours per weekday.                                                                                                                          |
-| preparationLeadTimeMinutes | Minimum preparation time in minutes before booking start. Lead-time enforcement is active when `isScheduleRelated`, `isTimePeriodRelated`, or `isBlockPeriodRelated` is `true`, `preparationLeadTimeMinutes` is greater than `0`, and `serviceHours` is non-empty. |
-| serviceHours          | Service windows when preparation can take place (same structure as `openingHours`, independent of opening hours). Only evaluated together with `preparationLeadTimeMinutes` on schedule-, time-period-, and block-period-related bookables. |
-| bufferTimeBeforeMinutes | Optional capacity buffer before each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`. Blocks back-to-back bookings in calendar and checkout capacity checks. |
-| bufferTimeAfterMinutes | Optional capacity buffer after each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`. |
-| isSpecialOpeningHoursRelated | If `true`, `specialOpeningHours` override the regular opening hours for specific dates.                                                              |
-| specialOpeningHours   | Special opening hours for specific dates.                                                                                                                   |
-| isLongRange           | If `true`, long-range bookings (e.g. weeks/months) are enabled.                                                                                            |
-| longRangeOptions      | Configuration for long-range bookings (e.g. type = `week` or `month`).                                                                                    |
-| isBlockPeriodRelated  | If `true`, availability uses `blockPeriods` (recurring weekday/time windows).                                                                              |
-| blockPeriods          | Block periods with `id`, `label`, `startWeekday`, `startTime`, `endWeekday`, `endTime`.                                                                    |
-| priceCategories       | List of price categories including price, interval, affected weekdays and holidays.                                                                       |
-| priceType             | Price type (e.g. `per-hour`, `per-day`, `per-item`, `per-square-meter`).                                                                                   |
-| priceValueAddedTax    | VAT rate (in percent) applied to this bookable.                                                                                                            |
-| enableCoupons         | If `true`, coupons can be applied to this bookable.                                                                                                       |
-| tags                  | Tags used for internal grouping and filtering.                                                                                                             |
-| flags                 | Feature flags highlighted to users (e.g. "barrier-free").                                                                                                |
-| relatedBookableIds    | IDs of bookables related to this bookable.                                                                                                                 |
-| checkoutBookableIds   | Additional bookables for checkout: `{ bookableId, mandatory }`.                                                                                          |
-| requiresLogin         | If `true`, only authenticated users may book.                                                                                                              |
-| cancellationPolicy    | e.g. `{ userCancellable: true, contactHint: "" }` — whether users can cancel bookings themselves; `contactHint` is an optional message shown in emails when user cancellation is disabled.                                                                           |
-| permittedUsers        | List of user IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
-| permittedRoles        | List of role IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                     |
-| bookingDiscounts      | Per-user and per-role booking discounts (`users[].userId`, `users[].discountPercent`, `roles[].roleId`, `roles[].discountPercent`; integer 0–100). Highest matching discount applies. |
-| attachments           | Attachments: `id`, `title`, `caption`, `type`, `url`, `show`, `required`, `mailAttach`.                                                                     |
-| lockerDetails         | Configuration for locker integrations (e.g. units).                                                                                                       |
-| requiredFields        | Checkout fields required from the user (default: `address`, `zipCode`, `city`).                                                                            |
-| externalProviders     | External pricing/availability providers: `active`, `provider`, `handles`, `config`.                                                                         |
-| customFieldDefinitions| Tenant/bookable-level custom field definitions.                                                                                                            |
-| customFieldValues     | Stored values for custom fields on this bookable.                                                                                                          |
-| eventId               | ID of the related event (for `ticket` bookables).                                                                                                         |
-| ownerUserId           | ID of the user that owns/manages this bookable.                                                                                                           |
-| timeCreated           | Timestamp when the bookable was created.                                                                                                                   |
-| timeUpdated           | Timestamp when the bookable was last updated.                                                                                                              |
+| Field                        | Description                                                                                                                                                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id                           | Unique identifier of the bookable.                                                                                                                                                                                                                                 |
+| tenantId                     | Tenant to which the bookable belongs.                                                                                                                                                                                                                              |
+| type                         | Type of the bookable (e.g. `room`, `location`, `resource`, `ticket`).                                                                                                                                                                                              |
+| title                        | Human readable title/name.                                                                                                                                                                                                                                         |
+| description                  | Description of the bookable.                                                                                                                                                                                                                                       |
+| location                     | Geo object with `coordinates`, `display_address`, `address`, and `meta` (same shape as Event location).                                                                                                                                                            |
+| isPublic                     | If `false`, the bookable is hidden from public listings.                                                                                                                                                                                                           |
+| isBookable                   | If `false`, the bookable cannot be checked out.                                                                                                                                                                                                                    |
+| amount                       | Available capacity/amount. `null` means unlimited.                                                                                                                                                                                                                 |
+| minBookingDuration           | Minimum booking duration in minutes (if schedule-related).                                                                                                                                                                                                         |
+| maxBookingDuration           | Maximum booking duration in minutes (if schedule-related).                                                                                                                                                                                                         |
+| autoCommitBooking            | If `true`, bookings are automatically committed / forwarded to payment.                                                                                                                                                                                            |
+| isScheduleRelated            | If `true`, the user is asked to choose a booking time during checkout.                                                                                                                                                                                             |
+| isTimePeriodRelated          | If `true`, the user selects one of the predefined `timePeriods`.                                                                                                                                                                                                   |
+| timePeriods                  | Weekly repeating time windows when the bookable can be used.                                                                                                                                                                                                       |
+| isOpeningHoursRelated        | If `true`, availability is derived from `openingHours`.                                                                                                                                                                                                            |
+| openingHours                 | Regular opening hours per weekday.                                                                                                                                                                                                                                 |
+| preparationLeadTimeMinutes   | Minimum preparation time in minutes before booking start. Lead-time enforcement is active when `isScheduleRelated`, `isTimePeriodRelated`, or `isBlockPeriodRelated` is `true`, `preparationLeadTimeMinutes` is greater than `0`, and `serviceHours` is non-empty. |
+| serviceHours                 | Service windows when preparation can take place (same structure as `openingHours`, independent of opening hours). Only evaluated together with `preparationLeadTimeMinutes` on schedule-, time-period-, and block-period-related bookables.                        |
+| bufferTimeBeforeMinutes      | Optional capacity buffer before each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`. Blocks back-to-back bookings in calendar and checkout capacity checks.                                                       |
+| bufferTimeAfterMinutes       | Optional capacity buffer after each booking (minutes). Active only when `isScheduleRelated` is `true` and value is greater than `0`.                                                                                                                               |
+| isSpecialOpeningHoursRelated | If `true`, `specialOpeningHours` override the regular opening hours for specific dates.                                                                                                                                                                            |
+| specialOpeningHours          | Special opening hours for specific dates.                                                                                                                                                                                                                          |
+| isLongRange                  | If `true`, long-range bookings (e.g. weeks/months) are enabled.                                                                                                                                                                                                    |
+| longRangeOptions             | Configuration for long-range bookings (e.g. type = `week` or `month`).                                                                                                                                                                                             |
+| isBlockPeriodRelated         | If `true`, availability uses `blockPeriods` (recurring weekday/time windows).                                                                                                                                                                                      |
+| blockPeriods                 | Block periods with `id`, `label`, `startWeekday`, `startTime`, `endWeekday`, `endTime`.                                                                                                                                                                            |
+| priceCategories              | List of price categories including price, interval, affected weekdays and holidays.                                                                                                                                                                                |
+| priceType                    | Price type (e.g. `per-hour`, `per-day`, `per-item`, `per-square-meter`).                                                                                                                                                                                           |
+| priceValueAddedTax           | VAT rate (in percent) applied to this bookable.                                                                                                                                                                                                                    |
+| enableCoupons                | If `true`, coupons can be applied to this bookable.                                                                                                                                                                                                                |
+| tags                         | Tags used for internal grouping and filtering.                                                                                                                                                                                                                     |
+| flags                        | Feature flags highlighted to users (e.g. "barrier-free").                                                                                                                                                                                                          |
+| relatedBookableIds           | IDs of bookables related to this bookable.                                                                                                                                                                                                                         |
+| checkoutBookableIds          | Additional bookables for checkout: `{ bookableId, mandatory }`.                                                                                                                                                                                                    |
+| requiresLogin                | If `true`, only authenticated users may book.                                                                                                                                                                                                                      |
+| cancellationPolicy           | e.g. `{ userCancellable: true, contactHint: "" }` — whether users can cancel bookings themselves; `contactHint` is an optional message shown in emails when user cancellation is disabled.                                                                         |
+| permittedUsers               | List of user IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                                                                                                                              |
+| permittedRoles               | List of role IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                                                                                                                              |
+| bookingDiscounts             | Per-user and per-role booking discounts (`users[].userId`, `users[].discountPercent`, `roles[].roleId`, `roles[].discountPercent`; integer 0–100). Highest matching discount applies.                                                                              |
+| attachments                  | Attachments: `id`, `title`, `caption`, `type`, `url`, `show`, `required`, `mailAttach`.                                                                                                                                                                            |
+| lockerDetails                | Configuration for locker integrations (e.g. units).                                                                                                                                                                                                                |
+| requiredFields               | Checkout fields required from the user (default: `address`, `zipCode`, `city`).                                                                                                                                                                                    |
+| externalProviders            | External pricing/availability providers: `active`, `provider`, `handles`, `config`.                                                                                                                                                                                |
+| customFieldDefinitions       | Tenant/bookable-level custom field definitions.                                                                                                                                                                                                                    |
+| customFieldValues            | Stored values for custom fields on this bookable.                                                                                                                                                                                                                  |
+| eventId                      | ID of the related event (for `ticket` bookables).                                                                                                                                                                                                                  |
+| ownerUserId                  | ID of the user that owns/manages this bookable.                                                                                                                                                                                                                    |
+| timeCreated                  | Timestamp when the bookable was created.                                                                                                                                                                                                                           |
+| timeUpdated                  | Timestamp when the bookable was last updated.                                                                                                                                                                                                                      |
 
 ### Booking
 
@@ -396,38 +402,51 @@ Example:
 
 Key fields of a booking:
 
-| Field           | Description                                                                                                                           |
-|-----------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| id              | Unique identifier of the booking.                                                                                                     |
-| tenantId        | Tenant to which the booking belongs.                                                                                                  |
-| assignedUserId  | ID of the user who made the booking (may be empty for guest bookings).                                                                |
-| timeBegin       | Start timestamp of the booking (epoch millis).                                                                                        |
-| timeEnd         | End timestamp of the booking (epoch millis).                                                                                          |
-| timeCreated     | Timestamp when the booking was created.                                                                                               |
-| timePaid        | Timestamp when the booking was paid (if applicable).                                                                                  |
-| bookableItems   | Array of booked items (bookable id, tenant, amount, and snapshot of the used bookable configuration).                                |
-| couponCode      | Coupon code applied to the booking (if any).                                                                                          |
-| _couponUsed     | Snapshot of the used coupon (id, tenant, discount and validity).                                                                      |
-| priceEur        | Total price in Euro (without additional taxes).                                                                                       |
-| vatIncludedEur  | VAT amount included in `priceEur`.                                                                                                     |
-| isCommitted     | Whether the booking is committed (confirmed) from the system’s perspective.                                                           |
-| isPayed         | Whether the booking has been paid.                                                                                                    |
-| isRejected      | Whether the booking has been rejected.                                                                                                |
-| name            | Name of the person who made the booking.                                                                                              |
-| company         | Company of the person who made the booking.                                                                                           |
-| street          | Street address of the person who made the booking.                                                                                    |
-| zipCode         | Zip code of the person who made the booking.                                                                                          |
-| location        | City or location of the person who made the booking.                                                                                  |
-| mail            | Email address of the person who made the booking.                                                                                     |
-| phone           | Phone number of the person who made the booking.                                                                                      |
-| comment         | Comment or special requests from the customer.                                                                                        |
-| internalComments| Internal comments visible only to administrators.                                                                                     |
-| rejectionReason | Reason why a booking has been rejected (if applicable).                                                                              |
-| attachments     | Attachments related to the booking.                                                                                                   |
-| lockerInfo      | Information about locker assignments associated with this booking.                                                                    |
-| paymentProvider | Identifier of the payment provider used (if any).                                                                                     |
-| paymentMethod   | Human readable payment method (e.g. credit card, invoice).                                                                           |
-| hooks           | Technical hooks triggered for this booking (e.g. webhooks).                                                                          |
+| Field            | Description                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| id               | Unique identifier of the booking.                                                                                   |
+| tenantId         | Tenant to which the booking belongs.                                                                                |
+| assignedUserId   | ID of the user who made the booking (may be empty for guest bookings).                                              |
+| timeBegin        | Start timestamp of the booking (epoch millis).                                                                      |
+| timeEnd          | End timestamp of the booking (epoch millis).                                                                        |
+| timeCreated      | Timestamp when the booking was created.                                                                             |
+| timePaid         | Timestamp when the booking was paid (if applicable).                                                                |
+| bookableItems    | Array of booked items (bookable id, tenant, amount, and snapshot of the used bookable configuration).               |
+| couponCode       | Coupon code applied to the booking (if any).                                                                        |
+| \_couponUsed     | Snapshot of the used coupon (id, tenant, discount and validity).                                                    |
+| priceEur         | Total price in Euro (without additional taxes).                                                                     |
+| vatIncludedEur   | VAT amount included in `priceEur`.                                                                                  |
+| isCommitted      | Whether the booking is committed (confirmed) from the system’s perspective.                                         |
+| isPayed          | Whether the booking has been paid.                                                                                  |
+| isRejected       | Whether the booking has been rejected.                                                                              |
+| name             | Name of the person who made the booking.                                                                            |
+| company          | Company of the person who made the booking.                                                                         |
+| street           | Street address of the person who made the booking.                                                                  |
+| zipCode          | Zip code of the person who made the booking.                                                                        |
+| location         | City or location of the person who made the booking.                                                                |
+| mail             | Email address of the person who made the booking.                                                                   |
+| phone            | Phone number of the person who made the booking.                                                                    |
+| comment          | Comment or special requests from the customer.                                                                      |
+| internalComments | Internal comments visible only to administrators.                                                                   |
+| rejectionReason  | Reason why a booking has been rejected (if applicable).                                                             |
+| cancellationRefund | Persisted refund audit for the latest cancellation while the booking is rejected. Cleared when the cancellation is reverted. |
+| attachments      | Attachments related to the booking. Cancellation attachments include the applied refund audit data described below. |
+| lockerInfo       | Information about locker assignments associated with this booking.                                                  |
+| paymentProvider  | Identifier of the payment provider used (if any).                                                                   |
+| paymentMethod    | Human readable payment method (e.g. credit card, invoice).                                                          |
+| hooks            | Technical hooks triggered for this booking (e.g. webhooks).                                                         |
+
+Cancellation attachments may contain a `cancellation` object with:
+
+- `cancelledAt` and `daysBeforeStart`
+- original, refunded and retained Euro amounts
+- proposed and applied refund percentages
+- the applied tier threshold
+- origin (`user`, `admin`, or `system`) and administrator override status
+- the acting administrator ID, when applicable
+- a reference to the original invoice or receipt
+
+The current tenant tiers are evaluated when the cancellation is finalized; the complete policy is not copied to the booking. Payment-provider refunds are not executed automatically.
 
 ### Coupon
 

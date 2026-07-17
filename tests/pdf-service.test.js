@@ -274,6 +274,183 @@ describe("PdfService document generation (rendering only)", () => {
     assert.ok(html.includes("-119,00"));
   });
 
+  it("renders a partial cancellation with scaled amounts and audit details", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "",
+      location: "Musterstadt",
+    });
+    sinon.stub(BookingManager, "getBooking").resolves(makeBooking());
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const result = await PdfService.generateSingleCancellationReceipt(
+      "tenant-1",
+      "booking-1",
+      "ST-1-1",
+      "RE-1-1",
+      {
+        alreadyPaid: true,
+        refundCalculation: {
+          cancelledAt: Date.parse("2026-07-20T12:00:00+02:00"),
+          daysBeforeStart: 12,
+          originalAmountEur: 119,
+          suggestedRefundPercentage: 50,
+          appliedRefundPercentage: 50,
+          refundAmountEur: 59.5,
+          cancellationFeeEur: 59.5,
+          appliedTierDays: 0,
+          origin: "user",
+          adminOverride: false,
+        },
+      },
+    );
+
+    const html = result.buffer.toString();
+    assert.ok(html.includes("50 % Erstattung"));
+    assert.ok(html.includes("12 Kalendertage"));
+    assert.ok(html.includes("Automatisch nach Mandantenregel"));
+    assert.ok(html.includes("-59,50"));
+    assert.ok(html.includes("59,50"));
+    assert.ok(!html.includes("-119,00"));
+  });
+
+  it("renders aggregated cancellations using each booking refund", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "",
+      location: "Musterstadt",
+    });
+    sinon
+      .stub(BookingManager, "getBookings")
+      .resolves([makeBooking(), makeBooking({ id: "booking-2" })]);
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const cancelledAt = Date.parse("2026-07-20T12:00:00+02:00");
+    const result = await PdfService.generateAggregatedCancellationReceipt(
+      "tenant-1",
+      ["booking-1", "booking-2"],
+      "2026-0014-1",
+      "RE-1-1",
+      {
+        alreadyPaid: true,
+        groupBookingId: "group-1",
+        bankDetails: {
+          accountHolder: "Max Mustermann",
+          bankName: "Musterbank",
+          iban: "DE89370400440532013000",
+          bic: "COBADEFFXXX",
+        },
+        refundCalculations: [
+          {
+            bookingId: "booking-1",
+            cancelledAt,
+            daysBeforeStart: 12,
+            originalAmountEur: 119,
+            suggestedRefundPercentage: 100,
+            appliedRefundPercentage: 100,
+            refundAmountEur: 119,
+            cancellationFeeEur: 0,
+            appliedTierDays: 20,
+            origin: "admin",
+            adminOverride: false,
+          },
+          {
+            bookingId: "booking-2",
+            cancelledAt,
+            daysBeforeStart: 5,
+            originalAmountEur: 119,
+            suggestedRefundPercentage: 50,
+            appliedRefundPercentage: 50,
+            refundAmountEur: 59.5,
+            cancellationFeeEur: 59.5,
+            appliedTierDays: 0,
+            origin: "admin",
+            adminOverride: false,
+          },
+        ],
+      },
+    );
+
+    const html = result.buffer.toString();
+    assert.strictEqual(result.name, "Sammel-Stornorechnung-2026-0014-1.pdf");
+    assert.ok(html.includes("2026-0014-1"));
+    assert.ok(html.includes("pdf-items--detailed booked-items"));
+    assert.ok(html.includes("Details / Artikel:"));
+    assert.ok(html.includes("Automatisch nach Mandantenregel"));
+    assert.ok(!html.includes("Manuell durch Administration"));
+    assert.ok(html.includes("Bankverbindung für die Rückerstattung"));
+    assert.ok(html.includes("IBAN: DE89370400440532013000"));
+    assert.match(html, /Buchung\s+booking-1/);
+    assert.match(html, /Buchung\s+booking-2/);
+    assert.ok(html.includes("-178,50"));
+    assert.ok(html.includes("59,50"));
+  });
+
+  it("uses aggregated invoice table layout for aggregated cancellations", async () => {
+    sinon.stub(TenantManager, "getTenant").resolves({
+      id: "tenant-1",
+      cancellationTemplate: "",
+      invoiceTemplate: "",
+      location: "Musterstadt",
+      paymentPurposeSuffix: "Musterstadt",
+    });
+    sinon.stub(TenantManager, "getTenantApp").resolves({
+      daysUntilPaymentDue: 14,
+      bank: "Musterbank",
+      iban: "DE00",
+      bic: "XXX",
+    });
+    sinon
+      .stub(BookingManager, "getBookings")
+      .resolves([makeBooking(), makeBooking({ id: "booking-2" })]);
+    sinon.stub(BookableManager, "getBookables").resolves(BOOKABLES);
+
+    const invoiceResult = await PdfService.generateAggregatedInvoice(
+      "tenant-1",
+      ["booking-1", "booking-2"],
+      "2026-0014-1",
+      { groupBookingId: "group-1" },
+    );
+    const cancellationResult =
+      await PdfService.generateAggregatedCancellationReceipt(
+        "tenant-1",
+        ["booking-1", "booking-2"],
+        "2026-0014-1",
+        "2026-0014-1",
+        {
+          groupBookingId: "group-1",
+        },
+      );
+
+    const extractTable = (html) => {
+      const start = html.indexOf('<table class="pdf-items');
+      const end = html.indexOf("</table>", start) + 8;
+      return html.slice(start, end);
+    };
+    const normalizeTable = (table) =>
+      table.replace(/[−-]?\d+,\d+\s*€/g, "AMT").replace(/x/g, "×");
+
+    assert.strictEqual(
+      normalizeTable(extractTable(invoiceResult.buffer.toString())),
+      normalizeTable(extractTable(cancellationResult.buffer.toString())),
+    );
+  });
+
+  it("builds cancellation filenames from the cancellation number", () => {
+    assert.strictEqual(
+      PdfService._buildCancellationFilename("aggregated", "2026-0014-1"),
+      "Sammel-Stornorechnung-2026-0014-1.pdf",
+    );
+    assert.strictEqual(
+      PdfService._buildCancellationFilename("single", "2026-0014-1"),
+      "Stornorechnung-2026-0014-1.pdf",
+    );
+    assert.strictEqual(
+      PdfService._buildCancellationFilename("aggregated", "STO-2026-0014-1"),
+      "Sammel-Stornorechnung-STO-2026-0014-1.pdf",
+    );
+  });
+
   it("legacy templates using only bookingEntries still render", async () => {
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
@@ -366,6 +543,8 @@ describe("pdf booking table meta", () => {
       aggregatedInvoiceColumnCount: 3,
       aggregatedReceiptLabelColspan: 4,
       aggregatedInvoiceLabelColspan: 2,
+      useSplitAggregatedReceiptTotals: true,
+      useSplitAggregatedInvoiceTotals: true,
       showAggregatedPaymentColumn: true,
     });
   });
@@ -395,6 +574,78 @@ describe("pdf booking table meta", () => {
       validatePdfBookingTableMeta({ showBookingId: false }),
       null,
     );
+  });
+
+  it("keeps single-booking total amounts in right-aligned cells", () => {
+    const html = Handlebars.renderPartial("pdfBookingItemsTable", {
+      layout: "detailed",
+      tableClass: "booked-items",
+      items: [
+        {
+          title: "Tisch",
+          amount: 1,
+          unitPrice: "-20,00 €",
+          totalPrice: "-20,00 €",
+        },
+      ],
+      coupon: null,
+      totals: {
+        netto: "-20,00 €",
+        vat: "-3,80 €",
+        brutto: "-23,80 €",
+      },
+      booking: null,
+      tableMeta: resolveBookingTableMeta({}),
+    });
+
+    assert.match(
+      html,
+      /<tr class="netto">\s*<td colspan="3">Gesamt \(netto\)<\/td>\s*<td class="num">-20,00 €<\/td>/,
+    );
+    assert.match(
+      html,
+      /<tr class="brutto">\s*<td colspan="3">Gesamt \(brutto\)<\/td>\s*<td class="num">-23,80 €<\/td>/,
+    );
+
+    const { documentHtml } = PdfService._prepareDocument(
+      `<!DOCTYPE html><html><head></head><body>${html}</body></html>`,
+    );
+    assert.ok(documentHtml.includes("tr.netto td.num"));
+    assert.ok(documentHtml.includes("tr.netto td:not(.num) .num"));
+  });
+
+  it("renders single-column aggregated tables without invalid colspans", () => {
+    const tableMeta = resolveBookingTableMeta({
+      pdfBookingTableMeta: {
+        showBookingId: false,
+        showBookingPeriod: false,
+        showPaymentDate: false,
+        showPaymentMethod: false,
+      },
+    });
+    const html = Handlebars.renderPartial("pdfAggregatedBookingsTable", {
+      layout: "detailed",
+      tableMeta,
+      bookings: [
+        {
+          id: "QMEY-FCNJ",
+          period: "20.07.2026, 10:00 – 20.07.2026, 12:00",
+          netto: "0,00 €",
+          items: [{ title: "Serie", amount: 1, totalPrice: "0,00 €" }],
+          coupon: null,
+        },
+      ],
+      totals: {
+        netto: "0,00 €",
+        vat: "0,00 €",
+        brutto: "0,00 €",
+      },
+    });
+
+    assert.strictEqual(tableMeta.useSplitAggregatedInvoiceTotals, false);
+    assert.ok(!html.includes('colspan="0"'));
+    assert.ok(html.includes("Details / Artikel:"));
+    assert.ok(html.includes('colspan="1"'));
   });
 
   it("hides booking metadata in detailed receipt tables when disabled", () => {

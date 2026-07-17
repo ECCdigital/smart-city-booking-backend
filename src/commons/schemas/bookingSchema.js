@@ -16,6 +16,49 @@ const customFieldValueSchema = new Schema(
   { _id: false },
 );
 
+const originalCancellationDocumentSchema = new Schema(
+  {
+    number: { type: String, default: "" },
+    timeCreated: { type: Double, default: null },
+  },
+  { _id: false },
+);
+
+const cancellationAuditSchema = new Schema(
+  {
+    cancelledAt: { type: Double, required: true },
+    daysBeforeStart: { type: Number, default: null },
+    originalAmountEur: { type: Number, required: true, min: 0 },
+    suggestedRefundPercentage: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100,
+    },
+    appliedRefundPercentage: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100,
+    },
+    refundAmountEur: { type: Number, required: true, min: 0 },
+    cancellationFeeEur: { type: Number, required: true, min: 0 },
+    appliedTierDays: { type: Number, default: null, min: 0 },
+    origin: {
+      type: String,
+      required: true,
+      enum: ["user", "admin", "system"],
+    },
+    adminOverride: { type: Boolean, required: true },
+    cancelledByUserId: { type: String, default: null },
+    originalDocumentRef: {
+      type: originalCancellationDocumentSchema,
+      default: undefined,
+    },
+  },
+  { _id: false },
+);
+
 const attachmentSchemaDefinition = {
   type: {
     type: String,
@@ -32,6 +75,7 @@ const attachmentSchemaDefinition = {
   revision: { type: Number },
   timeCreated: { type: Double },
   mailAttach: { type: Boolean },
+  cancellation: { type: cancellationAuditSchema, default: undefined },
 };
 
 const bookingSchemaDefinition = {
@@ -102,9 +146,11 @@ const bookingSchemaDefinition = {
     type: Object,
     default: { userCancellable: true, contactHint: "" },
   },
+  cancellationRefund: { type: cancellationAuditSchema, default: undefined },
 };
 
 module.exports = {
   bookingSchemaDefinition,
   bookingHookSchemaDefinition,
+  cancellationAuditSchema,
 };

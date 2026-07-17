@@ -128,7 +128,7 @@ _Response body:_ `{ title, availability: [{ timeBegin, timeEnd, available }], _m
 
 Alias for the primary `/availability` endpoint (same V2 engine). Optional auth.
 
-### GET /api/:tenant/bookables/:id/availability/v1 *(deprecated)*
+### GET /api/:tenant/bookables/:id/availability/v1 _(deprecated)_
 
 Legacy iterative checkout-based availability. Prefer `/availability`. Optional auth.
 
@@ -171,6 +171,36 @@ _Response:_
 - **totalCapacity** — Total capacity of the bookable
 - **booked** — Number of booked units
 - **remaining** — Number of remaining units
+
+## Cancellation refunds
+
+Tenant owners configure `cancellationRefundTiers` through the existing tenant create/update API. An empty array means a full refund.
+
+### GET /api/:tenant/bookings/:id/cancellation-refund-preview
+
+Returns the current policy proposal for an administrator. **Requires JWT and booking update permission.**
+
+### GET /api/:tenant/bookings/:id/cancellation-refund-preview/public?name=
+
+Returns a customer-safe refund preview for self-cancellation. **Requires matching booking owner name. No JWT.**
+
+### GET /api/:tenant/bookings/:id/hooks/:hookId/cancellation-refund-preview
+
+Returns a customer-safe refund preview for a pending REJECT verification hook. **No JWT.**
+
+### POST /api/:tenant/bookings/:id/reject
+
+Cancels or rejects a booking. Administrators may send an integer `refundPercentage` from 0 through 100. If omitted, the current policy proposal is used.
+
+### GET /api/:tenant/group-bookings/:id/cancellation-refund-preview
+
+Returns per-booking calculations and aggregate amounts for a group booking. **Requires JWT and booking update permission.**
+
+### POST /api/:tenant/group-bookings/:id/reject
+
+Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated.
+
+Customer self-cancellations always use the current tenant policy when the verification link is released. Expected refund amounts are exposed via the public/hook preview endpoints and included in verify-rejection and booking-cancel mails. Rule-engine and workflow cancellations retain a full refund. Refunds are documented for manual processing; payment providers are not called automatically.
 
 ## Other categories
 

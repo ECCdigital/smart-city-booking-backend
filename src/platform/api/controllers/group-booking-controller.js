@@ -6,6 +6,10 @@ const BookingService = require("../../../commons/services/checkout/booking-servi
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const MailController = require("../../../commons/mail-service/mail-controller");
+const {
+  CancellationRefundService,
+  CANCELLATION_ORIGINS,
+} = require("../../../commons/services/payment/cancellation-refund-service");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -288,12 +292,57 @@ class GroupBookingController {
     }
   }
 
+  static async getCancellationRefundPreview(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const groupBookingId = req.params.id;
+      const user = req.user;
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+      );
+
+      if (!groupBooking) {
+        return res.sendStatus(404);
+      }
+
+      const hasPermission = await PermissionsService._allowUpdate(
+        groupBooking,
+        user.id,
+        tenantId,
+        RolePermission.MANAGE_BOOKINGS,
+      );
+      if (!hasPermission) {
+        return res.sendStatus(403);
+      }
+
+      const preview = await BookingService.getGroupCancellationRefundPreview(
+        tenantId,
+        groupBookingId,
+      );
+      return res.status(200).send(preview);
+    } catch (error) {
+      logger.error(error);
+      return res
+        .status(error.statusCode || 500)
+        .send(error.message || "Could not calculate cancellation refund");
+    }
+  }
+
   static async rejectGroupBooking(req, res) {
     try {
       const tenantId = req.params.tenant;
       const user = req.user;
       const groupBookingId = req.params.id;
-      const { reason, skipCancellation } = req.body;
+      const { reason, skipCancellation, bankDetails, refundPercentage } =
+        req.body || {};
+      if (refundPercentage !== undefined) {
+        try {
+          CancellationRefundService.validateRefundPercentage(refundPercentage);
+        } catch (error) {
+          return res.status(400).send(error.code);
+        }
+      }
 
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
@@ -316,6 +365,12 @@ class GroupBookingController {
           null,
           false,
           Boolean(skipCancellation),
+          bankDetails || null,
+          {
+            origin: CANCELLATION_ORIGINS.ADMIN,
+            refundPercentage,
+            cancelledByUserId: user.id,
+          },
         );
 
         if (!result.success) {

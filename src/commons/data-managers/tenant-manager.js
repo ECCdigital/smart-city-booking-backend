@@ -7,6 +7,9 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const { BookableManager } = require("./bookable-manager");
+const {
+  normalizeCancellationRefundTiers,
+} = require("../utilities/cancellation-refund-tiers");
 
 /**
  * Data Manager for Tenant objects.
@@ -55,6 +58,9 @@ class TenantManager {
 
     CustomFieldService.normalizeDefinitions(
       tenantEntity.bookableCustomFields || [],
+    );
+    tenantEntity.cancellationRefundTiers = normalizeCancellationRefundTiers(
+      tenantEntity.cancellationRefundTiers || [],
     );
     tenantEntity.validate();
     await TenantModel.updateOne({ id: tenantEntity.id }, tenantEntity, {

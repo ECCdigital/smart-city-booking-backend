@@ -33,6 +33,9 @@ const {
 const {
   validatePdfBookingTableMeta,
 } = require("../../../commons/pdf-service/pdf-booking-table-meta");
+const {
+  getCancellationRefundTiersError,
+} = require("../../../commons/utilities/cancellation-refund-tiers");
 
 const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
@@ -74,6 +77,13 @@ function validatePdfBookingTableMetaField(body) {
     return null;
   }
   return validatePdfBookingTableMeta(body.pdfBookingTableMeta);
+}
+
+function validateCancellationRefundTiersField(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "cancellationRefundTiers")) {
+    return null;
+  }
+  return getCancellationRefundTiersError(body.cancellationRefundTiers);
 }
 
 const logger = bunyan.createLogger({
@@ -214,6 +224,13 @@ class TenantController {
         return response.status(400).send(tableMetaError);
       }
 
+      const cancellationRefundTiersError = validateCancellationRefundTiersField(
+        request.body,
+      );
+      if (cancellationRefundTiersError) {
+        return response.status(400).send(cancellationRefundTiersError);
+      }
+
       tenant.ownerUserIds = [user.id];
       if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
@@ -328,6 +345,7 @@ class TenantController {
           "bookableCustomFields",
           "cancellationTemplate",
           "cancellationNumberPrefix",
+          "cancellationRefundTiers",
           "pdfBookingLayout",
           "pdfBookingTableMeta",
         ];
@@ -365,6 +383,12 @@ class TenantController {
         const tableMetaError = validatePdfBookingTableMetaField(request.body);
         if (tableMetaError) {
           return response.status(400).send(tableMetaError);
+        }
+
+        const cancellationRefundTiersError =
+          validateCancellationRefundTiersField(request.body);
+        if (cancellationRefundTiersError) {
+          return response.status(400).send(cancellationRefundTiersError);
         }
 
         fields.forEach((field) => {
