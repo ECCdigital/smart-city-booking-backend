@@ -1,4 +1,4 @@
-const { expect } = require("chai");
+const assert = require("assert");
 const sinon = require("sinon");
 
 const UserController = require("../src/platform/api/controllers/user-controller");
@@ -50,9 +50,8 @@ describe("syncSelfBookingNames flag", () => {
         res,
       );
 
-      expect(syncStub.calledOnceWith(user.id, "Augusta", "Lovelace")).to.be
-        .true;
-      expect(res.status.calledWith(200)).to.be.true;
+      assert.ok(syncStub.calledOnceWith(user.id, "Augusta", "Lovelace"));
+      assert.ok(res.status.calledWith(200));
     });
 
     it("skips booking name sync when syncSelfBookingNames is false", async () => {
@@ -70,9 +69,9 @@ describe("syncSelfBookingNames flag", () => {
         res,
       );
 
-      expect(updateStub.calledOnce).to.be.true;
-      expect(syncStub.called).to.be.false;
-      expect(res.status.calledWith(200)).to.be.true;
+      assert.ok(updateStub.calledOnce);
+      assert.ok(!syncStub.called);
+      assert.ok(res.status.calledWith(200));
     });
   });
 
@@ -103,9 +102,8 @@ describe("syncSelfBookingNames flag", () => {
 
       await UserController.updateUser(buildRequest({ lastName: "Byron" }), res);
 
-      expect(syncStub.calledOnceWith(existingUser.id, "Ada", "Byron")).to.be
-        .true;
-      expect(res.sendStatus.calledWith(200)).to.be.true;
+      assert.ok(syncStub.calledOnceWith(existingUser.id, "Ada", "Byron"));
+      assert.ok(res.sendStatus.calledWith(200));
     });
 
     it("skips booking name sync when syncSelfBookingNames is false", async () => {
@@ -122,8 +120,8 @@ describe("syncSelfBookingNames flag", () => {
         res,
       );
 
-      expect(syncStub.called).to.be.false;
-      expect(res.sendStatus.calledWith(200)).to.be.true;
+      assert.ok(!syncStub.called);
+      assert.ok(res.sendStatus.calledWith(200));
     });
   });
 
@@ -157,8 +155,7 @@ describe("syncSelfBookingNames flag", () => {
         lastName: "Byron",
       });
 
-      expect(syncStub.calledOnceWith(currentUser.id, "Augusta Byron")).to.be
-        .true;
+      assert.ok(syncStub.calledOnceWith(currentUser.id, "Augusta Byron"));
     });
 
     it("skips booking name sync when syncSelfBookingNames is false", async () => {
@@ -173,12 +170,12 @@ describe("syncSelfBookingNames flag", () => {
         syncSelfBookingNames: false,
       });
 
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         id: currentUser.id,
         firstName: "Augusta",
         lastName: "Byron",
       });
-      expect(syncStub.called).to.be.false;
+      assert.ok(!syncStub.called);
     });
   });
 });
