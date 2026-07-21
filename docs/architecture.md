@@ -28,7 +28,12 @@ This repository contains the **backend API** of the platform.
 
 Both frontends communicate with the same backend API. They are deployed separately and configured with the backend's public URL.
 
+- Backend `FRONTEND_URL` is the **Admin UI** public URL (v3 and v4).
+- The Storefront is wired with its own `NUXT_*` environment variables (not `FRONTEND_URL`).
+
 The vue-app also ships `booking-manager.min.js` for [embedding components into existing websites](web-integration.md) — independent of the Storefront.
+
+**How to run the stack locally:** [getting-started.md](getting-started.md) (npm or Docker Compose).
 
 ## Version lines
 

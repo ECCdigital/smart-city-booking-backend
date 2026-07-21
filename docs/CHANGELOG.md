@@ -9,7 +9,12 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- Full-stack operator guide ([getting-started.md](getting-started.md)): wire Admin UI and Storefront to the API, local npm setup, and Docker Compose example (`docker-compose.full-stack.example.yml`)
 - Public JSON bookable responses (`/json/:tenant/bookables*`, event tickets) include the tenant `cancellationRefundTiers`
+
+### Fixed
+
+- Docker image base switched from Node 25 to Node 22 LTS so `npm ci` succeeds during image build
 
 ## [4.2.0] — 2026-07-17
 

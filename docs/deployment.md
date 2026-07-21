@@ -2,16 +2,31 @@
 
 For production environments, plan your setup around secure secrets, stable process management, and observability.
 
+For a local or evaluation full stack (API + Admin UI + Storefront), see [getting-started.md](getting-started.md).
+
 ## Requirements
 
 - A reachable MongoDB instance (`DB_URL`, `DB_NAME`)
 - Strong secrets for `CRYPTO_SECRET`, `JWT_SECRET`, `JWT_REFRESH_SECRET`
-- Public URLs for `FRONTEND_URL` and `BACKEND_URL` (used for redirects and callbacks)
+- Public URLs for `FRONTEND_URL` (Admin UI) and `BACKEND_URL` (API) — used for redirects and callbacks
 - SMTP or Microsoft Graph mail settings if email-based flows are used
 - **Nextcloud** (`NEXTCLOUD_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_PASSWORD`) if you use file uploads, attachments, or payment PDFs (receipts, invoices, cancellations) — see [nextcloud.md](nextcloud.md)
 - A reverse proxy with TLS termination (e.g. Nginx, Traefik, cloud load balancer)
 
-When deploying v4 with separate frontends, configure each client application to point at `BACKEND_URL`. The Storefront and Admin UI are separate deployments — see [architecture.md](architecture.md).
+## Client applications (v4)
+
+The Storefront and Admin UI are separate deployments — see [architecture.md](architecture.md).
+
+| Client | Env var(s) | Value |
+|--------|------------|-------|
+| Admin UI | `VUE_APP_SERVER_BASE_URL` | Public API URL (`BACKEND_URL`) |
+| Storefront | `NUXT_API_BASE_URL` | API URL reachable from the Storefront server (BFF) |
+| Storefront | `NUXT_USER_BASE_URL` / `NUXT_PUBLIC_USER_BASE_URL` | Public Storefront URL |
+| Storefront | `NUXT_ADMIN_BASE_URL` / `NUXT_PUBLIC_ADMIN_BASE_URL` | Public Admin UI URL (optional) |
+| Backend | `FRONTEND_URL` | Public **Admin UI** URL (not the Storefront) |
+| Backend | `BACKEND_URL` | Public API URL |
+
+Full wiring matrix and Compose notes: [getting-started.md](getting-started.md).
 
 ## Recommended environment settings
 
@@ -40,7 +55,7 @@ See `.env-example` for the full list of configuration options.
 
 3. Use a process manager (e.g. `systemd` or PM2) so the service restarts automatically.
 
-## Run with Docker
+## Run with Docker (backend only)
 
 Build and run with your environment file:
 
@@ -53,6 +68,21 @@ docker run -d \
   -p 8081:8081 \
   smart-city-booking-backend
 ```
+
+## Full stack with Docker Compose
+
+An example Compose file runs MongoDB, this backend, the Admin UI, and the Storefront together:
+
+```bash
+cp docker-compose.full-stack.example.yml docker-compose.yml
+cp .env.full-stack.example .env
+# Edit secrets, then:
+docker compose up -d --build
+```
+
+Details (ports, BFF networking, branch pins): [getting-started.md](getting-started.md#path-b--docker-compose).
+
+For production, prefer pinned release tags or GHCR images behind a TLS reverse proxy. Nextcloud is not part of the example Compose stack — configure it separately when needed.
 
 ## Database migrations
 

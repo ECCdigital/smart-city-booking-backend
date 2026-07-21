@@ -52,7 +52,15 @@ Breaking changes: [docs/CHANGELOG.md](docs/CHANGELOG.md)
 
 ---
 
-## Quick Start
+## Full stack setup (API + Admin UI + Storefront)
+
+To run all three components together (local npm or Docker Compose), see **[docs/getting-started.md](docs/getting-started.md)**.
+
+That guide covers version alignment, environment wiring (`FRONTEND_URL` = Admin UI, Storefront via `NUXT_*`), bootstrap steps, and a full-stack Compose example.
+
+---
+
+## Quick Start (API only)
 
 ### Prerequisites
 
@@ -77,6 +85,8 @@ DB_NAME=booking-manager
 ```
 
 Set secure values for `CRYPTO_SECRET`, `JWT_SECRET`, and `JWT_REFRESH_SECRET`.
+
+`FRONTEND_URL` is the **Admin UI** base URL (default local: `http://localhost:8080`). The Storefront is configured separately — see [getting-started.md](docs/getting-started.md).
 
 For file uploads and payment documents (receipts, invoices), configure [Nextcloud](docs/nextcloud.md) in `.env`.
 
@@ -125,11 +135,12 @@ Schema reference with examples: [docs/entities.md](docs/entities.md)
 
 | Topic | Description |
 |-------|-------------|
+| [Getting started (full stack)](docs/getting-started.md) | Run API + Admin UI + Storefront (npm or Docker Compose) |
 | [Architecture](docs/architecture.md) | System components, data flow, version lines |
 | [Entities](docs/entities.md) | Data model and JSON examples |
 | [API Reference](docs/api/README.md) | Endpoints, permissions, examples |
 | [Authentication](docs/api/authentication.md) | Auth routes and JWT configuration |
-| [Deployment](docs/deployment.md) | Production setup, Docker, operations |
+| [Deployment](docs/deployment.md) | Production setup, Docker, full-stack Compose, operations |
 | [Nextcloud](docs/nextcloud.md) | File storage for uploads, attachments, and PDF documents |
 | [Changelog](docs/CHANGELOG.md) | Version history and breaking changes |
 | [Web Integration](docs/web-integration.md) | Embed bookables & events in existing websites (JS web interface) |
@@ -141,7 +152,9 @@ Schema reference with examples: [docs/entities.md](docs/entities.md)
 
 For production deployment (Docker, secrets, process management, GHCR images), see [docs/deployment.md](docs/deployment.md).
 
-Quick Docker example:
+**Full stack (API + Admin UI + Storefront + MongoDB):** see [docs/getting-started.md](docs/getting-started.md#path-b--docker-compose) and `docker-compose.full-stack.example.yml`.
+
+Quick backend-only Docker example:
 
 ```bash
 docker build -t smart-city-booking-backend .

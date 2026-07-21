@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 node:25-slim
+FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
     curl \
