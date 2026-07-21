@@ -14,6 +14,7 @@ describe("CompanyService", () => {
   let CompanyRoleService;
   let MailController;
   let MemberInvitationMail;
+  let CompanyStatusMail;
   let MemberInvitationManager;
   let JwtHelper;
   let CompanyService;
@@ -76,6 +77,7 @@ describe("CompanyService", () => {
       sendVerificationRequest: sandbox.stub().resolves(),
     };
     MemberInvitationMail = { sendMemberInvitation: sandbox.stub().resolves() };
+    CompanyStatusMail = { sendCompanyVerified: sandbox.stub().resolves() };
     MemberInvitationManager = {
       getPendingByEmailInTenant: sandbox.stub().resolves(null),
       store: sandbox.stub().callsFake(async (invitation) => invitation),
@@ -105,6 +107,10 @@ describe("CompanyService", () => {
     mock(
       "../../src/commons/services/company/member-invitation-mail",
       MemberInvitationMail,
+    );
+    mock(
+      "../../src/commons/services/company/company-status-mail",
+      CompanyStatusMail,
     );
     mock(
       "../../src/commons/data-managers/member-invitation-manager",
@@ -362,6 +368,25 @@ describe("CompanyService", () => {
         error = e;
       }
       expect(error.status).to.equal(404);
+    });
+
+    it("emails every member that the company was verified", async () => {
+      CompanyManager.getCompany.resolves({
+        id: "c1",
+        status: "unverified",
+        name: "Muster GmbH",
+      });
+      CompanyMemberManager.getMembersByCompany.resolves([
+        { userId: "a@x.de" },
+        { userId: "b@x.de" },
+      ]);
+
+      await CompanyService.verifyCompany("kielregion", "c1");
+
+      expect(CompanyStatusMail.sendCompanyVerified.calledOnce).to.equal(true);
+      const arg = CompanyStatusMail.sendCompanyVerified.firstCall.args[0];
+      expect(arg.recipients).to.have.members(["a@x.de", "b@x.de"]);
+      expect(arg.companyName).to.equal("Muster GmbH");
     });
   });
 

@@ -2,6 +2,9 @@ const mock = require("mock-require");
 const { expect } = require("chai");
 const sinon = require("sinon");
 
+// let the fire-and-forget notification settle before asserting on it
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
 describe("ApplicationService — submitApplication", () => {
   let sandbox;
   let StudentManager;
@@ -10,6 +13,9 @@ describe("ApplicationService — submitApplication", () => {
   let ApplicationManager;
   let ApplicationService;
   let PlatformSettingsService;
+  let CompanyMemberManager;
+  let ApplicationNotificationMail;
+  let AuditLogService;
 
   const tenantId = "kielregion";
   const userId = "lena@example.de";
@@ -59,9 +65,33 @@ describe("ApplicationService — submitApplication", () => {
       ApplicationManager,
     );
     mock("../../src/commons/data-managers/company-manager", {
-      getCompany: sandbox.stub().resolves({ id: "c-1", status: "verified" }),
+      getCompany: sandbox
+        .stub()
+        .resolves({ id: "c-1", name: "Muster GmbH", status: "verified" }),
       getBlockedCompanyIds: sandbox.stub().resolves([]),
     });
+    CompanyMemberManager = {
+      getMembersByCompany: sandbox.stub().resolves([
+        { userId: "owner@example.de", isOwner: true, branchId: "" },
+        { userId: "allbranch@example.de", isOwner: false, branchId: "" },
+        { userId: "b1@example.de", isOwner: false, branchId: "b-1" },
+        { userId: "b2@example.de", isOwner: false, branchId: "b-2" },
+      ]),
+    };
+    mock(
+      "../../src/commons/data-managers/company-member-manager",
+      CompanyMemberManager,
+    );
+    ApplicationNotificationMail = {
+      sendApplicationReceived: sandbox.stub().resolves(),
+      sendApplicationStatusChanged: sandbox.stub().resolves(),
+    };
+    mock(
+      "../../src/commons/services/student/application-notification-mail",
+      ApplicationNotificationMail,
+    );
+    AuditLogService = { record: sandbox.stub() };
+    mock("../../src/commons/services/audit-log-service", AuditLogService);
     PlatformSettingsService = {
       getSettings: sandbox.stub().resolves({ defaultApplicationStatus: "Neu" }),
     };
@@ -104,6 +134,48 @@ describe("ApplicationService — submitApplication", () => {
     expect(stored.status).to.equal("Neu");
     expect(stored.documents).to.deep.equal([]);
     expect(res.id).to.be.a("string").and.to.have.length.greaterThan(0);
+  });
+
+  it("notifies the owner, all-branch members and the offer's branch members", async () => {
+    await ApplicationService.submitApplication(
+      tenantId,
+      userId,
+      offerId,
+      validPayload,
+    );
+    await flush();
+    expect(
+      ApplicationNotificationMail.sendApplicationReceived.calledOnce,
+    ).to.equal(true);
+    const arg =
+      ApplicationNotificationMail.sendApplicationReceived.firstCall.args[0];
+    expect(arg.recipients).to.have.members([
+      "owner@example.de",
+      "allbranch@example.de",
+      "b1@example.de",
+    ]);
+    expect(arg.recipients).to.not.include("b2@example.de");
+    expect(arg.isUnsolicited).to.equal(false);
+    expect(arg.offerTitle).to.equal("Praktikum IT");
+    expect(arg.companyName).to.equal("Muster GmbH");
+  });
+
+  it("still succeeds when the company notification fails", async () => {
+    ApplicationNotificationMail.sendApplicationReceived.rejects(
+      new Error("smtp down"),
+    );
+    const res = await ApplicationService.submitApplication(
+      tenantId,
+      userId,
+      offerId,
+      validPayload,
+    );
+    expect(res.id).to.be.a("string");
+    expect(ApplicationManager.storeApplication.calledOnce).to.equal(true);
+    await flush();
+    expect(
+      AuditLogService.record.getCalls().some((c) => c.args[1] === "error"),
+    ).to.equal(true);
   });
 
   it("uses the default application status configured in the platform settings", async () => {
@@ -270,6 +342,8 @@ describe("ApplicationService — submitUnsolicitedApplication", () => {
   let ApplicationManager;
   let ApplicationService;
   let PlatformSettingsService;
+  let CompanyMemberManager;
+  let ApplicationNotificationMail;
 
   const tenantId = "kielregion";
   const userId = "lena@example.de";
@@ -317,6 +391,25 @@ describe("ApplicationService — submitUnsolicitedApplication", () => {
       ApplicationManager,
     );
     mock("../../src/commons/data-managers/offer-manager", {});
+    CompanyMemberManager = {
+      getMembersByCompany: sandbox.stub().resolves([
+        { userId: "owner@example.de", isOwner: true, branchId: "" },
+        { userId: "allbranch@example.de", isOwner: false, branchId: "" },
+        { userId: "b1@example.de", isOwner: false, branchId: "b-1" },
+      ]),
+    };
+    mock(
+      "../../src/commons/data-managers/company-member-manager",
+      CompanyMemberManager,
+    );
+    ApplicationNotificationMail = {
+      sendApplicationReceived: sandbox.stub().resolves(),
+      sendApplicationStatusChanged: sandbox.stub().resolves(),
+    };
+    mock(
+      "../../src/commons/services/student/application-notification-mail",
+      ApplicationNotificationMail,
+    );
     PlatformSettingsService = {
       getSettings: sandbox.stub().resolves({ defaultApplicationStatus: "Neu" }),
     };
@@ -354,6 +447,28 @@ describe("ApplicationService — submitUnsolicitedApplication", () => {
     expect(stored.consent).to.equal(true);
     expect(stored.status).to.equal("Neu");
     expect(res.id).to.be.a("string").and.to.have.length.greaterThan(0);
+  });
+
+  it("notifies only the owner and all-branch managers (no branch)", async () => {
+    await ApplicationService.submitUnsolicitedApplication(
+      tenantId,
+      userId,
+      companyId,
+      validPayload,
+    );
+    await flush();
+    expect(
+      ApplicationNotificationMail.sendApplicationReceived.calledOnce,
+    ).to.equal(true);
+    const arg =
+      ApplicationNotificationMail.sendApplicationReceived.firstCall.args[0];
+    expect(arg.recipients).to.have.members([
+      "owner@example.de",
+      "allbranch@example.de",
+    ]);
+    expect(arg.recipients).to.not.include("b1@example.de");
+    expect(arg.isUnsolicited).to.equal(true);
+    expect(arg.offerTitle).to.equal(null);
   });
 
   it("→ 403 when the caller is not a student", async () => {
@@ -750,5 +865,140 @@ describe("ApplicationController", () => {
         "lena@example.de",
       ),
     ).to.equal(true);
+  });
+});
+
+describe("ApplicationService — updateApplicationStatus", () => {
+  let sandbox;
+  let TaxonomyTermManager;
+  let ApplicationManager;
+  let CompanyManager;
+  let OfferManager;
+  let ApplicationNotificationMail;
+  let ApplicationService;
+
+  const tenantId = "kielregion";
+  const companyId = "c-1";
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    TaxonomyTermManager = {
+      getTerms: sandbox.stub().resolves([
+        { id: "st-neu", name: "Neu" },
+        { id: "st-eingeladen", name: "Eingeladen" },
+      ]),
+    };
+    ApplicationManager = {
+      getById: sandbox.stub().resolves({
+        id: "a-1",
+        companyId,
+        offerId: "o-1",
+        email: "lena@example.de",
+        firstName: "Lena",
+        status: "st-neu",
+      }),
+      updateStatus: sandbox.stub().resolves(),
+    };
+    CompanyManager = {
+      getCompany: sandbox
+        .stub()
+        .resolves({ id: companyId, name: "Muster GmbH" }),
+    };
+    OfferManager = {
+      getOffer: sandbox.stub().resolves({ id: "o-1", title: "Praktikum IT" }),
+    };
+    ApplicationNotificationMail = {
+      sendApplicationReceived: sandbox.stub().resolves(),
+      sendApplicationStatusChanged: sandbox.stub().resolves(),
+    };
+    mock(
+      "../../src/commons/data-managers/taxonomy-term-manager",
+      TaxonomyTermManager,
+    );
+    mock(
+      "../../src/commons/data-managers/application-manager",
+      ApplicationManager,
+    );
+    mock("../../src/commons/data-managers/company-manager", CompanyManager);
+    mock("../../src/commons/data-managers/offer-manager", OfferManager);
+    mock("../../src/commons/data-managers/student-manager", {});
+    mock("../../src/commons/data-managers/user-manager", {});
+    mock("../../src/commons/data-managers/company-member-manager", {});
+    mock("../../src/commons/services/audit-log-service", {
+      record: sandbox.stub().resolves(),
+    });
+    mock(
+      "../../src/commons/services/student/application-notification-mail",
+      ApplicationNotificationMail,
+    );
+    ApplicationService = mock.reRequire(
+      "../../src/commons/services/student/application-service",
+    );
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    mock.stopAll();
+  });
+
+  it("notifies the student with the old and new status names", async () => {
+    await ApplicationService.updateApplicationStatus(
+      tenantId,
+      companyId,
+      "a-1",
+      "st-eingeladen",
+      null,
+    );
+    await flush();
+    expect(
+      ApplicationNotificationMail.sendApplicationStatusChanged.calledOnce,
+    ).to.equal(true);
+    const arg =
+      ApplicationNotificationMail.sendApplicationStatusChanged.firstCall
+        .args[0];
+    expect(arg.to).to.equal("lena@example.de");
+    expect(arg.oldStatus).to.equal("Neu");
+    expect(arg.newStatus).to.equal("Eingeladen");
+    expect(arg.offerTitle).to.equal("Praktikum IT");
+    expect(arg.companyName).to.equal("Muster GmbH");
+  });
+});
+
+describe("application-notification-mail", () => {
+  let sandbox;
+  let MailerService;
+  let mailModule;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    MailerService = { send: sandbox.stub().resolves() };
+    mock("../../src/commons/mail-service/mail-service", MailerService);
+    mock("../../src/commons/data-managers/instance-manager", {
+      getInstance: sandbox.stub().resolves({ mailTemplate: "<x>" }),
+    });
+    mailModule = mock.reRequire(
+      "../../src/commons/services/student/application-notification-mail",
+    );
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    mock.stopAll();
+  });
+
+  it("sends one mail per recipient", async () => {
+    await mailModule.sendApplicationReceived({
+      recipients: ["a@b.de", "c@d.de"],
+      companyName: "X",
+      applicantName: "Y",
+      offerTitle: "Z",
+      isUnsolicited: false,
+    });
+    expect(MailerService.send.callCount).to.equal(2);
+  });
+
+  it("skips sending when there are no recipients", async () => {
+    await mailModule.sendApplicationReceived({ recipients: [] });
+    expect(MailerService.send.called).to.equal(false);
   });
 });

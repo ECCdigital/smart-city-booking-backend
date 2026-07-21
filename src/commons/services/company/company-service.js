@@ -23,6 +23,7 @@ const AccountDeletionService = require("../account-deletion-service");
 const JwtHelper = require("../../utilities/jwt-helper");
 const MailController = require("../../mail-service/mail-controller");
 const MemberInvitationMail = require("./member-invitation-mail");
+const CompanyStatusMail = require("./company-status-mail");
 const { createResendThrottle } = require("../../utilities/resend-throttle");
 const { isEmail, isURL } = require("validator");
 
@@ -432,6 +433,21 @@ class CompanyService {
       "update",
       `Unternehmen „${company.name}" freigegeben`,
     );
+
+    const verifiedRecipients = [
+      ...new Set(members.map((member) => member.userId).filter(Boolean)),
+    ];
+    CompanyStatusMail.sendCompanyVerified({
+      recipients: verifiedRecipients,
+      companyName: company.name,
+    }).catch((error) =>
+      AuditLogService.record(
+        tenantId,
+        "error",
+        `Freischaltungsbenachrichtigung an das Unternehmen konnte nicht gesendet werden: ${error?.message || error}`,
+      ),
+    );
+
     return CompanyManager.getCompany(tenantId, companyId);
   }
 

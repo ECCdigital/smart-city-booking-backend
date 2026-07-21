@@ -5,10 +5,12 @@ const StudentManager = require("../../data-managers/student-manager");
 const UserManager = require("../../data-managers/user-manager");
 const CompanyBranchManager = require("../../data-managers/company-branch-manager");
 const CompanyManager = require("../../data-managers/company-manager");
+const CompanyMemberManager = require("../../data-managers/company-member-manager");
 const TaxonomyTermManager = require("../../data-managers/taxonomy-term-manager");
 const PlatformSettingsService = require("../platform-settings-service");
 const { NextcloudManager } = require("../../data-managers/file-manager");
 const AuditLogService = require("../audit-log-service");
+const ApplicationNotificationMail = require("./application-notification-mail");
 
 const MOTIVATION_MAX = 5000;
 
@@ -116,6 +118,19 @@ function isDeadlinePassed(deadline) {
 }
 
 class ApplicationService {
+  static async _companyManagerRecipients(tenantId, companyId, branchId) {
+    const members = await CompanyMemberManager.getMembersByCompany(
+      tenantId,
+      companyId,
+    );
+    const scope = branchId || "";
+    const emails = members
+      .filter((m) => m.isOwner === true || !m.branchId || m.branchId === scope)
+      .map((m) => m.userId)
+      .filter(Boolean);
+    return [...new Set(emails)];
+  }
+
   static async submitApplication(tenantId, userId, offerId, payload) {
     const data = payload || {};
 
@@ -209,6 +224,28 @@ class ApplicationService {
       "create",
       `${user.id} hat sich auf „${offer.title}" beworben`,
     );
+
+    (async () => {
+      const recipients = await ApplicationService._companyManagerRecipients(
+        tenantId,
+        offer.companyId,
+        offer.branchId || "",
+      );
+      await ApplicationNotificationMail.sendApplicationReceived({
+        recipients,
+        companyName: company.name,
+        applicantName: `${user.firstName} ${user.lastName}`.trim(),
+        offerTitle: offer.title,
+        isUnsolicited: false,
+      });
+    })().catch((error) =>
+      AuditLogService.record(
+        tenantId,
+        "error",
+        `Benachrichtigung über neue Bewerbung konnte nicht gesendet werden: ${error?.message || error}`,
+      ),
+    );
+
     return { id: application.id };
   }
 
@@ -281,6 +318,28 @@ class ApplicationService {
       "create",
       `${user.id} hat eine Initiativbewerbung bei „${company.name}" abgeschickt`,
     );
+
+    (async () => {
+      const recipients = await ApplicationService._companyManagerRecipients(
+        tenantId,
+        companyId,
+        "",
+      );
+      await ApplicationNotificationMail.sendApplicationReceived({
+        recipients,
+        companyName: company.name,
+        applicantName: `${user.firstName} ${user.lastName}`.trim(),
+        offerTitle: null,
+        isUnsolicited: true,
+      });
+    })().catch((error) =>
+      AuditLogService.record(
+        tenantId,
+        "error",
+        `Benachrichtigung über neue Initiativbewerbung konnte nicht gesendet werden: ${error?.message || error}`,
+      ),
+    );
+
     return { id: application.id };
   }
 
@@ -381,6 +440,9 @@ class ApplicationService {
         throw { message: "Out of branch scope", status: 403 };
       }
     }
+    const oldStatusName =
+      statusTerms.find((term) => term.id === application.status)?.name ||
+      application.status;
     await ApplicationManager.updateStatus(tenantId, applicationId, status);
     const statusName = statusTerms.find((term) => term.id === status).name;
     await AuditLogService.record(
@@ -388,6 +450,31 @@ class ApplicationService {
       "update",
       `Bewerbung von ${application.email} auf „${statusName}" gesetzt`,
     );
+
+    (async () => {
+      const company = await CompanyManager.getCompany(
+        tenantId,
+        application.companyId,
+      );
+      const offer = application.offerId
+        ? await OfferManager.getOffer(tenantId, application.offerId)
+        : null;
+      await ApplicationNotificationMail.sendApplicationStatusChanged({
+        to: application.email,
+        applicantName: application.firstName,
+        companyName: company ? company.name : null,
+        offerTitle: offer ? offer.title : null,
+        oldStatus: oldStatusName,
+        newStatus: statusName,
+      });
+    })().catch((error) =>
+      AuditLogService.record(
+        tenantId,
+        "error",
+        `Statusbenachrichtigung an die Bewerber*in konnte nicht gesendet werden: ${error?.message || error}`,
+      ),
+    );
+
     return { id: applicationId, status };
   }
 

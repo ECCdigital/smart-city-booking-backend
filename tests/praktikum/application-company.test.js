@@ -49,6 +49,16 @@ describe("ApplicationService — company inbox + status", () => {
     );
     mock("../../src/commons/data-managers/student-manager", {});
     mock("../../src/commons/data-managers/user-manager", {});
+    mock("../../src/commons/data-managers/company-manager", {
+      getCompany: sandbox.stub().resolves({ id: CO, name: "Muster GmbH" }),
+    });
+    mock("../../src/commons/data-managers/company-member-manager", {
+      getMembersByCompany: sandbox.stub().resolves([]),
+    });
+    mock("../../src/commons/services/student/application-notification-mail", {
+      sendApplicationReceived: sandbox.stub().resolves(),
+      sendApplicationStatusChanged: sandbox.stub().resolves(),
+    });
     ApplicationService = mock.reRequire(
       "../../src/commons/services/student/application-service",
     );

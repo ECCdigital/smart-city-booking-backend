@@ -7,7 +7,7 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
-const ACTIONS = ["create", "update", "delete"];
+const ACTIONS = ["create", "update", "delete", "error"];
 
 class AuditLogService {
   // fire-and-forget; actor read from the request context
