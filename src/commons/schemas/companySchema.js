@@ -19,6 +19,7 @@ const companySchemaDefinition = {
   sizeId: { type: String, default: "" },
   logoUrl: { type: String, default: "" },
   description: { type: String, default: "" },
+  acceptsUnsolicitedApplications: { type: Boolean, default: false },
   location: { type: Object, default: null },
   created: { type: Number, default: () => Date.now() },
 };

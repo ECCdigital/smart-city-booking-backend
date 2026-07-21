@@ -343,6 +343,57 @@ describe("CompanyController — authz & handlers", () => {
       expect(r.body.media[0]).to.not.have.property("companyId");
       expect(r.body.media[0]).to.not.have.property("tenantId");
     });
+
+    it("exposes acceptsUnsolicitedApplications (Initiativbewerbung opt-in)", async () => {
+      CompanyManager.getCompany.resolves({
+        id: "c1",
+        status: "verified",
+        name: "Muster GmbH",
+        acceptsUnsolicitedApplications: true,
+      });
+      const r = res();
+      await CompanyController.getPublicCompany(req(), r);
+      expect(r.statusCode).to.equal(200);
+      expect(r.body.acceptsUnsolicitedApplications).to.equal(true);
+    });
+  });
+
+  describe("getUnsolicitedCompanies", () => {
+    it("returns public summaries of verified opt-in companies", async () => {
+      CompanyManager.getCompanies = sandbox.stub().resolves([
+        {
+          id: "c1",
+          name: "A",
+          slug: "a",
+          logoUrl: "l",
+          industryId: "i",
+          city: "Kiel",
+          districtId: "d",
+          mail: "secret@x.de",
+          status: "verified",
+          acceptsUnsolicitedApplications: true,
+        },
+      ]);
+      const r = res();
+      await CompanyController.getUnsolicitedCompanies(req(), r);
+      expect(r.statusCode).to.equal(200);
+      expect(CompanyManager.getCompanies.firstCall.args[1]).to.deep.equal({
+        status: "verified",
+        acceptsUnsolicitedApplications: true,
+      });
+      expect(r.body).to.have.length(1);
+      expect(r.body[0]).to.deep.equal({
+        id: "c1",
+        name: "A",
+        slug: "a",
+        logoUrl: "l",
+        industryId: "i",
+        city: "Kiel",
+        districtId: "d",
+      });
+      expect(r.body[0]).to.not.have.property("mail");
+      expect(r.body[0]).to.not.have.property("status");
+    });
   });
 
   describe("getMyContext — role detection for redirect", () => {

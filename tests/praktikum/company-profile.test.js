@@ -242,6 +242,25 @@ describe("CompanyService — profile", () => {
       const stored = CompanyManager.storeCompany.firstCall.args[0];
       expect(stored.description).to.equal("12345");
     });
+
+    it("persists acceptsUnsolicitedApplications from the payload", async () => {
+      CompanyManager.getCompany.resolves(existing());
+      await CompanyService.updateCompanyProfile("kielregion", "c1", {
+        name: "X",
+        acceptsUnsolicitedApplications: true,
+      });
+      const stored = CompanyManager.storeCompany.firstCall.args[0];
+      expect(stored.acceptsUnsolicitedApplications).to.equal(true);
+    });
+
+    it("defaults acceptsUnsolicitedApplications to false when absent", async () => {
+      CompanyManager.getCompany.resolves(existing());
+      await CompanyService.updateCompanyProfile("kielregion", "c1", {
+        name: "X",
+      });
+      const stored = CompanyManager.storeCompany.firstCall.args[0];
+      expect(stored.acceptsUnsolicitedApplications).to.equal(false);
+    });
   });
 
   describe("logo", () => {

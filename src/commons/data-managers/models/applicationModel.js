@@ -7,7 +7,11 @@ const ApplicationSchema = new Schema(applicationSchemaDefinition);
 
 ApplicationSchema.index(
   { tenantId: 1, offerId: 1, studentUserId: 1 },
-  { unique: true },
+  {
+    unique: true,
+    partialFilterExpression: { offerId: { $gt: "" } },
+    name: "app_offer_unique_partial",
+  },
 );
 ApplicationSchema.index({ tenantId: 1, studentUserId: 1 });
 ApplicationSchema.index({ tenantId: 1, companyId: 1 });

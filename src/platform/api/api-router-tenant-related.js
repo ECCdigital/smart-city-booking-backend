@@ -127,6 +127,7 @@ router.get(
   AuthenticationController.isSignedIn,
   CompanyController.getMyContext,
 );
+router.get("/companies/unsolicited", CompanyController.getUnsolicitedCompanies);
 router.get(
   "/companies/:id",
   AuthenticationController.isSignedIn,
@@ -436,6 +437,11 @@ router.post(
   "/offers/:offerId/applications",
   AuthenticationController.isSignedIn,
   ApplicationController.submit,
+);
+router.post(
+  "/companies/:id/applications",
+  AuthenticationController.isSignedIn,
+  ApplicationController.submitUnsolicited,
 );
 router.get(
   "/companies/:id/applications",

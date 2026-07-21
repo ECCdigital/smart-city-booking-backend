@@ -1,9 +1,10 @@
 const applicationSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true },
-  offerId: { type: String, required: true },
+  offerId: { type: String, default: "" },
   companyId: { type: String, required: true },
   branchId: { type: String, default: "" },
+  isUnsolicited: { type: Boolean, default: false },
   studentUserId: { type: String, required: true },
   firstName: { type: String, default: "" },
   lastName: { type: String, default: "" },

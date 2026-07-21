@@ -262,6 +262,208 @@ describe("ApplicationService — submitApplication", () => {
   });
 });
 
+describe("ApplicationService — submitUnsolicitedApplication", () => {
+  let sandbox;
+  let StudentManager;
+  let UserManager;
+  let CompanyManager;
+  let ApplicationManager;
+  let ApplicationService;
+  let PlatformSettingsService;
+
+  const tenantId = "kielregion";
+  const userId = "lena@example.de";
+  const companyId = "c-1";
+  const validPayload = {
+    motivation: "  Ich will mich vorstellen.  ",
+    consent: true,
+  };
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    StudentManager = {
+      getStudentByUser: sandbox.stub().resolves({
+        userId,
+        tenantId,
+        birthDate: "2008-03-14",
+        targetGroups: ["pupil"],
+      }),
+    };
+    UserManager = {
+      getUserBy: sandbox.stub().resolves({
+        id: userId,
+        firstName: "Lena",
+        lastName: "Petersen",
+        phone: "0431 12345",
+      }),
+    };
+    CompanyManager = {
+      getCompany: sandbox.stub().resolves({
+        id: companyId,
+        tenantId,
+        name: "Muster GmbH",
+        status: "verified",
+        acceptsUnsolicitedApplications: true,
+      }),
+    };
+    ApplicationManager = {
+      storeApplication: sandbox.stub().callsFake(async (a) => a),
+    };
+    mock("../../src/commons/data-managers/student-manager", StudentManager);
+    mock("../../src/commons/data-managers/user-manager", UserManager);
+    mock("../../src/commons/data-managers/company-manager", CompanyManager);
+    mock(
+      "../../src/commons/data-managers/application-manager",
+      ApplicationManager,
+    );
+    mock("../../src/commons/data-managers/offer-manager", {});
+    PlatformSettingsService = {
+      getSettings: sandbox.stub().resolves({ defaultApplicationStatus: "Neu" }),
+    };
+    mock(
+      "../../src/commons/services/platform-settings-service",
+      PlatformSettingsService,
+    );
+    ApplicationService = mock.reRequire(
+      "../../src/commons/services/student/application-service",
+    );
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    mock.stopAll();
+  });
+
+  it("stores an unsolicited application with empty offer/branch and the flag set", async () => {
+    const res = await ApplicationService.submitUnsolicitedApplication(
+      tenantId,
+      userId,
+      companyId,
+      validPayload,
+    );
+    expect(ApplicationManager.storeApplication.calledOnce).to.equal(true);
+    const stored = ApplicationManager.storeApplication.firstCall.args[0];
+    expect(stored.offerId).to.equal("");
+    expect(stored.branchId).to.equal("");
+    expect(stored.isUnsolicited).to.equal(true);
+    expect(stored.companyId).to.equal(companyId);
+    expect(stored.studentUserId).to.equal(userId);
+    expect(stored.firstName).to.equal("Lena");
+    expect(stored.email).to.equal(userId);
+    expect(stored.motivation).to.equal("Ich will mich vorstellen.");
+    expect(stored.consent).to.equal(true);
+    expect(stored.status).to.equal("Neu");
+    expect(res.id).to.be.a("string").and.to.have.length.greaterThan(0);
+  });
+
+  it("→ 403 when the caller is not a student", async () => {
+    StudentManager.getStudentByUser.resolves(null);
+    let err;
+    try {
+      await ApplicationService.submitUnsolicitedApplication(
+        tenantId,
+        userId,
+        companyId,
+        validPayload,
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err && err.status).to.equal(403);
+    expect(ApplicationManager.storeApplication.called).to.equal(false);
+  });
+
+  it("→ 400 when consent is not given", async () => {
+    let err;
+    try {
+      await ApplicationService.submitUnsolicitedApplication(
+        tenantId,
+        userId,
+        companyId,
+        { motivation: "x", consent: false },
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err && err.status).to.equal(400);
+    expect(ApplicationManager.storeApplication.called).to.equal(false);
+  });
+
+  it("→ 404 when the company does not exist", async () => {
+    CompanyManager.getCompany.resolves(null);
+    let err;
+    try {
+      await ApplicationService.submitUnsolicitedApplication(
+        tenantId,
+        userId,
+        companyId,
+        validPayload,
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err && err.status).to.equal(404);
+    expect(ApplicationManager.storeApplication.called).to.equal(false);
+  });
+
+  it("→ 404 when the company is blocked", async () => {
+    CompanyManager.getCompany.resolves({
+      id: companyId,
+      status: "blocked",
+      acceptsUnsolicitedApplications: true,
+    });
+    let err;
+    try {
+      await ApplicationService.submitUnsolicitedApplication(
+        tenantId,
+        userId,
+        companyId,
+        validPayload,
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err && err.status).to.equal(404);
+  });
+
+  it("→ 409 when the company does not accept unsolicited applications", async () => {
+    CompanyManager.getCompany.resolves({
+      id: companyId,
+      status: "verified",
+      acceptsUnsolicitedApplications: false,
+    });
+    let err;
+    try {
+      await ApplicationService.submitUnsolicitedApplication(
+        tenantId,
+        userId,
+        companyId,
+        validPayload,
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err && err.status).to.equal(409);
+    expect(ApplicationManager.storeApplication.called).to.equal(false);
+  });
+
+  it("does not dedup, so a second application to the same company is allowed", async () => {
+    await ApplicationService.submitUnsolicitedApplication(
+      tenantId,
+      userId,
+      companyId,
+      validPayload,
+    );
+    await ApplicationService.submitUnsolicitedApplication(
+      tenantId,
+      userId,
+      companyId,
+      validPayload,
+    );
+    expect(ApplicationManager.storeApplication.callCount).to.equal(2);
+  });
+});
+
 describe("ApplicationService — listMyApplications", () => {
   let sandbox;
   let OfferManager;
@@ -309,8 +511,20 @@ describe("ApplicationService — listMyApplications", () => {
 
   it("hydrates each application with an offer summary + its application status", async () => {
     ApplicationManager.listByUser.resolves([
-      { id: "a-1", offerId: "o-1", status: "st-neu", created: 111 },
-      { id: "a-2", offerId: "o-x", status: "st-eingeladen", created: 222 },
+      {
+        id: "a-1",
+        offerId: "o-1",
+        companyId: "c-1",
+        status: "st-neu",
+        created: 111,
+      },
+      {
+        id: "a-2",
+        offerId: "o-x",
+        companyId: "c-9",
+        status: "st-eingeladen",
+        created: 222,
+      },
     ]);
     OfferManager.getOffersByIds.resolves([
       {
@@ -326,6 +540,8 @@ describe("ApplicationService — listMyApplications", () => {
       {
         id: "a-1",
         offerId: "o-1",
+        companyId: "c-1",
+        isUnsolicited: false,
         statusId: "st-neu",
         status: "Neu",
         createdAt: 111,
@@ -341,6 +557,8 @@ describe("ApplicationService — listMyApplications", () => {
       {
         id: "a-2",
         offerId: "o-x",
+        companyId: "c-9",
+        isUnsolicited: false,
         statusId: "st-eingeladen",
         status: "Eingeladen",
         createdAt: 222,
@@ -380,6 +598,7 @@ describe("ApplicationController", () => {
     sandbox = sinon.createSandbox();
     ApplicationService = {
       submitApplication: sandbox.stub().resolves({ id: "a-1" }),
+      submitUnsolicitedApplication: sandbox.stub().resolves({ id: "a-2" }),
       listMyApplications: sandbox.stub().resolves([{ id: "a-1" }]),
       addDocumentRef: sandbox.stub().resolves(),
       deleteApplication: sandbox.stub().resolves({ removed: 1 }),
@@ -477,6 +696,45 @@ describe("ApplicationController", () => {
       ApplicationService.deleteApplication.calledOnceWith("kielregion", "a-1"),
     ).to.equal(true);
     expect(r.statusCode).to.equal(500);
+  });
+
+  it("submitUnsolicited stores the CV, returns 201 and passes the path company id", async () => {
+    const r = res();
+    await ApplicationController.submitUnsolicited(
+      {
+        params: { tenant: "kielregion", id: "c-9" },
+        user: { id: "lena@example.de" },
+        body: { consent: "true", motivation: "hallo" },
+        files: { file: CV() },
+      },
+      r,
+    );
+    expect(r.statusCode).to.equal(201);
+    expect(r.body).to.deep.equal({ id: "a-2" });
+    const args = ApplicationService.submitUnsolicitedApplication.firstCall.args;
+    expect(args[0]).to.equal("kielregion");
+    expect(args[1]).to.equal("lena@example.de");
+    expect(args[2]).to.equal("c-9");
+    expect(args[3]).to.deep.equal({ motivation: "hallo", consent: true });
+    expect(NextcloudManager.createFile.calledOnce).to.equal(true);
+    expect(ApplicationService.addDocumentRef.calledOnce).to.equal(true);
+  });
+
+  it("submitUnsolicited rejects a missing CV with 400 and never creates the application", async () => {
+    const r = res();
+    await ApplicationController.submitUnsolicited(
+      {
+        params: { tenant: "kielregion", id: "c-9" },
+        user: { id: "x@y.de" },
+        body: { consent: "true" },
+        files: {},
+      },
+      r,
+    );
+    expect(r.statusCode).to.equal(400);
+    expect(ApplicationService.submitUnsolicitedApplication.called).to.equal(
+      false,
+    );
   });
 
   it("listMine returns 200 with the acting student's applications", async () => {

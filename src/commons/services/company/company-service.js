@@ -835,6 +835,8 @@ class CompanyService {
         payload.description !== undefined
           ? String(payload.description)
           : company.description,
+      acceptsUnsolicitedApplications:
+        pick("acceptsUnsolicitedApplications") === true,
       location,
     };
 

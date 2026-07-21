@@ -47,6 +47,8 @@ function toListDto(tenantId, application, offer, statusName) {
   return {
     id: application.id,
     offerId: application.offerId,
+    companyId: application.companyId,
+    isUnsolicited: application.isUnsolicited === true,
     statusId: application.status,
     status: statusName,
     createdAt: application.created,
@@ -77,6 +79,7 @@ function toCompanyDto(
     id: application.id,
     offerId: application.offerId,
     offerTitle: offer ? offer.title : null,
+    isUnsolicited: application.isUnsolicited === true,
     branchId: branchId !== undefined ? branchId : application.branchId,
     branchName: branchName || null,
     applicant: {
@@ -205,6 +208,78 @@ class ApplicationService {
       tenantId,
       "create",
       `${user.id} hat sich auf „${offer.title}" beworben`,
+    );
+    return { id: application.id };
+  }
+
+  static async submitUnsolicitedApplication(
+    tenantId,
+    userId,
+    companyId,
+    payload,
+  ) {
+    const data = payload || {};
+
+    const student = await StudentManager.getStudentByUser(userId);
+    if (!student || student.tenantId !== tenantId) {
+      throw { message: "Only students can apply", status: 403 };
+    }
+
+    if (data.consent !== true) {
+      throw { message: "Consent is required", status: 400 };
+    }
+
+    const motivation = String(data.motivation || "").trim();
+    if (motivation.length > MOTIVATION_MAX) {
+      throw {
+        message: `Motivation must be at most ${MOTIVATION_MAX} characters`,
+        status: 400,
+      };
+    }
+
+    const company = await CompanyManager.getCompany(tenantId, companyId);
+    if (!company || company.status === "blocked") {
+      throw { message: "Company not found", status: 404 };
+    }
+    if (company.acceptsUnsolicitedApplications !== true) {
+      throw {
+        message: "This company is not accepting unsolicited applications",
+        status: 409,
+      };
+    }
+
+    const user = await UserManager.getUserBy({ id: userId }, false);
+    if (!user) {
+      throw { message: "User not found", status: 404 };
+    }
+
+    const settings = await PlatformSettingsService.getSettings(tenantId);
+    const now = Date.now();
+    const application = await ApplicationManager.storeApplication({
+      id: uuidv4(),
+      tenantId,
+      offerId: "",
+      companyId,
+      branchId: "",
+      isUnsolicited: true,
+      studentUserId: userId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.id,
+      phone: user.phone,
+      birthDate: student.birthDate,
+      motivation,
+      consent: true,
+      consentAt: now,
+      status: settings.defaultApplicationStatus,
+      documents: [],
+      created: now,
+    });
+
+    await AuditLogService.record(
+      tenantId,
+      "create",
+      `${user.id} hat eine Initiativbewerbung bei „${company.name}" abgeschickt`,
     );
     return { id: application.id };
   }

@@ -141,6 +141,42 @@ class ApplicationController {
     }
   }
 
+  static async submitUnsolicited(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const settings = await PlatformSettingsService.getSettings(tenantId);
+      // CV is mandatory: validate up front, roll back the application if it fails
+      const cv = request.files && request.files.file;
+      validateApplicationDocumentFile(cv, settings);
+      const payload = {
+        motivation: request.body && request.body.motivation,
+        consent:
+          (request.body && request.body.consent) === true ||
+          (request.body && request.body.consent) === "true",
+      };
+      const result = await ApplicationService.submitUnsolicitedApplication(
+        tenantId,
+        request.user.id,
+        request.params.id,
+        payload,
+      );
+      try {
+        await persistApplicationDocument(tenantId, result.id, cv, "lebenslauf");
+      } catch (docError) {
+        try {
+          await ApplicationService.deleteApplication(tenantId, result.id);
+        } catch (rollbackError) {
+          logger.error("Application rollback failed", rollbackError);
+        }
+        throw docError;
+      }
+      return response.status(201).send({ id: result.id });
+    } catch (error) {
+      logger.error("Could not submit unsolicited application", error);
+      return sendError(response, error, "Could not submit application");
+    }
+  }
+
   static async listMine(request, response) {
     try {
       const applications = await ApplicationService.listMyApplications(

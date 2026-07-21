@@ -229,6 +229,8 @@ class CompanyController {
         sizeId: company.sizeId,
         logoUrl: company.logoUrl,
         description: company.description,
+        acceptsUnsolicitedApplications:
+          company.acceptsUnsolicitedApplications === true,
         lat:
           company.location && Array.isArray(company.location.coordinates)
             ? company.location.coordinates[1]
@@ -245,6 +247,30 @@ class CompanyController {
         })),
         branches,
       });
+    } catch (error) {
+      logger.error(error);
+      return response.sendStatus(500);
+    }
+  }
+
+  static async getUnsolicitedCompanies(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const companies = await CompanyManager.getCompanies(tenantId, {
+        status: "verified",
+        acceptsUnsolicitedApplications: true,
+      });
+      return response.status(200).send(
+        companies.map((company) => ({
+          id: company.id,
+          name: company.name,
+          slug: company.slug,
+          logoUrl: company.logoUrl,
+          industryId: company.industryId,
+          city: company.city,
+          districtId: company.districtId,
+        })),
+      );
     } catch (error) {
       logger.error(error);
       return response.sendStatus(500);
