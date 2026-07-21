@@ -47,12 +47,12 @@ class PostManager {
     return PostModel.distinct("tags", publicQuery(tenantId));
   }
 
-  // company-dashboard feed: published company/all posts incl. dashboard-only
+  // company-dashboard feed: only published posts flagged company-dashboard-only
   static async listForCompany(tenantId) {
     const raw = await PostModel.find({
       tenantId,
       published: true,
-      audience: { $in: ["companies", "all"] },
+      companyDashboardOnly: true,
     }).sort({ publishedAt: -1, created: -1 });
     return raw.map((doc) => doc.toEntity());
   }
