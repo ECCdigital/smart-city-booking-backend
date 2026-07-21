@@ -158,5 +158,127 @@ describe("json-controller groupBookingAllowed", () => {
       assert.strictEqual(res.statusCode, 200);
       assert.strictEqual(res.body.groupBookingAllowed, false);
     });
+
+    it("attaches tenant cancellationRefundTiers to the bookable response", async () => {
+      const tiers = [
+        { daysBeforeStart: 20, refundPercentage: 100 },
+        { daysBeforeStart: 0, refundPercentage: 50 },
+      ];
+      getTenantStub.resolves({
+        id: "tenant-1",
+        catalogParticipation: { restricted: false },
+        cancellationRefundTiers: tiers,
+      });
+      const bookable = createBookable();
+      getBookableStub = sinon
+        .stub(BookableManager, "getBookable")
+        .resolves(bookable);
+      sinon.stub(BookableManager, "getBookablesByIds").resolves([]);
+
+      const req = {
+        params: { tenant: "tenant-1", id: "bookable-1" },
+        user: null,
+      };
+      const res = createMockResponse();
+
+      await JSONController.getBookable(req, res);
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.deepStrictEqual(res.body.cancellationRefundTiers, tiers);
+      assert.ok(getTenantStub.calledOnce);
+    });
+
+    it("attaches an empty cancellationRefundTiers array when tenant has none", async () => {
+      const bookable = createBookable();
+      getBookableStub = sinon
+        .stub(BookableManager, "getBookable")
+        .resolves(bookable);
+      sinon.stub(BookableManager, "getBookablesByIds").resolves([]);
+
+      const req = {
+        params: { tenant: "tenant-1", id: "bookable-1" },
+        user: null,
+      };
+      const res = createMockResponse();
+
+      await JSONController.getBookable(req, res);
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.deepStrictEqual(res.body.cancellationRefundTiers, []);
+    });
+
+    it("attaches cancellationRefundTiers to related bookables", async () => {
+      const tiers = [{ daysBeforeStart: 0, refundPercentage: 80 }];
+      getTenantStub.resolves({
+        id: "tenant-1",
+        catalogParticipation: { restricted: false },
+        cancellationRefundTiers: tiers,
+      });
+      const related = createBookable({
+        id: "bookable-2",
+        title: "Related",
+      });
+      const bookable = createBookable({
+        relatedBookableIds: ["bookable-2"],
+      });
+      getBookableStub = sinon
+        .stub(BookableManager, "getBookable")
+        .resolves(bookable);
+      sinon.stub(BookableManager, "getBookablesByIds").resolves([related]);
+
+      const req = {
+        params: { tenant: "tenant-1", id: "bookable-1" },
+        user: null,
+      };
+      const res = createMockResponse();
+
+      await JSONController.getBookable(req, res);
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.deepStrictEqual(res.body.cancellationRefundTiers, tiers);
+      assert.strictEqual(res.body.relatedBookables.length, 1);
+      assert.deepStrictEqual(
+        res.body.relatedBookables[0].cancellationRefundTiers,
+        tiers,
+      );
+    });
+  });
+
+  describe("getBookables", () => {
+    it("attaches tenant cancellationRefundTiers to each listed bookable", async () => {
+      const tiers = [
+        { daysBeforeStart: 14, refundPercentage: 100 },
+        { daysBeforeStart: 0, refundPercentage: 0 },
+      ];
+      getTenantStub.resolves({
+        id: "tenant-1",
+        catalogParticipation: { restricted: false },
+        cancellationRefundTiers: tiers,
+      });
+      sinon
+        .stub(BookableManager, "getBookables")
+        .resolves([
+          createBookable({ id: "bookable-1" }),
+          createBookable({ id: "bookable-2", title: "Second" }),
+        ]);
+      sinon.stub(BookableManager, "getBookablesByIds").resolves([]);
+
+      const req = {
+        params: { tenant: "tenant-1" },
+        query: {},
+        user: null,
+      };
+      const res = createMockResponse();
+
+      await JSONController.getBookables(req, res);
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.ok(Array.isArray(res.body));
+      assert.strictEqual(res.body.length, 2);
+      for (const pub of res.body) {
+        assert.deepStrictEqual(pub.cancellationRefundTiers, tiers);
+      }
+      assert.ok(getTenantStub.calledOnce);
+    });
   });
 });

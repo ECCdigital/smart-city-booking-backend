@@ -176,6 +176,8 @@ _Response:_
 
 Tenant owners configure `cancellationRefundTiers` through the existing tenant create/update API. An empty array means a full refund.
 
+Public JSON bookable responses under `/json/:tenant/bookables` and `/json/:tenant/bookables/:id` (including nested `relatedBookables` and event tickets) include the tenant’s `cancellationRefundTiers` so storefronts can show the refund policy without an extra tenant request.
+
 ### GET /api/:tenant/bookings/:id/cancellation-refund-preview
 
 Returns the current policy proposal for an administrator. **Requires JWT and booking update permission.**

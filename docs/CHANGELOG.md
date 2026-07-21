@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Public JSON bookable responses (`/json/:tenant/bookables*`, event tickets) include the tenant `cancellationRefundTiers`
+
 ## [4.2.0] — 2026-07-17
 
 ### Added

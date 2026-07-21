@@ -20,10 +20,12 @@ class JSONController {
     });
   }
 
+  /**
+   * @returns {Promise<object|false>} Loaded tenant on success, false after writing an error response.
+   */
   static async _enforceCatalogAccess(res, tenantId, identity) {
     try {
-      await enforceTenantCatalogAccess(tenantId, identity?.id);
-      return true;
+      return await enforceTenantCatalogAccess(tenantId, identity?.id);
     } catch (error) {
       JSONController._sendCatalogAccessError(res, error);
       return false;
@@ -48,7 +50,7 @@ class JSONController {
     bookable,
     tenantId,
     instance,
-    { identity, userRoles } = {},
+    { identity, userRoles, cancellationRefundTiers = [] } = {},
   ) {
     const pub = bookable.exportPublic();
     pub.checkoutUrl = await JSONController._checkoutUrl(
@@ -61,6 +63,7 @@ class JSONController {
       identity,
       userRoles,
     );
+    pub.cancellationRefundTiers = cancellationRefundTiers;
     return pub;
   }
 
@@ -70,11 +73,16 @@ class JSONController {
 
     const identity = req.user;
 
-    if (
-      !(await JSONController._enforceCatalogAccess(res, tenantId, identity))
-    ) {
+    const tenant = await JSONController._enforceCatalogAccess(
+      res,
+      tenantId,
+      identity,
+    );
+    if (!tenant) {
       return;
     }
+
+    const cancellationRefundTiers = tenant.cancellationRefundTiers || [];
 
     try {
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
@@ -114,12 +122,14 @@ class JSONController {
       const checkoutInstance =
         bookables.length > 0 ? await InstanceManager.getInstance() : null;
 
+      const exportOptions = { identity, userRoles, cancellationRefundTiers };
+
       const result = bookables.map(async (bookable) => {
         const pub = await JSONController._exportPublicBookable(
           bookable,
           tenantId,
           checkoutInstance,
-          { identity, userRoles },
+          exportOptions,
         );
 
         const extPrices = await ExternalPriceService.resolve(
@@ -146,10 +156,7 @@ class JSONController {
               b,
               tenantId,
               checkoutInstance,
-              {
-                identity,
-                userRoles,
-              },
+              exportOptions,
             ),
           ),
         );
@@ -171,15 +178,20 @@ class JSONController {
 
     const identity = req.user;
 
-    if (
-      !(await JSONController._enforceCatalogAccess(res, tenantId, identity))
-    ) {
+    const tenant = await JSONController._enforceCatalogAccess(
+      res,
+      tenantId,
+      identity,
+    );
+    if (!tenant) {
       return;
     }
 
-    const userRoles = await JSONController.getUserRoles(tenantId, identity);
+    const cancellationRefundTiers = tenant.cancellationRefundTiers || [];
 
     try {
+      const userRoles = await JSONController.getUserRoles(tenantId, identity);
+      const exportOptions = { identity, userRoles, cancellationRefundTiers };
       const bookable = await BookableManager.getBookable(id, tenantId);
 
       if (!bookable?.id || bookable.isPublic === false) {
@@ -197,7 +209,7 @@ class JSONController {
           bookable,
           tenantId,
           checkoutInstance,
-          { identity, userRoles },
+          exportOptions,
         );
 
         const extPrices = await ExternalPriceService.resolve(
@@ -225,10 +237,7 @@ class JSONController {
               b,
               tenantId,
               checkoutInstance,
-              {
-                identity,
-                userRoles,
-              },
+              exportOptions,
             ),
           ),
         );
@@ -253,17 +262,23 @@ class JSONController {
     const { tenant: tenantId } = req.params;
     const { ids } = req.query;
 
-    if (
-      !(await JSONController._enforceCatalogAccess(res, tenantId, req.user))
-    ) {
+    const tenant = await JSONController._enforceCatalogAccess(
+      res,
+      tenantId,
+      req.user,
+    );
+    if (!tenant) {
       return;
     }
+
+    const cancellationRefundTiers = tenant.cancellationRefundTiers || [];
 
     try {
       const identity = req.user;
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
       let events = await EventManager.getEvents(tenantId);
       const checkoutInstance = await InstanceManager.getInstance();
+      const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
       events = events.filter((event) => event.isPublic);
 
@@ -303,7 +318,7 @@ class JSONController {
                 ticket,
                 tenantId,
                 checkoutInstance,
-                { identity, userRoles },
+                exportOptions,
               ),
             ),
         );
@@ -319,17 +334,23 @@ class JSONController {
   static async getEvent(req, res) {
     const { tenant: tenantId, id } = req.params;
 
-    if (
-      !(await JSONController._enforceCatalogAccess(res, tenantId, req.user))
-    ) {
+    const tenant = await JSONController._enforceCatalogAccess(
+      res,
+      tenantId,
+      req.user,
+    );
+    if (!tenant) {
       return;
     }
+
+    const cancellationRefundTiers = tenant.cancellationRefundTiers || [];
 
     try {
       const identity = req.user;
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
       const event = await EventManager.getEvent(id, tenantId);
       const checkoutInstance = await InstanceManager.getInstance();
+      const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
       if (event?.id && event.isPublic === true) {
         const tickets = await BookableManager.getEventBookables(
@@ -346,7 +367,7 @@ class JSONController {
                 ticket,
                 tenantId,
                 checkoutInstance,
-                { identity, userRoles },
+                exportOptions,
               ),
             ),
         );
