@@ -54,12 +54,6 @@ docker run -d \
   smart-city-booking-backend
 ```
 
-## Docker images via GitHub Releases
-
-The repository publishes container images to GitHub Container Registry (`ghcr.io`) when a GitHub Release is published. See `.github/workflows/docker-publish.yml`.
-
-Pin deployments to explicit version tags (e.g. `v4.0.0`) rather than floating `latest` tags in production.
-
 ## Database migrations
 
 Database migration scripts live in `migrations/scripts/`. Run them according to your deployment process when upgrading between versions. See [CHANGELOG.md](CHANGELOG.md) and [migrations/](migrations/) for breaking changes.
