@@ -191,6 +191,52 @@ class BundleCheckoutService {
     return true;
   }
 
+  /**
+   * Run per-item checks and enrich bookable items with prices in one pass
+   * so each ItemCheckoutService is initialized only once.
+   * @returns {Promise<{freeBookingAllowed: boolean, bookingDiscountPercent: number}>}
+   */
+  async _checkAndEnrichBookableItemPrices() {
+    let freeBookingAllowed = true;
+    let bookingDiscountPercent = 0;
+
+    for (let i = 0; i < this.bookableItems.length; i++) {
+      const bookableItem = this.bookableItems[i];
+      let itemCheckoutService = null;
+      try {
+        itemCheckoutService =
+          await this.createItemCheckoutService(bookableItem);
+        await itemCheckoutService.checkAll();
+
+        bookableItem.regularPriceEur =
+          await itemCheckoutService.regularPriceEur();
+        bookableItem.regularGrossPriceEur =
+          await itemCheckoutService.regularGrossPriceEur();
+        bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
+        bookableItem.userGrossPriceEur =
+          await itemCheckoutService.userGrossPriceEur();
+        bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
+        bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
+        delete bookableItem._bookableUsed._id;
+
+        if (!(await itemCheckoutService.freeBookingAllowed())) {
+          freeBookingAllowed = false;
+        }
+        if (i === 0) {
+          bookingDiscountPercent =
+            await itemCheckoutService.bookingDiscountPercent();
+        }
+      } finally {
+        if (itemCheckoutService) {
+          itemCheckoutService.cleanup();
+          itemCheckoutService = null;
+        }
+      }
+    }
+
+    return { freeBookingAllowed, bookingDiscountPercent };
+  }
+
   async userPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
@@ -350,6 +396,40 @@ class BundleCheckoutService {
   }
 
   /**
+   * Validate all items and return aggregate prices without creating a booking.
+   * Throws the same check errors as checkAll() / prepareBooking().
+   * @returns {Promise<{
+   *   regularPriceEur: number,
+   *   userPriceEur: number,
+   *   regularGrossPriceEur: number,
+   *   userGrossPriceEur: number,
+   *   freeBookingAllowed: boolean,
+   *   bookingDiscountPercent: number
+   * }>}
+   */
+  async validateAndGetPrices() {
+    const { freeBookingAllowed, bookingDiscountPercent } =
+      await this._checkAndEnrichBookableItemPrices();
+
+    let regularPriceEur = 0;
+    let regularGrossPriceEur = 0;
+    for (const bookableItem of this.bookableItems) {
+      const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
+      regularPriceEur += bookableItem.regularPriceEur * multiplier;
+      regularGrossPriceEur += bookableItem.regularGrossPriceEur * multiplier;
+    }
+
+    return {
+      regularPriceEur: Math.round(regularPriceEur * 100) / 100,
+      userPriceEur: await this.userPriceEur(),
+      regularGrossPriceEur: Math.round(regularGrossPriceEur * 100) / 100,
+      userGrossPriceEur: await this.userGrossPriceEur(),
+      freeBookingAllowed,
+      bookingDiscountPercent,
+    };
+  }
+
+  /**
    * Prepares a booking by checking all bookable items and generating a booking reference.
    *
    * @async
@@ -360,30 +440,7 @@ class BundleCheckoutService {
    * @returns {Promise<Booking>} - A promise that resolves to the prepared booking object.
    */
   async prepareBooking({ keepExistingId = false, existingId = null } = {}) {
-    await this.checkAll();
-
-    for (const bookableItem of this.bookableItems) {
-      let itemCheckoutService = null;
-      try {
-        itemCheckoutService =
-          await this.createItemCheckoutService(bookableItem);
-        bookableItem.regularPriceEur =
-          await itemCheckoutService.regularPriceEur();
-        bookableItem.regularGrossPriceEur =
-          await itemCheckoutService.regularGrossPriceEur();
-        bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
-        bookableItem.userGrossPriceEur =
-          await itemCheckoutService.userGrossPriceEur();
-        bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
-        bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
-        delete bookableItem._bookableUsed._id;
-      } finally {
-        if (itemCheckoutService) {
-          itemCheckoutService.cleanup();
-          itemCheckoutService = null;
-        }
-      }
-    }
+    await this._checkAndEnrichBookableItemPrices();
 
     const mergedAttachments = mergeAttachments(
       this.attachments,

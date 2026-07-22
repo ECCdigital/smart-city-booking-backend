@@ -9,6 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- `POST /api/v2/:tenant/checkout/validate-group` — batch-validate series / group booking attempts in one request (avoids storefront 429s from parallel single validates)
 - Full-stack operator guide ([getting-started.md](getting-started.md)): wire Admin UI and Storefront to the API, local npm setup, and Docker Compose example (`docker-compose.full-stack.example.yml`)
 - Public JSON bookable responses (`/json/:tenant/bookables*`, event tickets) include the tenant `cancellationRefundTiers`
 
