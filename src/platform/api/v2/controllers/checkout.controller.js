@@ -260,99 +260,29 @@ class CheckoutControllerV2 {
       tenantId,
     );
 
-    const bookableItems = Array.isArray(rawBookableItems)
-      ? rawBookableItems.filter((item) => item && item.bookableId)
-      : [];
+    const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
+      tenantId,
+      user,
+      rawBookableItems,
+      rawBookingAttempts,
+    });
 
-    if (bookableItems.length === 0) {
+    if (resolved.error) {
       return res.status(200).json({
         success: false,
         checkoutId,
         checkoutIdGenerated: generated,
         error: {
-          reason: CHECKOUT_REASONS.INVALID_BOOKABLE_ITEMS,
-          checkType: null,
-          params: {},
+          reason: resolved.error.reason,
+          checkType: resolved.error.checkType,
+          params: resolved.error.params,
         },
       });
     }
 
-    const rawAttempts = Array.isArray(rawBookingAttempts)
-      ? rawBookingAttempts
-      : [];
-
-    if (rawAttempts.length === 0) {
-      return res.status(200).json({
-        success: false,
-        checkoutId,
-        checkoutIdGenerated: generated,
-        error: {
-          reason: CHECKOUT_REASONS.BOOKING_ATTEMPTS_MISSING,
-          checkType: null,
-          params: {},
-        },
-      });
-    }
+    const { bookableItems, bookingAttempts: rawAttempts } = resolved;
 
     try {
-      const leadBookableId = bookableItems[0].bookableId;
-      const bookable = await BookableManager.getBookable(
-        leadBookableId,
-        tenantId,
-      );
-      const gb = bookable?.groupBooking;
-      if (!gb?.enabled) {
-        return res.status(200).json({
-          success: false,
-          checkoutId,
-          checkoutIdGenerated: generated,
-          error: {
-            reason: CHECKOUT_REASONS.GROUP_BOOKING_DISABLED,
-            checkType: null,
-            params: { bookableId: leadBookableId },
-          },
-        });
-      }
-
-      const permitted = Array.isArray(gb.permittedRoles)
-        ? gb.permittedRoles
-        : [];
-      if (permitted.length > 0 && !user) {
-        return res.status(200).json({
-          success: false,
-          checkoutId,
-          checkoutIdGenerated: generated,
-          error: {
-            reason: CHECKOUT_REASONS.UNAUTHORIZED,
-            checkType: null,
-            params: {},
-          },
-        });
-      }
-
-      let userRoles = [];
-      if (user) {
-        const membership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            user.id,
-          );
-        userRoles = membership?.roles || [];
-      }
-
-      if (!GroupBookingPermissions.isAllowed(bookable, user, userRoles)) {
-        return res.status(200).json({
-          success: false,
-          checkoutId,
-          checkoutIdGenerated: generated,
-          error: {
-            reason: CHECKOUT_REASONS.GROUP_BOOKING_ROLE_REQUIRED,
-            checkType: null,
-            params: { requiredRoles: permitted },
-          },
-        });
-      }
-
       const resolvedItems = await withMandatoryAddons(bookableItems, tenantId);
 
       const attempts = await Promise.all(
@@ -472,69 +402,23 @@ class CheckoutControllerV2 {
         comment,
       } = req.body;
 
-      const bookableItems = Array.isArray(rawBookableItems)
-        ? rawBookableItems.filter((item) => item && item.bookableId)
-        : [];
-
-      if (bookableItems.length === 0) {
-        throw new CheckoutError({
-          reason: CHECKOUT_REASONS.INVALID_BOOKABLE_ITEMS,
-          statusCode: 400,
-        });
-      }
-
-      const rawAttempts = Array.isArray(rawBookingAttempts)
-        ? rawBookingAttempts
-        : [];
-
-      if (rawAttempts.length === 0) {
-        throw new CheckoutError({
-          reason: CHECKOUT_REASONS.BOOKING_ATTEMPTS_MISSING,
-          statusCode: 400,
-        });
-      }
-
-      const leadBookableId = bookableItems[0].bookableId;
-      const bookable = await BookableManager.getBookable(
-        leadBookableId,
+      const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
         tenantId,
-      );
-      const gb = bookable?.groupBooking;
-      if (!gb?.enabled) {
+        user,
+        rawBookableItems,
+        rawBookingAttempts,
+      });
+
+      if (resolved.error) {
         throw new CheckoutError({
-          reason: CHECKOUT_REASONS.GROUP_BOOKING_DISABLED,
-          statusCode: 403,
-          params: { bookableId: leadBookableId },
+          reason: resolved.error.reason,
+          statusCode: resolved.error.statusCode,
+          params: resolved.error.params,
+          checkType: resolved.error.checkType,
         });
       }
 
-      const permitted = Array.isArray(gb.permittedRoles)
-        ? gb.permittedRoles
-        : [];
-      if (permitted.length > 0 && !user) {
-        throw new CheckoutError({
-          reason: CHECKOUT_REASONS.UNAUTHORIZED,
-          statusCode: 401,
-        });
-      }
-
-      let userRoles = [];
-      if (user) {
-        const membership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            user.id,
-          );
-        userRoles = membership?.roles || [];
-      }
-
-      if (!GroupBookingPermissions.isAllowed(bookable, user, userRoles)) {
-        throw new CheckoutError({
-          reason: CHECKOUT_REASONS.GROUP_BOOKING_ROLE_REQUIRED,
-          statusCode: 403,
-          params: { requiredRoles: permitted },
-        });
-      }
+      const { bookableItems, bookingAttempts: rawAttempts } = resolved;
 
       const bookingAttempts = rawAttempts.map((attempt) => ({
         timeBegin: attempt?.timeBegin,
@@ -658,6 +542,99 @@ class CheckoutControllerV2 {
   }
 
   // --- helpers ---
+
+  /**
+   * Shared request + permission gate for group checkout / validate-group.
+   * Returns either `{ bookableItems, bookingAttempts, bookable, userRoles }`
+   * or `{ error: { reason, statusCode, checkType, params } }`.
+   */
+  static async _resolveGroupCheckoutRequest({
+    tenantId,
+    user,
+    rawBookableItems,
+    rawBookingAttempts,
+  }) {
+    const bookableItems = Array.isArray(rawBookableItems)
+      ? rawBookableItems.filter((item) => item && item.bookableId)
+      : [];
+
+    if (bookableItems.length === 0) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.INVALID_BOOKABLE_ITEMS,
+          statusCode: 400,
+          checkType: null,
+          params: {},
+        },
+      };
+    }
+
+    const bookingAttempts = Array.isArray(rawBookingAttempts)
+      ? rawBookingAttempts
+      : [];
+
+    if (bookingAttempts.length === 0) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.BOOKING_ATTEMPTS_MISSING,
+          statusCode: 400,
+          checkType: null,
+          params: {},
+        },
+      };
+    }
+
+    const leadBookableId = bookableItems[0].bookableId;
+    const bookable = await BookableManager.getBookable(
+      leadBookableId,
+      tenantId,
+    );
+    const gb = bookable?.groupBooking;
+    if (!gb?.enabled) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.GROUP_BOOKING_DISABLED,
+          statusCode: 403,
+          checkType: null,
+          params: { bookableId: leadBookableId },
+        },
+      };
+    }
+
+    const permitted = Array.isArray(gb.permittedRoles) ? gb.permittedRoles : [];
+    if (permitted.length > 0 && !user) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.UNAUTHORIZED,
+          statusCode: 401,
+          checkType: null,
+          params: {},
+        },
+      };
+    }
+
+    let userRoles = [];
+    if (user) {
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
+        tenantId,
+        user.id,
+      );
+      userRoles = membership?.roles || [];
+    }
+
+    if (!GroupBookingPermissions.isAllowed(bookable, user, userRoles)) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.GROUP_BOOKING_ROLE_REQUIRED,
+          statusCode: 403,
+          checkType: null,
+          params: { requiredRoles: permitted },
+        },
+      };
+    }
+
+    return { bookableItems, bookingAttempts, bookable, userRoles };
+  }
 
   /**
    * Sum price fields across successful validate-group attempts.
