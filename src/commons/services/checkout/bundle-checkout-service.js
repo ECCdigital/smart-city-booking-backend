@@ -350,19 +350,16 @@ class BundleCheckoutService {
   }
 
   /**
-   * Prepares a booking by checking all bookable items and generating a booking reference.
-   *
-   * @async
-   * @function prepareBooking
-   * @param {Object} [options={}] - The options for preparing the booking.
-   * @param {boolean} [options.keepExistingId=false] - Whether to keep the existing booking ID.
-   * @param {string|null} [options.existingId=null] - The existing booking ID to keep, if any.
-   * @returns {Promise<Booking>} - A promise that resolves to the prepared booking object.
+   * Enrich bookable items with per-item prices after a successful checkAll().
+   * Also returns free-booking / discount metadata for validate responses.
+   * @returns {Promise<{freeBookingAllowed: boolean, bookingDiscountPercent: number}>}
    */
-  async prepareBooking({ keepExistingId = false, existingId = null } = {}) {
-    await this.checkAll();
+  async _enrichBookableItemPrices() {
+    let freeBookingAllowed = true;
+    let bookingDiscountPercent = 0;
 
-    for (const bookableItem of this.bookableItems) {
+    for (let i = 0; i < this.bookableItems.length; i++) {
+      const bookableItem = this.bookableItems[i];
       let itemCheckoutService = null;
       try {
         itemCheckoutService =
@@ -377,6 +374,14 @@ class BundleCheckoutService {
         bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
         bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
         delete bookableItem._bookableUsed._id;
+
+        if (!(await itemCheckoutService.freeBookingAllowed())) {
+          freeBookingAllowed = false;
+        }
+        if (i === 0) {
+          bookingDiscountPercent =
+            await itemCheckoutService.bookingDiscountPercent();
+        }
       } finally {
         if (itemCheckoutService) {
           itemCheckoutService.cleanup();
@@ -384,6 +389,59 @@ class BundleCheckoutService {
         }
       }
     }
+
+    return { freeBookingAllowed, bookingDiscountPercent };
+  }
+
+  /**
+   * Validate all items and return aggregate prices without creating a booking.
+   * Throws the same check errors as checkAll() / prepareBooking().
+   * @returns {Promise<{
+   *   regularPriceEur: number,
+   *   userPriceEur: number,
+   *   regularGrossPriceEur: number,
+   *   userGrossPriceEur: number,
+   *   freeBookingAllowed: boolean,
+   *   bookingDiscountPercent: number
+   * }>}
+   */
+  async validateAndGetPrices() {
+    await this.checkAll();
+
+    const { freeBookingAllowed, bookingDiscountPercent } =
+      await this._enrichBookableItemPrices();
+
+    let regularPriceEur = 0;
+    let regularGrossPriceEur = 0;
+    for (const bookableItem of this.bookableItems) {
+      const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
+      regularPriceEur += bookableItem.regularPriceEur * multiplier;
+      regularGrossPriceEur += bookableItem.regularGrossPriceEur * multiplier;
+    }
+
+    return {
+      regularPriceEur: Math.round(regularPriceEur * 100) / 100,
+      userPriceEur: await this.userPriceEur(),
+      regularGrossPriceEur: Math.round(regularGrossPriceEur * 100) / 100,
+      userGrossPriceEur: await this.userGrossPriceEur(),
+      freeBookingAllowed,
+      bookingDiscountPercent,
+    };
+  }
+
+  /**
+   * Prepares a booking by checking all bookable items and generating a booking reference.
+   *
+   * @async
+   * @function prepareBooking
+   * @param {Object} [options={}] - The options for preparing the booking.
+   * @param {boolean} [options.keepExistingId=false] - Whether to keep the existing booking ID.
+   * @param {string|null} [options.existingId=null] - The existing booking ID to keep, if any.
+   * @returns {Promise<Booking>} - A promise that resolves to the prepared booking object.
+   */
+  async prepareBooking({ keepExistingId = false, existingId = null } = {}) {
+    await this.checkAll();
+    await this._enrichBookableItemPrices();
 
     const mergedAttachments = mergeAttachments(
       this.attachments,
