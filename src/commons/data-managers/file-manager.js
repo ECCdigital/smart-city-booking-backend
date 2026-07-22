@@ -381,6 +381,31 @@ class NextcloudManager extends FileManager {
       throw NextcloudManager._handleError(error, "Failed to create file");
     }
   }
+
+  /**
+   * Deletes a file from the Nextcloud server.
+   *
+   * @param {string} tenant - The tenant ID (used to locate the tenant-specific directory).
+   * @param {string} filename - The file path relative to the tenant directory (a leading slash is tolerated).
+   * @returns {Promise<void>} A promise that resolves when the file has been deleted.
+   */
+  static async deleteFile(tenant, filename) {
+    const relativePath = String(filename).replace(/^\/+/, "");
+    if (relativePath.split("/").includes("..")) {
+      throw new NextcloudError("Invalid file path");
+    }
+    try {
+      return await NextcloudManager._retryWithBackoff(async () => {
+        const client = NextcloudManager._getClient();
+        return await client.deleteFile(`${tenant}/${relativePath}`);
+      });
+    } catch (error) {
+      logger.error(`Failed to delete file ${filename} for tenant ${tenant}`, {
+        error: error.message,
+      });
+      throw NextcloudManager._handleError(error, "Failed to delete file");
+    }
+  }
 }
 
 module.exports = {

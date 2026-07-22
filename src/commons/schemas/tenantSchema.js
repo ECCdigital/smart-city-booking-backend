@@ -20,6 +20,7 @@ const tenantSchemaDefinition = {
   mail: { type: String, default: "" },
   phone: { type: String, default: "" },
   website: { type: String, default: "" },
+  platform: { type: String, default: "" },
   bookableDetailLink: { type: String, default: "" },
   eventDetailLink: { type: String, default: "" },
   genericMailTemplate: { type: String, default: "" },

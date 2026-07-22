@@ -1,0 +1,33 @@
+const offerSchemaDefinition = {
+  id: { type: String, required: true, unique: true },
+  tenantId: { type: String, required: true },
+  companyId: { type: String, required: true },
+  branchId: { type: String, default: "" },
+  title: { type: String, default: "" },
+  industryId: { type: String, default: "" },
+  internshipTypeId: { type: String, default: "" },
+  minAge: { type: Number, default: null },
+  duration: { type: String, default: "" },
+  applicationDeadline: { type: String, default: "" },
+  city: { type: String, default: "" },
+  postalCode: { type: String, default: "" },
+  districtId: { type: String, default: "" },
+  location: { type: Object, default: null },
+  requirements: { type: String, default: "" },
+  additionalInfo: { type: String, default: "" },
+  aboutUs: { type: String, default: "" },
+  externalLink: { type: String, default: "" },
+  contactChannels: { type: [String], default: [] },
+  contactPersons: { type: Array, default: [] },
+  status: {
+    type: String,
+    enum: ["Entwurf", "In Prüfung", "Online", "Archiv"],
+    default: "Entwurf",
+  },
+  reviewNote: { type: String, default: "" },
+  views: { type: Number, default: 0 },
+  created: { type: Number, default: () => Date.now() },
+  publishedAt: { type: Number, default: null },
+};
+
+module.exports = offerSchemaDefinition;
