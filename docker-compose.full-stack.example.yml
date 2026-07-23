@@ -1,0 +1,90 @@
+# Full-stack example: MongoDB + Backend API + Admin UI + Storefront
+#
+# Usage:
+#   cp docker-compose.full-stack.example.yml docker-compose.yml
+#   cp .env.full-stack.example .env
+#   # edit secrets in .env
+#   docker compose up -d --build
+#
+# Docs: docs/getting-started.md
+#
+# Branch pins: change #develop to version/4.x (backend, admin) or version/1.x
+# (storefront) for a more stable deploy.
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - booking-net
+
+  backend:
+    build:
+      context: .
+      # Or build from GitHub:
+      # context: https://github.com/ECCdigital/smart-city-booking-backend.git#develop
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "8081"
+      DB_URL: mongodb://mongodb:27017/booking-manager
+      DB_NAME: booking-manager
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:8081}
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      - mongodb
+    ports:
+      - "8081:8081"
+    networks:
+      - booking-net
+
+  admin:
+    build:
+      context: https://github.com/ECCdigital/smart-city-booking-vue-app.git#develop
+    restart: unless-stopped
+    environment:
+      VUE_APP_SERVER_BASE_URL: ${BACKEND_URL:-http://localhost:8081}
+      VUE_APP_NAME: ${VUE_APP_NAME:-Smart City Booking}
+      VUE_APP_IS_PRODUCTION: ${VUE_APP_IS_PRODUCTION:-true}
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    networks:
+      - booking-net
+
+  storefront:
+    build:
+      context: https://github.com/ECCdigital/smart-city-booking-store-front.git#develop
+    restart: unless-stopped
+    environment:
+      # Server-side BFF → backend on the Docker network (not localhost:8080)
+      NUXT_API_BASE_URL: http://backend:8081
+      NUXT_USER_BASE_URL: ${NUXT_USER_BASE_URL:-http://localhost:3000}
+      NUXT_PUBLIC_USER_BASE_URL: ${NUXT_PUBLIC_USER_BASE_URL:-http://localhost:3000}
+      NUXT_ADMIN_BASE_URL: ${FRONTEND_URL:-http://localhost:8080}
+      NUXT_PUBLIC_ADMIN_BASE_URL: ${FRONTEND_URL:-http://localhost:8080}
+      NUXT_CACHE_ENABLED: ${NUXT_CACHE_ENABLED:-false}
+      PORT: "3000"
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    networks:
+      - booking-net
+
+networks:
+  booking-net:
+    driver: bridge
+
+volumes:
+  mongodb_data:

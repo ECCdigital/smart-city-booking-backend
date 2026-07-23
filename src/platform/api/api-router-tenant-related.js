@@ -15,7 +15,6 @@ const { TenantController } = require("./controllers/tenant-controller");
 const {
   GroupBookingController,
 } = require("./controllers/group-booking-controller");
-const CatalogController = require("./controllers/catalog-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 
 const router = express.Router({ mergeParams: true });
@@ -37,11 +36,31 @@ router.get(
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
+  "/bookables/:id/availability/v1",
+  optionalAuth,
+  CalendarController.getBookableAvailabilityV1,
+);
+router.get(
+  "/bookables/:id/availability/v2",
+  optionalAuth,
+  CalendarController.getBookableAvailabilityV2,
+);
+router.get(
   "/bookables/:id/availability",
   optionalAuth,
   CalendarController.getBookableAvailability,
 );
+router.get(
+  "/bookables/:id/block-periods",
+  optionalAuth,
+  CalendarController.getBookableBlockPeriods,
+);
 router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
+
+router.get(
+  "/bookables/:id/prices",
+  BookableController.getBookablePriceCategories,
+);
 
 // Protected
 router.get(
@@ -49,6 +68,13 @@ router.get(
   AuthenticationController.isSignedIn,
   BookableController.getBookables,
 );
+
+router.get(
+  "/bookables/_template",
+  AuthenticationController.isSignedIn,
+  BookableController.getBookableTemplate,
+);
+
 router.get(
   "/bookables/:id",
   AuthenticationController.isSignedIn,
@@ -115,21 +141,7 @@ router.get(
 // BOOKINGS
 // ========
 
-// Public
 router.get("/bookings", optionalAuth, BookingController.getBookings);
-
-router.get("/bookings/:ids/status", BookingController.getBookingStatus);
-router.get(
-  "/bookings/:id/status/public",
-  BookingController.getPublicBookingStatus,
-);
-
-// Protected
-router.get(
-  "/bookings/:id",
-  AuthenticationController.isSignedIn,
-  BookingController.getBooking,
-);
 
 router.put(
   "/bookings",
@@ -137,15 +149,34 @@ router.put(
   BookingController.storeBooking,
 );
 router.get(
-  "/mybookings",
+  "/bookings/assigned",
   AuthenticationController.isSignedIn,
   BookingController.getAssignedBookings,
 );
+
+router.get(
+  "/bookings/:id",
+  AuthenticationController.isSignedIn,
+  BookingController.getBooking,
+);
+
 router.delete(
   "/bookings/:id",
   AuthenticationController.isSignedIn,
   BookingController.removeBooking,
 );
+
+router.get(
+  "/bookings/:ids/status",
+  optionalAuth,
+  BookingController.getBookingStatus,
+);
+
+router.get(
+  "/bookings/:id/status/public",
+  BookingController.getPublicBookingStatus,
+);
+
 router.get(
   "/bookings/:id/commit",
   AuthenticationController.isSignedIn,
@@ -155,6 +186,15 @@ router.post(
   "/bookings/:id/pay",
   AuthenticationController.isSignedIn,
   BookingController.payBooking,
+);
+router.get(
+  "/bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  BookingController.getCancellationRefundPreview,
+);
+router.get(
+  "/bookings/:id/cancellation-refund-preview/public",
+  BookingController.getPublicCancellationRefundPreview,
 );
 router.post(
   "/bookings/:id/reject",
@@ -168,6 +208,10 @@ router.post(
 router.get(
   "/bookings/:id/verify-ownership",
   BookingController.verifyBookingOwnership,
+);
+router.get(
+  "/bookings/:id/hooks/:hookId/cancellation-refund-preview",
+  BookingController.getHookCancellationRefundPreview,
 );
 router.get(
   "/bookings/:id/hooks/:hookId/release",
@@ -189,6 +233,18 @@ router.get(
   "/bookings/:id/invoice/:invoiceId",
   AuthenticationController.isSignedIn,
   BookingController.getInvoice,
+);
+
+router.post(
+  "/bookings/:id/invoice",
+  AuthenticationController.isSignedIn,
+  BookingController.createInvoice,
+);
+
+router.get(
+  "/bookings/:id/cancellation-receipt/:cancellationReceiptId",
+  AuthenticationController.isSignedIn,
+  BookingController.getCancellationReceipt,
 );
 
 // USERS
@@ -226,6 +282,11 @@ router.post(
   AuthenticationController.isSignedIn,
   GroupBookingController.payGroupBooking,
 );
+router.get(
+  "/group-bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getCancellationRefundPreview,
+);
 router.post(
   "/group-bookings/:id/reject",
   AuthenticationController.isSignedIn,
@@ -245,6 +306,11 @@ router.post(
   "/group-bookings/:id/receipt",
   AuthenticationController.isSignedIn,
   GroupBookingController.createGroupBookingReceipt,
+);
+router.post(
+  "/group-bookings/:id/invoice",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.createGroupBookingInvoice,
 );
 
 // CHECKOUT
@@ -266,11 +332,16 @@ router.get(
 // ========
 
 // Public
-router.post("/payments", PaymentController.createPayment);
+router.post("/payments", optionalAuth, PaymentController.createPayment);
 router.get("/payments/notify", PaymentController.paymentNotificationGET);
 router.post("/payments/notify", PaymentController.paymentNotificationPOST);
 router.post("/payments/response", PaymentController.paymentResponse);
 router.get("/payments/response", PaymentController.paymentResponse);
+router.get(
+  "/payments/providers/:provider/test",
+  AuthenticationController.isSignedIn,
+  PaymentController.testConnection,
+);
 
 // CALENDAR
 // ========
@@ -293,12 +364,12 @@ router.delete(
 
 // NEXT CLOUD
 // ==========
-router.get("/files/list", optionalAuth, FileController.getFiles);
-router.get("/files/get", optionalAuth, FileController.getFile);
+router.get("/files/list", optionalAuth, FileController.getTenantFiles);
+router.get("/files/get", optionalAuth, FileController.getTenantFile);
 router.post(
   "/files",
   AuthenticationController.isSignedIn,
-  FileController.createFile,
+  FileController.createTenantFile,
 );
 
 // WORKFLOW
@@ -453,19 +524,9 @@ router.delete(
   InvitationController.deleteUserInvitation,
 );
 
-// CATALOG
-
-router.get(
-  "/catalog",
-  AuthenticationController.isSignedIn,
-  CatalogController.getCatalogByTenant,
-);
-router.put(
-  "/catalog",
-  AuthenticationController.isSignedIn,
-  CatalogController.storeCatalog,
-);
-
+router.use("/catalog", require("./routes/catalog.routes"));
+router.use("/locker", require("./routes/locker.routes"));
+router.use("/access", require("./routes/access.routes"));
 router.use("/ical", require("./routes/ical.routes"));
 
 module.exports = router;

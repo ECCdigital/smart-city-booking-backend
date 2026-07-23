@@ -1,0 +1,14 @@
+---
+description: Business logic and service layer conventions
+globs: src/commons/**/*.js
+alwaysApply: false
+---
+
+# Commons Layer
+
+See `docs/agents/architecture.md` and `docs/agents/coding-standards.md`.
+
+- Entities in `entities/`, DB access via managers in `data-managers/`
+- Business logic in `services/` — don't query DB from controllers
+- Respect `tenantId` scoping on all tenant data
+- Use bunyan for logging, typed errors from `src/errors/`

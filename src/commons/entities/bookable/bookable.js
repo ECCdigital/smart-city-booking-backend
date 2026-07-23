@@ -1,5 +1,9 @@
 const { bookableSchemaDefinition } = require("../../schemas/bookableSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
+const {
+  validateBlockPeriods,
+  validateBookingModeExclusivity,
+} = require("../../utilities/block-period-validation");
 
 const BOOKABLE_TYPES = Object.freeze({
   EVENT_LOCATION: "event-location",
@@ -24,6 +28,8 @@ class Bookable {
     );
 
     Object.assign(this, defaults, filteredParams);
+
+    this.customFields = params.customFields || undefined;
 
     // Update timestamp on modification
     this.timeUpdated = Date.now();
@@ -143,16 +149,28 @@ class Bookable {
   }
 
   /**
-   * Check if user gets free booking
+   * Get the highest applicable booking discount for a user.
    * @param {string} userId User ID
-   * @param {string[]} userRoles User roles
-   * @returns {boolean} True if user gets free booking
+   * @param {string[]} userRoles User role IDs
+   * @returns {number} Discount percent (0–100)
    */
-  isFreeForUser(userId, userRoles = []) {
-    if (this.freeBookingUsers.includes(userId)) {
-      return true;
+  getUserDiscountPercent(userId, userRoles = []) {
+    const discounts = this.bookingDiscounts || { users: [], roles: [] };
+    let maxDiscount = 0;
+
+    for (const entry of discounts.users || []) {
+      if (entry.userId === userId) {
+        maxDiscount = Math.max(maxDiscount, entry.discountPercent || 0);
+      }
     }
-    return userRoles.some((role) => this.freeBookingRoles.includes(role));
+
+    for (const entry of discounts.roles || []) {
+      if (userRoles.includes(entry.roleId)) {
+        maxDiscount = Math.max(maxDiscount, entry.discountPercent || 0);
+      }
+    }
+
+    return maxDiscount;
   }
 
   /**
@@ -269,6 +287,62 @@ class Bookable {
   }
 
   /**
+   * Enrich this bookable with resolved custom fields
+   * @param {{ instanceFields: Array, tenantFields: Array }} definitions
+   * @returns {Bookable} this (for chaining)
+   */
+  enrichCustomFields({ instanceFields, tenantFields }) {
+    const {
+      CustomFieldService,
+    } = require("../../services/custom-field/custom-field-service");
+
+    const mergedDefs = CustomFieldService.mergeDefinitions({
+      instanceFields,
+      tenantFields,
+      bookableFields: this.customFieldDefinitions || [],
+    });
+
+    this.customFields = CustomFieldService.resolveFieldsWithValues(
+      mergedDefs,
+      this.customFieldValues || [],
+    );
+
+    return this;
+  }
+
+  get hasExternalPricing() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("pricing"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalAvailability() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("availability"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalMaxAmount() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("maxAmount"),
+      ) ?? false
+    );
+  }
+
+  get hasExternalBookingDuration() {
+    return (
+      this.externalProviders?.some(
+        (p) => p.active && p.handles.includes("availability"),
+      ) ?? false
+    );
+  }
+
+  /**
    * Export public bookable information
    * @returns {Object} Public bookable data
    */
@@ -293,9 +367,16 @@ class Bookable {
       timePeriods: this.timePeriods,
       isOpeningHoursRelated: this.isOpeningHoursRelated,
       openingHours: this.openingHours,
+      preparationLeadTimeMinutes: this.preparationLeadTimeMinutes,
+      serviceHours: this.serviceHours,
+      bufferTimeBeforeMinutes: this.bufferTimeBeforeMinutes,
+      bufferTimeAfterMinutes: this.bufferTimeAfterMinutes,
       isSpecialOpeningHoursRelated: this.isSpecialOpeningHoursRelated,
       specialOpeningHours: this.specialOpeningHours,
       isLongRange: this.isLongRange,
+      longRangeOptions: this.longRangeOptions,
+      isBlockPeriodRelated: this.isBlockPeriodRelated,
+      blockPeriods: this.blockPeriods,
       priceValueAddedTax: this.priceValueAddedTax,
       priceCategories: this.priceCategories,
       priceType: this.priceType,
@@ -303,6 +384,9 @@ class Bookable {
       checkoutBookableIds: this.checkoutBookableIds,
       eventId: this.eventId,
       attachments: this.attachments,
+      customFields: this.customFields,
+      customFieldValues: this.customFieldValues,
+      cancellationPolicy: this.cancellationPolicy,
     };
   }
 
@@ -340,6 +424,9 @@ class Bookable {
         );
       }
     }
+
+    validateBookingModeExclusivity(this);
+    validateBlockPeriods(this);
 
     return true;
   }

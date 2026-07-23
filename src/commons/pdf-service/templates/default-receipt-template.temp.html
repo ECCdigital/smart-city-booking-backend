@@ -8,21 +8,20 @@
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
         font-size: 1rem;
       }
-      .booking-detail {
-        border-collapse: collapse;
-        width: 100%;
-      }
-      .booking-detail td,
-      .booking-detail th {
-        padding: 8px;
-        border-bottom: 1px solid #ddd;
-      }
-      .total-row {
-        font-weight: bold;
-      }
+      /* Die Positionstabelle ({{{bookingEntries}}}) bringt ihr kompaktes
+         Standard-Styling selbst mit (table.pdf-items). Eigene Anpassungen
+         sind mit spezifischeren Selektoren möglich, z. B.
+         table.pdf-items.booking-detail td { ... } */
     </style>
   </head>
   <body>
+    <template data-pdf-footer>
+      <div style="display: flex; justify-content: space-between; width: 100%">
+        <span>Zahlungsbeleg {{receiptNumber}}</span>
+        <span>{{> pdfPageNumbers }}</span>
+      </div>
+    </template>
+
     <p class="receipt-data">
       Belegnummer: {{receiptNumber}}<br />
       Buchungsdatum: {{bookingDate}}

@@ -3,6 +3,7 @@ const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const SsoService = require("../../../commons/services/sso/sso-service");
 const UserService = require("../../../commons/services/user-service");
+const CardAuthService = require("../../../commons/services/card-auth/card-auth-service");
 
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
 
@@ -51,26 +52,64 @@ class AuthenticationController {
 
   static async ssoLogin(request, response) {
     try {
-      const {
-        body: { token },
-      } = request;
+      const { token } = request.body;
+
+      if (!token) {
+        return response.status(400).json({
+          success: false,
+          message: "Keycloak token required",
+        });
+      }
+
       const user = await SsoService.handleLogin(token);
 
-      if (user) {
-        const accessToken = await JwtHelper.generateToken(user);
-        const refreshToken = await JwtHelper.generateRefreshToken(user);
+      logger.info(`SSO login for user ${user.id}`);
 
-        response.status(200).json({
-          user,
-          accessToken,
-          refreshToken,
-        });
-      } else {
-        response.sendStatus(401);
-      }
+      response.status(200).json({
+        success: true,
+        user,
+        permissions: user.permissions,
+        authType: "keycloak",
+      });
     } catch (error) {
-      response.status(error.status || 500).send(error.message);
-      logger.error(error);
+      logger.error("SSO login failed:", error);
+      const message =
+        error.status === 404
+          ? "User not found. Registration required."
+          : error.message || "SSO authentication failed";
+      response.status(error.status || 401).json({
+        success: false,
+        message,
+      });
+    }
+  }
+
+  static async ssoVerify(request, response) {
+    try {
+      const { token } = request.body;
+
+      if (!token) {
+        return response.status(400).json({
+          success: false,
+          message: "Token required",
+        });
+      }
+
+      const user = await SsoService.handleLogin(token);
+
+      response.status(200).json({
+        success: true,
+        user,
+        permissions: user.permissions,
+        authType: "keycloak",
+      });
+    } catch (error) {
+      logger.error("SSO verify failed:", error.message);
+      response.status(error.status || 401).json({
+        success: false,
+        message: error.message || "Token verification failed",
+        ...(error.keycloakEmail ? { keycloakEmail: error.keycloakEmail } : {}),
+      });
     }
   }
 
@@ -142,6 +181,10 @@ class AuthenticationController {
         lastName,
         company,
         nextUrl,
+        verifyUrl,
+        legalAcceptance,
+        invitationToken,
+        invitationTenantId,
       } = request.body;
 
       const existingUser = await UserManager.getUser(userID);
@@ -156,10 +199,16 @@ class AuthenticationController {
         firstName: firstName,
         lastName: lastName,
         company: company,
+        legalAcceptance: legalAcceptance,
       });
       user.setPassword(password);
 
-      await UserService.singUpUser(user, nextUrl);
+      const invitation =
+        invitationToken && invitationTenantId
+          ? { token: invitationToken, tenantId: invitationTenantId }
+          : null;
+
+      await UserService.singUpUser(user, nextUrl, verifyUrl, invitation);
 
       return response.sendStatus(201);
     } catch (error) {
@@ -171,9 +220,9 @@ class AuthenticationController {
   static async ssoSignup(request, response) {
     try {
       const {
-        body: { token },
+        body: { token, legalAcceptance },
       } = request;
-      await SsoService.handleSignup(token);
+      await SsoService.handleSignup(token, legalAcceptance);
       response.sendStatus(201);
     } catch (error) {
       response.status(error.status).send(error.message);
@@ -188,7 +237,6 @@ class AuthenticationController {
       if (token) {
         await JwtHelper.revokeToken(token, "logout");
 
-        // Optional: Auch Refresh-Token revoken wenn mitgeschickt
         const { refreshToken } = request.body;
         if (refreshToken) {
           await JwtHelper.revokeToken(refreshToken, "logout");
@@ -239,6 +287,43 @@ class AuthenticationController {
     } catch (err) {
       logger.error(err);
       response.redirect(`${process.env.FRONTEND_URL}/login`);
+    }
+  }
+
+  static async forgotPassword(request, response) {
+    const { id, resetUrl } = request.body;
+
+    if (!id) {
+      return response.status(400).send("Email is required");
+    }
+
+    try {
+      await UserService.requestForgotPassword(id, resetUrl);
+      return response
+        .status(200)
+        .send("If the email exists, a reset link has been sent");
+    } catch (error) {
+      logger.error("Forgot password request failed:", error);
+      return response.status(500).send("Internal server error");
+    }
+  }
+
+  static async resetPasswordWithToken(request, response) {
+    const { token, password, id } = request.body;
+
+    if (!token || !password || !id) {
+      return response.status(400).send("Token, password, and ID are required");
+    }
+
+    try {
+      await UserService.resetPasswordWithToken(token, password, id);
+      logger.info(`Password reset via token for user ${id}.`);
+      return response.status(200).send("Password reset successfully");
+    } catch (error) {
+      logger.error(`Password reset via token failed for user ${id}:`, error);
+      return response
+        .status(error.status || 500)
+        .send(error.message || "Password reset failed");
     }
   }
 
@@ -293,6 +378,192 @@ class AuthenticationController {
     } catch (error) {
       logger.error(error);
       return response.status(500).send("Internal server error");
+    }
+  }
+
+  static async verifyEmail(request, response) {
+    const { token, id } = request.body;
+
+    if (!token || !id) {
+      return response.status(400).send("Token and ID are required");
+    }
+
+    try {
+      const { success } = await UserService.verifyEmail(token, id);
+      if (!success) {
+        throw new Error("Email verification failed");
+      }
+      logger.info(`Email verified for user ${id}.`);
+      return response.status(200).send("Email verified successfully");
+    } catch (error) {
+      logger.error(`Email verification failed for user ${id}:`, error);
+      return response
+        .status(error.status || 500)
+        .send(error.message || "Email verification failed");
+    }
+  }
+
+  static async getCardAuthMethods(request, response) {
+    try {
+      const methods = await CardAuthService.getAvailableCardAuthMethods();
+      response.status(200).json({ methods });
+    } catch (error) {
+      logger.error("Failed to get card auth methods", error);
+      response.sendStatus(500);
+    }
+  }
+
+  static async cardSignin(request, response) {
+    try {
+      const { appId, publicId, secret } = request.body;
+
+      if (!appId || !publicId || !secret) {
+        return response.status(400).json({
+          message: "appId, publicId, and secret are required",
+        });
+      }
+
+      const result = await CardAuthService.verifyCardAndResolveUser(
+        appId,
+        publicId,
+        secret,
+      );
+
+      if (result.status === "registration_required") {
+        return response.status(200).json({
+          requiresRegistration: true,
+          prefill: result.prefill,
+          cardInfo: result.cardInfo,
+        });
+      }
+
+      const { user, permissions } = result;
+      const context = {
+        ip: request.ip || request.connection?.remoteAddress,
+        userAgent: request.headers["user-agent"],
+      };
+
+      const accessToken = await JwtHelper.generateToken(user, context);
+      const refreshToken = await JwtHelper.generateRefreshToken(user, context);
+
+      logger.info(`User ${user.id} signed in via card auth (app: ${appId})`);
+
+      return response.status(200).json({
+        requiresRegistration: false,
+        user,
+        permissions,
+        accessToken,
+        refreshToken,
+        authType: "card",
+        cardAppId: appId,
+      });
+    } catch (error) {
+      logger.error("Card signin failed:", error);
+      response.status(error.status || 500).json({
+        message: error.message || "Card authentication failed",
+        reason: error.reason || undefined,
+      });
+    }
+  }
+
+  static async cardSignup(request, response) {
+    try {
+      const {
+        appId,
+        publicId,
+        secret,
+        email,
+        firstName,
+        lastName,
+        company,
+        nextUrl,
+        verifyUrl,
+        linkUrl,
+        legalAcceptance,
+      } = request.body;
+
+      if (!appId || !publicId || !secret || !email) {
+        return response.status(400).json({
+          message: "appId, publicId, secret, and email are required",
+        });
+      }
+
+      const result = await CardAuthService.registerWithCard({
+        appId,
+        publicId,
+        secret,
+        email,
+        firstName,
+        lastName,
+        company,
+        nextUrl,
+        verifyUrl,
+        linkUrl,
+        legalAcceptance,
+      });
+
+      if (result.status === "link_requested") {
+        return response.status(202).json({
+          success: true,
+          status: "link_requested",
+          message: result.message,
+        });
+      }
+
+      return response.status(201).json({
+        success: true,
+        status: "registered",
+        userId: result.userId,
+        message:
+          "Account created. Please verify your email to complete signup.",
+      });
+    } catch (error) {
+      logger.error("Card signup failed:", error);
+      response.status(error.status || 500).json({
+        message: error.message || "Card registration failed",
+        reason: error.reason || undefined,
+      });
+    }
+  }
+
+  static async confirmCardLink(request, response) {
+    try {
+      const { token, id } = request.query;
+      if (!token) {
+        return response.status(400).json({ message: "Token required" });
+      }
+
+      await CardAuthService.confirmCardLink(token, id);
+
+      return response.redirect(
+        `${process.env.FRONTEND_URL}/auth/card/link-success`,
+      );
+    } catch (error) {
+      logger.error("Card link confirmation failed:", error);
+      return response.redirect(
+        `${process.env.FRONTEND_URL}/auth/card/link-failed?reason=${encodeURIComponent(
+          error.reason || error.message || "unknown",
+        )}`,
+      );
+    }
+  }
+
+  static async confirmCardLinkWithToken(request, response) {
+    try {
+      const { token, id } = request.body;
+
+      if (!token) {
+        return response.status(400).json({ message: "Token required" });
+      }
+      await CardAuthService.confirmCardLink(token, id);
+
+      return response.status(200).json({ success: true });
+    } catch (error) {
+      logger.error("Card link confirmation failed:", error);
+      return response.status(error.status || 500).json({
+        message: "Card link confirmation failed",
+        reason: error.reason || error.message || "unknown",
+      });
     }
   }
 }

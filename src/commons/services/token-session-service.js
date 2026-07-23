@@ -135,6 +135,15 @@ class TokenSessionService {
       throw error;
     }
   }
+
+  static async reassignUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await TokenSessionModel.updateMany(
+      { userId: previousUserId },
+      { $set: { userId: newUserId } },
+      options,
+    );
+  }
 }
 
 module.exports = TokenSessionService;

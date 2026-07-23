@@ -154,6 +154,8 @@ class CouponController {
     const tenant = request.params.tenant;
     const { id } = request.params;
 
+    console.log(`Getting coupon with id ${id} for tenant ${tenant}`);
+
     const doesExist = await CouponManager.exists(id, tenant);
     if (!doesExist) {
       return response.status(404).send("Coupon not found");

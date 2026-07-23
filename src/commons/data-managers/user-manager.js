@@ -4,6 +4,10 @@ const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 class UserManager {
   static async getUser(id, withSensitive = false) {
     const rawUser = await UserModel.findOne({
@@ -18,6 +22,13 @@ class UserManager {
       user = user.exportPublic();
     }
     return user;
+  }
+
+  static async getRawUser(id) {
+    const rawUser = await UserModel.findOne({
+      id: { $regex: id, $options: "i" },
+    });
+    return rawUser;
   }
 
   static async signupUser(user) {
@@ -91,6 +102,147 @@ class UserManager {
     }
   }
 
+  static async getUserBy(filter, withSensitive = false) {
+    const rawUser = await UserModel.findOne(filter);
+    if (!rawUser) {
+      return null;
+    }
+
+    let user = rawUser.toEntity();
+    if (!withSensitive) {
+      user = user.exportPublic();
+    }
+    return user;
+  }
+
+  static async getRawUserBy(filter) {
+    return await UserModel.findOne(filter);
+  }
+
+  static async findRawUserByIdOrKeycloak(userId, keycloakId = null) {
+    const normalizedUserId = String(userId || "")
+      .trim()
+      .toLowerCase();
+    const normalizedKeycloakId = String(keycloakId || "").trim();
+
+    let rawUser = null;
+    if (normalizedUserId) {
+      rawUser = await UserModel.findOne({ id: normalizedUserId });
+      if (!rawUser) {
+        rawUser = await UserModel.findOne({
+          id: { $regex: `^${escapeRegex(normalizedUserId)}$`, $options: "i" },
+        });
+      }
+    }
+
+    if (!rawUser && normalizedKeycloakId) {
+      rawUser = await UserModel.findOne({ keycloakId: normalizedKeycloakId });
+    }
+
+    return rawUser;
+  }
+
+  /**
+   * Resolves a local user from Keycloak token claims.
+   * Prefers keycloakId (sub) over email; syncs keycloakId when found by email only.
+   */
+  static async resolveKeycloakUser(
+    claims,
+    { withSensitive = false, syncKeycloakId = true } = {},
+  ) {
+    const keycloakId = String(claims?.sub || "").trim();
+    const email = String(claims?.email || claims?.preferred_username || "")
+      .trim()
+      .toLowerCase();
+
+    let user = null;
+    let userKeycloakId = null;
+    let keycloakBoundUserId = null;
+    let emailBoundUserId = null;
+
+    if (keycloakId) {
+      const keycloakUser = await UserManager.getUserBy(
+        { keycloakId },
+        withSensitive,
+      );
+      if (keycloakUser) {
+        keycloakBoundUserId = keycloakUser.id;
+        userKeycloakId = keycloakUser.keycloakId;
+        user = keycloakUser;
+      }
+    }
+
+    if (email) {
+      const emailUser = await UserManager.getUser(email, withSensitive);
+      if (emailUser) {
+        emailBoundUserId = emailUser.id;
+        if (!user) {
+          user = emailUser;
+        }
+      }
+    }
+
+    if (
+      keycloakBoundUserId &&
+      emailBoundUserId &&
+      keycloakBoundUserId.toLowerCase() !== emailBoundUserId.toLowerCase()
+    ) {
+      throw {
+        message: "Identity conflict: email already bound to another account",
+        status: 409,
+      };
+    }
+
+    if (!user) {
+      throw {
+        message: "User not found",
+        status: 404,
+        keycloakEmail: email || null,
+      };
+    }
+
+    if (syncKeycloakId && keycloakId && userKeycloakId !== keycloakId) {
+      await UserManager.updateUser({ id: user.id, keycloakId }, false);
+      user.keycloakId = keycloakId;
+    }
+
+    return user;
+  }
+
+  static async updateUserByMongoId(mongoId, userSet, session = null) {
+    const options = session ? { session } : {};
+    await UserModel.updateOne({ _id: mongoId }, { $set: userSet }, options);
+  }
+
+  static async updateUserNamesByMongoId(
+    mongoId,
+    firstName,
+    lastName,
+    keycloakId = null,
+  ) {
+    const updateSet = {
+      firstName,
+      lastName,
+    };
+
+    if (keycloakId) {
+      updateSet.keycloakId = keycloakId;
+    }
+
+    return await UserModel.findOneAndUpdate(
+      { _id: mongoId },
+      { $set: updateSet },
+      { new: true },
+    );
+  }
+
+  static async getUserByCard(appId, publicId) {
+    return await UserModel.findOne({
+      "cardAuth.appId": appId,
+      "cardAuth.publicId": publicId,
+    }).lean();
+  }
+
   static async deleteUser(id) {
     try {
       return await UserModel.deleteOne({ id: id });
@@ -117,7 +269,7 @@ class UserManager {
     const rawUser = await UserModel.findOne({ "hooks.id": hookID });
 
     if (!rawUser) {
-      throw new Error("No User found with this hook.");
+      return null;
     }
 
     return rawUser.toEntity();

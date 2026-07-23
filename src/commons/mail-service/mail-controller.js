@@ -7,6 +7,9 @@ const UserManager = require("../data-managers/user-manager");
 const { MailType } = require("./mail-types");
 const { renderSnippet } = require("./templates/template-loader");
 const ICalService = require("../services/ical-service");
+const {
+  CancellationRefundService,
+} = require("../services/payment/cancellation-refund-service");
 
 class MailController {
   static async _attachICalFiles(bookingIds, tenantId, attachments = []) {
@@ -113,12 +116,25 @@ class MailController {
     attachments,
     aggregated = false,
   ) {
+    const ids = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
+    const primaryBookingId = ids[0];
+    let refundTemplateData = {};
+    if (primaryBookingId) {
+      const booking = await BookingManager.getBooking(
+        primaryBookingId,
+        tenantId,
+      );
+      refundTemplateData = CancellationRefundService.toMailTemplateData(
+        booking?.cancellationRefund,
+      );
+    }
+
     await MailSenderService.dispatch({
       mailType: MailType.BOOKING_CANCEL,
       address,
       bookingIds,
       tenantId,
-      templateData: { cancelReason: reason },
+      templateData: { cancelReason: reason, ...refundTemplateData },
       attachments,
       aggregated,
     });
@@ -158,6 +174,24 @@ class MailController {
     });
   }
 
+  static async sendBookingConfirmedInvoicePending(
+    address,
+    bookingIds,
+    tenantId,
+    aggregated = false,
+  ) {
+    const attachments = await this._attachICalFiles(bookingIds, tenantId);
+
+    await MailSenderService.dispatch({
+      mailType: MailType.BOOKING_CONFIRMED_INVOICE_PENDING,
+      address,
+      bookingIds,
+      tenantId,
+      attachments,
+      aggregated,
+    });
+  }
+
   static async sendInvoiceAfterBookingApproval(
     address,
     bookingIds,
@@ -183,6 +217,21 @@ class MailController {
   ) {
     await MailSenderService.dispatch({
       mailType: MailType.INCOMING_BOOKING,
+      address,
+      bookingIds,
+      tenantId,
+      aggregated,
+    });
+  }
+
+  static async sendSupervisorBookingNotification(
+    address,
+    bookingIds,
+    tenantId,
+    aggregated = false,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.SUPERVISOR_BOOKING_NOTIFICATION,
       address,
       bookingIds,
       tenantId,
@@ -239,24 +288,40 @@ class MailController {
     hookId,
     reason,
     attachments,
+    refundPreview = null,
   ) {
     const verifyRejectionUrl = `${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}`;
+    const refundTemplateData =
+      CancellationRefundService.toMailTemplateData(refundPreview);
 
     await MailSenderService.dispatch({
       mailType: MailType.VERIFY_BOOKING_REJECTION,
       address,
       bookingIds: [bookingId],
       tenantId,
-      templateData: { cancelReason: reason, verifyRejectionUrl },
+      templateData: {
+        cancelReason: reason,
+        verifyRejectionUrl,
+        ...refundTemplateData,
+      },
       attachments,
     });
   }
 
-  static async sendVerificationRequest(address, hookId) {
+  static async sendVerificationRequest(address, hookId, verifyUrl) {
     const instance = await InstanceManager.getInstance(false);
-    const verifyUrl = `${process.env.BACKEND_URL}/auth/verify/${hookId}`;
 
-    const content = renderSnippet("verification-request", { verifyUrl });
+    let verifyUrlTemplate = "";
+
+    if (!verifyUrl) {
+      verifyUrlTemplate = `${process.env.BACKEND_URL}/auth/verify/${hookId}`;
+    } else {
+      verifyUrlTemplate = `${verifyUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
+    }
+
+    const content = renderSnippet("verification-request", {
+      verifyUrl: verifyUrlTemplate,
+    });
 
     await MailerService.send({
       address,
@@ -281,6 +346,32 @@ class MailController {
       mailTemplate: instance.mailTemplate,
       model: {
         title: "Bestätigen Sie die Änderung Ihres Kennworts",
+        content,
+      },
+    });
+  }
+
+  static async sendForgotPasswordRequest(address, hookId, resetUrl) {
+    const instance = await InstanceManager.getInstance(false);
+
+    let resetUrlTemplate;
+
+    if (resetUrl) {
+      resetUrlTemplate = `${resetUrl}?token=${hookId}&id=${encodeURIComponent(address)}`;
+    } else {
+      resetUrlTemplate = `${process.env.FRONTEND_URL}/password/reset?token=${hookId}&id=${encodeURIComponent(address)}`;
+    }
+
+    const content = renderSnippet("forgot-password-request", {
+      resetUrl: resetUrlTemplate,
+    });
+
+    await MailerService.send({
+      address,
+      subject: "Kennwort zurücksetzen",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Kennwort zurücksetzen",
         content,
       },
     });
@@ -356,6 +447,37 @@ class MailController {
         content,
       },
       useInstanceMail: tenant.useInstanceMail,
+    });
+  }
+
+  static async sendCardLinkRequest({
+    address,
+    firstName,
+    hookId,
+    cardLabel,
+    linkUrlBase,
+  }) {
+    const instance = await InstanceManager.getInstance(false);
+
+    const linkUrl = linkUrlBase
+      ? `${linkUrlBase}?token=${hookId}&id=${encodeURIComponent(address)}`
+      : `${process.env.BACKEND_URL}/auth/card/link?token=${hookId}&id=${encodeURIComponent(address)}`;
+
+    const content = renderSnippet("card-link-request", {
+      email: address,
+      firstName,
+      cardLabel,
+      linkUrl,
+    });
+
+    await MailerService.send({
+      address,
+      subject: "Karte mit Ihrem Account verknüpfen",
+      mailTemplate: instance.mailTemplate,
+      model: {
+        title: "Karte mit Ihrem Account verknüpfen",
+        content,
+      },
     });
   }
 }

@@ -8,6 +8,12 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
+const {
+  GroupBookingPermissions,
+} = require("../../../commons/utilities/group-booking-permissions");
+const {
+  resolveCheckoutId,
+} = require("../../../commons/utilities/checkout-utils");
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
   level: process.env.LOG_LEVEL,
@@ -18,12 +24,13 @@ class CheckoutController {
     const tenantId = request.params.tenant;
     const user = request.user;
     const {
+      checkoutId: requestCheckoutId,
       bookableId,
       timeBegin,
       timeEnd,
       amount,
       couponCode,
-      bookWithPrice,
+      bookWithoutDiscount,
     } = request.body;
 
     if (!bookableId || !amount) {
@@ -33,21 +40,28 @@ class CheckoutController {
       return response.status(400).send("Missing parameters");
     }
 
+    const { checkoutId, generated } = await resolveCheckoutId(
+      requestCheckoutId,
+      user?.id,
+      tenantId,
+    );
+
     //TODO: Move this to a service
 
     let itemCheckoutService = null;
 
     try {
-      itemCheckoutService = new ItemCheckoutService(
-        user?.id,
+      itemCheckoutService = new ItemCheckoutService({
+        user: user?.id,
         tenantId,
         timeBegin,
         timeEnd,
         bookableId,
-        parseInt(amount),
+        amount: parseInt(amount),
         couponCode,
-        bookWithPrice,
-      );
+        bookWithoutDiscount,
+        checkoutId,
+      });
 
       await itemCheckoutService.init();
       await itemCheckoutService.checkAll();
@@ -65,6 +79,8 @@ class CheckoutController {
       }
 
       const payload = {
+        checkoutId,
+        checkoutIdGenerated: generated,
         regularPriceEur:
           (await itemCheckoutService.regularPriceEur()) * multiplier,
         userPriceEur: (await itemCheckoutService.userPriceEur()) * multiplier,
@@ -73,13 +89,19 @@ class CheckoutController {
         userGrossPriceEur:
           (await itemCheckoutService.userGrossPriceEur()) * multiplier,
         freeBookingAllowed: await itemCheckoutService.freeBookingAllowed(),
+        bookingDiscountPercent:
+          await itemCheckoutService.bookingDiscountPercent(),
       };
 
       return response.status(200).json(payload);
     } catch (err) {
       console.error(err);
       logger.warn(err);
-      return response.status(409).send(err.message);
+      return response.status(409).json({
+        error: err.message,
+        checkoutId,
+        checkoutIdGenerated: generated,
+      });
     } finally {
       if (itemCheckoutService) {
         itemCheckoutService.cleanup();
@@ -92,6 +114,15 @@ class CheckoutController {
     const tenantId = request.params.tenant;
     const user = request.user;
     const simulate = request.query.simulate === "true";
+
+    const { checkoutId: requestCheckoutId } = request.body;
+
+    const { checkoutId } = await resolveCheckoutId(
+      requestCheckoutId,
+      user?.id,
+      tenantId,
+    );
+
     try {
       return response.status(200).send(
         await BookingService.createSingleBooking({
@@ -99,6 +130,7 @@ class CheckoutController {
           user,
           bookingAttempt: request.body,
           simulate,
+          checkoutId,
         }),
       );
     } catch (err) {
@@ -143,16 +175,13 @@ class CheckoutController {
         .send("Group booking not enabled for this bookable");
     }
 
-    let allowed = false;
     const permitted = Array.isArray(gb.permittedRoles) ? gb.permittedRoles : [];
+    if (permitted.length > 0 && !user) {
+      return res.status(401).send("Unauthorized");
+    }
 
-    if (permitted.length === 0) {
-      allowed = true;
-    } else {
-      if (!user) {
-        return res.status(401).send("Unauthorized");
-      }
-      let userRoles;
+    let userRoles = [];
+    if (user) {
       try {
         const membership =
           await MembershipManager.getMembershipByTenantAndUserID(
@@ -167,10 +196,9 @@ class CheckoutController {
         );
         return res.status(500).send("Error while loading user roles");
       }
-      allowed = userRoles.some((r) => permitted.includes(r));
     }
 
-    if (!allowed) {
+    if (!GroupBookingPermissions.isAllowed(bookable, user, userRoles)) {
       logger.error(
         `User ${user?.id} not allowed to create group booking for bookable ${bookableItem.id}`,
       );
@@ -211,7 +239,8 @@ class CheckoutController {
 
       if (
         bookable.permittedUsers.length > 0 ||
-        bookable.permittedRoles.length > 0
+        bookable.permittedRoles.length > 0 ||
+        bookable.requiresLogin
       ) {
         if (!user) {
           return response.status(401).send("Unauthorized");

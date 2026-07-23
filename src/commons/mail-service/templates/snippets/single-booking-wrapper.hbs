@@ -1,5 +1,38 @@
 {{{message}}}<br />
+
+{{#if cancelReason}}
+  <p>
+    <strong>Hinweis zur Stornierung</strong>:
+    {{sanitizeString cancelReason}}
+  </p>
+{{/if}}
+
+{{#if rejectionReason}}
+  <p>
+    <strong>Ablehnungsgrund:</strong>
+    {{sanitizeString rejectionReason}}
+  </p>
+{{/if}}
+
 {{{bookingDetails}}}
+
+{{#if paymentUrl}}
+  <br /><br />
+  <a
+    href="{{paymentUrl}}"
+    style="
+      background-color: #0055a5;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: bold;
+      display: inline-block;
+    "
+  >
+    Buchung abschließen
+  </a>
+{{/if}}
 
 {{#if rejectionUrl}}
   <br /><br />
@@ -17,6 +50,14 @@
   >
     Buchung stornieren
   </a>
+{{/if}}
+
+{{#if cancellationContactHint}}
+  <br /><br />
+  <p>
+    <strong>Hinweis zur Stornierung:</strong>
+    {{sanitizeString cancellationContactHint}}
+  </p>
 {{/if}}
 
 {{#if qrContent}}

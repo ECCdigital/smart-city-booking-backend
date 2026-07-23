@@ -1,7 +1,13 @@
 <p>Die nachfolgende Buchung wurde storniert:</p>
-{{#if cancelReason}}
+
+{{#if hasRefundPreview}}
   <p>
-    <strong>Hinweis zur Stornierung</strong>:
-    {{sanitizeString cancelReason}}
+    <strong>Erstattung</strong>:
+    {{priceFormatted refundAmountEur}}
+    ({{refundPercentage}}&nbsp;%)
+    {{#if hasCancellationFee}}
+      <br />
+      Einbehalt (Stornogebühr): {{priceFormatted cancellationFeeEur}}
+    {{/if}}
   </p>
 {{/if}}

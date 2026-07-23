@@ -1,5 +1,15 @@
 const Tenant = require("../entities/tenant/tenant");
 const TenantModel = require("./models/tenantModel");
+const {
+  CustomFieldCache,
+} = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
+const { BookableManager } = require("./bookable-manager");
+const {
+  normalizeCancellationRefundTiers,
+} = require("../utilities/cancellation-refund-tiers");
 
 /**
  * Data Manager for Tenant objects.
@@ -25,6 +35,7 @@ class TenantManager {
     if (!rawTenant) {
       return null;
     }
+
     return rawTenant.toEntity();
   }
 
@@ -39,11 +50,35 @@ class TenantManager {
    */
   static async storeTenant(tenant, upsert = true) {
     const tenantEntity = tenant instanceof Tenant ? tenant : new Tenant(tenant);
+
+    const existingTenant = await TenantModel.findOne(
+      { id: tenantEntity.id },
+      { bookableCustomFields: 1 },
+    ).lean();
+
+    CustomFieldService.normalizeDefinitions(
+      tenantEntity.bookableCustomFields || [],
+    );
+    tenantEntity.cancellationRefundTiers = normalizeCancellationRefundTiers(
+      tenantEntity.cancellationRefundTiers || [],
+    );
     tenantEntity.validate();
     await TenantModel.updateOne({ id: tenantEntity.id }, tenantEntity, {
       upsert: upsert,
       setDefaultsOnInsert: true,
     });
+
+    const removedFieldIds = CustomFieldService.getRemovedFieldIds(
+      existingTenant?.bookableCustomFields || [],
+      tenantEntity.bookableCustomFields || [],
+    );
+    if (removedFieldIds.length > 0) {
+      await BookableManager.removeCustomFieldValues(removedFieldIds, {
+        tenantId: tenantEntity.id,
+      });
+    }
+
+    CustomFieldCache.invalidateTenant(tenantEntity.id);
 
     return tenantEntity;
   }
@@ -100,6 +135,15 @@ class TenantManager {
     }
     const tenant = rawTenant.toEntity();
     return tenant.applications.filter((app) => app.type === appType);
+  }
+
+  static async getTenantAppById(tenantId, appId) {
+    const rawTenant = await TenantModel.findOne({ id: tenantId });
+    if (!rawTenant) {
+      return null;
+    }
+    const tenant = rawTenant.toEntity();
+    return tenant.applications.find((app) => app.id === appId) || null;
   }
 
   /**

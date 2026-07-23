@@ -11,14 +11,26 @@ router.post("/signup", AuthenticationController.signup);
 router.post("/refresh", AuthenticationController.refreshToken);
 router.post("/resetpassword", AuthenticationController.resetPassword);
 router.post("/check-email", AuthenticationController.checkEmail);
+router.post("/forgot-password", AuthenticationController.forgotPassword);
+router.post("/reset-password", AuthenticationController.resetPasswordWithToken);
 
 // SSO Endpoints
 router.post("/sso/signin", AuthenticationController.ssoLogin);
 router.post("/sso/signup", AuthenticationController.ssoSignup);
+router.post("/sso/verify", AuthenticationController.ssoVerify);
+
+// Card Endpoints
+router.get("/card-methods", AuthenticationController.getCardAuthMethods);
+router.post("/card/signin", AuthenticationController.cardSignin);
+router.post("/card/signup", AuthenticationController.cardSignup);
+router.get("/auth/card/link", AuthenticationController.confirmCardLink);
+router.post("/card/link", AuthenticationController.confirmCardLinkWithToken);
 
 // Hooks
 router.get("/verify/:hookId", AuthenticationController.releaseHook);
 router.get("/reset/:hookId", AuthenticationController.releaseHook);
+
+router.post("/verify-email", AuthenticationController.verifyEmail);
 
 // Protected Auth-Endpoints
 router.post("/signin", (req, res, next) => {

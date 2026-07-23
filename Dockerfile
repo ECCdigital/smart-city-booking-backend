@@ -1,6 +1,7 @@
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
+    curl \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -29,6 +30,5 @@ RUN npx playwright install chromium --with-deps
 
 COPY . .
 
-# Expose port 8080 and start the application
 EXPOSE 8080
 CMD ["node", "src/server.js"]

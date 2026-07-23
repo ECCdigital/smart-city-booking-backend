@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ title }}</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      .invoice-box {
+        font-size: 12px;
+        line-height: 16px;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        padding-bottom: 20px;
+      }
+      .invoice-box table {
+        width: 100%;
+        line-height: inherit;
+        text-align: left;
+        border-collapse: collapse;
+      }
+      .invoice-box table td,
+      .invoice-box table th {
+        padding: 5px;
+        vertical-align: top;
+      }
+      .invoice-box table tr.heading td {
+        background: #eee;
+        border-bottom: 1px solid #ddd;
+        font-weight: bold;
+      }
+      /* Position tables ({{{mainContent}}}) use table.pdf-items styling from PRINT_CSS */
+      .header {
+        font-weight: bold;
+        font-size: x-large;
+        padding-bottom: 20px;
+      }
+      .header-address {
+        text-align: left;
+        padding-bottom: 20px;
+      }
+      .details {
+        line-height: 14px;
+        font-size: 10px;
+        text-align: right;
+      }
+      .information {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        line-height: 20px;
+        font-size: 12px;
+        text-align: left;
+      }
+      .cancellation-note {
+        margin-top: 10px;
+        padding: 10px;
+        border-left: 4px solid #c0392b;
+        background: #fdecea;
+        font-size: 12px;
+        line-height: 18px;
+      }
+      .refund-note {
+        margin-top: 10px;
+        padding: 10px;
+        border-left: 4px solid #2e7d32;
+        background: #eaf5ea;
+        font-size: 12px;
+        line-height: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <template data-pdf-footer>
+      <div style="display: flex; justify-content: space-between; width: 100%">
+        <span>{{ title }} {{ cancellationNumber }}</span>
+        <span>{{> pdfPageNumbers }}</span>
+      </div>
+    </template>
+
+    <div class="invoice-box">
+      <table>
+        <tr>
+          <td>
+            <div class="header">Smart City Booking</div>
+            <div class="header-address">{{{invoiceAddress}}}</div>
+          </td>
+          <td>
+            <div class="details">
+              Stornobelegnummer: {{cancellationNumber}} <br />
+              Ursprüngliche Rechnungsnummer: {{originalInvoiceNumber}} <br />
+              <br />
+              {{location}}, {{cancellationDate}}
+            </div>
+          </td>
+        </tr>
+      </table>
+      <div class="information">
+        <span style="font-size: larger; font-weight: bolder">{{ title }}</span>
+        <p>
+          Sehr geehrte Damen und Herren,<br /><br />
+          hiermit stornieren wir die Rechnung mit der Nummer
+          <strong>{{originalInvoiceNumber}}</strong> vom
+          {{originalInvoiceDate}}. Die nachfolgend aufgeführten Positionen
+          werden Ihnen {{#if isFullRefund}}in voller Höhe{{else}}anteilig gemäß
+          der nachfolgenden Berechnung{{/if}} gutgeschrieben.
+        </p>
+
+        {{#if cancellationReason}}
+        <div class="cancellation-note">
+          <strong>Grund der Stornierung:</strong>
+          {{cancellationReason}}
+        </div>
+        {{/if}}
+        <div class="cancellation-note">
+          <strong>Berechnung der Erstattung:</strong><br />
+          Stornierungszeitpunkt: {{cancellationDate}}<br />
+          {{#if refundCalculations}} {{#each refundCalculations}} Buchung
+          {{bookingId}}: {{daysBeforeStartLabel}} Kalendertage vor Beginn,
+          {{refundPercentage}} % Erstattung ({{refundAmount}}),
+          {{calculationMode}}{{#unless @last}}<br />{{/unless}} {{/each}}
+          {{else}} {{daysBeforeStartLabel}} Kalendertage vor Buchungsbeginn,
+          {{refundPercentage}} % Erstattung, {{calculationMode}}.{{/if}}
+        </div>
+        {{#if alreadyPaid}}
+        <div class="refund-note">
+          Der bereits gezahlte Betrag in Höhe von
+          <strong>{{refundAmount}}</strong> wird Ihnen erstattet. {{#if
+          hasCancellationFee}} Der einbehaltene Betrag beläuft sich auf
+          <strong>{{cancellationFee}}</strong>.{{/if}}
+        </div>
+        {{#if customerBankDetails}}{{{ customerBankDetails }}}{{/if}} {{else}}
+        <p>
+          Sofern noch keine Zahlung erfolgt ist, reduziert sich die
+          Zahlungsverpflichtung um <strong>{{refundAmount}}</strong>. {{#if
+          isFullRefund}}Die ursprüngliche Rechnung
+          <strong>{{originalInvoiceNumber}}</strong> wird damit vollständig
+          aufgehoben.{{else}}Der verbleibende Betrag in Höhe von
+          <strong>{{cancellationFee}}</strong> bleibt bestehen.{{/if}}
+        </p>
+        {{/if}}
+      </div>
+
+      {{{ mainContent }}}
+
+      <div class="information">
+        Bei Rückfragen zu dieser Stornorechnung wenden Sie sich bitte unter
+        Angabe der Stornobelegnummer <strong>{{cancellationNumber}}</strong>
+        an uns.
+      </div>
+
+      <div class="information">
+        Dieses Schreiben wurde maschinell erstellt und ist ohne Unterschrift
+        gültig.
+      </div>
+    </div>
+  </body>
+</html>

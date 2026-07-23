@@ -5,6 +5,14 @@ const FORMAT_VALIDATORS = {
     const { isEmail } = require("validator");
     return isEmail(value);
   },
+  multiEmail: (value) => {
+    const { isEmail } = require("validator");
+    const emails = value
+      .split(/[,\n]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    return emails.length > 0 && emails.every((e) => isEmail(e));
+  },
 };
 
 const ERROR_CODES = {
@@ -22,6 +30,15 @@ const ERROR_CODES = {
   validate: "invalid_custom",
 };
 
+function isMongooseSubdocumentSchema(type) {
+  return (
+    type &&
+    typeof type === "object" &&
+    type.constructor?.name === "Schema" &&
+    typeof type.paths === "object"
+  );
+}
+
 class SchemaUtils {
   static createDefaults(schemaDefinition) {
     const defaults = {};
@@ -36,6 +53,8 @@ class SchemaUtils {
           typeof field.default === "function" ? field.default() : field.default;
       } else if (field.type === Array) {
         defaults[key] = [];
+      } else if (isMongooseSubdocumentSchema(field.type)) {
+        // Optional embedded subdocuments must stay unset, not "".
       } else if (field.type === Object) {
         defaults[key] = {};
       } else if (field.type === Boolean) {
@@ -77,7 +96,9 @@ class SchemaUtils {
       if (typeof field.validate === "function") {
         const result = field.validate(value, obj);
         if (result !== true) {
-          addError(key, result);
+          // `false` is the Mongoose-compatible failure signal; map it to the
+          // SchemaUtils error code used by shared schema definitions.
+          addError(key, result === false ? "validate" : result);
         }
       }
 
