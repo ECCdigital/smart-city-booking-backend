@@ -8,7 +8,11 @@ const {
 } = require("../../../../commons/data-managers/bookable-manager");
 const MembershipManager = require("../../../../commons/data-managers/membership-manager");
 const {
+  GroupBookingPermissions,
+} = require("../../../../commons/utilities/group-booking-permissions");
+const {
   resolveCheckoutId,
+  withMandatoryAddons,
 } = require("../../../../commons/utilities/checkout-utils");
 const {
   normalizeCheckError,
@@ -16,6 +20,9 @@ const {
 const {
   CHECKOUT_REASONS,
 } = require("../../../../commons/services/checkout/checkout-reasons");
+const {
+  BundleCheckoutService,
+} = require("../../../../commons/services/checkout/bundle-checkout-service");
 const { CheckoutError } = require("../../../../errors/CheckoutError");
 const { BaseError } = require("../../../../errors/BaseError");
 const PaymentUtils = require("../../../../commons/utilities/payment-utils");
@@ -47,7 +54,7 @@ class CheckoutControllerV2 {
       end,
       amount,
       couponCode,
-      bookWithPrice,
+      bookWithoutDiscount,
     } = req.body;
 
     const { checkoutId, generated } = await resolveCheckoutId(
@@ -85,7 +92,7 @@ class CheckoutControllerV2 {
       bookableId,
       amount: parseInt(amount),
       couponCode,
-      bookWithPrice,
+      bookWithoutDiscount,
       checkoutId,
     });
 
@@ -132,6 +139,7 @@ class CheckoutControllerV2 {
           (await service.regularGrossPriceEur()) * multiplier,
         userGrossPriceEur: (await service.userGrossPriceEur()) * multiplier,
         freeBookingAllowed: await service.freeBookingAllowed(),
+        bookingDiscountPercent: await service.bookingDiscountPercent(),
       };
 
       logger.info(
@@ -225,6 +233,152 @@ class CheckoutControllerV2 {
     }
   }
 
+  /**
+   * Batch-validate a series / group booking without creating bookings.
+   * Always responds with HTTP 200.
+   *
+   * Request-level failures (missing params, group booking disabled, …)
+   * → `{ success: false, error }`.
+   *
+   * Otherwise `{ success: true, data: { attempts, allValid, totals } }`
+   * with one result per booking attempt (Ampel / per-slot UX).
+   */
+  static async validateGroup(req, res) {
+    const tenantId = req.params.tenant;
+    const user = req.user;
+    const {
+      checkoutId: requestCheckoutId,
+      bookableItems: rawBookableItems,
+      bookingAttempts: rawBookingAttempts,
+      couponCode,
+      bookWithoutDiscount,
+    } = req.body;
+
+    const { checkoutId, generated } = await resolveCheckoutId(
+      requestCheckoutId,
+      user?.id,
+      tenantId,
+    );
+
+    const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
+      tenantId,
+      user,
+      rawBookableItems,
+      rawBookingAttempts,
+    });
+
+    if (resolved.error) {
+      return res.status(200).json({
+        success: false,
+        checkoutId,
+        checkoutIdGenerated: generated,
+        error: {
+          reason: resolved.error.reason,
+          checkType: resolved.error.checkType,
+          params: resolved.error.params,
+        },
+      });
+    }
+
+    const { bookableItems, bookingAttempts: rawAttempts } = resolved;
+
+    try {
+      const resolvedItems = await withMandatoryAddons(bookableItems, tenantId);
+
+      const attempts = await Promise.all(
+        rawAttempts.map(async (attempt, index) => {
+          const timeBegin = attempt?.timeBegin;
+          const timeEnd = attempt?.timeEnd;
+          const base = { index, timeBegin, timeEnd };
+
+          const service = new BundleCheckoutService({
+            user: user?.id,
+            tenant: tenantId,
+            timeBegin,
+            timeEnd,
+            bookableItems: resolvedItems.map((item) => ({ ...item })),
+            couponCode,
+            bookWithoutDiscount,
+            checkoutId,
+          });
+
+          try {
+            const prices = await service.validateAndGetPrices();
+            return {
+              ...base,
+              success: true,
+              data: prices,
+            };
+          } catch (checkErr) {
+            const normalized = normalizeCheckError(checkErr);
+            logger.info(
+              {
+                tenantId,
+                userId: user?.id,
+                attemptIndex: index,
+                reason: normalized.reason,
+                checkType: normalized.checkType,
+                debugMessage: normalized.debugMessage,
+              },
+              "validateGroup: attempt failed",
+            );
+            return {
+              ...base,
+              success: false,
+              error: {
+                reason: normalized.reason,
+                checkType: normalized.checkType,
+                params: normalized.params,
+              },
+            };
+          }
+        }),
+      );
+
+      const allValid = attempts.every((attempt) => attempt.success);
+      const totals = allValid
+        ? CheckoutControllerV2._sumAttemptTotals(attempts)
+        : null;
+
+      logger.info(
+        {
+          tenantId,
+          userId: user?.id,
+          attemptCount: attempts.length,
+          allValid,
+        },
+        "validateGroup: done",
+      );
+
+      return res.status(200).json({
+        success: true,
+        checkoutId,
+        checkoutIdGenerated: generated,
+        data: {
+          attempts,
+          allValid,
+          totals,
+        },
+      });
+    } catch (err) {
+      logger.error(
+        { err, tenantId, userId: user?.id },
+        "validateGroup: unexpected error",
+      );
+
+      return res.status(200).json({
+        success: false,
+        checkoutId,
+        checkoutIdGenerated: generated,
+        error: {
+          reason: CHECKOUT_REASONS.UNKNOWN,
+          checkType: null,
+          params: {},
+        },
+      });
+    }
+  }
+
   static async groupCheckout(req, res) {
     try {
       const tenantId = req.params.tenant;
@@ -234,7 +388,7 @@ class CheckoutControllerV2 {
       const {
         bookableItems: rawBookableItems,
         bookingAttempts: rawBookingAttempts,
-        bookWithPrice,
+        bookWithoutDiscount,
         paymentProvider,
         customFieldValues,
         couponCode,
@@ -248,75 +402,29 @@ class CheckoutControllerV2 {
         comment,
       } = req.body;
 
-      const bookableItems = Array.isArray(rawBookableItems)
-        ? rawBookableItems.filter((item) => item && item.bookableId)
-        : [];
-
-      if (bookableItems.length === 0) {
-        throw new CheckoutError({
-          reason: CHECKOUT_REASONS.INVALID_BOOKABLE_ITEMS,
-          statusCode: 400,
-        });
-      }
-
-      const rawAttempts = Array.isArray(rawBookingAttempts)
-        ? rawBookingAttempts
-        : [];
-
-      if (rawAttempts.length === 0) {
-        throw new CheckoutError({
-          reason: CHECKOUT_REASONS.BOOKING_ATTEMPTS_MISSING,
-          statusCode: 400,
-        });
-      }
-
-      const leadBookableId = bookableItems[0].bookableId;
-      const bookable = await BookableManager.getBookable(
-        leadBookableId,
+      const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
         tenantId,
-      );
-      const gb = bookable?.groupBooking;
-      if (!gb?.enabled) {
+        user,
+        rawBookableItems,
+        rawBookingAttempts,
+      });
+
+      if (resolved.error) {
         throw new CheckoutError({
-          reason: CHECKOUT_REASONS.GROUP_BOOKING_DISABLED,
-          statusCode: 403,
-          params: { bookableId: leadBookableId },
+          reason: resolved.error.reason,
+          statusCode: resolved.error.statusCode,
+          params: resolved.error.params,
+          checkType: resolved.error.checkType,
         });
       }
 
-      const permitted = Array.isArray(gb.permittedRoles)
-        ? gb.permittedRoles
-        : [];
-      if (permitted.length > 0) {
-        if (!user) {
-          throw new CheckoutError({
-            reason: CHECKOUT_REASONS.UNAUTHORIZED,
-            statusCode: 401,
-          });
-        }
-
-        const membership =
-          await MembershipManager.getMembershipByTenantAndUserID(
-            tenantId,
-            user.id,
-          );
-        const userRoles = membership?.roles || [];
-        const allowed = userRoles.some((r) => permitted.includes(r));
-
-        if (!allowed) {
-          throw new CheckoutError({
-            reason: CHECKOUT_REASONS.GROUP_BOOKING_ROLE_REQUIRED,
-            statusCode: 403,
-            params: { requiredRoles: permitted },
-          });
-        }
-      }
+      const { bookableItems, bookingAttempts: rawAttempts } = resolved;
 
       const bookingAttempts = rawAttempts.map((attempt) => ({
         timeBegin: attempt?.timeBegin,
         timeEnd: attempt?.timeEnd,
         bookableItems,
-        bookWithPrice,
+        bookWithoutDiscount,
         customFieldValues,
         couponCode,
       }));
@@ -434,6 +542,126 @@ class CheckoutControllerV2 {
   }
 
   // --- helpers ---
+
+  /**
+   * Shared request + permission gate for group checkout / validate-group.
+   * Returns either `{ bookableItems, bookingAttempts, bookable, userRoles }`
+   * or `{ error: { reason, statusCode, checkType, params } }`.
+   */
+  static async _resolveGroupCheckoutRequest({
+    tenantId,
+    user,
+    rawBookableItems,
+    rawBookingAttempts,
+  }) {
+    const bookableItems = Array.isArray(rawBookableItems)
+      ? rawBookableItems.filter((item) => item && item.bookableId)
+      : [];
+
+    if (bookableItems.length === 0) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.INVALID_BOOKABLE_ITEMS,
+          statusCode: 400,
+          checkType: null,
+          params: {},
+        },
+      };
+    }
+
+    const bookingAttempts = Array.isArray(rawBookingAttempts)
+      ? rawBookingAttempts
+      : [];
+
+    if (bookingAttempts.length === 0) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.BOOKING_ATTEMPTS_MISSING,
+          statusCode: 400,
+          checkType: null,
+          params: {},
+        },
+      };
+    }
+
+    const leadBookableId = bookableItems[0].bookableId;
+    const bookable = await BookableManager.getBookable(
+      leadBookableId,
+      tenantId,
+    );
+    const gb = bookable?.groupBooking;
+    if (!gb?.enabled) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.GROUP_BOOKING_DISABLED,
+          statusCode: 403,
+          checkType: null,
+          params: { bookableId: leadBookableId },
+        },
+      };
+    }
+
+    const permitted = Array.isArray(gb.permittedRoles) ? gb.permittedRoles : [];
+    if (permitted.length > 0 && !user) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.UNAUTHORIZED,
+          statusCode: 401,
+          checkType: null,
+          params: {},
+        },
+      };
+    }
+
+    let userRoles = [];
+    if (user) {
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
+        tenantId,
+        user.id,
+      );
+      userRoles = membership?.roles || [];
+    }
+
+    if (!GroupBookingPermissions.isAllowed(bookable, user, userRoles)) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.GROUP_BOOKING_ROLE_REQUIRED,
+          statusCode: 403,
+          checkType: null,
+          params: { requiredRoles: permitted },
+        },
+      };
+    }
+
+    return { bookableItems, bookingAttempts, bookable, userRoles };
+  }
+
+  /**
+   * Sum price fields across successful validate-group attempts.
+   */
+  static _sumAttemptTotals(attempts) {
+    const totals = {
+      regularPriceEur: 0,
+      userPriceEur: 0,
+      regularGrossPriceEur: 0,
+      userGrossPriceEur: 0,
+    };
+
+    for (const attempt of attempts) {
+      if (!attempt.success || !attempt.data) continue;
+      totals.regularPriceEur += attempt.data.regularPriceEur || 0;
+      totals.userPriceEur += attempt.data.userPriceEur || 0;
+      totals.regularGrossPriceEur += attempt.data.regularGrossPriceEur || 0;
+      totals.userGrossPriceEur += attempt.data.userGrossPriceEur || 0;
+    }
+
+    return {
+      regularPriceEur: Math.round(totals.regularPriceEur * 100) / 100,
+      userPriceEur: Math.round(totals.userPriceEur * 100) / 100,
+      regularGrossPriceEur: Math.round(totals.regularGrossPriceEur * 100) / 100,
+      userGrossPriceEur: Math.round(totals.userGrossPriceEur * 100) / 100,
+    };
+  }
 
   /**
    * Determines whether the booking still needs to go through the payment

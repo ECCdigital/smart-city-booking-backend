@@ -332,9 +332,11 @@ class HtmlEngine {
       });
       htmlOutput += "</ul>";
 
-      if (event.externalBookingUrl){
-        htmlOutput += '<a class="btn-booking" href="' + event.externalBookingUrl + '" target="_blank">Jetzt buchen</a>';
-
+      if (event.externalBookingUrl) {
+        htmlOutput +=
+          '<a class="btn-booking" href="' +
+          event.externalBookingUrl +
+          '" target="_blank">Jetzt buchen</a>';
       } else {
         if (event.attendees?.free === false) {
           htmlOutput += '<ul class="price-category-list">';

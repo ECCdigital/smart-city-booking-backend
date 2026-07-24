@@ -1,0 +1,13 @@
+---
+description: Mocha test conventions
+globs: tests/**/*.js
+alwaysApply: false
+---
+
+# Testing
+
+See `docs/agents/testing.md` for full conventions.
+
+- Mocha + assert/sinon, imports from `../src/...`
+- Restore stubs in `afterEach`
+- Test behavior and edge cases, not implementation trivia

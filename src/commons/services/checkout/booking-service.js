@@ -11,6 +11,7 @@ const {
   ManualBundleCheckoutService,
 } = require("./bundle-checkout-service");
 const ReceiptService = require("../payment/receipt-service");
+const InvoiceService = require("../payment/invoice-service");
 const LockerService = require("../locker/locker-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
@@ -22,31 +23,34 @@ const WorkflowService = require("../workflow/workflow-service");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const { GroupBooking } = require("../../entities/groupBooking/groupBooking");
 const TenantManager = require("../../data-managers/tenant-manager");
+const SupervisorNotificationService = require("../supervisor-notification-service");
 const PaymentUtils = require("../../utilities/payment-utils");
 const {
   BookingConsistencyService,
   checkSameContactDetails,
   checkSameStatus,
   checkSamePaymentProvider,
+  checkInvoicePaymentProvider,
   checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
 const CancellationService = require("../payment/cancellation-service");
+const {
+  CancellationRefundService,
+  CANCELLATION_ORIGINS,
+} = require("../payment/cancellation-refund-service");
 const {
   BadRequestError,
   NotFoundError,
   BaseError,
   MethodNotAllowedError,
   ForbiddenError,
+  UnauthorizedError,
 } = require("../../../errors/BaseError");
 const { resolveCheckoutId } = require("../../utilities/checkout-utils");
-const {
-  CustomFieldService,
-} = require("../custom-field/custom-field-service");
+const { CustomFieldService } = require("../custom-field/custom-field-service");
 const { CheckoutError } = require("../../../errors/CheckoutError");
-const {
-  CHECKOUT_REASONS,
-} = require("./checkout-reasons");
+const { CHECKOUT_REASONS } = require("./checkout-reasons");
 
 const logger = bunyan.createLogger({
   name: "booking-service.js",
@@ -171,7 +175,7 @@ class BookingService {
       isCommitted,
       isPayed,
       isRejected,
-      bookWithPrice,
+      bookWithoutDiscount,
       customFieldValues: rawCustomFieldValues,
       cancellationPolicy,
     } = bookingAttempt;
@@ -277,7 +281,7 @@ class BookingService {
         isRejected: Boolean(isRejected),
         attachmentStatus,
         paymentProvider,
-        bookWithPrice,
+        bookWithoutDiscount,
         checkoutId: providedCheckoutId,
         customFieldValues,
         cancellationPolicy,
@@ -303,7 +307,7 @@ class BookingService {
         comment,
         attachmentStatus,
         paymentProvider,
-        bookWithPrice,
+        bookWithoutDiscount,
         checkoutId: providedCheckoutId,
         customFieldValues,
       });
@@ -439,6 +443,12 @@ class BookingService {
             booking.tenantId,
           );
         }
+
+        await SupervisorNotificationService.notifySupervisorsOnBookingCreated({
+          tenantId: booking.tenantId,
+          userId: booking.assignedUserId,
+          bookingIds: booking.id,
+        });
       } catch (err) {
         logger.error(err);
       }
@@ -574,6 +584,13 @@ class BookingService {
             true,
           );
         }
+
+        await SupervisorNotificationService.notifySupervisorsOnBookingCreated({
+          tenantId: newGroupBooking.tenantId,
+          userId: newGroupBooking.assignedUserId,
+          bookingIds: newGroupBooking.bookingIds,
+          aggregated: true,
+        });
       } catch (err) {
         logger.error(`Error while sending email: ${err}`);
       }
@@ -608,6 +625,8 @@ class BookingService {
         bookingId: updatedBooking.id,
       });
     }
+
+    const onUnreject = oldBooking.isRejected && !isRejected;
 
     const { checkoutId } = await resolveCheckoutId(
       undefined,
@@ -660,14 +679,28 @@ class BookingService {
       if (!(booking instanceof Booking)) {
         booking = new Booking(booking);
       }
+
+      if (onUnreject) {
+        booking.priceEur = oldBooking.priceEur;
+        booking.vatIncludedEur = oldBooking.vatIncludedEur;
+        booking.bookableItems = oldBooking.bookableItems;
+        booking.couponCode = oldBooking.couponCode;
+        booking._couponUsed = oldBooking._couponUsed;
+        booking.rejectionReason = "";
+        delete booking.cancellationRefund;
+      }
+
       booking.validate();
 
-      await BookingManager.storeBooking(booking);
+      await BookingManager.storeBooking(
+        booking,
+        true,
+        onUnreject ? { unset: ["cancellationRefund"] } : undefined,
+      );
 
       const onCommit = !oldBooking.isCommitted && isCommit;
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
-      const onUnreject = oldBooking.isRejected && !isRejected;
 
       const lockerServiceInstance = LockerService.getInstance();
 
@@ -688,6 +721,10 @@ class BookingService {
           booking.id,
           booking.rejectionReason,
           null,
+          false,
+          false,
+          null,
+          { origin: CANCELLATION_ORIGINS.SYSTEM },
         );
       }
 
@@ -1003,6 +1040,162 @@ class BookingService {
     }
   }
 
+  static async getCancellationRefundPreview(tenantId, bookingId) {
+    const [tenant, booking] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      BookingManager.getBooking(bookingId, tenantId),
+    ]);
+
+    if (!tenant) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
+    }
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
+    return {
+      bookingId,
+      ...CancellationRefundService.calculate({
+        tenant,
+        booking,
+        origin: CANCELLATION_ORIGINS.ADMIN,
+      }),
+    };
+  }
+
+  static toCustomerCancellationRefundPreview(calculation, bookingId) {
+    return {
+      bookingId,
+      originalAmountEur: calculation.originalAmountEur,
+      refundAmountEur: calculation.refundAmountEur,
+      cancellationFeeEur: calculation.cancellationFeeEur,
+      suggestedRefundPercentage: calculation.suggestedRefundPercentage,
+      appliedRefundPercentage: calculation.appliedRefundPercentage,
+      daysBeforeStart: calculation.daysBeforeStart,
+      appliedTierDays: calculation.appliedTierDays,
+    };
+  }
+
+  static async getUserCancellationRefundPreview(tenantId, bookingId) {
+    const [tenant, booking] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      BookingManager.getBooking(bookingId, tenantId),
+    ]);
+
+    if (!tenant) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
+    }
+    if (!booking || !booking.id) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    if (booking.isRejected === true) {
+      throw new ForbiddenError("booking_already_rejected", { bookingId });
+    }
+    if (booking.cancellationPolicy?.userCancellable !== true) {
+      throw new ForbiddenError("booking_user_cancellation_disabled", {
+        bookingId,
+      });
+    }
+
+    const calculation = CancellationRefundService.calculate({
+      tenant,
+      booking,
+      origin: CANCELLATION_ORIGINS.USER,
+    });
+
+    return this.toCustomerCancellationRefundPreview(calculation, bookingId);
+  }
+
+  static async getPublicCancellationRefundPreview(tenantId, bookingId, name) {
+    if (!name || typeof name !== "string" || !name.trim()) {
+      throw new BadRequestError("missing_name");
+    }
+
+    const ownsBooking = await this.verifyBookingOwnership(
+      tenantId,
+      bookingId,
+      name,
+    );
+    if (!ownsBooking) {
+      throw new UnauthorizedError("booking_name_mismatch", { bookingId });
+    }
+
+    return this.getUserCancellationRefundPreview(tenantId, bookingId);
+  }
+
+  static async getHookCancellationRefundPreview(tenantId, bookingId, hookId) {
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+    if (!booking || !booking.id) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
+    const hook = booking.getHook ? booking.getHook(hookId) : null;
+    if (!hook || hook.type !== BOOKING_HOOK_TYPES.REJECT) {
+      throw new NotFoundError("booking_hook_not_found", { bookingId, hookId });
+    }
+
+    return this.getUserCancellationRefundPreview(tenantId, bookingId);
+  }
+
+  static async getGroupCancellationRefundPreview(tenantId, groupBookingId) {
+    const [tenant, groupBooking] = await Promise.all([
+      TenantManager.getTenant(tenantId),
+      GroupBookingManager.getGroupBooking(tenantId, groupBookingId, false),
+    ]);
+
+    if (!tenant) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
+    }
+    if (!groupBooking) {
+      throw new NotFoundError("group_booking_not_found", { groupBookingId });
+    }
+
+    const bookings = await BookingManager.getBookings(
+      tenantId,
+      groupBooking.bookingIds,
+    );
+    if (bookings.length !== groupBooking.bookingIds.length) {
+      throw new NotFoundError("booking_not_found", {
+        groupBookingId,
+      });
+    }
+
+    const cancelledAt = Date.now();
+    const previewBookings = bookings.map((booking) => ({
+      bookingId: booking.id,
+      ...CancellationRefundService.calculate({
+        tenant,
+        booking,
+        cancelledAt,
+        origin: CANCELLATION_ORIGINS.ADMIN,
+      }),
+    }));
+
+    return {
+      groupBookingId,
+      cancelledAt,
+      bookings: previewBookings,
+      originalAmountEur:
+        previewBookings.reduce(
+          (total, booking) =>
+            total + Math.round(booking.originalAmountEur * 100),
+          0,
+        ) / 100,
+      refundAmountEur:
+        previewBookings.reduce(
+          (total, booking) => total + Math.round(booking.refundAmountEur * 100),
+          0,
+        ) / 100,
+      cancellationFeeEur:
+        previewBookings.reduce(
+          (total, booking) =>
+            total + Math.round(booking.cancellationFeeEur * 100),
+          0,
+        ) / 100,
+    };
+  }
+
   static async rejectBooking(
     tenantId,
     bookingId,
@@ -1011,11 +1204,18 @@ class BookingService {
     skipWorkflow = false,
     skipCancellation = false,
     bankDetails = null,
+    cancellationContext = {},
   ) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const [booking, tenant] = await Promise.all([
+      BookingManager.getBooking(bookingId, tenantId),
+      TenantManager.getTenant(tenantId),
+    ]);
 
     if (!booking) {
       throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    if (!tenant) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
     }
 
     try {
@@ -1026,6 +1226,16 @@ class BookingService {
         booking.removeHook(hookId);
       }
 
+      const refundCalculation = CancellationRefundService.calculate({
+        tenant,
+        booking,
+        cancelledAt: cancellationContext.cancelledAt ?? Date.now(),
+        origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
+        refundPercentage: cancellationContext.refundPercentage,
+        cancelledByUserId: cancellationContext.cancelledByUserId,
+      });
+      booking.cancellationRefund = { ...refundCalculation };
+
       let attachments;
 
       if (booking.priceEur > 0 && !skipCancellation) {
@@ -1033,13 +1243,22 @@ class BookingService {
         const options = {
           alreadyPaid: booking.isPayed,
           bankDetails: sanitizedBankDetails || undefined,
+          cancellationReason: reason,
+          refundCalculation,
         };
-        const { cancellation, name, cancellationId, revision, timeCreated } =
-          await CancellationService.createSingleCancellation({
-            tenantId,
-            bookingId,
-            options,
-          });
+        const {
+          cancellation,
+          name,
+          cancellationId,
+          revision,
+          timeCreated,
+          originalInvoiceNumber,
+          originalInvoiceDate,
+        } = await CancellationService.createSingleCancellation({
+          tenantId,
+          bookingId,
+          options,
+        });
 
         attachments = [
           {
@@ -1052,9 +1271,17 @@ class BookingService {
         booking.attachments.push({
           type: "cancellation",
           title: name,
+          name,
           cancellationId: cancellationId,
           revision: revision,
           timeCreated,
+          cancellation: {
+            ...refundCalculation,
+            originalDocumentRef: {
+              number: originalInvoiceNumber,
+              timeCreated: originalInvoiceDate,
+            },
+          },
         });
       }
 
@@ -1113,12 +1340,20 @@ class BookingService {
     hookId = null,
     skipWorkflow = false,
     skipCancellation = false,
+    bankDetails = null,
+    cancellationContext = {},
   ) {
-    const groupBooking = await GroupBookingManager.getGroupBooking(
-      tenantId,
-      groupBookingId,
-      true,
-    );
+    const [groupBooking, tenant] = await Promise.all([
+      GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true),
+      TenantManager.getTenant(tenantId),
+    ]);
+
+    if (!groupBooking) {
+      throw new NotFoundError("group_booking_not_found", { groupBookingId });
+    }
+    if (!tenant) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
+    }
 
     const bookings = groupBooking.bookings;
 
@@ -1137,18 +1372,37 @@ class BookingService {
     }
 
     let attachments;
-    let bookingAttachment;
+    let cancellationDocument;
+    const cancelledAt = cancellationContext.cancelledAt ?? Date.now();
+    const refundCalculations = bookings.map((booking) => ({
+      bookingId: booking.id,
+      ...CancellationRefundService.calculate({
+        tenant,
+        booking,
+        cancelledAt,
+        origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
+        refundPercentage: cancellationContext.refundPercentage,
+        cancelledByUserId: cancellationContext.cancelledByUserId,
+      }),
+    }));
 
     if (groupBooking.getTotalPrice() > 0 && !skipCancellation) {
-      const options = { alreadyPaid: groupBooking.areSomeBookingsPaid() };
+      const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+      const options = {
+        alreadyPaid: groupBooking.areSomeBookingsPaid(),
+        cancellationReason: reason,
+        refundCalculations,
+        bankDetails: sanitizedBankDetails || undefined,
+      };
 
-      const { cancellation, name, cancellationId, revision, timeCreated } =
+      cancellationDocument =
         await CancellationService.createAggregatedCancellation({
           tenantId,
           bookingIds: groupBooking.bookingIds,
           groupBookingId: groupBooking.id,
           options,
         });
+      const { cancellation } = cancellationDocument;
 
       attachments = [
         {
@@ -1157,22 +1411,39 @@ class BookingService {
           contentType: "application/pdf",
         },
       ];
-
-      bookingAttachment = {
-        type: "cancellation",
-        title: name,
-        cancellationId: cancellationId,
-        revision: revision,
-        timeCreated,
-      };
     }
 
     for (const booking of bookings) {
       booking.isRejected = true;
       booking.rejectionReason = reason;
 
-      if (bookingAttachment) {
-        booking.attachments.push(bookingAttachment);
+      const refundCalculation = refundCalculations.find(
+        (calculation) => calculation.bookingId === booking.id,
+      );
+      if (refundCalculation) {
+        const refundAudit = { ...refundCalculation };
+        delete refundAudit.bookingId;
+        booking.cancellationRefund = refundAudit;
+      }
+
+      if (cancellationDocument && refundCalculation) {
+        const refundAudit = { ...refundCalculation };
+        delete refundAudit.bookingId;
+        booking.attachments.push({
+          type: "cancellation",
+          title: cancellationDocument.name,
+          name: cancellationDocument.name,
+          cancellationId: cancellationDocument.cancellationId,
+          revision: cancellationDocument.revision,
+          timeCreated: cancellationDocument.timeCreated,
+          cancellation: {
+            ...refundAudit,
+            originalDocumentRef: {
+              number: cancellationDocument.originalInvoiceNumber,
+              timeCreated: cancellationDocument.originalInvoiceDate,
+            },
+          },
+        });
       }
       await BookingManager.storeBooking(booking);
 
@@ -1248,12 +1519,24 @@ class BookingService {
 
       await BookingManager.storeBooking(booking);
 
+      const tenantEntity = await TenantManager.getTenant(tenant);
+      const refundPreview = this.toCustomerCancellationRefundPreview(
+        CancellationRefundService.calculate({
+          tenant: tenantEntity,
+          booking,
+          origin: CANCELLATION_ORIGINS.USER,
+        }),
+        booking.id,
+      );
+
       await MailController.sendVerifyBookingRejection(
         booking.mail,
         booking.id,
         booking.tenantId,
         hook.id,
         reason,
+        undefined,
+        refundPreview,
       );
 
       logger.info(
@@ -1398,6 +1681,66 @@ class BookingService {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Creates an aggregated invoice for a group booking and attaches it to all bookings.
+   * @param {string} tenantId
+   * @param {string[]} bookingIds
+   * @param {string|null} groupBookingId
+   * @param {{ validate?: boolean }} [options]
+   * @returns {Promise<{ success: boolean, errors?: object[], invoice?: object, name?: string, invoiceId?: string, revision?: number, mail?: string, bookingIds?: string[] }>}
+   */
+  static async createAggregatedInvoice(
+    tenantId,
+    bookingIds,
+    groupBookingId = null,
+    { validate = true } = {},
+  ) {
+    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+
+    if (validate) {
+      const validator = new BookingConsistencyService([
+        checkSameContactDetails,
+        checkSameStatus,
+        checkSamePaymentProvider,
+        checkInvoicePaymentProvider,
+      ]);
+
+      const errors = validator.validate(bookings);
+      if (errors.length > 0) {
+        logger.error(
+          `${tenantId} -- bookings ${bookingIds} cannot create invoice: ${JSON.stringify(
+            errors,
+          )}`,
+        );
+        return { success: false, errors };
+      }
+    }
+
+    const {
+      invoice,
+      name,
+      invoiceId,
+      revision,
+      mail,
+      bookingIds: updatedBookingIds,
+    } = await InvoiceService.issueAggregatedInvoice(
+      tenantId,
+      bookings.map((b) => b.id),
+      groupBookingId,
+      bookings,
+    );
+
+    return {
+      success: true,
+      invoice,
+      name,
+      invoiceId,
+      revision,
+      mail,
+      bookingIds: updatedBookingIds,
+    };
   }
 
   static async handleSingleBookingRequestConfirmation(
@@ -1547,7 +1890,7 @@ class BookingService {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
     console.log(booking);
-    return booking
+    return booking;
   }
 
   static async getBookedSeatsCount(tenantId, eventId, params) {

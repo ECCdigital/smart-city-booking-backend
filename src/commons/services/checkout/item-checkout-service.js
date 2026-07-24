@@ -51,10 +51,10 @@ class ItemCheckoutService {
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string || null} couponCode The coupon code
-   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations.
+   * @param {boolean} bookWithoutDiscount When true, booking discounts are ignored and the full price applies.
    * @param {string} checkoutId The ID of the checkout process, used for correlating logs and operations. Optional.
    * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
-   *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
+   *                                Defaults to `false` (discounts are applied when configured).
    */
   constructor({
     user,
@@ -64,7 +64,7 @@ class ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
-    bookWithPrice,
+    bookWithoutDiscount,
     checkoutId,
     externalCache,
   }) {
@@ -76,7 +76,7 @@ class ItemCheckoutService {
     this.amount = Number(amount);
     this.couponCode = couponCode;
     this.originBookable = null;
-    this.bookWithPrice = bookWithPrice ?? true;
+    this.bookWithoutDiscount = bookWithoutDiscount ?? false;
     this.checkoutId = checkoutId;
     this.externalCache = externalCache || new Map();
     this._cache = new Map();
@@ -162,7 +162,7 @@ class ItemCheckoutService {
     this.amount = null;
     this.couponCode = null;
     this.originBookable = null;
-    this.bookWithPrice = null;
+    this.bookWithoutDiscount = null;
     this._availabilityProvider = null;
     this._cache.clear();
   }
@@ -235,24 +235,24 @@ class ItemCheckoutService {
     return this.originBookable.hasExternalBookingDuration;
   }
 
-  async freeBookingAllowed() {
-    return this._cached("freeBookingAllowed", async () => {
-      const freeBookingUsers = [
-        ...(this.originBookable.freeBookingUsers || []),
-        ...(
-          await MembershipManager.getMembershipsByTenantAndRoles(
-            this.tenantId,
-            this.originBookable.freeBookingRoles || [],
-          )
-        ).map((u) => u.userId),
-      ];
+  async bookingDiscountPercent() {
+    return this._cached("bookingDiscountPercent", async () => {
+      if (!this.user || this.originBookable.tenantId !== this.tenantId) {
+        return 0;
+      }
 
-      return (
-        !!this.user &&
-        freeBookingUsers.includes(this.user) &&
-        this.originBookable.tenantId === this.tenantId
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
+        this.tenantId,
+        this.user,
       );
+      const userRoles = membership?.roles || [];
+
+      return this.originBookable.getUserDiscountPercent(this.user, userRoles);
     });
+  }
+
+  async freeBookingAllowed() {
+    return (await this.bookingDiscountPercent()) >= 100;
   }
 
   async calculateAmountBooked(bookable) {
@@ -519,30 +519,35 @@ class ItemCheckoutService {
     return Math.round(price * 100) / 100;
   }
 
-  async userPriceEur() {
-    return this._cached("userPriceEur", async () => {
-      if (await this.freeBookingAllowed()) {
-        if (!this.bookWithPrice) {
-          return 0;
-        }
+  async _userPricesAfterCoupons() {
+    return this._cached("userPricesAfterCoupons", async () => {
+      let netPrice = await this.regularPriceEur();
+
+      const discountPercent = await this.bookingDiscountPercent();
+      if (discountPercent > 0 && !this.bookWithoutDiscount) {
+        netPrice = Math.max(
+          0,
+          Math.round(netPrice * (1 - discountPercent / 100) * 100) / 100,
+        );
       }
 
-      const total = await CouponService.applyCoupon(
+      return CouponService.applyCouponToCheckoutPrices(
         this.originBookable.enableCoupons ? this.couponCode : null,
         this.tenantId,
-        await this.regularPriceEur(),
+        netPrice,
+        await this.priceValueAddedTax(),
       );
-
-      return Math.round(total * 100) / 100;
     });
   }
 
+  async userPriceEur() {
+    const { netPrice } = await this._userPricesAfterCoupons();
+    return netPrice;
+  }
+
   async userGrossPriceEur() {
-    return this._cached("userGrossPriceEur", async () => {
-      const price =
-        (await this.userPriceEur()) * (1 + (await this.priceValueAddedTax()));
-      return Math.round(price * 100) / 100;
-    });
+    const { grossPrice } = await this._userPricesAfterCoupons();
+    return grossPrice;
   }
 
   async checkPermissions() {
@@ -816,6 +821,7 @@ class ManualItemCheckoutService extends ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
+    bookWithoutDiscount,
   }) {
     super({
       user,
@@ -825,6 +831,7 @@ class ManualItemCheckoutService extends ItemCheckoutService {
       bookableId,
       amount,
       couponCode,
+      bookWithoutDiscount,
     });
   }
 

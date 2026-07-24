@@ -12,10 +12,7 @@ router.post("/refresh", AuthenticationController.refreshToken);
 router.post("/resetpassword", AuthenticationController.resetPassword);
 router.post("/check-email", AuthenticationController.checkEmail);
 router.post("/forgot-password", AuthenticationController.forgotPassword);
-router.post(
-  "/reset-password",
-  AuthenticationController.resetPasswordWithToken,
-);
+router.post("/reset-password", AuthenticationController.resetPasswordWithToken);
 
 // SSO Endpoints
 router.post("/sso/signin", AuthenticationController.ssoLogin);
@@ -28,7 +25,6 @@ router.post("/card/signin", AuthenticationController.cardSignin);
 router.post("/card/signup", AuthenticationController.cardSignup);
 router.get("/auth/card/link", AuthenticationController.confirmCardLink);
 router.post("/card/link", AuthenticationController.confirmCardLinkWithToken);
-
 
 // Hooks
 router.get("/verify/:hookId", AuthenticationController.releaseHook);

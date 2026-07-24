@@ -13,7 +13,6 @@ class InvoiceApplication extends PaymentApplication {
     this.manualCreation = params.manualCreation ?? false;
   }
 
-
   static get Schema() {
     return {
       ...super.Schema,

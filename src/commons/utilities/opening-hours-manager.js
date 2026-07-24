@@ -256,8 +256,7 @@ function checkSpecialOpeningHours(bookable, timeBegin, timeEnd) {
 
       const dayStart =
         bookingStart > dayBoundaryStart ? bookingStart : dayBoundaryStart;
-      const dayEnd =
-        bookingEnd < dayBoundaryEnd ? bookingEnd : dayBoundaryEnd;
+      const dayEnd = bookingEnd < dayBoundaryEnd ? bookingEnd : dayBoundaryEnd;
 
       if (dayStart < sohStart || dayEnd > sohEnd) {
         return true;

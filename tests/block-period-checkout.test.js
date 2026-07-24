@@ -1,6 +1,8 @@
 const assert = require("assert");
 const sinon = require("sinon");
-const { generateBlockPeriodInstances } = require("../src/commons/utilities/block-period-generator");
+const {
+  generateBlockPeriodInstances,
+} = require("../src/commons/utilities/block-period-generator");
 const {
   isBlockPeriodBookingValid,
   shouldSkipOpeningHoursCheck,
@@ -19,10 +21,16 @@ const {
   CHECK_TYPES,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
-const { BookableManager } = require("../src/commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
-const { normalizeCheckError } = require("../src/commons/services/checkout/normalize-check-error");
-const { CHECKOUT_REASONS } = require("../src/commons/services/checkout/checkout-reasons");
+const {
+  normalizeCheckError,
+} = require("../src/commons/services/checkout/normalize-check-error");
+const {
+  CHECKOUT_REASONS,
+} = require("../src/commons/services/checkout/checkout-reasons");
 
 const TENANT_ID = "tenant-1";
 
@@ -117,11 +125,7 @@ describe("block period checkout and availability rules", () => {
     const instance = getWeekendInstance();
 
     assert.strictEqual(
-      isBlockPeriodBookingValid(
-        bookable,
-        instance.timeBegin,
-        instance.timeEnd,
-      ),
+      isBlockPeriodBookingValid(bookable, instance.timeBegin, instance.timeEnd),
       true,
     );
     assert.strictEqual(
@@ -176,7 +180,8 @@ describe("block period checkout and availability rules", () => {
       assert.strictEqual(partial.available, false);
       assert.strictEqual(partial.reason, "block-period-mismatch");
     } finally {
-      MembershipManager.getMembershipsByTenantAndRoles = originalMembershipLookup;
+      MembershipManager.getMembershipsByTenantAndRoles =
+        originalMembershipLookup;
     }
   });
 
@@ -213,7 +218,8 @@ describe("block period checkout and availability rules", () => {
     const normalized = normalizeCheckError({
       checkType: CHECK_TYPES.BLOCK_PERIOD,
       available: false,
-      message: "Für das Objekt Camping A muss eine vollständige Block-Periode gebucht werden.",
+      message:
+        "Für das Objekt Camping A muss eine vollständige Block-Periode gebucht werden.",
     });
 
     assert.strictEqual(

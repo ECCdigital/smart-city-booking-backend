@@ -15,6 +15,7 @@ const OVERRIDABLE_SNIPPETS = Object.freeze([
   "invoice",
   "invoice-after-approval",
   "payment-link-after-approval",
+  "supervisor-booking-notification",
 ]);
 
 const OVERRIDE_TEMPLATE_VARIABLES = Object.freeze([
@@ -38,6 +39,36 @@ const OVERRIDE_TEMPLATE_VARIABLES = Object.freeze([
   {
     name: "currentDate",
     description: "Aktuelles Versanddatum im Format TT.MM.JJJJ",
+  },
+  {
+    name: "hasRefundPreview",
+    description:
+      "Wahr, wenn die Buchung einen Erstattungsbetrag größer 0 € hat",
+  },
+  {
+    name: "refundAmountEur",
+    description:
+      "Erstattungsbetrag als Zahl (mit Helper priceFormatted nutzbar)",
+  },
+  {
+    name: "cancellationFeeEur",
+    description: "Einbehaltener Betrag als Zahl",
+  },
+  {
+    name: "originalAmountEur",
+    description: "Ursprungsbetrag der Buchung als Zahl",
+  },
+  {
+    name: "refundPercentage",
+    description: "Angewandter Erstattungsprozentsatz (0–100)",
+  },
+  {
+    name: "hasCancellationFee",
+    description: "Wahr, wenn ein Einbehalt größer 0 € anfällt",
+  },
+  {
+    name: "daysBeforeStart",
+    description: "Kalendertage bis zum Buchungsbeginn zum Berechnungszeitpunkt",
   },
 ]);
 

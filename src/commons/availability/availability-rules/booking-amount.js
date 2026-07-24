@@ -63,8 +63,7 @@ function sumBookedAmount(bookings, bookableId) {
  * @returns {number}
  */
 function sumBookedAmountForBookableSet(bookings, bookableIds) {
-  const idSet =
-    bookableIds instanceof Set ? bookableIds : new Set(bookableIds);
+  const idSet = bookableIds instanceof Set ? bookableIds : new Set(bookableIds);
 
   return bookings.reduce(
     (sum, booking) => sum + getBookedAmountForBookableSet(booking, idSet),

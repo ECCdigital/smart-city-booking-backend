@@ -7,6 +7,56 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+## [4.2.1] — 2026-07-22
+
+### Added
+
+- `POST /api/v2/:tenant/checkout/validate-group` — batch-validate series / group booking attempts in one request (avoids storefront 429s from parallel single validates)
+- Full-stack operator guide ([getting-started.md](getting-started.md)): wire Admin UI and Storefront to the API, local npm setup, and Docker Compose example (`docker-compose.full-stack.example.yml`)
+- Public JSON bookable responses (`/json/:tenant/bookables*`, event tickets) include the tenant `cancellationRefundTiers`
+
+### Fixed
+
+- Docker image base switched from Node 25 to Node 22 LTS so `npm ci` succeeds during image build
+
+## [4.2.0] — 2026-07-17
+
+### Added
+
+- Configurable cancellation refund tiers: refund share can depend on how many days before the booking the cancellation happens; admins can preview and override amounts
+- Customers see expected refund amounts before and after self-cancellation (preview and confirmation emails)
+- Percentage booking discounts per user or role on bookables (replaces free-booking-only lists); coupons still apply afterwards
+- Optional contact hint in booking emails when self-cancellation is disabled, so customers know how to get in touch
+- Supervisor notifications on new bookings (single and series), with configurable recipients per membership
+- Catalog indicates whether the current user may create series bookings
+- Bank details can be included on group booking cancellations (as with single bookings)
+- Renaming a user can optionally skip updating names on assigned self-bookings
+
+### Fixed
+
+- Fixed-amount coupons are applied correctly to the total (gross) price and only once per checkout, also for multi-item bookings
+- Invoices and receipts present coupon and discount lines more clearly (regular prices, Rabatt labels, discounts after VAT)
+- Cancellation PDFs: clearer refund labels, improved table layout, and optional cancellation number prefix only when configured
+- No cancel button in booking emails when self-cancellation is turned off
+- Deleting custom field definitions also removes their values from affected bookables
+- SSO users can again access related bookings, protected files, and private catalogs without token errors
+- Bookings created manually by an admin appear in the assigned user’s personal booking list
+- Restoring a previously cancelled booking clears stored refund audit data
+
+## [4.1.4] — 2026-07-03
+
+### Added
+
+- Preview for receipt, invoice, and cancellation PDF templates before saving
+- Configurable layout for booking tables in PDFs (summary, compact, detailed)
+- Option to show or hide booking number, period, and payment details in PDF tables
+- Manual collective invoice for all bookings in a group booking, with optional email delivery
+- Page numbers and repeating headers/footers on multi-page PDFs
+
+### Changed
+
+- Updated default templates for receipts, invoices, and cancellations
+
 ## [4.1.3] — 2026-07-02
 
 ### Fixed
@@ -78,6 +128,9 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.2.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.0...v4.2.1
+[4.2.0]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.4...v4.2.0
+[4.1.4]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.3...v4.1.4
 [4.1.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.2...v4.1.3
 [4.1.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.1...v4.1.2
 [4.1.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.0...v4.1.1

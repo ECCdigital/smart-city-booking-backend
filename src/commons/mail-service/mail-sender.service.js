@@ -92,6 +92,10 @@ class MailSenderService {
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
 
+    const booking = bookingId
+      ? await BookingManager.getBooking(bookingId, tenantId)
+      : null;
+
     // Booking details
     const bookingDetails = bookingId
       ? await MailDataService.generateBookingDetails(bookingId, tenantId)
@@ -108,10 +112,12 @@ class MailSenderService {
       attachments = [...attachments, qrResult.attachment];
     }
 
-    // Rejection link
-    const rejectionUrl = addRejectionLink
-      ? `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}`
-      : null;
+    const { rejectionUrl, cancellationContactHint } =
+      MailDataService.buildCancellationMailContext(
+        booking,
+        tenantId,
+        addRejectionLink,
+      );
 
     const snippetHtml = renderSnippet("single-booking-wrapper", {
       message,
@@ -120,6 +126,7 @@ class MailSenderService {
       rejectionReason,
       bookingDetails,
       rejectionUrl,
+      cancellationContactHint,
       qrContent,
       showFooter: true,
       supportEmail: tenant.mail,
@@ -220,14 +227,43 @@ class MailSenderService {
     const sendBCC = this.resolve(mailType.sendBCC, ctx);
     const addRejectionLink = this.resolve(mailType.addRejectionLink, ctx);
     const overrideSource = getSnippetOverride(tenant, mailType.templateName);
-    const { paymentUrl, cancelReason, rejectionReason, verifyRejectionUrl } =
-      templateData;
+    const {
+      paymentUrl,
+      cancelReason,
+      rejectionReason,
+      verifyRejectionUrl,
+      hasRefundPreview,
+      originalAmountEur,
+      refundAmountEur,
+      cancellationFeeEur,
+      refundPercentage,
+      daysBeforeStart,
+      hasCancellationFee,
+    } = templateData;
 
     const renderForBooking = (booking) => {
+      const refundVars =
+        typeof hasRefundPreview === "boolean"
+          ? {
+              hasRefundPreview,
+              originalAmountEur,
+              refundAmountEur,
+              cancellationFeeEur,
+              refundPercentage,
+              daysBeforeStart,
+              hasCancellationFee,
+            }
+          : {};
+
       const variables = buildOverrideTemplateVariables({
         tenant,
         booking,
-        extra: { verifyRejectionUrl },
+        extra: {
+          verifyRejectionUrl,
+          cancelReason,
+          rejectionReason,
+          ...refundVars,
+        },
       });
 
       const message = renderSnippet(mailType.templateName, variables, {

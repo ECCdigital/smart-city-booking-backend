@@ -86,13 +86,21 @@ class AvailabilityContext {
     this.metrics.dbQueryCount += 1;
     this.#indexBookings(bookings);
 
-    if (bookable?.type === BOOKABLE_TYPES.TICKET && parentBookables.length > 0) {
-      await this.#loadTicketParentRelatedBookables(parentBookables, bookableIds);
+    if (
+      bookable?.type === BOOKABLE_TYPES.TICKET &&
+      parentBookables.length > 0
+    ) {
+      await this.#loadTicketParentRelatedBookables(
+        parentBookables,
+        bookableIds,
+      );
     }
 
-    const familyBookables = [bookable, ...parentBookables, ...relatedBookables].filter(
-      Boolean,
-    );
+    const familyBookables = [
+      bookable,
+      ...parentBookables,
+      ...relatedBookables,
+    ].filter(Boolean);
     const needsUntimedBookings = familyBookables.some(
       (familyBookable) => !isTimeRelatedBookable(familyBookable),
     );
@@ -106,10 +114,7 @@ class AvailabilityContext {
       this.#indexBookings(untimedBookings);
     }
 
-    if (
-      bookable?.type === BOOKABLE_TYPES.TICKET &&
-      bookable?.eventId
-    ) {
+    if (bookable?.type === BOOKABLE_TYPES.TICKET && bookable?.eventId) {
       const [event, eventBookings] = await Promise.all([
         EventManager.getEvent(bookable.eventId, this.tenantId),
         BookingManager.getEventBookings(this.tenantId, bookable.eventId),
@@ -214,7 +219,12 @@ class AvailabilityContext {
    * @param {string|null} bookingToIgnore
    * @returns {import("../../entities/booking/booking").Booking[]}
    */
-  getConcurrentBookings(bookableId, timeBegin, timeEnd, bookingToIgnore = null) {
+  getConcurrentBookings(
+    bookableId,
+    timeBegin,
+    timeEnd,
+    bookingToIgnore = null,
+  ) {
     const bookings = this.bookingsByBookableId.get(bookableId) || [];
     return BookingManager.filterConcurrentBookings(
       bookings,

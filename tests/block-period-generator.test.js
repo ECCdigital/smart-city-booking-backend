@@ -44,15 +44,18 @@ describe("block period generator", () => {
   };
 
   it("builds a single weekend instance from an anchor date", () => {
-    const instance = buildBlockPeriodInstance(
-      weekend,
-      localDate("2026-01-03"),
-    );
+    const instance = buildBlockPeriodInstance(weekend, localDate("2026-01-03"));
 
     assert.strictEqual(instance.blockPeriodId, "weekend");
     assert.strictEqual(instance.label, "Wochenende");
-    assert.strictEqual(instance.timeBegin, localDate("2026-01-03", "08:00").getTime());
-    assert.strictEqual(instance.timeEnd, localDate("2026-01-04", "20:00").getTime());
+    assert.strictEqual(
+      instance.timeBegin,
+      localDate("2026-01-03", "08:00").getTime(),
+    );
+    assert.strictEqual(
+      instance.timeEnd,
+      localDate("2026-01-04", "20:00").getTime(),
+    );
   });
 
   it("builds a workweek instance spanning Monday to Friday", () => {
@@ -61,8 +64,14 @@ describe("block period generator", () => {
       localDate("2026-01-05"),
     );
 
-    assert.strictEqual(instance.timeBegin, localDate("2026-01-05", "08:00").getTime());
-    assert.strictEqual(instance.timeEnd, localDate("2026-01-09", "18:00").getTime());
+    assert.strictEqual(
+      instance.timeBegin,
+      localDate("2026-01-05", "08:00").getTime(),
+    );
+    assert.strictEqual(
+      instance.timeEnd,
+      localDate("2026-01-09", "18:00").getTime(),
+    );
   });
 
   it("builds a block that crosses the week boundary", () => {
@@ -71,8 +80,14 @@ describe("block period generator", () => {
       localDate("2026-01-09"),
     );
 
-    assert.strictEqual(instance.timeBegin, localDate("2026-01-09", "18:00").getTime());
-    assert.strictEqual(instance.timeEnd, localDate("2026-01-12", "08:00").getTime());
+    assert.strictEqual(
+      instance.timeBegin,
+      localDate("2026-01-09", "18:00").getTime(),
+    );
+    assert.strictEqual(
+      instance.timeEnd,
+      localDate("2026-01-12", "08:00").getTime(),
+    );
   });
 
   it("generates weekly weekend instances inside a range", () => {
@@ -83,10 +98,22 @@ describe("block period generator", () => {
     );
 
     assert.strictEqual(instances.length, 4);
-    assert.strictEqual(instances[0].timeBegin, localDate("2026-01-03", "08:00").getTime());
-    assert.strictEqual(instances[1].timeBegin, localDate("2026-01-10", "08:00").getTime());
-    assert.strictEqual(instances[2].timeBegin, localDate("2026-01-17", "08:00").getTime());
-    assert.strictEqual(instances[3].timeBegin, localDate("2026-01-24", "08:00").getTime());
+    assert.strictEqual(
+      instances[0].timeBegin,
+      localDate("2026-01-03", "08:00").getTime(),
+    );
+    assert.strictEqual(
+      instances[1].timeBegin,
+      localDate("2026-01-10", "08:00").getTime(),
+    );
+    assert.strictEqual(
+      instances[2].timeBegin,
+      localDate("2026-01-17", "08:00").getTime(),
+    );
+    assert.strictEqual(
+      instances[3].timeBegin,
+      localDate("2026-01-24", "08:00").getTime(),
+    );
   });
 
   it("includes an ongoing block that started before the range", () => {
@@ -96,8 +123,14 @@ describe("block period generator", () => {
       localDate("2026-01-31"),
     );
 
-    assert.strictEqual(instances[0].timeBegin, localDate("2026-01-03", "08:00").getTime());
-    assert.strictEqual(instances[0].timeEnd, localDate("2026-01-04", "20:00").getTime());
+    assert.strictEqual(
+      instances[0].timeBegin,
+      localDate("2026-01-03", "08:00").getTime(),
+    );
+    assert.strictEqual(
+      instances[0].timeEnd,
+      localDate("2026-01-04", "20:00").getTime(),
+    );
   });
 
   it("generates instances for multiple block period definitions", () => {
@@ -132,11 +165,9 @@ describe("block period generator", () => {
     );
 
     assert.strictEqual(
-      matchesBlockPeriodInstance(
-        instances[0].timeBegin,
-        instances[0].timeEnd,
-        [weekend],
-      ),
+      matchesBlockPeriodInstance(instances[0].timeBegin, instances[0].timeEnd, [
+        weekend,
+      ]),
       true,
     );
     assert.strictEqual(

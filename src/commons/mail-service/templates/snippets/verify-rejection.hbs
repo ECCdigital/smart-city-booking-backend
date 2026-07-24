@@ -15,6 +15,22 @@
   </p>
 {{/if}}
 
+{{#if hasRefundPreview}}
+  <p>
+    <strong>Erwartete Erstattung</strong> nach aktueller Regelung:
+    {{priceFormatted refundAmountEur}}
+    ({{refundPercentage}}&nbsp;%)
+    {{#if hasCancellationFee}}
+      <br />
+      Einbehalt (Stornogebühr): {{priceFormatted cancellationFeeEur}}
+    {{/if}}
+  </p>
+  <p>
+    Der endgültige Erstattungsbetrag wird zum Zeitpunkt Ihrer Bestätigung
+    berechnet.
+  </p>
+{{/if}}
+
 <p>
   <a
     href="{{verifyRejectionUrl}}"

@@ -12,7 +12,7 @@ const FileController = require("./controllers/file-controller");
 const MailTemplateController = require("./controllers/mail-template-controller");
 const { BookingController } = require("./controllers/booking-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
-const InstanceController = require("./controllers/instance-controller")
+const InstanceController = require("./controllers/instance-controller");
 
 const router = express.Router({ mergeParams: true });
 
@@ -140,6 +140,11 @@ router.get(
   AuthenticationController.isSignedIn,
   TenantController.countCheck,
 );
+router.post(
+  "/tenants/:id/pdf-preview",
+  AuthenticationController.isSignedIn,
+  TenantController.previewPdfTemplate,
+);
 
 router.post(
   "/tenants/:id/add-user",
@@ -187,6 +192,12 @@ router.post(
   "/tenants/:id/update-user-status",
   AuthenticationController.isSignedIn,
   TenantController.updateUserStatus,
+);
+
+router.post(
+  "/tenants/:id/update-user-booking-notification-recipients",
+  AuthenticationController.isSignedIn,
+  TenantController.updateUserBookingNotificationRecipients,
 );
 
 // USERS

@@ -7,7 +7,6 @@ const logger = bunyan.createLogger({
 });
 
 function errorHandler(err, req, res, next) {
-
   if (err instanceof BaseError) {
     logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
     return res.status(err.statusCode).json(err.toJSON());

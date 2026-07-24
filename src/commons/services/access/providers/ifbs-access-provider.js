@@ -57,7 +57,6 @@ class IfbsAccessProvider extends AccessProvider {
         openProcessId: openBoxId || null,
       };
     } catch (err) {
-
       return {
         confirmed: false,
         confirmedAt: null,

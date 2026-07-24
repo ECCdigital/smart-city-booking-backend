@@ -5,7 +5,9 @@ const {
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
+const { COUPON_TYPE } = require("../../entities/coupon/coupon");
 const LockerService = require("../locker/locker-service");
+const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
 
 /**
  * Class representing a bundle checkout service.
@@ -32,7 +34,7 @@ class BundleCheckoutService {
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
    * @param {Array} attachments - The attachments.
-   * @param {boolean} bookWithPrice - Whether to book with price.
+   * @param {boolean} bookWithoutDiscount - When true, booking discounts are ignored.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} customFieldValues - Checkout custom field values.
    */
@@ -56,7 +58,7 @@ class BundleCheckoutService {
     attachmentStatus,
     paymentProvider,
     attachments,
-    bookWithPrice,
+    bookWithoutDiscount,
     checkoutId,
     customFieldValues,
   }) {
@@ -79,11 +81,43 @@ class BundleCheckoutService {
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
-    this.bookWithPrice = bookWithPrice;
+    this.bookWithoutDiscount = bookWithoutDiscount;
     this.checkoutId = checkoutId;
     this.customFieldValues = Array.isArray(customFieldValues)
       ? customFieldValues
       : [];
+  }
+
+  async _getUsedCoupon() {
+    if (!this.couponCode) {
+      return null;
+    }
+    if (this._usedCoupon !== undefined) {
+      return this._usedCoupon;
+    }
+    this._usedCoupon = await CouponManager.getCoupon(
+      this.couponCode,
+      this.tenant,
+    );
+    return this._usedCoupon;
+  }
+
+  async _isMultiItemFixedCoupon() {
+    if (!this.couponCode || this.bookableItems.length <= 1) {
+      return false;
+    }
+    const coupon = await this._getUsedCoupon();
+    return coupon?.type === COUPON_TYPE.FIXED;
+  }
+
+  async _itemCouponCode() {
+    if (!this.couponCode) {
+      return null;
+    }
+    if (await this._isMultiItemFixedCoupon()) {
+      return null;
+    }
+    return this.couponCode;
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -94,8 +128,8 @@ class BundleCheckoutService {
       timeEnd: this.timeEnd,
       bookableId: bookableItem.bookableId,
       amount: bookableItem.amount,
-      couponCode: this.couponCode,
-      bookWithPrice: this.bookWithPrice,
+      couponCode: await this._itemCouponCode(),
+      bookWithoutDiscount: this.bookWithoutDiscount,
       checkoutId: this.checkoutId,
     });
     await itemCheckoutService.init();
@@ -157,14 +191,75 @@ class BundleCheckoutService {
     return true;
   }
 
+  /**
+   * Run per-item checks and enrich bookable items with prices in one pass
+   * so each ItemCheckoutService is initialized only once.
+   * @returns {Promise<{freeBookingAllowed: boolean, bookingDiscountPercent: number}>}
+   */
+  async _checkAndEnrichBookableItemPrices() {
+    let freeBookingAllowed = true;
+    let bookingDiscountPercent = 0;
+
+    for (let i = 0; i < this.bookableItems.length; i++) {
+      const bookableItem = this.bookableItems[i];
+      let itemCheckoutService = null;
+      try {
+        itemCheckoutService =
+          await this.createItemCheckoutService(bookableItem);
+        await itemCheckoutService.checkAll();
+
+        bookableItem.regularPriceEur =
+          await itemCheckoutService.regularPriceEur();
+        bookableItem.regularGrossPriceEur =
+          await itemCheckoutService.regularGrossPriceEur();
+        bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
+        bookableItem.userGrossPriceEur =
+          await itemCheckoutService.userGrossPriceEur();
+        bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
+        bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
+        delete bookableItem._bookableUsed._id;
+
+        if (!(await itemCheckoutService.freeBookingAllowed())) {
+          freeBookingAllowed = false;
+        }
+        if (i === 0) {
+          bookingDiscountPercent =
+            await itemCheckoutService.bookingDiscountPercent();
+        }
+      } finally {
+        if (itemCheckoutService) {
+          itemCheckoutService.cleanup();
+          itemCheckoutService = null;
+        }
+      }
+    }
+
+    return { freeBookingAllowed, bookingDiscountPercent };
+  }
+
   async userPriceEur() {
     let total = 0;
     for (const bookableItem of this.bookableItems) {
       const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
       total += bookableItem.userPriceEur * multiplier;
     }
+    total = Math.round(total * 100) / 100;
 
-    return Math.round(total * 100) / 100;
+    if (await this._isMultiItemFixedCoupon()) {
+      const grossAfter = await this.userGrossPriceEur();
+      let grossBefore = 0;
+      for (const bookableItem of this.bookableItems) {
+        const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
+        grossBefore += bookableItem.userGrossPriceEur * multiplier;
+      }
+      grossBefore = Math.round(grossBefore * 100) / 100;
+      if (!grossBefore) {
+        return 0;
+      }
+      return Math.round(((total * grossAfter) / grossBefore) * 100) / 100;
+    }
+
+    return total;
   }
 
   async userGrossPriceEur() {
@@ -173,7 +268,14 @@ class BundleCheckoutService {
       const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
       total += bookableItem.userGrossPriceEur * multiplier;
     }
-    return Math.round(total * 100) / 100;
+    total = Math.round(total * 100) / 100;
+
+    if (await this._isMultiItemFixedCoupon()) {
+      const coupon = await this._getUsedCoupon();
+      return Math.max(0, Math.round((total - coupon.discount) * 100) / 100);
+    }
+
+    return total;
   }
 
   async vatIncludedEur() {
@@ -231,14 +333,40 @@ class BundleCheckoutService {
    * Restrictive rule: every item must allow user cancellation, otherwise the
    * resulting booking is not user-cancellable.
    * @param {Array} bookableItems Bookable items with `_bookableUsed` populated.
-   * @returns {{userCancellable: boolean}} Aggregated policy.
+   * @returns {{userCancellable: boolean, contactHint?: string}} Aggregated policy.
    */
   aggregateCancellationPolicy(bookableItems) {
     const userCancellable = bookableItems.every(
       (item) =>
         item._bookableUsed?.cancellationPolicy?.userCancellable === true,
     );
-    return { userCancellable };
+
+    if (userCancellable) {
+      return { userCancellable };
+    }
+
+    const contactHints = [
+      ...new Set(
+        bookableItems
+          .filter(
+            (item) =>
+              item._bookableUsed?.cancellationPolicy?.userCancellable !== true,
+          )
+          .map((item) =>
+            item._bookableUsed?.cancellationPolicy?.contactHint?.trim(),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    if (contactHints.length === 0) {
+      return { userCancellable };
+    }
+
+    return {
+      userCancellable,
+      contactHint: contactHints.join("\n\n"),
+    };
   }
 
   processAttachments(bookableItems, attachmentStatus) {
@@ -268,6 +396,40 @@ class BundleCheckoutService {
   }
 
   /**
+   * Validate all items and return aggregate prices without creating a booking.
+   * Throws the same check errors as checkAll() / prepareBooking().
+   * @returns {Promise<{
+   *   regularPriceEur: number,
+   *   userPriceEur: number,
+   *   regularGrossPriceEur: number,
+   *   userGrossPriceEur: number,
+   *   freeBookingAllowed: boolean,
+   *   bookingDiscountPercent: number
+   * }>}
+   */
+  async validateAndGetPrices() {
+    const { freeBookingAllowed, bookingDiscountPercent } =
+      await this._checkAndEnrichBookableItemPrices();
+
+    let regularPriceEur = 0;
+    let regularGrossPriceEur = 0;
+    for (const bookableItem of this.bookableItems) {
+      const multiplier = bookableItem.ignoreAmount ? 1 : bookableItem.amount;
+      regularPriceEur += bookableItem.regularPriceEur * multiplier;
+      regularGrossPriceEur += bookableItem.regularGrossPriceEur * multiplier;
+    }
+
+    return {
+      regularPriceEur: Math.round(regularPriceEur * 100) / 100,
+      userPriceEur: await this.userPriceEur(),
+      regularGrossPriceEur: Math.round(regularGrossPriceEur * 100) / 100,
+      userGrossPriceEur: await this.userGrossPriceEur(),
+      freeBookingAllowed,
+      bookingDiscountPercent,
+    };
+  }
+
+  /**
    * Prepares a booking by checking all bookable items and generating a booking reference.
    *
    * @async
@@ -278,30 +440,7 @@ class BundleCheckoutService {
    * @returns {Promise<Booking>} - A promise that resolves to the prepared booking object.
    */
   async prepareBooking({ keepExistingId = false, existingId = null } = {}) {
-    await this.checkAll();
-
-    for (const bookableItem of this.bookableItems) {
-      let itemCheckoutService = null;
-      try {
-        itemCheckoutService =
-          await this.createItemCheckoutService(bookableItem);
-        bookableItem.regularPriceEur =
-          await itemCheckoutService.regularPriceEur();
-        bookableItem.regularGrossPriceEur =
-          await itemCheckoutService.regularGrossPriceEur();
-        bookableItem.userPriceEur = await itemCheckoutService.userPriceEur();
-        bookableItem.userGrossPriceEur =
-          await itemCheckoutService.userGrossPriceEur();
-        bookableItem._bookableUsed = itemCheckoutService.bookableUsed;
-        bookableItem.ignoreAmount = itemCheckoutService.ignoreAmount;
-        delete bookableItem._bookableUsed._id;
-      } finally {
-        if (itemCheckoutService) {
-          itemCheckoutService.cleanup();
-          itemCheckoutService = null;
-        }
-      }
-    }
+    await this._checkAndEnrichBookableItemPrices();
 
     const mergedAttachments = mergeAttachments(
       this.attachments,
@@ -391,7 +530,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} paymentMethod - The payment method.
    * @param {Array} hooks - The hooks.
    * @param {Array} attachments - The attachments.
-   * @param {boolean} bookWithPrice - Whether to book with price.
+   * @param {boolean} bookWithoutDiscount - When true, booking discounts are ignored.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} lockerInfo - The locker info.
    * @param {Array} customFieldValues - Checkout custom field values.
@@ -426,7 +565,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     paymentMethod,
     hooks,
     attachments,
-    bookWithPrice,
+    bookWithoutDiscount,
     checkoutId,
     lockerInfo,
     customFieldValues,
@@ -452,7 +591,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       attachmentStatus,
       paymentProvider,
       attachments,
-      bookWithPrice,
+      bookWithoutDiscount,
       checkoutId,
       customFieldValues,
     });
@@ -475,8 +614,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       timeEnd: this.timeEnd,
       bookableId: bookableItem.bookableId,
       amount: bookableItem.amount,
-      couponCode: this.couponCode,
-      bookWithPrice: this.bookWithPrice,
+      couponCode: await this._itemCouponCode(),
+      bookWithoutDiscount: this.bookWithoutDiscount,
     });
 
     await itemCheckoutService.init(bookableItem._bookableUsed);
@@ -517,6 +656,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
 
   async prepareBooking(options = {}) {
     const booking = await super.prepareBooking(options);
+    booking.assignedUserId = primaryEmailFromMail(this.email);
     booking.internalComments = this.internalComments;
     booking.rejectionReason = this.rejectionReason;
 

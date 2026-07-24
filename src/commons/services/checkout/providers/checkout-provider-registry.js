@@ -19,7 +19,7 @@ class CheckoutProviderRegistry {
     if (!ProviderClass) {
       throw new Error(
         `No checkout provider registered for "${lockerSystem}". ` +
-        `Available: [${[...this._providers.keys()].join(", ")}]`,
+          `Available: [${[...this._providers.keys()].join(", ")}]`,
       );
     }
 

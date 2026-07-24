@@ -44,6 +44,26 @@ class CustomFieldService {
     return definitions.map((def) => this.normalizeUsageOptions(def));
   }
 
+  /**
+   * Returns field IDs that exist in previousDefinitions but not in nextDefinitions.
+   * @param {Array} previousDefinitions
+   * @param {Array} nextDefinitions
+   * @returns {string[]}
+   */
+  static getRemovedFieldIds(previousDefinitions = [], nextDefinitions = []) {
+    const nextIds = new Set(
+      nextDefinitions.map((definition) => definition?.id).filter(Boolean),
+    );
+
+    return [
+      ...new Set(
+        previousDefinitions
+          .map((definition) => definition?.id)
+          .filter((id) => id && !nextIds.has(id)),
+      ),
+    ];
+  }
+
   static mergeDefinitions({
     instanceFields = [],
     tenantFields = [],

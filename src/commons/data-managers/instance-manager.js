@@ -7,6 +7,7 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const { InstanceCache } = require("../services/instance/instance-cache");
+const { BookableManager } = require("./bookable-manager");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
@@ -48,11 +49,22 @@ class InstanceManager {
     if (!rawInstance) {
       return null;
     }
+
+    const previousCustomFields = rawInstance.bookableCustomFields || [];
+
     const updated = await InstanceModel.findOneAndUpdate(
       {},
       { $set: instanceEntity },
       { new: true },
     );
+
+    const removedFieldIds = CustomFieldService.getRemovedFieldIds(
+      previousCustomFields,
+      instanceEntity.bookableCustomFields || [],
+    );
+    if (removedFieldIds.length > 0) {
+      await BookableManager.removeCustomFieldValues(removedFieldIds);
+    }
 
     CustomFieldCache.invalidateInstance();
     InstanceCache.invalidate();

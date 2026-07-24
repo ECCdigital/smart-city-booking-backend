@@ -218,8 +218,12 @@ class UserService {
     keycloakId = null,
     anonymize = false,
   }) {
-    const normalizedCurrentId = String(currentId || "").trim().toLowerCase();
-    const normalizedNewId = String(newId || "").trim().toLowerCase();
+    const normalizedCurrentId = String(currentId || "")
+      .trim()
+      .toLowerCase();
+    const normalizedNewId = String(newId || "")
+      .trim()
+      .toLowerCase();
     const normalizedKeycloakId = String(keycloakId || "").trim();
 
     if (!normalizedNewId) {
@@ -305,7 +309,11 @@ class UserService {
       }
 
       if (Object.keys(userSet).length > 0) {
-        await UserManager.updateUserByMongoId(currentUser._id, userSet, session);
+        await UserManager.updateUserByMongoId(
+          currentUser._id,
+          userSet,
+          session,
+        );
       }
     };
 
@@ -329,8 +337,11 @@ class UserService {
     firstName,
     lastName,
     keycloakId = null,
+    syncSelfBookingNames = true,
   }) {
-    const normalizedUserId = String(userId || "").trim().toLowerCase();
+    const normalizedUserId = String(userId || "")
+      .trim()
+      .toLowerCase();
     const normalizedKeycloakId = String(keycloakId || "").trim();
     const normalizedFirstName = String(firstName || "").trim();
     const normalizedLastName = String(lastName || "").trim();
@@ -357,11 +368,13 @@ class UserService {
       throw { message: "User not found", status: 404 };
     }
 
-    await UserService.syncSelfBookingNames(
-      updated.id,
-      normalizedFirstName,
-      normalizedLastName,
-    );
+    if (syncSelfBookingNames !== false) {
+      await UserService.syncSelfBookingNames(
+        updated.id,
+        normalizedFirstName,
+        normalizedLastName,
+      );
+    }
 
     return {
       id: updated.id,

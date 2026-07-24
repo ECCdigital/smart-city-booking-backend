@@ -32,3 +32,10 @@
     Buchung stornieren
   </a>
 {{/if}}
+
+{{#if cancellationContactHint}}
+  <p>
+    <strong>Hinweis zur Stornierung:</strong>
+    {{sanitizeString cancellationContactHint}}
+  </p>
+{{/if}}

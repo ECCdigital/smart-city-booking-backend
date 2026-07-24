@@ -188,13 +188,61 @@ const bookableSchemaDefinition = {
   requiresLogin: { type: Boolean, default: false },
   permittedUsers: { type: [String], default: [] },
   permittedRoles: { type: [String], default: [] },
-  freeBookingUsers: { type: [String], default: [] },
-  freeBookingRoles: { type: [String], default: [] },
+  bookingDiscounts: {
+    type: new Schema(
+      {
+        users: {
+          type: [
+            new Schema(
+              {
+                userId: { type: String, required: true },
+                discountPercent: {
+                  type: Number,
+                  default: 0,
+                  min: 0,
+                  max: 100,
+                  validate: {
+                    validator: Number.isInteger,
+                    message: "discountPercent must be an integer",
+                  },
+                },
+              },
+              { _id: false },
+            ),
+          ],
+          default: [],
+        },
+        roles: {
+          type: [
+            new Schema(
+              {
+                roleId: { type: String, required: true },
+                discountPercent: {
+                  type: Number,
+                  default: 0,
+                  min: 0,
+                  max: 100,
+                  validate: {
+                    validator: Number.isInteger,
+                    message: "discountPercent must be an integer",
+                  },
+                },
+              },
+              { _id: false },
+            ),
+          ],
+          default: [],
+        },
+      },
+      { _id: false },
+    ),
+    default: { users: [], roles: [] },
+  },
 
   // Cancellation policy
   cancellationPolicy: {
     type: Object,
-    default: { userCancellable: true },
+    default: { userCancellable: true, contactHint: "" },
   },
 
   // Relationship properties

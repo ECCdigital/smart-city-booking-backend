@@ -54,7 +54,10 @@ class CatalogController {
 
   static async getCatalogBundle(request, response) {
     try {
-      const bundle = await CatalogService.getCatalogBundle(null, request.user?.id);
+      const bundle = await CatalogService.getCatalogBundle(
+        null,
+        request.user?.id,
+      );
 
       if (!bundle) {
         return response.status(404).send({

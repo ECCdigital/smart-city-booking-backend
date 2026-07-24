@@ -238,8 +238,9 @@ class UserController {
         await UserManager.updateUser(newInfos);
 
         if (
-          Object.prototype.hasOwnProperty.call(newInfos, "firstName") ||
-          Object.prototype.hasOwnProperty.call(newInfos, "lastName")
+          (Object.prototype.hasOwnProperty.call(newInfos, "firstName") ||
+            Object.prototype.hasOwnProperty.call(newInfos, "lastName")) &&
+          request.body.syncSelfBookingNames !== false
         ) {
           const firstName = Object.prototype.hasOwnProperty.call(
             newInfos,
@@ -403,8 +404,9 @@ class UserController {
       await UserManager.updateUser(user);
 
       if (
-        Object.prototype.hasOwnProperty.call(request.body, "firstName") ||
-        Object.prototype.hasOwnProperty.call(request.body, "lastName")
+        (Object.prototype.hasOwnProperty.call(request.body, "firstName") ||
+          Object.prototype.hasOwnProperty.call(request.body, "lastName")) &&
+        request.body.syncSelfBookingNames !== false
       ) {
         await UserService.syncSelfBookingNames(
           user.id,

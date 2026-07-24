@@ -1,6 +1,8 @@
 const assert = require("assert");
 const sinon = require("sinon");
-const { BookableManager } = require("../src/commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
 
 describe("BookableManager.getAncestorBookables", () => {
@@ -32,9 +34,9 @@ describe("BookableManager.getAncestorBookables", () => {
     );
 
     assert.strictEqual(aggregateStub.calledOnce, true);
-    assert.deepStrictEqual(
-      ancestors.map((bookable) => bookable.id).sort(),
-      ["grandparent-1", "parent-1"],
-    );
+    assert.deepStrictEqual(ancestors.map((bookable) => bookable.id).sort(), [
+      "grandparent-1",
+      "parent-1",
+    ]);
   });
 });

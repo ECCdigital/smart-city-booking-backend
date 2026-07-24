@@ -19,7 +19,6 @@ const {
 } = require("../../../errors/BaseError");
 const { toBool } = require("../../../commons/utilities/parser");
 
-
 function parseIds(raw) {
   if (!raw) return undefined;
   const ids = raw

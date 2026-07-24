@@ -112,11 +112,16 @@ describe("rule-engine aggregateActionRegistry", () => {
   let sandbox;
   let aggregateActionRegistry;
   let fakeMailerService;
+  let fakeTenantManager;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     fakeMailerService = { send: sandbox.stub().resolves() };
+    fakeTenantManager = {
+      getTenant: sandbox.stub().resolves({ id: "t1", name: "Test Tenant" }),
+    };
     mock("../src/commons/mail-service/mail-service", fakeMailerService);
+    mock("../src/commons/data-managers/tenant-manager", fakeTenantManager);
     aggregateActionRegistry = mock.reRequire(
       "../src/rule-engine/aggregateActionRegistry",
     );

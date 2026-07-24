@@ -161,7 +161,11 @@ function matchesBlockPeriodInstance(timeBegin, timeEnd, blockPeriods) {
   const beginMs = Number(timeBegin);
   const endMs = Number(timeEnd);
 
-  if (!Number.isFinite(beginMs) || !Number.isFinite(endMs) || endMs <= beginMs) {
+  if (
+    !Number.isFinite(beginMs) ||
+    !Number.isFinite(endMs) ||
+    endMs <= beginMs
+  ) {
     return false;
   }
 
@@ -174,8 +178,7 @@ function matchesBlockPeriodInstance(timeBegin, timeEnd, blockPeriods) {
   );
 
   return instances.some(
-    (instance) =>
-      instance.timeBegin === beginMs && instance.timeEnd === endMs,
+    (instance) => instance.timeBegin === beginMs && instance.timeEnd === endMs,
   );
 }
 

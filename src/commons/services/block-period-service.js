@@ -3,9 +3,7 @@ const {
   generateBlockPeriodInstances,
   isBlockPeriodBookable,
 } = require("../utilities/block-period-generator");
-const {
-  AvailabilityContext,
-} = require("./availability/availability-context");
+const { AvailabilityContext } = require("./availability/availability-context");
 const { ContextDataProvider } = require("../availability/providers");
 const checkWindowAvailabilityModule = require("../availability/check-window-availability");
 const {
@@ -86,15 +84,13 @@ class BlockPeriodService {
     const blockPeriods = [];
 
     for (const instance of instances) {
-      const availability = await checkWindowAvailabilityModule.checkWindowAvailability(
-        provider,
-        {
+      const availability =
+        await checkWindowAvailabilityModule.checkWindowAvailability(provider, {
           timeBegin: instance.timeBegin,
           timeEnd: instance.timeEnd,
           amount: Number(amount),
           user,
-        },
-      );
+        });
 
       /** @type {Object} */
       const entry = {

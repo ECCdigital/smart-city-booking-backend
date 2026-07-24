@@ -100,7 +100,6 @@ class User {
 
     hook.status = "released";
 
-
     return true;
   }
 

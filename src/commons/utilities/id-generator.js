@@ -49,8 +49,8 @@ class IdGenerator {
         cancellationCount: {
           ...tenant.cancellationCount,
           [year]: newId,
-        }
-      }
+        },
+      };
     }
 
     await TenantManager.storeTenant(updatedTenant);

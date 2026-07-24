@@ -9,6 +9,9 @@ const {
 } = require("../../../commons/data-managers/bookable-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const {
+  GroupBookingPermissions,
+} = require("../../../commons/utilities/group-booking-permissions");
+const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
 const logger = bunyan.createLogger({
@@ -27,7 +30,7 @@ class CheckoutController {
       timeEnd,
       amount,
       couponCode,
-      bookWithPrice,
+      bookWithoutDiscount,
     } = request.body;
 
     if (!bookableId || !amount) {
@@ -56,7 +59,7 @@ class CheckoutController {
         bookableId,
         amount: parseInt(amount),
         couponCode,
-        bookWithPrice,
+        bookWithoutDiscount,
         checkoutId,
       });
 
@@ -86,6 +89,8 @@ class CheckoutController {
         userGrossPriceEur:
           (await itemCheckoutService.userGrossPriceEur()) * multiplier,
         freeBookingAllowed: await itemCheckoutService.freeBookingAllowed(),
+        bookingDiscountPercent:
+          await itemCheckoutService.bookingDiscountPercent(),
       };
 
       return response.status(200).json(payload);
@@ -170,16 +175,13 @@ class CheckoutController {
         .send("Group booking not enabled for this bookable");
     }
 
-    let allowed = false;
     const permitted = Array.isArray(gb.permittedRoles) ? gb.permittedRoles : [];
+    if (permitted.length > 0 && !user) {
+      return res.status(401).send("Unauthorized");
+    }
 
-    if (permitted.length === 0) {
-      allowed = true;
-    } else {
-      if (!user) {
-        return res.status(401).send("Unauthorized");
-      }
-      let userRoles;
+    let userRoles = [];
+    if (user) {
       try {
         const membership =
           await MembershipManager.getMembershipByTenantAndUserID(
@@ -194,10 +196,9 @@ class CheckoutController {
         );
         return res.status(500).send("Error while loading user roles");
       }
-      allowed = userRoles.some((r) => permitted.includes(r));
     }
 
-    if (!allowed) {
+    if (!GroupBookingPermissions.isAllowed(bookable, user, userRoles)) {
       logger.error(
         `User ${user?.id} not allowed to create group booking for bookable ${bookableItem.id}`,
       );

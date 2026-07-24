@@ -1,6 +1,8 @@
 const assert = require("assert");
 const sinon = require("sinon");
-const { generateTimePeriodInstances } = require("../src/commons/utilities/time-period-generator");
+const {
+  generateTimePeriodInstances,
+} = require("../src/commons/utilities/time-period-generator");
 const {
   isTimePeriodBookingValid,
 } = require("../src/commons/availability/availability-rules/time-period-rules");
@@ -18,8 +20,12 @@ const {
   CHECK_TYPES,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
-const { normalizeCheckError } = require("../src/commons/services/checkout/normalize-check-error");
-const { CHECKOUT_REASONS } = require("../src/commons/services/checkout/checkout-reasons");
+const {
+  normalizeCheckError,
+} = require("../src/commons/services/checkout/normalize-check-error");
+const {
+  CHECKOUT_REASONS,
+} = require("../src/commons/services/checkout/checkout-reasons");
 
 const TENANT_ID = "tenant-1";
 
@@ -91,11 +97,7 @@ describe("time period checkout and availability rules", () => {
     const instance = getTuesdaySlotInstance();
 
     assert.strictEqual(
-      isTimePeriodBookingValid(
-        bookable,
-        instance.timeBegin,
-        instance.timeEnd,
-      ),
+      isTimePeriodBookingValid(bookable, instance.timeBegin, instance.timeEnd),
       true,
     );
     assert.strictEqual(
@@ -173,7 +175,8 @@ describe("time period checkout and availability rules", () => {
       assert.strictEqual(partial.available, false);
       assert.strictEqual(partial.reason, "time-period-mismatch");
     } finally {
-      MembershipManager.getMembershipsByTenantAndRoles = originalMembershipLookup;
+      MembershipManager.getMembershipsByTenantAndRoles =
+        originalMembershipLookup;
     }
   });
 
