@@ -7,6 +7,11 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Mail snippets inherit the tenant mail theme font; hardcoded `font-family` values are stripped at render time so booking details match header/footer typography
+- Normalize double-quoted font names in mail HTML (`"Segoe UI"` → `'Segoe UI'`) so inline theme styles are not truncated
+
 ## [4.2.1] — 2026-07-22
 
 ### Added

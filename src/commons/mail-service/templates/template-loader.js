@@ -22,7 +22,14 @@ const WRAPPER_TEMPLATE = Handlebars.compile(`
  */
 function stripHardcodedFontFamily(html) {
   if (typeof html !== "string" || html.length === 0) return html;
-  return html.replace(/font-family\s*:\s*[^;"]*;?\s*/gi, "");
+  return html
+    // Drop font-family from inline styles (stop before ";" or attribute quote).
+    .replace(/\s*font-family\s*:\s*[^;"]*;?/gi, " ")
+    // Leftover from stacks that embedded unescaped "Segoe UI" inside style="...".
+    .replace(/\s*"Segoe UI"[^;"]*;?/gi, " ")
+    .replace(/\s*;\s*;/g, ";")
+    .replace(/style="\s*;?\s*/gi, 'style="')
+    .replace(/;\s*"/g, '"');
 }
 
 function setSnippetCache(key, compiled) {
