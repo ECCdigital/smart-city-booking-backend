@@ -7,6 +7,11 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Booking mails support an optional editable closing snippet (`mailSnippets["{type}__after"]`) rendered after buttons, QR code, and the system footer
+- Tenant setting `mailShowSupportFooter` (default `true`) to hide the automatic support-contact footer in booking mails
+
 ### Fixed
 
 - Mail snippets inherit the tenant mail theme font; hardcoded `font-family` values are stripped at render time so booking details match header/footer typography

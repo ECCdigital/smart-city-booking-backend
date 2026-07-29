@@ -12,6 +12,7 @@ const WRAPPER_TEMPLATE = Handlebars.compile(`
     {{#if showFooter}}
       {{> mailFooter email=supportEmail}}
     {{/if}}
+    {{{messageAfter}}}
   </div>
 `);
 
