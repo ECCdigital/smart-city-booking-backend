@@ -317,6 +317,7 @@ class TenantController {
           "genericMailTemplate",
           "mailSnippets",
           "mailSubjects",
+          "mailShowSupportFooter",
           "useInstanceMail",
           "noreplyMail",
           "noreplyDisplayName",

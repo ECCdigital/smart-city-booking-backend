@@ -7,6 +7,18 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+## [4.2.2] — 2026-07-29
+
+### Added
+
+- Booking mails support an optional editable closing snippet (`mailSnippets["{type}__after"]`) rendered after buttons, QR code, and the system footer
+- Tenant setting `mailShowSupportFooter` (default `true`) to hide the automatic support-contact footer in booking mails
+
+### Fixed
+
+- Mail snippets inherit the tenant mail theme font; hardcoded `font-family` values are stripped at render time so booking details match header/footer typography
+- Normalize double-quoted font names in mail HTML (`"Segoe UI"` → `'Segoe UI'`) so inline theme styles are not truncated
+
 ## [4.2.1] — 2026-07-22
 
 ### Added
@@ -128,6 +140,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.2.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.4...v4.2.0
 [4.1.4]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.3...v4.1.4
