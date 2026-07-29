@@ -25,6 +25,7 @@ const tenantSchemaDefinition = {
   genericMailTemplate: { type: String, default: "" },
   mailSnippets: { type: Object, default: {} },
   mailSubjects: { type: Object, default: {} },
+  mailShowSupportFooter: { type: Boolean, default: true },
   useInstanceMail: { type: Boolean, default: true },
   noreplyMail: { type: String, default: "" },
   noreplyDisplayName: { type: String, default: "" },

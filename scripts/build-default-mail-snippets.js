@@ -17,7 +17,7 @@ function buildSnippet(rowId, columns) {
   const htmlParts = columns.flatMap((column) =>
     column.blocks.map((block) => block.renderedHtml),
   );
-  const renderedHtml = `<div style="font-family:-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; color:#222222; line-height:1.5; font-size:16px;">\n<div style=""><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%; border-collapse:collapse;"><tr><td style="vertical-align:top; width:100%;" width="100%">${htmlParts.join("\n")}</td></tr></table></div>\n</div>`;
+  const renderedHtml = `<div style="font-family:inherit; color:#222222; line-height:1.5; font-size:16px;">\n<div style=""><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%; border-collapse:collapse;"><tr><td style="vertical-align:top; width:100%;" width="100%">${htmlParts.join("\n")}</td></tr></table></div>\n</div>`;
 
   return `<!--MAILBLOCKS:v=1;b64=${b64}-->\n${renderedHtml}`;
 }
