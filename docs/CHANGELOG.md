@@ -14,6 +14,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- **DEV-845:** Group cancellation refund preview lists bookings chronologically by `timeBegin` (with dates in the payload); `createGroupBooking` also sorts attempts by start time before creating
 - Mail snippets inherit the tenant mail theme font; hardcoded `font-family` values are stripped at render time so booking details match header/footer typography
 - Normalize double-quoted font names in mail HTML (`"Segoe UI"` → `'Segoe UI'`) so inline theme styles are not truncated
 
