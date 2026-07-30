@@ -78,7 +78,6 @@ function validateMailBookingPeriodFormat(body) {
     return null;
   }
   if (
-    !body.mailBookingPeriodFormat ||
     Formatters.MAIL_BOOKING_PERIOD_FORMATS.includes(
       body.mailBookingPeriodFormat,
     )
