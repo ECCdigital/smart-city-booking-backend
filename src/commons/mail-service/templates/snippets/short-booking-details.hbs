@@ -3,9 +3,7 @@
   {{booking.id}}
   {{#if booking.timeBegin}}
     <br /><strong>Buchungszeitraum:</strong>
-    {{formatDateTime booking.timeBegin}}
-    -
-    {{formatDateTime booking.timeEnd}}
+    {{bookingPeriod}}
   {{/if}}
   <br /><strong>Gesamtbetrag:</strong>
   {{priceFormatted booking.priceEur}}

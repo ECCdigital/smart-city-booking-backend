@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Tenant setting `mailBookingPeriodFormat` (`default`, `fromTo`, `timeFirst`, `long`, `compact`) to control how booking periods are rendered in email booking details
+
 ## [4.2.2] — 2026-07-29
 
 ### Added

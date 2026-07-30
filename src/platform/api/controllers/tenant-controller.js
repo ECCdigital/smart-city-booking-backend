@@ -36,6 +36,7 @@ const {
 const {
   getCancellationRefundTiersError,
 } = require("../../../commons/utilities/cancellation-refund-tiers");
+const Formatters = require("../../../commons/utilities/formatters");
 
 const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
@@ -70,6 +71,21 @@ function validatePdfBookingLayout(body) {
     return null;
   }
   return `Invalid pdfBookingLayout "${body.pdfBookingLayout}". Allowed values: summary, compact, detailed`;
+}
+
+function validateMailBookingPeriodFormat(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "mailBookingPeriodFormat")) {
+    return null;
+  }
+  if (
+    !body.mailBookingPeriodFormat ||
+    Formatters.MAIL_BOOKING_PERIOD_FORMATS.includes(
+      body.mailBookingPeriodFormat,
+    )
+  ) {
+    return null;
+  }
+  return `Invalid mailBookingPeriodFormat "${body.mailBookingPeriodFormat}". Allowed values: ${Formatters.MAIL_BOOKING_PERIOD_FORMATS.join(", ")}`;
 }
 
 function validatePdfBookingTableMetaField(body) {
@@ -224,6 +240,13 @@ class TenantController {
         return response.status(400).send(tableMetaError);
       }
 
+      const mailBookingPeriodFormatError = validateMailBookingPeriodFormat(
+        request.body,
+      );
+      if (mailBookingPeriodFormatError) {
+        return response.status(400).send(mailBookingPeriodFormatError);
+      }
+
       const cancellationRefundTiersError = validateCancellationRefundTiersField(
         request.body,
       );
@@ -318,6 +341,7 @@ class TenantController {
           "mailSnippets",
           "mailSubjects",
           "mailShowSupportFooter",
+          "mailBookingPeriodFormat",
           "useInstanceMail",
           "noreplyMail",
           "noreplyDisplayName",
@@ -384,6 +408,13 @@ class TenantController {
         const tableMetaError = validatePdfBookingTableMetaField(request.body);
         if (tableMetaError) {
           return response.status(400).send(tableMetaError);
+        }
+
+        const mailBookingPeriodFormatError = validateMailBookingPeriodFormat(
+          request.body,
+        );
+        if (mailBookingPeriodFormatError) {
+          return response.status(400).send(mailBookingPeriodFormatError);
         }
 
         const cancellationRefundTiersError =

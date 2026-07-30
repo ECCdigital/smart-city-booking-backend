@@ -9,7 +9,7 @@
 {{else}} {{/gt}}
 
 {{#if booking.timeBegin}}
-  <br><strong>Buchungszeitraum:</strong> {{formatDateTime booking.timeBegin}} - {{formatDateTime booking.timeEnd}}
+  <br><strong>Buchungszeitraum:</strong> {{bookingPeriod}}
 {{/if}}
 <br>
 <h2>Bestellübersicht</h2>
