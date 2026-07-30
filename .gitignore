@@ -370,3 +370,6 @@ test.js
 
 # Codex: local-only agent overrides (not committed)
 AGENTS.override.md
+
+# Scratch: local-only scratchpad (not committed)
+/.scratch
