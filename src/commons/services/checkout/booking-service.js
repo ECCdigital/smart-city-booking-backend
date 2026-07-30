@@ -481,6 +481,10 @@ class BookingService {
       throw new BadRequestError("missing_booking_attempts");
     }
 
+    const sortedBookingAttempts = [...bookingAttempts].sort(
+      (a, b) => Number(a.timeBegin) - Number(b.timeBegin),
+    );
+
     // Check invoice payment permission
     if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
       const isPermitted = await PaymentUtils.checkInvoicePermission(
@@ -501,7 +505,7 @@ class BookingService {
 
     const allBookings = [];
 
-    for (const bookingAttempt of bookingAttempts) {
+    for (const bookingAttempt of sortedBookingAttempts) {
       bookingAttempt.mail = contactData.mail;
       bookingAttempt.name = contactData.name;
       bookingAttempt.company = contactData.company;
@@ -1161,9 +1165,13 @@ class BookingService {
       });
     }
 
+    bookings.sort((a, b) => Number(a.timeBegin) - Number(b.timeBegin));
+
     const cancelledAt = Date.now();
     const previewBookings = bookings.map((booking) => ({
       bookingId: booking.id,
+      timeBegin: booking.timeBegin,
+      timeEnd: booking.timeEnd,
       ...CancellationRefundService.calculate({
         tenant,
         booking,
