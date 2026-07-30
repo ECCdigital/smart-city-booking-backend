@@ -26,6 +26,11 @@ const tenantSchemaDefinition = {
   mailSnippets: { type: Object, default: {} },
   mailSubjects: { type: Object, default: {} },
   mailShowSupportFooter: { type: Boolean, default: true },
+  mailBookingPeriodFormat: {
+    type: String,
+    enum: ["default", "fromTo", "timeFirst", "long", "compact"],
+    default: "default",
+  },
   useInstanceMail: { type: Boolean, default: true },
   noreplyMail: { type: String, default: "" },
   noreplyDisplayName: { type: String, default: "" },

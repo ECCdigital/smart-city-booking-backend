@@ -8,8 +8,8 @@
   <br> {{booking.comment}}
 {{else}} {{/gt}}
 
-{{#if booking.timeBegin}}
-  <br><strong>Buchungszeitraum:</strong> {{formatDateTime booking.timeBegin}} - {{formatDateTime booking.timeEnd}}
+{{#if bookingPeriod}}
+  <br><strong>Buchungszeitraum:</strong> {{bookingPeriod}}
 {{/if}}
 <br>
 <h2>Bestellübersicht</h2>
