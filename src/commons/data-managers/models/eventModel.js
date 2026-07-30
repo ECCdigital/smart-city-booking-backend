@@ -4,6 +4,8 @@ const { Schema } = mongoose;
 
 const EventSchema = new Schema(eventSchemaDefinition);
 
+EventSchema.index({ tenantId: 1 }, { name: "tenantId_1" });
+
 EventSchema.methods.toEntity = function () {
   const { Event } = require("../../entities/event/event");
   return new Event(this.toObject());

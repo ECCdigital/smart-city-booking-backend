@@ -17,6 +17,24 @@ BookingSchema.index(
   { name: "tenant_bookableItems_bookableId" },
 );
 BookingSchema.index({ tenantId: 1, id: 1 }, { name: "tenantId_1_id_1" });
+BookingSchema.index(
+  { tenantId: 1, timeCreated: -1 },
+  { name: "tenantId_1_timeCreated_-1" },
+);
+BookingSchema.index(
+  { tenantId: 1, timePaid: -1 },
+  {
+    name: "tenantId_1_timePaid_-1_paid_not_rejected",
+    partialFilterExpression: { isPayed: true, isRejected: false },
+  },
+);
+BookingSchema.index(
+  { tenantId: 1, "cancellationRefund.cancelledAt": -1 },
+  {
+    name: "tenantId_1_cancellationRefund_cancelledAt_-1",
+    partialFilterExpression: { isRejected: true },
+  },
+);
 
 BookingSchema.pre(
   "deleteOne",

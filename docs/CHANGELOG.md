@@ -9,6 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- Admin Dashboard KPI API: `GET /api/v2/dashboard/summary` (cross-tenant) and `GET /api/v2/:tenant/dashboard/summary` (tenant detail with status, revenue-by-month, and by-bookable breakdowns); live aggregations with short in-process cache
 - Tenant setting `mailBookingPeriodFormat` (`default`, `fromTo`, `timeFirst`, `long`, `compact`) to control how booking periods are rendered in email booking details
 
 ## [4.2.2] — 2026-07-29
