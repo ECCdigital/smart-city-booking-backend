@@ -7,6 +7,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+## [4.2.3] — 2026-07-31
+
 ### Added
 
 - Tenant setting `mailBookingPeriodFormat` (`default`, `fromTo`, `timeFirst`, `long`, `compact`) to control how booking periods are rendered in email booking details
@@ -145,6 +147,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.2.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.2...v4.2.3
 [4.2.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.1.4...v4.2.0
