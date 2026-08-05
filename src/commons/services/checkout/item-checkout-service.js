@@ -833,6 +833,8 @@ class ManualItemCheckoutService extends ItemCheckoutService {
     amount,
     couponCode,
     bookWithoutDiscount,
+    excludeBookingIds,
+    capacityChecksOnly = false,
   }) {
     super({
       user,
@@ -843,7 +845,9 @@ class ManualItemCheckoutService extends ItemCheckoutService {
       amount,
       couponCode,
       bookWithoutDiscount,
+      excludeBookingIds,
     });
+    this.capacityChecksOnly = Boolean(capacityChecksOnly);
   }
 
   async init(originBookable) {
@@ -856,6 +860,26 @@ class ManualItemCheckoutService extends ItemCheckoutService {
       this.originBookable = await super.getBookable();
     }
     this.externalProviders = await this._resolveExternalProviders();
+  }
+
+  /**
+   * On admin booking update, only capacity/overlap checks run (with excludeBookingIds).
+   * Create and other call sites omit capacityChecksOnly and keep the full check set.
+   */
+  async checkAll(stopOnFirstError = true) {
+    if (!this.capacityChecksOnly) {
+      return super.checkAll(stopOnFirstError);
+    }
+
+    const checks = [
+      this.checkMaxAmount(),
+      this.checkAvailability(),
+      this.checkEventSeats(),
+      this.checkParentAvailability(),
+      this.checkChildBookings(),
+    ];
+
+    return stopOnFirstError ? Promise.all(checks) : Promise.allSettled(checks);
   }
 }
 

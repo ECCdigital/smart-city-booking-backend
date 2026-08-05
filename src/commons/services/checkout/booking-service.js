@@ -281,7 +281,9 @@ class BookingService {
         isRejected: Boolean(isRejected),
         attachmentStatus,
         paymentProvider,
-        bookWithoutDiscount,
+        // Manual/admin create must not apply the creating user's booking discounts
+        // (Admin UI shows list prices; discounts belong to self-service checkout).
+        bookWithoutDiscount: true,
         checkoutId: providedCheckoutId,
         customFieldValues,
         cancellationPolicy,
@@ -673,6 +675,8 @@ class BookingService {
         checkoutId,
         customFieldValues: updatedBooking.customFieldValues,
         cancellationPolicy: updatedBooking.cancellationPolicy,
+        excludeBookingIds: [oldBooking.id],
+        capacityChecksOnly: true,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({
