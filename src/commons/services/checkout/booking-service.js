@@ -673,6 +673,8 @@ class BookingService {
         checkoutId,
         customFieldValues: updatedBooking.customFieldValues,
         cancellationPolicy: updatedBooking.cancellationPolicy,
+        excludeBookingIds: [oldBooking.id],
+        capacityChecksOnly: true,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({

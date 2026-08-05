@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Admin booking update no longer self-blocks on capacity and no longer applies non-capacity checkout rules (lead time, opening hours, …); `excludeBookingIds` and capacity-only checks run on the update path, while prices are recomputed from edited `_bookableUsed.priceCategories`
+
 ## [4.2.3] — 2026-07-31
 
 ### Added
