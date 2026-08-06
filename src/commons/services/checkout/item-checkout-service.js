@@ -863,23 +863,16 @@ class ManualItemCheckoutService extends ItemCheckoutService {
   }
 
   /**
-   * On admin booking update, only capacity/overlap checks run (with excludeBookingIds).
-   * Create and other call sites omit capacityChecksOnly and keep the full check set.
+   * Admin booking update sets capacityChecksOnly so saves never hard-fail on
+   * checkout rules (including capacity/overlap). Informational availability is
+   * via validate endpoints with excludeBookingIds. Create keeps the full set.
    */
   async checkAll(stopOnFirstError = true) {
-    if (!this.capacityChecksOnly) {
-      return super.checkAll(stopOnFirstError);
+    if (this.capacityChecksOnly) {
+      return true;
     }
 
-    const checks = [
-      this.checkMaxAmount(),
-      this.checkAvailability(),
-      this.checkEventSeats(),
-      this.checkParentAvailability(),
-      this.checkChildBookings(),
-    ];
-
-    return stopOnFirstError ? Promise.all(checks) : Promise.allSettled(checks);
+    return super.checkAll(stopOnFirstError);
   }
 }
 
