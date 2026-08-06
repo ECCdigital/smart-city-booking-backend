@@ -223,7 +223,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     assert.strictEqual(result.timeBegin, NEW_TIME_BEGIN);
   });
 
-  it("rejects an update that overlaps a different booking", async () => {
+  it("allows admin update even when overlapping a different booking", async () => {
     concurrent = [
       bookingRecord(),
       bookingRecord({
@@ -233,14 +233,13 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       }),
     ];
 
-    await assert.rejects(
-      () => BookingService.updateBooking(TENANT_ID, bookingRecord()),
-      (error) => {
-        assert.strictEqual(error.checkType, CHECK_TYPES.AVAILABILITY);
-        assert.strictEqual(error.available, false);
-        return true;
-      },
+    const result = await BookingService.updateBooking(
+      TENANT_ID,
+      bookingRecord(),
     );
+
+    assert.strictEqual(result.id, BOOKING_ID);
+    assert.strictEqual(lastPreparedStore().id, BOOKING_ID);
   });
 
   it("does not let insufficient lead time block an update", async () => {
@@ -320,7 +319,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     assert.strictEqual(stored.vatIncludedEur, 3.8);
   });
 
-  it("excludes only the edited booking id, not a group sibling", async () => {
+  it("allows admin update even when a group sibling overlaps the same window", async () => {
     concurrent = [
       bookingRecord(),
       bookingRecord({
@@ -330,13 +329,12 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       }),
     ];
 
-    await assert.rejects(
-      () => BookingService.updateBooking(TENANT_ID, bookingRecord()),
-      (error) => {
-        assert.strictEqual(error.checkType, CHECK_TYPES.AVAILABILITY);
-        return true;
-      },
+    const result = await BookingService.updateBooking(
+      TENANT_ID,
+      bookingRecord(),
     );
+
+    assert.strictEqual(result.id, BOOKING_ID);
   });
 });
 

@@ -538,9 +538,9 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    *   cancellation policy. When provided, it replaces the value aggregated
    *   from the underlying bookables.
    * @param {string|string[]|null} [excludeBookingIds] Booking IDs ignored in
-   *   capacity checks (admin update of an existing booking).
-   * @param {boolean} [capacityChecksOnly] When true, item checks are limited to
-   *   capacity/overlap (update path only — do not set on create).
+   *   capacity checks (e.g. validate while editing an existing booking).
+   * @param {boolean} [capacityChecksOnly] When true, item checkAll is a no-op
+   *   so admin updates never hard-fail (update path only — do not set on create).
    */
   constructor({
     user,
