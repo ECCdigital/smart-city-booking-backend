@@ -540,7 +540,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string|string[]|null} [excludeBookingIds] Booking IDs ignored in
    *   capacity checks (e.g. validate while editing an existing booking).
    * @param {boolean} [capacityChecksOnly] When true, item checkAll is a no-op
-   *   so admin updates never hard-fail (update path only — do not set on create).
+   *   so admin manual create/update never hard-fail. Use validate endpoints for
+   *   informational availability.
    */
   constructor({
     user,

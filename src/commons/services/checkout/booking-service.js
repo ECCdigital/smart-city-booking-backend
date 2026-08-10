@@ -287,6 +287,9 @@ class BookingService {
         checkoutId: providedCheckoutId,
         customFieldValues,
         cancellationPolicy,
+        // Same as admin update: never hard-fail on checkout rules. Informational
+        // availability is via validate endpoints.
+        capacityChecksOnly: true,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);

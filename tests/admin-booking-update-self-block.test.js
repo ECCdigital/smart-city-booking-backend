@@ -11,9 +11,6 @@ const UserManager = require("../src/commons/data-managers/user-manager");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
 const LockerService = require("../src/commons/services/locker/locker-service");
 const BookingService = require("../src/commons/services/checkout/booking-service");
-const {
-  CHECK_TYPES,
-} = require("../src/commons/availability/checkout-check-types");
 
 const TENANT_ID = "tenant-1";
 const BOOKING_ID = "EDIT-ME";
@@ -338,7 +335,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
   });
 });
 
-describe("BookingService.createBooking — create path still runs full checks", () => {
+describe("BookingService.createBooking — admin create never hard-fails checks", () => {
   let clock;
 
   beforeEach(() => {
@@ -391,40 +388,36 @@ describe("BookingService.createBooking — create path still runs full checks", 
     sinon.restore();
   });
 
-  it("still rejects create when lead time is insufficient", async () => {
+  it("does not let insufficient lead time block a manual create", async () => {
     const snapshot = bookableSnapshot({
       preparationLeadTimeMinutes: 120,
     });
 
-    await assert.rejects(
-      () =>
-        BookingService.createBooking({
-          tenantId: TENANT_ID,
-          user: { id: "admin@example.com" },
-          simulate: true,
-          manualBooking: true,
-          bookingAttempt: {
-            timeBegin: Date.UTC(2026, 5, 15, 10, 0, 0),
-            timeEnd: Date.UTC(2026, 5, 15, 11, 0, 0),
-            bookableItems: [
-              {
-                bookableId: "room-1",
-                amount: 1,
-                _bookableUsed: snapshot,
-              },
-            ],
-            name: "Create Smoke",
-            mail: "user@example.com",
-            paymentProvider: "invoice",
-            isCommitted: false,
-            isPayed: false,
-            isRejected: false,
+    const result = await BookingService.createBooking({
+      tenantId: TENANT_ID,
+      user: { id: "admin@example.com" },
+      simulate: true,
+      manualBooking: true,
+      bookingAttempt: {
+        timeBegin: Date.UTC(2026, 5, 15, 10, 0, 0),
+        timeEnd: Date.UTC(2026, 5, 15, 11, 0, 0),
+        bookableItems: [
+          {
+            bookableId: "room-1",
+            amount: 1,
+            _bookableUsed: snapshot,
           },
-        }),
-      (error) => {
-        assert.strictEqual(error.checkType, CHECK_TYPES.INSUFFICIENT_LEAD_TIME);
-        return true;
+        ],
+        name: "Create Smoke",
+        mail: "user@example.com",
+        paymentProvider: "invoice",
+        isCommitted: false,
+        isPayed: false,
+        isRejected: false,
       },
-    );
+    });
+
+    assert.ok(result.id);
+    assert.strictEqual(result.mail, "user@example.com");
   });
 });
