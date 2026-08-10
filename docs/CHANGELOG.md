@@ -7,6 +7,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+## [4.2.4] — 2026-08-10
+
 ### Fixed
 
 - Manual/admin booking create no longer applies the creating user's bookable booking discounts (list price is kept; Admin UI does not send `bookWithoutDiscount`)
@@ -152,6 +154,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.2.4]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.3...v4.2.4
 [4.2.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.2...v4.2.3
 [4.2.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.0...v4.2.1
