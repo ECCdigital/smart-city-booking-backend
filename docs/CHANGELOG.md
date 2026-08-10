@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Admin manual booking create never hard-fails on checkout rules (including capacity/overlap), matching admin update; use validate endpoints for informational availability
+
 ## [4.2.4] — 2026-08-10
 
 ### Fixed

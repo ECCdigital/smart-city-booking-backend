@@ -863,9 +863,9 @@ class ManualItemCheckoutService extends ItemCheckoutService {
   }
 
   /**
-   * Admin booking update sets capacityChecksOnly so saves never hard-fail on
-   * checkout rules (including capacity/overlap). Informational availability is
-   * via validate endpoints with excludeBookingIds. Create keeps the full set.
+   * Admin manual create/update sets capacityChecksOnly so saves never hard-fail
+   * on checkout rules (including capacity/overlap). Informational availability
+   * is via validate endpoints (with excludeBookingIds when editing).
    */
   async checkAll(stopOnFirstError = true) {
     if (this.capacityChecksOnly) {
