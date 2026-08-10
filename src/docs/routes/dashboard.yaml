@@ -9,6 +9,8 @@
       Cross-tenant Admin Dashboard KPIs for tenants the caller may access
       (instance owner: all tenants; otherwise tenant owner or `manageBookings.readAny`).
       Live Mongo aggregations with a short in-process cache (~45s TTL).
+      Always echoes `status` and `granularity`; always includes `byPeriod`
+      (empty when granularity is omitted). Period keys use Europe/Berlin.
     security:
       - bearerAuth: []
     parameters:
@@ -36,15 +38,33 @@
         in: query
         required: false
         description: |
-          Booking-status i18n key. Constrains booking-side KPIs only (not revenue).
+          Booking-status i18n key(s). Repeated and/or comma-separated; OR semantics.
+          Constrains booking-side KPIs only (not revenue). Invalid key → 400.
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+              - status.awaiting_approval
+              - status.payment_expected
+              - status.paid_completed
+              - status.confirmed_without_payment
+              - status.rejected
+      - name: granularity
+        in: query
+        required: false
+        description: |
+          Dashboard Granularity for `byPeriod` (`day` | `week` | `month` | `year`).
+          Omit for empty `byPeriod`. Series capped at 366 buckets (else 400).
         schema:
           type: string
           enum:
-            - status.awaiting_approval
-            - status.payment_expected
-            - status.paid_completed
-            - status.confirmed_without_payment
-            - status.rejected
+            - day
+            - week
+            - month
+            - year
       - name: isBookable
         in: query
         required: false
@@ -79,7 +99,7 @@
       - Dashboard
     summary: Tenant dashboard KPI summary
     description: |
-      Tenant-scoped Admin Dashboard KPIs including `byStatus`, `revenueByMonth`,
+      Tenant-scoped Admin Dashboard KPIs including `byStatus`, `byPeriod`,
       and activity-only `byBookable` (top-N). Requires instance owner, tenant owner,
       or `manageBookings.readAny` for the tenant.
     security:
@@ -111,14 +131,28 @@
       - name: status
         in: query
         required: false
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+              - status.awaiting_approval
+              - status.payment_expected
+              - status.paid_completed
+              - status.confirmed_without_payment
+              - status.rejected
+      - name: granularity
+        in: query
+        required: false
         schema:
           type: string
           enum:
-            - status.awaiting_approval
-            - status.payment_expected
-            - status.paid_completed
-            - status.confirmed_without_payment
-            - status.rejected
+            - day
+            - week
+            - month
+            - year
       - name: isBookable
         in: query
         required: false
@@ -159,6 +193,19 @@
 
 components:
   schemas:
+    DashboardPeriodBucket:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Europe/Berlin period key
+          example: "2026-01"
+        bookings:
+          type: integer
+        cancellations:
+          type: integer
+        revenueEur:
+          type: number
     DashboardTenantKpis:
       type: object
       properties:
@@ -174,6 +221,9 @@ components:
           type: integer
         events:
           type: integer
+        activeEvents:
+          type: integer
+          description: Now-snapshot Active Event count (isEventBookable); ignores from/to
         revenueEur:
           type: number
     DashboardInstanceSummary:
@@ -187,6 +237,21 @@ components:
           type: string
           format: date-time
           nullable: true
+        status:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Echo of parsed status filter (canonical order), or null
+        granularity:
+          type: string
+          nullable: true
+          enum:
+            - day
+            - week
+            - month
+            - year
+          description: Echo of Dashboard Granularity, or null when omitted
         totals:
           allOf:
             - $ref: "#/components/schemas/DashboardTenantKpis"
@@ -194,6 +259,11 @@ components:
               properties:
                 tenants:
                   type: integer
+        byPeriod:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardPeriodBucket"
+          description: Zero-filled series; empty when granularity is null
         byTenant:
           type: array
           items:
@@ -220,6 +290,19 @@ components:
           type: string
           format: date-time
           nullable: true
+        status:
+          type: array
+          nullable: true
+          items:
+            type: string
+        granularity:
+          type: string
+          nullable: true
+          enum:
+            - day
+            - week
+            - month
+            - year
         totals:
           $ref: "#/components/schemas/DashboardTenantKpis"
         byStatus:
@@ -231,16 +314,10 @@ components:
                 type: string
               count:
                 type: integer
-        revenueByMonth:
+        byPeriod:
           type: array
           items:
-            type: object
-            properties:
-              month:
-                type: string
-                example: "2026-01"
-              revenueEur:
-                type: number
+            $ref: "#/components/schemas/DashboardPeriodBucket"
         byBookable:
           type: array
           items:

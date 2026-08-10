@@ -1,3 +1,4 @@
+const { DateTime } = require("luxon");
 const TenantManager = require("../../data-managers/tenant-manager");
 const UserManager = require("../../data-managers/user-manager");
 const PermissionService = require("../permission-service");
@@ -12,6 +13,9 @@ const {
 
 const DEFAULT_BY_BOOKABLE_LIMIT = 100;
 const MAX_BY_BOOKABLE_LIMIT = 500;
+const MAX_BY_PERIOD_BUCKETS = 366;
+const BERLIN_TZ = "Europe/Berlin";
+const GRANULARITIES = new Set(["day", "week", "month", "year"]);
 
 function parseOptionalDateMs(value, fieldName) {
   if (value == null || value === "") {
@@ -52,6 +56,52 @@ function parseIsBookable(raw) {
   throw new BadRequestError("Invalid isBookable value");
 }
 
+/**
+ * Parse multi-value status (repeated and/or comma-separated).
+ * @returns {string[]|null} Canonical order intersection, or null when unset.
+ */
+function parseStatusKeys(raw) {
+  if (raw == null || raw === "") {
+    return null;
+  }
+  const parts = [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  for (const item of list) {
+    if (item == null || item === "") {
+      continue;
+    }
+    for (const piece of String(item).split(",")) {
+      const trimmed = piece.trim();
+      if (trimmed) {
+        parts.push(trimmed);
+      }
+    }
+  }
+  if (!parts.length) {
+    return null;
+  }
+
+  const seen = new Set();
+  for (const key of parts) {
+    if (!DashboardManager.isValidStatusKey(key)) {
+      throw new BadRequestError("Invalid status filter");
+    }
+    seen.add(key);
+  }
+  return DashboardManager.getStatusKeys().filter((key) => seen.has(key));
+}
+
+function parseGranularity(raw) {
+  if (raw == null || raw === "") {
+    return null;
+  }
+  const value = String(raw).trim();
+  if (!GRANULARITIES.has(value)) {
+    throw new BadRequestError("Invalid granularity");
+  }
+  return value;
+}
+
 function parseFilters(query = {}, { includeByBookableLimit = false } = {}) {
   const fromMs = parseOptionalDateMs(query.from, "from");
   const toMs = parseOptionalDateMs(query.to, "to");
@@ -59,16 +109,12 @@ function parseFilters(query = {}, { includeByBookableLimit = false } = {}) {
     throw new BadRequestError("`from` must be before or equal to `to`");
   }
 
-  const statusKey = query.status || null;
-  if (statusKey && !DashboardManager.isValidStatusKey(statusKey)) {
-    throw new BadRequestError("Invalid status filter");
-  }
-
   const filters = {
     fromMs,
     toMs,
     bookableId: query.bookableId || null,
-    statusKey,
+    statusKeys: parseStatusKeys(query.status),
+    granularity: parseGranularity(query.granularity),
     isBookable: parseIsBookable(query.isBookable),
   };
 
@@ -98,32 +144,152 @@ function statusArrayFromCounts(counts) {
   }));
 }
 
-function monthKey(date) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
+function startOfBerlinPeriod(ms, granularity) {
+  return DateTime.fromMillis(ms, { zone: BERLIN_TZ }).startOf(granularity);
 }
 
-function zeroFillRevenueByMonth(monthMap, startMs, endMs) {
-  const start = new Date(startMs);
-  start.setUTCDate(1);
-  start.setUTCHours(0, 0, 0, 0);
+function periodKeyFromDateTime(dt, granularity) {
+  switch (granularity) {
+    case "day":
+      return dt.toFormat("yyyy-MM-dd");
+    case "week":
+      return dt.toFormat("kkkk-'W'WW");
+    case "month":
+      return dt.toFormat("yyyy-MM");
+    case "year":
+      return dt.toFormat("yyyy");
+    default:
+      throw new BadRequestError("Invalid granularity");
+  }
+}
 
-  const end = new Date(endMs);
-  end.setUTCDate(1);
-  end.setUTCHours(0, 0, 0, 0);
+function plusOnePeriod(dt, granularity) {
+  switch (granularity) {
+    case "day":
+      return dt.plus({ days: 1 });
+    case "week":
+      return dt.plus({ weeks: 1 });
+    case "month":
+      return dt.plus({ months: 1 });
+    case "year":
+      return dt.plus({ years: 1 });
+    default:
+      throw new BadRequestError("Invalid granularity");
+  }
+}
 
-  const rows = [];
-  const cursor = new Date(start);
+/**
+ * Count Berlin periods in the inclusive zero-fill range.
+ * Stops counting after MAX_BY_PERIOD_BUCKETS + 1 so callers can reject early.
+ */
+function countBerlinPeriods(startMs, endMs, granularity) {
+  if (startMs > endMs) {
+    return 0;
+  }
+  let cursor = startOfBerlinPeriod(startMs, granularity);
+  const end = startOfBerlinPeriod(endMs, granularity);
+  let count = 0;
   while (cursor <= end) {
-    const key = monthKey(cursor);
+    count += 1;
+    if (count > MAX_BY_PERIOD_BUCKETS) {
+      return count;
+    }
+    cursor = plusOnePeriod(cursor, granularity);
+  }
+  return count;
+}
+
+function zeroFillByPeriod(
+  { bookings, cancellations, revenue },
+  startMs,
+  endMs,
+  granularity,
+) {
+  if (startMs > endMs) {
+    return [];
+  }
+  const rows = [];
+  let cursor = startOfBerlinPeriod(startMs, granularity);
+  const end = startOfBerlinPeriod(endMs, granularity);
+  while (cursor <= end) {
+    const key = periodKeyFromDateTime(cursor, granularity);
     rows.push({
-      month: key,
-      revenueEur: monthMap.get(key) || 0,
+      period: key,
+      bookings: bookings.get(key) || 0,
+      cancellations: cancellations.get(key) || 0,
+      revenueEur: roundMoney(revenue.get(key) || 0),
     });
-    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    cursor = plusOnePeriod(cursor, granularity);
   }
   return rows;
+}
+
+function effectiveRange(fromMs, toMs, createdAtMs, nowMs = Date.now()) {
+  const rangeStart = Math.max(
+    fromMs != null ? fromMs : createdAtMs,
+    createdAtMs,
+  );
+  const rangeEnd = toMs != null ? Math.min(toMs, nowMs) : nowMs;
+  return { rangeStart, rangeEnd };
+}
+
+function assertPeriodCap(rangeStart, rangeEnd, granularity) {
+  if (!granularity) {
+    return;
+  }
+  if (rangeStart > rangeEnd) {
+    return;
+  }
+  const count = countBerlinPeriods(rangeStart, rangeEnd, granularity);
+  if (count > MAX_BY_PERIOD_BUCKETS) {
+    throw new BadRequestError(
+      `granularity series exceeds ${MAX_BY_PERIOD_BUCKETS} periods`,
+    );
+  }
+}
+
+async function buildByPeriod(tenantIds, filters, rangeStart, rangeEnd) {
+  const { granularity, fromMs, toMs, bookableId, statusKeys } = filters;
+  if (!granularity) {
+    return [];
+  }
+  if (rangeStart > rangeEnd) {
+    return [];
+  }
+  assertPeriodCap(rangeStart, rangeEnd, granularity);
+
+  const [bookings, cancellations, revenue] = await Promise.all([
+    DashboardManager.aggregateBookingsByPeriod({
+      tenantIds,
+      fromMs,
+      toMs,
+      bookableId,
+      statusKeys,
+      granularity,
+    }),
+    DashboardManager.aggregateCancellationsByPeriod({
+      tenantIds,
+      fromMs,
+      toMs,
+      bookableId,
+      statusKeys,
+      granularity,
+    }),
+    DashboardManager.aggregateRevenueByPeriod({
+      tenantIds,
+      fromMs,
+      toMs,
+      bookableId,
+      granularity,
+    }),
+  ]);
+
+  return zeroFillByPeriod(
+    { bookings, cancellations, revenue },
+    rangeStart,
+    rangeEnd,
+    granularity,
+  );
 }
 
 function sortByBookableRows(rows) {
@@ -221,13 +387,34 @@ class DashboardService {
 
   static async _buildInstanceSummary(tenants, filters) {
     const tenantIds = tenants.map((t) => t.id);
-    const { fromMs, toMs, bookableId, statusKey, isBookable } = filters;
+    const { fromMs, toMs, bookableId, statusKeys, isBookable, granularity } =
+      filters;
+
+    const createdAtMap =
+      await DashboardManager.getTenantCreatedAtMap(tenantIds);
+    let earliestCreatedAt = Infinity;
+    for (const id of tenantIds) {
+      const createdAt = createdAtMap.get(id);
+      if (createdAt != null && createdAt < earliestCreatedAt) {
+        earliestCreatedAt = createdAt;
+      }
+    }
+    if (!Number.isFinite(earliestCreatedAt)) {
+      earliestCreatedAt = 0;
+    }
+    const { rangeStart, rangeEnd } = effectiveRange(
+      fromMs,
+      toMs,
+      earliestCreatedAt,
+    );
+    assertPeriodCap(rangeStart, rangeEnd, granularity);
 
     const [
       users,
       membershipsByTenant,
       bookablesByTenant,
       eventsByTenant,
+      activeEventsByTenant,
       bookingsByTenant,
       cancellationsByTenant,
       revenueByTenant,
@@ -236,12 +423,13 @@ class DashboardService {
       DashboardManager.countActiveMembershipsByTenant(tenantIds),
       DashboardManager.countBookablesByTenant(tenantIds, isBookable),
       DashboardManager.countEventsByTenant(tenantIds),
+      DashboardManager.countActiveEventsByTenant(tenantIds),
       DashboardManager.aggregateBookingCountsByTenant({
         tenantIds,
         fromMs,
         toMs,
         bookableId,
-        statusKey,
+        statusKeys,
         includeByStatus: false,
       }),
       DashboardManager.aggregateCancellationsByTenant({
@@ -249,14 +437,13 @@ class DashboardService {
         fromMs,
         toMs,
         bookableId,
-        statusKey,
+        statusKeys,
       }),
       DashboardManager.aggregateRevenueByTenant({
         tenantIds,
         fromMs,
         toMs,
         bookableId,
-        byMonth: false,
       }),
     ]);
 
@@ -275,6 +462,7 @@ class DashboardService {
         bookables: stock.bookables,
         bookableObjects: stock.bookableObjects,
         events: eventsByTenant.get(tenant.id) || 0,
+        activeEvents: activeEventsByTenant.get(tenant.id) || 0,
         revenueEur: roundMoney(revenueByTenant.get(tenant.id)?.revenueEur || 0),
       };
     });
@@ -289,6 +477,7 @@ class DashboardService {
       bookables: 0,
       bookableObjects: 0,
       events: 0,
+      activeEvents: 0,
       revenueEur: 0,
     };
 
@@ -298,42 +487,71 @@ class DashboardService {
       totals.bookables += row.bookables;
       totals.bookableObjects += row.bookableObjects;
       totals.events += row.events;
+      totals.activeEvents += row.activeEvents;
       totals.revenueEur += row.revenueEur;
     }
     totals.revenueEur = roundMoney(totals.revenueEur);
 
+    const byPeriod = await buildByPeriod(
+      tenantIds,
+      filters,
+      rangeStart,
+      rangeEnd,
+    );
+
     return {
       from: toIsoOrNull(fromMs),
       to: toIsoOrNull(toMs),
+      status: statusKeys,
+      granularity,
       totals,
+      byPeriod,
       byTenant,
     };
   }
 
   static async _buildTenantSummary(tenant, filters) {
     const tenantIds = [tenant.id];
-    const { fromMs, toMs, bookableId, statusKey, isBookable, byBookableLimit } =
-      filters;
+    const {
+      fromMs,
+      toMs,
+      bookableId,
+      statusKeys,
+      isBookable,
+      byBookableLimit,
+      granularity,
+    } = filters;
+
+    const createdAtMap =
+      await DashboardManager.getTenantCreatedAtMap(tenantIds);
+    const tenantCreatedAt = createdAtMap.get(tenant.id) || 0;
+    const { rangeStart, rangeEnd } = effectiveRange(
+      fromMs,
+      toMs,
+      tenantCreatedAt,
+    );
+    assertPeriodCap(rangeStart, rangeEnd, granularity);
 
     const [
       membershipsByTenant,
       bookablesByTenant,
       eventsByTenant,
+      activeEventsByTenant,
       bookingsByTenant,
       cancellationsByTenant,
       revenueByTenant,
       byBookableRows,
-      createdAtMap,
     ] = await Promise.all([
       DashboardManager.countActiveMembershipsByTenant(tenantIds),
       DashboardManager.countBookablesByTenant(tenantIds, isBookable),
       DashboardManager.countEventsByTenant(tenantIds),
+      DashboardManager.countActiveEventsByTenant(tenantIds),
       DashboardManager.aggregateBookingCountsByTenant({
         tenantIds,
         fromMs,
         toMs,
         bookableId,
-        statusKey,
+        statusKeys,
         includeByStatus: true,
       }),
       DashboardManager.aggregateCancellationsByTenant({
@@ -341,23 +559,21 @@ class DashboardService {
         fromMs,
         toMs,
         bookableId,
-        statusKey,
+        statusKeys,
       }),
       DashboardManager.aggregateRevenueByTenant({
         tenantIds,
         fromMs,
         toMs,
         bookableId,
-        byMonth: true,
       }),
       DashboardManager.aggregateByBookable({
         tenantId: tenant.id,
         fromMs,
         toMs,
         bookableId,
-        statusKey,
+        statusKeys,
       }),
-      DashboardManager.getTenantCreatedAtMap(tenantIds),
     ]);
 
     const stock = bookablesByTenant.get(tenant.id) || {
@@ -368,27 +584,14 @@ class DashboardService {
       bookings: 0,
       byStatus: emptyStatusCounts(),
     };
-    const revenue = revenueByTenant.get(tenant.id) || {
-      revenueEur: 0,
-      months: new Map(),
-    };
+    const revenue = revenueByTenant.get(tenant.id) || { revenueEur: 0 };
 
-    const tenantCreatedAt = createdAtMap.get(tenant.id) || 0;
-    const nowMs = Date.now();
-    const rangeStart = Math.max(
-      fromMs != null ? fromMs : tenantCreatedAt,
-      tenantCreatedAt,
+    const byPeriod = await buildByPeriod(
+      tenantIds,
+      filters,
+      rangeStart,
+      rangeEnd,
     );
-    const rangeEnd = toMs != null ? Math.min(toMs, nowMs) : nowMs;
-    const revenueByMonth =
-      rangeStart <= rangeEnd
-        ? zeroFillRevenueByMonth(revenue.months, rangeStart, rangeEnd).map(
-            (row) => ({
-              month: row.month,
-              revenueEur: roundMoney(row.revenueEur),
-            }),
-          )
-        : [];
 
     const sorted = sortByBookableRows(byBookableRows);
     const byBookable = sorted.slice(0, byBookableLimit);
@@ -399,6 +602,8 @@ class DashboardService {
       tenantName: tenant.name,
       from: toIsoOrNull(fromMs),
       to: toIsoOrNull(toMs),
+      status: statusKeys,
+      granularity,
       totals: {
         users: membershipsByTenant.get(tenant.id) || 0,
         bookings: booking.bookings || 0,
@@ -406,10 +611,11 @@ class DashboardService {
         bookables: stock.bookables,
         bookableObjects: stock.bookableObjects,
         events: eventsByTenant.get(tenant.id) || 0,
+        activeEvents: activeEventsByTenant.get(tenant.id) || 0,
         revenueEur: roundMoney(revenue.revenueEur),
       },
       byStatus: statusArrayFromCounts(booking.byStatus || emptyStatusCounts()),
-      revenueByMonth,
+      byPeriod,
       byBookable,
       byBookableHasMore,
       byBookableLimit,
@@ -420,7 +626,9 @@ class DashboardService {
 module.exports = DashboardService;
 module.exports.DEFAULT_BY_BOOKABLE_LIMIT = DEFAULT_BY_BOOKABLE_LIMIT;
 module.exports.MAX_BY_BOOKABLE_LIMIT = MAX_BY_BOOKABLE_LIMIT;
+module.exports.MAX_BY_PERIOD_BUCKETS = MAX_BY_PERIOD_BUCKETS;
 module.exports.parseFilters = parseFilters;
 module.exports.clampByBookableLimit = clampByBookableLimit;
-module.exports.zeroFillRevenueByMonth = zeroFillRevenueByMonth;
+module.exports.countBerlinPeriods = countBerlinPeriods;
+module.exports.zeroFillByPeriod = zeroFillByPeriod;
 module.exports.sortByBookableRows = sortByBookableRows;

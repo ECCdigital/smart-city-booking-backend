@@ -7,6 +7,9 @@ const TenantModel = require("./models/tenantModel");
 const {
   BOOKING_STATUS_I18N,
 } = require("../services/booking/booking-status-keys");
+const {
+  isEventBookable,
+} = require("../availability/availability-rules/event-rules");
 
 const ALL_STATUS_KEYS = [
   BOOKING_STATUS_I18N.AWAITING_APPROVAL,
@@ -15,6 +18,14 @@ const ALL_STATUS_KEYS = [
   BOOKING_STATUS_I18N.CONFIRMED_WITHOUT_PAYMENT,
   BOOKING_STATUS_I18N.REJECTED,
 ];
+
+const BERLIN_TZ = "Europe/Berlin";
+const PERIOD_FORMAT = {
+  day: "%Y-%m-%d",
+  week: "%G-W%V",
+  month: "%Y-%m",
+  year: "%Y",
+};
 
 /**
  * Mongo match predicates for a booking status i18n key.
@@ -49,6 +60,52 @@ function statusPredicate(statusKey) {
     default:
       return null;
   }
+}
+
+/**
+ * OR-match for one or more status keys. Empty/null → no status constraint.
+ * @param {string[]|null|undefined} statusKeys
+ */
+function statusMatch(statusKeys) {
+  if (!statusKeys || statusKeys.length === 0) {
+    return {};
+  }
+  if (statusKeys.length === 1) {
+    return statusPredicate(statusKeys[0]) || {};
+  }
+  const predicates = statusKeys
+    .map((key) => statusPredicate(key))
+    .filter(Boolean);
+  if (!predicates.length) {
+    return {};
+  }
+  return { $or: predicates };
+}
+
+function includesRejectedStatus(statusKeys) {
+  return (
+    !statusKeys ||
+    statusKeys.length === 0 ||
+    statusKeys.includes(BOOKING_STATUS_I18N.REJECTED)
+  );
+}
+
+/**
+ * Convert epoch-ms fields to Date for $dateToString.
+ * BSON int is common for legacy `timePaid: 0`; $toDate alone rejects int→date.
+ */
+function epochMsToDateExpr(fieldRef) {
+  return { $toDate: { $toLong: fieldRef } };
+}
+
+function periodKeyExpr(dateExpr, granularity) {
+  return {
+    $dateToString: {
+      format: PERIOD_FORMAT[granularity],
+      date: dateExpr,
+      timezone: BERLIN_TZ,
+    },
+  };
 }
 
 function timeRangeMatch(field, fromMs, toMs) {
@@ -188,6 +245,29 @@ class DashboardManager {
   }
 
   /**
+   * Active Event counts per tenant (now-snapshot via isEventBookable; ignores from/to).
+   * @param {string[]} tenantIds
+   * @param {Date} [now]
+   * @returns {Promise<Map<string, number>>}
+   */
+  static async countActiveEventsByTenant(tenantIds, now = new Date()) {
+    if (!tenantIds.length) {
+      return new Map();
+    }
+    const docs = await EventModel.find(tenantIdMatch(tenantIds))
+      .select({ tenantId: 1, information: 1 })
+      .lean();
+    const counts = new Map(tenantIds.map((id) => [id, 0]));
+    for (const doc of docs) {
+      if (!isEventBookable(doc, now)) {
+        continue;
+      }
+      counts.set(doc.tenantId, (counts.get(doc.tenantId) || 0) + 1);
+    }
+    return counts;
+  }
+
+  /**
    * Booking counts and optional byStatus, filtered by timeCreated (+ status/bookableId).
    * @returns {Promise<Map<string, { bookings: number, byStatus: Object<string, number> }>>}
    */
@@ -196,7 +276,7 @@ class DashboardManager {
     fromMs,
     toMs,
     bookableId,
-    statusKey,
+    statusKeys,
     includeByStatus,
   }) {
     if (!tenantIds.length) {
@@ -207,10 +287,8 @@ class DashboardManager {
       ...tenantIdMatch(tenantIds),
       ...timeRangeMatch("timeCreated", fromMs, toMs),
       ...bookableIdMatch(bookableId),
+      ...statusMatch(statusKeys),
     };
-    if (statusKey) {
-      Object.assign(match, statusPredicate(statusKey));
-    }
 
     const group = {
       _id: "$tenantId",
@@ -309,26 +387,22 @@ class DashboardManager {
 
   /**
    * Cancellation counts by tenant. Time axis: cancelledAt with timeCreated fallback.
-   * Status filter applies when it restricts to rejected (or when absent).
+   * Status filter applies when it includes rejected (or when absent).
    */
   static async aggregateCancellationsByTenant({
     tenantIds,
     fromMs,
     toMs,
     bookableId,
-    statusKey,
+    statusKeys,
   }) {
     if (!tenantIds.length) {
       return new Map();
     }
 
-    // Cancellations are rejected bookings. If status filter is set to a non-rejected
-    // status, cancellations are zero for booking-side consistency.
-    if (
-      statusKey &&
-      statusKey !== BOOKING_STATUS_I18N.REJECTED &&
-      statusPredicate(statusKey)
-    ) {
+    // Cancellations are rejected bookings. If status filter omits rejected,
+    // cancellations are zero for booking-side consistency.
+    if (!includesRejectedStatus(statusKeys)) {
       return new Map(tenantIds.map((id) => [id, 0]));
     }
 
@@ -369,15 +443,14 @@ class DashboardManager {
   }
 
   /**
-   * Revenue totals by tenant (and optionally by month for a single tenant).
-   * Unaffected by status filter. Uses timePaid + isPayed && !isRejected.
+   * Revenue totals by tenant. Unaffected by status filter.
+   * Uses timePaid + isPayed && !isRejected.
    */
   static async aggregateRevenueByTenant({
     tenantIds,
     fromMs,
     toMs,
     bookableId,
-    byMonth,
   }) {
     if (!tenantIds.length) {
       return new Map();
@@ -391,38 +464,6 @@ class DashboardManager {
       ...bookableIdMatch(bookableId),
     };
 
-    if (byMonth) {
-      const rows = await BookingModel.aggregate([
-        { $match: match },
-        {
-          $group: {
-            _id: {
-              tenantId: "$tenantId",
-              month: {
-                $dateToString: {
-                  format: "%Y-%m",
-                  date: { $toDate: "$timePaid" },
-                },
-              },
-            },
-            revenueEur: { $sum: "$priceEur" },
-          },
-        },
-      ]).exec();
-
-      const byTenant = new Map();
-      for (const row of rows) {
-        const tenantId = row._id.tenantId;
-        if (!byTenant.has(tenantId)) {
-          byTenant.set(tenantId, { revenueEur: 0, months: new Map() });
-        }
-        const entry = byTenant.get(tenantId);
-        entry.revenueEur += row.revenueEur;
-        entry.months.set(row._id.month, row.revenueEur);
-      }
-      return byTenant;
-    }
-
     const rows = await BookingModel.aggregate([
       { $match: match },
       {
@@ -433,9 +474,138 @@ class DashboardManager {
       },
     ]).exec();
 
-    return new Map(
-      rows.map((r) => [r._id, { revenueEur: r.revenueEur, months: new Map() }]),
-    );
+    return new Map(rows.map((r) => [r._id, { revenueEur: r.revenueEur }]));
+  }
+
+  /**
+   * Bookings grouped by Europe/Berlin period key (root series; not per-tenant).
+   * @returns {Promise<Map<string, number>>} period → count
+   */
+  static async aggregateBookingsByPeriod({
+    tenantIds,
+    fromMs,
+    toMs,
+    bookableId,
+    statusKeys,
+    granularity,
+  }) {
+    if (!tenantIds.length || !granularity) {
+      return new Map();
+    }
+
+    const match = {
+      ...tenantIdMatch(tenantIds),
+      ...timeRangeMatch("timeCreated", fromMs, toMs),
+      ...bookableIdMatch(bookableId),
+      ...statusMatch(statusKeys),
+    };
+
+    const rows = await BookingModel.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: periodKeyExpr(epochMsToDateExpr("$timeCreated"), granularity),
+          bookings: { $sum: 1 },
+        },
+      },
+    ]).exec();
+
+    return new Map(rows.map((r) => [r._id, r.bookings]));
+  }
+
+  /**
+   * Cancellations grouped by Europe/Berlin period key.
+   * @returns {Promise<Map<string, number>>} period → count
+   */
+  static async aggregateCancellationsByPeriod({
+    tenantIds,
+    fromMs,
+    toMs,
+    bookableId,
+    statusKeys,
+    granularity,
+  }) {
+    if (!tenantIds.length || !granularity) {
+      return new Map();
+    }
+
+    if (!includesRejectedStatus(statusKeys)) {
+      return new Map();
+    }
+
+    const match = {
+      ...tenantIdMatch(tenantIds),
+      isRejected: true,
+      ...bookableIdMatch(bookableId),
+    };
+
+    const pipeline = [
+      { $match: match },
+      {
+        $addFields: {
+          _cancellationAt: {
+            $ifNull: ["$cancellationRefund.cancelledAt", "$timeCreated"],
+          },
+        },
+      },
+    ];
+
+    if (fromMs != null || toMs != null) {
+      const range = {};
+      if (fromMs != null) {
+        range.$gte = fromMs;
+      }
+      if (toMs != null) {
+        range.$lte = toMs;
+      }
+      pipeline.push({ $match: { _cancellationAt: range } });
+    }
+
+    pipeline.push({
+      $group: {
+        _id: periodKeyExpr(epochMsToDateExpr("$_cancellationAt"), granularity),
+        cancellations: { $sum: 1 },
+      },
+    });
+
+    const rows = await BookingModel.aggregate(pipeline).exec();
+    return new Map(rows.map((r) => [r._id, r.cancellations]));
+  }
+
+  /**
+   * Revenue grouped by Europe/Berlin period key. Unaffected by status filter.
+   * @returns {Promise<Map<string, number>>} period → revenueEur
+   */
+  static async aggregateRevenueByPeriod({
+    tenantIds,
+    fromMs,
+    toMs,
+    bookableId,
+    granularity,
+  }) {
+    if (!tenantIds.length || !granularity) {
+      return new Map();
+    }
+
+    const match = {
+      ...tenantIdMatch(tenantIds),
+      isPayed: true,
+      isRejected: false,
+      ...timeRangeMatch("timePaid", fromMs, toMs),
+      ...bookableIdMatch(bookableId),
+    };
+
+    const rows = await BookingModel.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: periodKeyExpr(epochMsToDateExpr("$timePaid"), granularity),
+          revenueEur: { $sum: "$priceEur" },
+        },
+      },
+    ]).exec();
+
+    return new Map(rows.map((r) => [r._id, r.revenueEur]));
   }
 
   /**
@@ -447,16 +617,14 @@ class DashboardManager {
     fromMs,
     toMs,
     bookableId,
-    statusKey,
+    statusKeys,
   }) {
     const bookingMatch = {
       tenantId,
       ...timeRangeMatch("timeCreated", fromMs, toMs),
       ...bookableIdMatch(bookableId),
+      ...statusMatch(statusKeys),
     };
-    if (statusKey) {
-      Object.assign(bookingMatch, statusPredicate(statusKey));
-    }
 
     const bookingRowsPromise = BookingModel.aggregate([
       { $match: bookingMatch },
@@ -473,11 +641,7 @@ class DashboardManager {
     ]).exec();
 
     let cancellationRowsPromise;
-    if (
-      statusKey &&
-      statusKey !== BOOKING_STATUS_I18N.REJECTED &&
-      statusPredicate(statusKey)
-    ) {
+    if (!includesRejectedStatus(statusKeys)) {
       cancellationRowsPromise = Promise.resolve([]);
     } else {
       const cancelMatch = {
