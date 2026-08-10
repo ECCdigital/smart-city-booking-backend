@@ -675,6 +675,9 @@ class BookingService {
         paymentMethod: updatedBooking.paymentMethod,
         attachments: oldBooking.attachments,
         lockerInfo: oldBooking.lockerInfo,
+        // Same as manual create: admin-entered list prices must not be overwritten
+        // by the assignee's (or admin's) bookingDiscounts.
+        bookWithoutDiscount: true,
         checkoutId,
         customFieldValues: updatedBooking.customFieldValues,
         cancellationPolicy: updatedBooking.cancellationPolicy,
