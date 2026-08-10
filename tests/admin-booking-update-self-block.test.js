@@ -316,6 +316,51 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     assert.strictEqual(stored.vatIncludedEur, 3.8);
   });
 
+  it("does not apply assigned user's booking discount when admin edits priceCategories", async () => {
+    const assigneeId = "admin@stadt.de";
+    MembershipManager.getMembershipByTenantAndUserID.resolves({
+      userId: assigneeId,
+      roles: [],
+    });
+
+    const snapshot = bookableSnapshot({
+      priceCategories: priceCategories(20),
+      bookingDiscounts: {
+        users: [{ userId: assigneeId, discountPercent: 100 }],
+        roles: [],
+      },
+    });
+    concurrent = [
+      bookingRecord({
+        snapshot,
+        priceEur: 11.9,
+        vatIncludedEur: 1.9,
+        itemNet: 10,
+        itemGross: 11.9,
+      }),
+    ];
+    concurrent[0].assignedUserId = assigneeId;
+
+    const updated = bookingRecord({
+      snapshot,
+      priceEur: 11.9,
+      vatIncludedEur: 1.9,
+      itemNet: 10,
+      itemGross: 11.9,
+    });
+    updated.assignedUserId = assigneeId;
+
+    await BookingService.updateBooking(TENANT_ID, updated);
+    const stored = lastPreparedStore();
+
+    // Admin entered list price via priceCategories must win over bookingDiscounts
+    assert.strictEqual(stored.bookableItems[0].userPriceEur, 20);
+    assert.strictEqual(stored.bookableItems[0].userGrossPriceEur, 23.8);
+    assert.strictEqual(stored.bookableItems[0].regularPriceEur, 20);
+    assert.strictEqual(stored.priceEur, 23.8);
+    assert.strictEqual(stored.vatIncludedEur, 3.8);
+  });
+
   it("allows admin update even when a group sibling overlaps the same window", async () => {
     concurrent = [
       bookingRecord(),
