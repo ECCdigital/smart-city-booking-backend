@@ -7,6 +7,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+## [4.2.5] — 2026-08-10
+
 ### Fixed
 
 - Admin manual booking create never hard-fails on checkout rules (including capacity/overlap), matching admin update; use validate endpoints for informational availability
@@ -158,6 +160,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.2.5]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.4...v4.2.5
 [4.2.4]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.3...v4.2.4
 [4.2.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.2...v4.2.3
 [4.2.2]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.1...v4.2.2
