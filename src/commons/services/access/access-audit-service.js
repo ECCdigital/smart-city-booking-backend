@@ -2,6 +2,7 @@ const bunyan = require("bunyan");
 const AccessLogManager = require("../../data-managers/access-log-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const PdfService = require("../../pdf-service/pdf-service");
+const { ACCESS_BLOCKING_REASONS } = require("./access-blocking-reasons");
 
 const logger = bunyan.createLogger({
   name: "access-audit-service.js",
@@ -23,6 +24,36 @@ const SENSITIVE_KEYS = [
   "password",
   "clientSecret",
 ];
+
+// German wording for the blocking reason vocabulary, keyed by the shared
+// constants. A reason without an entry here still reaches the export as its
+// raw code; `tests/access-audit-export.test.js` holds the map complete.
+//
+// Deliberately short noun phrases, not the full sentences the scan landing
+// page shows an end user: these sit in a table cell next to a timestamp, often
+// several at once.
+const BLOCKING_REASON_LABELS = Object.freeze({
+  [ACCESS_BLOCKING_REASONS.REJECTED]: "Zugang abgelehnt",
+  [ACCESS_BLOCKING_REASONS.NOT_COMMITTED]: "Buchung nicht bestätigt",
+  [ACCESS_BLOCKING_REASONS.PAYMENT_REQUIRED]: "Zahlung ausstehend",
+  [ACCESS_BLOCKING_REASONS.AUTHORIZATION_REVOKED]: "Berechtigung widerrufen",
+  [ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW]: "Außerhalb des Zeitfensters",
+  [ACCESS_BLOCKING_REASONS.NOT_PROVISIONED]: "Zugang nicht freigegeben",
+  [ACCESS_BLOCKING_REASONS.LOCKER_NOT_READY]: "Schließfach nicht bereit",
+  [ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS]: "Keine Fernöffnung möglich",
+  [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING]: "Nachweis fehlt",
+  [ACCESS_BLOCKING_REASONS.EVIDENCE_INVALID]: "Nachweis ungültig",
+  [ACCESS_BLOCKING_REASONS.EVIDENCE_RULE_UNAVAILABLE]:
+    "Nachweisregel nicht auswertbar",
+});
+
+// German wording for the channel an attempt arrived over. The values are the
+// ones `accessLogSchema` documents; the field is free-form there because the
+// client reports it, so an unknown channel falls through as reported.
+const CHANNEL_LABELS = Object.freeze({
+  qrScan: "QR-Scan",
+  remote: "Fernöffnung",
+});
 
 /**
  * Builds tenant-wide audit exports (CSV / PDF) from the `accessLogs`
@@ -88,8 +119,8 @@ class AccessAuditService {
       timestampFormatted: AccessAuditService._formatDateTime(log.timestamp),
       action: log.action || "",
       result: log.result || "",
-      blockingReasons: (log.blockingReasons || []).join(", "),
-      channel: log.channel || "",
+      blockingReasons: AccessAuditService._formatReasons(log.blockingReasons),
+      channel: AccessAuditService._formatChannel(log.channel),
       // Blank, not "Nein", where the entry predates the field: a compliance
       // export must not claim a fact that was never recorded.
       evidenceBypassed: AccessAuditService._formatFlag(log.evidenceBypassed),
@@ -109,6 +140,25 @@ class AccessAuditService {
   static _formatFlag(value) {
     if (value == null) return "";
     return value === true ? "Ja" : "Nein";
+  }
+
+  /**
+   * The reasons a refusal carries, spelled out for the person reading the
+   * export. Order is kept: the manager stores them most relevant first.
+   *
+   * A reason nobody has a label for is written out as its raw code rather than
+   * dropped — an unexplained denial in a compliance export is worse than an
+   * ugly one.
+   */
+  static _formatReasons(reasons) {
+    return (reasons || [])
+      .map((reason) => BLOCKING_REASON_LABELS[reason] || reason)
+      .join(", ");
+  }
+
+  static _formatChannel(channel) {
+    if (!channel) return "";
+    return CHANNEL_LABELS[channel] || channel;
   }
 
   static _formatDateTime(value) {
@@ -163,6 +213,14 @@ class AccessAuditService {
       return result;
     }
     return value;
+  }
+
+  static get BLOCKING_REASON_LABELS() {
+    return BLOCKING_REASON_LABELS;
+  }
+
+  static get CHANNEL_LABELS() {
+    return CHANNEL_LABELS;
   }
 
   static get COLUMN_LABELS() {

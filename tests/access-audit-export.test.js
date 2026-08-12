@@ -64,9 +64,9 @@ describe("AccessAuditService export", () => {
       const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
 
       expect(entry.blockingReasons).to.equal(
-        "outside_access_window, evidence_missing",
+        "Außerhalb des Zeitfensters, Nachweis fehlt",
       );
-      expect(entry.channel).to.equal("remote");
+      expect(entry.channel).to.equal("Fernöffnung");
       expect(entry.evidenceBypassed).to.equal("Nein");
     });
 
@@ -78,7 +78,25 @@ describe("AccessAuditService export", () => {
       const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
 
       expect(entry.evidenceBypassed).to.equal("Ja");
-      expect(entry.channel).to.equal("qrScan");
+      expect(entry.channel).to.equal("QR-Scan");
+    });
+
+    it("names every blocking reason of the shared vocabulary", () => {
+      // Adding a reason to the vocabulary without wording for it here would
+      // otherwise surface as a raw code in a compliance export.
+      expect(
+        Object.keys(AccessAuditService.BLOCKING_REASON_LABELS),
+      ).to.have.members(Object.values(ACCESS_BLOCKING_REASONS));
+    });
+
+    it("keeps a reason it has no label for rather than dropping it", async () => {
+      query.resolves([createLog({ blockingReasons: ["some_future_reason"] })]);
+
+      const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
+
+      // An unlabelled reason is still evidence. Losing it would leave a denial
+      // in the export with no explanation at all.
+      expect(entry.blockingReasons).to.equal("some_future_reason");
     });
 
     it("leaves the new fields empty for entries written before they existed", async () => {
@@ -165,8 +183,8 @@ describe("AccessAuditService export", () => {
         "Kanal",
         "Evidence-Bypass",
       ]);
-      expect(cellFor("Blockierungsgründe")).to.equal("evidence_invalid");
-      expect(cellFor("Kanal")).to.equal("qrScan");
+      expect(cellFor("Blockierungsgründe")).to.equal("Nachweis ungültig");
+      expect(cellFor("Kanal")).to.equal("QR-Scan");
       expect(cellFor("Evidence-Bypass")).to.equal("Nein");
     });
 
@@ -214,8 +232,9 @@ describe("AccessAuditService export", () => {
       expect(html).to.include("Blockierungsgründe");
       expect(html).to.include("Kanal");
       expect(html).to.include("Evidence-Bypass");
-      expect(html).to.include("evidence_missing");
-      expect(html).to.include("remote");
+      expect(html).to.include("Nachweis fehlt");
+      expect(html).to.include("Fernöffnung");
+      expect(html).to.not.include("evidence_missing");
     });
   });
 });
