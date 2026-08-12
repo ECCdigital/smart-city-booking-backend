@@ -196,11 +196,26 @@ Für UI-Dropdowns (welche Provider sind beim Tenant aktiv?):
 {
   "success": true,
   "data": [
-    { "id": "salto-ks", "title": "Salto KS", "capabilities": ["getLocks", "openLock", ...] },
-    { "id": "nuki", "title": "Nuki Türen", "capabilities": ["getSmartlocks", ...] }
+    {
+      "id": "salto-ks",
+      "title": "Salto KS",
+      "capabilities": ["getLocks", "openLock", ...],
+      "providerCapabilities": ["open", "getStatus", ...]
+    },
+    {
+      "id": "nuki",
+      "title": "Nuki Türen",
+      "capabilities": ["getSmartlocks", ...],
+      "providerCapabilities": ["open", "getLocation", ...]
+    }
   ]
 }
 ```
+
+- `capabilities`: was der API-Client des Providers kann (Low-Level).
+- `providerCapabilities`: was der Provider selbst anbietet — inklusive
+  **optionaler** Fähigkeiten. Danach richtet sich, ob eine Aktion überhaupt
+  angeboten wird; z.B. `getLocation` für den Standort-Prefill (siehe 2.3).
 
 Berechtigung: `MANAGE_BOOKABLES` (Read).
 
@@ -288,12 +303,37 @@ Um dem Admin eine Auswahlliste der echten Schlösser anzubieten:
 
 Berechtigung: `MANAGE_BOOKABLES` (Read).
 
-### 2.3 Bookable speichern
+### 2.3 Standort eines AccessPoints vom Provider vorbefüllen
+
+`GET /api/:tenant/accesspoints/:id/location-prefill` (Tenant-Owner)
+
+Fragt den Provider, wo das Schloss steht — damit der Admin Koordinaten nicht
+abtippen muss, die der Provider ohnehin kennt.
+
+```json
+{ "coordinates": { "type": "Point", "points": [7.1, 51.2] } }
+```
+
+- NUKI liefert Koordinaten, aber **keine** Adresse (die API kennt keine).
+- Salto KS deklariert die optionale Capability nicht (keine Geodaten in der
+  Connect-API) und liefert `null` — ebenso Provider ohne die Capability und ein
+  Schloss ohne hinterlegte Position. Dann bleibt nur manuelle Eingabe.
+
+Der Endpoint **schreibt nichts**. Die Übernahme ist ein normales
+`PUT /api/:tenant/accesspoints` mit dem Wert im Feld `location`; die Entity
+bleibt die einzige Quelle für den Standort (kein Sync, kein Hintergrundabgleich).
+
+**UI-Flow:** Die Prefill-Aktion nur anbieten, wenn `providerCapabilities` des
+Providers `getLocation` enthält (siehe 1.5). Ergebnis ins Formular schreiben und
+erst beim Speichern mit-PUTen; `null` als „Provider kennt keinen Standort"
+melden. Adresse ggf. manuell ergänzen.
+
+### 2.4 Bookable speichern
 
 `PUT /api/:tenant/bookables` mit dem kompletten Bookable-Objekt inkl.
 `accessPointDetails`. Das gesamte Bookable round-trippen (wie bei `lockerDetails`).
 
-### 2.4 Vererbung (Hinweis)
+### 2.5 Vererbung (Hinweis)
 
 Access-Points werden standardmäßig an Eltern-/Kind-Bookables vererbt
 (steuerbar serverseitig via `ACCESS_POINTS_INHERIT_PARENTS` /
@@ -469,6 +509,8 @@ Antwort: `{ "success": true, "data": [ { booking-ähnliches Objekt, accessPointI
 - [ ] Türen aus `/accesspoints` auswählen und in `accessPointIds` referenzieren
 - [ ] Neue Türen via Provider-Auswahl + `PUT /accesspoints` anlegen (Tenant-Owner)
 - [ ] `label`, `mode` (nur aus `supportedModes`) am AccessPoint pflegen
+- [ ] Standort per `location-prefill` vorschlagen (nur bei `getLocation` in
+      `providerCapabilities`), Übernahme erst beim Speichern
 
 **Booking-Detail / Self-Service:**
 

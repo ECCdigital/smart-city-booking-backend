@@ -39,6 +39,23 @@ class AccessProvider {
     );
   }
 
+  /**
+   * Where the physical lock stands, as far as the provider knows it. Optional
+   * capability: only providers that declare `getLocation` are asked, and even
+   * they may answer `null`. The result is a prefill suggestion - it is never
+   * written to the access point by the provider.
+   *
+   * @param {Object} _accessPoint The access point to locate
+   * @param {string} _tenant Tenant the access point belongs to
+   * @returns {Promise<Object|null>} A `location` in the shape of
+   *   `accessPoint.location`, or `null` when the provider knows no location
+   */
+  async getLocation(_accessPoint, _tenant) {
+    throw new Error(
+      `getLocation() is not supported by ${this.constructor.name}`,
+    );
+  }
+
   async registerWebhook(tenant, callbackUrl) {
     throw new Error(
       `registerWebhook() is not supported by ${this.constructor.name}`,

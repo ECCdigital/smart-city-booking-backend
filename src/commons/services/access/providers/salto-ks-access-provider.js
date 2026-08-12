@@ -181,6 +181,11 @@ class SaltoKsAccessProvider extends AccessProvider {
     return SALTO_SUPPORTED_MODES;
   }
 
+  // No getLocation: the Salto KS Connect API carries no geo data - a site knows
+  // only its country code and time zone, a lock only its floor inside the
+  // building. Leaving the optional capability undeclared is what tells an admin
+  // UI not to offer a location prefill that could never fill anything in.
+
   async registerWebhook(tenant, callbackUrl) {
     const client = await this._getClient(tenant);
     return client.subscribeNotifications(callbackUrl);

@@ -6,6 +6,7 @@ const {
   AccessPoint,
 } = require("../../../commons/entities/access/access-point");
 const AccessQrService = require("../../../commons/services/access/access-qr-service");
+const AccessLocationService = require("../../../commons/services/access/access-location-service");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
 const createComponentLogger = require("../../../middleware/logger");
@@ -282,6 +283,55 @@ class AccessPointController {
         `${tenantId} -- Scan code of access point ${id} rotated by user ${user?.id}`,
       );
       return response.status(200).send(rotated.toResponse());
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * Suggest the location of an access point from what its provider knows about
+   * the physical lock, so an admin does not have to type coordinates twice.
+   *
+   * Read-only: the suggestion is sent as it comes from the provider and nothing
+   * is written to the access point. Adopting it is an explicit PUT, which keeps
+   * the entity the only source of the location.
+   *
+   * Reserved for tenant owners. Providers without the optional `getLocation`
+   * capability - and providers that simply know no position - answer `null`.
+   *
+   * @param {Object} request Express request, `params.tenant` and `params.id`
+   * @param {Object} response Express response, receives the location or `null`
+   * @param {Function} next Express error handler
+   * @returns {Promise<void>} Resolves once the response has been sent
+   */
+  static async getLocationPrefill(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
+
+      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
+        logger.warn(
+          `${tenantId} -- User ${user?.id} is not allowed to read access point location prefills`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
+
+      if (!accessPoint) {
+        return response.sendStatus(404);
+      }
+
+      const location = await AccessLocationService.getLocationPrefill(
+        accessPoint,
+        tenantId,
+      );
+
+      logger.info(
+        `${tenantId} -- Location prefill of access point ${id} requested by user ${user?.id}`,
+      );
+      return response.status(200).json(location);
     } catch (err) {
       return next(err);
     }

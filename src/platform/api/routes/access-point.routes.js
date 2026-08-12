@@ -27,6 +27,12 @@ router.get(
   AccessPointController.getQrCode,
 );
 
+router.get(
+  "/:id/location-prefill",
+  AuthenticationController.isSignedIn,
+  AccessPointController.getLocationPrefill,
+);
+
 router.post(
   "/:id/rotate-scan-code",
   AuthenticationController.isSignedIn,

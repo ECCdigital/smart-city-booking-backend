@@ -26,6 +26,17 @@
      scan URL `https://<STORE_FRONT_URL>/mobile-key/<tenant>/<scanCode>`. This is
      the store-front, not the Vue admin app that `FRONTEND_URL` points at.
 
+2. **QR door access: location prefill from the provider**
+   - New endpoint for tenant owners:
+     `GET /api/:tenant/accesspoints/:id/location-prefill` suggests where the lock
+     stands, based on the optional provider capability `getLocation`.
+   - NUKI answers with coordinates and no address, Salto KS and providers without
+     the capability answer `null`. Which providers offer `getLocation` is now part
+     of `providerCapabilities` in `GET /api/:tenant/access-apps/providers`.
+   - The endpoint writes nothing: the suggestion is adopted by submitting it as
+     `location` through the regular `PUT /api/:tenant/accesspoints`, so the access
+     point stays the single source of its location.
+
 ### v3.4.0 (BREAKING)
 
 **Important changes**

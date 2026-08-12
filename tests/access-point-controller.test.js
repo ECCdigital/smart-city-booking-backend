@@ -22,6 +22,7 @@ describe("AccessPointController", () => {
   let AccessPointController;
   let AccessPointManager;
   let AccessQrService;
+  let AccessLocationService;
   let BookableManager;
   let PermissionService;
   let request;
@@ -43,6 +44,7 @@ describe("AccessPointController", () => {
     );
     AccessPointManager = require("../src/commons/data-managers/access-point-manager");
     AccessQrService = require("../src/commons/services/access/access-qr-service");
+    AccessLocationService = require("../src/commons/services/access/access-location-service");
     BookableManager =
       require("../src/commons/data-managers/bookable-manager").BookableManager;
     PermissionService = require("../src/commons/services/permission-service");
@@ -56,6 +58,7 @@ describe("AccessPointController", () => {
     response = {
       status: sandbox.stub().returnsThis(),
       send: sandbox.stub(),
+      json: sandbox.stub(),
       sendStatus: sandbox.stub(),
       setHeader: sandbox.stub(),
     };
@@ -589,10 +592,7 @@ describe("AccessPointController", () => {
 
     it("answers 400 for an unsupported format", async () => {
       allowWrite({ tenantOwner: true });
-      const getAccessPoint = sandbox.stub(
-        AccessPointManager,
-        "getAccessPoint",
-      );
+      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
 
       request.query.format = "bmp";
 
@@ -686,6 +686,93 @@ describe("AccessPointController", () => {
       sandbox.stub(AccessPointManager, "getAccessPoint").rejects(failure);
 
       await AccessPointController.rotateScanCode(request, response, next);
+
+      expect(next.calledOnceWithExactly(failure)).to.be.true;
+    });
+  });
+
+  describe("getLocationPrefill", () => {
+    let getLocationPrefill;
+    let storeAccessPoint;
+
+    beforeEach(() => {
+      request.params.id = "point-1";
+      getLocationPrefill = sandbox
+        .stub(AccessLocationService, "getLocationPrefill")
+        .resolves({ coordinates: { type: "Point", points: [7.1, 51.2] } });
+      storeAccessPoint = sandbox.stub(AccessPointManager, "storeAccessPoint");
+    });
+
+    it("answers 403 for a user who is not a tenant owner", async () => {
+      allowWrite();
+      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
+
+      await AccessPointController.getLocationPrefill(request, response, next);
+
+      expect(response.sendStatus.calledWith(403)).to.be.true;
+      expect(getAccessPoint.called).to.be.false;
+      expect(getLocationPrefill.called).to.be.false;
+    });
+
+    it("answers 404 for an access point of another tenant", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.getLocationPrefill(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(getLocationPrefill.called).to.be.false;
+    });
+
+    it("sends the location the provider reports", async () => {
+      allowWrite({ tenantOwner: true });
+      const accessPoint = createAccessPoint();
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
+
+      await AccessPointController.getLocationPrefill(request, response, next);
+
+      expect(getLocationPrefill.calledOnceWithExactly(accessPoint, "tenant-1"))
+        .to.be.true;
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(response.json.firstCall.args[0]).to.deep.equal({
+        coordinates: { type: "Point", points: [7.1, 51.2] },
+      });
+    });
+
+    it("sends null for a provider that knows no location", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint({ provider: "salto-ks" }));
+      getLocationPrefill.resolves(null);
+
+      await AccessPointController.getLocationPrefill(request, response, next);
+
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(response.json.calledOnceWithExactly(null)).to.be.true;
+    });
+
+    it("writes nothing to the access point, adopting the location is a PUT", async () => {
+      allowWrite({ tenantOwner: true });
+      const accessPoint = createAccessPoint();
+      const locationBefore = accessPoint.location;
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
+
+      await AccessPointController.getLocationPrefill(request, response, next);
+
+      expect(storeAccessPoint.called).to.be.false;
+      expect(accessPoint.location).to.equal(locationBefore);
+    });
+
+    it("hands unexpected errors to the error handler", async () => {
+      allowWrite({ tenantOwner: true });
+      const failure = new Error("Nuki API Error");
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+      getLocationPrefill.rejects(failure);
+
+      await AccessPointController.getLocationPrefill(request, response, next);
 
       expect(next.calledOnceWithExactly(failure)).to.be.true;
     });

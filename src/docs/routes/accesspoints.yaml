@@ -207,6 +207,69 @@
       "404":
         description: The tenant has no access point with that id
 
+/api/{tenant}/accesspoints/{id}/location-prefill:
+  get:
+    tags:
+      - Access Points
+    summary: Suggest the location of an access point from its provider
+    description: |
+      Asks the access provider where the physical lock stands, so the location
+      does not have to be typed in when the provider already knows it.
+
+      The endpoint writes nothing: the suggestion is only adopted when it is
+      submitted back as `location` through the `PUT`, which keeps the access
+      point the single source of its location. There is no sync field and no
+      background reconciliation.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well).
+
+      `getLocation` is an optional provider capability. Which providers offer it
+      is part of `providerCapabilities` in `GET /api/{tenant}/access-apps/providers`,
+      so a client can tell up front whether a prefill is worth offering.
+
+      NUKI answers with coordinates and no address, since its API has none.
+      Salto KS does not offer the capability - its Connect API carries no geo
+      data - and answers `null`, as does every other provider without the
+      capability and every lock the provider knows no position for.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+    responses:
+      "200":
+        description: |
+          The suggested location, or `null` when the provider knows none. The
+          access point itself is unchanged.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/AccessPointLocation"
+              nullable: true
+            examples:
+              coordinates:
+                summary: A NUKI lock with coordinates
+                value:
+                  coordinates:
+                    type: Point
+                    points: [7.1, 51.2]
+              unknown:
+                summary: A provider without geo data
+                value: null
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: The tenant has no access point with that id
+
 /api/{tenant}/accesspoints/{id}/rotate-scan-code:
   post:
     tags:

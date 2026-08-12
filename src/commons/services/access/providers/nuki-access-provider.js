@@ -166,6 +166,23 @@ class NukiAccessProvider extends AccessProvider {
     return deriveSupportedModes(capabilities);
   }
 
+  /**
+   * Position of the smartlock, read from the same `/smartlock` data the sync
+   * already uses. Nuki knows coordinates but no address, so the prefill is
+   * coordinates only.
+   *
+   * @param {Object} accessPoint The access point to locate
+   * @param {string} tenant Tenant the access point belongs to
+   * @returns {Promise<Object|null>} A location with coordinates, or null when
+   *   the smartlock carries no usable position
+   */
+  async getLocation(accessPoint, tenant) {
+    const client = await this._getClient(tenant);
+    const smartlock = await client.getSmartlock(accessPoint.externalId);
+
+    return NukiApiClient.getLocationForSmartlock(smartlock);
+  }
+
   async registerWebhook(tenant, callbackUrl) {
     const client = await this._getClient(tenant);
     return client.registerNotification(callbackUrl);
@@ -265,6 +282,7 @@ class NukiAccessProvider extends AccessProvider {
       "revokeAuthorization",
       "listAccessPoints",
       "getSupportedModes",
+      "getLocation",
       "registerWebhook",
       "unregisterWebhook",
       "parseWebhook",

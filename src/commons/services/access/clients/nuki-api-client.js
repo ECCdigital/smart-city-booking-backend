@@ -174,6 +174,33 @@ class NukiApiClient extends BaseAccessApiClient {
     return capabilities;
   }
 
+  /**
+   * Read the position of a smartlock out of its `config`. Nuki keeps latitude
+   * and longitude on every smartlock but has no address for it, so the result
+   * carries coordinates only. Locks that were never positioned report 0/0,
+   * which is treated as "no location" rather than as a spot in the Atlantic.
+   *
+   * @param {Object} smartlock A smartlock as returned by the Nuki API
+   * @returns {Object|null} A location with coordinates, or null if unknown
+   */
+  static getLocationForSmartlock(smartlock) {
+    const { latitude, longitude } = smartlock?.config || {};
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+      return null;
+    }
+
+    if (latitude === 0 && longitude === 0) {
+      return null;
+    }
+
+    return { coordinates: { type: "Point", points: [longitude, latitude] } };
+  }
+
   static get capabilities() {
     return [
       "getSmartlocks",
