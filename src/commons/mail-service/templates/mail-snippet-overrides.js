@@ -14,6 +14,15 @@ const OVERRIDABLE_SNIPPETS = Object.freeze([
   "free-booking-confirmation",
   "invoice",
   "invoice-after-approval",
+  "invoice__after",
+  "booking-confirmation__after",
+  "free-booking-confirmation__after",
+  "booking-request-confirmation__after",
+  "booking-confirmed-invoice-pending__after",
+  "booking-cancel__after",
+  "booking-rejection__after",
+  "invoice-after-approval__after",
+  "payment-link-after-approval__after",
   "payment-link-after-approval",
 ]);
 
