@@ -1,5 +1,54 @@
 # swagger/routes/access.yaml
 
+/api/{tenant}/access/resolve-scan/{scanCode}:
+  get:
+    tags:
+      - Access
+    summary: Resolve a scanned sticker code to an access point
+    description: |
+      Translates a printed scan code into the access point it identifies.
+      Requires authentication — there is no public endpoint that turns a scan
+      code into a door name.
+
+      Follows the soft-fail contract: as long as the server can process the
+      request, it answers with HTTP 200 and `{ success, data }`. A current
+      code returns the access point's display fields; a code found only in
+      `previousScanCodes` returns `stale_scan_code` (the user is holding an
+      outdated sticker); anything else returns `unknown_scan_code`.
+
+      Failed resolutions are recorded in the access audit with
+      `action: "scan"`. Successful resolutions are not audited.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: scanCode
+        in: path
+        required: true
+        description: The scanned sticker code
+        schema:
+          type: string
+    responses:
+      "200":
+        description: |
+          The request was processed. `success: true` carries the access point's
+          display fields; `success: false` carries the reason the code did not
+          resolve.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/ResolveScanSuccess"
+                - $ref: "#/components/schemas/ResolveScanFailure"
+      "401":
+        description: Not authenticated
+      "500":
+        description: Could not resolve scan code
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
 /api/{tenant}/access/{accessPointId}/open:
   post:
     tags:
@@ -191,6 +240,55 @@
 
 components:
   schemas:
+    ResolveScanSuccess:
+      type: object
+      description: The scan code resolved to an access point
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              description: Access point identifier
+            label:
+              type: string
+              description: Human-readable name of the access point
+            type:
+              type: string
+              enum: [locker, door]
+            provider:
+              type: string
+            mode:
+              type: string
+              enum: [remote, authorization, both]
+
+    ResolveScanFailure:
+      type: object
+      description: The scan code did not resolve
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            reason:
+              type: string
+              enum: [stale_scan_code, unknown_scan_code]
+              description: |
+                `stale_scan_code` — the code was replaced and belongs to a
+                known access point; `unknown_scan_code` — no access point of
+                the tenant carries this code.
+            accessPointId:
+              type: string
+              nullable: true
+              description: |
+                The access point the stale code belongs to, or `null` when the
+                code is unknown.
+
     OpenSuccess:
       type: object
       description: The access point was opened

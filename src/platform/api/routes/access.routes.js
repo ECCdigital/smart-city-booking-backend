@@ -10,6 +10,14 @@ router.get(
   AccessAuditController.exportAudit,
 );
 
+// Ahead of the `/:accessPointId/...` routes so a scan code can never be read
+// as an access point id.
+router.get(
+  "/resolve-scan/:scanCode",
+  AuthenticationController.isSignedIn,
+  AccessController.resolveScan,
+);
+
 router.post(
   "/:accessPointId/open",
   AuthenticationController.isSignedIn,

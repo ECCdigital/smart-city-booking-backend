@@ -133,6 +133,46 @@ describe("AccessPointManager", () => {
     });
   });
 
+  describe("getAccessPointByScanCode", () => {
+    it("matches the current and the previous scan codes within the tenant", async () => {
+      const findOne = sandbox.stub(AccessPointModel, "findOne").resolves(null);
+
+      await AccessPointManager.getAccessPointByScanCode("tenant-1", "code-1");
+
+      expect(
+        findOne.calledOnceWithExactly({
+          tenantId: "tenant-1",
+          $or: [{ scanCode: "code-1" }, { previousScanCodes: "code-1" }],
+        }),
+      ).to.be.true;
+    });
+
+    it("returns an access point entity", async () => {
+      const expected = createAccessPoint();
+      sandbox
+        .stub(AccessPointModel, "findOne")
+        .resolves(fakeDocument(expected));
+
+      const accessPoint = await AccessPointManager.getAccessPointByScanCode(
+        "tenant-1",
+        expected.scanCode,
+      );
+
+      expect(accessPoint).to.equal(expected);
+    });
+
+    it("returns null for a code no access point of the tenant carries", async () => {
+      sandbox.stub(AccessPointModel, "findOne").resolves(null);
+
+      const accessPoint = await AccessPointManager.getAccessPointByScanCode(
+        "tenant-1",
+        "never-issued",
+      );
+
+      expect(accessPoint).to.equal(null);
+    });
+  });
+
   describe("removeAccessPoint", () => {
     it("only deletes within the given tenant", async () => {
       const deleteOne = sandbox

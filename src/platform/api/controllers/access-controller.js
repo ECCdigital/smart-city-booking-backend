@@ -2,6 +2,7 @@ const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const AccessService = require("../../../commons/services/access/access-service");
+const AccessScanService = require("../../../commons/services/access/access-scan-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError } = require("../../../errors/BaseError");
 
@@ -61,6 +62,36 @@ class AccessController {
 
       logger.error(err);
       return ApiResponse.error(response, "Could not open access point");
+    }
+  }
+
+  /**
+   * GET /:tenant/access/resolve-scan/:scanCode
+   *
+   * Translates a scanned sticker into the door it belongs to. Deliberately
+   * behind a login: nobody may turn a code into a door name without an
+   * account. A code that does not resolve is a soft failure on HTTP 200, so
+   * the scanning client can tell the two failures apart and say what to do.
+   */
+  static async resolveScan(request, response) {
+    const { tenant, scanCode } = request.params;
+    const user = request.user;
+
+    try {
+      const outcome = await AccessScanService.resolveScanCode(
+        tenant,
+        scanCode,
+        user.id,
+      );
+
+      if (!outcome.success) {
+        return ApiResponse.softFail(response, { data: outcome.data });
+      }
+
+      return ApiResponse.ok(response, { data: outcome.data });
+    } catch (err) {
+      logger.error(err);
+      return ApiResponse.error(response, "Could not resolve scan code");
     }
   }
 

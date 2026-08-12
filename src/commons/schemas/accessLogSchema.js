@@ -32,6 +32,7 @@ const accessLogSchemaDefinition = {
       "revoke",
       "status",
       "webhook",
+      "scan",
     ],
     required: true,
   },

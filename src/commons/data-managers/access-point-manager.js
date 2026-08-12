@@ -52,6 +52,25 @@ class AccessPointManager {
   }
 
   /**
+   * Get the access point a scanned code belongs to. Matches the current scan
+   * code as well as the codes it replaced, so a sticker that is still out in
+   * the field can be told apart from a code nobody ever issued. Callers
+   * distinguish the two by comparing the code to `scanCode`.
+   *
+   * @param {string} tenantId The tenant id
+   * @param {string} scanCode The scanned code
+   * @returns {Promise<AccessPoint|null>} The access point or null
+   */
+  static async getAccessPointByScanCode(tenantId, scanCode) {
+    const rawAccessPoint = await AccessPointModel.findOne({
+      tenantId: tenantId,
+      $or: [{ scanCode: scanCode }, { previousScanCodes: scanCode }],
+    });
+    if (!rawAccessPoint) return null;
+    return rawAccessPoint.toEntity();
+  }
+
+  /**
    * Insert an access point into the database or update it.
    *
    * @param {AccessPoint|Object} accessPoint The access point to be stored
