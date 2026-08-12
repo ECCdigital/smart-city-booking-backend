@@ -257,14 +257,15 @@ class BookableManager {
     const rawBookables = await BookableModel.find({
       tenantId: tenantId,
       "accessPointDetails.active": true,
-      "accessPointDetails.points.0": { $exists: true },
+      "accessPointDetails.accessPointIds.0": { $exists: true },
     });
     return rawBookables.map((doc) => doc.toEntity());
   }
 
   /**
    * Get all bookables of a tenant that expose a specific access point (by id)
-   * via their active access point configuration.
+   * via their active access point configuration. Several bookables may
+   * reference the same access point, e.g. a main entrance shared by rooms.
    * @param {string} tenantId Tenant ID
    * @param {string} accessPointId Access point ID
    * @returns {Promise<Bookable[]>} Bookables exposing the access point
@@ -273,9 +274,27 @@ class BookableManager {
     const rawBookables = await BookableModel.find({
       tenantId: tenantId,
       "accessPointDetails.active": true,
-      "accessPointDetails.points.id": accessPointId,
+      "accessPointDetails.accessPointIds": accessPointId,
     });
     return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Remove an access point reference from every bookable of a tenant. Called
+   * when the access point itself is deleted, so no bookable is left pointing at
+   * an access point that no longer exists.
+   * @param {string} tenantId Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<void>}
+   */
+  static async detachAccessPoint(tenantId, accessPointId) {
+    await BookableModel.updateMany(
+      {
+        tenantId: tenantId,
+        "accessPointDetails.accessPointIds": accessPointId,
+      },
+      { $pull: { "accessPointDetails.accessPointIds": accessPointId } },
+    );
   }
 
   /**

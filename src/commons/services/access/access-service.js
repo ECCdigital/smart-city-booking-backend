@@ -2,6 +2,7 @@ const bunyan = require("bunyan");
 const { getAccessProvider } = require("./providers/access-provider-registry");
 const BookingManager = require("../../data-managers/booking-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
+const AccessPointManager = require("../../data-managers/access-point-manager");
 const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const AccessLogService = require("./access-log-service");
@@ -1165,29 +1166,43 @@ class AccessService {
     const apBookables =
       await BookableManager.getBookablesWithAccessPoints(tenant);
 
+    const accessPointsById = await this._getAccessPointsById(
+      tenant,
+      apBookables,
+    );
+
     const inheritChildren =
       process.env.ACCESS_POINTS_INHERIT_CHILDREN !== "false";
     const inheritParents =
       process.env.ACCESS_POINTS_INHERIT_PARENTS !== "false";
 
     const map = new Map();
-    const addPoints = (bookableId, points) => {
+    const addPoints = (bookableId, accessPointIds) => {
       let pointMap = map.get(bookableId);
       if (!pointMap) {
         pointMap = new Map();
         map.set(bookableId, pointMap);
       }
-      for (const point of points) {
+      for (const accessPointId of accessPointIds) {
         pointMap.set(
-          String(point.id),
-          point.mode || AccessPointMode.AUTHORIZATION,
+          accessPointId,
+          accessPointsById.get(accessPointId).mode ||
+            AccessPointMode.AUTHORIZATION,
         );
       }
     };
 
     await Promise.all(
       apBookables.map(async (bookable) => {
-        const points = bookable.accessPointDetails?.points || [];
+        // References without an access point confer nothing - they are doors
+        // that no longer exist.
+        const points = (
+          bookable.accessPointDetails?.accessPointIds || []
+        ).flatMap((accessPointId) =>
+          accessPointsById.has(String(accessPointId))
+            ? [String(accessPointId)]
+            : [],
+        );
         if (!points.length) {
           return;
         }
@@ -1238,15 +1253,18 @@ class AccessService {
     const triggerIds = new Set();
     let mode = null;
 
+    if (apBookables.length > 0) {
+      const accessPoint = await AccessPointManager.getAccessPoint(
+        accessPointId,
+        tenant,
+      );
+      if (accessPoint) {
+        mode = accessPoint.mode || AccessPointMode.AUTHORIZATION;
+      }
+    }
+
     await Promise.all(
       apBookables.map(async (bookable) => {
-        const point = (bookable.accessPointDetails?.points || []).find(
-          (p) => String(p.id) === String(accessPointId),
-        );
-        if (point) {
-          mode = point.mode || AccessPointMode.AUTHORIZATION;
-        }
-
         triggerIds.add(bookable.id);
 
         const relatedLookups = [];
@@ -1599,23 +1617,49 @@ class AccessService {
 
   /**
    * @private
-   * Resolves the access buffer (lead/lag time around a booking) for a given
-   * access point. A per access point override
-   * (`point.accessBuffer`) takes precedence over the bookable wide default
-   * (`accessPointDetails.accessBuffer`). Falls back to no buffer.
+   * Resolves the access buffer (lead/lag time around a booking) of a bookable.
+   * The buffer is configured once per bookable
+   * (`accessPointDetails.accessBuffer`) and applies to all of its access
+   * points. Falls back to no buffer.
    * @returns {{ beforeMs: number, afterMs: number }}
    */
-  static _resolveAccessBuffer(bookable, point) {
-    const fallback = bookable.accessPointDetails?.accessBuffer || {};
-    const override = point.accessBuffer || {};
+  static _resolveAccessBuffer(bookable) {
+    const buffer = bookable.accessPointDetails?.accessBuffer || {};
 
-    const before = Number(override.before ?? fallback.before ?? 0);
-    const after = Number(override.after ?? fallback.after ?? 0);
+    const before = Number(buffer.before ?? 0);
+    const after = Number(buffer.after ?? 0);
 
     const toMs = (minutes) =>
       Number.isFinite(minutes) && minutes > 0 ? minutes * 60 * 1000 : 0;
 
     return { beforeMs: toMs(before), afterMs: toMs(after) };
+  }
+
+  /**
+   * @private
+   * Loads the access points the given bookables reference from the
+   * `accesspoints` collection. Ids without an access point are left out - the
+   * bookable is then simply not a door the booking can open.
+   * @param {string} tenant Tenant ID
+   * @param {Bookable[]} bookables The bookables whose references to resolve
+   * @returns {Promise<Map<string, AccessPoint>>} accessPointId -> access point
+   */
+  static async _getAccessPointsById(tenant, bookables) {
+    const accessPointIds = [
+      ...new Set(
+        bookables.flatMap((bookable) =>
+          (bookable.accessPointDetails?.accessPointIds || []).map(String),
+        ),
+      ),
+    ];
+    const accessPoints = await AccessPointManager.getAccessPointsByIds(
+      tenant,
+      accessPointIds,
+    );
+
+    return new Map(
+      accessPoints.map((accessPoint) => [String(accessPoint.id), accessPoint]),
+    );
   }
 
   static async _getDoorAccessPoints(tenant, booking) {
@@ -1627,6 +1671,10 @@ class AccessService {
       bookables,
       bookableRelations,
     );
+    const accessPointsById = await this._getAccessPointsById(
+      tenant,
+      sortedBookables,
+    );
     const seenAccessPointIds = new Set();
 
     return sortedBookables.flatMap((bookable) => {
@@ -1634,62 +1682,62 @@ class AccessService {
         return [];
       }
 
-      return (bookable.accessPointDetails.points || []).flatMap((point) => {
-        const accessPointKey = String(point.id);
+      const { beforeMs, afterMs } = this._resolveAccessBuffer(bookable);
 
-        if (seenAccessPointIds.has(accessPointKey)) {
-          return [];
-        }
-        seenAccessPointIds.add(accessPointKey);
+      return (bookable.accessPointDetails.accessPointIds || []).flatMap(
+        (accessPointId) => {
+          const accessPointKey = String(accessPointId);
+          const accessPoint = accessPointsById.get(accessPointKey);
 
-        const { beforeMs, afterMs } = this._resolveAccessBuffer(
-          bookable,
-          point,
-        );
+          if (!accessPoint || seenAccessPointIds.has(accessPointKey)) {
+            return [];
+          }
+          seenAccessPointIds.add(accessPointKey);
 
-        const accessInfo = (booking.accessInfo || []).find(
-          (info) => String(info.accessPointId) === String(point.id),
-        );
-        const accessPoint = {
-          id: point.id,
-          tenant,
-          type: "door",
-          provider: point.provider,
-          externalId: point.externalId,
-          locationId: point.locationId || null,
-          label: point.label || "",
-          mode: point.mode || AccessPointMode.AUTHORIZATION,
-          config: point.config || {},
-          bookableId: bookable.id,
-          bookableTitle: bookable.title,
-          relation: bookableRelations.get(bookable.id) || "self",
-        };
+          const accessInfo = (booking.accessInfo || []).find(
+            (info) => String(info.accessPointId) === accessPointKey,
+          );
+          const resolvedAccessPoint = {
+            id: accessPoint.id,
+            tenant,
+            type: "door",
+            provider: accessPoint.provider,
+            externalId: accessPoint.externalId,
+            locationId: accessPoint.providerLocationId || null,
+            label: accessPoint.label || "",
+            mode: accessPoint.mode || AccessPointMode.AUTHORIZATION,
+            config: accessPoint.config || {},
+            bookableId: bookable.id,
+            bookableTitle: bookable.title,
+            relation: bookableRelations.get(bookable.id) || "self",
+          };
 
-        return [
-          {
-            accessPoint,
-            bookingContext: {
-              tenant,
-              bookingId: booking.id,
-              timeBegin: booking.timeBegin,
-              timeEnd: booking.timeEnd,
-              accessBuffer: { beforeMs, afterMs },
-              accessFrom: booking.timeBegin - beforeMs,
-              accessTo: booking.timeEnd + afterMs,
-              booking,
-              accessInfo,
-              authorizationId: accessInfo?.authorizationId || null,
-              accessId: accessInfo?.accessId || null,
-              saltoUserId: accessInfo?.saltoUserId || null,
-              isProvisioned: accessInfo?.isProvisioned || false,
-              provisionedAt: accessInfo?.provisionedAt || null,
-              revokedAt: accessInfo?.revokedAt || null,
-              saltoUserDeletedAt: accessInfo?.saltoUserDeletedAt || null,
-              lastEvent: accessInfo?.lastEvent || null,
+          return [
+            {
+              accessPoint: resolvedAccessPoint,
+              bookingContext: {
+                tenant,
+                bookingId: booking.id,
+                timeBegin: booking.timeBegin,
+                timeEnd: booking.timeEnd,
+                accessBuffer: { beforeMs, afterMs },
+                accessFrom: booking.timeBegin - beforeMs,
+                accessTo: booking.timeEnd + afterMs,
+                booking,
+                accessInfo,
+                authorizationId: accessInfo?.authorizationId || null,
+                accessId: accessInfo?.accessId || null,
+                saltoUserId: accessInfo?.saltoUserId || null,
+                isProvisioned: accessInfo?.isProvisioned || false,
+                provisionedAt: accessInfo?.provisionedAt || null,
+                revokedAt: accessInfo?.revokedAt || null,
+                saltoUserDeletedAt: accessInfo?.saltoUserDeletedAt || null,
+                lastEvent: accessInfo?.lastEvent || null,
+              },
             },
-          },
-        ];
-      });
+          ];
+        },
+      );
     });
   }
 

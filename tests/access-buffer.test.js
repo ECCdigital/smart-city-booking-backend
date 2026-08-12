@@ -75,32 +75,32 @@ describe("Booking access window", () => {
 describe("AccessService._resolveAccessBuffer", () => {
   it("falls back to no buffer", () => {
     const bookable = { accessPointDetails: {} };
-    const point = {};
-    expect(AccessService._resolveAccessBuffer(bookable, point)).to.deep.equal({
+    expect(AccessService._resolveAccessBuffer(bookable)).to.deep.equal({
       beforeMs: 0,
       afterMs: 0,
     });
   });
 
-  it("uses the bookable wide default", () => {
+  it("uses the buffer configured on the bookable", () => {
     const bookable = {
       accessPointDetails: { accessBuffer: { before: 10, after: 5 } },
     };
-    const point = {};
-    expect(AccessService._resolveAccessBuffer(bookable, point)).to.deep.equal({
+    expect(AccessService._resolveAccessBuffer(bookable)).to.deep.equal({
       beforeMs: 10 * MINUTE,
       afterMs: 5 * MINUTE,
     });
   });
 
-  it("lets a per access point override win", () => {
+  it("applies the same buffer to every access point of the bookable", () => {
     const bookable = {
-      accessPointDetails: { accessBuffer: { before: 10, after: 5 } },
+      accessPointDetails: {
+        accessBuffer: { before: 10, after: 5 },
+        accessPointIds: ["door-1", "door-2"],
+      },
     };
-    const point = { accessBuffer: { before: 30, after: 0 } };
-    expect(AccessService._resolveAccessBuffer(bookable, point)).to.deep.equal({
-      beforeMs: 30 * MINUTE,
-      afterMs: 0,
+    expect(AccessService._resolveAccessBuffer(bookable)).to.deep.equal({
+      beforeMs: 10 * MINUTE,
+      afterMs: 5 * MINUTE,
     });
   });
 });

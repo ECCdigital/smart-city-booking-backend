@@ -115,6 +115,39 @@
         description: Not allowed to read access points
       "404":
         description: The tenant has no access point with that id
+  delete:
+    tags:
+      - Access Points
+    summary: Delete an access point
+    description: |
+      Deletes the access point and removes its id from the
+      `accessPointDetails.accessPointIds` of every bookable of the tenant, so no
+      bookable is left pointing at an access point that no longer exists.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well).
+
+      The access log keeps its entries: they document what happened at a door
+      that once existed, and may therefore reference a deleted access point.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The access point was deleted and detached from all bookables
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: The tenant has no access point with that id
 
 components:
   schemas:

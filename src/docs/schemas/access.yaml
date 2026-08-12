@@ -65,9 +65,8 @@ components:
       description: >
         Resolved lead/lag time (in milliseconds) around a booking during which
         the access point can still be operated. Resolved from the bookable
-        configuration (`accessPointDetails.accessBuffer` as default, optionally
-        overridden per access point via `points[].accessBuffer`). Both values
-        default to 0 (no buffer).
+        configuration (`accessPointDetails.accessBuffer`), which applies to all
+        access points of that bookable. Both values default to 0 (no buffer).
       properties:
         beforeMs:
           type: integer
@@ -84,10 +83,9 @@ components:
       type: object
       description: >
         Lead/lag time (in minutes) around a booking during which the access
-        point can still be operated. Configured on the bookable
-        (`accessPointDetails.accessBuffer` as default, optionally overridden
-        per access point via `points[].accessBuffer`). Both values default
-        to 0 (no buffer).
+        point can still be operated. Configured once on the bookable
+        (`accessPointDetails.accessBuffer`) for all of its access points. Both
+        values default to 0 (no buffer).
       properties:
         before:
           type: integer

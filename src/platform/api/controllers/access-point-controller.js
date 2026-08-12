@@ -1,5 +1,8 @@
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const {
+  BookableManager,
+} = require("../../../commons/data-managers/bookable-manager");
+const {
   AccessPoint,
 } = require("../../../commons/entities/access/access-point");
 const { RolePermission } = require("../../../commons/entities/role/role");
@@ -156,6 +159,43 @@ class AccessPointController {
       `${tenantId} -- Access point ${updatedAccessPoint.id} updated by user ${user?.id}`,
     );
     return response.status(200).send(updatedAccessPoint.toResponse());
+  }
+
+  /**
+   * Delete an access point and detach it from every bookable of the tenant, so
+   * no bookable is left pointing at an access point that no longer exists. The
+   * access log keeps its entries: they document what happened at a door that
+   * once existed.
+   */
+  static async removeAccessPoint(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
+
+      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
+        logger.warn(
+          `${tenantId} -- User ${user?.id} is not allowed to delete access points`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
+
+      if (!accessPoint) {
+        return response.sendStatus(404);
+      }
+
+      await BookableManager.detachAccessPoint(tenantId, id);
+      await AccessPointManager.removeAccessPoint(id, tenantId);
+
+      logger.info(
+        `${tenantId} -- Access point ${id} deleted by user ${user?.id}`,
+      );
+      return response.sendStatus(200);
+    } catch (err) {
+      return next(err);
+    }
   }
 
   /**

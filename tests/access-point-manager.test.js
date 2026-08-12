@@ -89,6 +89,67 @@ describe("AccessPointManager", () => {
     });
   });
 
+  describe("getAccessPointsByIds", () => {
+    it("scopes the lookup to the tenant and the given ids", async () => {
+      const find = sandbox.stub(AccessPointModel, "find").resolves([]);
+
+      await AccessPointManager.getAccessPointsByIds("tenant-1", [
+        "point-1",
+        "point-2",
+      ]);
+
+      expect(
+        find.calledOnceWithExactly({
+          tenantId: "tenant-1",
+          id: { $in: ["point-1", "point-2"] },
+        }),
+      ).to.be.true;
+    });
+
+    it("does not query the database without ids", async () => {
+      const find = sandbox.stub(AccessPointModel, "find").resolves([]);
+
+      const accessPoints = await AccessPointManager.getAccessPointsByIds(
+        "tenant-1",
+        [],
+      );
+
+      expect(accessPoints).to.deep.equal([]);
+      expect(find.called).to.be.false;
+    });
+
+    it("leaves out ids the tenant does not know", async () => {
+      const accessPoint = createAccessPoint();
+      sandbox
+        .stub(AccessPointModel, "find")
+        .resolves([fakeDocument(accessPoint)]);
+
+      const accessPoints = await AccessPointManager.getAccessPointsByIds(
+        "tenant-1",
+        ["point-1", "ghost-point"],
+      );
+
+      expect(accessPoints).to.deep.equal([accessPoint]);
+    });
+  });
+
+  describe("removeAccessPoint", () => {
+    it("only deletes within the given tenant", async () => {
+      const deleteOne = sandbox
+        .stub(AccessPointModel, "deleteOne")
+        .resolves({ deletedCount: 1 });
+
+      await AccessPointManager.removeAccessPoint("point-1", "tenant-1");
+
+      expect(
+        deleteOne.calledOnceWithExactly({
+          id: "point-1",
+          tenantId: "tenant-1",
+        }),
+      ).to.be.true;
+    });
+  });
+
   describe("storeAccessPoint", () => {
     let findOneAndUpdate;
 

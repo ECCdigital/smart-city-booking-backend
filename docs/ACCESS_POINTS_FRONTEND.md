@@ -119,17 +119,17 @@ Access-App ist ein Eintrag mit `type: "access"`.
 
 **UI-Formular-Empfehlung:**
 
-| Feld                              | Nuki | Salto KS |
-| --------------------------------- | ---- | -------- |
-| Anzeigename (`title`)             | ✓    | ✓        |
-| Aktiv (`active`) Toggle           | ✓    | ✓        |
-| `apiToken` (Passwortfeld)         | ✓    | –        |
-| `clientId`                        | –    | ✓        |
-| `clientSecret` (Passwortfeld)     | –    | ✓        |
-| `username` (E-Mail KS-System-User)| –    | ✓        |
-| `password` (Passwortfeld)         | –    | ✓        |
+| Feld                               | Nuki | Salto KS |
+| ---------------------------------- | ---- | -------- |
+| Anzeigename (`title`)              | ✓    | ✓        |
+| Aktiv (`active`) Toggle            | ✓    | ✓        |
+| `apiToken` (Passwortfeld)          | ✓    | –        |
+| `clientId`                         | –    | ✓        |
+| `clientSecret` (Passwortfeld)      | –    | ✓        |
+| `username` (E-Mail KS-System-User) | –    | ✓        |
+| `password` (Passwortfeld)          | –    | ✓        |
 | `siteId` (Salto Site UUID)         | –    | ✓        |
-| `apiBaseUrl` (advanced/optional)  | ✓    | ✓        |
+| `apiBaseUrl` (advanced/optional)   | ✓    | ✓        |
 
 Für `clientSecret`/`apiToken`/`password`: Wenn bereits gesetzt, im UI maskiert
 anzeigen (z.B. `••••••`) und nur bei tatsächlicher Eingabe überschreiben.
@@ -233,27 +233,20 @@ Türen werden am Bookable im Feld `accessPointDetails` gespeichert.
 ```jsonc
 {
   "active": true, // Access-Points für dieses Bookable aktiv?
-  "accessBuffer": { "before": 15, "after": 10 }, // Default-Puffer in MINUTEN
-  "points": [
-    {
-      "id": "ap-uuid-1", // eindeutige ID (Frontend generiert, z.B. uuid)
-      "provider": "salto-ks", // "nuki" | "salto-ks"
-      "externalId": "lock-123", // ID des Schlosses beim Provider
-      "locationId": "site-1", // optional
-      "label": "Haupteingang", // Anzeigename
-      "mode": "authorization", // "remote" | "authorization" | "both"
-      "accessBuffer": { "before": 0, "after": 0 }, // optional, überschreibt Default
-      "config": {}, // optional, providerspezifisch
-    },
-  ],
+  "accessBuffer": { "before": 15, "after": 10 }, // Puffer in MINUTEN
+  "accessPointIds": ["ap-uuid-1", "ap-uuid-2"], // Referenzen in /accesspoints
 }
 ```
 
+- **`accessPointIds`**: Referenzen auf AccessPoints des Mandanten. Die Tür selbst
+  (Provider, `externalId`, Label, Modus, Konfiguration) wird unter
+  `/api/:tenant/accesspoints` verwaltet, nicht am Bookable.
+- Eine unbekannte ID beantwortet `PUT /api/:tenant/bookables` mit HTTP 400 und
+  `details[].code = "unknown_access_point"`.
+- Mehrere Bookables dürfen dieselbe ID referenzieren — der Haupteingang gehört
+  typischerweise zu mehreren Räumen.
 - **`accessBuffer`** (Minuten): Vor-/Nachlaufzeit, in der die Buchung die Tür
-  bereits/noch bedienen darf. Pro Punkt überschreibbar; sonst gilt der
-  Bookable-weite Default; sonst 0.
-- **`id`**: stabil halten (wird in Buchungen / Logs referenziert). Beim Anlegen
-  eines neuen Punktes eine UUID generieren.
+  bereits/noch bedienen darf. Gilt für alle AccessPoints des Bookables; sonst 0.
 
 ### 2.2 Verfügbare Türen vom Provider laden
 
@@ -286,10 +279,12 @@ Um dem Admin eine Auswahlliste der echten Schlösser anzubieten:
 
 1. Provider wählen (aus aktiven Providern, siehe 1.5).
 2. `GET .../:provider/access-points` aufrufen → Liste anzeigen.
-3. Tür auswählen → daraus einen `points[]`-Eintrag bauen
-   (`externalId`, `label`, `locationId` vorbefüllen, `id` neu generieren).
+3. Tür auswählen → per `PUT /api/:tenant/accesspoints` einen AccessPoint anlegen
+   (`provider`, `externalId`, `label`, `providerLocationId` vorbefüllen; die `id`
+   kommt vom Server). Nur für Tenant-Owner.
 4. `mode` wählen — **nur Modi aus `supportedModes`** anbieten.
-5. Optional `accessBuffer` setzen.
+5. Die zurückgegebene `id` in `accessPointDetails.accessPointIds` des Bookables
+   aufnehmen.
 
 Berechtigung: `MANAGE_BOOKABLES` (Read).
 
@@ -470,10 +465,10 @@ Antwort: `{ "success": true, "data": [ { booking-ähnliches Objekt, accessPointI
 **Bookable-Editor:**
 
 - [ ] `accessPointDetails.active` Toggle
-- [ ] Default-`accessBuffer` (before/after in Minuten)
-- [ ] Türen hinzufügen via Provider-Auswahl + `/access-apps/:provider/access-points`
-- [ ] Pro Tür: `label`, `mode` (nur aus `supportedModes`), optionaler Puffer
-- [ ] Stabile `id` pro Punkt (UUID)
+- [ ] `accessBuffer` (before/after in Minuten) für alle Türen des Bookables
+- [ ] Türen aus `/accesspoints` auswählen und in `accessPointIds` referenzieren
+- [ ] Neue Türen via Provider-Auswahl + `PUT /accesspoints` anlegen (Tenant-Owner)
+- [ ] `label`, `mode` (nur aus `supportedModes`) am AccessPoint pflegen
 
 **Booking-Detail / Self-Service:**
 

@@ -21,6 +21,7 @@ describe("AccessPointController", () => {
   let sandbox;
   let AccessPointController;
   let AccessPointManager;
+  let BookableManager;
   let PermissionService;
   let request;
   let response;
@@ -40,6 +41,8 @@ describe("AccessPointController", () => {
       "../src/platform/api/controllers/access-point-controller.js",
     );
     AccessPointManager = require("../src/commons/data-managers/access-point-manager");
+    BookableManager =
+      require("../src/commons/data-managers/bookable-manager").BookableManager;
     PermissionService = require("../src/commons/services/permission-service");
 
     request = {
@@ -428,6 +431,88 @@ describe("AccessPointController", () => {
 
       expect(response.sendStatus.calledWith(404)).to.be.true;
       expect(storeAccessPoint.called).to.be.false;
+    });
+  });
+
+  describe("removeAccessPoint", () => {
+    let removeAccessPoint;
+    let detachAccessPoint;
+
+    beforeEach(() => {
+      request.params.id = "point-1";
+      removeAccessPoint = sandbox
+        .stub(AccessPointManager, "removeAccessPoint")
+        .resolves();
+      detachAccessPoint = sandbox
+        .stub(BookableManager, "detachAccessPoint")
+        .resolves();
+    });
+
+    it("answers 403 for a user who is not a tenant owner", async () => {
+      allowWrite();
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.removeAccessPoint(request, response, next);
+
+      expect(response.sendStatus.calledWith(403)).to.be.true;
+      expect(removeAccessPoint.called).to.be.false;
+      expect(detachAccessPoint.called).to.be.false;
+    });
+
+    it("answers 404 for an access point of another tenant", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.removeAccessPoint(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(removeAccessPoint.called).to.be.false;
+    });
+
+    it("deletes the access point of the tenant in the path", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+
+      await AccessPointController.removeAccessPoint(request, response, next);
+
+      expect(removeAccessPoint.calledOnceWithExactly("point-1", "tenant-1")).to
+        .be.true;
+      expect(response.sendStatus.calledWith(200)).to.be.true;
+    });
+
+    it("detaches the id from every bookable of the tenant", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+
+      await AccessPointController.removeAccessPoint(request, response, next);
+
+      expect(detachAccessPoint.calledOnceWithExactly("tenant-1", "point-1")).to
+        .be.true;
+    });
+
+    it("detaches the id before the access point is gone", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+
+      await AccessPointController.removeAccessPoint(request, response, next);
+
+      expect(detachAccessPoint.calledBefore(removeAccessPoint)).to.be.true;
+    });
+
+    it("hands unexpected errors to the error handler", async () => {
+      allowWrite({ tenantOwner: true });
+      const failure = new Error("Database Error");
+      sandbox.stub(AccessPointManager, "getAccessPoint").rejects(failure);
+
+      await AccessPointController.removeAccessPoint(request, response, next);
+
+      expect(next.calledOnceWithExactly(failure)).to.be.true;
     });
   });
 });

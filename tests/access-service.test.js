@@ -6,6 +6,7 @@ const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
+const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const MailController = require("../src/commons/mail-service/mail-controller");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 
@@ -39,17 +40,33 @@ describe("AccessService bookable access point inheritance", () => {
     return {
       id,
       title,
-      accessPointDetails: {
-        active: true,
-        points: pointIds.map((pointId) => ({
-          id: pointId,
-          provider: "nuki",
-          externalId: `${pointId}-external`,
-          label: pointId,
-          mode: "authorization",
-        })),
-      },
+      accessPointDetails: { active: true, accessPointIds: pointIds },
     };
+  }
+
+  /**
+   * Answer access point lookups from the tenant-wide collection, as the
+   * `accesspoints` collection does at runtime.
+   */
+  function stubAccessPoints(ids) {
+    const accessPoints = ids.map((id) => ({
+      id,
+      tenantId: "tenant-1",
+      type: "door",
+      provider: "nuki",
+      externalId: `${id}-external`,
+      label: id,
+      mode: "authorization",
+      config: {},
+    }));
+
+    sandbox
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .callsFake(async (tenant, requestedIds) =>
+        accessPoints.filter((accessPoint) =>
+          requestedIds.includes(accessPoint.id),
+        ),
+      );
   }
 
   it("resolves access points from booked, parent, and child bookables", async () => {
@@ -77,6 +94,7 @@ describe("AccessService bookable access point inheritance", () => {
       accessInfo: [{ accessPointId: "door-self", authorizationId: "auth-1" }],
     };
 
+    stubAccessPoints(["door-shared", "door-self", "door-parent", "door-child"]);
     sandbox
       .stub(BookableManager, "getRelatedBookables")
       .withArgs("room", "tenant-1")
@@ -121,6 +139,7 @@ describe("AccessService bookable access point inheritance", () => {
       tenantId: "tenant-1",
       bookableItems: [{ bookableId: "room" }],
     };
+    stubAccessPoints(["door-self"]);
     const getRelatedBookables = sandbox.stub(
       BookableManager,
       "getRelatedBookables",

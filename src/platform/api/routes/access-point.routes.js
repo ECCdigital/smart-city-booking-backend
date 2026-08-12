@@ -21,4 +21,10 @@ router.get(
   AccessPointController.getAccessPoint,
 );
 
+router.delete(
+  "/:id",
+  AuthenticationController.isSignedIn,
+  AccessPointController.removeAccessPoint,
+);
+
 module.exports = router;

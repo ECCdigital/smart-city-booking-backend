@@ -34,6 +34,24 @@ class AccessPointManager {
   }
 
   /**
+   * Get the access points of a tenant for a list of ids. Ids the tenant does
+   * not know are left out, the result is not ordered like the given ids.
+   *
+   * @param {string} tenantId The tenant id
+   * @param {string[]} ids Logical identifiers of the access points
+   * @returns {Promise<AccessPoint[]>} The access points that exist
+   */
+  static async getAccessPointsByIds(tenantId, ids = []) {
+    if (ids.length === 0) return [];
+
+    const rawAccessPoints = await AccessPointModel.find({
+      tenantId: tenantId,
+      id: { $in: ids },
+    });
+    return rawAccessPoints.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Insert an access point into the database or update it.
    *
    * @param {AccessPoint|Object} accessPoint The access point to be stored
@@ -55,6 +73,17 @@ class AccessPointManager {
     );
 
     return accessPointEntity;
+  }
+
+  /**
+   * Remove an access point of a tenant.
+   *
+   * @param {string} id Logical identifier of the access point
+   * @param {string} tenantId The tenant id
+   * @returns {Promise<void>}
+   */
+  static async removeAccessPoint(id, tenantId) {
+    await AccessPointModel.deleteOne({ id: id, tenantId: tenantId });
   }
 }
 
