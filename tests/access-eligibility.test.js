@@ -4,7 +4,7 @@ const sinon = require("sinon");
 const AccessService = require("../src/commons/services/access/access-service");
 const {
   ACCESS_BLOCKING_REASONS,
-} = require("../src/commons/services/access/access-service");
+} = require("../src/commons/services/access/access-blocking-reasons");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const { BookableManager } = require("../src/commons/data-managers/bookable-manager");
 const PermissionsService = require("../src/commons/services/permission-service");

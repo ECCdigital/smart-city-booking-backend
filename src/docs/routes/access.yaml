@@ -60,6 +60,14 @@
       paid booking, and the current time to be inside the booking's access
       window including its buffer.
 
+      On top of those fixed booking checks the access point may configure
+      validation rules that demand evidence of presence, e.g. a scan of the QR
+      code on the door. All configured rules have to be fulfilled. This applies
+      to every channel: at a door requiring a scan, a remote open from the
+      booking view is refused with `evidence_missing`. Users with the
+      `MANAGE_BOOKINGS` permission are exempt from the rules - the booking
+      checks still apply to them - and the exemption is recorded in the audit.
+
       Every attempt that could be processed - opened as well as refused -
       answers with HTTP 200 and the envelope `{ success, data }`; refused
       attempts are recorded in the access audit with `result: "denied"` and
@@ -75,6 +83,12 @@
         schema:
           type: string
       - $ref: "#/components/parameters/BookingIdQueryParam"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OpenRequest"
     responses:
       "200":
         description: |
@@ -289,6 +303,57 @@ components:
                 The access point the stale code belongs to, or `null` when the
                 code is unknown.
 
+    OpenRequest:
+      type: object
+      description: |
+        Everything the client contributes to an open attempt. All fields are
+        optional; a request without a body is an open without evidence.
+      properties:
+        otp:
+          type: string
+          nullable: true
+          description: |
+            One-time password, for providers and locks that ask for one.
+        evidence:
+          type: array
+          description: |
+            Evidence for the validation rules of the access point. Each entry is
+            matched to a rule by its `type`; at most one entry per type counts
+            and everything else - surplus entries of a type, types this access
+            point does not ask for - is ignored rather than rejected.
+          items:
+            $ref: "#/components/schemas/AccessEvidence"
+        channel:
+          type: string
+          nullable: true
+          description: |
+            How the client says it reached the door - `qrScan` or `remote` for
+            the platform's own clients. Reported by the client and stored in the
+            audit as reported: it is diagnostic context, never part of the access
+            decision, and is therefore deliberately neither validated against
+            those two values nor interpreted. Omit it or send `null` when it is
+            unknown.
+          example: qrScan
+
+    AccessEvidence:
+      type: object
+      description: |
+        One piece of evidence, identified by the rule type it answers. The
+        remaining fields depend on that type.
+      properties:
+        type:
+          type: string
+          enum: [qrScan]
+          description: The validation rule this evidence answers
+        scanCode:
+          type: string
+          description: |
+            `type: qrScan` only - the code read from the QR code on the door.
+            Valid only while it is the access point's current code; rotating the
+            code invalidates every sticker carrying the old one.
+      required:
+        - type
+
     OpenSuccess:
       type: object
       description: The access point was opened
@@ -316,6 +381,13 @@ components:
                 relevant first), taken from the blocking reason vocabulary
                 shared with the access audit. Empty when the user may not
                 access the booking at all, as ownership has no own reason.
+
+                The evidence reasons: `evidence_missing` - a rule asked for
+                evidence the client did not send; `evidence_invalid` - evidence
+                was sent but does not hold, e.g. a scan code that was rotated
+                out; `evidence_rule_unavailable` - the rule cannot be evaluated
+                on this access point, which blocks the door instead of being
+                skipped and needs an administrator.
               items:
                 type: string
                 enum:
@@ -327,7 +399,10 @@ components:
                   - not_provisioned
                   - locker_not_ready
                   - no_remote_access
-              example: ["payment_required"]
+                  - evidence_rule_unavailable
+                  - evidence_missing
+                  - evidence_invalid
+              example: ["evidence_missing"]
 
     OpenResult:
       type: object

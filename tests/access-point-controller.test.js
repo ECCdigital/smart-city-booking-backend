@@ -5,6 +5,7 @@ const sinon = require("sinon");
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
 const { RolePermission } = require("../src/commons/entities/role/role");
 const { ValidationError } = require("../src/errors/ValidationError");
+const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
 
 function createAccessPoint(overrides = {}) {
   return AccessPoint.create({
@@ -326,6 +327,39 @@ describe("AccessPointController", () => {
         expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
         expect(storeAccessPoint.called).to.be.false;
       });
+
+      it("accepts a rule together with the field it needs", async () => {
+        request.body = {
+          provider: "nuki",
+          location: { display_address: "Rathaus" },
+          validationRules: [{ type: TEST_GEO_RULE }],
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      it("refuses a rule whose precondition the access point does not meet", async () => {
+        request.body = {
+          provider: "nuki",
+          validationRules: [{ type: TEST_GEO_RULE }],
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors).to.deep.equal([
+          {
+            field: "validationRules",
+            code: "precondition_failed",
+            params: { ruleType: TEST_GEO_RULE, requires: ["location"] },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
     });
 
     describe("update", () => {
@@ -367,6 +401,37 @@ describe("AccessPointController", () => {
           externalId: "lock-42",
         });
         expect(response.status.calledWith(200)).to.be.true;
+      });
+
+      it("checks the preconditions against the state the update would leave behind", async () => {
+        request.body = {
+          id: "point-1",
+          location: { display_address: "Rathaus" },
+          validationRules: [{ type: TEST_GEO_RULE }],
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      it("refuses an update that leaves a rule without its precondition", async () => {
+        existing = createAccessPoint({
+          location: { display_address: "Rathaus" },
+          validationRules: [{ type: TEST_GEO_RULE }],
+        });
+        AccessPointManager.getAccessPoint.resolves(existing);
+        request.body = { id: "point-1", location: null };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
+        expect(next.firstCall.args[0].errors[0]).to.deep.include({
+          field: "validationRules",
+          code: "precondition_failed",
+        });
+        expect(storeAccessPoint.called).to.be.false;
       });
 
       it("keeps the scan code when the lock is replaced", async () => {

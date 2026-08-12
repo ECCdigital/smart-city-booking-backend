@@ -18,11 +18,22 @@ class AccessController {
    * The eligibility decision belongs to the service, which audits refusals.
    * This renders its outcome: refusals are soft failures on HTTP 200 so the
    * client can show the reasons.
+   *
+   * The body may carry `evidence` for the access point's validation rules and
+   * a `channel` saying how the client got here. The channel is passed on as
+   * reported - it is diagnostic context for the audit, not something the
+   * server acts on - while evidence of the wrong shape is dropped, so a
+   * malformed body reads as "no evidence sent" rather than an error.
    */
   static async open(request, response) {
     const { tenant, accessPointId } = request.params;
     const { bookingId } = request.query;
     const otp = request.body?.otp || request.query?.otp || null;
+    const evidence = Array.isArray(request.body?.evidence)
+      ? request.body.evidence
+      : [];
+    const channel =
+      typeof request.body?.channel === "string" ? request.body.channel : null;
     const user = request.user;
 
     try {
@@ -36,7 +47,7 @@ class AccessController {
         bookingId,
         accessPointId,
         user.id,
-        { otp, hasManagePermission },
+        { otp, hasManagePermission, evidence, channel },
       );
 
       if (!outcome.success) {

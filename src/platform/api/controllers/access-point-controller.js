@@ -7,8 +7,10 @@ const {
 } = require("../../../commons/entities/access/access-point");
 const AccessQrService = require("../../../commons/services/access/access-qr-service");
 const AccessLocationService = require("../../../commons/services/access/access-location-service");
+const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
+const { ValidationError } = require("../../../errors/ValidationError");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("access-point-controller.js");
@@ -125,6 +127,8 @@ class AccessPointController {
       tenantId: tenantId,
     });
 
+    AccessPointController._assertRulePreconditions(accessPoint);
+
     const createdAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
       tenantId,
@@ -151,6 +155,8 @@ class AccessPointController {
       accessPoint,
       AccessPointController._writableFields(request.body),
     );
+
+    AccessPointController._assertRulePreconditions(accessPoint);
 
     const updatedAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
@@ -335,6 +341,34 @@ class AccessPointController {
     } catch (err) {
       return next(err);
     }
+  }
+
+  /**
+   * Refuse validation rules the access point cannot carry, e.g. a geo rule on a
+   * door without a location. Checked against the state the write would leave
+   * behind, so a rule and the field it needs can be submitted together.
+   *
+   * This is the first of the two places the preconditions are enforced: the
+   * second is the open path, which fails closed if the state drifts away from
+   * them later. A rule is never silently skipped.
+   *
+   * @param {AccessPoint} accessPoint The access point as it would be stored
+   * @throws {ValidationError} If a configured rule lacks a precondition
+   */
+  static _assertRulePreconditions(accessPoint) {
+    const unmet = AccessEvidenceService.findUnmetPreconditions(accessPoint);
+
+    if (unmet.length === 0) {
+      return;
+    }
+
+    throw new ValidationError(
+      unmet.map(({ ruleType, requires }) => ({
+        field: "validationRules",
+        code: "precondition_failed",
+        params: { ruleType: ruleType, requires: requires },
+      })),
+    );
   }
 
   /**

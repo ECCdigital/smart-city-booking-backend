@@ -4,10 +4,11 @@ const sinon = require("sinon");
 const AccessService = require("../src/commons/services/access/access-service");
 const {
   ACCESS_BLOCKING_REASONS,
-} = require("../src/commons/services/access/access-service");
+} = require("../src/commons/services/access/access-blocking-reasons");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const PermissionsService = require("../src/commons/services/permission-service");
 const {
   registerAccessProvider,
@@ -26,6 +27,18 @@ let providerOpen = async () => ({});
 class TestOpenProvider {
   async open(accessPoint, context) {
     return providerOpen(accessPoint, context);
+  }
+
+  async close() {
+    return { closed: true };
+  }
+
+  async unlatch() {
+    return { unlatched: true };
+  }
+
+  async getStatus() {
+    return { state: "locked" };
   }
 }
 
@@ -48,7 +61,26 @@ function createBooking(overrides = {}) {
   });
 }
 
-function stubResolvedDoor(sandbox, booking, { accessPoint = {} } = {}) {
+function stubResolvedDoor(
+  sandbox,
+  booking,
+  { accessPoint = {}, entity = {} } = {},
+) {
+  sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
+    entity && {
+      id: "door-1",
+      tenantId: "tenant-1",
+      type: "door",
+      provider: TEST_PROVIDER,
+      externalId: "lock-1",
+      label: "Main door",
+      mode: AccessPointMode.REMOTE,
+      scanCode: "current-code",
+      previousScanCodes: ["retired-code"],
+      validationRules: [],
+      ...entity,
+    },
+  );
   sandbox.stub(BookingManager, "getBooking").resolves(booking);
   sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
     booking,
@@ -73,6 +105,34 @@ function stubResolvedDoor(sandbox, booking, { accessPoint = {} } = {}) {
           timeEnd: booking.timeEnd,
           accessBuffer: { beforeMs: 0, afterMs: 0 },
           isProvisioned: true,
+          booking,
+        },
+      },
+    ],
+  });
+}
+
+function stubResolvedLocker(sandbox, booking) {
+  sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+  sandbox.stub(BookingManager, "getBooking").resolves(booking);
+  sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
+    booking,
+    doors: [],
+    lockers: [
+      {
+        accessPoint: {
+          id: "box-7",
+          tenant: "tenant-1",
+          type: "locker",
+          provider: TEST_PROVIDER,
+          mode: AccessPointMode.REMOTE,
+        },
+        bookingContext: {
+          tenant: "tenant-1",
+          bookingId: booking.id,
+          timeBegin: booking.timeBegin,
+          timeEnd: booking.timeEnd,
+          accessBuffer: { beforeMs: 0, afterMs: 0 },
           booking,
         },
       },
@@ -283,6 +343,223 @@ describe("AccessService.open", () => {
   });
 });
 
+describe("AccessService.open with validation rules", () => {
+  let sandbox;
+
+  const QR_RULE = { validationRules: [{ type: "qrScan" }] };
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    providerOpen = sandbox.stub().resolves({ processId: 42 });
+    sandbox.stub(AccessLogService, "log").resolves();
+    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  function open(options) {
+    return AccessService.open(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "user-1",
+      options,
+    );
+  }
+
+  it("opens when the presented code is the door's current one", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+
+    const outcome = await open({
+      evidence: [{ type: "qrScan", scanCode: "current-code" }],
+    });
+
+    expect(outcome.success).to.be.true;
+    expect(providerOpen.calledOnce).to.be.true;
+
+    const logged = AccessLogService.log.firstCall.args[0];
+    expect(logged).to.include({ result: "success", evidenceBypassed: false });
+    expect(logged.payload.validatedEvidence).to.deep.equal(["qrScan"]);
+  });
+
+  it("denies a remote open without evidence at a door that requires a scan", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+
+    const outcome = await open({ channel: "remote" });
+
+    expect(outcome).to.deep.equal({
+      success: false,
+      blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING],
+    });
+    expect(providerOpen.called).to.be.false;
+
+    const logged = AccessLogService.log.firstCall.args[0];
+    expect(logged).to.include({ action: "open", result: "denied" });
+    expect(logged.blockingReasons).to.deep.equal([
+      ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING,
+    ]);
+  });
+
+  it("denies a code that was rotated out", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+
+    const outcome = await open({
+      evidence: [{ type: "qrScan", scanCode: "retired-code" }],
+    });
+
+    expect(outcome.blockingReasons).to.deep.equal([
+      ACCESS_BLOCKING_REASONS.EVIDENCE_INVALID,
+    ]);
+    expect(providerOpen.called).to.be.false;
+  });
+
+  it("fails closed when a configured rule cannot be evaluated", async () => {
+    stubResolvedDoor(sandbox, createBooking(), {
+      entity: { validationRules: [{ type: "retiredRule" }] },
+    });
+
+    const outcome = await open({});
+
+    expect(outcome.blockingReasons).to.deep.equal([
+      ACCESS_BLOCKING_REASONS.EVIDENCE_RULE_UNAVAILABLE,
+    ]);
+    expect(providerOpen.called).to.be.false;
+  });
+
+  it("lets a user with the manage-bookings permission skip the rules and audits it", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+
+    const outcome = await open({ hasManagePermission: true });
+
+    expect(outcome.success).to.be.true;
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      result: "success",
+      evidenceBypassed: true,
+    });
+  });
+
+  it("does not report a bypass when the door required no evidence", async () => {
+    stubResolvedDoor(sandbox, createBooking());
+
+    await open({ hasManagePermission: true });
+
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      evidenceBypassed: false,
+    });
+  });
+
+  it("checks the booking before it asks for evidence", async () => {
+    stubResolvedDoor(sandbox, createBooking({ isCommitted: false }), {
+      entity: QR_RULE,
+    });
+
+    const outcome = await open({});
+
+    expect(outcome.blockingReasons).to.deep.equal([
+      ACCESS_BLOCKING_REASONS.NOT_COMMITTED,
+    ]);
+  });
+
+  it("audits the reported channel unchanged, on success and on denial", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+
+    await open({
+      channel: "qrScan",
+      evidence: [{ type: "qrScan", scanCode: "current-code" }],
+    });
+    await open({ channel: "remote" });
+
+    expect(AccessLogService.log.firstCall.args[0].channel).to.equal("qrScan");
+    expect(AccessLogService.log.secondCall.args[0].channel).to.equal("remote");
+  });
+
+  it("audits no channel when the client reported none", async () => {
+    stubResolvedDoor(sandbox, createBooking());
+
+    await open({});
+
+    expect(AccessLogService.log.firstCall.args[0].channel).to.equal(null);
+  });
+
+  it("fails closed when the door disappeared while it was being opened", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: null });
+
+    const outcome = await open({});
+
+    expect(outcome).to.deep.equal({
+      success: false,
+      blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_RULE_UNAVAILABLE],
+    });
+    expect(providerOpen.called).to.be.false;
+  });
+
+  it("asks for no evidence at a locker, which carries no rules", async () => {
+    const booking = createBooking();
+    stubResolvedLocker(sandbox, booking);
+
+    const outcome = await AccessService.open(
+      "tenant-1",
+      "booking-1",
+      "box-7",
+      "user-1",
+    );
+
+    expect(outcome.success).to.be.true;
+    expect(AccessPointManager.getAccessPoint.called).to.be.false;
+  });
+});
+
+describe("AccessService close, unlatch and status with validation rules", () => {
+  let sandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    sandbox.stub(AccessLogService, "log").resolves();
+    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+    stubResolvedDoor(sandbox, createBooking(), {
+      entity: { validationRules: [{ type: "qrScan" }] },
+    });
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("closes without evidence", async () => {
+    const result = await AccessService.close(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "user-1",
+    );
+
+    expect(result).to.deep.equal({ closed: true });
+  });
+
+  it("unlatches without evidence", async () => {
+    const result = await AccessService.unlatch(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "user-1",
+    );
+
+    expect(result).to.deep.equal({ unlatched: true });
+  });
+
+  it("reports the status without evidence", async () => {
+    const status = await AccessService.getStatus(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+    );
+
+    expect(status.locked).to.be.true;
+  });
+});
+
 describe("AccessController.open", () => {
   let sandbox;
   let request;
@@ -350,6 +627,61 @@ describe("AccessController.open", () => {
 
     expect(open.firstCall.args[4]).to.deep.include({
       hasManagePermission: true,
+    });
+  });
+
+  it("hands the evidence and the reported channel to the service", async () => {
+    const open = sandbox
+      .stub(AccessService, "open")
+      .resolves({ success: true, data: {} });
+    request.body = {
+      evidence: [{ type: "qrScan", scanCode: "current-code" }],
+      channel: "qrScan",
+    };
+
+    await AccessController.open(request, response);
+
+    expect(open.firstCall.args[4]).to.deep.include({
+      evidence: [{ type: "qrScan", scanCode: "current-code" }],
+      channel: "qrScan",
+    });
+  });
+
+  it("treats a body without evidence as no evidence at all", async () => {
+    const open = sandbox
+      .stub(AccessService, "open")
+      .resolves({ success: true, data: {} });
+
+    await AccessController.open(request, response);
+
+    expect(open.firstCall.args[4]).to.deep.include({
+      evidence: [],
+      channel: null,
+    });
+  });
+
+  it("passes on a channel it does not know rather than judging it", async () => {
+    const open = sandbox
+      .stub(AccessService, "open")
+      .resolves({ success: true, data: {} });
+    request.body = { channel: "kiosk" };
+
+    await AccessController.open(request, response);
+
+    expect(open.firstCall.args[4]).to.deep.include({ channel: "kiosk" });
+  });
+
+  it("drops a channel and an evidence list of the wrong shape", async () => {
+    const open = sandbox
+      .stub(AccessService, "open")
+      .resolves({ success: true, data: {} });
+    request.body = { evidence: "not-a-list", channel: { spoofed: true } };
+
+    await AccessController.open(request, response);
+
+    expect(open.firstCall.args[4]).to.deep.include({
+      evidence: [],
+      channel: null,
     });
   });
 

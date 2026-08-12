@@ -20,6 +20,8 @@ class AccessLogService {
       actor: entry.actor || { source: "system" },
       result: entry.result || "pending",
       blockingReasons: entry.blockingReasons || [],
+      channel: entry.channel ?? null,
+      evidenceBypassed: entry.evidenceBypassed === true,
       payload: entry.payload || {},
       errorCode: entry.errorCode || null,
       errorMessage: entry.errorMessage || null,

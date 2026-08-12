@@ -46,6 +46,12 @@
       explicitly empty list: omitting it on create requires a QR scan,
       submitting `[]` means no evidence is required.
 
+      A validation rule may require other fields of the access point (a geo
+      rule would need `location`). Those preconditions are checked against the
+      state this request would leave behind, so a rule and the field it needs
+      can be submitted together; an unmet precondition is answered with a
+      `precondition_failed` validation error.
+
       An `id` the tenant does not know is answered with 404 instead of being
       created, so ids always come from the server.
     security:
@@ -458,7 +464,10 @@ components:
 
     AccessPointValidationRule:
       type: object
-      description: An evidence requirement of an access point
+      description: |
+        An evidence requirement of an access point. `qrScan` requires the person
+        opening the door to present the code printed on it and has no
+        precondition of its own.
       properties:
         type:
           type: string
@@ -483,13 +492,19 @@ components:
           type: array
           items:
             type: object
+            description: |
+              One rejected field. `code: "precondition_failed"` on
+              `validationRules` means a rule cannot be used on this access
+              point; `params` then names the rule (`ruleType`) and the fields it
+              needs (`requires`).
             properties:
               field:
                 type: string
-                example: mode
+                example: validationRules
               code:
                 type: string
-                example: invalid_enum
+                example: precondition_failed
               params:
                 type: object
                 additionalProperties: true
+                example: { ruleType: geoFence, requires: [location] }

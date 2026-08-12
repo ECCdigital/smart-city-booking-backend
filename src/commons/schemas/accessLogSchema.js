@@ -48,6 +48,20 @@ const accessLogSchemaDefinition = {
     default: "pending",
   },
   blockingReasons: { type: [String], default: [] },
+  channel: {
+    // How the client says it reached the door (`qrScan`, `remote`). Reported by
+    // the client and stored as reported: it is diagnostic context for reading
+    // the audit, never part of the access decision.
+    type: String,
+    default: null,
+  },
+  evidenceBypassed: {
+    // True only where it means something: the access point did require
+    // evidence and a user with the manage-bookings permission was let through
+    // without it.
+    type: Boolean,
+    default: false,
+  },
   payload: { type: Object, default: {} },
   errorCode: { type: String, default: null },
   errorMessage: { type: String, default: null },

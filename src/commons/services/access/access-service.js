@@ -6,32 +6,15 @@ const AccessPointManager = require("../../data-managers/access-point-manager");
 const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const AccessLogService = require("./access-log-service");
+const AccessEvidenceService = require("./access-evidence-service");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { RolePermission } = require("../../entities/role/role");
 const MailController = require("../../mail-service/mail-controller");
 const { ForbiddenError } = require("../../../errors/BaseError");
-
-const ACCESS_BLOCKING_REASONS = Object.freeze({
-  REJECTED: "rejected",
-  NOT_COMMITTED: "not_committed",
-  PAYMENT_REQUIRED: "payment_required",
-  AUTHORIZATION_REVOKED: "authorization_revoked",
-  OUTSIDE_ACCESS_WINDOW: "outside_access_window",
-  NOT_PROVISIONED: "not_provisioned",
-  LOCKER_NOT_READY: "locker_not_ready",
-  NO_REMOTE_ACCESS: "no_remote_access",
-});
-
-const ACCESS_BLOCKING_REASON_PRIORITY = Object.freeze([
-  ACCESS_BLOCKING_REASONS.REJECTED,
-  ACCESS_BLOCKING_REASONS.NOT_COMMITTED,
-  ACCESS_BLOCKING_REASONS.PAYMENT_REQUIRED,
-  ACCESS_BLOCKING_REASONS.AUTHORIZATION_REVOKED,
-  ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW,
-  ACCESS_BLOCKING_REASONS.NOT_PROVISIONED,
-  ACCESS_BLOCKING_REASONS.LOCKER_NOT_READY,
-  ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
-]);
+const {
+  ACCESS_BLOCKING_REASONS,
+  prioritizeBlockingReasons,
+} = require("./access-blocking-reasons");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -42,7 +25,10 @@ class AccessService {
   /**
    * Opens an access point linked to a booking.
    *
-   * Owns the eligibility decision: a refused attempt is audited
+   * Owns the eligibility decision, in two layers: the booking checks
+   * (committed, paid, in window, ownership) apply to everyone, and on top of
+   * them the access point's own validation rules demand evidence that the
+   * person is really at the door. A refused attempt is audited
    * (`result: "denied"`) and reported as a soft failure instead of throwing,
    * so callers can render the reasons. Only a booking or access point that
    * cannot be resolved at all (nothing to audit against) and provider errors
@@ -54,7 +40,12 @@ class AccessService {
    * @param {string} userId
    * @param {Object} [options]
    * @param {string|null} [options.otp=null]
-   * @param {boolean} [options.hasManagePermission=false]
+   * @param {boolean} [options.hasManagePermission=false] Replaces booking
+   *   ownership and exempts the user from the evidence rules
+   * @param {Object[]} [options.evidence=[]] Evidence the client sent, e.g. a
+   *   scanned code
+   * @param {string|null} [options.channel=null] How the client says it reached
+   *   the door. Recorded as reported, never part of the decision.
    * @returns {Promise<{ success: true, data: Object }
    *   | { success: false, blockingReasons: string[] }>} The open result, or the
    *   prioritized reasons for the refusal. The reasons are empty when the user
@@ -65,6 +56,7 @@ class AccessService {
   static async open(tenant, bookingId, accessPointId, userId, options = {}) {
     const resolved = await this._resolve(tenant, bookingId, accessPointId);
     const { accessPoint, bookingContext } = resolved;
+    const channel = options.channel ?? null;
 
     const eligibility = this._evaluateResolvedEligibility(resolved, {
       userId,
@@ -72,17 +64,30 @@ class AccessService {
     });
 
     if (!eligibility.operableAccessPointIds.includes(String(accessPointId))) {
-      await this._log({
-        tenantId: tenant,
+      return this._denyOpen({
+        tenant,
         userId,
         accessPoint,
         bookingId,
-        action: "open",
-        result: "denied",
         blockingReasons: eligibility.blockingReasons,
+        channel,
       });
+    }
 
-      return { success: false, blockingReasons: eligibility.blockingReasons };
+    const evidenceOutcome = await this._evaluateEvidence(tenant, accessPoint, {
+      evidence: options.evidence,
+      bypass: options.hasManagePermission === true,
+    });
+
+    if (!evidenceOutcome.satisfied) {
+      return this._denyOpen({
+        tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        blockingReasons: evidenceOutcome.blockingReasons,
+        channel,
+      });
     }
 
     try {
@@ -101,7 +106,12 @@ class AccessService {
         bookingId,
         action: "open",
         result: "success",
-        payload: result,
+        payload: {
+          ...result,
+          validatedEvidence: evidenceOutcome.validatedEvidence,
+        },
+        channel,
+        evidenceBypassed: evidenceOutcome.bypassed,
       });
       return { success: true, data: result };
     } catch (err) {
@@ -113,9 +123,91 @@ class AccessService {
         action: "open",
         result: "failure",
         errorMessage: err.message,
+        channel,
+        evidenceBypassed: evidenceOutcome.bypassed,
       });
       throw err;
     }
+  }
+
+  /**
+   * @private
+   * Records a refused open attempt and turns it into the soft failure the
+   * caller reports. Both layers of the decision refuse the same way, so the
+   * audit entry is written in one place.
+   *
+   * @param {Object} refusal
+   * @param {string} refusal.tenant Tenant ID
+   * @param {string} refusal.userId Acting user
+   * @param {Object} refusal.accessPoint The access point that stays shut
+   * @param {string} refusal.bookingId Booking the attempt was made for
+   * @param {string[]} refusal.blockingReasons Prioritized reasons
+   * @param {string|null} refusal.channel Channel as reported by the client
+   * @returns {Promise<{ success: false, blockingReasons: string[] }>} The refusal
+   */
+  static async _denyOpen({
+    tenant,
+    userId,
+    accessPoint,
+    bookingId,
+    blockingReasons,
+    channel,
+  }) {
+    await this._log({
+      tenantId: tenant,
+      userId,
+      accessPoint,
+      bookingId,
+      action: "open",
+      result: "denied",
+      blockingReasons,
+      channel,
+    });
+
+    return { success: false, blockingReasons };
+  }
+
+  /**
+   * @private
+   * Checks the evidence requirements of the access point being opened.
+   *
+   * The requirements live on the stored access point, which is read again here:
+   * the copy resolved through the bookable deliberately carries neither the
+   * rules nor the scan code they are checked against.
+   *
+   * Lockers are not entities of the `accesspoints` collection and have no rules
+   * to carry. A door that has one, on the other hand, must be readable - if it
+   * disappeared while this request was running, what it demanded is unknown and
+   * the attempt fails closed rather than opening a door whose rules nobody can
+   * see.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} accessPoint The resolved access point being opened
+   * @param {Object} opts
+   * @param {Object[]} [opts.evidence] Evidence the client sent
+   * @param {boolean} opts.bypass Whether the user may skip the rules
+   * @returns {Promise<Object>} Outcome as of {@link AccessEvidenceService.evaluate}
+   */
+  static async _evaluateEvidence(tenant, accessPoint, { evidence, bypass }) {
+    if (accessPoint.type === "locker") {
+      return AccessEvidenceService.evaluate(null, evidence, { bypass });
+    }
+
+    const storedAccessPoint = await AccessPointManager.getAccessPoint(
+      accessPoint.id,
+      tenant,
+    );
+
+    if (!storedAccessPoint) {
+      logger.warn(
+        `${tenant} -- access point ${accessPoint.id} vanished while it was being opened, failing closed`,
+      );
+      return AccessEvidenceService.ruleUnavailable();
+    }
+
+    return AccessEvidenceService.evaluate(storedAccessPoint, evidence, {
+      bypass,
+    });
   }
 
   /**
@@ -771,7 +863,7 @@ class AccessService {
       blockingReasons.push(ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS);
     }
 
-    const prioritized = this._prioritizeBlockingReasons(blockingReasons);
+    const prioritized = prioritizeBlockingReasons(blockingReasons);
 
     return {
       canView,
@@ -1865,15 +1957,6 @@ class AccessService {
     };
   }
 
-  static _prioritizeBlockingReasons(reasons) {
-    const unique = [...new Set(reasons)];
-    return unique.sort(
-      (a, b) =>
-        ACCESS_BLOCKING_REASON_PRIORITY.indexOf(a) -
-        ACCESS_BLOCKING_REASON_PRIORITY.indexOf(b),
-    );
-  }
-
   static async _resolveManagePermissionByTenant(userId, tenantIds) {
     const entries = await Promise.all(
       tenantIds.map(async (tenantId) => [
@@ -1968,6 +2051,8 @@ class AccessService {
     payload = {},
     errorMessage = null,
     actor = null,
+    channel = null,
+    evidenceBypassed = false,
   }) {
     logger.info(
       `${tenantId} -- ${action} ${result} on access-point ${accessPoint.id} (booking ${bookingId})`,
@@ -1985,6 +2070,8 @@ class AccessService {
         actor: actor || { userId, source: userId ? "user" : "system" },
         result,
         blockingReasons,
+        channel,
+        evidenceBypassed,
         payload,
         errorMessage,
       });
@@ -1995,4 +2082,3 @@ class AccessService {
 }
 
 module.exports = AccessService;
-module.exports.ACCESS_BLOCKING_REASONS = ACCESS_BLOCKING_REASONS;

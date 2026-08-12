@@ -1,3 +1,10 @@
+// Which validation rule types exist is owned by the rules themselves, so a rule
+// an administrator may save is always one this server can also evaluate.
+const {
+  VALIDATION_RULE_TYPES,
+  isKnownValidationRuleType,
+} = require("../services/access/access-validation-rules");
+
 const AccessPointType = Object.freeze({
   LOCKER: "locker",
   DOOR: "door",
@@ -9,13 +16,8 @@ const AccessPointMode = Object.freeze({
   BOTH: "both",
 });
 
-const VALIDATION_RULE_TYPES = Object.freeze({
-  QR_SCAN: "qrScan",
-});
-
 const ACCESS_POINT_TYPES = Object.values(AccessPointType);
 const ACCESS_POINT_MODES = Object.values(AccessPointMode);
-const RULE_TYPES = Object.values(VALIDATION_RULE_TYPES);
 
 function oneOf(allowedValues) {
   return (value) => (allowedValues.includes(value) ? true : "enum");
@@ -37,7 +39,7 @@ function validateValidationRules(value) {
     return "type_array";
   }
   const allRulesKnown = value.every(
-    (rule) => isPlainObject(rule) && RULE_TYPES.includes(rule.type),
+    (rule) => isPlainObject(rule) && isKnownValidationRuleType(rule.type),
   );
   return allRulesKnown ? true : "enum";
 }
