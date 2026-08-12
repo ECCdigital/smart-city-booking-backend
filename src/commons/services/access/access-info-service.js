@@ -10,6 +10,7 @@ require("./clients");
 require("./providers/register-access-providers");
 
 const APP_TYPE = "access";
+const LIST_ACCESS_POINTS_CAPABILITY = "listAccessPoints";
 
 class AccessInfoService {
   /**
@@ -39,6 +40,59 @@ class AccessInfoService {
   static async getAccessPoints(tenantId, provider) {
     const accessProvider = getAccessProvider(provider);
     return accessProvider.listAccessPoints(tenantId);
+  }
+
+  /**
+   * The access modes the provider reports for an access point - what the
+   * hardware can do, as opposed to the `mode` an administrator configured
+   * for it.
+   *
+   * The provider's access point is resolved by `externalId` against what the
+   * provider lists for the tenant, matched against the `id` of a listed entry
+   * as well as its `externalId`: providers name their access points either
+   * way. The listing is used rather than the provider's own
+   * `getSupportedModes` capability - which asks about a single access point
+   * and is what the provisioning path uses - because an access point the
+   * provider does not know has to come back as "no answer" here, not as the
+   * error a direct lookup would raise. Same question and same argument order
+   * as that capability, so the two differ only in whom they ask.
+   *
+   * Everything unknown is answered with `null` rather than an empty list, so a
+   * caller can tell "this access point cannot do that" from "the provider does
+   * not say". A provider that cannot list its access points, an access point
+   * without an `externalId`, one the provider does not list and one listed
+   * without `supportedModes` all end up here.
+   *
+   * @param {Object} accessPoint The access point, read for `provider` and
+   *   `externalId`
+   * @param {string} tenantId Tenant the access point belongs to
+   * @returns {Promise<string[]|null>} The modes the provider reports, or
+   *   `null` when it reports none
+   */
+  static async getSupportedModes(accessPoint, tenantId) {
+    const capabilities = getAccessProviderCapabilities(accessPoint.provider);
+
+    if (
+      !capabilities.includes(LIST_ACCESS_POINTS_CAPABILITY) ||
+      !accessPoint.externalId
+    ) {
+      return null;
+    }
+
+    const providerAccessPoints = await AccessInfoService.getAccessPoints(
+      tenantId,
+      accessPoint.provider,
+    );
+    const externalId = String(accessPoint.externalId);
+    const providerAccessPoint = (providerAccessPoints || []).find(
+      (candidate) =>
+        String(candidate.id) === externalId ||
+        String(candidate.externalId) === externalId,
+    );
+
+    return Array.isArray(providerAccessPoint?.supportedModes)
+      ? providerAccessPoint.supportedModes
+      : null;
   }
 
   static async testConnection(provider, config) {

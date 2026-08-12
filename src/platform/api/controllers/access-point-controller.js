@@ -8,6 +8,7 @@ const {
 const AccessQrService = require("../../../commons/services/access/access-qr-service");
 const AccessLocationService = require("../../../commons/services/access/access-location-service");
 const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
+const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
 const { ValidationError } = require("../../../errors/ValidationError");
@@ -128,6 +129,7 @@ class AccessPointController {
     });
 
     AccessPointController._assertRulePreconditions(accessPoint);
+    await AccessPointController._assertModeSupported(accessPoint, tenantId);
 
     const createdAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
@@ -157,6 +159,7 @@ class AccessPointController {
     );
 
     AccessPointController._assertRulePreconditions(accessPoint);
+    await AccessPointController._assertModeSupported(accessPoint, tenantId);
 
     const updatedAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
@@ -369,6 +372,40 @@ class AccessPointController {
         params: { ruleType: ruleType, requires: requires },
       })),
     );
+  }
+
+  /**
+   * Refuse a `mode` the hardware cannot do, e.g. `remote` on an access point
+   * that only knows authorizations. This is where the mode is written, so this
+   * is where an administrator is told - rather than at the door, where the same
+   * mismatch only surfaces as a booking that cannot be provisioned.
+   *
+   * Checked against the state the write would leave behind, so pointing an
+   * access point at other hardware is judged by the new one. A provider that
+   * reports no `supportedModes` is taken at its word and lets the mode
+   * through: an unknown capability is not a missing one.
+   *
+   * @param {AccessPoint} accessPoint The access point as it would be stored
+   * @param {string} tenantId Tenant the access point belongs to
+   * @throws {ValidationError} If the lock does not support the mode
+   */
+  static async _assertModeSupported(accessPoint, tenantId) {
+    const supportedModes = await AccessInfoService.getSupportedModes(
+      accessPoint,
+      tenantId,
+    );
+
+    if (!supportedModes || supportedModes.includes(accessPoint.mode)) {
+      return;
+    }
+
+    throw new ValidationError([
+      {
+        field: "mode",
+        code: "unsupported_mode",
+        params: { mode: accessPoint.mode, supportedModes: supportedModes },
+      },
+    ]);
   }
 
   /**

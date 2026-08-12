@@ -24,6 +24,7 @@ describe("AccessPointController", () => {
   let AccessPointManager;
   let AccessQrService;
   let AccessLocationService;
+  let AccessInfoService;
   let BookableManager;
   let PermissionService;
   let request;
@@ -46,6 +47,7 @@ describe("AccessPointController", () => {
     AccessPointManager = require("../src/commons/data-managers/access-point-manager");
     AccessQrService = require("../src/commons/services/access/access-qr-service");
     AccessLocationService = require("../src/commons/services/access/access-location-service");
+    AccessInfoService = require("../src/commons/services/access/access-info-service");
     BookableManager =
       require("../src/commons/data-managers/bookable-manager").BookableManager;
     PermissionService = require("../src/commons/services/permission-service");
@@ -191,11 +193,15 @@ describe("AccessPointController", () => {
 
   describe("storeAccessPoint", () => {
     let storeAccessPoint;
+    let getSupportedModes;
 
     beforeEach(() => {
       storeAccessPoint = sandbox
         .stub(AccessPointManager, "storeAccessPoint")
         .callsFake(async (accessPoint) => accessPoint);
+      getSupportedModes = sandbox
+        .stub(AccessInfoService, "getSupportedModes")
+        .resolves(null);
     });
 
     it("answers 403 for a user who is not a tenant owner", async () => {
@@ -490,6 +496,146 @@ describe("AccessPointController", () => {
         expect(sent.label).to.equal("Neuer Name");
         expect(sent).to.not.have.property("scanCode");
         expect(sent).to.not.have.property("previousScanCodes");
+      });
+    });
+
+    describe("mode support", () => {
+      beforeEach(() => {
+        allowWrite({ tenantOwner: true });
+      });
+
+      it("refuses a mode the provider does not report as supported", async () => {
+        getSupportedModes.resolves(["authorization"]);
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          mode: "remote",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors).to.deep.equal([
+          {
+            field: "mode",
+            code: "unsupported_mode",
+            params: { mode: "remote", supportedModes: ["authorization"] },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("accepts a mode the provider reports as supported", async () => {
+        getSupportedModes.resolves(["remote", "authorization", "both"]);
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          mode: "remote",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      it("does not refuse when the provider reports no supported modes", async () => {
+        getSupportedModes.resolves(null);
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          mode: "remote",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      it("asks the provider about the access point the create would leave behind", async () => {
+        request.body = {
+          provider: "salto-ks",
+          externalId: "lock-9",
+          mode: "both",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const [accessPoint, tenantId] = getSupportedModes.firstCall.args;
+        expect(tenantId).to.equal("tenant-1");
+        expect(accessPoint).to.include({
+          provider: "salto-ks",
+          externalId: "lock-9",
+          mode: "both",
+        });
+      });
+
+      it("checks the new hardware when provider and externalId change", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint({ mode: "remote" }));
+        getSupportedModes.resolves(["authorization"]);
+        request.body = {
+          id: "point-1",
+          provider: "salto-ks",
+          externalId: "lock-42",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const [accessPoint, tenantId] = getSupportedModes.firstCall.args;
+        expect(tenantId).to.equal("tenant-1");
+        expect(accessPoint).to.include({
+          provider: "salto-ks",
+          externalId: "lock-42",
+          mode: "remote",
+        });
+        expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("keeps the mode when the new hardware supports it", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint({ mode: "remote" }));
+        getSupportedModes.resolves(["remote", "authorization", "both"]);
+        request.body = {
+          id: "point-1",
+          provider: "salto-ks",
+          externalId: "lock-42",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [updated] = storeAccessPoint.firstCall.args;
+        expect(updated.mode).to.equal("remote");
+      });
+
+      it("does not ask the provider about a body it already refused", async () => {
+        request.body = {
+          provider: "nuki",
+          validationRules: [{ type: TEST_GEO_RULE }],
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
+        expect(getSupportedModes.called).to.be.false;
+      });
+
+      it("hands provider errors to the error handler", async () => {
+        const failure = new Error("Nuki API Error");
+        getSupportedModes.rejects(failure);
+        request.body = { provider: "nuki", externalId: "lock-1" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.calledOnceWithExactly(failure)).to.be.true;
+        expect(storeAccessPoint.called).to.be.false;
       });
     });
 

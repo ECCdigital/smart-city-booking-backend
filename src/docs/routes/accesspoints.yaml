@@ -52,6 +52,15 @@
       can be submitted together; an unmet precondition is answered with a
       `precondition_failed` validation error.
 
+      `mode` is checked against what the provider reports for the access point
+      behind `provider` and `externalId`: hardware without a remote capability
+      cannot be put into `remote`, which is answered with an `unsupported_mode`
+      validation error carrying the offending `mode` and the `supportedModes`
+      the provider reports. Like the preconditions, this is checked against the
+      state this request would leave behind, so pointing the access point at
+      other hardware is judged by the new one. A provider that reports no
+      supported modes does not restrict the mode.
+
       An `id` the tenant does not know is answered with 404 instead of being
       created, so ids always come from the server.
     security:
