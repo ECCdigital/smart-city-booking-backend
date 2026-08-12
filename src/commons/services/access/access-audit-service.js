@@ -11,7 +11,9 @@ const logger = bunyan.createLogger({
 const DEFAULT_EXPORT_LIMIT = 50000;
 
 // Keys that may carry sensitive secrets (PINs, codes, tokens). They are
-// redacted before the payload is rendered into a compliance export.
+// redacted before the payload is rendered into a compliance export. The match
+// is on the whole key by design: `payload.presentedScanCode` names the sticker
+// someone held up to a door and has to stay readable for an investigation.
 const SENSITIVE_KEYS = [
   "pin",
   "code",
@@ -86,6 +88,11 @@ class AccessAuditService {
       timestampFormatted: AccessAuditService._formatDateTime(log.timestamp),
       action: log.action || "",
       result: log.result || "",
+      blockingReasons: (log.blockingReasons || []).join(", "),
+      channel: log.channel || "",
+      // Blank, not "Nein", where the entry predates the field: a compliance
+      // export must not claim a fact that was never recorded.
+      evidenceBypassed: AccessAuditService._formatFlag(log.evidenceBypassed),
       accessPointId: log.accessPointId || "",
       accessPointType: log.accessPointType || "",
       provider: log.provider || "",
@@ -97,6 +104,11 @@ class AccessAuditService {
       errorMessage: log.errorMessage || "",
       details: AccessAuditService._stringifyPayload(log.payload),
     }));
+  }
+
+  static _formatFlag(value) {
+    if (value == null) return "";
+    return value === true ? "Ja" : "Nein";
   }
 
   static _formatDateTime(value) {
@@ -158,6 +170,11 @@ class AccessAuditService {
       timestampFormatted: "Zeitpunkt",
       action: "Aktion",
       result: "Ergebnis",
+      // Next to the result, because that is where they are read: a denial
+      // without its reasons, its channel and the bypass flag cannot be judged.
+      blockingReasons: "Blockierungsgründe",
+      channel: "Kanal",
+      evidenceBypassed: "Evidence-Bypass",
       accessPointId: "Access-Point-ID",
       accessPointType: "Typ",
       provider: "Anbieter",
