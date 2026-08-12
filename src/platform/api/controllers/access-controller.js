@@ -3,6 +3,7 @@ const PermissionService = require("../../../commons/services/permission-service"
 const { RolePermission } = require("../../../commons/entities/role/role");
 const AccessService = require("../../../commons/services/access/access-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
+const { ForbiddenError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "access-controller.js",
@@ -12,35 +13,52 @@ const logger = bunyan.createLogger({
 class AccessController {
   /**
    * POST /:tenant/access/:accessPointId/open
+   *
+   * The eligibility decision belongs to the service, which audits refusals.
+   * This renders its outcome: refusals are soft failures on HTTP 200 so the
+   * client can show the reasons.
    */
   static async open(request, response) {
+    const { tenant, accessPointId } = request.params;
+    const { bookingId } = request.query;
+    const otp = request.body?.otp || request.query?.otp || null;
+    const user = request.user;
+
     try {
-      const { tenant, accessPointId } = request.params;
-      const { bookingId } = request.query;
-      const otp = request.body?.otp || request.query?.otp || null;
-      const user = request.user;
-
-      const allowed = await AccessController._canOperate(
+      const hasManagePermission = await AccessController._hasManagePermission(
         user.id,
         tenant,
-        bookingId,
-        accessPointId,
       );
-      if (!allowed) return response.sendStatus(403);
 
-      const result = await AccessService.open(
+      const outcome = await AccessService.open(
         tenant,
         bookingId,
         accessPointId,
         user.id,
-        { otp },
+        { otp, hasManagePermission },
       );
+
+      if (!outcome.success) {
+        logger.info(
+          `${tenant} -- user ${user.id} was denied access-point ${accessPointId} (booking ${bookingId}): ${outcome.blockingReasons.join(", ")}`,
+        );
+        return ApiResponse.softFail(response, {
+          data: { blockingReasons: outcome.blockingReasons },
+        });
+      }
 
       logger.info(
         `${tenant} -- user ${user.id} opened access-point ${accessPointId} (booking ${bookingId})`,
       );
-      return ApiResponse.ok(response, { data: result });
+      return ApiResponse.ok(response, { data: outcome.data });
     } catch (err) {
+      if (err instanceof ForbiddenError) {
+        logger.warn(
+          `${tenant} -- user ${user.id} tried to open access-point ${accessPointId} outside booking ${bookingId}`,
+        );
+        return response.sendStatus(403);
+      }
+
       logger.error(err);
       return ApiResponse.error(response, "Could not open access point");
     }
@@ -327,18 +345,28 @@ class AccessController {
    * everyone, including managers/admins.
    */
   static async _canOperate(userId, tenant, bookingId, accessPointId) {
-    const hasManagePermission = await PermissionService._allowUpdateAny(
-      userId,
-      tenant,
-      RolePermission.MANAGE_BOOKINGS,
-    );
-
     return AccessService.canOperate(
       userId,
       tenant,
       bookingId,
       accessPointId,
-      hasManagePermission,
+      await AccessController._hasManagePermission(userId, tenant),
+    );
+  }
+
+  /**
+   * @private
+   * Whether the user may manage the bookings of a tenant, which replaces the
+   * booking ownership requirement of the access checks.
+   * @param {string} userId User ID
+   * @param {string} tenant Tenant ID
+   * @returns {Promise<boolean>} Whether the user may manage bookings
+   */
+  static async _hasManagePermission(userId, tenant) {
+    return PermissionService._allowUpdateAny(
+      userId,
+      tenant,
+      RolePermission.MANAGE_BOOKINGS,
     );
   }
 

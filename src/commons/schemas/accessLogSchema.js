@@ -40,10 +40,13 @@ const accessLogSchemaDefinition = {
     default: () => ({}),
   },
   result: {
+    // `denied` means the attempt was refused before the provider was
+    // contacted, `failure` a provider error after the checks had passed.
     type: String,
-    enum: ["success", "failure", "pending"],
+    enum: ["success", "failure", "denied", "pending"],
     default: "pending",
   },
+  blockingReasons: { type: [String], default: [] },
   payload: { type: Object, default: {} },
   errorCode: { type: String, default: null },
   errorMessage: { type: String, default: null },

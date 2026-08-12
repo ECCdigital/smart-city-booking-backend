@@ -8,6 +8,7 @@ const AccessLogService = require("./access-log-service");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { RolePermission } = require("../../entities/role/role");
 const MailController = require("../../mail-service/mail-controller");
+const { ForbiddenError } = require("../../../errors/BaseError");
 
 const ACCESS_BLOCKING_REASONS = Object.freeze({
   REJECTED: "rejected",
@@ -39,13 +40,49 @@ const logger = bunyan.createLogger({
 class AccessService {
   /**
    * Opens an access point linked to a booking.
+   *
+   * Owns the eligibility decision: a refused attempt is audited
+   * (`result: "denied"`) and reported as a soft failure instead of throwing,
+   * so callers can render the reasons. Only a booking or access point that
+   * cannot be resolved at all (nothing to audit against) and provider errors
+   * after a passed check are raised as errors.
+   *
+   * @param {string} tenant
+   * @param {string} bookingId
+   * @param {string} accessPointId
+   * @param {string} userId
+   * @param {Object} [options]
+   * @param {string|null} [options.otp=null]
+   * @param {boolean} [options.hasManagePermission=false]
+   * @returns {Promise<{ success: true, data: Object }
+   *   | { success: false, blockingReasons: string[] }>} The open result, or the
+   *   prioritized reasons for the refusal. The reasons are empty when the user
+   *   may not access the booking at all, as ownership has no own reason.
+   * @throws {ForbiddenError} The booking does not exist or does not include
+   *   the access point.
    */
   static async open(tenant, bookingId, accessPointId, userId, options = {}) {
-    const { accessPoint, bookingContext } = await this._resolve(
-      tenant,
-      bookingId,
-      accessPointId,
-    );
+    const resolved = await this._resolve(tenant, bookingId, accessPointId);
+    const { accessPoint, bookingContext } = resolved;
+
+    const eligibility = this._evaluateResolvedEligibility(resolved, {
+      userId,
+      hasManagePermission: options.hasManagePermission === true,
+    });
+
+    if (!eligibility.operableAccessPointIds.includes(String(accessPointId))) {
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "open",
+        result: "denied",
+        blockingReasons: eligibility.blockingReasons,
+      });
+
+      return { success: false, blockingReasons: eligibility.blockingReasons };
+    }
 
     try {
       const provider = getAccessProvider(accessPoint.provider);
@@ -65,7 +102,7 @@ class AccessService {
         result: "success",
         payload: result,
       });
-      return result;
+      return { success: true, data: result };
     } catch (err) {
       await this._log({
         tenantId: tenant,
@@ -564,35 +601,40 @@ class AccessService {
     accessPointId,
     hasManagePermission,
   ) {
-    const booking = await BookingManager.getBooking(bookingId, tenant);
-
-    if (!booking) {
-      return false;
-    }
-
-    const { lockers, doors } = await this._getBookingAccessPointsFromBooking(
-      tenant,
-      booking,
-    );
-
-    const resolved = [...lockers, ...doors].find(
-      ({ accessPoint }) => String(accessPoint.id) === String(accessPointId),
-    );
+    const resolved = await this._tryResolve(tenant, bookingId, accessPointId);
 
     if (!resolved) {
       return false;
     }
 
-    const accessPoints = [
-      this._toEligibilityAccessPoint(resolved.accessPoint, resolved.bookingContext),
-    ];
-    const eligibility = this.evaluateBookingAccessEligibility(
-      booking,
-      accessPoints,
-      { userId, hasManagePermission },
-    );
+    const eligibility = this._evaluateResolvedEligibility(resolved, {
+      userId,
+      hasManagePermission,
+    });
 
     return eligibility.operableAccessPointIds.includes(String(accessPointId));
+  }
+
+  /**
+   * @private
+   * Runs {@link evaluateBookingAccessEligibility} for a single, already
+   * resolved access point.
+   * @param {Object} resolved Access point as returned by {@link _tryResolve}
+   * @param {Object} opts
+   * @param {string|null} opts.userId Acting user
+   * @param {boolean} opts.hasManagePermission Whether the user may manage
+   *   the bookings of the tenant
+   * @returns {Object} Eligibility as of {@link evaluateBookingAccessEligibility}
+   */
+  static _evaluateResolvedEligibility(
+    { accessPoint, bookingContext, booking },
+    { userId, hasManagePermission },
+  ) {
+    return this.evaluateBookingAccessEligibility(
+      booking,
+      [this._toEligibilityAccessPoint(accessPoint, bookingContext)],
+      { userId, hasManagePermission },
+    );
   }
 
   /**
@@ -636,7 +678,8 @@ class AccessService {
     const hasPermission =
       hasManagePermission ||
       Boolean(
-        userId && PermissionsService._isOwner(booking, userId, booking.tenantId),
+        userId &&
+          PermissionsService._isOwner(booking, userId, booking.tenantId),
       );
 
     const canView = booking.isBookingValid() && hasPermission;
@@ -706,11 +749,7 @@ class AccessService {
       }
     }
 
-    if (
-      hasPermission &&
-      accessPoints.length > 0 &&
-      !anyInWindow
-    ) {
+    if (hasPermission && accessPoints.length > 0 && !anyInWindow) {
       blockingReasons.push(ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW);
     }
     if (anyRevoked) {
@@ -1447,24 +1486,56 @@ class AccessService {
   /**
    * @private
    * Resolves access point + builds booking context for the provider.
+   *
+   * An unresolvable target is forbidden rather than refused: neither a missing
+   * booking nor an access point outside the booking is an eligibility
+   * decision, so there is no reason vocabulary and nothing to audit against.
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<Object>} Access point, booking context and booking
+   * @throws {ForbiddenError} The booking does not exist or does not include
+   *   the access point.
    */
   static async _resolve(tenant, bookingId, accessPointId) {
-    const { lockers, doors } = await this._getBookingAccessPoints(
-      tenant,
-      bookingId,
-    );
+    const resolved = await this._tryResolve(tenant, bookingId, accessPointId);
 
+    if (!resolved) {
+      throw new ForbiddenError("access_point_not_in_booking", {
+        bookingId,
+        accessPointId,
+      });
+    }
+
+    return resolved;
+  }
+
+  /**
+   * @private
+   * Resolves one access point of a booking together with its booking.
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<Object|null>} Access point, booking context and booking,
+   *   or null when the booking does not exist or does not include the access
+   *   point
+   */
+  static async _tryResolve(tenant, bookingId, accessPointId) {
+    const booking = await BookingManager.getBooking(bookingId, tenant);
+
+    if (!booking) {
+      return null;
+    }
+
+    const { lockers, doors } = await this._getBookingAccessPointsFromBooking(
+      tenant,
+      booking,
+    );
     const resolved = [...lockers, ...doors].find(
       ({ accessPoint }) => String(accessPoint.id) === String(accessPointId),
     );
 
-    if (!resolved) {
-      throw new Error(
-        `Access point ${accessPointId} not found in booking ${bookingId}`,
-      );
-    }
-
-    return resolved;
+    return resolved ? { ...resolved, booking } : null;
   }
 
   static async _getBookingAccessPoints(tenant, bookingId) {
@@ -1845,6 +1916,7 @@ class AccessService {
     bookingId,
     action,
     result = "pending",
+    blockingReasons = [],
     payload = {},
     errorMessage = null,
     actor = null,
@@ -1864,6 +1936,7 @@ class AccessService {
         action,
         actor: actor || { userId, source: userId ? "user" : "system" },
         result,
+        blockingReasons,
         payload,
         errorMessage,
       });

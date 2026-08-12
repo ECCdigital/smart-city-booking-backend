@@ -19,6 +19,7 @@ class AccessLogService {
       action: entry.action,
       actor: entry.actor || { source: "system" },
       result: entry.result || "pending",
+      blockingReasons: entry.blockingReasons || [],
       payload: entry.payload || {},
       errorCode: entry.errorCode || null,
       errorMessage: entry.errorMessage || null,

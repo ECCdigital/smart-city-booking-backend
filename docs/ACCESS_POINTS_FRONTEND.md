@@ -372,8 +372,14 @@ Antwort:
   Close-Button für Salto-Türen ausblenden bzw. nur bei Nuki anzeigen. Orientiere
   dich am `mode` und ggf. an `provider`.
 - **Berechtigung & Zeitfenster:** Owner oder `MANAGE_BOOKINGS`, und die Buchung
-  muss **im (gepufferten) Zeitfenster** liegen. Sonst `403`. Open/Close-Buttons
-  also nur innerhalb `accessFrom`..`accessTo` aktiv schalten.
+  muss **im (gepufferten) Zeitfenster** liegen. Open/Close-Buttons also nur
+  innerhalb `accessFrom`..`accessTo` aktiv schalten.
+- **Abgelehntes Öffnen** antwortet mit `200` und
+  `{ "success": false, "data": { "blockingReasons": ["payment_required", ...] } }`
+  – die Gründe sind nach Priorität sortiert und eignen sich direkt für die
+  Fehlermeldung. `403` bleibt dem Fall vorbehalten, dass Buchung oder
+  Access-Point nicht existieren. `close`/`unlatch` antworten unverändert mit
+  `403`, wenn nicht geöffnet werden darf.
 
 ### 3.3 Status / Rückmeldung
 

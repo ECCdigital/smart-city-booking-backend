@@ -6,8 +6,15 @@
       - Access
     summary: Open an access point
     description: |
-      Triggers the opening of a specific access point.
-      Requires booking ownership or `MANAGE_BOOKINGS` permission.
+      Triggers the opening of a specific access point. Requires booking
+      ownership or `MANAGE_BOOKINGS` permission, a committed and (if priced)
+      paid booking, and the current time to be inside the booking's access
+      window including its buffer.
+
+      Every attempt that could be processed - opened as well as refused -
+      answers with HTTP 200 and the envelope `{ success, data }`; refused
+      attempts are recorded in the access audit with `result: "denied"` and
+      their blocking reasons.
     security:
       - bearerAuth: []
     parameters:
@@ -21,21 +28,20 @@
       - $ref: "#/components/parameters/BookingIdQueryParam"
     responses:
       "200":
-        description: Access point successfully opened
+        description: |
+          The attempt was processed. `success: true` carries the open result,
+          `success: false` the reasons why the attempt was refused.
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                success:
-                  type: boolean
-                  example: true
-                data:
-                  $ref: "#/components/schemas/OpenResult"
+              oneOf:
+                - $ref: "#/components/schemas/OpenSuccess"
+                - $ref: "#/components/schemas/OpenDenied"
       "401":
         description: Not authenticated
       "403":
-        description: Forbidden
+        description: |
+          The booking does not exist or does not include the access point.
       "500":
         description: Could not open access point
         content:
@@ -185,6 +191,46 @@
 
 components:
   schemas:
+    OpenSuccess:
+      type: object
+      description: The access point was opened
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/OpenResult"
+
+    OpenDenied:
+      type: object
+      description: The open attempt was refused and recorded in the access audit
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            blockingReasons:
+              type: array
+              description: |
+                Reasons why the attempt was refused, sorted by priority (most
+                relevant first), taken from the blocking reason vocabulary
+                shared with the access audit. Empty when the user may not
+                access the booking at all, as ownership has no own reason.
+              items:
+                type: string
+                enum:
+                  - rejected
+                  - not_committed
+                  - payment_required
+                  - authorization_revoked
+                  - outside_access_window
+                  - not_provisioned
+                  - locker_not_ready
+                  - no_remote_access
+              example: ["payment_required"]
+
     OpenResult:
       type: object
       description: Result returned after triggering an access point open
