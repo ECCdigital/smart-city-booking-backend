@@ -21,6 +21,7 @@ describe("AccessPointController", () => {
   let sandbox;
   let AccessPointController;
   let AccessPointManager;
+  let AccessQrService;
   let BookableManager;
   let PermissionService;
   let request;
@@ -41,6 +42,7 @@ describe("AccessPointController", () => {
       "../src/platform/api/controllers/access-point-controller.js",
     );
     AccessPointManager = require("../src/commons/data-managers/access-point-manager");
+    AccessQrService = require("../src/commons/services/access/access-qr-service");
     BookableManager =
       require("../src/commons/data-managers/bookable-manager").BookableManager;
     PermissionService = require("../src/commons/services/permission-service");
@@ -55,6 +57,7 @@ describe("AccessPointController", () => {
       status: sandbox.stub().returnsThis(),
       send: sandbox.stub(),
       sendStatus: sandbox.stub(),
+      setHeader: sandbox.stub(),
     };
     next = sandbox.stub();
   });
@@ -511,6 +514,178 @@ describe("AccessPointController", () => {
       sandbox.stub(AccessPointManager, "getAccessPoint").rejects(failure);
 
       await AccessPointController.removeAccessPoint(request, response, next);
+
+      expect(next.calledOnceWithExactly(failure)).to.be.true;
+    });
+  });
+
+  describe("getQrCode", () => {
+    let render;
+
+    beforeEach(() => {
+      request.params.id = "point-1";
+      render = sandbox.stub(AccessQrService, "render").resolves({
+        format: "svg",
+        contentType: "image/svg+xml",
+        body: "<svg></svg>",
+        filename: "access-point-point-1.svg",
+      });
+    });
+
+    it("answers 403 for a user who is not a tenant owner", async () => {
+      allowWrite();
+      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
+
+      await AccessPointController.getQrCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(403)).to.be.true;
+      expect(getAccessPoint.called).to.be.false;
+      expect(render.called).to.be.false;
+    });
+
+    it("answers 404 for an access point of another tenant", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.getQrCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(render.called).to.be.false;
+    });
+
+    it("renders an svg by default", async () => {
+      allowWrite({ tenantOwner: true });
+      const accessPoint = createAccessPoint();
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
+
+      await AccessPointController.getQrCode(request, response, next);
+
+      expect(render.calledOnceWithExactly(accessPoint, "svg")).to.be.true;
+      expect(response.setHeader.calledWith("Content-Type", "image/svg+xml")).to
+        .be.true;
+      expect(response.status.calledWith(200)).to.be.true;
+      expect(response.send.calledWith("<svg></svg>")).to.be.true;
+    });
+
+    it("passes the requested format through", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+      request.query.format = "png";
+      render.resolves({
+        format: "png",
+        contentType: "image/png",
+        body: Buffer.from("png"),
+        filename: "access-point-point-1.png",
+      });
+
+      await AccessPointController.getQrCode(request, response, next);
+
+      expect(render.firstCall.args[1]).to.equal("png");
+      expect(response.setHeader.calledWith("Content-Type", "image/png")).to.be
+        .true;
+    });
+
+    it("answers 400 for an unsupported format", async () => {
+      allowWrite({ tenantOwner: true });
+      const getAccessPoint = sandbox.stub(
+        AccessPointManager,
+        "getAccessPoint",
+      );
+
+      request.query.format = "bmp";
+
+      await AccessPointController.getQrCode(request, response, next);
+
+      expect(response.status.calledWith(400)).to.be.true;
+      expect(getAccessPoint.called).to.be.false;
+      expect(render.called).to.be.false;
+    });
+
+    it("hands unexpected errors to the error handler", async () => {
+      allowWrite({ tenantOwner: true });
+      const failure = new Error("Render Error");
+      sandbox
+        .stub(AccessPointManager, "getAccessPoint")
+        .resolves(createAccessPoint());
+      render.rejects(failure);
+
+      await AccessPointController.getQrCode(request, response, next);
+
+      expect(next.calledOnceWithExactly(failure)).to.be.true;
+    });
+  });
+
+  describe("rotateScanCode", () => {
+    let storeAccessPoint;
+
+    beforeEach(() => {
+      request.params.id = "point-1";
+      storeAccessPoint = sandbox
+        .stub(AccessPointManager, "storeAccessPoint")
+        .callsFake(async (accessPoint) => accessPoint);
+    });
+
+    it("answers 403 for a user who is not a tenant owner", async () => {
+      allowWrite();
+      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
+
+      await AccessPointController.rotateScanCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(403)).to.be.true;
+      expect(getAccessPoint.called).to.be.false;
+      expect(storeAccessPoint.called).to.be.false;
+    });
+
+    it("answers 404 for an access point of another tenant", async () => {
+      allowWrite({ tenantOwner: true });
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
+
+      await AccessPointController.rotateScanCode(request, response, next);
+
+      expect(response.sendStatus.calledWith(404)).to.be.true;
+      expect(storeAccessPoint.called).to.be.false;
+    });
+
+    it("rotates the scan code and persists it for the tenant in the path", async () => {
+      allowWrite({ tenantOwner: true });
+      const accessPoint = createAccessPoint();
+      const codeBefore = accessPoint.scanCode;
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
+
+      await AccessPointController.rotateScanCode(request, response, next);
+
+      expect(accessPoint.scanCode).to.not.equal(codeBefore);
+      expect(accessPoint.previousScanCodes[0]).to.equal(codeBefore);
+      const [stored, tenantId] = storeAccessPoint.firstCall.args;
+      expect(stored).to.equal(accessPoint);
+      expect(tenantId).to.equal("tenant-1");
+      expect(response.status.calledWith(200)).to.be.true;
+    });
+
+    it("returns neither the old nor the new scan code", async () => {
+      allowWrite({ tenantOwner: true });
+      const accessPoint = createAccessPoint();
+      const codeBefore = accessPoint.scanCode;
+      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
+
+      await AccessPointController.rotateScanCode(request, response, next);
+
+      const sent = response.send.firstCall.args[0];
+      expect(sent).to.not.have.property("scanCode");
+      expect(sent).to.not.have.property("previousScanCodes");
+      const serialized = JSON.stringify(sent);
+      expect(serialized).to.not.include(codeBefore);
+      expect(serialized).to.not.include(accessPoint.scanCode);
+    });
+
+    it("hands unexpected errors to the error handler", async () => {
+      allowWrite({ tenantOwner: true });
+      const failure = new Error("Database Error");
+      sandbox.stub(AccessPointManager, "getAccessPoint").rejects(failure);
+
+      await AccessPointController.rotateScanCode(request, response, next);
 
       expect(next.calledOnceWithExactly(failure)).to.be.true;
     });

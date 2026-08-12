@@ -160,6 +160,74 @@ describe("AccessPoint entity", () => {
     });
   });
 
+  describe("rotateScanCode", () => {
+    it("mints a new scan code", () => {
+      const accessPoint = AccessPoint.create(createParams());
+      const before = accessPoint.scanCode;
+
+      accessPoint.rotateScanCode();
+
+      expect(accessPoint.scanCode).to.be.a("string").with.length.above(0);
+      expect(accessPoint.scanCode).to.not.equal(before);
+      expect(accessPoint.scanCode).to.match(/^[A-Za-z0-9_-]{16,}$/);
+    });
+
+    it("moves the previous code to the front of previousScanCodes", () => {
+      const accessPoint = AccessPoint.create(createParams());
+      const first = accessPoint.scanCode;
+
+      accessPoint.rotateScanCode();
+
+      expect(accessPoint.previousScanCodes[0]).to.equal(first);
+    });
+
+    it("keeps the most recent codes first when rotated repeatedly", () => {
+      const accessPoint = AccessPoint.create(createParams());
+      const codes = [accessPoint.scanCode];
+
+      for (let i = 0; i < 3; i += 1) {
+        accessPoint.rotateScanCode();
+        codes.push(accessPoint.scanCode);
+      }
+
+      // codes = [c0, c1, c2, c3]; c3 is current, c0..c2 were rotated out
+      expect(accessPoint.previousScanCodes).to.deep.equal([
+        codes[2],
+        codes[1],
+        codes[0],
+      ]);
+    });
+
+    it("caps previousScanCodes at five, dropping the oldest", () => {
+      const accessPoint = AccessPoint.create(createParams());
+      const history = [accessPoint.scanCode];
+
+      for (let i = 0; i < 7; i += 1) {
+        accessPoint.rotateScanCode();
+        history.push(accessPoint.scanCode);
+      }
+
+      expect(accessPoint.previousScanCodes).to.have.length(5);
+      // history has 8 codes; last (history[7]) is current, previous five are
+      // history[6]..history[2], newest first. history[0], history[1] fell off.
+      expect(accessPoint.previousScanCodes).to.deep.equal([
+        history[6],
+        history[5],
+        history[4],
+        history[3],
+        history[2],
+      ]);
+      expect(accessPoint.previousScanCodes).to.not.include(history[0]);
+      expect(accessPoint.previousScanCodes).to.not.include(history[1]);
+    });
+
+    it("returns the access point so callers can chain", () => {
+      const accessPoint = AccessPoint.create(createParams());
+
+      expect(accessPoint.rotateScanCode()).to.equal(accessPoint);
+    });
+  });
+
   describe("constructor", () => {
     it("ignores properties that are not part of the access point", () => {
       const accessPoint = new AccessPoint({

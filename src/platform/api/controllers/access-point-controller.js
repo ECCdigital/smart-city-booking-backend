@@ -5,6 +5,7 @@ const {
 const {
   AccessPoint,
 } = require("../../../commons/entities/access/access-point");
+const AccessQrService = require("../../../commons/services/access/access-qr-service");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
 const createComponentLogger = require("../../../middleware/logger");
@@ -193,6 +194,94 @@ class AccessPointController {
         `${tenantId} -- Access point ${id} deleted by user ${user?.id}`,
       );
       return response.sendStatus(200);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * Render the printable QR code of an access point. The code encodes the
+   * store-front URL with the current scan code; a client only ever receives
+   * the rendered image or PDF, never the scan code inside it. The format is
+   * chosen with `?format=svg|png|pdf` and defaults to `svg`.
+   */
+  static async getQrCode(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
+
+      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
+        logger.warn(
+          `${tenantId} -- User ${user?.id} is not allowed to render access point QR codes`,
+        );
+        return response.sendStatus(403);
+      }
+
+      if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
+        return response.status(400).send(`Unsupported format: ${format}`);
+      }
+
+      const accessPoint = await AccessPointManager.getAccessPoint(
+        request.params.id,
+        tenantId,
+      );
+
+      if (!accessPoint) {
+        return response.sendStatus(404);
+      }
+
+      const rendered = await AccessQrService.render(accessPoint, format);
+
+      response.setHeader("Content-Type", rendered.contentType);
+      response.setHeader(
+        "Content-Disposition",
+        `inline; filename="${rendered.filename}"`,
+      );
+      return response.status(200).send(rendered.body);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * Rotate the scan code of an access point: the current code is retired and a
+   * fresh one takes its place, so old stickers stop resolving at once. Rotation
+   * is the revocation mechanism; a reprint is simply rotate, then fetch the QR
+   * code again.
+   *
+   * Reserved for tenant owners. The response carries neither the old nor the
+   * new scan code - both stay server knowledge.
+   */
+  static async rotateScanCode(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const user = request.user;
+      const id = request.params.id;
+
+      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
+        logger.warn(
+          `${tenantId} -- User ${user?.id} is not allowed to rotate scan codes`,
+        );
+        return response.sendStatus(403);
+      }
+
+      const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
+
+      if (!accessPoint) {
+        return response.sendStatus(404);
+      }
+
+      accessPoint.rotateScanCode();
+      const rotated = await AccessPointManager.storeAccessPoint(
+        accessPoint,
+        tenantId,
+      );
+
+      logger.info(
+        `${tenantId} -- Scan code of access point ${id} rotated by user ${user?.id}`,
+      );
+      return response.status(200).send(rotated.toResponse());
     } catch (err) {
       return next(err);
     }

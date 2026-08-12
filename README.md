@@ -14,6 +14,18 @@
 
 ## Changelog
 
+### Unreleased
+
+1. **QR door access: scan-code QR generation & rotation**
+   - New management endpoints for tenant owners:
+     `GET /api/:tenant/accesspoints/:id/qrcode?format=svg|png|pdf` (default `svg`)
+     renders the printable QR code, `POST /api/:tenant/accesspoints/:id/rotate-scan-code`
+     retires the current scan code and mints a new one.
+   - **Environment variables:** A new global `STORE_FRONT_URL` must be set. It is
+     the public base URL of the store-front and is used to build the encoded
+     scan URL `https://<STORE_FRONT_URL>/mobile-key/<tenant>/<scanCode>`. This is
+     the store-front, not the Vue admin app that `FRONTEND_URL` points at.
+
 ### v3.4.0 (BREAKING)
 
 **Important changes**

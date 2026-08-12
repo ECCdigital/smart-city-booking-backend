@@ -149,6 +149,106 @@
       "404":
         description: The tenant has no access point with that id
 
+/api/{tenant}/accesspoints/{id}/qrcode:
+  get:
+    tags:
+      - Access Points
+    summary: Render the QR code of an access point
+    description: |
+      Renders the printable QR code of the access point. The code encodes the
+      store-front scan URL `https://<STORE_FRONT_URL>/mobile-key/<tenant>/<scanCode>`;
+      the URL schema and the scan code inside stay server knowledge, the client
+      only ever receives the rendered image or PDF.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well).
+
+      `format=pdf` returns an A4 print template (label, QR code and a short
+      instruction) rendered through the PDF service.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+      - name: format
+        in: query
+        required: false
+        description: The render format. Defaults to `svg`.
+        schema:
+          type: string
+          enum: [svg, png, pdf]
+          default: svg
+    responses:
+      "200":
+        description: The rendered QR code
+        content:
+          image/svg+xml:
+            schema:
+              type: string
+          image/png:
+            schema:
+              type: string
+              format: binary
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      "400":
+        description: Unsupported format
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: The tenant has no access point with that id
+
+/api/{tenant}/accesspoints/{id}/rotate-scan-code:
+  post:
+    tags:
+      - Access Points
+    summary: Rotate the scan code of an access point
+    description: |
+      Retires the current scan code - it is pushed to the front of the
+      access point's `previousScanCodes` (capped at five, the oldest fall off) -
+      and mints a new opaque, url-safe, per-tenant scan code. Old stickers stop
+      resolving at once; in-flight opens are unaffected because access points are
+      resolved per request. Rotation is the revocation mechanism, a reprint is
+      simply rotate, then fetch the QR code again.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well).
+
+      The response carries neither the old nor the new scan code - both stay
+      server knowledge.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The access point after rotation, without any scan codes
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: The tenant has no access point with that id
+
 components:
   schemas:
     ManagedAccessPoint:

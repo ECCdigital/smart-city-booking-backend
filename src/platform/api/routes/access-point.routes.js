@@ -21,6 +21,18 @@ router.get(
   AccessPointController.getAccessPoint,
 );
 
+router.get(
+  "/:id/qrcode",
+  AuthenticationController.isSignedIn,
+  AccessPointController.getQrCode,
+);
+
+router.post(
+  "/:id/rotate-scan-code",
+  AuthenticationController.isSignedIn,
+  AccessPointController.rotateScanCode,
+);
+
 router.delete(
   "/:id",
   AuthenticationController.isSignedIn,

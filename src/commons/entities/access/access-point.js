@@ -21,6 +21,13 @@ const AccessPointState = Object.freeze({
 
 const SCAN_CODE_BYTES = 24;
 
+/**
+ * How many rotated-out scan codes an access point keeps. Old codes only serve
+ * to tell a stale sticker apart from one that was never issued, so a short
+ * window is enough.
+ */
+const PREVIOUS_SCAN_CODES_CAP = 5;
+
 const FIELDS_HIDDEN_IN_RESPONSES = ["scanCode", "previousScanCodes"];
 
 /**
@@ -103,6 +110,24 @@ class AccessPoint {
     const response = this.toDocument();
     FIELDS_HIDDEN_IN_RESPONSES.forEach((field) => delete response[field]);
     return response;
+  }
+
+  /**
+   * Rotate the scan code: the current code is pushed to the front of
+   * `previousScanCodes` (capped, oldest fall off) and a fresh random code takes
+   * its place. Old stickers are void at once; in-flight opens are unaffected
+   * because access points are resolved per request. Rotation is the only
+   * revocation mechanism - there is no token to expire.
+   *
+   * @returns {AccessPoint} This access point, so callers can chain.
+   */
+  rotateScanCode() {
+    this.previousScanCodes = [this.scanCode, ...this.previousScanCodes].slice(
+      0,
+      PREVIOUS_SCAN_CODES_CAP,
+    );
+    this.scanCode = generateScanCode();
+    return this;
   }
 
   /**
