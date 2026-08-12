@@ -490,6 +490,7 @@ router.use("/catalog", require("./routes/catalog.routes"));
 router.use("/locker", require("./routes/locker.routes"));
 router.use("/access", require("./routes/access.routes"));
 router.use("/access-apps", require("./routes/access-app.routes"));
+router.use("/accesspoints", require("./routes/access-point.routes"));
 router.use("/ical", require("./routes/ical.routes"));
 
 module.exports = router;

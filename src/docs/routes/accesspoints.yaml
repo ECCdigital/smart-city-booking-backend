@@ -1,0 +1,299 @@
+# swagger/routes/accesspoints.yaml
+
+/api/{tenant}/accesspoints:
+  get:
+    tags:
+      - Access Points
+    summary: List the access points of a tenant
+    description: |
+      Returns all access points of the tenant. Requires `readAny` on
+      `manageBookables`.
+
+      Scan codes are server knowledge and never part of a response.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    responses:
+      "200":
+        description: All access points of the tenant
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/ManagedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not allowed to read access points
+  put:
+    tags:
+      - Access Points
+    summary: Create or update an access point
+    description: |
+      Upserts an access point. An `id` in the body updates that access point,
+      a body without `id` creates a new one with a server-side id and a fresh
+      scan code.
+
+      Reserved for tenant owners (membership `owner: true`; instance owners are
+      allowed as well). `tenantId` and `scanCode` are not writable - the tenant
+      comes from the path, the scan code is only replaced by rotating it.
+
+      Fields that are omitted keep their current value; on create they fall back
+      to their default, and `provider` has to be part of the body.
+      `validationRules` therefore distinguishes an omitted field from an
+      explicitly empty list: omitting it on create requires a QR scan,
+      submitting `[]` means no evidence is required.
+
+      An `id` the tenant does not know is answered with 404 instead of being
+      created, so ids always come from the server.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessPointWrite"
+    responses:
+      "200":
+        description: The updated access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "201":
+        description: The created access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "400":
+        description: The submitted access point is invalid
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidationErrorResponse"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not a tenant owner
+      "404":
+        description: The tenant has no access point with the submitted `id`
+
+/api/{tenant}/accesspoints/{id}:
+  get:
+    tags:
+      - Access Points
+    summary: Get a single access point
+    description: |
+      Returns one access point of the tenant. Requires `readAny` on
+      `manageBookables`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not allowed to read access points
+      "404":
+        description: The tenant has no access point with that id
+
+components:
+  schemas:
+    ManagedAccessPoint:
+      type: object
+      description: |
+        A physical access point of a tenant. `scanCode` and `previousScanCodes`
+        are persisted but never returned.
+      properties:
+        id:
+          type: string
+          example: "6f1c0f6e-6f0f-4d0e-9f0a-2b1c9d4e5f60"
+        tenantId:
+          type: string
+          example: "demo"
+        type:
+          type: string
+          enum: [door, locker]
+          description: Only `door` is used in V1.
+          example: door
+        provider:
+          type: string
+          description: Access provider of the physical lock
+          example: nuki
+        externalId:
+          type: string
+          description: Identifier of the lock at the provider
+          example: "lock-123"
+        providerLocationId:
+          type: string
+          nullable: true
+          description: NUKI account id or Salto site id the lock belongs to
+          example: "site-1"
+        label:
+          type: string
+          example: Haupteingang
+        mode:
+          type: string
+          enum: [remote, authorization, both]
+          description: How the physical lock can be operated
+          example: authorization
+        config:
+          type: object
+          description: Provider-specific configuration
+          additionalProperties: true
+        location:
+          allOf:
+            - $ref: "#/components/schemas/AccessPointLocation"
+          nullable: true
+        validationRules:
+          type: array
+          description: |
+            Evidence a client has to provide when opening this access point, on
+            top of the fixed booking checks. All rules have to be fulfilled.
+          items:
+            $ref: "#/components/schemas/AccessPointValidationRule"
+
+    AccessPointWrite:
+      type: object
+      description: |
+        Writable access point fields. `id` decides between update and create.
+      properties:
+        id:
+          type: string
+          description: |
+            Identifier of the access point to update. Omit it to create a new
+            access point.
+        label:
+          type: string
+        type:
+          type: string
+          enum: [door, locker]
+        provider:
+          type: string
+        externalId:
+          type: string
+        providerLocationId:
+          type: string
+          nullable: true
+        mode:
+          type: string
+          enum: [remote, authorization, both]
+        config:
+          type: object
+          additionalProperties: true
+        location:
+          allOf:
+            - $ref: "#/components/schemas/AccessPointLocation"
+          nullable: true
+        validationRules:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessPointValidationRule"
+
+    AccessPointLocation:
+      type: object
+      description: |
+        Where the access point physically is, in the same shape as
+        `bookable.location`. Coordinates without an address are allowed.
+      properties:
+        coordinates:
+          type: object
+          properties:
+            type:
+              type: string
+              example: Point
+            points:
+              type: array
+              description: Longitude and latitude
+              items:
+                type: number
+              example: [7.1, 51.2]
+        display_address:
+          type: string
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+              nullable: true
+            house_number:
+              type: string
+              nullable: true
+            post_code:
+              type: string
+              nullable: true
+            city:
+              type: string
+              nullable: true
+            suburb:
+              type: string
+              nullable: true
+            state:
+              type: string
+              nullable: true
+            country:
+              type: string
+              nullable: true
+            country_code:
+              type: string
+              nullable: true
+        meta:
+          type: object
+          additionalProperties: true
+
+    AccessPointValidationRule:
+      type: object
+      description: An evidence requirement of an access point
+      properties:
+        type:
+          type: string
+          enum: [qrScan]
+          example: qrScan
+      required:
+        - type
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: ValidationError
+        message:
+          type: string
+          example: validation_failed
+        statusCode:
+          type: integer
+          example: 400
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: mode
+              code:
+                type: string
+                example: invalid_enum
+              params:
+                type: object
+                additionalProperties: true
