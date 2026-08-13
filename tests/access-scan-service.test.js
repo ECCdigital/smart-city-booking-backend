@@ -31,7 +31,7 @@ describe("AccessScanService", () => {
   });
 
   describe("resolveScanCode", () => {
-    it("resolves a current scan code to the display fields of the access point", async () => {
+    it("resolves a current scan code to the shared projection of the access point", async () => {
       const accessPoint = createAccessPoint();
       sandbox
         .stub(AccessPointManager, "getAccessPointByScanCode")
@@ -47,12 +47,51 @@ describe("AccessScanService", () => {
         success: true,
         data: {
           id: "point-1",
+          tenantId: "tenant-1",
           label: "Haupteingang",
           type: "door",
           provider: "nuki",
           mode: "authorization",
+          validationRuleTypes: ["qrScan"],
+          capabilities: ["open", "close", "getStatus"],
         },
       });
+    });
+
+    it("knows no booking and answers with the core fields alone", async () => {
+      const accessPoint = createAccessPoint();
+      sandbox
+        .stub(AccessPointManager, "getAccessPointByScanCode")
+        .resolves(accessPoint);
+
+      const outcome = await AccessScanService.resolveScanCode(
+        "tenant-1",
+        accessPoint.scanCode,
+        "user-1",
+      );
+
+      expect(outcome.data).to.not.have.any.keys(
+        "accessFrom",
+        "accessTo",
+        "accessBuffer",
+        "isProvisioned",
+      );
+    });
+
+    it("asks a user who may manage the bookings for no evidence", async () => {
+      const accessPoint = createAccessPoint();
+      sandbox
+        .stub(AccessPointManager, "getAccessPointByScanCode")
+        .resolves(accessPoint);
+
+      const outcome = await AccessScanService.resolveScanCode(
+        "tenant-1",
+        accessPoint.scanCode,
+        "user-1",
+        { hasManagePermission: true },
+      );
+
+      expect(outcome.data.validationRuleTypes).to.deep.equal([]);
     });
 
     it("never answers with the scan codes themselves", async () => {

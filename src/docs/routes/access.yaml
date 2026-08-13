@@ -12,8 +12,8 @@
 
       Follows the soft-fail contract: as long as the server can process the
       request, it answers with HTTP 200 and `{ success, data }`. A current
-      code returns the access point's display fields; a code found only in
-      `previousScanCodes` returns `stale_scan_code` (the user is holding an
+      code returns the access point in the shared projection; a code found only
+      in `previousScanCodes` returns `stale_scan_code` (the user is holding an
       outdated sticker); anything else returns `unknown_scan_code`.
 
       Failed resolutions are recorded in the access audit with
@@ -31,9 +31,8 @@
     responses:
       "200":
         description: |
-          The request was processed. `success: true` carries the access point's
-          display fields; `success: false` carries the reason the code did not
-          resolve.
+          The request was processed. `success: true` carries the access point,
+          `success: false` the reason the code did not resolve.
         content:
           application/json:
             schema:
@@ -117,12 +116,19 @@
     tags:
       - Access
     summary: Unlatch an access point
+    deprecated: true
     description: |
       Pulls the latch of a specific access point so the door physically opens,
-      instead of only releasing the lock (see `/open`). Requires a provider and
-      device that support unlatching (e.g. a Nuki Smart Lock mounted on a door
-      with a latch).
-      Requires booking ownership or `MANAGE_BOOKINGS` permission.
+      instead of only releasing the lock. Requires a provider and device that
+      support unlatching (e.g. a Nuki Smart Lock mounted on a door with a
+      latch).
+
+      Guarded exactly like `/open` - the same booking checks, the same
+      validation rules, the same audit entries - because it opens the same
+      door.
+
+      No client needs this route: where a lock can pull its latch, `/open` does
+      so by itself, per lock and behind the server.
     security:
       - bearerAuth: []
     parameters:
@@ -134,9 +140,65 @@
         schema:
           type: string
       - $ref: "#/components/parameters/BookingIdQueryParam"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OpenRequest"
     responses:
       "200":
-        description: Access point successfully unlatched
+        description: |
+          The attempt was processed. `success: true` carries the started open,
+          `success: false` the reasons why the attempt was refused.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/OpenSuccess"
+                - $ref: "#/components/schemas/OpenDenied"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          The booking does not exist or does not include the access point.
+      "500":
+        description: Could not unlatch access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access/{accessPointId}/close:
+  post:
+    tags:
+      - Access
+    summary: Close an access point
+    description: |
+      Locks a specific access point again. Requires booking ownership or
+      `MANAGE_BOOKINGS` permission, a valid booking and the current time inside
+      the booking's access window including its buffer.
+
+      Answers with the state the lock is in afterwards, in the shape of
+      `/status`, so a client does not have to ask for it separately. That state
+      is read from the lock, not assumed from the command: a lock takes its
+      time to turn, so directly after a close it may still report itself as
+      unlocked. A lock that cannot be read afterwards answers with all fields
+      `null` and `statusSource: null`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point to close
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: The state of the access point after closing
         content:
           application/json:
             schema:
@@ -146,13 +208,57 @@
                   type: boolean
                   example: true
                 data:
-                  $ref: "#/components/schemas/OpenResult"
+                  $ref: "#/components/schemas/AccessPointStatus"
       "401":
         description: Not authenticated
       "403":
         description: Forbidden
       "500":
-        description: Could not unlatch access point
+        description: Could not close access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access/{accessPointId}/status:
+  get:
+    tags:
+      - Access
+    summary: Get the state of an access point
+    description: |
+      Asks the provider what state the lock is in. Requires booking ownership
+      or `MANAGE_BOOKINGS` permission, a valid booking and the current time
+      inside the booking's access window including its buffer.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: The state of the access point
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  $ref: "#/components/schemas/AccessPointStatus"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "500":
+        description: Could not get access point status
         content:
           application/json:
             schema:
@@ -178,8 +284,11 @@
       - $ref: "#/components/parameters/BookingIdQueryParam"
       - name: openProcessId
         in: query
-        required: true
-        description: Identifier of the open process (returned by the open endpoint)
+        required: false
+        description: |
+          The process the open answered with. Given, the process itself is
+          asked; left out, the last event the door reported answers, and
+          failing that the lock's own state. `statusSource` says which.
         schema:
           type: string
     responses:
@@ -195,8 +304,6 @@
                   example: true
                 data:
                   $ref: "#/components/schemas/OpenStatus"
-      "400":
-        description: Missing `openProcessId` query parameter
       "401":
         description: Not authenticated
       "403":
@@ -214,10 +321,14 @@
       - Access
     summary: List access points for a booking
     description: |
-      Returns all access points linked to the given booking.
+      Returns all access points linked to the given booking, in the same
+      projection a resolved scan code answers with, plus the fields the booking
+      adds.
 
-      **Note:** This endpoint is not fully implemented yet and currently
-      returns only `{ "success": true }` without data.
+      Listing does not require the booking to be within its access window -
+      what a booking opens should be readable at any time - but it does require
+      a valid booking and either its ownership or the `MANAGE_BOOKINGS`
+      permission.
     security:
       - bearerAuth: []
     parameters:
@@ -225,7 +336,7 @@
       - $ref: "#/components/parameters/BookingIdQueryParam"
     responses:
       "200":
-        description: List of access points (not fully implemented)
+        description: The access points of the booking
         content:
           application/json:
             schema:
@@ -236,9 +347,6 @@
                   example: true
                 data:
                   type: array
-                  nullable: true
-                  description: |
-                    Not yet implemented – currently omitted from the response.
                   items:
                     $ref: "#/components/schemas/AccessPoint"
       "401":
@@ -262,22 +370,11 @@ components:
           type: boolean
           example: true
         data:
-          type: object
-          properties:
-            id:
-              type: string
-              description: Access point identifier
-            label:
-              type: string
-              description: Human-readable name of the access point
-            type:
-              type: string
-              enum: [locker, door]
-            provider:
-              type: string
-            mode:
-              type: string
-              enum: [remote, authorization, both]
+          allOf:
+            - $ref: "#/components/schemas/AccessPoint"
+          description: >
+            The access point in the same projection the booking ways use. A
+            scan knows no booking, so only the core fields are carried.
 
     ResolveScanFailure:
       type: object
@@ -403,82 +500,6 @@ components:
                   - evidence_missing
                   - evidence_invalid
               example: ["evidence_missing"]
-
-    OpenResult:
-      type: object
-      description: Result returned after triggering an access point open
-      properties:
-        processId:
-          type: integer
-          description: Identifier of the access point process
-          example: 27415
-        openProcessId:
-          type: integer
-          description: Identifier to poll the open status
-          example: 15840
-
-    OpenStatus:
-      type: object
-      description: Status of a running open process
-      properties:
-        confirmed:
-          type: boolean
-          description: Whether the open process was confirmed by the hardware
-          example: true
-        confirmedAt:
-          type: string
-          format: date-time
-          nullable: true
-          description: Timestamp when the opening was confirmed (null if not confirmed)
-          example: "2026-03-23T14:05:12.000Z"
-        openProcessId:
-          type: string
-          description: Identifier of the open process
-          example: "15842"
-        errorCode:
-          type: integer
-          nullable: true
-          description: |
-            Error code if the process failed (null on success).
-            Known codes:
-            - `1904` – waiting timed out
-          example: 1904
-        errorMessage:
-          type: string
-          nullable: true
-          description: Human-readable error description (null on success)
-          example: "waiting timed out"
-
-    AccessPoint:
-      type: object
-      description: An access point linked to a booking
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-          enum: [locker, door]
-        provider:
-          type: string
-        externalId:
-          type: string
-        label:
-          type: string
-        mode:
-          type: string
-          enum: [remote, authorization, both]
-        capabilities:
-          type: array
-          description: Atomic provider capabilities detected for the access point
-          items:
-            type: string
-            enum: [remote, authorization]
-        supportedModes:
-          type: array
-          description: Modes that can be selected for this access point
-          items:
-            type: string
-            enum: [remote, authorization, both]
 
     ErrorResponse:
       type: object

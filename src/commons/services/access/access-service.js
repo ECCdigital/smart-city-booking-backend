@@ -7,6 +7,7 @@ const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const AccessLogService = require("./access-log-service");
 const AccessEvidenceService = require("./access-evidence-service");
+const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { RolePermission } = require("../../entities/role/role");
 const MailController = require("../../mail-service/mail-controller");
@@ -46,14 +47,78 @@ class AccessService {
    *   scanned code
    * @param {string|null} [options.channel=null] How the client says it reached
    *   the door. Recorded as reported, never part of the decision.
-   * @returns {Promise<{ success: true, data: Object }
-   *   | { success: false, blockingReasons: string[] }>} The open result, or the
-   *   prioritized reasons for the refusal. The reasons are empty when the user
-   *   may not access the booking at all, as ownership has no own reason.
+   * @returns {Promise<{ success: true, data: { openProcessId: string|null } }
+   *   | { success: false, blockingReasons: string[] }>} The started open - with
+   *   the process to poll, or `null` when the door is already dealt with - or
+   *   the prioritized reasons for the refusal. The reasons are empty when the
+   *   user may not access the booking at all, as ownership has no own reason.
    * @throws {ForbiddenError} The booking does not exist or does not include
    *   the access point.
    */
   static async open(tenant, bookingId, accessPointId, userId, options = {}) {
+    return this._openGuarded(
+      "open",
+      tenant,
+      bookingId,
+      accessPointId,
+      userId,
+      options,
+    );
+  }
+
+  /**
+   * Unlatches an access point linked to a booking, i.e. pulls the latch so the
+   * door physically opens instead of only releasing the lock.
+   *
+   * Behind the same guard as {@link open} - eligibility and evidence - because
+   * it opens the same door. Where a lock can pull its latch, `open` does so by
+   * itself, so this is the older way to the same end and no client needs it.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId Access point ID
+   * @param {string} userId Acting user
+   * @param {Object} [options] As of {@link open}
+   * @returns {Promise<{ success: true, data: { openProcessId: string|null } }
+   *   | { success: false, blockingReasons: string[] }>} As of {@link open}
+   * @throws {ForbiddenError} The booking does not exist or does not include
+   *   the access point.
+   */
+  static async unlatch(tenant, bookingId, accessPointId, userId, options = {}) {
+    return this._openGuarded(
+      "unlatch",
+      tenant,
+      bookingId,
+      accessPointId,
+      userId,
+      options,
+    );
+  }
+
+  /**
+   * @private
+   * The guarded way through a door: eligibility, then evidence, then the
+   * provider - and an audit entry whichever of the three has the last word.
+   * Both actions that open an access point run through here, so neither can
+   * end up with the weaker check.
+   *
+   * @param {"open"|"unlatch"} action What to ask the provider for, which is
+   *   also what the audit entry is filed under
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId Access point ID
+   * @param {string} userId Acting user
+   * @param {Object} options As of {@link open}
+   * @returns {Promise<Object>} As of {@link open}
+   */
+  static async _openGuarded(
+    action,
+    tenant,
+    bookingId,
+    accessPointId,
+    userId,
+    options,
+  ) {
     const resolved = await this._resolve(tenant, bookingId, accessPointId);
     const { accessPoint, bookingContext } = resolved;
     const channel = options.channel ?? null;
@@ -65,6 +130,7 @@ class AccessService {
 
     if (!eligibility.operableAccessPointIds.includes(String(accessPointId))) {
       return this._denyOpen({
+        action,
         tenant,
         userId,
         accessPoint,
@@ -81,6 +147,7 @@ class AccessService {
 
     if (!evidenceOutcome.satisfied) {
       return this._denyOpen({
+        action,
         tenant,
         userId,
         accessPoint,
@@ -92,7 +159,7 @@ class AccessService {
 
     try {
       const provider = getAccessProvider(accessPoint.provider);
-      const result = await provider.open(accessPoint, {
+      const result = await provider[action](accessPoint, {
         ...bookingContext,
         openOptions: {
           otp: options.otp || null,
@@ -104,7 +171,7 @@ class AccessService {
         userId,
         accessPoint,
         bookingId,
-        action: "open",
+        action,
         result: "success",
         payload: {
           ...result,
@@ -113,14 +180,17 @@ class AccessService {
         channel,
         evidenceBypassed: evidenceOutcome.bypassed,
       });
-      return { success: true, data: result };
+      return {
+        success: true,
+        data: { openProcessId: this._toOpenProcessId(result) },
+      };
     } catch (err) {
       await this._log({
         tenantId: tenant,
         userId,
         accessPoint,
         bookingId,
-        action: "open",
+        action,
         result: "failure",
         errorMessage: err.message,
         channel,
@@ -137,6 +207,7 @@ class AccessService {
    * audit entry is written in one place.
    *
    * @param {Object} refusal
+   * @param {"open"|"unlatch"} refusal.action What was refused
    * @param {string} refusal.tenant Tenant ID
    * @param {string} refusal.userId Acting user
    * @param {Object} refusal.accessPoint The access point that stays shut
@@ -146,6 +217,7 @@ class AccessService {
    * @returns {Promise<{ success: false, blockingReasons: string[] }>} The refusal
    */
   static async _denyOpen({
+    action,
     tenant,
     userId,
     accessPoint,
@@ -158,7 +230,7 @@ class AccessService {
       userId,
       accessPoint,
       bookingId,
-      action: "open",
+      action,
       result: "denied",
       blockingReasons,
       channel,
@@ -211,46 +283,22 @@ class AccessService {
   }
 
   /**
-   * Unlatches an access point linked to a booking, i.e. pulls the latch so the
-   * door physically opens instead of only releasing the lock.
-   */
-  static async unlatch(tenant, bookingId, accessPointId, userId) {
-    const { accessPoint, bookingContext } = await this._resolve(
-      tenant,
-      bookingId,
-      accessPointId,
-    );
-
-    try {
-      const provider = getAccessProvider(accessPoint.provider);
-      const result = await provider.unlatch(accessPoint, bookingContext);
-
-      await this._log({
-        tenantId: tenant,
-        userId,
-        accessPoint,
-        bookingId,
-        action: "unlatch",
-        result: "success",
-        payload: result,
-      });
-      return result;
-    } catch (err) {
-      await this._log({
-        tenantId: tenant,
-        userId,
-        accessPoint,
-        bookingId,
-        action: "unlatch",
-        result: "failure",
-        errorMessage: err.message,
-      });
-      throw err;
-    }
-  }
-
-  /**
    * Closes an access point linked to a booking.
+   *
+   * Answers with the state the lock is in afterwards, in the shape of
+   * {@link getStatus}: the flow reports a fresh state after every action, and
+   * saying it here saves the client a second call for it.
+   *
+   * The state is read from the lock rather than assumed from the command: a
+   * lock takes its time to turn, so "closed" is only what the lock says it
+   * is. A state that cannot be read is reported as unknown - the close itself
+   * did go through.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId Access point ID
+   * @param {string} userId Acting user
+   * @returns {Promise<Object>} The status after closing
    */
   static async close(tenant, bookingId, accessPointId, userId) {
     const { accessPoint, bookingContext } = await this._resolve(
@@ -272,7 +320,7 @@ class AccessService {
         result: "success",
         payload: result,
       });
-      return result;
+      return this._readStatusAfterClose(provider, accessPoint, bookingContext);
     } catch (err) {
       await this._log({
         tenantId: tenant,
@@ -288,7 +336,44 @@ class AccessService {
   }
 
   /**
-   * Returns the current state of an access point.
+   * @private
+   * The state of the lock right after it was closed. Read from the lock, not
+   * derived from the command that was sent - what a close means for the bolt
+   * is the lock's answer, not the caller's assumption.
+   *
+   * A lock that cannot be read afterwards answers "nothing known": the close
+   * was carried out and audited either way, so it must not be turned into a
+   * failure here.
+   *
+   * @param {Object} provider The provider of the access point
+   * @param {Object} accessPoint The access point that was closed
+   * @param {Object} bookingContext The booking it was closed for
+   * @returns {Promise<Object>} The status as of {@link _toStatusResponse}
+   */
+  static async _readStatusAfterClose(provider, accessPoint, bookingContext) {
+    try {
+      return this._toStatusResponse(
+        await provider.getStatus(accessPoint, bookingContext),
+        "provider_status",
+      );
+    } catch (err) {
+      logger.warn(
+        `Could not read access point ${accessPoint.id} after closing it: ${err.message}`,
+      );
+      return this._toStatusResponse({}, null);
+    }
+  }
+
+  /**
+   * Returns the state of an open attempt: the running process where there is
+   * one, the last event the door reported otherwise, and the lock's own state
+   * as the last resort. `statusSource` says which of the three answered.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId Access point ID
+   * @param {string|null} openProcessId The process an open answered with
+   * @returns {Promise<Object>} The status of the open attempt
    */
   static async getOpenStatus(tenant, bookingId, accessPointId, openProcessId) {
     const { accessPoint, bookingContext } = await this._resolve(
@@ -316,8 +401,6 @@ class AccessService {
       statusSource = "provider_status";
     }
 
-    status = this._normalizeOpenStatus(status, statusSource);
-
     await this._log({
       tenantId: tenant,
       accessPoint,
@@ -327,9 +410,18 @@ class AccessService {
       payload: status,
       actor: { source: "system" },
     });
-    return status;
+
+    return this._toOpenStatusResponse(status, statusSource);
   }
 
+  /**
+   * Returns the current state of an access point as the lock reports it.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<Object>} The status of the access point
+   */
   static async getStatus(tenant, bookingId, accessPointId) {
     const { accessPoint, bookingContext } = await this._resolve(
       tenant,
@@ -338,10 +430,7 @@ class AccessService {
     );
 
     const provider = getAccessProvider(accessPoint.provider);
-    const status = this._normalizeOpenStatus(
-      await provider.getStatus(accessPoint, bookingContext),
-      "provider_status",
-    );
+    const status = await provider.getStatus(accessPoint, bookingContext);
 
     await this._log({
       tenantId: tenant,
@@ -353,19 +442,75 @@ class AccessService {
       actor: { source: "system" },
     });
 
-    return status;
+    return this._toStatusResponse(status, "provider_status");
   }
 
-  static _normalizeOpenStatus(status = {}, statusSource = null) {
+  /**
+   * @private
+   * A provider answer as the API hands it out: the named fields and nothing
+   * else. The raw answer stays in the audit log - as long as provider keys
+   * slip through, a client can branch on them again, which is exactly what
+   * these endpoints are meant to end.
+   *
+   * `null` carries meaning and is not `false`: it says the provider does not
+   * report this.
+   *
+   * @param {Object} [status={}] The provider's answer
+   * @param {string|null} [statusSource=null] Where the answer came from
+   * @returns {{ open: boolean|null, locked: boolean|null,
+   *   doorOpen: boolean|null, statusSource: string|null }} The status
+   */
+  static _toStatusResponse(status = {}, statusSource = null) {
     const open = this._resolveOpen(status);
 
     return {
-      ...status,
       open,
       locked: this._resolveLocked(status, open),
       doorOpen: typeof status.doorOpen === "boolean" ? status.doorOpen : null,
       statusSource,
     };
+  }
+
+  /**
+   * @private
+   * The status of an open attempt: the fields of {@link _toStatusResponse}
+   * plus what only an attempt can say - whether it was confirmed, and how it
+   * failed if it did.
+   *
+   * @param {Object} [status={}] The provider's answer
+   * @param {string|null} [statusSource=null] Where the answer came from
+   * @returns {Object} The status of the open attempt
+   */
+  static _toOpenStatusResponse(status = {}, statusSource = null) {
+    return {
+      ...this._toStatusResponse(status, statusSource),
+      confirmed:
+        typeof status.confirmed === "boolean" ? status.confirmed : null,
+      errorCode:
+        typeof status.errorCode === "string" ||
+        typeof status.errorCode === "number"
+          ? status.errorCode
+          : null,
+      errorMessage:
+        typeof status.errorMessage === "string" ? status.errorMessage : null,
+    };
+  }
+
+  /**
+   * @private
+   * The process id an open answered with, if the provider started one. `null`
+   * means the door is already dealt with, a value means there is something to
+   * poll - so the answer says by itself whether polling is called for.
+   *
+   * @param {Object} [result={}] The provider's answer to an open
+   * @returns {string|null} The open process id
+   */
+  static _toOpenProcessId(result = {}) {
+    const openProcessId = result?.openProcessId;
+
+    return openProcessId === null || openProcessId === undefined
+      ? null
+      : String(openProcessId);
   }
 
   static _resolveOpen(status) {
@@ -405,43 +550,50 @@ class AccessService {
   }
 
   /**
-   * Returns all access points for a booking.
+   * Returns all access points of a booking, in the shape a client sees them.
+   *
+   * The projection is the same one a resolved scan goes through, so the person
+   * at the door reads the same access point either way. What a client must not
+   * learn - scan codes, provider configuration, external ids - stays on the
+   * internal entries this is built from.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {Object} [options]
+   * @param {boolean} [options.hasManagePermission=false] Whether the user may
+   *   manage the bookings of the tenant, which exempts them from the evidence
+   *   rules and thus empties `validationRuleTypes`
+   * @returns {Promise<Object[]>} The access points of the booking
    */
-  static async getByBooking(tenant, bookingId) {
+  static async getByBooking(tenant, bookingId, { hasManagePermission } = {}) {
+    const entries = await this._getBookingAccessPointEntries(tenant, bookingId);
+
+    return entries.map(({ accessPoint, bookingContext }) =>
+      projectAccessPoint(accessPoint, {
+        hasManagePermission: hasManagePermission === true,
+        bookingContext,
+      }),
+    );
+  }
+
+  /**
+   * @private
+   * Lockers and doors of a booking as one list of internal entries, lockers
+   * first. Everything that needs the full access point - eligibility, the
+   * providers, the audit log - works on these; only the API boundary projects
+   * them.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @returns {Promise<{ accessPoint: Object, bookingContext: Object }[]>}
+   */
+  static async _getBookingAccessPointEntries(tenant, bookingId) {
     const { lockers, doors } = await this._getBookingAccessPoints(
       tenant,
       bookingId,
     );
 
-    return [
-      ...lockers.map(({ accessPoint, bookingContext }) => ({
-        ...accessPoint,
-        externalBookingId: bookingContext.externalBookingId,
-        lastOpenBoxId: bookingContext.lastOpenBoxId,
-        isProvisioned: true,
-        accessBuffer: bookingContext.accessBuffer || {
-          beforeMs: 0,
-          afterMs: 0,
-        },
-        accessFrom: bookingContext.accessFrom ?? null,
-        accessTo: bookingContext.accessTo ?? null,
-      })),
-      ...doors.map(({ accessPoint, bookingContext }) => ({
-        ...accessPoint,
-        authorizationId: bookingContext.authorizationId || null,
-        accessId: bookingContext.accessId || null,
-        saltoUserId: bookingContext.saltoUserId || null,
-        isProvisioned: bookingContext.isProvisioned || false,
-        provisionedAt: bookingContext.provisionedAt || null,
-        lastEvent: bookingContext.lastEvent || null,
-        accessBuffer: bookingContext.accessBuffer || {
-          beforeMs: 0,
-          afterMs: 0,
-        },
-        accessFrom: bookingContext.accessFrom ?? null,
-        accessTo: bookingContext.accessTo ?? null,
-      })),
-    ];
+    return [...lockers, ...doors];
   }
 
   static async provisionForBooking(tenant, bookingId) {
@@ -736,7 +888,8 @@ class AccessService {
    * the access-bookings list API.
    *
    * @param {import("../../entities/booking/booking").Booking} booking
-   * @param {Object[]} accessPoints Access points as returned by {@link getByBooking}
+   * @param {Object[]} accessPoints Access points as returned by
+   *   {@link _toEligibilityAccessPoint}
    * @param {Object} [opts]
    * @param {number} [opts.now=Date.now()]
    * @param {string|null} [opts.userId=null]
@@ -954,12 +1107,13 @@ class AccessService {
       this._uniqueTenantIds(bookings),
     );
 
-    const managePermissionByTenant = includeEligibility
-      ? await this._resolveManagePermissionByTenant(
-          userId,
-          this._uniqueTenantIds(bookings),
-        )
-      : null;
+    const managePermissionByTenant =
+      includeEligibility || includeAccessPoints
+        ? await this._resolveManagePermissionByTenant(
+            userId,
+            this._uniqueTenantIds(bookings),
+          )
+        : null;
 
     return this._buildAccessBookingResults(bookings, {
       state,
@@ -1044,9 +1198,10 @@ class AccessService {
       includeBuffer: honorBuffer,
       includeEligibility,
       userId,
-      managePermissionByTenant: includeEligibility
-        ? await this._resolveManagePermissionByTenant(userId, tenantIds)
-        : null,
+      managePermissionByTenant:
+        includeEligibility || includeAccessPoints
+          ? await this._resolveManagePermissionByTenant(userId, tenantIds)
+          : null,
       now,
       resolve: (booking) => {
         const { triggerIds, mode } = triggerByTenant.get(booking.tenantId) || {
@@ -1120,12 +1275,16 @@ class AccessService {
         includeAccessPoints ||
         (state === "active" && includeBuffer) ||
         includeEligibility;
-      let enrichedPoints = null;
+      let entries = null;
+      let eligibilityPoints = null;
       if (needsEnrichment) {
-        enrichedPoints = await this._getFilteredBookingAccessPoints(
+        entries = await this._getFilteredBookingAccessPointEntries(
           booking.tenantId,
           booking.id,
           { capability, includeLockers },
+        );
+        eligibilityPoints = entries.map(({ accessPoint, bookingContext }) =>
+          this._toEligibilityAccessPoint(accessPoint, bookingContext),
         );
       }
 
@@ -1135,7 +1294,7 @@ class AccessService {
           state,
           now,
           includeBuffer,
-          enrichedPoints,
+          eligibilityPoints,
           includeEligibility,
         )
       ) {
@@ -1156,16 +1315,23 @@ class AccessService {
         accessPointIds: resolved.accessPointIds,
       };
 
+      const hasManagePermission =
+        managePermissionByTenant?.get(booking.tenantId) ?? false;
+
       if (includeAccessPoints) {
-        result.accessPoints = enrichedPoints;
+        result.accessPoints = (entries || []).map(
+          ({ accessPoint, bookingContext }) =>
+            projectAccessPoint(accessPoint, {
+              hasManagePermission,
+              bookingContext,
+            }),
+        );
       }
 
       if (includeEligibility) {
-        const hasManagePermission =
-          managePermissionByTenant?.get(booking.tenantId) ?? false;
         result.accessEligibility = this.evaluateBookingAccessEligibility(
           booking,
-          enrichedPoints || [],
+          eligibilityPoints || [],
           { now, userId, hasManagePermission },
         );
       }
@@ -1464,23 +1630,33 @@ class AccessService {
 
   /**
    * @private
-   * Loads the access points of a booking and applies the capability/locker
-   * filters. Reuses {@link getByBooking} (which never exposes PINs).
+   * Loads the access point entries of a booking and applies the
+   * capability/locker filters. Entries rather than the projection, because the
+   * eligibility decision needs fields a client never sees.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {Object} filters
+   * @param {string|null} filters.capability `"authorization"` to keep only the
+   *   access points a booking holds an authorization for
+   * @param {boolean} filters.includeLockers Whether lockers count as access
+   * @returns {Promise<{ accessPoint: Object, bookingContext: Object }[]>} The
+   *   entries that passed the filters
    */
-  static async _getFilteredBookingAccessPoints(
+  static async _getFilteredBookingAccessPointEntries(
     tenant,
     bookingId,
     { capability, includeLockers },
   ) {
-    const points = await this.getByBooking(tenant, bookingId);
+    const entries = await this._getBookingAccessPointEntries(tenant, bookingId);
     const onlyAuthorization = capability === "authorization";
 
-    return points.filter((point) => {
-      if (point.type === "locker") {
+    return entries.filter(({ accessPoint }) => {
+      if (accessPoint.type === "locker") {
         return includeLockers && !onlyAuthorization;
       }
       if (onlyAuthorization) {
-        return this._usesAuthorization(point.mode);
+        return this._usesAuthorization(accessPoint.mode);
       }
       return true;
     });
@@ -1688,7 +1864,7 @@ class AccessService {
     return (booking.lockerInfo || []).map((lockerInfo) => ({
       accessPoint: {
         id: this._getLockerAccessPointId(lockerInfo),
-        tenant,
+        tenantId: tenant,
         provider: lockerInfo.lockerSystem,
         type: "locker",
         mode: AccessPointMode.REMOTE,
@@ -1789,16 +1965,21 @@ class AccessService {
           const accessInfo = (booking.accessInfo || []).find(
             (info) => String(info.accessPointId) === accessPointKey,
           );
+          // The resolved copy carries the rule *types* so a client can be told
+          // what it has to prove, but neither the rule configuration nor the
+          // scan code they are checked against - the evidence check reads the
+          // stored access point again for those.
           const resolvedAccessPoint = {
             id: accessPoint.id,
-            tenant,
+            tenantId: tenant,
             type: "door",
             provider: accessPoint.provider,
             externalId: accessPoint.externalId,
-            locationId: accessPoint.providerLocationId || null,
             label: accessPoint.label || "",
             mode: accessPoint.mode || AccessPointMode.AUTHORIZATION,
-            config: accessPoint.config || {},
+            validationRuleTypes: (accessPoint.validationRules || []).map(
+              (rule) => rule.type,
+            ),
             bookableId: bookable.id,
             bookableTitle: bookable.title,
             relation: bookableRelations.get(bookable.id) || "self",

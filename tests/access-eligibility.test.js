@@ -6,10 +6,14 @@ const {
   ACCESS_BLOCKING_REASONS,
 } = require("../src/commons/services/access/access-blocking-reasons");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
-const { BookableManager } = require("../src/commons/data-managers/bookable-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 const PermissionsService = require("../src/commons/services/permission-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
-const { AccessPointMode } = require("../src/commons/entities/access/access-point");
+const {
+  AccessPointMode,
+} = require("../src/commons/entities/access/access-point");
 
 const MINUTE = 60 * 1000;
 
@@ -37,6 +41,26 @@ function createDoorPoint(overrides = {}) {
     accessBuffer: { beforeMs: 0, afterMs: 0 },
     isProvisioned: true,
     ...overrides,
+  };
+}
+
+/**
+ * A door as the booking way resolves it internally: the access point itself
+ * plus the booking context it was resolved with.
+ */
+function createDoorEntry({ accessBuffer, ...overrides } = {}) {
+  return {
+    accessPoint: {
+      id: "door-1",
+      type: "door",
+      provider: "nuki",
+      mode: AccessPointMode.REMOTE,
+      ...overrides,
+    },
+    bookingContext: {
+      accessBuffer: accessBuffer || { beforeMs: 0, afterMs: 0 },
+      isProvisioned: true,
+    },
   };
 }
 
@@ -347,10 +371,14 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
     sandbox.stub(BookingManager, "getUserBookingsFiltered").resolves([booking]);
     sandbox
       .stub(AccessService, "_getAccessTriggerMapsForTenants")
-      .resolves(new Map([["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])]]));
+      .resolves(
+        new Map([
+          ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
+        ]),
+      );
     sandbox
-      .stub(AccessService, "_getFilteredBookingAccessPoints")
-      .resolves([createDoorPoint()]);
+      .stub(AccessService, "_getFilteredBookingAccessPointEntries")
+      .resolves([createDoorEntry()]);
     sandbox
       .stub(AccessService, "_resolveManagePermissionByTenant")
       .resolves(new Map([["tenant-1", false]]));
@@ -386,11 +414,13 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
           ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
         ]),
       );
-    sandbox.stub(AccessService, "_getFilteredBookingAccessPoints").resolves([
-      createDoorPoint({
-        accessBuffer: { beforeMs: 15 * MINUTE, afterMs: 0 },
-      }),
-    ]);
+    sandbox
+      .stub(AccessService, "_getFilteredBookingAccessPointEntries")
+      .resolves([
+        createDoorEntry({
+          accessBuffer: { beforeMs: 15 * MINUTE, afterMs: 0 },
+        }),
+      ]);
     sandbox
       .stub(AccessService, "_resolveManagePermissionByTenant")
       .resolves(new Map([["tenant-1", false]]));
@@ -424,11 +454,13 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
           ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
         ]),
       );
-    sandbox.stub(AccessService, "_getFilteredBookingAccessPoints").resolves([
-      createDoorPoint({
-        accessBuffer: { beforeMs: 15 * MINUTE, afterMs: 0 },
-      }),
-    ]);
+    sandbox
+      .stub(AccessService, "_getFilteredBookingAccessPointEntries")
+      .resolves([
+        createDoorEntry({
+          accessBuffer: { beforeMs: 15 * MINUTE, afterMs: 0 },
+        }),
+      ]);
     sandbox
       .stub(AccessService, "_resolveManagePermissionByTenant")
       .resolves(new Map([["tenant-1", false]]));

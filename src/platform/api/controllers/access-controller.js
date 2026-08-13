@@ -26,6 +26,27 @@ class AccessController {
    * malformed body reads as "no evidence sent" rather than an error.
    */
   static async open(request, response) {
+    return AccessController._renderOpen(request, response, {
+      action: "open",
+      errorMessage: "Could not open access point",
+    });
+  }
+
+  /**
+   * @private
+   * Renders one of the two ways through a door. Both are decided by the
+   * service, both are refused the same way, so both are rendered here: a
+   * refusal is a soft failure on HTTP 200 with its reasons, an access point
+   * outside the booking is a 403.
+   *
+   * @param {Object} request Express request
+   * @param {Object} response Express response
+   * @param {Object} options
+   * @param {"open"|"unlatch"} options.action Which way to take
+   * @param {string} options.errorMessage What to say when nothing else fits
+   * @returns {Promise<Object>} The Express response
+   */
+  static async _renderOpen(request, response, { action, errorMessage }) {
     const { tenant, accessPointId } = request.params;
     const { bookingId } = request.query;
     const otp = request.body?.otp || request.query?.otp || null;
@@ -42,7 +63,7 @@ class AccessController {
         tenant,
       );
 
-      const outcome = await AccessService.open(
+      const outcome = await AccessService[action](
         tenant,
         bookingId,
         accessPointId,
@@ -60,19 +81,19 @@ class AccessController {
       }
 
       logger.info(
-        `${tenant} -- user ${user.id} opened access-point ${accessPointId} (booking ${bookingId})`,
+        `${tenant} -- user ${user.id} ${action}ed access-point ${accessPointId} (booking ${bookingId})`,
       );
       return ApiResponse.ok(response, { data: outcome.data });
     } catch (err) {
       if (err instanceof ForbiddenError) {
         logger.warn(
-          `${tenant} -- user ${user.id} tried to open access-point ${accessPointId} outside booking ${bookingId}`,
+          `${tenant} -- user ${user.id} tried to ${action} access-point ${accessPointId} outside booking ${bookingId}`,
         );
         return response.sendStatus(403);
       }
 
       logger.error(err);
-      return ApiResponse.error(response, "Could not open access point");
+      return ApiResponse.error(response, errorMessage);
     }
   }
 
@@ -89,10 +110,15 @@ class AccessController {
     const user = request.user;
 
     try {
+      const hasManagePermission = await AccessController._hasManagePermission(
+        user.id,
+        tenant,
+      );
       const outcome = await AccessScanService.resolveScanCode(
         tenant,
         scanCode,
         user.id,
+        { hasManagePermission },
       );
 
       if (!outcome.success) {
@@ -108,36 +134,17 @@ class AccessController {
 
   /**
    * POST /:tenant/access/:accessPointId/unlatch
+   *
+   * Opens a door by pulling its latch. Rendered exactly like {@link open},
+   * because it is guarded exactly like it: a door that asks for evidence asks
+   * for it here too. Where a lock can pull its latch, `open` does so by itself
+   * - no client needs this route.
    */
   static async unlatch(request, response) {
-    try {
-      const { tenant, accessPointId } = request.params;
-      const { bookingId } = request.query;
-      const user = request.user;
-
-      const allowed = await AccessController._canOperate(
-        user.id,
-        tenant,
-        bookingId,
-        accessPointId,
-      );
-      if (!allowed) return response.sendStatus(403);
-
-      const result = await AccessService.unlatch(
-        tenant,
-        bookingId,
-        accessPointId,
-        user.id,
-      );
-
-      logger.info(
-        `${tenant} -- user ${user.id} unlatched access-point ${accessPointId} (booking ${bookingId})`,
-      );
-      return ApiResponse.ok(response, { data: result });
-    } catch (err) {
-      logger.error(err);
-      return ApiResponse.error(response, "Could not unlatch access point");
-    }
+    return AccessController._renderOpen(request, response, {
+      action: "unlatch",
+      errorMessage: "Could not unlatch access point",
+    });
   }
 
   /**
@@ -238,7 +245,12 @@ class AccessController {
 
   /**
    * GET /:tenant/access-points
-   * Returns all access points linked to a booking.
+   *
+   * Returns all access points linked to a booking. Listing them does not
+   * require the booking to be within its time window - what a booking opens
+   * should be readable at any time - and the manage permission is resolved
+   * once: it decides both whether the booking may be seen at all and whether
+   * this user has to prove anything at its doors.
    */
   static async getAccessPoints(request, response) {
     try {
@@ -246,14 +258,21 @@ class AccessController {
       const { bookingId } = request.query;
       const user = request.user;
 
-      const allowed = await AccessController._canView(
+      const hasManagePermission = await AccessController._hasManagePermission(
+        user.id,
+        tenant,
+      );
+      const allowed = await AccessService.canView(
         user.id,
         tenant,
         bookingId,
+        hasManagePermission,
       );
       if (!allowed) return response.sendStatus(403);
 
-      const points = await AccessService.getByBooking(tenant, bookingId);
+      const points = await AccessService.getByBooking(tenant, bookingId, {
+        hasManagePermission,
+      });
 
       return ApiResponse.ok(response, { data: points });
     } catch (err) {
@@ -409,29 +428,6 @@ class AccessController {
       userId,
       tenant,
       RolePermission.MANAGE_BOOKINGS,
-    );
-  }
-
-  /**
-   * @private
-   * Checks that the booking is valid (committed, paid if priced, not rejected)
-   * and that the user is either the booking owner or has the manage-bookings
-   * permission. In contrast to {@link _canOperate} this does NOT check the
-   * (buffered) time window, so the access points assigned to a booking can be
-   * listed at any time.
-   */
-  static async _canView(userId, tenant, bookingId) {
-    const hasManagePermission = await PermissionService._allowUpdateAny(
-      userId,
-      tenant,
-      RolePermission.MANAGE_BOOKINGS,
-    );
-
-    return AccessService.canView(
-      userId,
-      tenant,
-      bookingId,
-      hasManagePermission,
     );
   }
 }

@@ -355,57 +355,67 @@ auftauchen als direkt am gebuchten Bookable konfiguriert.
   "data": [
     {
       "id": "ap-uuid-1",
+      "tenantId": "rostock",
       "type": "door",
       "provider": "salto-ks",
-      "externalId": "lock-123",
       "label": "Haupteingang",
       "mode": "authorization",
-      "bookableId": "...",
-      "bookableTitle": "...",
-      "authorizationId": "access-99",
-      "isProvisioned": true,
-      "provisionedAt": 1718200000000,
-      "lastEvent": {
-        "type": "open",
-        "timestamp": 1718200500000,
-        "source": "webhook",
-        "success": true,
-        "errorCode": null
-      },
+      "validationRuleTypes": ["qrScan"],
+      "capabilities": ["open", "getStatus"],
       "accessBuffer": { "beforeMs": 900000, "afterMs": 600000 },
       "accessFrom": 1718199100000,
-      "accessTo": 1718205600000
+      "accessTo": 1718205600000,
+      "isProvisioned": true
     }
-    // Locker-Einträge haben type:"locker" und zusätzliche Felder
+    // Locker-Einträge haben type:"locker" und zusätzlich externalBookingId
   ]
 }
 ```
 
-- **`pin` ist NICHT enthalten** (bewusst). Nur Provisioning-Status & letztes Event.
+Dieselbe Projektion beantwortet auch einen gescannten Code
+(`GET /api/:tenant/access/resolve-scan/:scanCode`) – dort ohne die vier
+Buchungsfelder, weil ein Scan keine Buchung kennt.
+
+- **`validationRuleTypes`** sagt, was **dieser** Nutzer an **dieser** Tür
+  nachweisen muss, bevor sie aufgeht. Leer bei `MANAGE_BOOKINGS` und bei
+  Lockern. Die Liste sagt, was verlangt wird – nie, ob es klappen wird.
+- **`capabilities`** sagt, welche Knöpfe sinnvoll sind: `open`, `close`,
+  `getStatus`. Nicht am `provider` verzweigen – der ist nur ein Schlüssel,
+  z.B. für den Service-Kontakt.
+- **Nie enthalten:** Scan-Codes, Provider-Konfiguration, externe IDs, PINs.
 - `accessFrom`/`accessTo` = gepufferter Zeitraum (ms), in dem bedient werden darf.
 - Berechtigung: Owner **oder** `MANAGE_BOOKINGS`. Buchung muss gültig sein
   (committed, ggf. bezahlt, nicht abgelehnt) – aber **nicht** zwingend im
   Zeitfenster (Liste ist immer sichtbar).
 
-### 3.2 Tür öffnen / schließen / entriegeln
+### 3.2 Tür öffnen / schließen
 
-| Aktion             | Endpoint                                                         | Mode          |
-| ------------------ | ---------------------------------------------------------------- | ------------- |
-| Öffnen             | `POST /api/:tenant/access/:accessPointId/open?bookingId=<id>`    | remote/both   |
-| Entriegeln (Latch) | `POST /api/:tenant/access/:accessPointId/unlatch?bookingId=<id>` | remote (Nuki) |
-| Schließen          | `POST /api/:tenant/access/:accessPointId/close?bookingId=<id>`   | remote/both   |
+| Aktion    | Endpoint                                                       | Capability |
+| --------- | -------------------------------------------------------------- | ---------- |
+| Öffnen    | `POST /api/:tenant/access/:accessPointId/open?bookingId=<id>`  | `open`     |
+| Schließen | `POST /api/:tenant/access/:accessPointId/close?bookingId=<id>` | `close`    |
 
-Antwort:
+Antwort auf `open`:
 
 ```json
-{ "success": true, "data": { "success": true, "state": "open", "providerResponse": { ... } } }
+{ "success": true, "data": { "openProcessId": null } }
+{ "success": true, "data": { "openProcessId": "OB-5512" } }
 ```
 
-- `accessPointId` = die `id` des Punktes (nicht die `externalId`).
+`null` heißt „sofort erledigt", ein Wert heißt „pollen" (siehe 3.3) – die
+Antwort beschreibt sich selbst. `close` antwortet mit dem Zustand **nach** dem
+Schließen, in der Form von `/status`. Der wird beim Schloss gelesen, nicht aus
+dem Befehl geschlossen — direkt nach dem Schließen kann es sich also noch als
+entriegelt melden.
+
+- `accessPointId` = die `id` des Punktes.
 - `bookingId` als **Query-Param**.
-- **Salto KS** unterstützt kein remote `close` (Schlösser verriegeln selbst) –
-  Close-Button für Salto-Türen ausblenden bzw. nur bei Nuki anzeigen. Orientiere
-  dich am `mode` und ggf. an `provider`.
+- Ob ein Schließen-Knopf sinnvoll ist, steht in `capabilities` – nicht am
+  Provider ablesen.
+- **Nachweis:** Verlangt `validationRuleTypes` etwas, muss `open` ihn
+  mitschicken:
+  `{ "evidence": [{ "type": "qrScan", "scanCode": "..." }], "channel": "qrScan" }`.
+  Fehlt er, antwortet der Server mit `evidence_missing`.
 - **Berechtigung & Zeitfenster:** Owner oder `MANAGE_BOOKINGS`, und die Buchung
   muss **im (gepufferten) Zeitfenster** liegen. Open/Close-Buttons also nur
   innerhalb `accessFrom`..`accessTo` aktiv schalten.
@@ -413,8 +423,13 @@ Antwort:
   `{ "success": false, "data": { "blockingReasons": ["payment_required", ...] } }`
   – die Gründe sind nach Priorität sortiert und eignen sich direkt für die
   Fehlermeldung. `403` bleibt dem Fall vorbehalten, dass Buchung oder
-  Access-Point nicht existieren. `close`/`unlatch` antworten unverändert mit
-  `403`, wenn nicht geöffnet werden darf.
+  Access-Point nicht existieren. `close` antwortet weiterhin mit `403`, wenn
+  nicht bedient werden darf.
+- **Die Falle zieht das Backend:** Wo ein Nuki-Schloss eine Falle hat, schickt
+  `/open` `UNLATCH` statt `UNLOCK` – die Tür geht also auf, statt nur
+  entriegelt zu sein. Das entscheidet der Server pro Schloss.
+  `POST …/unlatch` gibt es noch, ist aber **deprecated**, wird nicht mehr
+  gebraucht und hängt inzwischen hinter demselben Wächter wie `/open`.
 
 ### 3.3 Status / Rückmeldung
 
@@ -427,8 +442,7 @@ Antwort:
     "open": true,
     "locked": false,
     "doorOpen": null,
-    "statusSource": "provider_status",
-    "...": "providerspezifische Felder"
+    "statusSource": "provider_status"
   }
 }
 ```
@@ -441,21 +455,27 @@ Antwort:
   "success": true,
   "data": {
     "open": true,
+    "locked": false,
+    "doorOpen": null,
+    "statusSource": "last_event",
     "confirmed": true,
-    "confirmedAt": 1718200500000,
-    "statusSource": "last_event"
+    "errorCode": null,
+    "errorMessage": null
   }
 }
 ```
 
 Hinweise:
 
+- Es kommen **nur** diese benannten Felder heraus; providereigene Felder
+  bleiben im Audit-Log. `null` heißt „der Provider sagt dazu nichts" und ist
+  nicht dasselbe wie `false`.
 - Für **Nuki/Salto** wird der Status webhook-getrieben aus dem zuletzt
-  gespeicherten Event (`lastEvent`) gelesen (`statusSource: "last_event"`),
-  ansonsten als Fallback live beim Provider abgefragt.
-- Für **iFBS-Locker** bleibt das bisherige `openProcessId`-Polling.
-- Empfehlung: Nach `open` kurz auf `open-status` pollen (z.B. alle 2s, max ~30s)
-  und das Ergebnis (`confirmed`/`open`) anzeigen.
+  gespeicherten Event gelesen (`statusSource: "last_event"`), ansonsten als
+  Fallback live beim Provider abgefragt.
+- Für **iFBS-Locker** bleibt das `openProcessId`-Polling.
+- Empfehlung: Nach `open` mit `openProcessId` kurz auf `open-status` pollen
+  (z.B. alle 2s, max ~30s) und das Ergebnis (`confirmed`/`open`) anzeigen.
 
 ### 3.4 Buchungen mit Zutritt (nutzerzentriert, tenant-übergreifend)
 

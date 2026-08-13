@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const bunyan = require("bunyan");
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const { createClient } = require("../clients/access-client-registry");
@@ -11,6 +12,11 @@ require("../clients");
 
 const APP_TYPE = "access";
 const PROVIDER_ID = "nuki";
+
+const logger = bunyan.createLogger({
+  name: "nuki-access-provider.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class NukiAccessProvider extends AccessProvider {
   async _getClient(tenant) {
@@ -28,11 +34,29 @@ class NukiAccessProvider extends AccessProvider {
     return createClient(rawApp);
   }
 
+  /**
+   * Opens the access point: pulls the latch where the lock has one, releases
+   * the lock where it has not. For the person at the door that is the
+   * difference between "the door is open" and "it is unlocked, now push".
+   *
+   * The decision is made here and per lock, never by the client: `unlatch` is
+   * guarded like `open`, but a client that could choose the action could also
+   * choose the weaker route. There is no falling back either - a lock that
+   * cannot pull its latch is asked to unlock right away, so nobody waits out a
+   * failed action in front of the door.
+   *
+   * @param {Object} accessPoint The access point to open
+   * @param {Object} bookingContext The booking the door is opened for
+   * @returns {Promise<Object>} The provider's answer to the action
+   */
   async open(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
+    const action = (await this._hasLatch(client, accessPoint))
+      ? NUKI_ACTIONS.UNLATCH
+      : NUKI_ACTIONS.UNLOCK;
     const providerResponse = await client.executeAction(
       accessPoint.externalId,
-      NUKI_ACTIONS.UNLOCK,
+      action,
     );
 
     return {
@@ -40,6 +64,32 @@ class NukiAccessProvider extends AccessProvider {
       state: "open",
       providerResponse,
     };
+  }
+
+  /**
+   * @private
+   * Whether this lock has a latch to pull, read from the smartlock itself:
+   * the provider declares `unlatch` for every Nuki access point, but an opener
+   * or a box has no latch.
+   *
+   * A lookup that fails is answered with "no latch": the door then opens the
+   * way it always did instead of not opening at all.
+   *
+   * @param {Object} client The tenant's Nuki API client
+   * @param {Object} accessPoint The access point being opened
+   * @returns {Promise<boolean>} True if this lock has a latch to pull
+   */
+  async _hasLatch(client, accessPoint) {
+    try {
+      const smartlock = await client.getSmartlock(accessPoint.externalId);
+
+      return NukiApiClient.canUnlatchSmartlock(smartlock);
+    } catch (err) {
+      logger.warn(
+        `Could not read smartlock ${accessPoint.externalId} to decide on its latch, unlocking instead: ${err.message}`,
+      );
+      return false;
+    }
   }
 
   async close(accessPoint, bookingContext) {

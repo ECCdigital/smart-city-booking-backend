@@ -3,6 +3,7 @@ const sinon = require("sinon");
 
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const AccessScanService = require("../src/commons/services/access/access-scan-service");
+const PermissionsService = require("../src/commons/services/permission-service");
 
 describe("AccessController.resolveScan", () => {
   let sandbox;
@@ -11,6 +12,7 @@ describe("AccessController.resolveScan", () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    sandbox.stub(PermissionsService, "_allowUpdateAny").resolves(false);
 
     request = {
       params: { tenant: "tenant-1", scanCode: "code-1" },
@@ -37,8 +39,23 @@ describe("AccessController.resolveScan", () => {
     await AccessController.resolveScan(request, response);
 
     expect(
-      resolveScanCode.calledOnceWithExactly("tenant-1", "code-1", "user-1"),
+      resolveScanCode.calledOnceWithExactly("tenant-1", "code-1", "user-1", {
+        hasManagePermission: false,
+      }),
     ).to.be.true;
+  });
+
+  it("passes on that the user may manage the bookings of the tenant", async () => {
+    PermissionsService._allowUpdateAny.resolves(true);
+    const resolveScanCode = sandbox
+      .stub(AccessScanService, "resolveScanCode")
+      .resolves({ success: true, data: {} });
+
+    await AccessController.resolveScan(request, response);
+
+    expect(resolveScanCode.firstCall.args[3]).to.deep.equal({
+      hasManagePermission: true,
+    });
   });
 
   it("answers a resolved code with the success envelope", async () => {

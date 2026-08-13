@@ -20,6 +20,15 @@ const NUKI_DEVICE_TYPES = Object.freeze({
 
 const NUKI_NON_REMOTE_TYPES = Object.freeze([NUKI_DEVICE_TYPES.BOX]);
 
+// Device types mounted on a door with a latch. An opener buzzes a door open
+// and a box has no door at all, so neither has a latch to pull.
+const NUKI_LATCH_TYPES = Object.freeze([
+  NUKI_DEVICE_TYPES.SMART_LOCK_1_2,
+  NUKI_DEVICE_TYPES.SMART_DOOR,
+  NUKI_DEVICE_TYPES.SMART_LOCK_3_4,
+  NUKI_DEVICE_TYPES.SMART_LOCK_ULTRA,
+]);
+
 // Nuki smart lock states (state.state) as defined by the Nuki Web API.
 const NUKI_LOCK_STATES = Object.freeze({
   0: "uncalibrated",
@@ -172,6 +181,25 @@ class NukiApiClient extends BaseAccessApiClient {
     }
 
     return capabilities;
+  }
+
+  /**
+   * Whether this lock can pull the latch, i.e. whether an unlatch would
+   * physically open the door rather than only release the lock. The device
+   * type decides it, from the same `/smartlock` data the modes are derived
+   * from.
+   *
+   * A lock whose type is missing or unknown is answered with `false`: the
+   * question is what this lock can do, and a lock that does not say cannot be
+   * asked to do more than unlock.
+   *
+   * @param {Object} smartlock A smartlock as returned by the Nuki API
+   * @returns {boolean} True if the lock has a latch to pull
+   */
+  static canUnlatchSmartlock(smartlock) {
+    const type = smartlock?.type ?? smartlock?.config?.deviceType ?? null;
+
+    return NUKI_LATCH_TYPES.includes(type);
   }
 
   /**

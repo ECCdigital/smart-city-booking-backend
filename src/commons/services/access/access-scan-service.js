@@ -1,6 +1,7 @@
 const bunyan = require("bunyan");
 const AccessPointManager = require("../../data-managers/access-point-manager");
 const AccessLogService = require("./access-log-service");
+const { projectAccessPoint } = require("./access-point-projection");
 
 const logger = bunyan.createLogger({
   name: "access-scan-service.js",
@@ -26,14 +27,27 @@ class AccessScanService {
    * at the door - a stale code is a sticker that should be replaced, an
    * unknown one was never issued here.
    *
+   * A resolved code answers with the same projection the booking way uses, so
+   * the person at the door reads one access point, not two shapes of it. It
+   * knows no booking, so it carries the core fields only.
+   *
    * @param {string} tenantId The tenant the code was scanned for
    * @param {string} scanCode The scanned code
    * @param {string|null} [userId=null] The user holding the scanner
+   * @param {Object} [options]
+   * @param {boolean} [options.hasManagePermission=false] Whether the user may
+   *   manage the bookings of the tenant, which exempts them from the evidence
+   *   rules
    * @returns {Promise<{ success: true, data: Object }
    *   | { success: false, data: { reason: string, accessPointId: string|null } }>}
-   *   The access point's display fields, or why the code did not resolve
+   *   The access point as the API hands it out, or why the code did not resolve
    */
-  static async resolveScanCode(tenantId, scanCode, userId = null) {
+  static async resolveScanCode(
+    tenantId,
+    scanCode,
+    userId = null,
+    { hasManagePermission = false } = {},
+  ) {
     const accessPoint = await AccessPointManager.getAccessPointByScanCode(
       tenantId,
       scanCode,
@@ -59,13 +73,7 @@ class AccessScanService {
 
     return {
       success: true,
-      data: {
-        id: accessPoint.id,
-        label: accessPoint.label,
-        type: accessPoint.type,
-        provider: accessPoint.provider,
-        mode: accessPoint.mode,
-      },
+      data: projectAccessPoint(accessPoint, { hasManagePermission }),
     };
   }
 

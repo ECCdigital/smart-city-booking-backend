@@ -9,6 +9,8 @@ const {
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const MailController = require("../src/commons/mail-service/mail-controller");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
+const AccessScanService = require("../src/commons/services/access/access-scan-service");
+const { AccessPoint } = require("../src/commons/entities/access/access-point");
 
 describe("AccessService bookable access point inheritance", () => {
   let sandbox;
@@ -232,46 +234,176 @@ describe("AccessService locker access window", () => {
   });
 
   it("exposes locker access window fields via getByBooking", async () => {
-    const bookingContext = {
-      tenant: "tenant-1",
-      bookingId: "booking-1",
+    stubLockerBooking();
+
+    const points = await AccessService.getByBooking("tenant-1", "booking-1");
+
+    expect(points).to.have.length(1);
+    expect(points[0]).to.deep.equal({
+      id: "ifbs-booking-99",
+      tenantId: "tenant-1",
+      type: "locker",
+      provider: "ifbs",
+      label: "",
+      mode: "remote",
+      validationRuleTypes: [],
+      capabilities: ["open", "close", "getStatus"],
       externalBookingId: "ifbs-booking-99",
-      lastOpenBoxId: "open-box-1",
+      isProvisioned: true,
       accessBuffer: { beforeMs: 0, afterMs: 0 },
       accessFrom: 1000,
       accessTo: 2000,
-    };
+    });
+  });
 
+  it("keeps what only the server needs out of the listed access points", async () => {
+    stubLockerBooking();
+
+    const points = await AccessService.getByBooking("tenant-1", "booking-1");
+
+    expect(points[0]).to.not.have.any.keys(
+      "config",
+      "externalId",
+      "locationId",
+      "lastOpenBoxId",
+      "lastEvent",
+      "provisionedAt",
+      "authorizationId",
+      "accessId",
+      "saltoUserId",
+      "scanCode",
+      "previousScanCodes",
+    );
+  });
+
+  function stubLockerBooking() {
     sandbox.stub(AccessService, "_getBookingAccessPoints").resolves({
       lockers: [
         {
           accessPoint: {
             id: "ifbs-booking-99",
-            tenant: "tenant-1",
+            tenantId: "tenant-1",
             provider: "ifbs",
             type: "locker",
             mode: "remote",
           },
-          bookingContext,
+          bookingContext: {
+            tenant: "tenant-1",
+            bookingId: "booking-1",
+            externalBookingId: "ifbs-booking-99",
+            lastOpenBoxId: "open-box-1",
+            accessBuffer: { beforeMs: 0, afterMs: 0 },
+            accessFrom: 1000,
+            accessTo: 2000,
+          },
         },
       ],
       doors: [],
     });
+  }
+});
 
-    const points = await AccessService.getByBooking("tenant-1", "booking-1");
+describe("One access point shape on both ways", () => {
+  let sandbox;
+  let accessPoint;
 
-    expect(points).to.have.length(1);
-    expect(points[0]).to.deep.include({
-      id: "ifbs-booking-99",
-      type: "locker",
-      provider: "ifbs",
+  const CORE_FIELDS = [
+    "id",
+    "tenantId",
+    "type",
+    "provider",
+    "label",
+    "mode",
+    "validationRuleTypes",
+    "capabilities",
+  ];
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    accessPoint = AccessPoint.create({
+      id: "door-1",
+      tenantId: "tenant-1",
+      provider: "nuki",
+      externalId: "lock-1",
+      label: "Werkstatt Nord",
       mode: "remote",
-      externalBookingId: "ifbs-booking-99",
-      lastOpenBoxId: "open-box-1",
+    });
+
+    sandbox
+      .stub(AccessPointManager, "getAccessPointByScanCode")
+      .resolves(accessPoint);
+    sandbox
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .resolves([accessPoint]);
+    sandbox.stub(BookingManager, "getBooking").resolves({
+      id: "booking-1",
+      tenantId: "tenant-1",
+      timeBegin: 1000,
+      timeEnd: 2000,
+      bookableItems: [{ bookableId: "room" }],
+      accessInfo: [{ accessPointId: "door-1", isProvisioned: true }],
+    });
+    sandbox.stub(BookableManager, "getBookablesByIds").resolves([
+      {
+        id: "room",
+        title: "Room",
+        accessPointDetails: { active: true, accessPointIds: ["door-1"] },
+      },
+    ]);
+    sandbox.stub(BookableManager, "getRelatedBookables").resolves([]);
+    sandbox.stub(BookableManager, "getAllParentBookables").resolves([]);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  function coreFieldsOf(view) {
+    return Object.fromEntries(CORE_FIELDS.map((field) => [field, view[field]]));
+  }
+
+  it("answers a scanned code and a booking with the same core fields", async () => {
+    const scanned = await AccessScanService.resolveScanCode(
+      "tenant-1",
+      accessPoint.scanCode,
+      "user-1",
+    );
+    const [listed] = await AccessService.getByBooking("tenant-1", "booking-1");
+
+    expect(coreFieldsOf(listed)).to.deep.equal(coreFieldsOf(scanned.data));
+    expect(listed.validationRuleTypes).to.deep.equal(["qrScan"]);
+    expect(listed.capabilities).to.deep.equal(["open", "close", "getStatus"]);
+  });
+
+  it("asks a user who may manage the bookings for no evidence on either way", async () => {
+    const scanned = await AccessScanService.resolveScanCode(
+      "tenant-1",
+      accessPoint.scanCode,
+      "user-1",
+      { hasManagePermission: true },
+    );
+    const [listed] = await AccessService.getByBooking("tenant-1", "booking-1", {
+      hasManagePermission: true,
+    });
+
+    expect(scanned.data.validationRuleTypes).to.deep.equal([]);
+    expect(listed.validationRuleTypes).to.deep.equal([]);
+  });
+
+  it("adds the booking context only where there is a booking", async () => {
+    const scanned = await AccessScanService.resolveScanCode(
+      "tenant-1",
+      accessPoint.scanCode,
+      "user-1",
+    );
+    const [listed] = await AccessService.getByBooking("tenant-1", "booking-1");
+
+    expect(scanned.data).to.not.have.property("isProvisioned");
+    expect(listed).to.deep.include({
       isProvisioned: true,
-      accessBuffer: { beforeMs: 0, afterMs: 0 },
       accessFrom: 1000,
       accessTo: 2000,
+      accessBuffer: { beforeMs: 0, afterMs: 0 },
     });
   });
 });
