@@ -42,7 +42,8 @@ class AccessService {
    * @param {Object} [options]
    * @param {string|null} [options.otp=null]
    * @param {boolean} [options.hasManagePermission=false] Replaces booking
-   *   ownership and exempts the user from the evidence rules
+   *   ownership, and exempts the user from the evidence rules at a booking
+   *   that is not theirs - at their own they present evidence like anyone else
    * @param {Object[]} [options.evidence=[]] Evidence the client sent, e.g. a
    *   scanned code
    * @param {string|null} [options.channel=null] How the client says it reached
@@ -142,7 +143,7 @@ class AccessService {
 
     const evidenceOutcome = await this._evaluateEvidence(tenant, accessPoint, {
       evidence: options.evidence,
-      bypass: options.hasManagePermission === true,
+      bypass: eligibility.accessRole === "manager",
     });
 
     if (!evidenceOutcome.satisfied) {
@@ -883,6 +884,35 @@ class AccessService {
   }
 
   /**
+   * @private
+   * Derives the role someone acts in at a booking: `"booker"` when the booking
+   * is theirs (owned or assigned), `"manager"` when they may manage someone
+   * else's booking, `null` when they may do neither. Ownership beats the
+   * manage permission - whoever holds both is the booker at their own booking.
+   *
+   * The rule stands here alone, so whoever changes "who is what" changes it
+   * once. The check is synchronous and reads the already loaded booking, so
+   * asking costs no further database access.
+   *
+   * @param {import("../../entities/booking/booking").Booking} booking
+   * @param {string|null} userId Acting user
+   * @param {boolean} hasManagePermission Whether the user may manage the
+   *   bookings of the tenant
+   * @returns {"booker"|"manager"|null} The access role
+   */
+  static _resolveAccessRole(booking, userId, hasManagePermission) {
+    const isOwnBooking = Boolean(
+      userId && PermissionsService._isOwner(booking, userId, booking.tenantId),
+    );
+
+    if (isOwnBooking) {
+      return "booker";
+    }
+
+    return hasManagePermission ? "manager" : null;
+  }
+
+  /**
    * Evaluates whether a booking's access points can be viewed or operated at a
    * given point in time. Centralises the rules used by {@link canOperate} and
    * the access-bookings list API.
@@ -899,6 +929,7 @@ class AccessService {
    *   canOperate: boolean,
    *   canOperateRemote: boolean,
    *   canUseAuthorization: boolean,
+   *   accessRole: "booker"|"manager"|null,
    *   blockingReasons: string[],
    *   primaryBlockingReason: string|null,
    *   operableAccessPointIds: string[],
@@ -921,12 +952,12 @@ class AccessService {
       blockingReasons.push(ACCESS_BLOCKING_REASONS.PAYMENT_REQUIRED);
     }
 
-    const hasPermission =
-      hasManagePermission ||
-      Boolean(
-        userId &&
-          PermissionsService._isOwner(booking, userId, booking.tenantId),
-      );
+    const accessRole = this._resolveAccessRole(
+      booking,
+      userId,
+      hasManagePermission,
+    );
+    const hasPermission = accessRole !== null;
 
     const canView = booking.isBookingValid() && hasPermission;
     const operableAccessPointIds = [];
@@ -1023,6 +1054,7 @@ class AccessService {
       canOperate: operableAccessPointIds.length > 0,
       canOperateRemote: remoteOperableAccessPointIds.length > 0,
       canUseAuthorization: anyAuthUsable,
+      accessRole,
       blockingReasons: prioritized,
       primaryBlockingReason: prioritized[0] ?? null,
       operableAccessPointIds,

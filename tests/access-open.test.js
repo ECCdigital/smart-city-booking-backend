@@ -387,19 +387,20 @@ describe("AccessService.open with validation rules", () => {
     sandbox = sinon.createSandbox();
     providerOpen = sandbox.stub().resolves({ processId: 42 });
     sandbox.stub(AccessLogService, "log").resolves();
-    sandbox.stub(PermissionsService, "_isOwner").returns(true);
   });
 
   afterEach(() => {
     sandbox.restore();
   });
 
-  function open(options) {
+  // Ownership is left to the data - `createBooking` assigns the booking to
+  // "user-1", so anyone else acting here is looking at someone else's booking.
+  function open(options, userId = "user-1") {
     return AccessService.open(
       "tenant-1",
       "booking-1",
       "door-1",
-      "user-1",
+      userId,
       options,
     );
   }
@@ -463,15 +464,46 @@ describe("AccessService.open with validation rules", () => {
     expect(providerOpen.called).to.be.false;
   });
 
-  it("lets a user with the manage-bookings permission skip the rules and audits it", async () => {
+  it("holds a booker with the manage-bookings permission to the rules", async () => {
     stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
 
     const outcome = await open({ hasManagePermission: true });
+
+    expect(outcome).to.deep.equal({
+      success: false,
+      blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING],
+    });
+    expect(providerOpen.called).to.be.false;
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      result: "denied",
+      evidenceBypassed: false,
+    });
+  });
+
+  it("lets a manager skip the rules of a booking that is not theirs and audits it", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+
+    const outcome = await open({ hasManagePermission: true }, "manager-9");
 
     expect(outcome.success).to.be.true;
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       result: "success",
       evidenceBypassed: true,
+    });
+  });
+
+  it("lets a booker with the manage-bookings permission in once they scan", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+
+    const outcome = await open({
+      hasManagePermission: true,
+      evidence: [{ type: "qrScan", scanCode: "current-code" }],
+    });
+
+    expect(outcome.success).to.be.true;
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      result: "success",
+      evidenceBypassed: false,
     });
   });
 
@@ -558,7 +590,7 @@ describe("AccessService close, unlatch and status with validation rules", () => 
       .stub()
       .resolves({ state: "locked", providerResponse: { raw: true } });
     sandbox.stub(AccessLogService, "log").resolves();
-    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+    // Ownership is left to the data: the booking is assigned to "user-1".
     stubResolvedDoor(sandbox, createBooking(), {
       entity: { validationRules: [{ type: "qrScan" }] },
     });
@@ -661,7 +693,7 @@ describe("AccessService close, unlatch and status with validation rules", () => 
     ).to.deep.equal(["qrScan"]);
   });
 
-  it("lets a user who may manage the bookings unlatch without evidence", async () => {
+  it("refuses the unlatch to a booker who may manage the bookings", async () => {
     const outcome = await AccessService.unlatch(
       "tenant-1",
       "booking-1",
@@ -670,9 +702,31 @@ describe("AccessService close, unlatch and status with validation rules", () => 
       { hasManagePermission: true },
     );
 
+    expect(outcome).to.deep.equal({
+      success: false,
+      blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING],
+    });
+    expect(providerUnlatch.called).to.be.false;
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "unlatch",
+      result: "denied",
+      evidenceBypassed: false,
+    });
+  });
+
+  it("lets a manager unlatch a booking that is not theirs without evidence", async () => {
+    const outcome = await AccessService.unlatch(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "manager-9",
+      { hasManagePermission: true },
+    );
+
     expect(outcome.success).to.be.true;
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       action: "unlatch",
+      result: "success",
       evidenceBypassed: true,
     });
   });
