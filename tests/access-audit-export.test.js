@@ -26,6 +26,7 @@ function createLog(overrides = {}) {
     result: "success",
     blockingReasons: [],
     channel: null,
+    accessRole: "booker",
     evidenceBypassed: false,
     payload: {},
     errorCode: null,
@@ -81,6 +82,18 @@ describe("AccessAuditService export", () => {
       expect(entry.channel).to.equal("QR-Scan");
     });
 
+    it("says in which capacity a door was opened", async () => {
+      query.resolves([
+        createLog({ accessRole: "manager", evidenceBypassed: true }),
+      ]);
+
+      const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
+
+      // The capacity, not the permission: this is what makes the bypass next
+      // to it readable.
+      expect(entry.accessRole).to.equal("Verwaltung");
+    });
+
     it("names every blocking reason of the shared vocabulary", () => {
       // Adding a reason to the vocabulary without wording for it here would
       // otherwise surface as a raw code in a compliance export.
@@ -104,6 +117,7 @@ describe("AccessAuditService export", () => {
       delete log.blockingReasons;
       delete log.channel;
       delete log.evidenceBypassed;
+      delete log.accessRole;
       query.resolves([log]);
 
       const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
@@ -112,6 +126,25 @@ describe("AccessAuditService export", () => {
       expect(entry.channel).to.equal("");
       // Not "Nein": nobody recorded that the rules were not bypassed.
       expect(entry.evidenceBypassed).to.equal("");
+      // Not "Buchender" either: nobody acted in a capacity here.
+      expect(entry.accessRole).to.equal("");
+    });
+
+    it("leaves the capacity empty where an action has none", async () => {
+      query.resolves([
+        createLog({
+          action: "provision",
+          accessRole: null,
+          actor: { userId: "user-1", source: "system" },
+        }),
+      ]);
+
+      const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
+
+      // Provisioning nobody stands at the door for: the blank cell is the
+      // correct statement, not a gap in the record.
+      expect(entry.action).to.equal("provision");
+      expect(entry.accessRole).to.equal("");
     });
 
     it("exports a failed scan with its error code", async () => {
@@ -188,6 +221,26 @@ describe("AccessAuditService export", () => {
       expect(cellFor("Evidence-Bypass")).to.equal("Nein");
     });
 
+    it("has a column for the capacity next to the bypass", async () => {
+      query.resolves([
+        createLog({ accessRole: "manager", evidenceBypassed: true }),
+      ]);
+
+      const entries = await AccessAuditService.getAuditEntries("tenant-1");
+      const csv = AccessAuditService.toCsv(entries);
+      const [header, row] = csv.replace("\uFEFF", "").split("\r\n");
+
+      const cells = header.split(";");
+      const values = row.split(";");
+
+      expect(cells).to.include("Zugriffsrolle");
+      expect(values[cells.indexOf("Zugriffsrolle")]).to.equal("Verwaltung");
+      // Read together, the two cells tell an auditor why the bypass applied.
+      expect(
+        cells.indexOf("Zugriffsrolle") - cells.indexOf("Evidence-Bypass"),
+      ).to.equal(1);
+    });
+
     it("keeps the existing columns", () => {
       const header = AccessAuditService.toCsv([]).replace("\uFEFF", "");
 
@@ -222,6 +275,7 @@ describe("AccessAuditService export", () => {
           blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING],
           channel: "remote",
           evidenceBypassed: false,
+          accessRole: "booker",
         }),
       ]);
 
@@ -232,8 +286,10 @@ describe("AccessAuditService export", () => {
       expect(html).to.include("Blockierungsgründe");
       expect(html).to.include("Kanal");
       expect(html).to.include("Evidence-Bypass");
+      expect(html).to.include("Zugriffsrolle");
       expect(html).to.include("Nachweis fehlt");
       expect(html).to.include("Fernöffnung");
+      expect(html).to.include("Buchender");
       expect(html).to.not.include("evidence_missing");
     });
   });

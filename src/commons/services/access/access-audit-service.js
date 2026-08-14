@@ -55,6 +55,14 @@ const CHANNEL_LABELS = Object.freeze({
   remote: "Fernöffnung",
 });
 
+// German wording for the capacity somebody operated an access point in. The
+// values are the ones `accessLogSchema` allows; an entry without a capacity
+// stays blank, which reads as "not recorded", not as "no".
+const ACCESS_ROLE_LABELS = Object.freeze({
+  booker: "Buchender",
+  manager: "Verwaltung",
+});
+
 /**
  * Builds tenant-wide audit exports (CSV / PDF) from the `accessLogs`
  * collection for compliance purposes (see ACCESS_POINTS_IMPLEMENTATION_PLAN §7).
@@ -124,6 +132,7 @@ class AccessAuditService {
       // Blank, not "Nein", where the entry predates the field: a compliance
       // export must not claim a fact that was never recorded.
       evidenceBypassed: AccessAuditService._formatFlag(log.evidenceBypassed),
+      accessRole: AccessAuditService._formatAccessRole(log.accessRole),
       accessPointId: log.accessPointId || "",
       accessPointType: log.accessPointType || "",
       provider: log.provider || "",
@@ -154,6 +163,23 @@ class AccessAuditService {
     return (reasons || [])
       .map((reason) => BLOCKING_REASON_LABELS[reason] || reason)
       .join(", ");
+  }
+
+  /**
+   * The capacity somebody acted in, spelled out. Follows `_formatFlag`: an
+   * entry that carries no capacity — closing, status, scans, provisioning —
+   * leaves the cell blank rather than claiming one.
+   *
+   * A capacity outside the schema enum is written out as its raw value, for
+   * the reason `_formatReasons` gives: blanking it would turn something the
+   * log does record into "not recorded".
+   *
+   * @param {string|null} accessRole - as stored on the log entry
+   * @returns {string} the German wording, or "" where none was recorded
+   */
+  static _formatAccessRole(accessRole) {
+    if (!accessRole) return "";
+    return ACCESS_ROLE_LABELS[accessRole] || accessRole;
   }
 
   static _formatChannel(channel) {
@@ -229,10 +255,12 @@ class AccessAuditService {
       action: "Aktion",
       result: "Ergebnis",
       // Next to the result, because that is where they are read: a denial
-      // without its reasons, its channel and the bypass flag cannot be judged.
+      // without its reasons, its channel, the bypass flag and the capacity it
+      // was decided in cannot be judged.
       blockingReasons: "Blockierungsgründe",
       channel: "Kanal",
       evidenceBypassed: "Evidence-Bypass",
+      accessRole: "Zugriffsrolle",
       accessPointId: "Access-Point-ID",
       accessPointType: "Typ",
       provider: "Anbieter",
