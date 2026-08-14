@@ -3,7 +3,9 @@ const sinon = require("sinon");
 
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const AccessScanService = require("../src/commons/services/access/access-scan-service");
+const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const PermissionsService = require("../src/commons/services/permission-service");
+const { AccessPoint } = require("../src/commons/entities/access/access-point");
 
 describe("AccessController.resolveScan", () => {
   let sandbox;
@@ -39,23 +41,29 @@ describe("AccessController.resolveScan", () => {
     await AccessController.resolveScan(request, response);
 
     expect(
-      resolveScanCode.calledOnceWithExactly("tenant-1", "code-1", "user-1", {
-        hasManagePermission: false,
-      }),
+      resolveScanCode.calledOnceWithExactly("tenant-1", "code-1", "user-1"),
     ).to.be.true;
   });
 
-  it("passes on that the user may manage the bookings of the tenant", async () => {
+  it("reports the rules of the door to a user who may manage the bookings", async () => {
     PermissionsService._allowUpdateAny.resolves(true);
-    const resolveScanCode = sandbox
-      .stub(AccessScanService, "resolveScanCode")
-      .resolves({ success: true, data: {} });
+    const accessPoint = AccessPoint.create({
+      id: "point-1",
+      tenantId: "tenant-1",
+      provider: "nuki",
+      externalId: "lock-1",
+      label: "Haupteingang",
+    });
+    accessPoint.scanCode = "code-1";
+    sandbox
+      .stub(AccessPointManager, "getAccessPointByScanCode")
+      .resolves(accessPoint);
 
     await AccessController.resolveScan(request, response);
 
-    expect(resolveScanCode.firstCall.args[3]).to.deep.equal({
-      hasManagePermission: true,
-    });
+    expect(
+      response.json.firstCall.args[0].data.validationRuleTypes,
+    ).to.deep.equal(["qrScan"]);
   });
 
   it("answers a resolved code with the success envelope", async () => {

@@ -70,12 +70,26 @@ describe("Access point projection", () => {
       expect(view.validationRuleTypes).to.deep.equal(["qrScan"]);
     });
 
-    it("is empty for a user who may manage the bookings of the tenant", () => {
+    it("is empty for someone acting on a booking as the management", () => {
       const view = projectAccessPoint(storedDoor(), {
-        hasManagePermission: true,
+        accessRole: "manager",
       });
 
       expect(view.validationRuleTypes).to.deep.equal([]);
+    });
+
+    it("demands the rules of the door from the booker of the booking", () => {
+      const view = projectAccessPoint(storedDoor(), {
+        accessRole: "booker",
+      });
+
+      expect(view.validationRuleTypes).to.deep.equal(["qrScan"]);
+    });
+
+    it("reports the rules of the door where no booking names a role", () => {
+      const view = projectAccessPoint(storedDoor(), { accessRole: null });
+
+      expect(view.validationRuleTypes).to.deep.equal(["qrScan"]);
     });
 
     it("is empty for lockers, which are never asked for evidence", () => {

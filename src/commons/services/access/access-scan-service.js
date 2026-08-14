@@ -31,23 +31,19 @@ class AccessScanService {
    * the person at the door reads one access point, not two shapes of it. It
    * knows no booking, so it carries the core fields only.
    *
+   * Without a booking there is no access role, so nothing is waived: the
+   * answer names the rules of the door as they are configured, for everyone.
+   * Whoever just scanned holds the evidence anyway - naming the demand costs
+   * them nothing, and hiding it would strand them in front of a locked door.
+   *
    * @param {string} tenantId The tenant the code was scanned for
    * @param {string} scanCode The scanned code
    * @param {string|null} [userId=null] The user holding the scanner
-   * @param {Object} [options]
-   * @param {boolean} [options.hasManagePermission=false] Whether the user may
-   *   manage the bookings of the tenant, which exempts them from the evidence
-   *   rules
    * @returns {Promise<{ success: true, data: Object }
    *   | { success: false, data: { reason: string, accessPointId: string|null } }>}
    *   The access point as the API hands it out, or why the code did not resolve
    */
-  static async resolveScanCode(
-    tenantId,
-    scanCode,
-    userId = null,
-    { hasManagePermission = false } = {},
-  ) {
+  static async resolveScanCode(tenantId, scanCode, userId = null) {
     const accessPoint = await AccessPointManager.getAccessPointByScanCode(
       tenantId,
       scanCode,
@@ -73,7 +69,7 @@ class AccessScanService {
 
     return {
       success: true,
-      data: projectAccessPoint(accessPoint, { hasManagePermission }),
+      data: projectAccessPoint(accessPoint),
     };
   }
 

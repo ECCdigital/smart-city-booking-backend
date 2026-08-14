@@ -33,9 +33,10 @@ const NO_BUFFER = Object.freeze({ beforeMs: 0, afterMs: 0 });
  *   form) or `validationRuleTypes` (resolved form, which carries the types
  *   only).
  * @param {Object} [options]
- * @param {boolean} [options.hasManagePermission=false] Whether the user may
- *   manage the bookings of the tenant, which exempts them from the evidence
- *   rules
+ * @param {"booker"|"manager"|null} [options.accessRole=null] The role the user
+ *   acts in at the booking. Only the management is exempt from the evidence
+ *   rules; the booker proves what the door demands, manage permission or not.
+ *   Without a booking there is no role, so nothing is waived.
  * @param {Object|null} [options.bookingContext=null] The booking the access
  *   point was resolved for. Given, the booking fields are added; a resolved
  *   scan knows no booking and gets the core fields alone.
@@ -43,7 +44,7 @@ const NO_BUFFER = Object.freeze({ beforeMs: 0, afterMs: 0 });
  */
 function projectAccessPoint(
   accessPoint,
-  { hasManagePermission = false, bookingContext = null } = {},
+  { accessRole = null, bookingContext = null } = {},
 ) {
   const view = {
     id: accessPoint.id,
@@ -52,10 +53,7 @@ function projectAccessPoint(
     provider: accessPoint.provider,
     label: accessPoint.label || "",
     mode: accessPoint.mode,
-    validationRuleTypes: effectiveValidationRuleTypes(
-      accessPoint,
-      hasManagePermission,
-    ),
+    validationRuleTypes: effectiveValidationRuleTypes(accessPoint, accessRole),
     capabilities: uiCapabilities(accessPoint.provider),
   };
 
@@ -69,18 +67,20 @@ function projectAccessPoint(
 /**
  * What this user has to prove at this access point - not what the door is
  * configured with. The answer is empty where the rules never come into play:
- * for a user who may manage the bookings of the tenant, and for lockers, which
- * are not asked for evidence at all.
+ * for someone acting on a booking as the management, and for lockers, which
+ * are not asked for evidence at all. Whoever opens their own booking proves
+ * what the door demands, even if they may manage the bookings of the tenant -
+ * this says the same thing the door itself decides.
  *
  * It says what is demanded, never whether it will work: a rule whose
  * preconditions are unmet still reports itself at opening time.
  *
  * @param {Object} accessPoint The access point being projected
- * @param {boolean} hasManagePermission Whether the user may manage bookings
+ * @param {"booker"|"manager"|null} accessRole The role the user acts in
  * @returns {string[]} The rule types this user has to satisfy
  */
-function effectiveValidationRuleTypes(accessPoint, hasManagePermission) {
-  if (hasManagePermission || accessPoint.type === AccessPointType.LOCKER) {
+function effectiveValidationRuleTypes(accessPoint, accessRole) {
+  if (accessRole === "manager" || accessPoint.type === AccessPointType.LOCKER) {
     return [];
   }
 

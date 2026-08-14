@@ -104,21 +104,20 @@ class AccessController {
    * behind a login: nobody may turn a code into a door name without an
    * account. A code that does not resolve is a soft failure on HTTP 200, so
    * the scanning client can tell the two failures apart and say what to do.
+   *
+   * The manage permission is not asked for here: a code alone names no
+   * booking, so nobody acts in an access role yet and there is nothing to
+   * waive.
    */
   static async resolveScan(request, response) {
     const { tenant, scanCode } = request.params;
     const user = request.user;
 
     try {
-      const hasManagePermission = await AccessController._hasManagePermission(
-        user.id,
-        tenant,
-      );
       const outcome = await AccessScanService.resolveScanCode(
         tenant,
         scanCode,
         user.id,
-        { hasManagePermission },
       );
 
       if (!outcome.success) {
@@ -249,8 +248,10 @@ class AccessController {
    * Returns all access points linked to a booking. Listing them does not
    * require the booking to be within its time window - what a booking opens
    * should be readable at any time - and the manage permission is resolved
-   * once: it decides both whether the booking may be seen at all and whether
-   * this user has to prove anything at its doors.
+   * once: it decides whether the booking may be seen at all, and together with
+   * the asking user it decides the role they act in, which says what they have
+   * to prove at its doors. Who owns the booking stays in the domain; the
+   * controller only names the user.
    */
   static async getAccessPoints(request, response) {
     try {
@@ -271,6 +272,7 @@ class AccessController {
       if (!allowed) return response.sendStatus(403);
 
       const points = await AccessService.getByBooking(tenant, bookingId, {
+        userId: user.id,
         hasManagePermission,
       });
 

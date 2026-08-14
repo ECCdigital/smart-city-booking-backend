@@ -377,8 +377,13 @@ Dieselbe Projektion beantwortet auch einen gescannten Code
 Buchungsfelder, weil ein Scan keine Buchung kennt.
 
 - **`validationRuleTypes`** sagt, was **dieser** Nutzer an **dieser** Tür
-  nachweisen muss, bevor sie aufgeht. Leer bei `MANAGE_BOOKINGS` und bei
-  Lockern. Die Liste sagt, was verlangt wird – nie, ob es klappen wird.
+  nachweisen muss, bevor sie aufgeht. Es zählt die Zugriffsrolle, nicht das
+  Recht: Geleert wird das Feld nur bei der _Verwaltung_ (fremde Buchung) und bei
+  Lockern – für Träger von `MANAGE_BOOKINGS` ist es **gefüllt**, sobald sie die
+  Tür ihrer **eigenen** Buchung ansehen, denn dort sind sie _Buchende_ wie jeder
+  andere. Ein gescannter Code kennt keine Buchung und damit keine Zugriffsrolle;
+  er meldet immer die Regeln der Tür. Die Liste sagt, was verlangt wird – nie,
+  ob es klappen wird.
 - **`capabilities`** sagt, welche Knöpfe sinnvoll sind: `open`, `close`,
   `getStatus`. Nicht am `provider` verzweigen – der ist nur ein Schlüssel,
   z.B. für den Service-Kontakt.

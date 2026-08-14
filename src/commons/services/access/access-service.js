@@ -569,20 +569,32 @@ class AccessService {
    *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
-   * @param {Object} [options]
+   * @param {Object} [options] The user asking, whose role at this booking
+   *   decides what `validationRuleTypes` demands of them
+   * @param {string|null} [options.userId=null] Acting user
    * @param {boolean} [options.hasManagePermission=false] Whether the user may
-   *   manage the bookings of the tenant, which exempts them from the evidence
-   *   rules and thus empties `validationRuleTypes`
+   *   manage the bookings of the tenant. It empties `validationRuleTypes` only
+   *   at someone else's booking - at their own they are the booker and prove
+   *   what the door demands, exactly as the open path decides it.
    * @returns {Promise<Object[]>} The access points of the booking
    */
-  static async getByBooking(tenant, bookingId, { hasManagePermission } = {}) {
-    const entries = await this._getBookingAccessPointEntries(tenant, bookingId);
+  static async getByBooking(
+    tenant,
+    bookingId,
+    { userId = null, hasManagePermission = false } = {},
+  ) {
+    const { booking, lockers, doors } = await this._getBookingAccessPoints(
+      tenant,
+      bookingId,
+    );
+    const accessRole = this._resolveAccessRole(
+      booking,
+      userId,
+      hasManagePermission,
+    );
 
-    return entries.map(({ accessPoint, bookingContext }) =>
-      projectAccessPoint(accessPoint, {
-        hasManagePermission: hasManagePermission === true,
-        bookingContext,
-      }),
+    return [...lockers, ...doors].map(({ accessPoint, bookingContext }) =>
+      projectAccessPoint(accessPoint, { accessRole, bookingContext }),
     );
   }
 
@@ -1358,14 +1370,19 @@ class AccessService {
 
       const hasManagePermission =
         managePermissionByTenant?.get(booking.tenantId) ?? false;
+      // Determined before the blocks below, because they hang on separate
+      // flags. The eligibility asks the same deriver for itself and reports
+      // the role in its answer - one rule, one place, whoever asks.
+      const accessRole = this._resolveAccessRole(
+        booking,
+        userId,
+        hasManagePermission,
+      );
 
       if (includeAccessPoints) {
         result.accessPoints = (entries || []).map(
           ({ accessPoint, bookingContext }) =>
-            projectAccessPoint(accessPoint, {
-              hasManagePermission,
-              bookingContext,
-            }),
+            projectAccessPoint(accessPoint, { accessRole, bookingContext }),
         );
       }
 

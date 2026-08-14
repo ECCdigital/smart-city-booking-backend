@@ -480,3 +480,63 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
     );
   });
 });
+
+describe("AccessService.getUserBookingsWithAccess includeAccessPoints", () => {
+  let sandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  /**
+   * List the bookings of a user who may manage the bookings of the tenant,
+   * with one door that demands a QR scan. The booking belongs to `booker-1`.
+   */
+  async function listFor(userId) {
+    const now = Date.now();
+    const booking = createBooking({
+      assignedUserId: "booker-1",
+      timeBegin: now - MINUTE,
+      timeEnd: now + MINUTE,
+    });
+    sandbox.stub(BookingManager, "getUserBookingsFiltered").resolves([booking]);
+    sandbox
+      .stub(AccessService, "_getAccessTriggerMapsForTenants")
+      .resolves(
+        new Map([
+          ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
+        ]),
+      );
+    sandbox
+      .stub(AccessService, "_getFilteredBookingAccessPointEntries")
+      .resolves([createDoorEntry({ validationRules: [{ type: "qrScan" }] })]);
+    sandbox
+      .stub(AccessService, "_resolveManagePermissionByTenant")
+      .resolves(new Map([["tenant-1", true]]));
+    sandbox.stub(BookableManager, "getBookablesByIds").resolves([]);
+
+    return AccessService.getUserBookingsWithAccess(userId, {
+      state: "active",
+      includeAccessPoints: true,
+      now,
+    });
+  }
+
+  it("demands the evidence of the door from the booker of the booking", async () => {
+    const results = await listFor("booker-1");
+
+    expect(results[0].accessPoints[0].validationRuleTypes).to.deep.equal([
+      "qrScan",
+    ]);
+  });
+
+  it("demands no evidence where the booking belongs to somebody else", async () => {
+    const results = await listFor("manager-9");
+
+    expect(results[0].accessPoints[0].validationRuleTypes).to.deep.equal([]);
+  });
+});

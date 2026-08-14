@@ -338,6 +338,7 @@ describe("One access point shape on both ways", () => {
     sandbox.stub(BookingManager, "getBooking").resolves({
       id: "booking-1",
       tenantId: "tenant-1",
+      assignedUserId: "booker-1",
       timeBegin: 1000,
       timeEnd: 2000,
       bookableItems: [{ bookableId: "room" }],
@@ -375,18 +376,21 @@ describe("One access point shape on both ways", () => {
     expect(listed.capabilities).to.deep.equal(["open", "close", "getStatus"]);
   });
 
-  it("asks a user who may manage the bookings for no evidence on either way", async () => {
-    const scanned = await AccessScanService.resolveScanCode(
-      "tenant-1",
-      accessPoint.scanCode,
-      "user-1",
-      { hasManagePermission: true },
-    );
+  it("asks the booker for evidence, even where they may manage the bookings", async () => {
     const [listed] = await AccessService.getByBooking("tenant-1", "booking-1", {
+      userId: "booker-1",
       hasManagePermission: true,
     });
 
-    expect(scanned.data.validationRuleTypes).to.deep.equal([]);
+    expect(listed.validationRuleTypes).to.deep.equal(["qrScan"]);
+  });
+
+  it("asks for no evidence where somebody manages a booking that is not theirs", async () => {
+    const [listed] = await AccessService.getByBooking("tenant-1", "booking-1", {
+      userId: "manager-1",
+      hasManagePermission: true,
+    });
+
     expect(listed.validationRuleTypes).to.deep.equal([]);
   });
 

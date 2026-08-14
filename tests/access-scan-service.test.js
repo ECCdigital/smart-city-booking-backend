@@ -78,7 +78,7 @@ describe("AccessScanService", () => {
       );
     });
 
-    it("asks a user who may manage the bookings for no evidence", async () => {
+    it("names the rules of the door itself, because a scan knows no role", async () => {
       const accessPoint = createAccessPoint();
       sandbox
         .stub(AccessPointManager, "getAccessPointByScanCode")
@@ -88,10 +88,9 @@ describe("AccessScanService", () => {
         "tenant-1",
         accessPoint.scanCode,
         "user-1",
-        { hasManagePermission: true },
       );
 
-      expect(outcome.data.validationRuleTypes).to.deep.equal([]);
+      expect(outcome.data.validationRuleTypes).to.deep.equal(["qrScan"]);
     });
 
     it("never answers with the scan codes themselves", async () => {
