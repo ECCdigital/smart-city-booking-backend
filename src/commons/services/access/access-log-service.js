@@ -21,6 +21,7 @@ class AccessLogService {
       result: entry.result || "pending",
       blockingReasons: entry.blockingReasons || [],
       channel: entry.channel ?? null,
+      accessRole: entry.accessRole ?? null,
       evidenceBypassed: entry.evidenceBypassed === true,
       payload: entry.payload || {},
       errorCode: entry.errorCode || null,

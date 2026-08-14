@@ -346,6 +346,7 @@ describe("AccessService.open", () => {
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       action: "open",
       result: "failure",
+      accessRole: "booker",
     });
   });
 
@@ -476,6 +477,7 @@ describe("AccessService.open with validation rules", () => {
     expect(providerOpen.called).to.be.false;
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       result: "denied",
+      accessRole: "booker",
       evidenceBypassed: false,
     });
   });
@@ -488,6 +490,7 @@ describe("AccessService.open with validation rules", () => {
     expect(outcome.success).to.be.true;
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       result: "success",
+      accessRole: "manager",
       evidenceBypassed: true,
     });
   });
@@ -503,6 +506,7 @@ describe("AccessService.open with validation rules", () => {
     expect(outcome.success).to.be.true;
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       result: "success",
+      accessRole: "booker",
       evidenceBypassed: false,
     });
   });
@@ -527,6 +531,10 @@ describe("AccessService.open with validation rules", () => {
     expect(outcome.blockingReasons).to.deep.equal([
       ACCESS_BLOCKING_REASONS.NOT_COMMITTED,
     ]);
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      result: "denied",
+      accessRole: "booker",
+    });
   });
 
   it("audits the reported channel unchanged, on success and on denial", async () => {
@@ -613,6 +621,22 @@ describe("AccessService close, unlatch and status with validation rules", () => 
       locked: true,
       doorOpen: null,
       statusSource: "provider_status",
+    });
+  });
+
+  it("audits close and status without an access role", async () => {
+    await AccessService.close("tenant-1", "booking-1", "door-1", "user-1");
+    await AccessService.getStatus("tenant-1", "booking-1", "door-1");
+
+    // Closing takes no permission and a status question has no booker: there
+    // is no capacity to record, and the empty cell says exactly that.
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "close",
+      accessRole: null,
+    });
+    expect(AccessLogService.log.secondCall.args[0]).to.include({
+      action: "status",
+      accessRole: null,
     });
   });
 
@@ -710,6 +734,7 @@ describe("AccessService close, unlatch and status with validation rules", () => 
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       action: "unlatch",
       result: "denied",
+      accessRole: "booker",
       evidenceBypassed: false,
     });
   });
@@ -727,6 +752,7 @@ describe("AccessService close, unlatch and status with validation rules", () => 
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       action: "unlatch",
       result: "success",
+      accessRole: "manager",
       evidenceBypassed: true,
     });
   });

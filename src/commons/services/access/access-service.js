@@ -138,6 +138,7 @@ class AccessService {
         bookingId,
         blockingReasons: eligibility.blockingReasons,
         channel,
+        accessRole: eligibility.accessRole,
       });
     }
 
@@ -155,6 +156,7 @@ class AccessService {
         bookingId,
         blockingReasons: evidenceOutcome.blockingReasons,
         channel,
+        accessRole: eligibility.accessRole,
       });
     }
 
@@ -179,6 +181,7 @@ class AccessService {
           validatedEvidence: evidenceOutcome.validatedEvidence,
         },
         channel,
+        accessRole: eligibility.accessRole,
         evidenceBypassed: evidenceOutcome.bypassed,
       });
       return {
@@ -195,6 +198,7 @@ class AccessService {
         result: "failure",
         errorMessage: err.message,
         channel,
+        accessRole: eligibility.accessRole,
         evidenceBypassed: evidenceOutcome.bypassed,
       });
       throw err;
@@ -215,6 +219,9 @@ class AccessService {
    * @param {string} refusal.bookingId Booking the attempt was made for
    * @param {string[]} refusal.blockingReasons Prioritized reasons
    * @param {string|null} refusal.channel Channel as reported by the client
+   * @param {"booker"|"manager"|null} refusal.accessRole The capacity the
+   *   refused user acted in, `null` where they had none - refusing a booker
+   *   and refusing a stranger are two different entries in the audit
    * @returns {Promise<{ success: false, blockingReasons: string[] }>} The refusal
    */
   static async _denyOpen({
@@ -225,6 +232,7 @@ class AccessService {
     bookingId,
     blockingReasons,
     channel,
+    accessRole,
   }) {
     await this._log({
       tenantId: tenant,
@@ -235,6 +243,7 @@ class AccessService {
       result: "denied",
       blockingReasons,
       channel,
+      accessRole,
     });
 
     return { success: false, blockingReasons };
@@ -2265,6 +2274,7 @@ class AccessService {
     errorMessage = null,
     actor = null,
     channel = null,
+    accessRole = null,
     evidenceBypassed = false,
   }) {
     logger.info(
@@ -2284,6 +2294,7 @@ class AccessService {
         result,
         blockingReasons,
         channel,
+        accessRole,
         evidenceBypassed,
         payload,
         errorMessage,
