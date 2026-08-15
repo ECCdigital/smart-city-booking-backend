@@ -248,6 +248,7 @@ class MailSenderService {
       refundPercentage,
       daysBeforeStart,
       hasCancellationFee,
+      accessPoints,
     } = templateData;
 
     const renderForBooking = (booking) => {
@@ -271,6 +272,7 @@ class MailSenderService {
           verifyRejectionUrl,
           cancelReason,
           rejectionReason,
+          accessPoints,
           ...refundVars,
         },
       });

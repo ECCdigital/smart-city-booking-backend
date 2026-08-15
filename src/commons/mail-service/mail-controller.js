@@ -308,6 +308,21 @@ class MailController {
     });
   }
 
+  static async sendAccessProvisioned(
+    address,
+    bookingId,
+    tenantId,
+    accessPoints,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.ACCESS_PROVISIONED,
+      address,
+      bookingIds: [bookingId],
+      tenantId,
+      templateData: { accessPoints },
+    });
+  }
+
   static async sendVerificationRequest(address, hookId, verifyUrl) {
     const instance = await InstanceManager.getInstance(false);
 

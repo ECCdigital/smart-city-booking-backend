@@ -373,3 +373,6 @@ AGENTS.override.md
 
 # Scratch: local-only scratchpad (not committed)
 /.scratch
+.scratch
+CONTEXT.md
+docs/specs/*

@@ -11,10 +11,16 @@ const RuleController = require("./controllers/rule-controller");
 const FileController = require("./controllers/file-controller");
 const MailTemplateController = require("./controllers/mail-template-controller");
 const { BookingController } = require("./controllers/booking-controller");
+const AccessController = require("./controllers/access-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 const InstanceController = require("./controllers/instance-controller");
 
 const router = express.Router({ mergeParams: true });
+
+// ACCESS WEBHOOKS
+// ===============
+
+router.use("/webhooks/access", require("./routes/access-webhook.routes"));
 
 // INSTANCES
 // =========
@@ -313,6 +319,20 @@ router.get(
   "/bookings/assigned",
   AuthenticationController.isSignedIn,
   BookingController.getAssignedBookings,
+);
+
+// ACCESS (tenant-independent: a user may have bookings across tenants)
+// ===================================================================
+router.get(
+  "/access/bookings",
+  AuthenticationController.isSignedIn,
+  AccessController.getAccessBookings,
+);
+
+router.get(
+  "/access/access-points/:accessPointId/bookings",
+  AuthenticationController.isSignedIn,
+  AccessController.getAccessPointBookings,
 );
 
 router.use("/instances", require("./routes/instance.routes"));

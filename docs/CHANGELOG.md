@@ -7,6 +7,11 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- QR door access: scan-code QR generation & rotation — `GET /api/:tenant/accesspoints/:id/qrcode?format=svg|png|pdf` (default `svg`) renders the printable QR code, `POST /api/:tenant/accesspoints/:id/rotate-scan-code` retires the current scan code and mints a new one. Requires the new global env var `STORE_FRONT_URL` (public store-front base URL, used to build `https://<STORE_FRONT_URL>/mobile-key/<tenant>/<scanCode>`; not the Vue admin app that `FRONTEND_URL` points at)
+- QR door access: location prefill from the provider — `GET /api/:tenant/accesspoints/:id/location-prefill` suggests where the lock stands via the optional provider capability `getLocation` (NUKI returns coordinates without address; Salto KS and providers without the capability return `null`). `getLocation` support is exposed in `providerCapabilities` of `GET /api/:tenant/access-apps/providers`. The endpoint writes nothing; adopt the suggestion via `location` in the regular `PUT /api/:tenant/accesspoints`
+
 ### Fixed
 
 - Admin booking update no longer applies the assignee's bookable booking discounts when recomputing prices (same as manual create; Admin-entered list prices from `priceCategories` are kept)

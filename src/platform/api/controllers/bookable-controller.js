@@ -6,6 +6,9 @@ const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const PermissionService = require("../../../commons/services/permission-service");
+const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
+const { ValidationError } = require("../../../errors/ValidationError");
+const { BaseError } = require("../../../errors/BaseError");
 const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
@@ -224,14 +227,14 @@ class BookableController {
    * @param response
    * @returns {Promise<void>}
    */
-  static async storeBookable(request, response) {
+  static async storeBookable(request, response, next) {
     const bookable = new Bookable(request.body);
     const isUpdate = !!bookable.id;
 
     if (isUpdate) {
-      await BookableController.updateBookable(request, response);
+      await BookableController.updateBookable(request, response, next);
     } else {
-      await BookableController.createBookable(request, response);
+      await BookableController.createBookable(request, response, next);
     }
   }
 
@@ -249,7 +252,7 @@ class BookableController {
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
    * @throws {Error} If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    */
-  static async createBookable(request, response) {
+  static async createBookable(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
@@ -274,6 +277,8 @@ class BookableController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await BookableController._validateAccessPointIds(bookable, tenant);
+        BookableController._validateAccessBuffers(bookable);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -287,6 +292,12 @@ class BookableController {
       }
     } catch (err) {
       logger.error(err);
+      if (err instanceof BaseError) {
+        return next(err);
+      }
+      if (err.statusCode) {
+        return response.status(err.statusCode).send(err.message);
+      }
       response.status(500).send("Could not create bookable");
     }
   }
@@ -305,7 +316,7 @@ class BookableController {
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
    * @throws {Error} If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    */
-  static async updateBookable(request, response) {
+  static async updateBookable(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
@@ -335,6 +346,8 @@ class BookableController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await BookableController._validateAccessPointIds(bookable, tenant);
+        BookableController._validateAccessBuffers(bookable);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
@@ -348,8 +361,99 @@ class BookableController {
       }
     } catch (err) {
       logger.error(err);
+      if (err instanceof BaseError) {
+        return next(err);
+      }
+      if (err.statusCode) {
+        return response.status(err.statusCode).send(err.message);
+      }
       response.status(500).send("Could not update bookable");
     }
+  }
+
+  /**
+   * Validates that every referenced access point exists for the tenant. A
+   * bookable may only point at access points of its own tenant, and a dangling
+   * reference would silently be a door that never opens.
+   *
+   * @param {Bookable} bookable The bookable to be stored
+   * @param {string} tenant The tenant of the request
+   * @throws {ValidationError} If the tenant has no access point for an id
+   */
+  static async _validateAccessPointIds(bookable, tenant) {
+    const accessPointIds = bookable.accessPointDetails?.accessPointIds || [];
+
+    if (accessPointIds.length === 0) {
+      return;
+    }
+
+    const accessPoints = await AccessPointManager.getAccessPointsByIds(
+      tenant,
+      accessPointIds,
+    );
+    const knownIds = new Set(
+      accessPoints.map((accessPoint) => String(accessPoint.id)),
+    );
+
+    const errors = accessPointIds
+      .filter((accessPointId) => !knownIds.has(String(accessPointId)))
+      .map((accessPointId) => ({
+        field: "accessPointDetails.accessPointIds",
+        code: "unknown_access_point",
+        params: { accessPointId: accessPointId },
+      }));
+
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
+    }
+  }
+
+  /**
+   * Validates the access buffer configuration (lead/lag time around a booking
+   * during which an access point can still be operated). The buffer is
+   * configured once per bookable (`accessPointDetails.accessBuffer`) and applies
+   * to all of its access points. Values must be non-negative integers (minutes)
+   * and must not exceed the configurable maximum
+   * (`ACCESS_MAX_BUFFER_MINUTES`, default 1440).
+   */
+  static _validateAccessBuffers(bookable) {
+    const details = bookable.accessPointDetails;
+
+    if (!details?.active) {
+      return;
+    }
+
+    const maxMinutes = Number(process.env.ACCESS_MAX_BUFFER_MINUTES) || 1440;
+
+    const validate = (buffer, context) => {
+      if (buffer === undefined || buffer === null) {
+        return;
+      }
+
+      for (const key of ["before", "after"]) {
+        const rawValue = buffer[key];
+
+        if (rawValue === undefined || rawValue === null || rawValue === "") {
+          continue;
+        }
+
+        const value = Number(rawValue);
+
+        if (!Number.isInteger(value) || value < 0 || value > maxMinutes) {
+          const err = new Error(
+            `Invalid access buffer '${key}' (${rawValue}) for ${context}. ` +
+              `Expected an integer between 0 and ${maxMinutes} minutes.`,
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+
+        // Normalize to a number so downstream logic never deals with strings.
+        buffer[key] = value;
+      }
+    };
+
+    validate(details.accessBuffer, "bookable default");
   }
 
   /**

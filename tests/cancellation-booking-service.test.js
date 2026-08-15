@@ -7,6 +7,7 @@ const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const CancellationService = require("../src/commons/services/payment/cancellation-service");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
 const LockerService = require("../src/commons/services/locker/locker-service");
+const AccessService = require("../src/commons/services/access/access-service");
 const MailController = require("../src/commons/mail-service/mail-controller");
 const {
   CANCELLATION_ORIGINS,
@@ -43,6 +44,7 @@ function stubCancellationSideEffects() {
   sinon.stub(LockerService, "getInstance").returns({
     handleCancel: sinon.stub().resolves(),
   });
+  sinon.stub(AccessService, "revokeForBooking").resolves([]);
   sinon.stub(MailController, "sendBookingCancel").resolves();
   sinon.stub(MailController, "sendBookingRejection").resolves();
 }
@@ -376,6 +378,7 @@ describe("BookingService cancellation refunds", function () {
     sinon.stub(LockerService, "getInstance").returns({
       handleCreate: sinon.stub().resolves(),
     });
+    sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon
       .stub(ManualBundleCheckoutService.prototype, "prepareBooking")
       .resolves(

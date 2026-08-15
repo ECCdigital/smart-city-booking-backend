@@ -17,7 +17,7 @@ class LockerInfoService {
   static async getClient(tenantId, provider) {
     const tenant = await TenantManager.getTenant(tenantId);
     const rawApp = tenant.applications.find(
-      (a) => a.type === APP_TYPE && a.id === provider && a.active,
+      (a) => a.id === provider && a.active,
     );
 
     if (!rawApp) {
@@ -65,7 +65,7 @@ class LockerInfoService {
     const tenant = await TenantManager.getTenant(tenantId);
 
     const rawApp = tenant.applications.find(
-      (a) => a.type === APP_TYPE && a.id === provider && a.active,
+      (a) => a.id === provider && a.active,
     );
 
     if (!rawApp) {
