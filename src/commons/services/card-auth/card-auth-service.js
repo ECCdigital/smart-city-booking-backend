@@ -1,4 +1,3 @@
-// card-auth-service.js
 const axios = require("axios");
 const bunyan = require("bunyan");
 const InstanceManager = require("../../data-managers/instance-manager");
@@ -112,6 +111,7 @@ class CardAuthService {
     nextUrl,
     verifyUrl,
     linkUrl,
+    legalAcceptance,
   }) {
     const app = await CardAuthService.getCardApp(appId);
 
@@ -202,6 +202,7 @@ class CardAuthService {
         cardType: verification.cardType || app.cardType || "",
         linkedAt: Date.now(),
       },
+      legalAcceptance,
     });
     user.secret = undefined;
 

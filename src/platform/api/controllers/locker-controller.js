@@ -219,9 +219,7 @@ class LockerController {
         provider,
       );
 
-      logger.info(
-        `${tenant} -- sending ${provider} customer service info`,
-      );
+      logger.info(`${tenant} -- sending ${provider} customer service info`);
       response.status(200).send(info);
     } catch (err) {
       logger.error(err);

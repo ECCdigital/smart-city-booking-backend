@@ -136,38 +136,38 @@ class NextcloudManager extends FileManager {
     const fullPath = [tenantClean, rootClean].filter(Boolean).join("/");
 
     try {
-    return await NextcloudManager._retryWithBackoff(async () => {
-      const client = NextcloudManager._getClient();
+      return await NextcloudManager._retryWithBackoff(async () => {
+        const client = NextcloudManager._getClient();
 
-      const directoryItems = await client.getDirectoryContents(fullPath, {
-        deep: true,
-      });
-
-      const basePath = tenantClean
-        ? `/api/${tenantClean}/files/get`
-        : "/api/files/get";
-
-      return directoryItems
-        .filter((item) => item.type === "file")
-        .map((item) => {
-          const filename = String(item.filename || "");
-
-          const tenantPrefix = tenantClean ? `${tenantClean}/` : "";
-
-          const croppedFilename = tenantPrefix
-            ? filename.replace(`${tenant}/`, "")
-            : filename;
-
-          const url = new URL(basePath, backendUrl);
-          url.searchParams.set("name", croppedFilename);
-
-          return {
-            ...item,
-            filename: croppedFilename,
-            link: url.toString(),
-          };
+        const directoryItems = await client.getDirectoryContents(fullPath, {
+          deep: true,
         });
-    });
+
+        const basePath = tenantClean
+          ? `/api/${tenantClean}/files/get`
+          : "/api/files/get";
+
+        return directoryItems
+          .filter((item) => item.type === "file")
+          .map((item) => {
+            const filename = String(item.filename || "");
+
+            const tenantPrefix = tenantClean ? `${tenantClean}/` : "";
+
+            const croppedFilename = tenantPrefix
+              ? filename.replace(`${tenant}/`, "")
+              : filename;
+
+            const url = new URL(basePath, backendUrl);
+            url.searchParams.set("name", croppedFilename);
+
+            return {
+              ...item,
+              filename: croppedFilename,
+              link: url.toString(),
+            };
+          });
+      });
     } catch (error) {
       logger.error(`Failed to get files for tenant ${tenant} at ${rootPath}`, {
         error: error.message,
@@ -192,7 +192,7 @@ class NextcloudManager extends FileManager {
         const client = NextcloudManager._getClient();
         return client.getFileContents(completeFilename);
       });
-    } catch(error) {
+    } catch (error) {
       logger.error(`Failed to get file ${filename} for tenant ${tenant}`, {
         error: error.message,
       });
@@ -306,8 +306,7 @@ class NextcloudManager extends FileManager {
           mime: s?.mime ?? s?.contentType,
         };
       });
-     } catch (error) {
-
+    } catch (error) {
       logger.error(`Failed to stat file ${filename} for tenant ${tenantID}`, {
         error: error.message,
       });
@@ -362,7 +361,6 @@ class NextcloudManager extends FileManager {
 
     try {
       return await NextcloudManager._retryWithBackoff(async () => {
-
         const client = NextcloudManager._getClient();
 
         if (directory) {
@@ -375,7 +373,7 @@ class NextcloudManager extends FileManager {
 
         return nextCloudPath;
       });
-      } catch (error) {
+    } catch (error) {
       logger.error(
         `Failed to create file ${fileName} in ${subDir} for tenant ${tenantID}`,
         { error: error.message },

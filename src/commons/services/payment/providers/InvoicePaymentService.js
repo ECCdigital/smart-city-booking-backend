@@ -120,42 +120,23 @@ class InvoicePaymentService extends PaymentService {
   }
 
   async createAggregatedInvoice() {
-    const bookings = [];
-    for (const bookingId of this.bookingIds) {
-      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
-      bookings.push(booking);
-    }
-
-    const { invoice, name, invoiceId, revision, timeCreated } =
-      await InvoiceService.createAggregatedInvoice(
-        this.tenantId,
-        bookings,
-        this.groupBookingId,
-      );
-
-    for (const booking of bookings) {
-      booking.attachments.push({
-        type: "invoice",
-        name,
-        invoiceId,
-        revision,
-        timeCreated,
-        aggregated: true,
-      });
-      await BookingManager.storeBooking(booking);
-    }
+    const result = await InvoiceService.issueAggregatedInvoice(
+      this.tenantId,
+      this.bookingIds,
+      this.groupBookingId,
+    );
 
     const attachments = [
       {
-        filename: name,
-        content: invoice.buffer,
+        filename: result.name,
+        content: result.invoice.buffer,
         contentType: "application/pdf",
       },
     ];
 
     try {
       await MailController.sendInvoice(
-        bookings[0].mail,
+        result.mail,
         this.bookingIds,
         this.tenantId,
         attachments,
@@ -164,6 +145,13 @@ class InvoicePaymentService extends PaymentService {
     } catch (err) {
       logger.error("Fehler beim Versenden der Sammelrechnung:", err);
     }
+
+    return {
+      bookingIds: this.bookingIds,
+      name: result.name,
+      invoiceId: result.invoiceId,
+      revision: result.revision,
+    };
   }
 
   async paymentNotification() {
@@ -225,40 +213,22 @@ class InvoicePaymentService extends PaymentService {
   }
 
   async aggregatedPaymentRequest() {
-    const bookings = [];
-    for (const bookingId of this.bookingIds) {
-      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
-      bookings.push(booking);
-    }
-
-    const { invoice, name, invoiceId, revision, timeCreated } =
-      await InvoiceService.createAggregatedInvoice(
-        this.tenantId,
-        this.bookingIds,
-        this.groupBookingId,
-      );
-
-    for (const booking of bookings) {
-      booking.attachments.push({
-        type: "invoice",
-        name,
-        invoiceId,
-        revision,
-        timeCreated,
-      });
-      await BookingManager.storeBooking(booking);
-    }
+    const result = await InvoiceService.issueAggregatedInvoice(
+      this.tenantId,
+      this.bookingIds,
+      this.groupBookingId,
+    );
 
     const attachments = [
       {
-        filename: name,
-        content: invoice.buffer,
+        filename: result.name,
+        content: result.invoice.buffer,
         contentType: "application/pdf",
       },
     ];
     await MailController.sendInvoiceAfterBookingApproval(
-      bookings[0].mail,
-      bookings.map((b) => b.id),
+      result.mail,
+      result.bookingIds,
       this.tenantId,
       attachments,
       true,

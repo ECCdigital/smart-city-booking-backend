@@ -1,6 +1,10 @@
 const CatalogManager = require("../data-managers/catalog-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const InstanceManager = require("../data-managers/instance-manager");
+const {
+  getMemberTenantIds,
+  isTenantListedInCatalog,
+} = require("../utilities/catalog-participation-utils");
 
 const DEFAULT_HERO = Object.freeze({ title: "", subtitle: "" });
 
@@ -41,7 +45,7 @@ class CatalogService {
     return catalog;
   }
 
-  static async getCatalogBundle(tenantId = null) {
+  static async getCatalogBundle(tenantId = null, userId = null) {
     if (!tenantId) {
       const [catalog, portal, branding] = await Promise.all([
         CatalogManager.getInstanceCatalog(),
@@ -56,9 +60,6 @@ class CatalogService {
         };
       }
 
-      // Wenn die öffentlichen Buchungsangebote deaktiviert sind, liefern wir
-      // nur ein minimales Bundle aus, damit das Frontend in den Personal-Modus
-      // wechseln und trotzdem das Branding rendern kann.
       if (!portal.publicOffersEnabled) {
         return {
           offersEnabled: false,
@@ -69,13 +70,14 @@ class CatalogService {
         };
       }
 
-      const tenants = await TenantManager.getTenants();
+      const [tenants, memberTenantIds] = await Promise.all([
+        TenantManager.getTenants(),
+        getMemberTenantIds(userId),
+      ]);
 
-      const allowedTenants = tenants.filter((tenant) => {
-        if (tenant.catalogParticipation.visible) {
-          return !catalog.excludedTenantIds.includes(tenant.id);
-        }
-      });
+      const allowedTenants = tenants.filter((tenant) =>
+        isTenantListedInCatalog(tenant, catalog, memberTenantIds),
+      );
 
       return {
         offersEnabled: true,
@@ -154,18 +156,11 @@ class CatalogService {
     };
   }
 
-  /**
-   * Gibt das ausgelieferte Branding zurück (Theme nur bei `branding.active`).
-   */
   static async getBranding() {
     const branding = await InstanceManager.getBranding();
     return exportBranding(branding);
   }
 
-  /**
-   * Liefert dem Frontend den aktuellen Portal-Modus (`offers` oder `personal`)
-   * inklusive Branding. Wird vom Catalog-Frontend als Routing-Hint genutzt.
-   */
   static async getPortalMode() {
     const [portal, branding] = await Promise.all([
       InstanceManager.getPortalConfig(),

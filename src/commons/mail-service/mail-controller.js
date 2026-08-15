@@ -7,6 +7,9 @@ const UserManager = require("../data-managers/user-manager");
 const { MailType } = require("./mail-types");
 const { renderSnippet } = require("./templates/template-loader");
 const ICalService = require("../services/ical-service");
+const {
+  CancellationRefundService,
+} = require("../services/payment/cancellation-refund-service");
 
 class MailController {
   static async _attachICalFiles(bookingIds, tenantId, attachments = []) {
@@ -113,12 +116,25 @@ class MailController {
     attachments,
     aggregated = false,
   ) {
+    const ids = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
+    const primaryBookingId = ids[0];
+    let refundTemplateData = {};
+    if (primaryBookingId) {
+      const booking = await BookingManager.getBooking(
+        primaryBookingId,
+        tenantId,
+      );
+      refundTemplateData = CancellationRefundService.toMailTemplateData(
+        booking?.cancellationRefund,
+      );
+    }
+
     await MailSenderService.dispatch({
       mailType: MailType.BOOKING_CANCEL,
       address,
       bookingIds,
       tenantId,
-      templateData: { cancelReason: reason },
+      templateData: { cancelReason: reason, ...refundTemplateData },
       attachments,
       aggregated,
     });
@@ -208,6 +224,21 @@ class MailController {
     });
   }
 
+  static async sendSupervisorBookingNotification(
+    address,
+    bookingIds,
+    tenantId,
+    aggregated = false,
+  ) {
+    await MailSenderService.dispatch({
+      mailType: MailType.SUPERVISOR_BOOKING_NOTIFICATION,
+      address,
+      bookingIds,
+      tenantId,
+      aggregated,
+    });
+  }
+
   static async sendNewBooking(address, bookingId, tenantId) {
     await MailSenderService.dispatch({
       mailType: MailType.NEW_BOOKING,
@@ -257,15 +288,22 @@ class MailController {
     hookId,
     reason,
     attachments,
+    refundPreview = null,
   ) {
     const verifyRejectionUrl = `${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}`;
+    const refundTemplateData =
+      CancellationRefundService.toMailTemplateData(refundPreview);
 
     await MailSenderService.dispatch({
       mailType: MailType.VERIFY_BOOKING_REJECTION,
       address,
       bookingIds: [bookingId],
       tenantId,
-      templateData: { cancelReason: reason, verifyRejectionUrl },
+      templateData: {
+        cancelReason: reason,
+        verifyRejectionUrl,
+        ...refundTemplateData,
+      },
       attachments,
     });
   }

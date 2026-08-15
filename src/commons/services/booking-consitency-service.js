@@ -86,6 +86,25 @@ function checkSamePaymentProvider(bookings) {
 }
 
 /**
+ * Ensures all bookings use invoice as payment provider.
+ *
+ * @param {Array<Object>} bookings - The list of bookings to check.
+ * @throws {ConsistencyError} If any booking does not use invoice payment.
+ */
+function checkInvoicePaymentProvider(bookings) {
+  const bad = bookings.find(
+    (b) => String(b.paymentProvider || "").toLowerCase() !== "invoice",
+  );
+  if (bad) {
+    throw new ConsistencyError(
+      "INVOICE_PAYMENT_REQUIRED",
+      "All bookings must use invoice payment provider",
+      { bookingId: bad.id },
+    );
+  }
+}
+
+/**
  * Ensures all bookings are paid.
  *
  * @param {Array<Object>} bookings - The list of bookings to check.
@@ -165,6 +184,7 @@ module.exports = {
   checkSameOwner,
   checkSameStatus,
   checkSamePaymentProvider,
+  checkInvoicePaymentProvider,
   checkPayedStatus,
   validatePaymentProviderRequirement,
   checkSameContactDetails,

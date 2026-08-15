@@ -3,7 +3,11 @@ const InstanceModel = require("./models/instanceModel");
 const {
   CustomFieldCache,
 } = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const { InstanceCache } = require("../services/instance/instance-cache");
+const { BookableManager } = require("./bookable-manager");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
@@ -33,9 +37,11 @@ class InstanceManager {
     const instanceEntity =
       instance instanceof Instance ? instance : new Instance(instance);
 
-    // Übergangslogik: alte und neue Felder spiegeln, damit Konsumenten beider
-    // Versionen während des Rollouts konsistente Werte sehen.
     InstanceManager._syncLegacyFields(instanceEntity);
+
+    CustomFieldService.normalizeDefinitions(
+      instanceEntity.bookableCustomFields || [],
+    );
 
     instanceEntity.validate();
 
@@ -43,16 +49,39 @@ class InstanceManager {
     if (!rawInstance) {
       return null;
     }
+
+    const previousCustomFields = rawInstance.bookableCustomFields || [];
+
     const updated = await InstanceModel.findOneAndUpdate(
       {},
       { $set: instanceEntity },
       { new: true },
     );
 
+    const removedFieldIds = CustomFieldService.getRemovedFieldIds(
+      previousCustomFields,
+      instanceEntity.bookableCustomFields || [],
+    );
+    if (removedFieldIds.length > 0) {
+      await BookableManager.removeCustomFieldValues(removedFieldIds);
+    }
+
     CustomFieldCache.invalidateInstance();
     InstanceCache.invalidate();
 
     return updated.toEntity();
+  }
+
+  static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await InstanceModel.updateOne(
+      { ownerUserIds: previousUserId },
+      { $set: { "ownerUserIds.$[elem]": newUserId } },
+      {
+        ...options,
+        arrayFilters: [{ elem: previousUserId }],
+      },
+    );
   }
 
   static async getBookableCustomFields() {

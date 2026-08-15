@@ -20,24 +20,20 @@ async function testProvider(providerId, config) {
   const handler = testHandlers[providerId];
 
   if (!handler) {
-    throw new Error(
-      `No test handler registered for provider: ${providerId}`,
-    );
+    throw new Error(`No test handler registered for provider: ${providerId}`);
   }
 
   // Support both function and object format
-  if (typeof handler === 'function') {
+  if (typeof handler === "function") {
     return handler(config);
   }
 
   if (handler.requiredFields) {
-    const missing = handler.requiredFields.filter(
-      (field) => !config[field],
-    );
+    const missing = handler.requiredFields.filter((field) => !config[field]);
     if (missing.length > 0) {
       return {
         success: false,
-        message: `Missing required fields: ${missing.join(', ')}`,
+        message: `Missing required fields: ${missing.join(", ")}`,
       };
     }
   }

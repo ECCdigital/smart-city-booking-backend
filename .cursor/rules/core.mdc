@@ -1,0 +1,19 @@
+---
+description: Core project context for Smart City Booking Backend
+alwaysApply: true
+---
+
+# Smart City Booking Backend
+
+Follow `AGENTS.md` at the repo root. Key points:
+
+- Node.js/Express + MongoDB, multi-tenant booking API (backend only)
+- Frontends: Admin UI → github.com/ECCdigital/smart-city-booking-vue-app, Storefront → github.com/ECCdigital/smart-city-booking-store-front
+- Business logic in `src/commons/`, HTTP in `src/platform/`
+- English for code, comments, commits, PRs, and changelog entries
+- DRY: reuse existing code; extract shared logic only on real duplication
+- Run `npm test` and `npm run lint:check` before finishing
+- Minimal diffs, no drive-by refactors, no commits unless asked
+- Never commit secrets (`.env`)
+
+Detailed guides: `docs/agents/`

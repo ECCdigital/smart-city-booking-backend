@@ -32,6 +32,68 @@ const customFieldValueSchema = new Schema(
   { _id: false },
 );
 
+const blockPeriodSchemaDefinition = {
+  id: { type: String, required: true },
+  label: { type: String, required: true },
+  startWeekday: {
+    type: Number,
+    required: true,
+    min: 0,
+    max: 6,
+    validate: {
+      validator: Number.isInteger,
+      message: "startWeekday must be an integer",
+    },
+  },
+  startTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
+  endWeekday: {
+    type: Number,
+    required: true,
+    min: 0,
+    max: 6,
+    validate: {
+      validator: Number.isInteger,
+      message: "endWeekday must be an integer",
+    },
+  },
+  endTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
+};
+
+const serviceHoursSchemaDefinition = {
+  weekdays: {
+    type: [Number],
+    required: true,
+    validate: {
+      validator: (value) =>
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.every(
+          (weekday) =>
+            Number.isInteger(weekday) && weekday >= 0 && weekday <= 6,
+        ),
+      message: "weekdays must contain integers between 0 and 6",
+    },
+  },
+  startTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
+  endTime: {
+    type: String,
+    required: true,
+    match: /^([01]\d|2[0-3]):[0-5]\d$/,
+  },
+};
+
 const bookableSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true, ref: "Tenant" },
@@ -84,10 +146,22 @@ const bookableSchemaDefinition = {
   timePeriods: { type: [Object], default: [] },
   isOpeningHoursRelated: { type: Boolean, default: false },
   openingHours: { type: [Object], default: [] },
+  preparationLeadTimeMinutes: { type: Number, default: null, min: 0 },
+  serviceHours: {
+    type: [new Schema(serviceHoursSchemaDefinition, { _id: false })],
+    default: [],
+  },
+  bufferTimeBeforeMinutes: { type: Number, default: null, min: 0 },
+  bufferTimeAfterMinutes: { type: Number, default: null, min: 0 },
   isSpecialOpeningHoursRelated: { type: Boolean, default: false },
   specialOpeningHours: { type: [Object], default: [] },
   isLongRange: { type: Boolean, default: false },
   longRangeOptions: { type: Object, default: null },
+  isBlockPeriodRelated: { type: Boolean, default: false },
+  blockPeriods: {
+    type: [new Schema(blockPeriodSchemaDefinition, { _id: false })],
+    default: [],
+  },
 
   // Price properties
   priceCategories: {
@@ -114,13 +188,61 @@ const bookableSchemaDefinition = {
   requiresLogin: { type: Boolean, default: false },
   permittedUsers: { type: [String], default: [] },
   permittedRoles: { type: [String], default: [] },
-  freeBookingUsers: { type: [String], default: [] },
-  freeBookingRoles: { type: [String], default: [] },
+  bookingDiscounts: {
+    type: new Schema(
+      {
+        users: {
+          type: [
+            new Schema(
+              {
+                userId: { type: String, required: true },
+                discountPercent: {
+                  type: Number,
+                  default: 0,
+                  min: 0,
+                  max: 100,
+                  validate: {
+                    validator: Number.isInteger,
+                    message: "discountPercent must be an integer",
+                  },
+                },
+              },
+              { _id: false },
+            ),
+          ],
+          default: [],
+        },
+        roles: {
+          type: [
+            new Schema(
+              {
+                roleId: { type: String, required: true },
+                discountPercent: {
+                  type: Number,
+                  default: 0,
+                  min: 0,
+                  max: 100,
+                  validate: {
+                    validator: Number.isInteger,
+                    message: "discountPercent must be an integer",
+                  },
+                },
+              },
+              { _id: false },
+            ),
+          ],
+          default: [],
+        },
+      },
+      { _id: false },
+    ),
+    default: { users: [], roles: [] },
+  },
 
   // Cancellation policy
   cancellationPolicy: {
     type: Object,
-    default: { userCancellable: true },
+    default: { userCancellable: true, contactHint: "" },
   },
 
   // Relationship properties
@@ -143,7 +265,7 @@ const bookableSchemaDefinition = {
       accessPointIds: [],
     },
   },
-  requiredFields: { type: [String], default: [] },
+  requiredFields: { type: [String], default: ["address", "zipCode", "city"] },
 
   externalProviders: {
     type: [
@@ -181,4 +303,6 @@ const bookableSchemaDefinition = {
 
 module.exports = {
   bookableSchemaDefinition,
+  blockPeriodSchemaDefinition,
+  serviceHoursSchemaDefinition,
 };

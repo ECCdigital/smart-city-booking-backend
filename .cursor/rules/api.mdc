@@ -1,0 +1,14 @@
+---
+description: API controller and route conventions
+globs: src/platform/**/*.js
+alwaysApply: false
+---
+
+# API Layer
+
+See `docs/agents/api.md` for full conventions.
+
+- Keep controllers thin — delegate to services/managers
+- Always scope by `tenantId` and check permissions
+- Use error classes from `src/errors/` and `api-response.js`
+- Update OpenAPI YAML in `src/docs/routes/` for endpoint changes

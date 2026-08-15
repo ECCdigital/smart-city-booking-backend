@@ -46,7 +46,7 @@ class BookableService {
         timeEnd,
         bookableId,
         amount: 1,
-        bookWithPrice: false,
+        bookWithoutDiscount: false,
       });
 
       await checkoutService.init(bookable);

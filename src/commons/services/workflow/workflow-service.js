@@ -235,22 +235,42 @@ class WorkflowService {
     });
   }
 
-  static async getWorkflowStatus(tenantId, bookingID) {
-    const workflow = await WorkflowManager.getWorkflow(tenantId);
-
-    if (!workflow || !workflow.active) return null;
-
-    const status = workflow.states.find((status) =>
-      status.tasks.some((task) => task.id === bookingID),
-    );
-
-    let archive;
-    if (!status) {
-      archive = workflow.archive.some((task) => task.id === bookingID)
-        ? "archive"
-        : "";
+  static buildWorkflowStatusMap(workflow) {
+    if (!workflow?.active) {
+      return null;
     }
-    return status?.id || archive || null;
+
+    const statusByBookingId = new Map();
+
+    for (const status of workflow.states) {
+      for (const task of status.tasks) {
+        statusByBookingId.set(task.id, status.id);
+      }
+    }
+
+    for (const task of workflow.archive) {
+      statusByBookingId.set(task.id, "archive");
+    }
+
+    return statusByBookingId;
+  }
+
+  static async getWorkflowStatusMap(tenantId) {
+    const workflow = await WorkflowManager.getWorkflow(tenantId);
+    return WorkflowService.buildWorkflowStatusMap(workflow);
+  }
+
+  static resolveWorkflowStatus(statusMap, bookingId) {
+    if (!statusMap) {
+      return null;
+    }
+
+    return statusMap.get(bookingId) ?? null;
+  }
+
+  static async getWorkflowStatus(tenantId, bookingID) {
+    const statusMap = await WorkflowService.getWorkflowStatusMap(tenantId);
+    return WorkflowService.resolveWorkflowStatus(statusMap, bookingID);
   }
 }
 

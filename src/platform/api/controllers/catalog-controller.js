@@ -6,6 +6,9 @@ const InstanceManager = require("../../../commons/data-managers/instance-manager
 const {
   authenticateIfNeeded,
 } = require("../../../commons/utilities/auth-utils");
+const {
+  assertCatalogSlugAccess,
+} = require("../../../commons/utilities/catalog-participation-utils");
 
 const logger = bunyan.createLogger({
   name: "catalog-controller.js",
@@ -51,7 +54,10 @@ class CatalogController {
 
   static async getCatalogBundle(request, response) {
     try {
-      const bundle = await CatalogService.getCatalogBundle();
+      const bundle = await CatalogService.getCatalogBundle(
+        null,
+        request.user?.id,
+      );
 
       if (!bundle) {
         return response.status(404).send({
@@ -155,9 +161,14 @@ class CatalogController {
         );
         if (user) request.user = user;
 
-        //TODO: Add permission checks here if needed
+        await assertCatalogSlugAccess(catalog, request.user?.id);
       } catch (error) {
-        console.error("Authentication error:", error);
+        if (error.code) {
+          return response.status(error.code).json({
+            success: false,
+            message: error.message,
+          });
+        }
 
         return response.status(401).json({ message: error.message });
       }
@@ -175,6 +186,18 @@ class CatalogController {
   static async getTheme(request, response) {
     try {
       const slug = request.params.slug;
+
+      if (slug) {
+        const catalog = await CatalogService.getCatalog(slug);
+        try {
+          await assertCatalogSlugAccess(catalog, request.user?.id);
+        } catch (error) {
+          return response.status(error.code || 500).json({
+            success: false,
+            message: error.message || "Internal Server Error",
+          });
+        }
+      }
 
       const themeData = slug
         ? await CatalogService.getThemeBySlug(slug)

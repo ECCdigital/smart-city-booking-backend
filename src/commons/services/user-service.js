@@ -1,22 +1,59 @@
 const { User, USER_HOOK_TYPES } = require("../entities/user/user");
+const mongoose = require("mongoose");
 const UserManager = require("../data-managers/user-manager");
 const bunyan = require("bunyan");
 const logger = bunyan.createLogger({
   name: "user-service.js",
   level: process.env.LOG_LEVEL,
 });
+const BookingManager = require("../data-managers/booking-manager");
+const GroupBookingManager = require("../data-managers/group-booking-manager");
+const { BookableManager } = require("../data-managers/bookable-manager");
+const EventManager = require("../data-managers/event-manager");
+const CouponManager = require("../data-managers/coupon-manager");
+const MembershipManager = require("../data-managers/membership-manager");
+const InstanceManager = require("../data-managers/instance-manager");
+const TokenSessionService = require("./token-session-service");
 
 class UserService {
-  static async singUpUser(user, nextUrl, verifyUrl) {
+  static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {
     const MailController = require("../mail-service/mail-controller");
     const hook = user.addHook(USER_HOOK_TYPES.VERIFY, { nextUrl, verifyUrl });
     const createdUser = await UserManager.createUser(user);
+
+    if (invitation && invitation.token && invitation.tenantId) {
+      await UserService._claimInvitationOnSignup(
+        invitation.tenantId,
+        invitation.token,
+        createdUser.id,
+      );
+    }
+
     await MailController.sendVerificationRequest(
       createdUser.id,
       hook.id,
       verifyUrl,
     );
     await MailController.sendUserCreated(createdUser.id);
+  }
+
+  /**
+   * Persist the invitation context on a pending membership during signup so it
+   * can be recovered after email verification / login, independent of any
+   * redirect. Best-effort: a failure here must never block account creation.
+   */
+  static async _claimInvitationOnSignup(tenantId, token, userId) {
+    const InvitationService = require("./invitation-service");
+    try {
+      await InvitationService.claimInvitationForUser(tenantId, token, userId);
+      logger.info(
+        `Invitation ${token} claimed for newly registered user ${userId}`,
+      );
+    } catch (error) {
+      logger.warn(
+        `Could not claim invitation ${token} for user ${userId}: ${error.message || error}`,
+      );
+    }
   }
 
   static async releaseHook(hookId) {
@@ -94,7 +131,7 @@ class UserService {
         hook.status = "revoked";
       }
     });
-    
+
     const hook = userEntity.addForgotPasswordHook(resetUrl);
     await UserManager.updateUser(userEntity);
     await MailController.sendForgotPasswordRequest(
@@ -137,6 +174,213 @@ class UserService {
     logger.info(`Password reset for user ${user.id}`);
 
     return { success: true };
+  }
+
+  static async syncSelfBookingNames(userId, firstName, lastName) {
+    const normalizedFirstName = String(firstName || "").trim();
+    const normalizedLastName = String(lastName || "").trim();
+    const fullName = `${normalizedFirstName} ${normalizedLastName}`.trim();
+
+    if (!fullName) {
+      return;
+    }
+
+    await BookingManager.updateAssignedSelfBookingNames(userId, fullName);
+  }
+
+  static _isTransactionUnsupportedError(error) {
+    const message = String(error?.message || error || "").toLowerCase();
+    return (
+      message.includes("replica set") ||
+      message.includes("mongos") ||
+      (message.includes("transaction") && message.includes("not supported"))
+    );
+  }
+
+  static async _runWithOptionalTransaction(callback) {
+    const session = await mongoose.startSession();
+
+    try {
+      await session.withTransaction(async () => callback(session));
+    } catch (error) {
+      if (!UserService._isTransactionUnsupportedError(error)) {
+        throw error;
+      }
+      await callback(null);
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  static async changeUserId({
+    currentId,
+    newId,
+    keycloakId = null,
+    anonymize = false,
+  }) {
+    const normalizedCurrentId = String(currentId || "")
+      .trim()
+      .toLowerCase();
+    const normalizedNewId = String(newId || "")
+      .trim()
+      .toLowerCase();
+    const normalizedKeycloakId = String(keycloakId || "").trim();
+
+    if (!normalizedNewId) {
+      throw { message: "Missing required parameters", status: 400 };
+    }
+
+    const currentUser = await UserManager.findRawUserByIdOrKeycloak(
+      normalizedCurrentId,
+      normalizedKeycloakId,
+    );
+    if (!currentUser) {
+      throw { message: "User not found", status: 404 };
+    }
+
+    const previousId = currentUser.id;
+
+    if (previousId !== normalizedNewId) {
+      const existingTargetUser = await UserManager.getRawUserBy({
+        id: normalizedNewId,
+      });
+      if (
+        existingTargetUser &&
+        String(existingTargetUser._id) !== String(currentUser._id)
+      ) {
+        throw { message: "Target user id already exists", status: 409 };
+      }
+    }
+
+    const userSet = {};
+    if (previousId !== normalizedNewId) {
+      userSet.id = normalizedNewId;
+    }
+    if (normalizedKeycloakId) {
+      userSet.keycloakId = normalizedKeycloakId;
+    }
+    if (anonymize === true) {
+      userSet.firstName = "Gelöschtes Profil";
+      userSet.lastName = "";
+    }
+
+    const applyChange = async (session) => {
+      if (previousId !== normalizedNewId) {
+        await BookingManager.reassignUserReferences(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await GroupBookingManager.reassignUserReferences(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await BookableManager.reassignOwnerUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await EventManager.reassignOwnerUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await CouponManager.reassignOwnerUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await MembershipManager.reassignUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await TokenSessionService.reassignUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+        await InstanceManager.reassignOwnerUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
+      }
+
+      if (Object.keys(userSet).length > 0) {
+        await UserManager.updateUserByMongoId(
+          currentUser._id,
+          userSet,
+          session,
+        );
+      }
+    };
+
+    await UserService._runWithOptionalTransaction(applyChange);
+
+    if (anonymize === true) {
+      const targetId =
+        previousId !== normalizedNewId ? normalizedNewId : previousId;
+      await UserService.syncSelfBookingNames(targetId, userSet.firstName, "");
+    }
+
+    return {
+      previousId,
+      id: normalizedNewId,
+      changed: previousId !== normalizedNewId,
+    };
+  }
+
+  static async updateUserNames({
+    userId,
+    firstName,
+    lastName,
+    keycloakId = null,
+    syncSelfBookingNames = true,
+  }) {
+    const normalizedUserId = String(userId || "")
+      .trim()
+      .toLowerCase();
+    const normalizedKeycloakId = String(keycloakId || "").trim();
+    const normalizedFirstName = String(firstName || "").trim();
+    const normalizedLastName = String(lastName || "").trim();
+
+    if (!normalizedFirstName || !normalizedLastName) {
+      throw { message: "Missing required parameters", status: 400 };
+    }
+
+    const currentUser = await UserManager.findRawUserByIdOrKeycloak(
+      normalizedUserId,
+      normalizedKeycloakId,
+    );
+    if (!currentUser) {
+      throw { message: "User not found", status: 404 };
+    }
+
+    const updated = await UserManager.updateUserNamesByMongoId(
+      currentUser._id,
+      normalizedFirstName,
+      normalizedLastName,
+      normalizedKeycloakId || null,
+    );
+    if (!updated) {
+      throw { message: "User not found", status: 404 };
+    }
+
+    if (syncSelfBookingNames !== false) {
+      await UserService.syncSelfBookingNames(
+        updated.id,
+        normalizedFirstName,
+        normalizedLastName,
+      );
+    }
+
+    return {
+      id: updated.id,
+      firstName: updated.firstName,
+      lastName: updated.lastName,
+    };
   }
 }
 

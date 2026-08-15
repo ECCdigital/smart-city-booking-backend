@@ -23,6 +23,10 @@ const {
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  CancellationRefundService,
+  CANCELLATION_ORIGINS,
+} = require("../../../commons/services/payment/cancellation-refund-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
@@ -33,15 +37,45 @@ const logger = bunyan.createLogger({
  * Web Controller for Bookings.
  */
 class BookingController {
+  static _resolvePrimaryBookableId(booking) {
+    if (booking.bookableId) {
+      return booking.bookableId;
+    }
+
+    return booking.bookableItems?.[0]?.bookableId ?? null;
+  }
+
   static async _populate(bookings) {
-    for (let booking of bookings) {
+    if (!bookings.length) {
+      return;
+    }
+
+    const tenantId = bookings[0].tenantId;
+    const bookableIds = [
+      ...new Set(
+        bookings
+          .map((booking) =>
+            BookingController._resolvePrimaryBookableId(booking),
+          )
+          .filter(Boolean),
+      ),
+    ];
+
+    const [bookables, workflowStatusMap] = await Promise.all([
+      BookableManager.getBookablesByIdsWithCustomFields(tenantId, bookableIds),
+      WorkflowService.getWorkflowStatusMap(tenantId),
+    ]);
+
+    const bookableById = new Map(
+      bookables.map((bookable) => [bookable.id, bookable]),
+    );
+
+    for (const booking of bookings) {
+      const bookableId = BookingController._resolvePrimaryBookableId(booking);
       booking._populated = {
-        bookable: await BookableManager.getBookable(
-          booking.bookableId,
-          booking.tenantId,
-        ),
-        workflowStatus: await WorkflowService.getWorkflowStatus(
-          booking.tenantId,
+        bookable: bookableId ? bookableById.get(bookableId) ?? null : null,
+        workflowStatus: WorkflowService.resolveWorkflowStatus(
+          workflowStatusMap,
           booking.id,
         ),
       };
@@ -81,35 +115,22 @@ class BookingController {
         );
         response.status(200).send(anonymizedBookings);
       } else if (user) {
-        if (request.query.populate === "true") {
-          await BookingController._populate(bookings);
-        }
-
-        // Check once whether the user has readAny permission; if so, avoid per-booking checks
-        const hasReadAny = await UserManager.hasPermission(
+        const readContext = await PermissionsService.createReadContext(
           user.id,
           tenant,
           RolePermission.MANAGE_BOOKINGS,
-          "readAny",
         );
 
-        let allowedBookings = [];
-        if (hasReadAny) {
-          allowedBookings = bookings;
-        } else {
-          for (const booking of bookings) {
-            if (
-              user &&
-              (await PermissionsService._allowRead(
-                booking,
-                user.id,
-                tenant,
-                RolePermission.MANAGE_BOOKINGS,
-              ))
-            ) {
-              allowedBookings.push(booking);
-            }
-          }
+        const allowedBookings = PermissionsService.canReadAllWithContext(
+          readContext,
+        )
+          ? bookings
+          : bookings.filter((booking) =>
+              PermissionsService.allowReadWithContext(booking, readContext),
+            );
+
+        if (request.query.populate === "true") {
+          await BookingController._populate(allowedBookings);
         }
 
         logger.info(
@@ -186,30 +207,36 @@ class BookingController {
           tenant,
         );
 
-        let relatedBookings;
+        let relatedBookings = [];
         for (let relatedBookable of relatedBookables) {
-          relatedBookings = await BookingManager.getRelatedBookings(
+          const bookingsForRelated = await BookingManager.getRelatedBookings(
             tenant,
             relatedBookable.id,
           );
+          relatedBookings = relatedBookings.concat(bookingsForRelated || []);
         }
-        bookings = bookings.concat(relatedBookings || []);
+        bookings = bookings.concat(relatedBookings);
       }
 
       if (includeParentBookings) {
-        let parentBookables = await BookableManager.getParentBookables(
+        let parentBookables = await BookableManager.getAncestorBookables(
           bookableId,
           tenant,
         );
-        let parentBookings;
+        let parentBookings = [];
         for (let parentBookable of parentBookables) {
-          parentBookings = await BookingManager.getRelatedBookings(
+          const bookingsForParent = await BookingManager.getRelatedBookings(
             tenant,
             parentBookable.id,
           );
+          parentBookings = parentBookings.concat(bookingsForParent || []);
         }
-        bookings = bookings.concat(parentBookings || []);
+        bookings = bookings.concat(parentBookings);
       }
+
+      bookings = Array.from(
+        new Map(bookings.map((booking) => [booking.id, booking])).values(),
+      );
 
       if (request.query.public === "true") {
         const anonymizedBookings = bookings.map((b) => {
@@ -306,6 +333,8 @@ class BookingController {
       const tenantId = request.params.tenant;
       const ids = request.params.ids;
 
+      console.log(ids);
+
       if (ids) {
         const splitIds = ids.split(",");
 
@@ -313,6 +342,10 @@ class BookingController {
           tenantId,
           splitIds,
         );
+
+        for (const id of splitIds) {
+          const tmp = await BookingService.getBookingStatus(tenantId, splitIds);
+        }
 
         logger.info(
           `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,
@@ -405,7 +438,11 @@ class BookingController {
           RolePermission.MANAGE_BOOKINGS,
         )
       ) {
-        await BookingService.updateBooking(tenant, booking);
+        const savedBooking = await BookingService.updateBooking(
+          tenant,
+          booking,
+          { requestBody: request.body },
+        );
 
         await WorkflowService.updateTask(
           tenant,
@@ -416,7 +453,7 @@ class BookingController {
         logger.info(
           `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
         );
-        response.status(201).send(booking);
+        response.status(201).send(savedBooking);
       } else {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to update booking.`,
@@ -566,14 +603,104 @@ class BookingController {
     }
   }
 
+  static async getCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const user = request.user;
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
+
+      if (!booking) {
+        return response.sendStatus(404);
+      }
+
+      const hasPermission = await PermissionsService._allowUpdate(
+        booking,
+        user.id,
+        tenantId,
+        RolePermission.MANAGE_BOOKINGS,
+      );
+      if (!hasPermission) {
+        return response.sendStatus(403);
+      }
+
+      const preview = await BookingService.getCancellationRefundPreview(
+        tenantId,
+        bookingId,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
+  static async getPublicCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const name = request.query.name;
+
+      if (!tenantId || !bookingId || !name) {
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const preview = await BookingService.getPublicCancellationRefundPreview(
+        tenantId,
+        bookingId,
+        name,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
+  static async getHookCancellationRefundPreview(request, response) {
+    try {
+      const tenantId = request.params.tenant;
+      const bookingId = request.params.id;
+      const hookId = request.params.hookId;
+
+      if (!tenantId || !bookingId || !hookId) {
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const preview = await BookingService.getHookCancellationRefundPreview(
+        tenantId,
+        bookingId,
+        hookId,
+      );
+      return response.status(200).send(preview);
+    } catch (err) {
+      logger.error(err);
+      return response
+        .status(err.statusCode || 500)
+        .send(err.message || "Could not calculate cancellation refund");
+    }
+  }
+
   static async rejectBooking(request, response) {
     try {
       const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
-      const { reason, skipCancellation, bankDetails } = request.body || {};
+      const { reason, skipCancellation, bankDetails, refundPercentage } =
+        request.body || {};
       if (!id) {
         return response.sendStatus(400);
+      }
+      if (refundPercentage !== undefined) {
+        try {
+          CancellationRefundService.validateRefundPercentage(refundPercentage);
+        } catch (error) {
+          return response.status(400).send(error.code);
+        }
       }
 
       const booking = await BookingManager.getBooking(id, tenantId);
@@ -597,6 +724,11 @@ class BookingController {
           false,
           Boolean(skipCancellation),
           bankDetails || null,
+          {
+            origin: CANCELLATION_ORIGINS.ADMIN,
+            refundPercentage,
+            cancelledByUserId: user.id,
+          },
         );
         return response.sendStatus(200);
       } else {
@@ -671,6 +803,7 @@ class BookingController {
             false,
             false,
             bankDetails || null,
+            { origin: CANCELLATION_ORIGINS.USER },
           );
         } else {
           return response.sendStatus(400);

@@ -1,63 +1,44 @@
 const { BookableManager } = require("../../data-managers/bookable-manager");
-const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
-const EventManager = require("../../data-managers/event-manager");
 const OpeningHoursManager = require("../../utilities/opening-hours-manager");
 const bunyan = require("bunyan");
-const {
-  getTenant,
-  getTenantAppById,
-} = require("../../data-managers/tenant-manager");
+const { getTenantAppById } = require("../../data-managers/tenant-manager");
 const HolidaysService = require("../holiday/holidays-service");
 const { formatISO } = require("date-fns");
-const { BOOKABLE_TYPES, Bookable } = require("../../entities/bookable/bookable");
+const {
+  BOOKABLE_TYPES,
+  Bookable,
+} = require("../../entities/bookable/bookable");
 const CouponService = require("../coupon-service");
 const providerRegistry = require("./providers/checkout-provider-registry");
 const { createClient } = require("../locker/clients/locker-client-registry");
+const { CHECK_TYPES } = require("../../availability/checkout-check-types");
+const { CheckoutDataProvider } = require("../../availability/providers");
+const {
+  getBookedAmountForBookableWindow,
+  runPermissionCheck,
+  runAvailabilityCheck,
+  runParentAvailabilityCheck,
+  runChildBookingsCheck,
+  runEventSeatsCheck,
+  runBookingDurationCheck,
+  runBlockPeriodCheck,
+  runTimePeriodCheck,
+  runEventDateCheck,
+  runMaxBookingDateCheck,
+  runMinBookingLeadTimeCheck,
+} = require("../../availability/checkout-availability-checks");
+const {
+  isTimeRelatedBookable,
+  shouldSkipOpeningHoursCheck,
+} = require("../../availability/availability-rules");
+const { CheckoutPermissions } = require("./checkout-permissions");
+const { log } = require("qrcode/lib/core/galois-field");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
   level: process.env.LOG_LEVEL,
 });
-
-const CHECK_TYPES = {
-  PERMISSION: "permission",
-  AVAILABILITY: "availability",
-  PARENT_AVAILABILITY: "parent-availability",
-  OPENING_HOURS: "opening-hours",
-  BOOKING_DURATION: "booking-duration",
-  EVENT_DATE: "event-date",
-  EVENT_SEATS: "event-seats",
-  CHILD_BOOKINGS: "child-bookings",
-  MAX_BOOKING_DATE: "max-booking-date",
-  TIME_RELATION: "time-relation",
-  PRICE_CATEGORY: "price-category",
-  MAX_AMOUNT: "max-amount",
-};
-
-class CheckoutPermissions {
-  static _isOwner(bookable, userId, tenantId) {
-    return bookable.ownerUserId === userId && bookable.tenantId === tenantId;
-  }
-
-  static async _allowCheckout(bookable, userId, tenantId) {
-    const permittedUsers = [
-      ...(bookable.permittedUsers || []),
-      ...(
-        await MembershipManager.getMembershipsByTenantAndRoles(
-          tenantId,
-          bookable.permittedRoles || [],
-        )
-      ).map((u) => u.userId),
-    ];
-
-    if (permittedUsers.length > 0 && !permittedUsers.includes(userId)) {
-      return false;
-    }
-
-    return true;
-  }
-}
 
 class ItemCheckoutService {
   /**
@@ -70,10 +51,11 @@ class ItemCheckoutService {
    * @param {string} bookableId The ID of the bookable
    * @param {number} amount The amount of the booking
    * @param {string || null} couponCode The coupon code
-   * @param {boolean} bookWithPrice Determines whether the booking process should include pricing calculations.
+   * @param {boolean} bookWithoutDiscount When true, booking discounts are ignored and the full price applies.
    * @param {string} checkoutId The ID of the checkout process, used for correlating logs and operations. Optional.
+   * @param {string|string[]|null} [excludeBookingIds] Booking IDs to ignore in capacity checks (e.g. the booking being edited).
    * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
-   *                                Set to `true` to enable pricing considerations, or `false` to skip them. Defaults to `true`.
+   *                                Defaults to `false` (discounts are applied when configured).
    */
   constructor({
     user,
@@ -83,8 +65,9 @@ class ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
-    bookWithPrice,
+    bookWithoutDiscount,
     checkoutId,
+    excludeBookingIds,
     externalCache,
   }) {
     this.user = user;
@@ -95,10 +78,16 @@ class ItemCheckoutService {
     this.amount = Number(amount);
     this.couponCode = couponCode;
     this.originBookable = null;
-    this.bookWithPrice = bookWithPrice ?? true;
+    this.bookWithoutDiscount = bookWithoutDiscount ?? false;
     this.checkoutId = checkoutId;
+    this.excludeBookingIds = Array.isArray(excludeBookingIds)
+      ? excludeBookingIds.filter(Boolean)
+      : excludeBookingIds
+        ? [excludeBookingIds]
+        : [];
     this.externalCache = externalCache || new Map();
     this._cache = new Map();
+    this._availabilityProvider = null;
   }
 
   _cached(key, fn) {
@@ -180,8 +169,31 @@ class ItemCheckoutService {
     this.amount = null;
     this.couponCode = null;
     this.originBookable = null;
-    this.bookWithPrice = null;
+    this.bookWithoutDiscount = null;
+    this.excludeBookingIds = [];
+    this._availabilityProvider = null;
     this._cache.clear();
+  }
+
+  async _getAvailabilityProvider() {
+    if (!this._availabilityProvider) {
+      this._availabilityProvider =
+        await CheckoutDataProvider.fromCheckoutService(this);
+    }
+
+    return this._availabilityProvider;
+  }
+
+  async _availabilityParams() {
+    return {
+      provider: await this._getAvailabilityProvider(),
+      originBookable: this.originBookable,
+      amount: this.amount,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+      userId: this.user,
+      excludeBookingIds: this.excludeBookingIds,
+    };
   }
 
   get bookableUsed() {
@@ -232,91 +244,66 @@ class ItemCheckoutService {
     return this.originBookable.hasExternalBookingDuration;
   }
 
-  async freeBookingAllowed() {
-    return this._cached("freeBookingAllowed", async () => {
-      const freeBookingUsers = [
-        ...(this.originBookable.freeBookingUsers || []),
-        ...(
-          await MembershipManager.getMembershipsByTenantAndRoles(
-            this.tenantId,
-            this.originBookable.freeBookingRoles || [],
-          )
-        ).map((u) => u.userId),
-      ];
+  async bookingDiscountPercent() {
+    return this._cached("bookingDiscountPercent", async () => {
+      if (!this.user || this.originBookable.tenantId !== this.tenantId) {
+        return 0;
+      }
 
-      return (
-        !!this.user &&
-        freeBookingUsers.includes(this.user) &&
-        this.originBookable.tenantId === this.tenantId
+      const membership = await MembershipManager.getMembershipByTenantAndUserID(
+        this.tenantId,
+        this.user,
       );
+      const userRoles = membership?.roles || [];
+
+      return this.originBookable.getUserDiscountPercent(this.user, userRoles);
     });
   }
 
+  async freeBookingAllowed() {
+    return (await this.bookingDiscountPercent()) >= 100;
+  }
+
   async calculateAmountBooked(bookable) {
-    let concurrentBookings;
-
-    if ((await this.isTimeRelated()) || (await this._isLongRange())) {
-      if (!this.timeBegin || !this.timeEnd) {
-        logger.warn(
-          `Bookable with ID ${bookable.id} is time related but no time is given.`,
-        );
-        throw {
-          bookableId: bookable.id,
-          title: bookable.title,
-          checkType: CHECK_TYPES.TIME_RELATION,
-          available: false,
-          message: `Das Objekt ${bookable.title} ist zeitbezogen, aber es wurde kein Zeitraum angegeben.`,
-        };
-      }
-
-      concurrentBookings = await BookingManager.getConcurrentBookings(
-        bookable.id,
-        bookable.tenantId,
-        this.timeBegin,
-        this.timeEnd,
-      );
-    } else {
-      concurrentBookings = await BookingManager.getRelatedBookings(
-        bookable.tenantId,
-        bookable.id,
-      );
-    }
-
-    const amountBooked = concurrentBookings.reduce((sum, cb) => {
-      if (cb.isRejected || !Array.isArray(cb.bookableItems)) {
-        return sum;
-      }
-
-      for (const bi of cb.bookableItems) {
-        if (bi.bookableId === bookable.id) {
-          sum += Number(bi.amount) || 0;
-        }
-      }
-
-      return sum;
-    }, 0);
+    const provider = await this._getAvailabilityProvider();
+    const { amountBooked, bookings } = await getBookedAmountForBookableWindow(
+      provider,
+      this.originBookable,
+      bookable,
+      this.timeBegin,
+      this.timeEnd,
+      this.excludeBookingIds,
+    );
 
     return {
       amountBooked,
-      bookings: concurrentBookings.map((cb) => ({
-        id: cb.id,
-        timeBegin: cb.timeBegin,
-        timeEnd: cb.timeEnd,
+      bookings: bookings.map((booking) => ({
+        id: booking.id,
+        timeBegin: booking.timeBegin,
+        timeEnd: booking.timeEnd,
       })),
     };
   }
 
   async calculateAmountBookedTicketsByParent(parentBookable) {
-    const childBookables = await BookableManager.getRelatedBookables(
+    const provider = await this._getAvailabilityProvider();
+    const childBookables = await provider.getRelatedBookablesFor(
       parentBookable.id,
-      parentBookable.tenantId,
     );
 
     let amountBooked = 0;
     for (const childBookable of childBookables) {
-      amountBooked += (await this.calculateAmountBooked(childBookable))
-        .amountBooked;
+      const result = await getBookedAmountForBookableWindow(
+        provider,
+        this.originBookable,
+        childBookable,
+        this.timeBegin,
+        this.timeEnd,
+        this.excludeBookingIds,
+      );
+      amountBooked += result.amountBooked;
     }
+
     return amountBooked;
   }
 
@@ -339,11 +326,7 @@ class ItemCheckoutService {
   }
 
   async isTimeRelated() {
-    return (
-      this.originBookable.isScheduleRelated === true ||
-      this.originBookable.isTimePeriodRelated === true ||
-      this.originBookable.isLongRange === true
-    );
+    return isTimeRelatedBookable(this.originBookable);
   }
 
   async _isLongRange() {
@@ -547,63 +530,51 @@ class ItemCheckoutService {
     return Math.round(price * 100) / 100;
   }
 
-  async userPriceEur() {
-    return this._cached("userPriceEur", async () => {
-      if (await this.freeBookingAllowed()) {
-        if (!this.bookWithPrice) {
-          return 0;
-        }
+  async _userPricesAfterCoupons() {
+    return this._cached("userPricesAfterCoupons", async () => {
+      let netPrice = await this.regularPriceEur();
+
+      const discountPercent = await this.bookingDiscountPercent();
+      if (discountPercent > 0 && !this.bookWithoutDiscount) {
+        netPrice = Math.max(
+          0,
+          Math.round(netPrice * (1 - discountPercent / 100) * 100) / 100,
+        );
       }
 
-      const total = await CouponService.applyCoupon(
+      return CouponService.applyCouponToCheckoutPrices(
         this.originBookable.enableCoupons ? this.couponCode : null,
         this.tenantId,
-        await this.regularPriceEur(),
+        netPrice,
+        await this.priceValueAddedTax(),
       );
-
-      return Math.round(total * 100) / 100;
     });
+  }
+
+  async userPriceEur() {
+    const { netPrice } = await this._userPricesAfterCoupons();
+    return netPrice;
   }
 
   async userGrossPriceEur() {
-    return this._cached("userGrossPriceEur", async () => {
-      const price =
-        (await this.userPriceEur()) * (1 + (await this.priceValueAddedTax()));
-      return Math.round(price * 100) / 100;
-    });
+    const { grossPrice } = await this._userPricesAfterCoupons();
+    return grossPrice;
   }
 
   async checkPermissions() {
-    if (this.originBookable?.isBookable !== true) {
-      throw {
-        checkType: CHECK_TYPES.PERMISSION,
-        available: false,
-        message: `Das Objekt ${this.originBookable.title}, mit der ID ${this.originBookable.id} ist nicht buchbar.`,
-      };
-    }
-
-    if (
-      !(await CheckoutPermissions._allowCheckout(
-        this.originBookable,
-        this.user,
-        this.tenantId,
-      ))
-    ) {
-      throw {
-        checkType: CHECK_TYPES.PERMISSION,
-        available: false,
-        message: `Sie haben keine Berechtigung, das Objekt ${this.originBookable.title} zu buchen.`,
-      };
-    }
-
-    return { checkType: CHECK_TYPES.PERMISSION, available: true };
+    const provider = await this._getAvailabilityProvider();
+    return runPermissionCheck({
+      provider,
+      originBookable: this.originBookable,
+      userId: this.user,
+    });
   }
 
   async checkAvailability() {
     if (this.hasExternalAvailability) {
       return await this._checkExternalAvailability();
     }
-    return await this._checkInternalAvailability();
+    return runAvailabilityCheck(await this._availabilityParams());
   }
 
   async _checkExternalAvailability() {
@@ -632,215 +603,26 @@ class ItemCheckoutService {
     };
   }
 
-  /**
-   * The method returns all concurrent bookings for the affected bookables.
-   *
-   * @returns {Promise<Object>}
-   */
-  async _checkInternalAvailability() {
-    const { amountBooked, bookings } = await this.calculateAmountBooked(
-      this.originBookable,
-    );
-
-    const isAvailable =
-      !this.originBookable.amount ||
-      amountBooked + this.amount <= this.originBookable.amount;
-
-    if (!isAvailable) {
-      throw {
-        checkType: CHECK_TYPES.AVAILABILITY,
-        available: false,
-        bookableId: this.originBookable.id,
-        title: this.originBookable.title,
-        message: `Das Objekt ${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-        totalCapacity:
-          this.originBookable.amount > 0 ? this.originBookable.amount : null,
-        booked: amountBooked,
-        remaining:
-          this.originBookable.amount > 0
-            ? this.originBookable.amount - amountBooked
-            : null,
-        concurrentBookings: bookings,
-      };
-    }
-
-    return {
-      checkType: CHECK_TYPES.AVAILABILITY,
-      available: true,
-      bookableId: this.originBookable.id,
-      title: this.originBookable.title,
-      totalCapacity:
-        this.originBookable.amount > 0 ? this.originBookable.amount : null,
-      booked: amountBooked,
-      remaining:
-        this.originBookable.amount > 0
-          ? this.originBookable.amount - amountBooked
-          : null,
-    };
-  }
-
   async checkParentAvailability() {
-    const parentBookables = await BookableManager.getParentBookables(
-      this.originBookable.id,
-      this.originBookable.tenantId,
-    );
-
-    const parentAmount = [];
-
-    for (const parentBookable of parentBookables) {
-      const { amountBooked: parentAmountBooked, bookings } =
-        await this.calculateAmountBooked(parentBookable);
-
-      let isAvailable;
-      if (this.originBookable.type === "ticket") {
-        const amountBooked =
-          await this.calculateAmountBookedTicketsByParent(parentBookable);
-        isAvailable =
-          !parentBookable.amount ||
-          parentAmountBooked + amountBooked + this.amount <=
-            parentBookable.amount;
-      } else {
-        isAvailable =
-          !parentBookable.amount || parentAmountBooked < parentBookable.amount;
-      }
-
-      parentAmount.push({
-        bookableId: parentBookable.id,
-        title: parentBookable.title,
-        checkType: CHECK_TYPES.PARENT_AVAILABILITY,
-        totalCapacity: parentBookable.amount > 0 ? parentBookable.amount : null,
-        booked: parentAmountBooked,
-        remaining:
-          parentBookable.amount > 0
-            ? parentBookable.amount - parentAmountBooked
-            : null,
-        available: isAvailable,
-      });
-
-      if (!isAvailable) {
-        throw {
-          checkType: CHECK_TYPES.PARENT_AVAILABILITY,
-          available: false,
-          message: `Übergeordnetes Objekt ${parentBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-          parentAvailability: parentAmount,
-          concurrentBookings: bookings,
-        };
-      }
-    }
-
-    return {
-      checkType: CHECK_TYPES.PARENT_AVAILABILITY,
-      available: true,
-      parentAvailabilities: parentAmount,
-    };
+    return runParentAvailabilityCheck(await this._availabilityParams());
   }
 
   async checkChildBookings() {
-    const childBookables = await BookableManager.getRelatedBookables(
-      this.originBookable.id,
-      this.originBookable.tenantId,
-    );
-
-    const childAmount = [];
-
-    // remove self
-    const filteredChildBookables = childBookables.filter(
-      (cb) => cb.id !== this.originBookable.id,
-    );
-
-    for (const childBookable of filteredChildBookables) {
-      const { amountBooked, bookings } =
-        await this.calculateAmountBooked(childBookable);
-
-      const isAvailable =
-        !childBookable.amount ||
-        amountBooked + this.amount <= childBookable.amount;
-
-      childAmount.push({
-        available: isAvailable,
-        bookableId: childBookable.id,
-        title: childBookable.title,
-        totalCapacity: childBookable.amount,
-        booked: amountBooked,
-        remaining: childBookable.amount - amountBooked,
-      });
-
-      if (!isAvailable) {
-        throw {
-          checkType: CHECK_TYPES.CHILD_BOOKINGS,
-          available: false,
-          message: `Abhängiges Objekt ${childBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-          childAvailabilities: childAmount,
-          concurrentBookings: bookings,
-        };
-      }
-    }
-
-    return {
-      checkType: CHECK_TYPES.CHILD_BOOKINGS,
-      available: true,
-      childAvailabilities: childAmount,
-    };
+    return runChildBookingsCheck(await this._availabilityParams());
   }
 
   async checkEventSeats() {
-    if (this.hasEvent) {
-      const event = await EventManager.getEvent(
-        this.originBookable.eventId,
-        this.originBookable.tenantId,
-      );
-
-      const eventBookings = await BookingManager.getEventBookings(
-        this.originBookable.tenantId,
-        this.originBookable.eventId,
-      );
-
-      const amountBooked = eventBookings
-        .map((cb) => cb.bookableItems)
-        .flat()
-        .filter(
-          (bi) =>
-            bi._bookableUsed.eventId === this.originBookable.eventId &&
-            bi._bookableUsed.tenantId === this.originBookable.tenantId,
-        )
-        .reduce((acc, bi) => Number(acc) + Number(bi.amount), 0);
-
-      if (
-        !!event?.attendees.maxAttendees &&
-        Number(amountBooked) + this.amount > event.attendees.maxAttendees
-      ) {
-        throw {
-          checkType: CHECK_TYPES.EVENT_SEATS,
-          available: false,
-          eventId: event.id,
-          title: event.information.name,
-          message: `Die Veranstaltung ${event.information.name} hat nicht ausreichend freie Plätze.`,
-          totalCapacity: event.attendees.maxAttendees,
-          booked: amountBooked,
-          remaining: event.attendees.maxAttendees - amountBooked,
-        };
-      }
-      return {
-        eventId: event.id,
-        title: event.information.name,
-        checkType: CHECK_TYPES.EVENT_SEATS,
-        available: true,
-        totalCapacity: event?.attendees.maxAttendees,
-        booked: amountBooked,
-        remaining: event?.attendees.maxAttendees - amountBooked,
-      };
-    }
-
-    return {
-      checkType: CHECK_TYPES.EVENT_SEATS,
-      available: true,
-    };
+    const provider = await this._getAvailabilityProvider();
+    return runEventSeatsCheck({
+      provider,
+      originBookable: this.originBookable,
+      amount: this.amount,
+    });
   }
 
   async checkBookingDuration() {
     const durationMinutes = this.getBookingDuration();
 
-    // --- External provider check ---
     if (this.hasExternalBookingDuration) {
       for (const provider of this.externalProviders) {
         if (!provider.handlesBookingDuration) continue;
@@ -861,43 +643,27 @@ class ItemCheckoutService {
       }
     }
 
-    // --- Internal check  ---
-    const hours = durationMinutes / 60;
+    return runBookingDurationCheck({
+      originBookable: this.originBookable,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+    });
+  }
 
-    if (!this.originBookable.isScheduleRelated) {
-      return { checkType: CHECK_TYPES.BOOKING_DURATION, available: true };
-    }
+  async checkBlockPeriod() {
+    return runBlockPeriodCheck({
+      originBookable: this.originBookable,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+    });
+  }
 
-    if (
-      this.originBookable.minBookingDuration &&
-      hours < this.originBookable.minBookingDuration
-    ) {
-      throw {
-        checkType: CHECK_TYPES.BOOKING_DURATION,
-        bookableId: this.originBookable.id,
-        title: this.originBookable.title,
-        available: false,
-        message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} muss mindestens ${this.originBookable.minBookingDuration} Stunden betragen.`,
-      };
-    }
-
-    if (
-      this.originBookable.maxBookingDuration &&
-      hours > this.originBookable.maxBookingDuration
-    ) {
-      throw {
-        checkType: CHECK_TYPES.BOOKING_DURATION,
-        bookableId: this.originBookable.id,
-        title: this.originBookable.title,
-        available: false,
-        message: `Die Buchungsdauer für das Objekt ${this.originBookable.title} darf ${this.originBookable.maxBookingDuration} Stunden nicht überschreiten.`,
-      };
-    }
-
-    return {
-      checkType: CHECK_TYPES.BOOKING_DURATION,
-      available: true,
-    };
+  async checkTimePeriod() {
+    return runTimePeriodCheck({
+      originBookable: this.originBookable,
+      timeBegin: this.timeBegin,
+      timeEnd: this.timeEnd,
+    });
   }
 
   async checkOpeningHours() {
@@ -905,11 +671,11 @@ class ItemCheckoutService {
       return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
-    if (this.originBookable.isLongRange === true) {
+    if (shouldSkipOpeningHoursCheck(this.originBookable)) {
       return { checkType: CHECK_TYPES.OPENING_HOURS, available: true };
     }
 
-    const parentBookables = await BookableManager.getParentBookables(
+    const parentBookables = await BookableManager.getAncestorBookables(
       this.originBookable.id,
       this.originBookable.tenantId,
     );
@@ -935,92 +701,19 @@ class ItemCheckoutService {
   }
 
   async checkMaxBookingDate() {
-    const tenant = await getTenant(this.tenantId);
+    return runMaxBookingDateCheck(await this._availabilityParams());
+  }
 
-    const maxBookingAdvanceInMonths = Number(tenant?.maxBookingAdvanceInMonths);
-    if (!maxBookingAdvanceInMonths) {
-      return { checkType: CHECK_TYPES.MAX_BOOKING_DATE, available: true };
-    }
-
-    const maxBookingDate = new Date();
-    maxBookingDate.setMonth(
-      maxBookingDate.getMonth() + maxBookingAdvanceInMonths,
-    );
-
-    if (this.timeBegin > maxBookingDate) {
-      throw {
-        checkType: CHECK_TYPES.MAX_BOOKING_DATE,
-        available: false,
-        message: `Die Buchung für das Objekt ${this.originBookable.title} ist nur bis zu ${maxBookingAdvanceInMonths} Monate im Voraus möglich.`,
-      };
-    }
-
-    return { checkType: CHECK_TYPES.MAX_BOOKING_DATE, available: true };
+  async checkMinBookingLeadTime() {
+    return runMinBookingLeadTimeCheck(await this._availabilityParams());
   }
 
   async checkEventDate() {
-    if (
-      this.originBookable.type === BOOKABLE_TYPES.TICKET &&
-      !!this.originBookable.eventId
-    ) {
-      const event = await EventManager.getEvent(
-        this.originBookable.eventId,
-        this.originBookable.tenantId,
-      );
-
-      if (!event) {
-        throw {
-          checkType: CHECK_TYPES.EVENT_DATE,
-          available: false,
-          message: `Die Veranstaltung für das Ticket ${this.originBookable.title} existiert nicht.`,
-        };
-      }
-
-      const now = new Date();
-      const eventEndDate = event.information.endDate
-        ? new Date(event.information.endDate)
-        : null;
-
-      const eventDate =
-        eventEndDate ||
-        (event.information.startDate
-          ? new Date(event.information.startDate)
-          : null);
-
-      if (!eventDate) {
-        return {
-          checkType: CHECK_TYPES.EVENT_DATE,
-          available: true,
-        };
-      }
-
-      if (eventEndDate && event.information.endTime) {
-        const [hours, minutes] = event.information.endTime
-          .split(":")
-          .map(Number);
-        eventEndDate.setHours(hours, minutes, 0, 0);
-      } else if (!eventEndDate && event.information.startTime) {
-        const [hours, minutes] = event.information.startTime
-          .split(":")
-          .map(Number);
-        eventDate.setHours(hours, minutes, 0, 0);
-      }
-
-      if (eventDate < now) {
-        throw {
-          eventId: event.id,
-          title: event.information.name,
-          checkType: CHECK_TYPES.EVENT_DATE,
-          available: false,
-          message: `Die Veranstaltung ${event.information.name} liegt in der Vergangenheit und kann nicht mehr gebucht werden.`,
-        };
-      }
-    }
-
-    return {
-      checkType: CHECK_TYPES.EVENT_DATE,
-      available: true,
-    };
+    const provider = await this._getAvailabilityProvider();
+    return runEventDateCheck({
+      provider,
+      originBookable: this.originBookable,
+    });
   }
 
   async checkMaxAmount() {
@@ -1070,6 +763,8 @@ class ItemCheckoutService {
         this.checkPermissions(),
         this.checkOpeningHours(),
         this.checkMaxAmount(),
+        this.checkBlockPeriod(),
+        this.checkTimePeriod(),
         this.checkBookingDuration(),
         this.checkAvailability(),
         this.checkEventDate(),
@@ -1077,6 +772,7 @@ class ItemCheckoutService {
         this.checkParentAvailability(),
         this.checkChildBookings(),
         this.checkMaxBookingDate(),
+        this.checkMinBookingLeadTime(),
       ]);
     }
 
@@ -1084,6 +780,8 @@ class ItemCheckoutService {
       this.checkPermissions(),
       this.checkMaxAmount(),
       this.checkOpeningHours(),
+      this.checkBlockPeriod(),
+      this.checkTimePeriod(),
       this.checkBookingDuration(),
       this.checkAvailability(),
       this.checkEventDate(),
@@ -1091,6 +789,7 @@ class ItemCheckoutService {
       this.checkParentAvailability(),
       this.checkChildBookings(),
       this.checkMaxBookingDate(),
+      this.checkMinBookingLeadTime(),
     ]);
   }
 
@@ -1133,6 +832,9 @@ class ManualItemCheckoutService extends ItemCheckoutService {
     bookableId,
     amount,
     couponCode,
+    bookWithoutDiscount,
+    excludeBookingIds,
+    capacityChecksOnly = false,
   }) {
     super({
       user,
@@ -1142,7 +844,10 @@ class ManualItemCheckoutService extends ItemCheckoutService {
       bookableId,
       amount,
       couponCode,
+      bookWithoutDiscount,
+      excludeBookingIds,
     });
+    this.capacityChecksOnly = Boolean(capacityChecksOnly);
   }
 
   async init(originBookable) {
@@ -1155,6 +860,19 @@ class ManualItemCheckoutService extends ItemCheckoutService {
       this.originBookable = await super.getBookable();
     }
     this.externalProviders = await this._resolveExternalProviders();
+  }
+
+  /**
+   * Admin manual create/update sets capacityChecksOnly so saves never hard-fail
+   * on checkout rules (including capacity/overlap). Informational availability
+   * is via validate endpoints (with excludeBookingIds when editing).
+   */
+  async checkAll(stopOnFirstError = true) {
+    if (this.capacityChecksOnly) {
+      return true;
+    }
+
+    return super.checkAll(stopOnFirstError);
   }
 }
 

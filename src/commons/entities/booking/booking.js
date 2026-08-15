@@ -7,6 +7,9 @@ class Booking {
     const defaults = SchemaUtils.createDefaults(bookingSchemaDefinition);
     Object.assign(this, defaults, params);
 
+    this.customFieldDefinitions = params.customFieldDefinitions;
+    this.customFields = params.customFields;
+
     // Convert hooks to BookingHook entities
     if (this.hooks && Array.isArray(this.hooks)) {
       this.hooks = this.hooks.map((hook) =>
@@ -177,6 +180,33 @@ class Booking {
       bookableItems: this.bookableItems,
       cancellationPolicy: this.cancellationPolicy,
     };
+  }
+
+  /**
+   * Enrich this booking with merged checkout custom field definitions and resolved values.
+   * @param {{ instanceFields: Array, tenantFields: Array, bookableFields: Array }} definitions
+   * @returns {Booking} this (for chaining)
+   */
+  enrichCustomFields({ instanceFields, tenantFields, bookableFields = [] }) {
+    const {
+      CustomFieldService,
+    } = require("../../services/custom-field/custom-field-service");
+
+    const mergedDefs = CustomFieldService.mergeDefinitions({
+      instanceFields,
+      tenantFields,
+      bookableFields,
+    });
+
+    this.customFieldDefinitions =
+      CustomFieldService.filterCheckoutDefinitions(mergedDefs);
+
+    this.customFields = CustomFieldService.resolveFieldsWithValues(
+      this.customFieldDefinitions,
+      this.customFieldValues || [],
+    );
+
+    return this;
   }
 
   validate() {

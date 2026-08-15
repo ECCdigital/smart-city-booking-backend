@@ -8,22 +8,7 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL || "info",
 });
 
-/**
- * Bestimmt anhand des Token-Payloads, ob es ein Keycloak-
- * oder ein lokales Token ist.
- */
-function classifyToken(decoded) {
-  // Keycloak-Tokens haben typischerweise "realm_access",
-  // "azp" (authorized party) und der Issuer enthält "/realms/"
-  if (
-    decoded.azp ||
-    decoded.realm_access ||
-    (decoded.iss && decoded.iss.includes("/realms/"))
-  ) {
-    return "keycloak";
-  }
-  return "local";
-}
+const { classifyToken } = require("../commons/utilities/token-classifier");
 
 const requireAuth = async (req, res, next) => {
   try {
@@ -49,18 +34,20 @@ const requireAuth = async (req, res, next) => {
 
     const tokenType = classifyToken(unverified);
 
-    let userId;
-
     if (tokenType === "keycloak") {
       const decoded = await KeycloakVerifier.verifyToken(token);
-      userId = decoded.email || decoded.preferred_username;
 
-      const user = await UserManager.getUser(userId);
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "User not found in local system",
-        });
+      let user;
+      try {
+        user = await UserManager.resolveKeycloakUser(decoded);
+      } catch (error) {
+        if (error.status === 404) {
+          return res.status(401).json({
+            success: false,
+            message: "User not found in local system",
+          });
+        }
+        throw error;
       }
 
       if (user.isSuspended) {
@@ -71,7 +58,7 @@ const requireAuth = async (req, res, next) => {
       }
 
       req.user = {
-        id: userId,
+        id: user.id,
         authType: "keycloak",
         keycloakSub: decoded.sub,
         jti: decoded.jti || null,
@@ -149,16 +136,22 @@ const optionalAuth = async (req, res, next) => {
 
     if (tokenType === "keycloak") {
       const decoded = await KeycloakVerifier.verifyToken(token);
-      const userId = decoded.email || decoded.preferred_username;
-      const user = await UserManager.getUser(userId);
 
-      if (!user || user.isSuspended) {
+      let user;
+      try {
+        user = await UserManager.resolveKeycloakUser(decoded);
+      } catch {
+        req.user = null;
+        return next();
+      }
+
+      if (user.isSuspended) {
         req.user = null;
         return next();
       }
 
       req.user = {
-        id: userId,
+        id: user.id,
         authType: "keycloak",
         keycloakSub: decoded.sub,
         jti: decoded.jti || null,

@@ -107,6 +107,9 @@ app.use("/auth", userManagementRouter);
 const apiRouter = require("./platform/api/api-router");
 app.use("/api", apiRouter);
 
+const apiV2Router = require("./platform/api/v2/routes");
+app.use("/api/v2", apiV2Router);
+
 const apiRouterTenantRelated = require("./platform/api/api-router-tenant-related");
 app.use("/api/:tenant", apiRouterTenantRelated);
 

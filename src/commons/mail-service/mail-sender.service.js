@@ -8,6 +8,7 @@ const {
   getSnippetOverride,
   getSubjectOverride,
   renderSubjectOverride,
+  afterSnippetKey,
 } = require("./templates/mail-snippet-overrides");
 
 const overrideDateFormatter = new Intl.DateTimeFormat("de-DE", {
@@ -82,6 +83,7 @@ class MailSenderService {
     tenantId,
     subject,
     message,
+    messageAfter = "",
     includeQRCode = false,
     attachments = [],
     sendBCC = false,
@@ -91,6 +93,10 @@ class MailSenderService {
     rejectionReason = null,
   }) {
     const tenant = await TenantManager.getTenant(tenantId);
+
+    const booking = bookingId
+      ? await BookingManager.getBooking(bookingId, tenantId)
+      : null;
 
     // Booking details
     const bookingDetails = bookingId
@@ -108,10 +114,12 @@ class MailSenderService {
       attachments = [...attachments, qrResult.attachment];
     }
 
-    // Rejection link
-    const rejectionUrl = addRejectionLink
-      ? `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}`
-      : null;
+    const { rejectionUrl, cancellationContactHint } =
+      MailDataService.buildCancellationMailContext(
+        booking,
+        tenantId,
+        addRejectionLink,
+      );
 
     const snippetHtml = renderSnippet("single-booking-wrapper", {
       message,
@@ -120,9 +128,11 @@ class MailSenderService {
       rejectionReason,
       bookingDetails,
       rejectionUrl,
+      cancellationContactHint,
       qrContent,
-      showFooter: true,
+      showFooter: tenant.mailShowSupportFooter !== false,
       supportEmail: tenant.mail,
+      messageAfter,
     });
 
     await MailerService.send({
@@ -143,6 +153,7 @@ class MailSenderService {
     tenantId,
     subject,
     message,
+    messageAfter = "",
     attachments = [],
     sendBCC = false,
     addRejectionLink = false,
@@ -165,8 +176,9 @@ class MailSenderService {
       cancelReason,
       rejectionReason,
       bookingDetails,
-      showFooter: true,
+      showFooter: tenant.mailShowSupportFooter !== false,
       supportEmail: tenant.mail,
+      messageAfter,
     });
 
     await MailerService.send({
@@ -220,30 +232,68 @@ class MailSenderService {
     const sendBCC = this.resolve(mailType.sendBCC, ctx);
     const addRejectionLink = this.resolve(mailType.addRejectionLink, ctx);
     const overrideSource = getSnippetOverride(tenant, mailType.templateName);
+    const afterOverrideSource = getSnippetOverride(
+      tenant,
+      afterSnippetKey(mailType.templateName),
+    );
     const {
       paymentUrl,
       cancelReason,
       rejectionReason,
       verifyRejectionUrl,
+      hasRefundPreview,
+      originalAmountEur,
+      refundAmountEur,
+      cancellationFeeEur,
+      refundPercentage,
+      daysBeforeStart,
+      hasCancellationFee,
       accessPoints,
     } = templateData;
 
     const renderForBooking = (booking) => {
+      const refundVars =
+        typeof hasRefundPreview === "boolean"
+          ? {
+              hasRefundPreview,
+              originalAmountEur,
+              refundAmountEur,
+              cancellationFeeEur,
+              refundPercentage,
+              daysBeforeStart,
+              hasCancellationFee,
+            }
+          : {};
+
       const variables = buildOverrideTemplateVariables({
         tenant,
         booking,
-        extra: { verifyRejectionUrl, accessPoints },
+        extra: {
+          verifyRejectionUrl,
+          cancelReason,
+          rejectionReason,
+          accessPoints,
+          ...refundVars,
+        },
       });
 
       const message = renderSnippet(mailType.templateName, variables, {
         overrideSource,
       });
 
+      const messageAfter = afterOverrideSource
+        ? renderSnippet(
+            afterSnippetKey(mailType.templateName),
+            variables,
+            { overrideSource: afterOverrideSource },
+          )
+        : "";
+
       const subject = subjectOverrideSource
         ? renderSubjectOverride(subjectOverrideSource, variables)
         : defaultSubject;
 
-      return { message, subject };
+      return { message, messageAfter, subject };
     };
 
     if (aggregated) {
@@ -251,7 +301,8 @@ class MailSenderService {
       const primaryBooking = primaryBookingId
         ? await BookingManager.getBooking(primaryBookingId, tenantId)
         : null;
-      const { message, subject } = renderForBooking(primaryBooking);
+      const { message, messageAfter, subject } =
+        renderForBooking(primaryBooking);
 
       await this.sendAggregatedBookingMail({
         address,
@@ -259,6 +310,7 @@ class MailSenderService {
         tenantId,
         subject,
         message,
+        messageAfter,
         attachments,
         sendBCC,
         addRejectionLink,
@@ -271,7 +323,7 @@ class MailSenderService {
         const booking = bookingId
           ? await BookingManager.getBooking(bookingId, tenantId)
           : null;
-        const { message, subject } = renderForBooking(booking);
+        const { message, messageAfter, subject } = renderForBooking(booking);
 
         await this.sendBookingMail({
           address,
@@ -279,6 +331,7 @@ class MailSenderService {
           tenantId,
           subject,
           message,
+          messageAfter,
           includeQRCode,
           attachments,
           sendBCC,

@@ -1,5 +1,9 @@
 const { bookableSchemaDefinition } = require("../../schemas/bookableSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
+const {
+  validateBlockPeriods,
+  validateBookingModeExclusivity,
+} = require("../../utilities/block-period-validation");
 
 const BOOKABLE_TYPES = Object.freeze({
   EVENT_LOCATION: "event-location",
@@ -145,16 +149,28 @@ class Bookable {
   }
 
   /**
-   * Check if user gets free booking
+   * Get the highest applicable booking discount for a user.
    * @param {string} userId User ID
-   * @param {string[]} userRoles User roles
-   * @returns {boolean} True if user gets free booking
+   * @param {string[]} userRoles User role IDs
+   * @returns {number} Discount percent (0–100)
    */
-  isFreeForUser(userId, userRoles = []) {
-    if (this.freeBookingUsers.includes(userId)) {
-      return true;
+  getUserDiscountPercent(userId, userRoles = []) {
+    const discounts = this.bookingDiscounts || { users: [], roles: [] };
+    let maxDiscount = 0;
+
+    for (const entry of discounts.users || []) {
+      if (entry.userId === userId) {
+        maxDiscount = Math.max(maxDiscount, entry.discountPercent || 0);
+      }
     }
-    return userRoles.some((role) => this.freeBookingRoles.includes(role));
+
+    for (const entry of discounts.roles || []) {
+      if (userRoles.includes(entry.roleId)) {
+        maxDiscount = Math.max(maxDiscount, entry.discountPercent || 0);
+      }
+    }
+
+    return maxDiscount;
   }
 
   /**
@@ -351,9 +367,16 @@ class Bookable {
       timePeriods: this.timePeriods,
       isOpeningHoursRelated: this.isOpeningHoursRelated,
       openingHours: this.openingHours,
+      preparationLeadTimeMinutes: this.preparationLeadTimeMinutes,
+      serviceHours: this.serviceHours,
+      bufferTimeBeforeMinutes: this.bufferTimeBeforeMinutes,
+      bufferTimeAfterMinutes: this.bufferTimeAfterMinutes,
       isSpecialOpeningHoursRelated: this.isSpecialOpeningHoursRelated,
       specialOpeningHours: this.specialOpeningHours,
       isLongRange: this.isLongRange,
+      longRangeOptions: this.longRangeOptions,
+      isBlockPeriodRelated: this.isBlockPeriodRelated,
+      blockPeriods: this.blockPeriods,
       priceValueAddedTax: this.priceValueAddedTax,
       priceCategories: this.priceCategories,
       priceType: this.priceType,
@@ -401,6 +424,9 @@ class Bookable {
         );
       }
     }
+
+    validateBookingModeExclusivity(this);
+    validateBlockPeriods(this);
 
     return true;
   }

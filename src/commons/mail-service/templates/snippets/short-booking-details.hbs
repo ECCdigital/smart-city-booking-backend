@@ -1,11 +1,9 @@
 <p>
   <strong>Buchungsnummer:</strong>
   {{booking.id}}
-  {{#if booking.timeBegin}}
+  {{#if bookingPeriod}}
     <br /><strong>Buchungszeitraum:</strong>
-    {{formatDateTime booking.timeBegin}}
-    -
-    {{formatDateTime booking.timeEnd}}
+    {{bookingPeriod}}
   {{/if}}
   <br /><strong>Gesamtbetrag:</strong>
   {{priceFormatted booking.priceEur}}
@@ -31,4 +29,11 @@
   >
     Buchung stornieren
   </a>
+{{/if}}
+
+{{#if cancellationContactHint}}
+  <p>
+    <strong>Hinweis zur Stornierung:</strong>
+    {{sanitizeString cancellationContactHint}}
+  </p>
 {{/if}}

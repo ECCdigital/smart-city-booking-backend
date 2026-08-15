@@ -61,43 +61,25 @@ class AuthenticationController {
         });
       }
 
-      const KeycloakVerifier = require("../../../commons/utilities/keycloak-verifier");
-      const decoded = await KeycloakVerifier.verifyToken(token);
+      const user = await SsoService.handleLogin(token);
 
-      const userId = decoded.email || decoded.preferred_username;
+      logger.info(`SSO login for user ${user.id}`);
 
-      let user = await UserManager.getUser(userId, false);
-
-      if (!user) {
-        return response.status(404).json({
-          success: false,
-          message: "User not found. Registration required.",
-        });
-      }
-
-      if (user.isSuspended) {
-        return response.status(403).json({
-          success: false,
-          message: "User account is suspended",
-        });
-      }
-
-      const permissions = await UserManager.getUserPermissions(userId);
-
-      logger.info(`SSO login for user ${userId} (Keycloak token direct)`);
-
-      //TODO - Optional: JWT-Token
       response.status(200).json({
         success: true,
         user,
-        permissions,
+        permissions: user.permissions,
         authType: "keycloak",
       });
     } catch (error) {
       logger.error("SSO login failed:", error);
+      const message =
+        error.status === 404
+          ? "User not found. Registration required."
+          : error.message || "SSO authentication failed";
       response.status(error.status || 401).json({
         success: false,
-        message: error.message || "SSO authentication failed",
+        message,
       });
     }
   }
@@ -113,40 +95,20 @@ class AuthenticationController {
         });
       }
 
-      const KeycloakVerifier = require("../../../commons/utilities/keycloak-verifier");
-      const decoded = await KeycloakVerifier.verifyToken(token);
-
-      const userId = decoded.email || decoded.preferred_username;
-      const user = await UserManager.getUser(userId, false);
-
-      if (!user) {
-        return response.status(404).json({
-          success: false,
-          message: "User not found",
-          keycloakEmail: decoded.email,
-        });
-      }
-
-      if (user.isSuspended) {
-        return response.status(403).json({
-          success: false,
-          message: "User account is suspended",
-        });
-      }
-
-      const permissions = await UserManager.getUserPermissions(userId);
+      const user = await SsoService.handleLogin(token);
 
       response.status(200).json({
         success: true,
         user,
-        permissions,
+        permissions: user.permissions,
         authType: "keycloak",
       });
     } catch (error) {
       logger.error("SSO verify failed:", error.message);
-      response.status(401).json({
+      response.status(error.status || 401).json({
         success: false,
-        message: "Token verification failed",
+        message: error.message || "Token verification failed",
+        ...(error.keycloakEmail ? { keycloakEmail: error.keycloakEmail } : {}),
       });
     }
   }
@@ -220,6 +182,9 @@ class AuthenticationController {
         company,
         nextUrl,
         verifyUrl,
+        legalAcceptance,
+        invitationToken,
+        invitationTenantId,
       } = request.body;
 
       const existingUser = await UserManager.getUser(userID);
@@ -234,10 +199,16 @@ class AuthenticationController {
         firstName: firstName,
         lastName: lastName,
         company: company,
+        legalAcceptance: legalAcceptance,
       });
       user.setPassword(password);
 
-      await UserService.singUpUser(user, nextUrl, verifyUrl);
+      const invitation =
+        invitationToken && invitationTenantId
+          ? { token: invitationToken, tenantId: invitationTenantId }
+          : null;
+
+      await UserService.singUpUser(user, nextUrl, verifyUrl, invitation);
 
       return response.sendStatus(201);
     } catch (error) {
@@ -249,9 +220,9 @@ class AuthenticationController {
   static async ssoSignup(request, response) {
     try {
       const {
-        body: { token },
+        body: { token, legalAcceptance },
       } = request;
-      await SsoService.handleSignup(token);
+      await SsoService.handleSignup(token, legalAcceptance);
       response.sendStatus(201);
     } catch (error) {
       response.status(error.status).send(error.message);
@@ -341,9 +312,7 @@ class AuthenticationController {
     const { token, password, id } = request.body;
 
     if (!token || !password || !id) {
-      return response
-        .status(400)
-        .send("Token, password, and ID are required");
+      return response.status(400).send("Token, password, and ID are required");
     }
 
     try {
@@ -510,6 +479,7 @@ class AuthenticationController {
         nextUrl,
         verifyUrl,
         linkUrl,
+        legalAcceptance,
       } = request.body;
 
       if (!appId || !publicId || !secret || !email) {
@@ -529,6 +499,7 @@ class AuthenticationController {
         nextUrl,
         verifyUrl,
         linkUrl,
+        legalAcceptance,
       });
 
       if (result.status === "link_requested") {

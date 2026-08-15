@@ -101,6 +101,14 @@ const MailType = Object.freeze({
     addRejectionLink: false,
   },
 
+  SUPERVISOR_BOOKING_NOTIFICATION: {
+    templateName: "supervisor-booking-notification",
+    subject: (ctx) => `Neue Buchung im ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+  },
+
   VERIFY_BOOKING_REJECTION: {
     templateName: "verify-rejection",
     subject: (ctx) =>

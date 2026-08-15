@@ -1,10 +1,38 @@
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
+const TenantManager = require("../data-managers/tenant-manager");
 const QRCode = require("qrcode");
 const { renderSnippet } = require("./templates/template-loader");
+const Formatters = require("../utilities/formatters");
 
 class MailDataService {
+  static buildCancellationMailContext(
+    booking,
+    tenantId,
+    addRejectionLink = false,
+  ) {
+    if (!addRejectionLink || !booking) {
+      return { rejectionUrl: null, cancellationContactHint: null };
+    }
+
+    const userCancellable =
+      booking.cancellationPolicy?.userCancellable === true;
+
+    if (userCancellable) {
+      return {
+        rejectionUrl: `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${booking.id}`,
+        cancellationContactHint: null,
+      };
+    }
+
+    const contactHint = booking.cancellationPolicy?.contactHint?.trim();
+    return {
+      rejectionUrl: null,
+      cancellationContactHint: contactHint || null,
+    };
+  }
+
   static async getPopulatedBookables(bookingId, tenant) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
     const bookables = (await BookableManager.getBookables(tenant)).filter((b) =>
@@ -38,10 +66,10 @@ class MailDataService {
           endDate: event.information.endDate,
           endTime: event.information.endTime,
           locationName: event.eventLocation.name,
-          locationStreet: event.eventAddress.street,
-          locationHouseNumber: event.eventAddress.houseNumber,
-          locationZip: event.eventAddress.zip,
-          locationCity: event.eventAddress.city,
+          locationStreet: event.location?.address?.street,
+          locationHouseNumber: event.location?.address?.house_number,
+          locationZip: event.location?.address?.post_code,
+          locationCity: event.location?.address?.city,
         };
       }
 
@@ -66,14 +94,21 @@ class MailDataService {
 
   static async generateBookingDetails(bookingId, tenantId) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const tenant = await TenantManager.getTenant(tenantId);
     const bookables = await this.getPopulatedBookables(bookingId, tenantId);
     const bookingItems = this.buildBookingItems(booking, bookables);
     const coupon = this.buildCouponInfo(booking);
+    const bookingPeriod = Formatters.formatBookingPeriod(
+      booking.timeBegin,
+      booking.timeEnd,
+      tenant.mailBookingPeriodFormat,
+    );
 
     return renderSnippet("booking-details", {
       booking,
       bookingItems,
       coupon,
+      bookingPeriod,
     });
   }
 
@@ -83,6 +118,7 @@ class MailDataService {
     addRejectionLink = false,
   ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const tenant = await TenantManager.getTenant(tenantId);
     const bookables = await this.getPopulatedBookables(bookingId, tenantId);
 
     const bookingItems = booking.bookableItems.map((item) => {
@@ -90,14 +126,20 @@ class MailDataService {
       return { amount: item.amount, bookableTitle: bookable.title };
     });
 
-    const rejectionUrl = addRejectionLink
-      ? `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${bookingId}`
-      : null;
+    const { rejectionUrl, cancellationContactHint } =
+      this.buildCancellationMailContext(booking, tenantId, addRejectionLink);
+    const bookingPeriod = Formatters.formatBookingPeriod(
+      booking.timeBegin,
+      booking.timeEnd,
+      tenant.mailBookingPeriodFormat,
+    );
 
     return renderSnippet("short-booking-details", {
       booking,
       bookingItems,
       rejectionUrl,
+      cancellationContactHint,
+      bookingPeriod,
     });
   }
 

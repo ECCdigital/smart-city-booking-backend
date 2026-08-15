@@ -36,9 +36,24 @@ router.get(
 router.get("/bookables/:id/bookings", BookingController.getRelatedBookings);
 router.get("/bookables/:id/openingHours", BookableController.getOpeningHours);
 router.get(
+  "/bookables/:id/availability/v1",
+  optionalAuth,
+  CalendarController.getBookableAvailabilityV1,
+);
+router.get(
+  "/bookables/:id/availability/v2",
+  optionalAuth,
+  CalendarController.getBookableAvailabilityV2,
+);
+router.get(
   "/bookables/:id/availability",
   optionalAuth,
   CalendarController.getBookableAvailability,
+);
+router.get(
+  "/bookables/:id/block-periods",
+  optionalAuth,
+  CalendarController.getBookableBlockPeriods,
 );
 router.get("/bookables/:id/occupancy", BookableController.getBookableOccupancy);
 
@@ -172,6 +187,15 @@ router.post(
   AuthenticationController.isSignedIn,
   BookingController.payBooking,
 );
+router.get(
+  "/bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  BookingController.getCancellationRefundPreview,
+);
+router.get(
+  "/bookings/:id/cancellation-refund-preview/public",
+  BookingController.getPublicCancellationRefundPreview,
+);
 router.post(
   "/bookings/:id/reject",
   AuthenticationController.isSignedIn,
@@ -184,6 +208,10 @@ router.post(
 router.get(
   "/bookings/:id/verify-ownership",
   BookingController.verifyBookingOwnership,
+);
+router.get(
+  "/bookings/:id/hooks/:hookId/cancellation-refund-preview",
+  BookingController.getHookCancellationRefundPreview,
 );
 router.get(
   "/bookings/:id/hooks/:hookId/release",
@@ -254,6 +282,11 @@ router.post(
   AuthenticationController.isSignedIn,
   GroupBookingController.payGroupBooking,
 );
+router.get(
+  "/group-bookings/:id/cancellation-refund-preview",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.getCancellationRefundPreview,
+);
 router.post(
   "/group-bookings/:id/reject",
   AuthenticationController.isSignedIn,
@@ -273,6 +306,11 @@ router.post(
   "/group-bookings/:id/receipt",
   AuthenticationController.isSignedIn,
   GroupBookingController.createGroupBookingReceipt,
+);
+router.post(
+  "/group-bookings/:id/invoice",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.createGroupBookingInvoice,
 );
 
 // CHECKOUT

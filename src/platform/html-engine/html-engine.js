@@ -3,6 +3,7 @@ const {
 } = require("../../commons/data-managers/bookable-manager");
 const TenantManager = require("../../commons/data-managers/tenant-manager");
 const ExternalPriceService = require("../../commons/services/external-price-service");
+const InstanceManager = require("../../commons/data-managers/instance-manager");
 
 class HtmlEngine {
   /**
@@ -23,6 +24,19 @@ class HtmlEngine {
       if (extPrices) {
         bookable.priceCategories = extPrices;
       }
+    }
+  }
+
+  static async _checkoutUrl(bookableId, tenantId, instance) {
+    const checkoutInstance = instance || (await InstanceManager.getInstance());
+    if (
+      checkoutInstance &&
+      !checkoutInstance.checkout.useLegacyCheckout &&
+      checkoutInstance.checkout.checkoutUrl
+    ) {
+      return `${checkoutInstance.checkout.checkoutUrl}/checkout/${bookableId}/?tenantId=${tenantId}`;
+    } else {
+      return `${process.env.FRONTEND_URL}/checkout/?id=${bookableId}&tenant=${tenantId}`;
     }
   }
 
@@ -74,11 +88,12 @@ class HtmlEngine {
       : "";
   }
 
-  static async bookablesToList(bookables, order = []) {
+  static async bookablesToList(bookables, order = [], instance) {
     if (bookables.length > 0) {
       await HtmlEngine._resolveExternalPrices(bookables, bookables[0].tenantId);
     }
 
+    let checkoutInstance = instance;
     let htmlOutput = '<ul class="booking-manager-list">';
 
     if (order.length > 0) {
@@ -113,6 +128,8 @@ class HtmlEngine {
       }
 
       if (bookable.isBookable) {
+        checkoutInstance =
+          checkoutInstance || (await InstanceManager.getInstance());
         htmlOutput +=
           '<p class="autoCommitBooking">' +
           (bookable.autoCommitBooking === true
@@ -126,16 +143,18 @@ class HtmlEngine {
 
         htmlOutput += "</p>";
 
+        const checkoutUrl = await HtmlEngine._checkoutUrl(
+          bookable.id,
+          bookable.tenantId,
+          checkoutInstance,
+        );
+
         let buttonText = bookable.autoCommitBooking
           ? "Jetzt buchen"
           : "Jetzt anfragen";
         htmlOutput +=
           '<a href="' +
-          process.env.FRONTEND_URL +
-          "/checkout?id=" +
-          bookable.id +
-          "&tenant=" +
-          bookable.tenantId +
+          checkoutUrl +
           '" class="btn-booking" target="_blank">' +
           buttonText +
           "</a>";
@@ -153,6 +172,7 @@ class HtmlEngine {
 
   static async bookable(bookable) {
     await HtmlEngine._resolveExternalPrices([bookable], bookable.tenantId);
+    let checkoutInstance;
 
     let htmlOutput = '<div class="bookable-item">';
 
@@ -191,6 +211,8 @@ class HtmlEngine {
     }
 
     if (bookable.isBookable) {
+      checkoutInstance =
+        checkoutInstance || (await InstanceManager.getInstance());
       htmlOutput += bookable?.location?.display_address
         ? '<p class="location">' +
           (bookable.location.display_address || "") +
@@ -210,16 +232,18 @@ class HtmlEngine {
 
       htmlOutput += "</p>";
 
+      const checkoutUrl = await HtmlEngine._checkoutUrl(
+        bookable.id,
+        bookable.tenantId,
+        checkoutInstance,
+      );
+
       let buttonText = bookable.autoCommitBooking
         ? "Jetzt buchen"
         : "Jetzt anfragen";
       htmlOutput +=
         '<a href="' +
-        process.env.FRONTEND_URL +
-        "/checkout?id=" +
-        bookable.id +
-        "&tenant=" +
-        bookable.tenantId +
+        checkoutUrl +
         '" class="btn-booking" target="_blank">' +
         buttonText +
         "</a>";
@@ -234,6 +258,7 @@ class HtmlEngine {
       htmlOutput += await HtmlEngine.bookablesToList(
         relatedBookables,
         bookable.relatedBookableIds,
+        checkoutInstance,
       );
       htmlOutput += "</div>";
     }
@@ -307,9 +332,11 @@ class HtmlEngine {
       });
       htmlOutput += "</ul>";
 
-      if (event.externalBookingUrl){
-        htmlOutput += '<a class="btn-booking" href="' + event.externalBookingUrl + '" target="_blank">Jetzt buchen</a>';
-
+      if (event.externalBookingUrl) {
+        htmlOutput +=
+          '<a class="btn-booking" href="' +
+          event.externalBookingUrl +
+          '" target="_blank">Jetzt buchen</a>';
       } else {
         if (event.attendees?.free === false) {
           htmlOutput += '<ul class="price-category-list">';
@@ -391,14 +418,19 @@ class HtmlEngine {
     htmlOutput += event.eventLocation.name
       ? `<div class="name">${event.eventLocation.name || ""}</div>`
       : "";
-    htmlOutput += event.eventLocation.street
-      ? `<div class="street">${event.eventAddress.street || ""}</div>`
+    htmlOutput += event.location?.address?.street
+      ? `<div class="street">${[
+          event.location.address.street,
+          event.location.address.house_number,
+        ]
+          .filter(Boolean)
+          .join(" ")}</div>`
       : "";
-    htmlOutput += event.eventLocation.zip
-      ? `<div class="zip">${event.eventAddress.zip || ""}</div>`
+    htmlOutput += event.location?.address?.post_code
+      ? `<div class="zip">${event.location.address.post_code || ""}</div>`
       : "";
-    htmlOutput += event.eventLocation.city
-      ? `<div class="city">${event.eventAddress.city || ""}</div>`
+    htmlOutput += event.location?.address?.city
+      ? `<div class="city">${event.location.address.city || ""}</div>`
       : "";
     htmlOutput += event.eventLocation.phoneNumber
       ? `<div class="phone-number">${
@@ -418,8 +450,8 @@ class HtmlEngine {
 
       htmlOutput += `<div class="room">${eventLocationBookable?.title}</div>`;
     }
-    htmlOutput += event.eventLocation.additional
-      ? `<div class="additional">${event.eventAddress.additional || ""}</div>`
+    htmlOutput += event.location?.meta?.additional
+      ? `<div class="additional">${event.location.meta.additional || ""}</div>`
       : "";
 
     htmlOutput += `</div>`;

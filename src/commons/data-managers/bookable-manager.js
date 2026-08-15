@@ -3,6 +3,9 @@ const BookableModel = require("./models/bookableModel");
 const {
   CustomFieldCache,
 } = require("../services/custom-field/custom-field-cache");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const InstanceModel = require("./models/instanceModel");
 const TenantModel = require("./models/tenantModel");
 
@@ -40,6 +43,30 @@ class BookableManager {
 
   static _toEntityWithCustomFields(doc, customFieldDefs) {
     return doc ? doc.toEntity(customFieldDefs) : null;
+  }
+
+  /**
+   * Remove stored custom field values for the given field IDs.
+   * @param {string[]} fieldIds Custom field IDs to remove from bookables
+   * @param {{ tenantId?: string, bookableId?: string }} [scope] Optional scope
+   * @returns {Promise<void>}
+   */
+  static async removeCustomFieldValues(fieldIds, scope = {}) {
+    if (!Array.isArray(fieldIds) || fieldIds.length === 0) {
+      return;
+    }
+
+    const filter = {};
+    if (scope.tenantId) {
+      filter.tenantId = scope.tenantId;
+    }
+    if (scope.bookableId) {
+      filter.id = scope.bookableId;
+    }
+
+    await BookableModel.updateMany(filter, {
+      $pull: { customFieldValues: { fieldId: { $in: fieldIds } } },
+    });
   }
 
   /**
@@ -84,6 +111,26 @@ class BookableManager {
     });
 
     return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Batch-load bookables with merged custom field definitions.
+   * @param {string} tenantId
+   * @param {string[]} ids
+   * @returns {Promise<Bookable[]>}
+   */
+  static async getBookablesByIdsWithCustomFields(tenantId, ids) {
+    if (!ids?.length) return [];
+
+    const [rawBookables, defs] = await Promise.all([
+      BookableModel.find({
+        tenantId: tenantId,
+        id: { $in: ids },
+      }),
+      this.getCustomFieldDefinitions(tenantId),
+    ]);
+
+    return this._toEntitiesWithCustomFields(rawBookables, defs);
   }
 
   /**
@@ -312,12 +359,12 @@ class BookableManager {
   }
 
   /**
-   * Get all parent bookables (recursive lookup)
+   * Get all ancestor bookables recursively (parents, grandparents, ...).
    * @param {string} id Bookable ID
    * @param {string} tenantId Tenant ID
-   * @returns {Promise<Bookable[]>} List of parent bookables
+   * @returns {Promise<Bookable[]>} List of ancestors without duplicates
    */
-  static async getAllParentBookables(id, tenantId) {
+  static async getAncestorBookables(id, tenantId) {
     const pipeline = [
       {
         $match: {
@@ -331,9 +378,11 @@ class BookableManager {
           startWith: "$id",
           connectFromField: "id",
           connectToField: "relatedBookableIds",
-          as: "allParentBookables",
+          as: "allAncestors",
           maxDepth: 100,
-          restrictSearchWithMatch: { tenantId: tenantId },
+          restrictSearchWithMatch: {
+            tenantId: tenantId,
+          },
         },
       },
     ];
@@ -344,12 +393,12 @@ class BookableManager {
       return [];
     }
 
-    const parentBookables = results[0].allParentBookables || [];
+    const ancestors = results[0].allAncestors || [];
     const uniqueMap = new Map();
 
-    for (const bookable of parentBookables) {
-      if (bookable.id !== id) {
-        uniqueMap.set(bookable.id, bookable);
+    for (const ancestor of ancestors) {
+      if (ancestor.id !== id) {
+        uniqueMap.set(ancestor.id, ancestor);
       }
     }
 
@@ -362,6 +411,17 @@ class BookableManager {
   }
 
   /**
+   * Get all parent bookables (recursive lookup).
+   * Alias of {@link BookableManager.getAncestorBookables}.
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of parent bookables
+   */
+  static async getAllParentBookables(id, tenantId) {
+    return BookableManager.getAncestorBookables(id, tenantId);
+  }
+
+  /**
    * Store a bookable (create or update)
    * @param {Bookable|Object} bookable Bookable to store
    * @param {boolean} upsert Whether to create if not exists
@@ -371,6 +431,15 @@ class BookableManager {
     const bookableEntity =
       bookable instanceof Bookable ? bookable : new Bookable(bookable);
 
+    const existingBookable = await BookableModel.findOne(
+      { id: bookableEntity.id, tenantId: bookableEntity.tenantId },
+      { customFieldDefinitions: 1 },
+    ).lean();
+
+    CustomFieldService.normalizeDefinitions(
+      bookableEntity.customFieldDefinitions || [],
+    );
+
     bookableEntity.validate();
 
     await BookableModel.updateOne(
@@ -378,6 +447,17 @@ class BookableManager {
       bookableEntity,
       { upsert: upsert },
     );
+
+    const removedFieldIds = CustomFieldService.getRemovedFieldIds(
+      existingBookable?.customFieldDefinitions || [],
+      bookableEntity.customFieldDefinitions || [],
+    );
+    if (removedFieldIds.length > 0) {
+      await BookableManager.removeCustomFieldValues(removedFieldIds, {
+        tenantId: bookableEntity.tenantId,
+        bookableId: bookableEntity.id,
+      });
+    }
 
     return bookableEntity;
   }
@@ -461,6 +541,15 @@ class BookableManager {
       bookable: stats.bookable,
       byType: typeCount,
     };
+  }
+
+  static async reassignOwnerUserId(previousUserId, newUserId, session = null) {
+    const options = session ? { session } : {};
+    await BookableModel.updateMany(
+      { ownerUserId: previousUserId },
+      { $set: { ownerUserId: newUserId } },
+      options,
+    );
   }
 }
 

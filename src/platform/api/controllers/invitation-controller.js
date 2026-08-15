@@ -2,6 +2,7 @@ const InvitationService = require("../../../commons/services/invitation-service"
 const PermissionService = require("../../../commons/services/permission-service");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const { normalizeUserId } = require("../../../commons/utilities/user-id-utils");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -80,7 +81,9 @@ class InvitationController {
         challenges,
       } = request.body;
 
-      const sanitizedUserId = intendedUserId?.toLowerCase()?.trim();
+      const sanitizedUserId = intendedUserId
+        ? normalizeUserId(intendedUserId)
+        : null;
 
       if (
         !(await PermissionService._allowUpdateAny(
@@ -236,6 +239,11 @@ class InvitationController {
       const tenantID = request.params.tenant;
       const user = request.user;
       const { userId: userID } = request.body;
+      const normalizedUserId = normalizeUserId(userID);
+
+      if (!normalizedUserId) {
+        return response.status(400).send("User ID is required");
+      }
 
       if (
         !(await PermissionService._allowUpdateAny(
@@ -249,7 +257,7 @@ class InvitationController {
           .send("Forbidden: You don't have permission to resend invitations.");
       }
 
-      await InvitationService.resendInvitationMail(tenantID, userID);
+      await InvitationService.resendInvitationMail(tenantID, normalizedUserId);
 
       response
         .status(200)

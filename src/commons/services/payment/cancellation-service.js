@@ -66,8 +66,9 @@ class CancellationService {
         cancellationId,
         cancellationNumber,
         originalInvoiceNumber,
+        originalInvoiceDate,
         revision,
-        timeCreated: Date.now(),
+        timeCreated: options.refundCalculation?.cancelledAt ?? Date.now(),
       };
     } catch (err) {
       if (err.isNextcloudError) {
@@ -166,8 +167,9 @@ class CancellationService {
         cancellationId,
         cancellationNumber,
         originalInvoiceNumber,
+        originalInvoiceDate,
         revision,
-        timeCreated: Date.now(),
+        timeCreated: options.refundCalculations?.[0]?.cancelledAt ?? Date.now(),
       };
     } catch (err) {
       if (err.isNextcloudError) {
@@ -240,8 +242,8 @@ async function _createCancellationNumber(tenantId, bookingId) {
     cancellationId = await IdGenerator.next(tenantId, 4, "cancellation");
   }
 
-  const prefix = tenant.cancellationNumberPrefix || "Storno";
-  const cancellationNumber = `${prefix}-${cancellationId}-${revision}`;
+  const prefix = (tenant.cancellationNumberPrefix || "").trim();
+  const cancellationNumber = `${prefix ? `${prefix}-` : ""}${cancellationId}-${revision}`;
 
   return { cancellationNumber, cancellationId, revision };
 }

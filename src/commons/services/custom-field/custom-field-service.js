@@ -1,4 +1,69 @@
 class CustomFieldService {
+  /**
+   * Normalize a single field definition's usageOptions so that filter and
+   * detail-display settings stay consistent.
+   * - A field is only filterable when it has a catalogFilterType.
+   * - When not filterable, catalog filter settings are cleared.
+   * @param {Object} definition Custom field definition
+   * @returns {Object} The (mutated) definition
+   */
+  static normalizeUsageOptions(definition) {
+    if (!definition || typeof definition !== "object") {
+      return definition;
+    }
+
+    const usage = definition.usageOptions || (definition.usageOptions = {});
+
+    if (usage.filterable && !usage.catalogFilterType) {
+      usage.filterable = false;
+    }
+
+    if (!usage.filterable) {
+      usage.catalogFilterType = null;
+    }
+
+    const allowedDetailPositions = [
+      "none",
+      "badge",
+      "belowDescription",
+      "moreInfo",
+    ];
+    if (!allowedDetailPositions.includes(usage.detailDisplayPosition)) {
+      usage.detailDisplayPosition = "none";
+    }
+
+    return definition;
+  }
+
+  /**
+   * Normalize a list of field definitions in place.
+   * @param {Array} definitions Custom field definitions
+   * @returns {Array} The normalized definitions
+   */
+  static normalizeDefinitions(definitions = []) {
+    return definitions.map((def) => this.normalizeUsageOptions(def));
+  }
+
+  /**
+   * Returns field IDs that exist in previousDefinitions but not in nextDefinitions.
+   * @param {Array} previousDefinitions
+   * @param {Array} nextDefinitions
+   * @returns {string[]}
+   */
+  static getRemovedFieldIds(previousDefinitions = [], nextDefinitions = []) {
+    const nextIds = new Set(
+      nextDefinitions.map((definition) => definition?.id).filter(Boolean),
+    );
+
+    return [
+      ...new Set(
+        previousDefinitions
+          .map((definition) => definition?.id)
+          .filter((id) => id && !nextIds.has(id)),
+      ),
+    ];
+  }
+
   static mergeDefinitions({
     instanceFields = [],
     tenantFields = [],
@@ -36,6 +101,12 @@ class CustomFieldService {
     }
 
     return Array.from(fieldMap.values());
+  }
+
+  static filterCheckoutDefinitions(mergedDefinitions = []) {
+    return mergedDefinitions.filter(
+      (def) => def.usageOptions?.context === "checkout",
+    );
   }
 
   static resolveFieldsWithValues(mergedDefinitions, customFieldValues = []) {
