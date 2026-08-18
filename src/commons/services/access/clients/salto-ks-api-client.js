@@ -2,9 +2,81 @@ const axios = require("axios");
 const bunyan = require("bunyan");
 const BaseAccessApiClient = require("./base-access-api-client");
 
-const DEFAULT_SALTO_API_BASE_URL = "https://clp-accept-user.saltoks.com";
-const DEFAULT_SALTO_IDENTITY_URL = "https://identity.eu.my-clay.com";
 const DEFAULT_SALTO_SCOPE = "user_api.full_access";
+const DEFAULT_SALTO_ENVIRONMENT = "accept";
+
+// The Salto KS environments and their hosts. Accept (sandbox) and production
+// are separate installations with their own Connect API and identity server,
+// so a tenant picks the environment and the URLs follow from it. Hosts as
+// published on developer.saltosystems.com (OpenID concepts, API reference)
+// and verified 2026-08-18; each can be overridden by env var in case Salto
+// moves one.
+const SALTO_ENVIRONMENTS = Object.freeze({
+  accept: Object.freeze({
+    apiBaseUrl:
+      process.env.SALTO_ACCEPT_API_BASE_URL ||
+      "https://clp-accept-user.my-clay.com",
+    identityUrl:
+      process.env.SALTO_ACCEPT_IDENTITY_URL ||
+      "https://identity-acc.eu.my-clay.com",
+  }),
+  production: Object.freeze({
+    apiBaseUrl:
+      process.env.SALTO_PRODUCTION_API_BASE_URL ||
+      "https://connect.my-clay.com",
+    identityUrl:
+      process.env.SALTO_PRODUCTION_IDENTITY_URL ||
+      "https://identity.eu.my-clay.com",
+  }),
+});
+
+/**
+ * The Connect API and identity server of a Salto KS environment.
+ *
+ * @param {string} [environment] `accept` or `production`; defaults to accept
+ * @returns {{environment: string, apiBaseUrl: string, identityUrl: string}}
+ * @throws {Error} For an environment Salto does not have
+ */
+function resolveSaltoEnvironment(environment = DEFAULT_SALTO_ENVIRONMENT) {
+  const key = String(environment || DEFAULT_SALTO_ENVIRONMENT).toLowerCase();
+  const hosts = SALTO_ENVIRONMENTS[key];
+  if (!hosts) {
+    throw new Error(
+      `Unknown Salto KS environment '${environment}'. Use one of: ${Object.keys(SALTO_ENVIRONMENTS).join(", ")}`,
+    );
+  }
+  return { environment: key, ...hosts };
+}
+
+/**
+ * The message an upstream error carries in its body, if it has one.
+ *
+ * The identity server answers a rejected token request with an OAuth error
+ * body (`error`, `error_description`); the Connect API with
+ * `{ ErrorCode, Message }`. Both say more than the HTTP status, and it is that
+ * text an administrator needs to see in the connection test.
+ *
+ * @param {Error} err An axios error
+ * @returns {string|null} The upstream message, or `null` if the body has none
+ */
+function describeUpstreamError(err) {
+  const data = err?.response?.data;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  if (data.error) {
+    return data.error_description
+      ? `${data.error}: ${data.error_description}`
+      : String(data.error);
+  }
+
+  if (data.Message || data.message) {
+    return String(data.Message || data.message);
+  }
+
+  return null;
+}
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -28,28 +100,26 @@ const logger = bunyan.createLogger({
  * shortly before it expires.
  *
  * Resource paths follow the Salto KS Connect API (REST) conventions. The
- * identity server and Connect API base URL are configurable so the same
- * client works against the accept/sandbox and production environments.
+ * client is bound to one Salto environment (`accept` or `production`), from
+ * which both the Connect API base URL and the identity server follow.
  */
 class SaltoKsApiClient extends BaseAccessApiClient {
   constructor(
     clientId,
     clientSecret,
     siteId,
-    apiBaseUrl = DEFAULT_SALTO_API_BASE_URL,
+    environment = DEFAULT_SALTO_ENVIRONMENT,
     options = {},
   ) {
-    super(apiBaseUrl || DEFAULT_SALTO_API_BASE_URL);
+    const hosts = resolveSaltoEnvironment(environment);
+    super(hosts.apiBaseUrl);
+    this.environment = hosts.environment;
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     this.siteId = siteId || null;
     this.username = options.username || null;
     this.password = options.password || null;
-    this.identityUrl = (
-      options.identityUrl ||
-      process.env.SALTO_IDENTITY_URL ||
-      DEFAULT_SALTO_IDENTITY_URL
-    ).replace(/\/$/, "");
+    this.identityUrl = hosts.identityUrl.replace(/\/$/, "");
     this.scope = options.scope || DEFAULT_SALTO_SCOPE;
     this.defaultTimeout = options.defaultTimeout || 30000;
 
@@ -73,9 +143,9 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       );
     }
 
-    const basic = Buffer.from(
-      `${this.clientId}:${this.clientSecret}`,
-    ).toString("base64");
+    const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString(
+      "base64",
+    );
 
     const body = new URLSearchParams({
       grant_type: "password",
@@ -107,6 +177,12 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       this._tokenExpiresAt = now + (expiresIn || 3600) * 1000;
       return this._token;
     } catch (err) {
+      const upstream = describeUpstreamError(err);
+      if (upstream) {
+        // Keep the axios error (status, response) but say what the identity
+        // server actually objected to, not just "status code 400".
+        err.message = upstream;
+      }
       logger.error(`Salto KS token request failed: ${err.message}`);
       throw err;
     }
@@ -228,10 +304,14 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     siteId = this.siteId,
   ) {
     const resolvedSiteId = await this._resolveSiteId(siteId);
-    return this._request("post", `/v1.2/sites/${resolvedSiteId}/subscriptions`, {
-      callbackUrl,
-      eventTypes,
-    });
+    return this._request(
+      "post",
+      `/v1.2/sites/${resolvedSiteId}/subscriptions`,
+      {
+        callbackUrl,
+        eventTypes,
+      },
+    );
   }
 
   async unsubscribeNotifications(subscriptionId, siteId = this.siteId) {
@@ -265,30 +345,52 @@ class SaltoKsApiClient extends BaseAccessApiClient {
     ];
   }
 
+  /**
+   * Checks credentials against the identity server and, if a site is
+   * configured, the site scope against the Connect API.
+   *
+   * A failure names what the upstream server objected to (e.g.
+   * `invalid_client`) rather than only the HTTP status, so a wrong client
+   * secret, a wrong environment and a wrong site can be told apart.
+   *
+   * @returns {Promise<{success: boolean, message: string}>}
+   */
   static async testConnection(
     clientId,
     clientSecret,
     siteId,
-    apiBaseUrl = DEFAULT_SALTO_API_BASE_URL,
+    environment = DEFAULT_SALTO_ENVIRONMENT,
     options = {},
   ) {
-    const client = new SaltoKsApiClient(
-      clientId,
-      clientSecret,
-      siteId,
-      apiBaseUrl,
-      options,
-    );
+    let client;
+    try {
+      client = new SaltoKsApiClient(
+        clientId,
+        clientSecret,
+        siteId,
+        environment,
+        options,
+      );
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
 
     try {
       // Token request validates the credentials; listing locks validates the
       // site scope when a siteId is configured.
       await client._getToken();
       if (siteId) {
-        const test = await client.getLocks(siteId);
+        await client.getLocks(siteId);
       }
-      return { success: true, message: "Connection successful" };
+      return {
+        success: true,
+        message: `Connection successful (${client.environment})`,
+      };
     } catch (err) {
+      const upstream = describeUpstreamError(err);
+      if (upstream) {
+        return { success: false, message: upstream };
+      }
       return BaseAccessApiClient.handleConnectionError(err);
     }
   }
@@ -332,7 +434,9 @@ class SaltoKsApiClient extends BaseAccessApiClient {
 
 module.exports = {
   SaltoKsApiClient,
-  DEFAULT_SALTO_API_BASE_URL,
-  DEFAULT_SALTO_IDENTITY_URL,
+  SALTO_ENVIRONMENTS,
+  DEFAULT_SALTO_ENVIRONMENT,
   DEFAULT_SALTO_SCOPE,
+  resolveSaltoEnvironment,
+  describeUpstreamError,
 };

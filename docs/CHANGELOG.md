@@ -12,6 +12,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 - QR door access: scan-code QR generation & rotation — `GET /api/:tenant/accesspoints/:id/qrcode?format=svg|png|pdf` (default `svg`) renders the printable QR code, `POST /api/:tenant/accesspoints/:id/rotate-scan-code` retires the current scan code and mints a new one. Requires the new global env var `STORE_FRONT_URL` (public store-front base URL, used to build `https://<STORE_FRONT_URL>/mobile-key/<tenant>/<scanCode>`; not the Vue admin app that `FRONTEND_URL` points at)
 - QR door access: location prefill from the provider — `GET /api/:tenant/accesspoints/:id/location-prefill` suggests where the lock stands via the optional provider capability `getLocation` (NUKI returns coordinates without address; Salto KS and providers without the capability return `null`). `getLocation` support is exposed in `providerCapabilities` of `GET /api/:tenant/access-apps/providers`. The endpoint writes nothing; adopt the suggestion via `location` in the regular `PUT /api/:tenant/accesspoints`
 
+### Changed
+
+- Salto KS access app: the free-text `apiBaseUrl` is replaced by `environment` (`accept` | `production`, default `accept`); the backend derives Connect API and identity server from it (accept: `clp-accept-user.my-clay.com` + `identity-acc.eu.my-clay.com`, production: `connect.my-clay.com` + `identity.eu.my-clay.com`, overridable via `SALTO_{ACCEPT,PRODUCTION}_{API_BASE_URL,IDENTITY_URL}`; the global `SALTO_IDENTITY_URL` is gone). A stored legacy `apiBaseUrl` is tolerated and only read to tell the environment. `POST /api/:tenant/access-apps/salto-ks/test` accepts `environment` and now reports the identity server's `error`/`error_description` (e.g. `invalid_client: …`) or the Connect API `Message` instead of the bare HTTP status
+
 ### Fixed
 
 - Admin booking update no longer applies the assignee's bookable booking discounts when recomputing prices (same as manual create; Admin-entered list prices from `priceCategories` are kept)

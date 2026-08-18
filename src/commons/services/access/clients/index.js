@@ -4,10 +4,10 @@ const {
   NukiApiClient,
   DEFAULT_NUKI_API_BASE_URL,
 } = require("./nuki-api-client");
+const { SaltoKsApiClient } = require("./salto-ks-api-client");
 const {
-  SaltoKsApiClient,
-  DEFAULT_SALTO_API_BASE_URL,
-} = require("./salto-ks-api-client");
+  SaltoKsAccessApplication,
+} = require("../../../entities/application/accessApplication");
 
 registerClient("nuki", NukiApiClient, (app) => [
   app.apiToken,
@@ -28,18 +28,28 @@ registerClient("salto-ks", SaltoKsApiClient, (app) => [
   app.clientId,
   app.clientSecret,
   app.siteId,
-  app.apiBaseUrl || DEFAULT_SALTO_API_BASE_URL,
+  SaltoKsAccessApplication.resolveEnvironment(app),
   { username: app.username, password: app.password },
 ]);
 
 registerTestHandler("salto-ks", {
   requiredFields: ["clientId", "clientSecret", "username", "password"],
-  handler: ({ clientId, clientSecret, siteId, apiBaseUrl, username, password }) => {
+  handler: ({
+    clientId,
+    clientSecret,
+    siteId,
+    environment,
+    apiBaseUrl,
+    username,
+    password,
+  }) => {
     return SaltoKsApiClient.testConnection(
       clientId,
       clientSecret,
       siteId,
-      apiBaseUrl || DEFAULT_SALTO_API_BASE_URL,
+      // `apiBaseUrl` is what an admin UI from before the environment switch
+      // sends; it is only read to tell which environment it meant.
+      SaltoKsAccessApplication.resolveEnvironment({ environment, apiBaseUrl }),
       { username, password },
     );
   },

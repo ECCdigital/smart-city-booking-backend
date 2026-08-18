@@ -55,6 +55,9 @@ class NukiAccessApplication extends AccessApplication {
   }
 }
 
+const SALTO_KS_ENVIRONMENTS = ["accept", "production"];
+const DEFAULT_SALTO_KS_ENVIRONMENT = "accept";
+
 class SaltoKsAccessApplication extends AccessApplication {
   constructor(params) {
     super(params);
@@ -65,8 +68,40 @@ class SaltoKsAccessApplication extends AccessApplication {
     this.username = params.username || null;
     this.password = params.password || null;
     this.siteId = params.siteId || null;
-    this.apiBaseUrl =
-      params.apiBaseUrl || "https://clp-accept-user.saltoks.com";
+    // Which Salto installation the tenant talks to. The Connect API base URL
+    // and identity server follow from it (see salto-ks-api-client), so the
+    // free-text `apiBaseUrl` of earlier versions is no longer used - it is only
+    // read once to tell what environment an old configuration meant.
+    this.environment = SaltoKsAccessApplication.resolveEnvironment(params);
+  }
+
+  /**
+   * The environment a Salto KS configuration means - `accept` or
+   * `production`.
+   *
+   * Prefers an explicit `environment`; a configuration from before the switch
+   * existed only had `apiBaseUrl`, and an accept host in there meant accept,
+   * any other host production. Anything unknown is accept, the safe side.
+   *
+   * @param {{environment?: string, apiBaseUrl?: string}} params
+   * @returns {string}
+   */
+  static resolveEnvironment({ environment, apiBaseUrl } = {}) {
+    const explicit = String(environment || "").toLowerCase();
+    if (SALTO_KS_ENVIRONMENTS.includes(explicit)) {
+      return explicit;
+    }
+
+    const legacyUrl = String(apiBaseUrl || "").toLowerCase();
+    if (legacyUrl && !legacyUrl.includes("accept")) {
+      return "production";
+    }
+
+    return DEFAULT_SALTO_KS_ENVIRONMENT;
+  }
+
+  static get environments() {
+    return [...SALTO_KS_ENVIRONMENTS];
   }
 
   decrypt() {
@@ -95,9 +130,10 @@ class SaltoKsAccessApplication extends AccessApplication {
       username: { type: String, default: null },
       password: { type: Object, default: null },
       siteId: { type: String, default: null },
-      apiBaseUrl: {
+      environment: {
         type: String,
-        default: "https://clp-accept-user.saltoks.com",
+        enum: SALTO_KS_ENVIRONMENTS,
+        default: DEFAULT_SALTO_KS_ENVIRONMENT,
       },
     };
   }

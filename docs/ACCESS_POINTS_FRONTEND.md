@@ -107,7 +107,7 @@ Access-App ist ein Eintrag mit `type: "access"`.
   "username": "<KS-USER-EMAIL>", // E-Mail des KS-System-Users (Password-Grant)
   "password": "<KS-USER-PASSWORT>", // wird verschlüsselt gespeichert
   "siteId": "<SITE-UUID>", // Salto Site UUID; Referenzwerte werden backendseitig aufgelöst
-  "apiBaseUrl": "https://clp-accept-user.saltoks.com", // optional, Default gesetzt
+  "environment": "accept", // "accept" (Sandbox) oder "production"; Default "accept"
 
   // Vom Backend verwaltet (read-only fürs UI, aber mit-zurückschicken):
   // "webhookCallbackUrl": "...",
@@ -129,7 +129,8 @@ Access-App ist ein Eintrag mit `type: "access"`.
 | `username` (E-Mail KS-System-User) | –    | ✓        |
 | `password` (Passwortfeld)          | –    | ✓        |
 | `siteId` (Salto Site UUID)         | –    | ✓        |
-| `apiBaseUrl` (advanced/optional)   | ✓    | ✓        |
+| `apiBaseUrl` (advanced/optional)   | ✓    | –        |
+| `environment` (Auswahl)            | –    | ✓        |
 
 Für `clientSecret`/`apiToken`/`password`: Wenn bereits gesetzt, im UI maskiert
 anzeigen (z.B. `••••••`) und nur bei tatsächlicher Eingabe überschreiben.
@@ -138,6 +139,13 @@ anzeigen (z.B. `••••••`) und nur bei tatsächlicher Eingabe übersch
 > Daher sind zusätzlich `username` (E-Mail eines KS-System-Users mit Rolle
 > `site_admin`) und `password` nötig. Details:
 > [SALTO_KS_PASSWORD_GRANT_FRONTEND.md](./SALTO_KS_PASSWORD_GRANT_FRONTEND.md).
+
+> Salto KS hat statt einer Freitext-URL eine **Umgebung**: `accept` (Sandbox,
+> `clp-accept-user.my-clay.com` + `identity-acc.eu.my-clay.com`) oder
+> `production` (`connect.my-clay.com` + `identity.eu.my-clay.com`). Connect-API
+> und Identity-Server leitet das Backend daraus ab. Ein noch gespeichertes
+> `apiBaseUrl` älterer Konfigurationen wird toleriert und nur einmal gelesen,
+> um die gemeinte Umgebung zu erkennen.
 
 ### 1.4 Verbindung testen
 
@@ -154,7 +162,7 @@ Body = die einzugebenden Felder (Klartext), z.B. Salto KS:
   "username": "service-user@example.com",
   "password": "...",
   "siteId": "f9616ba5-443a-11e6-a8b9-0050568da097",
-  "apiBaseUrl": "..."
+  "environment": "accept"
 }
 ```
 
@@ -171,8 +179,14 @@ Nuki:
 Antwort:
 
 ```json
-{ "success": true, "message": "Connection successful" }
+{ "success": true, "message": "Connection successful (accept)" }
 ```
+
+Schlägt der Test fehl, steht in `message` die Antwort des jeweiligen Servers
+statt nur des HTTP-Status – vom Identity-Server z. B.
+`invalid_client: Client authentication failed`, von der Connect API deren
+`Message`. So lassen sich falsches Secret, falsche Umgebung und falsche Site
+unterscheiden.
 
 oder
 
@@ -521,7 +535,7 @@ Antwort: `{ "success": true, "data": [ { booking-ähnliches Objekt, accessPointI
 
 - [ ] Liste der Access-Apps mit Aktiv-Toggle + Anzeigename
 - [ ] Formular Nuki (`apiToken`, `apiBaseUrl`)
-- [ ] Formular Salto KS (`clientId`, `clientSecret`, `username`, `password`, `siteId`, `apiBaseUrl`)
+- [ ] Formular Salto KS (`clientId`, `clientSecret`, `username`, `password`, `siteId`, `environment`)
 - [ ] Secrets maskiert, nur bei Eingabe überschreiben
 - [ ] „Verbindung testen"-Button (`/access-apps/:provider/test`)
 - [ ] Webhook-Status-Badge für Salto (`webhookRegisteredAt` / `webhookRegistrationError`)
