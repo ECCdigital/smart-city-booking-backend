@@ -21,6 +21,10 @@ const OfferController = require("./controllers/offer-controller");
 const TaxonomyController = require("./controllers/taxonomy-controller");
 const PostController = require("./controllers/post-controller");
 const StudentController = require("./controllers/student-controller");
+const GuardianConsentController = require("./controllers/guardian-consent-controller");
+const {
+  requireGuardianConsent,
+} = require("../../middleware/guardian-consent-middleware");
 const AccountDeletionController = require("./controllers/account-deletion-controller");
 const ApplicationController = require("./controllers/application-controller");
 const StatsController = require("./controllers/stats-controller");
@@ -48,7 +52,43 @@ router.post(
 // STUDENTS
 // ========
 
+router.all(
+  [
+    "/students/me/bookmarks",
+    "/students/me/bookmarks/:offerId",
+    "/students/me/applications",
+  ],
+  AuthenticationController.isSignedIn,
+  requireGuardianConsent,
+);
+router.post(
+  [
+    "/offers/:offerId/applications",
+    "/companies/:id/applications",
+    "/applications/:id/documents",
+  ],
+  AuthenticationController.isSignedIn,
+  requireGuardianConsent,
+);
+router.delete(
+  "/applications/:id/documents/:docId",
+  AuthenticationController.isSignedIn,
+  requireGuardianConsent,
+);
+
 router.post("/students/register", StudentController.register);
+router.post("/guardian-consent/lookup", GuardianConsentController.lookup);
+router.post("/guardian-consent/confirm", GuardianConsentController.confirm);
+router.get(
+  "/students/me/guardian-consent",
+  AuthenticationController.isSignedIn,
+  GuardianConsentController.getMyStatus,
+);
+router.post(
+  "/students/me/guardian-consent/resend",
+  AuthenticationController.isSignedIn,
+  GuardianConsentController.resend,
+);
 router.post(
   "/students/resend-verification",
   StudentController.resendVerification,
@@ -289,6 +329,18 @@ router.delete(
   AuthenticationController.isSignedIn,
   requirePermission("students:manage"),
   StudentController.adminDelete,
+);
+router.post(
+  "/admin/students/:userId/guardian-consent",
+  AuthenticationController.isSignedIn,
+  requirePermission("students:manage"),
+  GuardianConsentController.adminGrant,
+);
+router.delete(
+  "/admin/students/:userId/guardian-consent",
+  AuthenticationController.isSignedIn,
+  requirePermission("students:manage"),
+  GuardianConsentController.adminRevoke,
 );
 router.get(
   "/admin/students/:userId/applications",

@@ -1,3 +1,4 @@
+const bunyan = require("bunyan");
 const { User, USER_HOOK_TYPES } = require("../../entities/user/user");
 const UserManager = require("../../data-managers/user-manager");
 const UserService = require("../user-service");
@@ -12,6 +13,13 @@ const ApplicationService = require("./application-service");
 const AuditLogService = require("../audit-log-service");
 const { isEmail } = require("validator");
 const { createResendThrottle } = require("../../utilities/resend-throttle");
+const GuardianConsentService = require("./guardian-consent-service");
+const { sendGuardianConsentRequest } = require("./guardian-consent-mail");
+
+const logger = bunyan.createLogger({
+  name: "student-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 const TARGET_GROUPS = ["pupil", "student", "career_changer"];
 const resendThrottle = createResendThrottle();
@@ -53,6 +61,10 @@ function toAdminDto(user, student, applicationCount, includeConsents) {
     createdAt: user.created,
     tenantId: student ? student.tenantId : "",
     applicationCount: applicationCount || 0,
+    guardianEmail: student ? student.guardianEmail || "" : "",
+    guardianConsentRequired: GuardianConsentService.isPending(student),
+    guardianConsentAt: student ? student.guardianConsentAt || null : null,
+    guardianConsentBy: student ? student.guardianConsentBy || "" : "",
   };
   if (includeConsents) {
     dto.legalAcceptance = user.legalAcceptance || null;
@@ -87,6 +99,7 @@ class StudentService {
     const school = String(data.school || "").trim();
     const grade = String(data.grade || "").trim();
     const birthDate = String(data.birthDate || "").trim();
+    const guardianEmail = String(data.guardianEmail || "").trim();
     const targetGroups = Array.isArray(data.targetGroups)
       ? data.targetGroups.map((t) => String(t).trim()).filter(Boolean)
       : [];
@@ -145,6 +158,12 @@ class StudentService {
       throw { message: "All consents are required", status: 400 };
     }
 
+    const guardian = GuardianConsentService.buildForRegistration(
+      birthDate,
+      guardianEmail,
+      email,
+    );
+
     const tenant = await TenantManager.getTenant(tenantId);
     if (!tenant) {
       throw { message: "Tenant not found", status: 404 };
@@ -174,11 +193,27 @@ class StudentService {
         school,
         grade,
         targetGroups,
+        ...guardian.fields,
       });
     } catch (err) {
       await StudentManager.removeStudent(email).catch(() => {});
       await UserManager.deleteUser(email).catch(() => {});
       throw err;
+    }
+
+    if (guardian.token) {
+      try {
+        await sendGuardianConsentRequest({
+          sendTo: guardian.fields.guardianEmail,
+          firstName,
+          lastName,
+          token: guardian.token,
+        });
+      } catch (err) {
+        logger.warn(
+          `Could not send guardian consent request for ${email}: ${err.message || err}`,
+        );
+      }
     }
 
     await AuditLogService.record(
@@ -238,6 +273,7 @@ class StudentService {
     const school = String(data.school || "").trim();
     const grade = String(data.grade || "").trim();
     const birthDate = String(data.birthDate || "").trim();
+    const guardianEmail = String(data.guardianEmail || "").trim();
     const targetGroups = Array.isArray(data.targetGroups)
       ? data.targetGroups.map((t) => String(t).trim()).filter(Boolean)
       : [];
@@ -287,6 +323,30 @@ class StudentService {
     if (!existing) {
       throw { message: "Student profile not found", status: 404 };
     }
+    const guardian = {
+      guardianEmail: existing.guardianEmail,
+      guardianConsentRequiredUntil: existing.guardianConsentRequiredUntil,
+      guardianConsentAt: existing.guardianConsentAt,
+      guardianConsentBy: existing.guardianConsentBy,
+      guardianConsentTokenHash: existing.guardianConsentTokenHash,
+      guardianConsentSentAt: existing.guardianConsentSentAt,
+    };
+    let enrolment = null;
+
+    if (GuardianConsentService.isRequiredFor(birthDate)) {
+      const consented = !!existing.guardianConsentAt;
+      if (consented || GuardianConsentService.isPending(existing)) {
+        guardian.guardianConsentRequiredUntil =
+          GuardianConsentService.requiredUntilFor(birthDate);
+      } else {
+        enrolment = GuardianConsentService.buildForRegistration(
+          birthDate,
+          guardianEmail || existing.guardianEmail,
+          userId,
+        );
+        Object.assign(guardian, enrolment.fields);
+      }
+    }
     user.firstName = firstName;
     user.lastName = lastName;
     user.phone = phone;
@@ -303,7 +363,23 @@ class StudentService {
       school,
       grade,
       created: existing.created,
+      ...guardian,
     });
+
+    if (enrolment && enrolment.token) {
+      try {
+        await sendGuardianConsentRequest({
+          sendTo: guardian.guardianEmail,
+          firstName,
+          lastName,
+          token: enrolment.token,
+        });
+      } catch (err) {
+        logger.warn(
+          `Could not send guardian consent request for ${userId}: ${err.message || err}`,
+        );
+      }
+    }
 
     return StudentService.getStudentProfile(userId);
   }

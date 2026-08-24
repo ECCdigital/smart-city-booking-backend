@@ -9,6 +9,7 @@ describe("StudentService — profile (get/update)", () => {
   let StudentService;
   let userObj;
   let currentStudent;
+  let guardianMail;
 
   const userId = "lena@example.de";
 
@@ -43,8 +44,12 @@ describe("StudentService — profile (get/update)", () => {
         return s;
       }),
     };
+    guardianMail = sandbox.stub().resolves();
     mock("../../src/commons/data-managers/user-manager", UserManager);
     mock("../../src/commons/data-managers/student-manager", StudentManager);
+    mock("../../src/commons/services/student/guardian-consent-mail", {
+      sendGuardianConsentRequest: guardianMail,
+    });
     StudentService = mock.reRequire(
       "../../src/commons/services/student/student-service",
     );
@@ -131,6 +136,157 @@ describe("StudentService — profile (get/update)", () => {
     expect(UserManager.getUserBy.calledWith({ id: userId }, true)).to.equal(
       true,
     );
+  });
+
+  it("updateStudentProfile keeps a pending guardian consent intact", async () => {
+    const requiredUntil = Date.now() + 31536000000;
+    currentStudent.guardianEmail = "mutter@example.de";
+    currentStudent.guardianConsentRequiredUntil = requiredUntil;
+    currentStudent.guardianConsentAt = null;
+    currentStudent.guardianConsentTokenHash = "hash";
+    currentStudent.guardianConsentSentAt = 222;
+
+    await StudentService.updateStudentProfile(userId, {
+      firstName: "Lena",
+      lastName: "Petersen",
+      street: "Holtenauer Str. 142",
+      postalCode: "24105",
+      city: "Kiel",
+      phone: "0431 1234567",
+      birthDate: "2008-03-14",
+      targetGroups: ["pupil"],
+      guardianEmail: "",
+      guardianConsentAt: Date.now(),
+    });
+
+    const saved = StudentManager.storeStudent.lastCall.args[0];
+    expect(saved.guardianEmail).to.equal("mutter@example.de");
+    expect(saved.guardianConsentRequiredUntil).to.equal(requiredUntil);
+    expect(saved.guardianConsentAt).to.be.null;
+    expect(saved.guardianConsentTokenHash).to.equal("hash");
+    expect(saved.guardianConsentSentAt).to.equal(222);
+  });
+
+  it("updateStudentProfile cannot lift the gate by editing birthDate", async () => {
+    const requiredUntil = Date.now() + 31536000000;
+    currentStudent.guardianEmail = "mutter@example.de";
+    currentStudent.guardianConsentRequiredUntil = requiredUntil;
+    currentStudent.guardianConsentAt = null;
+
+    await StudentService.updateStudentProfile(userId, {
+      firstName: "Lena",
+      lastName: "Petersen",
+      street: "Holtenauer Str. 142",
+      postalCode: "24105",
+      city: "Kiel",
+      phone: "0431 1234567",
+      birthDate: "1990-01-01",
+      targetGroups: ["pupil"],
+    });
+
+    const saved = StudentManager.storeStudent.lastCall.args[0];
+    expect(saved.birthDate).to.equal("1990-01-01");
+    expect(saved.guardianConsentRequiredUntil).to.equal(requiredUntil);
+    expect(saved.guardianConsentAt).to.be.null;
+  });
+
+  it("updateStudentProfile starts the consent flow when moving under 16", async () => {
+    currentStudent.birthDate = "2000-03-14";
+    currentStudent.guardianConsentRequiredUntil = null;
+    currentStudent.guardianConsentAt = null;
+
+    await StudentService.updateStudentProfile(userId, {
+      firstName: "Lena",
+      lastName: "Petersen",
+      street: "Holtenauer Str. 142",
+      postalCode: "24105",
+      city: "Kiel",
+      phone: "0431 1234567",
+      birthDate: "2015-03-14",
+      targetGroups: ["pupil"],
+      guardianEmail: "Mutter@Example.DE",
+    });
+
+    const saved = StudentManager.storeStudent.lastCall.args[0];
+    expect(saved.birthDate).to.equal("2015-03-14");
+    expect(saved.guardianEmail).to.equal("mutter@example.de");
+    expect(saved.guardianConsentRequiredUntil).to.equal(Date.UTC(2031, 2, 14));
+    expect(saved.guardianConsentAt).to.be.null;
+    expect(saved.guardianConsentTokenHash).to.be.a("string").with.length(64);
+    expect(guardianMail.calledOnce).to.be.true;
+    expect(guardianMail.firstCall.args[0].sendTo).to.equal("mutter@example.de");
+  });
+
+  it("updateStudentProfile demands a guardian email when moving under 16", async () => {
+    currentStudent.birthDate = "2000-03-14";
+    currentStudent.guardianEmail = "";
+    currentStudent.guardianConsentRequiredUntil = null;
+
+    let err;
+    try {
+      await StudentService.updateStudentProfile(userId, {
+        firstName: "Lena",
+        lastName: "Petersen",
+        street: "Holtenauer Str. 142",
+        postalCode: "24105",
+        city: "Kiel",
+        phone: "0431 1234567",
+        birthDate: "2015-03-14",
+        targetGroups: ["pupil"],
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).to.have.property("status", 400);
+    expect(StudentManager.storeStudent.called).to.be.false;
+  });
+
+  it("updateStudentProfile reuses a guardian already on file", async () => {
+    currentStudent.birthDate = "2000-03-14";
+    currentStudent.guardianEmail = "mutter@example.de";
+    currentStudent.guardianConsentRequiredUntil = Date.now() - 1000;
+    currentStudent.guardianConsentAt = null;
+
+    await StudentService.updateStudentProfile(userId, {
+      firstName: "Lena",
+      lastName: "Petersen",
+      street: "Holtenauer Str. 142",
+      postalCode: "24105",
+      city: "Kiel",
+      phone: "0431 1234567",
+      birthDate: "2015-03-14",
+      targetGroups: ["pupil"],
+    });
+
+    const saved = StudentManager.storeStudent.lastCall.args[0];
+    expect(saved.guardianEmail).to.equal("mutter@example.de");
+    expect(saved.guardianConsentAt).to.be.null;
+  });
+
+  it("updateStudentProfile lets a consented student change age freely", async () => {
+    const consentedAt = Date.now() - 5000;
+    currentStudent.birthDate = "2012-05-10";
+    currentStudent.guardianEmail = "mutter@example.de";
+    currentStudent.guardianConsentRequiredUntil = Date.UTC(2028, 4, 10);
+    currentStudent.guardianConsentAt = consentedAt;
+
+    await StudentService.updateStudentProfile(userId, {
+      firstName: "Lena",
+      lastName: "Petersen",
+      street: "Holtenauer Str. 142",
+      postalCode: "24105",
+      city: "Kiel",
+      phone: "0431 1234567",
+      birthDate: "2014-01-20",
+      targetGroups: ["pupil"],
+    });
+
+    const saved = StudentManager.storeStudent.lastCall.args[0];
+    expect(saved.birthDate).to.equal("2014-01-20");
+    expect(saved.guardianConsentAt).to.equal(consentedAt);
+    expect(saved.guardianConsentRequiredUntil).to.equal(Date.UTC(2030, 0, 20));
+    expect(guardianMail.called).to.be.false;
   });
 
   it("updateStudentProfile validates birthDate + targetGroups (400)", async () => {

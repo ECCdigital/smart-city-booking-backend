@@ -10,6 +10,19 @@ class StudentManager {
     return raw.toEntity();
   }
 
+  static async getStudentByGuardianToken(tokenHash) {
+    if (!tokenHash) {
+      return null;
+    }
+    const raw = await StudentModel.findOne({
+      guardianConsentTokenHash: tokenHash,
+    });
+    if (!raw) {
+      return null;
+    }
+    return raw.toEntity();
+  }
+
   static async listStudents(tenantId) {
     const raw = await StudentModel.find({ tenantId });
     return raw.map((doc) => doc.toEntity());
