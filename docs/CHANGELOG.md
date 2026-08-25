@@ -7,6 +7,12 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Custom field definitions support `usageOptions.showInMail` (checkout fields only, enforced on write): flagged fields render as `Label: Wert` lines in the booking-details block of all booking mails; empty values show as "nicht angegeben"
+- Mail-visible custom field values render type-aware via `CustomFieldService.formatValueForDisplay`: booleans as "Ja"/"Nein", selects as the option caption (raw value if the option was deleted), numbers as strings
+- Migration `25-08-2026-customfield-show-in-mail` backfills `usageOptions.showInMail: false` on existing custom field definitions (instance, tenant, bookable) so all fields stay opt-in
+
 ### Fixed
 
 - Admin booking update no longer applies the assignee's bookable booking discounts when recomputing prices (same as manual create; Admin-entered list prices from `priceCategories` are kept)
