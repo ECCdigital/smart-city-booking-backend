@@ -40,7 +40,6 @@ class AccessService {
    * @param {string} accessPointId
    * @param {string} userId
    * @param {Object} [options]
-   * @param {string|null} [options.otp=null]
    * @param {boolean} [options.hasManagePermission=false] Replaces booking
    *   ownership, and exempts the user from the evidence rules at a booking
    *   that is not theirs - at their own they present evidence like anyone else
@@ -162,12 +161,7 @@ class AccessService {
 
     try {
       const provider = getAccessProvider(accessPoint.provider);
-      const result = await provider[action](accessPoint, {
-        ...bookingContext,
-        openOptions: {
-          otp: options.otp || null,
-        },
-      });
+      const result = await provider[action](accessPoint, bookingContext);
 
       await this._log({
         tenantId: tenant,

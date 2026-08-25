@@ -5,6 +5,7 @@ const AccessService = require("../../../commons/services/access/access-service")
 const AccessScanService = require("../../../commons/services/access/access-scan-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError } = require("../../../errors/BaseError");
+const { AccessOpenError } = require("../../../errors/AccessOpenError");
 
 const logger = bunyan.createLogger({
   name: "access-controller.js",
@@ -49,7 +50,6 @@ class AccessController {
   static async _renderOpen(request, response, { action, errorMessage }) {
     const { tenant, accessPointId } = request.params;
     const { bookingId } = request.query;
-    const otp = request.body?.otp || request.query?.otp || null;
     const evidence = Array.isArray(request.body?.evidence)
       ? request.body.evidence
       : [];
@@ -68,7 +68,7 @@ class AccessController {
         bookingId,
         accessPointId,
         user.id,
-        { otp, hasManagePermission, evidence, channel },
+        { hasManagePermission, evidence, channel },
       );
 
       if (!outcome.success) {
@@ -90,6 +90,18 @@ class AccessController {
           `${tenant} -- user ${user.id} tried to ${action} access-point ${accessPointId} outside booking ${bookingId}`,
         );
         return response.sendStatus(403);
+      }
+
+      if (err instanceof AccessOpenError) {
+        // The guest is told only the failure class - temporary ("try again in
+        // a few minutes") or configuration ("contact the administration").
+        // The provider detail is already in the audit log.
+        logger.warn(
+          `${tenant} -- ${action} of access-point ${accessPointId} (booking ${bookingId}) failed (${err.failureClass}): ${err.message}`,
+        );
+        return ApiResponse.softFail(response, {
+          data: { openFailure: err.failureClass },
+        });
       }
 
       logger.error(err);

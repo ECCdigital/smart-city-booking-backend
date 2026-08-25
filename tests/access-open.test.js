@@ -319,16 +319,16 @@ describe("AccessService.open", () => {
     ).to.deep.equal(outcome.blockingReasons);
   });
 
-  it("passes the otp on to the provider", async () => {
+  it("never forwards a caller-supplied otp to the provider", async () => {
+    // The former `otp` parameter is gone for good: a provider that needs an
+    // OTP computes it itself (docs/specs/salto-ks-remote-open.md §4).
     stubResolvedDoor(sandbox, createBooking());
 
     await AccessService.open("tenant-1", "booking-1", "door-1", "user-1", {
       otp: "1234",
     });
 
-    expect(providerOpen.firstCall.args[1].openOptions).to.deep.equal({
-      otp: "1234",
-    });
+    expect(providerOpen.firstCall.args[1]).to.not.have.property("openOptions");
   });
 
   it("audits a provider error as a failure and rethrows", async () => {

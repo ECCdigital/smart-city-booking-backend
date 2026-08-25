@@ -2,23 +2,22 @@ const crypto = require("crypto");
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const { createClient } = require("../clients/access-client-registry");
+const { classifySaltoError } = require("../clients/salto-ks-api-client");
+const SaltoKsIqActivationService = require("../salto-ks-iq-activation-service");
 const { AccessPointMode } = require("../../../entities/access/access-point");
+const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 
 require("../clients");
 
 const APP_TYPE = "access";
 const PROVIDER_ID = "salto-ks";
 
-// Salto KS is authorization-driven and additionally supports remote open, so
-// every Salto lock can be used in remote, authorization and both modes.
-const SALTO_SUPPORTED_MODES = Object.freeze([
-  AccessPointMode.REMOTE,
-  AccessPointMode.AUTHORIZATION,
-  AccessPointMode.BOTH,
-]);
+// The lock types with a keypad - the only ones that know the Salto-Guest+PIN
+// path (ADR 0001). Remote open is open to every door hanging on an IQ.
+const KEYPAD_LOCK_TYPES = Object.freeze(["escutcheon_pin", "wall_reader_pin"]);
 
 class SaltoKsAccessProvider extends AccessProvider {
-  async _getClient(tenant) {
+  async _getApp(tenant) {
     const tenantData = await TenantManager.getTenant(tenant);
     const rawApp = tenantData?.applications?.find(
       (a) => a.type === APP_TYPE && a.id === PROVIDER_ID && a.active,
@@ -30,20 +29,93 @@ class SaltoKsAccessProvider extends AccessProvider {
       );
     }
 
-    return createClient(rawApp);
+    return rawApp;
   }
 
+  async _getClient(tenant) {
+    return createClient(await this._getApp(tenant));
+  }
+
+  /**
+   * Opens the lock as the tenant's system user. The OTP is always computed by
+   * the backend from the stored activation of the lock's IQ - never taken
+   * from the caller - and at most one OTP is spent per attempt: a rejection
+   * is booked and reported, not retried with a fresh computation.
+   *
+   * @throws {AccessOpenError} With the failure class the guest may see;
+   *   the message carries the Salto detail for the audit log.
+   */
   async open(accessPoint, bookingContext) {
-    const client = await this._getClient(bookingContext.tenant);
-    const providerResponse = await client.openLock(accessPoint.externalId, {
-      otp: bookingContext.openOptions?.otp || null,
-    });
+    const tenant = bookingContext.tenant;
+    const client = await this._getClient(tenant);
+
+    const locks = this._extractList(await client.getLocks());
+    const lock = locks.find(
+      (l) => String(l.id || l.lockId) === String(accessPoint.externalId),
+    );
+
+    if (!lock) {
+      throw AccessOpenError.configuration(
+        `Salto KS does not list lock '${accessPoint.externalId}'`,
+      );
+    }
+
+    const iq = lock.iq
+      ? { id: String(lock.iq.id), otp_enabled: lock.iq.otp_enabled ?? false }
+      : null;
+
+    const { otp } = iq
+      ? await SaltoKsIqActivationService.resolveOtpForOpen(tenant, iq)
+      : { otp: null };
+
+    let providerResponse;
+    try {
+      providerResponse = await client.openLock(accessPoint.externalId, { otp });
+    } catch (err) {
+      throw await this._mapOpenError(err, tenant, iq);
+    }
+
+    if (otp) {
+      await SaltoKsIqActivationService.recordOpenSuccess(tenant, iq.id);
+    }
 
     return {
       success: true,
       state: "open",
       providerResponse,
     };
+  }
+
+  /**
+   * @private
+   * Books a failed locking call on the IQ's activation and turns it into the
+   * failure class the guest sees (§7 of the spec): OTP rejections and an
+   * offline lock are temporary, a missing right of the system user - which
+   * only ever shows itself here - is configurative.
+   */
+  async _mapOpenError(err, tenant, iq) {
+    const kind = classifySaltoError(err);
+    const detail = err.message || String(err);
+
+    if (kind === "otp_invalid" && iq) {
+      await SaltoKsIqActivationService.recordOtpInvalid(tenant, iq.id, detail);
+      return AccessOpenError.temporary(`Salto KS rejected the OTP: ${detail}`);
+    }
+
+    if (kind === "otp_blocked" && iq) {
+      await SaltoKsIqActivationService.recordOtpBlocked(tenant, iq.id, detail);
+      return AccessOpenError.temporary(
+        `Salto KS blocked OTP submissions: ${detail}`,
+      );
+    }
+
+    if (kind === "forbidden") {
+      return AccessOpenError.configuration(
+        `Salto KS refused the remote open - check the system user's remote locking right: ${detail}`,
+      );
+    }
+
+    return AccessOpenError.temporary(`Salto KS open failed: ${detail}`);
   }
 
   async getStatus(accessPoint, bookingContext) {
@@ -60,7 +132,12 @@ class SaltoKsAccessProvider extends AccessProvider {
       lockId: String(accessPoint.externalId),
       name: lock?.customer_reference || "",
       online: lock?.online ?? null,
-      state: lockedState === "locked" ? "locked" : lockedState === "unlocked" ? "unlocked" : null,
+      state:
+        lockedState === "locked"
+          ? "locked"
+          : lockedState === "unlocked"
+            ? "unlocked"
+            : null,
       lockedState,
       batteryLevel: lock?.battery_level ?? null,
       batteryCritical: lock?.battery_level === "critical" ? true : null,
@@ -155,13 +232,40 @@ class SaltoKsAccessProvider extends AccessProvider {
     };
   }
 
+  /**
+   * The access points of the site, each with the modes its lock really
+   * supports right now (§6 of the spec): the keypad path follows the lock
+   * type, remote open additionally needs the lock's IQ to be locally
+   * activated (IQs without `otp_enabled` need no activation) and not in
+   * `restore_required`. Deliberately no condition on `online` - an offline IQ
+   * is a runtime failure of the open attempt, not a capability.
+   */
   async listAccessPoints(tenant) {
-    const client = await this._getClient(tenant);
-    const locks = await client.getLocks();
-    const list = this._extractList(locks);
+    const app = await this._getApp(tenant);
+    const client = createClient(app);
+    const [locks, iqs] = await Promise.all([
+      client.getLocks(),
+      client.getIqs(),
+    ]);
+    const iqList = this._extractList(iqs);
+    const activations = Array.isArray(app.iqActivations)
+      ? app.iqActivations
+      : [];
 
-    return list.map((lock) => {
+    return this._extractList(locks).map((lock) => {
       const externalId = String(lock.id || lock.lockId);
+      const supportedModes = this._deriveSupportedModes(
+        lock,
+        iqList,
+        activations,
+      );
+      const capabilities = [];
+      if (supportedModes.includes(AccessPointMode.REMOTE)) {
+        capabilities.push("remote");
+      }
+      if (supportedModes.includes(AccessPointMode.AUTHORIZATION)) {
+        capabilities.push("authorization");
+      }
 
       return {
         id: externalId,
@@ -170,15 +274,72 @@ class SaltoKsAccessProvider extends AccessProvider {
         externalId,
         locationId: lock.siteId ? String(lock.siteId) : null,
         label: lock.customer_reference || "",
-        capabilities: ["remote", "authorization"],
-        supportedModes: SALTO_SUPPORTED_MODES,
+        capabilities,
+        supportedModes,
         metadata: lock,
       };
     });
   }
 
-  async getSupportedModes() {
-    return SALTO_SUPPORTED_MODES;
+  async getSupportedModes(accessPoint, tenant) {
+    const points = await this.listAccessPoints(tenant);
+    const externalId = String(accessPoint.externalId);
+    const point = points.find((p) => p.externalId === externalId);
+    return point ? point.supportedModes : null;
+  }
+
+  /**
+   * @private
+   * The capability rule for one lock. `lock_type` stays provider runtime
+   * knowledge - it is read from the live lock, never persisted.
+   */
+  _deriveSupportedModes(lock, iqList, activations) {
+    const modes = [];
+
+    if (KEYPAD_LOCK_TYPES.includes(lock.lock_type)) {
+      modes.push(AccessPointMode.AUTHORIZATION);
+    }
+
+    if (this._supportsRemoteOpen(lock, iqList, activations)) {
+      modes.unshift(AccessPointMode.REMOTE);
+    }
+
+    if (
+      modes.includes(AccessPointMode.REMOTE) &&
+      modes.includes(AccessPointMode.AUTHORIZATION)
+    ) {
+      modes.push(AccessPointMode.BOTH);
+    }
+
+    return modes;
+  }
+
+  /**
+   * @private
+   */
+  _supportsRemoteOpen(lock, iqList, activations) {
+    const iqId = lock.iq ? String(lock.iq.id) : null;
+    if (!iqId) {
+      return false;
+    }
+
+    const iq = iqList.find((candidate) => String(candidate.id) === iqId);
+    if (iq?.restore_required) {
+      return false;
+    }
+
+    const entry = activations.find((a) => a.iqId === iqId);
+    const otpEnabled = iq
+      ? iq.otp_enabled ?? false
+      : lock.iq.otp_enabled ?? false;
+
+    if (!otpEnabled) {
+      return true;
+    }
+
+    // `degraded` keeps the capability for guests - it only raises the admin
+    // hint; `reactivation_required` withdraws it.
+    return ["activated", "degraded"].includes(entry?.state);
   }
 
   // No getLocation: the Salto KS Connect API carries no geo data - a site knows
