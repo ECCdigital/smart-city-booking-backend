@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Custom field definitions support `usageOptions.showInMail` (checkout fields only, enforced on write): flagged fields render as `Label: Wert` lines in the booking-details block of all booking mails; empty values show as "nicht angegeben"
+
 ### Fixed
 
 - Admin booking update no longer applies the assignee's bookable booking discounts when recomputing prices (same as manual create; Admin-entered list prices from `priceCategories` are kept)

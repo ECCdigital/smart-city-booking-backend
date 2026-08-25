@@ -104,11 +104,26 @@ class MailDataService {
       tenant.mailBookingPeriodFormat,
     );
 
+    // Order follows the merge order of the definitions (instance → tenant →
+    // bookable); a null displayValue renders as "nicht angegeben".
+    const mailCustomFields = (booking.customFields || [])
+      .filter((field) => field.usageOptions?.showInMail === true)
+      .map((field) => ({
+        caption: field.caption,
+        displayValue:
+          field.value === null ||
+          field.value === undefined ||
+          field.value === ""
+            ? null
+            : String(field.value),
+      }));
+
     return renderSnippet("booking-details", {
       booking,
       bookingItems,
       coupon,
       bookingPeriod,
+      mailCustomFields,
     });
   }
 

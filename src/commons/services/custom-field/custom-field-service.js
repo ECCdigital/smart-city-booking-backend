@@ -4,6 +4,7 @@ class CustomFieldService {
    * detail-display settings stay consistent.
    * - A field is only filterable when it has a catalogFilterType.
    * - When not filterable, catalog filter settings are cleared.
+   * - showInMail only exists on checkout fields; it is cleared otherwise.
    * @param {Object} definition Custom field definition
    * @returns {Object} The (mutated) definition
    */
@@ -31,6 +32,9 @@ class CustomFieldService {
     if (!allowedDetailPositions.includes(usage.detailDisplayPosition)) {
       usage.detailDisplayPosition = "none";
     }
+
+    usage.showInMail =
+      usage.context === "checkout" && usage.showInMail === true;
 
     return definition;
   }
