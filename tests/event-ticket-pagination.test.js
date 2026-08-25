@@ -9,6 +9,7 @@ const {
 function responseStub() {
   return {
     status: sinon.stub().returnsThis(),
+    json: sinon.stub(),
     send: sinon.stub(),
     sendStatus: sinon.stub(),
   };
@@ -57,7 +58,11 @@ describe("EventController.getPublicEventTickets", () => {
       response,
     );
 
-    assert.strictEqual(response.sendStatus.firstCall.args[0], 404);
+    assert.strictEqual(response.status.firstCall.args[0], 404);
+    assert.deepStrictEqual(response.json.firstCall.args[0], {
+      success: false,
+      error: "event_not_found",
+    });
     assert.strictEqual(pageStub.called, false);
   });
 });

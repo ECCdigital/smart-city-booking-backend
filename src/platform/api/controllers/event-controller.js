@@ -9,6 +9,8 @@ const EventService = require("../../../commons/services/event-service");
 const PermissionService = require("../../../commons/services/permission-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const { NotFoundError } = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -26,8 +28,7 @@ class EventController {
       const event = await EventManager.getEvent(eventId, tenant);
 
       if (!event || event.isPublic !== true) {
-        response.sendStatus(404);
-        return;
+        throw new NotFoundError("event_not_found");
       }
 
       const requestedOffset = Number.parseInt(request.query.offset, 10);
@@ -54,8 +55,12 @@ class EventController {
         },
       });
     } catch (err) {
+      if (err instanceof NotFoundError) {
+        return ApiResponse.notFound(response, err.code);
+      }
+
       logger.warn(err);
-      response.status(500).send("could not get event tickets");
+      return ApiResponse.error(response, "could_not_get_event_tickets");
     }
   }
 
