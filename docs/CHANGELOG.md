@@ -7,6 +7,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+## [4.2.6] — 2026-08-25
+
 ### Added
 
 - Custom field definitions support `usageOptions.showInMail` (checkout fields only, enforced on write): flagged fields render as `Label: Wert` lines in the booking-details block of all booking mails; empty values show as "nicht angegeben"
@@ -170,6 +172,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 See git tags (`v3.x.x`, `v2.x.x`, `v4.0.0-rc.*`) for historical releases.
 
+[4.2.6]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.5...v4.2.6
 [4.2.5]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.4...v4.2.5
 [4.2.4]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.3...v4.2.4
 [4.2.3]: https://github.com/ECCdigital/smart-city-booking-backend/compare/v4.2.2...v4.2.3
