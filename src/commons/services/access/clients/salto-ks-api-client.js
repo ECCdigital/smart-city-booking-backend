@@ -77,6 +77,44 @@ function describeUpstreamError(err) {
 
   return null;
 }
+/**
+ * What a failed Salto call means for the open path.
+ *
+ * Measured contract (docs/research/salto-ks-api-contract.md §9): a rejected
+ * OTP answers 400 with `ErrorCode` 3102 and "otp_invalid"; the per-command
+ * block after repeated rejections answers 403 with the same `ErrorCode` and
+ * "otp_blocked". Any other 403 is a missing right of the system user.
+ *
+ * @param {Error} err An axios error from the Connect API
+ * @returns {"otp_invalid"|"otp_blocked"|"forbidden"|"other"}
+ */
+function classifySaltoError(err) {
+  const status = err?.response?.status;
+  const data = err?.response?.data;
+  const text =
+    `${data?.Message || data?.message || ""} ${err?.message || ""}`.toLowerCase();
+
+  if (
+    text.includes("otp_blocked") ||
+    (status === 403 && data?.ErrorCode === 3102)
+  ) {
+    return "otp_blocked";
+  }
+
+  if (
+    text.includes("otp_invalid") ||
+    (status === 400 && data?.ErrorCode === 3102)
+  ) {
+    return "otp_invalid";
+  }
+
+  if (status === 403) {
+    return "forbidden";
+  }
+
+  return "other";
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -245,6 +283,51 @@ class SaltoKsApiClient extends BaseAccessApiClient {
       `/v1.2/sites/${resolvedSiteId}/locks/${lockId}/locking`,
       payload,
     );
+  }
+
+  async getIqs(siteId = this.siteId) {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request("get", `/v1.2/sites/${resolvedSiteId}/iqs`);
+  }
+
+  /**
+   * The first secret of an IQ, requested without an OTP. Salto hands it out
+   * only while the calling system user was never activated at this IQ; the
+   * read is single-shot - afterwards the endpoint answers 403.
+   *
+   * @param {string} iqId Salto IQ UUID
+   * @param {string} [siteId]
+   * @returns {Promise<string|null>} The 16-character first secret
+   */
+  async getIqFirstSecret(iqId, siteId = this.siteId) {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    const response = await this._request(
+      "get",
+      `/v1.2/sites/${resolvedSiteId}/iqs/${iqId}/secret`,
+    );
+    return response?.secret ?? null;
+  }
+
+  async sendIqPinEmail(iqId, siteId = this.siteId) {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request(
+      "get",
+      `/v1.2/sites/${resolvedSiteId}/iqs/${iqId}/pin?send_email=true`,
+    );
+  }
+
+  async putIqPin(iqId, { otp, delta }, siteId = this.siteId) {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request(
+      "put",
+      `/v1.2/sites/${resolvedSiteId}/iqs/${iqId}/pin`,
+      { otp, delta },
+    );
+  }
+
+  async getSiteMe(siteId = this.siteId) {
+    const resolvedSiteId = await this._resolveSiteId(siteId);
+    return this._request("get", `/v1.2/sites/${resolvedSiteId}/me`);
   }
 
   async createUser({ firstName, lastName, email }, siteId = this.siteId) {
@@ -439,4 +522,5 @@ module.exports = {
   DEFAULT_SALTO_SCOPE,
   resolveSaltoEnvironment,
   describeUpstreamError,
+  classifySaltoError,
 };

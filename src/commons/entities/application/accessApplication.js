@@ -73,6 +73,15 @@ class SaltoKsAccessApplication extends AccessApplication {
     // free-text `apiBaseUrl` of earlier versions is no longer used - it is only
     // read once to tell what environment an old configuration meant.
     this.environment = SaltoKsAccessApplication.resolveEnvironment(params);
+    // One entry per IQ the system user was activated at - the site has one
+    // Salto application per tenant, so the activations live here, not at the
+    // access point. `secret` and `pin` are the OTP ingredients; they stay
+    // encrypted even through decrypt(), because unlike clientSecret they are
+    // never round-tripped through an admin UI - only the IQ activation
+    // service decrypts them at the moment of use.
+    this.iqActivations = Array.isArray(params.iqActivations)
+      ? params.iqActivations
+      : [];
   }
 
   /**
@@ -120,6 +129,14 @@ class SaltoKsAccessApplication extends AccessApplication {
     if (this.password && typeof this.password === "string") {
       this.password = SecurityUtils.encrypt(this.password);
     }
+    for (const activation of this.iqActivations || []) {
+      if (activation.secret && typeof activation.secret === "string") {
+        activation.secret = SecurityUtils.encrypt(activation.secret);
+      }
+      if (activation.pin && typeof activation.pin === "string") {
+        activation.pin = SecurityUtils.encrypt(activation.pin);
+      }
+    }
   }
 
   static get Schema() {
@@ -135,6 +152,7 @@ class SaltoKsAccessApplication extends AccessApplication {
         enum: SALTO_KS_ENVIRONMENTS,
         default: DEFAULT_SALTO_KS_ENVIRONMENT,
       },
+      iqActivations: { type: Array, default: [] },
     };
   }
 }

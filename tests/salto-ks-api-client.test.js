@@ -55,6 +55,80 @@ describe("SaltoKsApiClient.openLock", () => {
   });
 });
 
+describe("SaltoKsApiClient IQ endpoints", () => {
+  let sandbox;
+  let client;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    client = new SaltoKsApiClient(
+      "client-id",
+      "client-secret",
+      "site-id",
+      "accept",
+      { username: "user@example.test", password: "password" },
+    );
+    sandbox.stub(client, "_resolveSiteId").resolves("resolved-site-id");
+    sandbox.stub(client, "_request").resolves({});
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("lists the IQs of the site", async () => {
+    await client.getIqs();
+
+    expect(client._request.firstCall.args).to.deep.equal([
+      "get",
+      "/v1.2/sites/resolved-site-id/iqs",
+    ]);
+  });
+
+  it("fetches the first secret of an IQ without an OTP", async () => {
+    client._request.resolves({ secret: "ABCDEFGHIJKLMNOP" });
+
+    const secret = await client.getIqFirstSecret("iq-id");
+
+    expect(client._request.firstCall.args).to.deep.equal([
+      "get",
+      "/v1.2/sites/resolved-site-id/iqs/iq-id/secret",
+    ]);
+    expect(secret).to.equal("ABCDEFGHIJKLMNOP");
+  });
+
+  it("asks Salto to mail the IQ-PIN to the system user", async () => {
+    await client.sendIqPinEmail("iq-id");
+
+    expect(client._request.firstCall.args).to.deep.equal([
+      "get",
+      "/v1.2/sites/resolved-site-id/iqs/iq-id/pin?send_email=true",
+    ]);
+  });
+
+  it("activates the IQ with the OTP and an unchanged pin", async () => {
+    await client.putIqPin("iq-id", { otp: "28a5a", delta: "0000" });
+
+    expect(client._request.firstCall.args).to.deep.equal([
+      "put",
+      "/v1.2/sites/resolved-site-id/iqs/iq-id/pin",
+      { otp: "28a5a", delta: "0000" },
+    ]);
+  });
+
+  it("reads the site user the client acts as", async () => {
+    client._request.resolves({ remote_access: true });
+
+    const me = await client.getSiteMe();
+
+    expect(client._request.firstCall.args).to.deep.equal([
+      "get",
+      "/v1.2/sites/resolved-site-id/me",
+    ]);
+    expect(me).to.deep.equal({ remote_access: true });
+  });
+});
+
 describe("Salto KS environments", () => {
   it("maps accept to the accept Connect API and identity server", () => {
     const client = new SaltoKsApiClient("id", "secret", null, "accept");
