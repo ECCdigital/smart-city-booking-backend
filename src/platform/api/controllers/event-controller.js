@@ -1,4 +1,7 @@
 const EventManager = require("../../../commons/data-managers/event-manager");
+const {
+  BookableManager,
+} = require("../../../commons/data-managers/bookable-manager");
 const { Event } = require("../../../commons/entities/event/event");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const bunyan = require("bunyan");
@@ -6,6 +9,8 @@ const EventService = require("../../../commons/services/event-service");
 const PermissionService = require("../../../commons/services/permission-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const { NotFoundError } = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -16,6 +21,49 @@ const logger = bunyan.createLogger({
  * Web Controller for Events.
  */
 class EventController {
+  static async getPublicEventTickets(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const eventId = request.params.id;
+      const event = await EventManager.getEvent(eventId, tenant);
+
+      if (!event || event.isPublic !== true) {
+        throw new NotFoundError("event_not_found");
+      }
+
+      const requestedOffset = Number.parseInt(request.query.offset, 10);
+      const requestedLimit = Number.parseInt(request.query.limit, 10);
+      const offset = Number.isInteger(requestedOffset)
+        ? Math.max(requestedOffset, 0)
+        : 0;
+      const limit = Number.isInteger(requestedLimit)
+        ? Math.min(Math.max(requestedLimit, 1), 50)
+        : 10;
+      const { tickets, total } =
+        await BookableManager.getPublicEventBookablesPage(tenant, eventId, {
+          offset,
+          limit,
+        });
+
+      response.status(200).send({
+        tickets,
+        pagination: {
+          offset,
+          limit,
+          total,
+          hasMore: offset + tickets.length < total,
+        },
+      });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return ApiResponse.notFound(response, err.code);
+      }
+
+      logger.warn(err);
+      return ApiResponse.error(response, "could_not_get_event_tickets");
+    }
+  }
+
   static async getEvents(request, response) {
     try {
       const tenant = request.params.tenant;

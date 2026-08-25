@@ -176,6 +176,45 @@ class BookableManager {
   }
 
   /**
+   * Get a stable page of public ticket bookables for an event.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} eventId Event ID
+   * @param {{ offset: number, limit: number }} pagination
+   * @returns {Promise<{tickets: Bookable[], total: number}>}
+   */
+  static async getPublicEventBookablesPage(
+    tenantId,
+    eventId,
+    { offset, limit },
+  ) {
+    const filter = {
+      tenantId,
+      eventId,
+      type: "ticket",
+      isPublic: true,
+    };
+
+    const [rawBookables, total, defs] = await Promise.all([
+      BookableModel.find(filter)
+        .sort({
+          "specialOpeningHours.0.date": 1,
+          "specialOpeningHours.0.startTime": 1,
+          id: 1,
+        })
+        .skip(offset)
+        .limit(limit),
+      BookableModel.countDocuments(filter),
+      this.getCustomFieldDefinitions(tenantId),
+    ]);
+
+    return {
+      tickets: this._toEntitiesWithCustomFields(rawBookables, defs),
+      total,
+    };
+  }
+
+  /**
    * Get bookables by owner
    * @param {string} tenantId Tenant ID
    * @param {string} ownerUserId Owner user ID

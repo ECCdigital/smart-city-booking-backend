@@ -94,6 +94,22 @@ Returns public bookables for a tenant. Optional auth.
 
 Returns a single public bookable. Optional auth.
 
+### GET /api/:tenant/events/:id/tickets
+
+Returns a paginated list of public ticket bookables for a public event.
+
+- `200 OK`: The event is public. `tickets` can be an empty array when it has no public tickets.
+- `404 Not Found`: The event does not exist or is not public.
+
+Returns a stable, paginated list of public ticket bookables for a public event.
+
+Query parameters:
+
+- `offset` (default `0`, minimum `0`)
+- `limit` (default `10`, minimum `1`, maximum `50`)
+
+Response: `{ tickets, pagination: { offset, limit, total, hasMore } }`.
+
 ### GET /api/:tenant/bookables
 
 Returns all bookables (including non-public). **Requires JWT.**

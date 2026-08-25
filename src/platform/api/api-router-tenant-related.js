@@ -108,6 +108,7 @@ router.get(
 
 // Public
 router.get("/events", EventController.getEvents);
+router.get("/events/:id/tickets", EventController.getPublicEventTickets);
 router.get("/events/:id", EventController.getEvent);
 router.get("/events/:id/bookings", BookingController.getEventBookings);
 
