@@ -4,7 +4,15 @@ const TenantModel = require("../../data-managers/models/tenantModel");
 const SecurityUtils = require("../../utilities/security-utils");
 const clientRegistry = require("./clients/access-client-registry");
 const { computeSaltoOtp } = require("./clients/salto-ks-otp");
-const { BadRequestError, NotFoundError } = require("../../../errors/BaseError");
+const {
+  classifySaltoError,
+  extractSaltoList,
+} = require("./clients/salto-ks-api-client");
+const {
+  BaseError,
+  BadRequestError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
 const { AccessOpenError } = require("../../../errors/AccessOpenError");
 
 require("./clients");
@@ -60,7 +68,7 @@ class SaltoKsIqActivationService {
   static async listIqs(tenantId) {
     const { app, client } = await this._getAppAndClient(tenantId);
     let activations = this._activationsOf(app);
-    const iqs = this._extractList(await client.getIqs());
+    const iqs = extractSaltoList(await client.getIqs());
 
     for (const iq of iqs) {
       const entry = activations.find((a) => a.iqId === String(iq.id));
@@ -136,7 +144,7 @@ class SaltoKsIqActivationService {
 
     let app;
     try {
-      app = await this._getApp(tenantId);
+      app = await this.getSaltoApp(tenantId);
     } catch (err) {
       if (err instanceof NotFoundError) {
         return {};
@@ -184,7 +192,16 @@ class SaltoKsIqActivationService {
     try {
       secret = await client.getIqFirstSecret(iqId);
     } catch (err) {
-      if (err?.response?.status === 403) {
+      // Only Salto's own "already activated" answer (ErrorCode 2203) means
+      // the app legacy of the setup guide - any other 403 (e.g. a missing
+      // permission) is not healed by discarding and must surface as itself.
+      if (
+        err?.response?.status === 403 &&
+        (err.response.data?.ErrorCode === 2203 ||
+          `${err.response.data?.Message || err.message || ""}`
+            .toLowerCase()
+            .includes("already activated"))
+      ) {
         throw new BadRequestError("salto_iq_already_activated_at_salto", {
           iqId,
         });
@@ -193,7 +210,7 @@ class SaltoKsIqActivationService {
     }
 
     if (!secret) {
-      throw new Error(`Salto KS returned no first secret for IQ ${iqId}`);
+      throw new BaseError("salto_iq_no_first_secret", 502, { iqId });
     }
 
     const next = activations
@@ -268,10 +285,18 @@ class SaltoKsIqActivationService {
       await this._patchEntry(tenantId, activations, iqId, {
         lastError: err.message,
       });
-      throw new BadRequestError("salto_iq_activation_otp_rejected", {
-        iqId,
-        message: err.message,
-      });
+
+      // Only an OTP rejection means the entered PIN (or the stored secret)
+      // is wrong; a network error or a 5xx is not the admin's doing and
+      // surfaces as itself.
+      const kind = classifySaltoError(err);
+      if (kind === "otp_invalid" || kind === "otp_blocked") {
+        throw new BadRequestError("salto_iq_activation_otp_rejected", {
+          iqId,
+          message: err.message,
+        });
+      }
+      throw err;
     }
 
     await this._patchEntry(tenantId, activations, iqId, {
@@ -296,7 +321,7 @@ class SaltoKsIqActivationService {
    * @returns {Promise<{iqId: string, state: string}>}
    */
   static async discardActivation(tenantId, iqId) {
-    const app = await this._getApp(tenantId);
+    const app = await this.getSaltoApp(tenantId);
     const activations = this._activationsOf(app);
 
     if (activations.some((a) => a.iqId === iqId)) {
@@ -330,7 +355,7 @@ class SaltoKsIqActivationService {
       return { otp: null };
     }
 
-    const app = await this._getApp(tenantId);
+    const app = await this.getSaltoApp(tenantId);
     const entry = this._activationsOf(app).find((a) => a.iqId === iq.id);
 
     if (
@@ -403,8 +428,48 @@ class SaltoKsIqActivationService {
   }
 
   /**
+   * Books that Salto reported `restore_required` for the IQ: the stored
+   * ingredients are dead, the capability is withdrawn until the admin
+   * discards and re-runs the wizard.
+   *
+   * @param {string} tenantId
+   * @param {string} iqId
+   * @param {string} [message] What was seen, for the admin view
+   */
+  static async markReactivationRequired(tenantId, iqId, message) {
+    await this._patchLoadedEntry(tenantId, iqId, () => ({
+      state: IQ_ACTIVATION_STATES.REACTIVATION_REQUIRED,
+      lastError: message || "restore_required",
+    }));
+  }
+
+  /**
+   * Removes the activation entries from a tenant that is about to leave
+   * through the API: even encrypted, the OTP ingredients never travel
+   * (docs/specs/salto-ks-remote-open.md paragraph 2). Safe because a tenant
+   * update never writes them back - see {@link preserveActivations}.
+   *
+   * @param {Object|null} tenant The tenant answer to redact, mutated in place
+   * @returns {Object|null} The same tenant
+   */
+  static redactActivations(tenant) {
+    for (const app of tenant?.applications || []) {
+      if (app.type === APP_TYPE && app.id === PROVIDER_ID) {
+        delete app.iqActivations;
+      }
+    }
+    return tenant;
+  }
+
+  /**
    * Books a successful open: the failure streak ends and a degraded
    * activation is proven healthy again.
+   *
+   * This is the only implemented healing arc. The spec's state machine also
+   * allows an oracle success (`PUT …/pin` with `delta:"0000"`) to heal, but
+   * defines no trigger for it - and an unprompted oracle call spends an OTP
+   * submission, three of which block the command. So nothing runs the oracle
+   * on its own; a degraded activation heals at the door or is discarded.
    *
    * @param {string} tenantId
    * @param {string} iqId
@@ -426,11 +491,15 @@ class SaltoKsIqActivationService {
    * The tenant's active Salto application and a client bound to it.
    */
   static async _getAppAndClient(tenantId) {
-    const app = await this._getApp(tenantId);
+    const app = await this.getSaltoApp(tenantId);
     return { app, client: clientRegistry.createClient(app) };
   }
 
-  static async _getApp(tenantId) {
+  /**
+   * The tenant's active Salto application. Shared with the access provider -
+   * one lookup, one error.
+   */
+  static async getSaltoApp(tenantId) {
     const tenant = await TenantManager.getTenant(tenantId);
     const app = tenant?.applications?.find(
       (a) => a.type === APP_TYPE && a.id === PROVIDER_ID && a.active,
@@ -445,13 +514,6 @@ class SaltoKsIqActivationService {
 
   static _activationsOf(app) {
     return Array.isArray(app.iqActivations) ? app.iqActivations : [];
-  }
-
-  static _extractList(value) {
-    if (Array.isArray(value)) {
-      return value;
-    }
-    return value?.items || value?.data || [];
   }
 
   /**
@@ -486,7 +548,7 @@ class SaltoKsIqActivationService {
    * book failures or successes on.
    */
   static async _patchLoadedEntry(tenantId, iqId, buildPatch) {
-    const app = await this._getApp(tenantId);
+    const app = await this.getSaltoApp(tenantId);
     const activations = this._activationsOf(app);
     const entry = activations.find((a) => a.iqId === iqId);
 

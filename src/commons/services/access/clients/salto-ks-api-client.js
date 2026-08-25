@@ -115,6 +115,21 @@ function classifySaltoError(err) {
   return "other";
 }
 
+/**
+ * The list inside a Connect API answer: Salto pages some collections
+ * (`{items}`), others come bare or under a named key.
+ *
+ * @param {*} value A Connect API answer
+ * @returns {Array}
+ */
+function extractSaltoList(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return value?.items || value?.data || value?.locks || [];
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -507,11 +522,7 @@ class SaltoKsApiClient extends BaseAccessApiClient {
   }
 
   _extractList(value) {
-    if (Array.isArray(value)) {
-      return value;
-    }
-
-    return value?.items || value?.data || value?.locks || [];
+    return extractSaltoList(value);
   }
 }
 
@@ -523,4 +534,5 @@ module.exports = {
   resolveSaltoEnvironment,
   describeUpstreamError,
   classifySaltoError,
+  extractSaltoList,
 };

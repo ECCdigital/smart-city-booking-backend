@@ -70,6 +70,7 @@ function saltoError(status, errorCode, message) {
 describe("SaltoKsAccessProvider.open", () => {
   let provider;
   let getLocks;
+  let getIqs;
   let openLock;
 
   beforeEach(() => {
@@ -78,6 +79,9 @@ describe("SaltoKsAccessProvider.open", () => {
     getLocks = sinon
       .stub(SaltoKsApiClient.prototype, "getLocks")
       .resolves([saltoLock()]);
+    getIqs = sinon
+      .stub(SaltoKsApiClient.prototype, "getIqs")
+      .resolves([saltoIq()]);
     openLock = sinon
       .stub(SaltoKsApiClient.prototype, "openLock")
       .resolves({ locked_state: "unlocked" });
@@ -87,6 +91,9 @@ describe("SaltoKsAccessProvider.open", () => {
     sinon.stub(SaltoKsIqActivationService, "recordOpenSuccess").resolves();
     sinon.stub(SaltoKsIqActivationService, "recordOtpInvalid").resolves();
     sinon.stub(SaltoKsIqActivationService, "recordOtpBlocked").resolves();
+    sinon
+      .stub(SaltoKsIqActivationService, "markReactivationRequired")
+      .resolves();
   });
 
   afterEach(() => {
@@ -220,6 +227,48 @@ describe("SaltoKsAccessProvider.open", () => {
 
     expect(openLock.firstCall.args[1]).to.deep.equal({ otp: null });
     expect(SaltoKsIqActivationService.recordOpenSuccess.called).to.be.false;
+  });
+
+  it("flags restore_required at open time and books the re-activation", async () => {
+    getIqs.resolves([saltoIq({ restore_required: true })]);
+
+    try {
+      await provider.open(accessPoint, bookingContext);
+      throw new Error("expected open to throw");
+    } catch (err) {
+      expect(err).to.be.instanceOf(AccessOpenError);
+      expect(err.failureClass).to.equal("configuration");
+    }
+
+    expect(
+      SaltoKsIqActivationService.markReactivationRequired.calledOnceWith(
+        TENANT_ID,
+        IQ_ID,
+      ),
+    ).to.be.true;
+    expect(openLock.called).to.be.false;
+  });
+
+  it("refuses a known lock during the backoff without any Salto call", async () => {
+    // First open teaches the provider which IQ the lock hangs on.
+    await provider.open(accessPoint, bookingContext);
+    expect(getLocks.calledOnce).to.be.true;
+
+    // From now on the local refusal comes before any Salto request.
+    SaltoKsIqActivationService.resolveOtpForOpen.rejects(
+      AccessOpenError.temporary("backing off after otp_blocked"),
+    );
+
+    try {
+      await provider.open(accessPoint, bookingContext);
+      throw new Error("expected open to throw");
+    } catch (err) {
+      expect(err.failureClass).to.equal("temporary");
+    }
+
+    expect(getLocks.calledOnce).to.be.true;
+    expect(getIqs.calledOnce).to.be.true;
+    expect(openLock.calledOnce).to.be.true;
   });
 
   it("reports a lock Salto does not list as a configuration failure", async () => {

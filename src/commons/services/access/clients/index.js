@@ -4,7 +4,7 @@ const {
   NukiApiClient,
   DEFAULT_NUKI_API_BASE_URL,
 } = require("./nuki-api-client");
-const { SaltoKsApiClient } = require("./salto-ks-api-client");
+const { SaltoKsApiClient, extractSaltoList } = require("./salto-ks-api-client");
 const {
   SaltoKsAccessApplication,
 } = require("../../../entities/application/accessApplication");
@@ -97,7 +97,7 @@ registerTestHandler("salto-ks", {
       const states = await SaltoKsIqActivationService.getLocalStates(
         context.tenantId,
       );
-      const iqs = client._extractList(await client.getIqs());
+      const iqs = extractSaltoList(await client.getIqs());
       details.iqs = iqs.map((iq) => ({
         id: String(iq.id),
         customerReference: iq.customer_reference || "",

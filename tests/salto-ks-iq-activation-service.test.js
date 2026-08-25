@@ -170,6 +170,20 @@ describe("SaltoKsIqActivationService.startActivation", () => {
     }
     expect(TenantModel.updateOne.called).to.be.false;
   });
+
+  it("passes an unrelated 403 through instead of claiming an app legacy", async () => {
+    stubTenant(saltoApp());
+    const saltoError = new Error("permission denied");
+    saltoError.response = { status: 403, data: { ErrorCode: 1403 } };
+    fakeClient({ getIqFirstSecret: sinon.stub().rejects(saltoError) });
+
+    try {
+      await SaltoKsIqActivationService.startActivation(TENANT_ID, IQ_ID);
+      throw new Error("expected startActivation to throw");
+    } catch (err) {
+      expect(err).to.equal(saltoError);
+    }
+  });
 });
 
 describe("SaltoKsIqActivationService.completeActivation", () => {
@@ -268,6 +282,27 @@ describe("SaltoKsIqActivationService.completeActivation", () => {
     } catch (err) {
       expect(err.code).to.equal("salto_iq_invalid_pin");
     }
+  });
+
+  it("passes a non-OTP failure through instead of claiming a wrong PIN", async () => {
+    stubTenant(pendingApp());
+    const networkError = new Error("socket hang up");
+    fakeClient({ putIqPin: sinon.stub().rejects(networkError) });
+
+    try {
+      await SaltoKsIqActivationService.completeActivation(
+        TENANT_ID,
+        IQ_ID,
+        "1234",
+      );
+      throw new Error("expected completeActivation to throw");
+    } catch (err) {
+      expect(err).to.equal(networkError);
+    }
+
+    const [entry] = persistedActivations();
+    expect(entry.state).to.equal("pending_pin");
+    expect(entry.lastError).to.equal("socket hang up");
   });
 
   it("refuses to complete an activation that was never started", async () => {
@@ -578,6 +613,62 @@ describe("SaltoKsIqActivationService open bookkeeping", () => {
     expect(entry.failureCount).to.equal(0);
     expect(entry.state).to.equal("activated");
     expect(entry.lastError).to.equal(null);
+  });
+});
+
+describe("SaltoKsIqActivationService open bookkeeping (reactivation)", () => {
+  beforeEach(() => {
+    sinon.stub(TenantModel, "updateOne").resolves();
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it("marks an activation as reactivation_required", async () => {
+    stubTenant(
+      saltoApp({
+        iqActivations: [{ iqId: IQ_ID, state: "activated", lastError: null }],
+      }),
+    );
+
+    await SaltoKsIqActivationService.markReactivationRequired(
+      TENANT_ID,
+      IQ_ID,
+      "restore_required",
+    );
+
+    const [entry] = persistedActivations();
+    expect(entry.state).to.equal("reactivation_required");
+    expect(entry.lastError).to.equal("restore_required");
+  });
+});
+
+describe("SaltoKsIqActivationService.redactActivations", () => {
+  it("strips the activation entries from a tenant answer", () => {
+    const tenant = {
+      id: TENANT_ID,
+      applications: [
+        saltoApp({
+          iqActivations: [{ iqId: IQ_ID, state: "activated" }],
+        }),
+        { type: "payment", id: "other" },
+      ],
+    };
+
+    SaltoKsIqActivationService.redactActivations(tenant);
+
+    expect(tenant.applications[0]).to.not.have.property("iqActivations");
+    expect(tenant.applications[1]).to.deep.equal({
+      type: "payment",
+      id: "other",
+    });
+  });
+
+  it("tolerates a tenant without applications", () => {
+    expect(() =>
+      SaltoKsIqActivationService.redactActivations(null),
+    ).to.not.throw();
   });
 });
 
