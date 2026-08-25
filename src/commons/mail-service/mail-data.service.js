@@ -3,6 +3,9 @@ const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const QRCode = require("qrcode");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const { renderSnippet } = require("./templates/template-loader");
 const Formatters = require("../utilities/formatters");
 
@@ -110,12 +113,10 @@ class MailDataService {
       .filter((field) => field.usageOptions?.showInMail === true)
       .map((field) => ({
         caption: field.caption,
-        displayValue:
-          field.value === null ||
-          field.value === undefined ||
-          field.value === ""
-            ? null
-            : String(field.value),
+        displayValue: CustomFieldService.formatValueForDisplay(
+          field,
+          field.value,
+        ),
       }));
 
     return renderSnippet("booking-details", {

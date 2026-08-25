@@ -59,6 +59,106 @@ describe("CustomFieldService.normalizeUsageOptions (showInMail)", () => {
   });
 });
 
+describe("CustomFieldService.formatValueForDisplay", () => {
+  it("returns null for empty values regardless of inputType", () => {
+    for (const inputType of [
+      "string",
+      "text",
+      "numeric",
+      "boolean",
+      "select",
+    ]) {
+      for (const value of [null, undefined, ""]) {
+        const result = CustomFieldService.formatValueForDisplay(
+          checkoutField({ inputType }),
+          value,
+        );
+
+        assert.strictEqual(result, null);
+      }
+    }
+  });
+
+  it("formats boolean values as Ja/Nein", () => {
+    const definition = checkoutField({ inputType: "boolean" });
+
+    assert.strictEqual(
+      CustomFieldService.formatValueForDisplay(definition, true),
+      "Ja",
+    );
+    assert.strictEqual(
+      CustomFieldService.formatValueForDisplay(definition, false),
+      "Nein",
+    );
+  });
+
+  it("formats select values as the caption of the matching option", () => {
+    const definition = checkoutField({
+      inputType: "select",
+      options: [
+        { value: "opt-a", caption: "Option A" },
+        { value: "opt-b", caption: "Option B" },
+      ],
+    });
+
+    assert.strictEqual(
+      CustomFieldService.formatValueForDisplay(definition, "opt-b"),
+      "Option B",
+    );
+  });
+
+  it("keeps plain string select options as-is", () => {
+    const definition = checkoutField({
+      inputType: "select",
+      options: ["Klein", "Groß"],
+    });
+
+    assert.strictEqual(
+      CustomFieldService.formatValueForDisplay(definition, "Groß"),
+      "Groß",
+    );
+  });
+
+  it("falls back to the raw value when the select option was deleted", () => {
+    const definition = checkoutField({
+      inputType: "select",
+      options: [{ value: "opt-a", caption: "Option A" }],
+    });
+
+    assert.strictEqual(
+      CustomFieldService.formatValueForDisplay(definition, "opt-gone"),
+      "opt-gone",
+    );
+  });
+
+  it("formats numeric values as strings, keeping 0 visible", () => {
+    const definition = checkoutField({ inputType: "numeric" });
+
+    assert.strictEqual(
+      CustomFieldService.formatValueForDisplay(definition, 0),
+      "0",
+    );
+    assert.strictEqual(
+      CustomFieldService.formatValueForDisplay(definition, 12.5),
+      "12.5",
+    );
+  });
+
+  it("passes string and text values through unchanged", () => {
+    for (const inputType of ["string", "text"]) {
+      const definition = checkoutField({ inputType });
+
+      assert.strictEqual(
+        CustomFieldService.formatValueForDisplay(
+          definition,
+          "Zeile 1\nZeile 2",
+        ),
+        "Zeile 1\nZeile 2",
+      );
+    }
+  });
+});
+
 describe("MailDataService.generateBookingDetails (mailCustomFields)", () => {
   afterEach(() => {
     sinon.restore();
@@ -102,6 +202,37 @@ describe("MailDataService.generateBookingDetails (mailCustomFields)", () => {
     assert.ok(html.includes("4 Erwachsene"));
     assert.ok(!html.includes("Internes Feld"));
     assert.ok(!html.includes("geheim"));
+  });
+
+  it("renders boolean and select values human-readable", async () => {
+    stubBooking([
+      {
+        ...checkoutField({
+          id: "field-bool",
+          caption: "Barrierefrei",
+          inputType: "boolean",
+        }),
+        value: false,
+        hasValue: true,
+      },
+      {
+        ...checkoutField({
+          id: "field-select",
+          caption: "Raumgröße",
+          inputType: "select",
+          options: [{ value: "l", caption: "Großer Saal" }],
+        }),
+        value: "l",
+        hasValue: true,
+      },
+    ]);
+
+    const html = await MailDataService.generateBookingDetails("B-1", "tenant");
+
+    assert.ok(html.includes("<strong>Barrierefrei:</strong>"));
+    assert.ok(html.includes("Nein"));
+    assert.ok(html.includes("Großer Saal"));
+    assert.ok(!html.includes("nicht angegeben"));
   });
 
   it("renders flagged fields without a value as nicht angegeben", async () => {
