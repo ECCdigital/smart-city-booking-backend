@@ -95,8 +95,8 @@ class AccessInfoService {
       : null;
   }
 
-  static async testConnection(provider, config) {
-    return testProvider(provider, config);
+  static async testConnection(provider, config, context = {}) {
+    return testProvider(provider, config, context);
   }
 
   static async registerWebhook(tenantId, provider, callbackUrl) {

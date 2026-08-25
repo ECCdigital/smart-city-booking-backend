@@ -4,7 +4,16 @@ function registerTestHandler(providerId, handler) {
   testHandlers[providerId] = handler;
 }
 
-async function testProvider(providerId, config) {
+/**
+ * Runs the registered connection test of a provider.
+ *
+ * @param {string} providerId
+ * @param {Object} config The configuration under test, as the admin form
+ *   sent it - not necessarily what is stored
+ * @param {Object} [context] Where the test runs, e.g. `{ tenantId }`, for
+ *   handlers that enrich the answer with stored state
+ */
+async function testProvider(providerId, config, context = {}) {
   const handler = testHandlers[providerId];
 
   if (!handler) {
@@ -12,7 +21,7 @@ async function testProvider(providerId, config) {
   }
 
   if (typeof handler === "function") {
-    return handler(config);
+    return handler(config, context);
   }
 
   if (handler.requiredFields) {
@@ -25,7 +34,7 @@ async function testProvider(providerId, config) {
     }
   }
 
-  return handler.handler(config);
+  return handler.handler(config, context);
 }
 
 function hasTestHandler(providerId) {

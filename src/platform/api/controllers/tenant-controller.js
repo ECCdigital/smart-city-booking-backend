@@ -16,6 +16,7 @@ const ChallengeManager = require("../../../commons/data-managers/challenge-manag
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
 const SupervisorNotificationService = require("../../../commons/services/supervisor-notification-service");
 const AccessAppLifecycleService = require("../../../commons/services/access/access-app-lifecycle-service");
+const SaltoKsIqActivationService = require("../../../commons/services/access/salto-ks-iq-activation-service");
 const {
   validateMailSnippets,
   validateMailSubjects,
@@ -429,10 +430,11 @@ class TenantController {
           }
         });
 
-        await AccessAppLifecycleService.syncWebhooks(
-          await TenantManager.getTenant(request.body.id),
-          tenant,
-        );
+        const previousTenant = await TenantManager.getTenant(request.body.id);
+        // The IQ activations are backend-owned runtime state - a tenant
+        // update never writes them, whatever the admin UI round-tripped.
+        SaltoKsIqActivationService.preserveActivations(previousTenant, tenant);
+        await AccessAppLifecycleService.syncWebhooks(previousTenant, tenant);
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
