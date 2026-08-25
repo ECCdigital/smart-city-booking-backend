@@ -79,63 +79,108 @@ The same calls succeeded a minute later unchanged. A `PATCH` response also once
 showed `roles: []` while the following `GET` showed the role. → The job must
 retry these two calls; the errors are not permanent.
 
-## 5. The PIN did not open the door — open question
+## 5. An access group without a time schedule never reaches the lock
 
-Server side the recipe is complete and verified via the API: guest
-`subscription_state: subscribed`, `use_pin: true`, PIN key present, member of an
-access group that contains the lock, no time schedule. The keypad still rejects
-it (tested by hand at the door, 2026-08-18, six attempts spread over 20
-minutes).
+Measured at the door on 2026-08-18. This is the single most important
+operational fact in this document: **a `site_guest` PIN only works if the access
+group carries a time schedule.** Without one, the group is never rolled out to
+the lock, and the keypad treats the PIN as unknown.
 
-The entry log (`GET /v1.1/sites/{id}/entries`) distinguishes the two failures
-precisely:
+The A/B is clean — same guests, same group, same lock, same PINs, one variable:
 
-| Attempt                                    | `event_category` | `event_detail` | `user_alias`                | Reading                              |
-| ------------------------------------------ | ---------------- | -------------- | --------------------------- | ------------------------------------ |
-| Guest #2, PIN ~8 min old, `use_pin: false` | `lock_rejected`  | `null`         | `Booking wayfinder-probe-2` | Lock **knew** the PIN, denied access |
-| Guest #3, PIN 2–8 min old, `use_pin: true` | `lock_rejected`  | `no_access`    | `null`                      | Lock did **not** know the PIN        |
+| local time   | event                                         | user resolved to                     |
+| ------------ | --------------------------------------------- | ------------------------------------ |
+| 11:21–11:24  | `lock_rejected` `no_access`                   | `ee8f17b4-…` (sentinel, see below)   |
+| **11:26:38** | **time schedule created on the access group** | —                                    |
+| 11:30:12     | `lock_opened` `pin_code`                      | guest #4 `Booking wayfinder-probe-4` |
+| 11:30:24     | `lock_opened` `pin_code`                      | guest #3 `Booking wayfinder-probe-3` |
 
-So the lock does learn PINs (it knew guest #2's), but it had still not learned
-guest #3's PIN **20 minutes** after it was issued. This is therefore not a short
-propagation delay that a bit of lead time would cover — something else gates it.
-The IQ reports `data_sync_state: "not_synced"` throughout, and
-`GET /locks/{id}/offline_keys` is empty while the lock claims
-`offline_access_keys_count: 1`.
+Guest #3's PIN was 51 minutes old and had been rejected eight times; it opened
+3m34s after the schedule appeared. Three distinct PINs issued at three different
+times all failed before, all worked after.
 
-What differed between the two guests is not obviously causal and is worth
-testing next: guest #2 was in the access group **while that group carried a time
-schedule** (created 10:25, deleted 10:37); guest #3 has never had one. Other
-candidates: the IQ needs an explicit sync or activation, `use_pin` needs time to
-propagate, or Sallis/`blue_net` locks handle PINs differently from Salto's own.
+`POST /v1.1/sites/{id}/access_groups/{ag}/time_schedules` with every weekday
+`true`, `start_time: "00:00"`, `end_time: "23:59"` is the "always" schedule and
+is enough. → **The provider must create a time schedule when it lazily creates
+an AccessPoint's access group.** A group without one silently grants nothing.
 
-**This is the decisive open question for the whole Guest+PIN design**: if a
-freshly issued PIN needs minutes (or a manual sync) to reach the door, a
-just-in-time grant at `accessFrom` cannot work — the grant needs lead time, or
-the PIN path is not viable at all for short-notice bookings. It has its own
-ticket.
+### Propagation latency — the constraint on the just-in-time grant
 
-Left standing for that test: guest `Booking wayfinder-probe-3`
-(site user `034d50b8-43db-4e55-bdf0-42045be11f56`, platform user
-`996bb445-955d-437e-8a99-5458afcd3d3b`), **PIN `525149`**, valid 7 days, in
-access group `zzz-wayfinder-probe (delete me)`
-(`04f5784d-7428-4ec4-b6e9-1cd5e64e7379`) which holds `Tür 01`. Delete both when
-the question is answered.
+Into an **already scheduled** group, a fresh guest is usable at the door within
+**45 seconds**: guest #6 granted 11:34:19.9 (four API calls, 4.0 s server side),
+door opened 11:35:04. That 45 s is an upper bound — the first keypad attempt was
+not necessarily immediate.
+
+So the just-in-time grant at `accessFrom` is viable, with about a minute of lead
+time. What is slow is creating the _schedule_, not adding the _member_, and the
+schedule is per AccessPoint and created once.
+
+### Reading the entry log correctly
+
+`GET /v1.1/sites/{id}/entries` carries 23 fields; reading only
+`event_category`/`event_detail`/`user_alias` is what produced the earlier wrong
+diagnosis. The fields that matter:
+
+- `access_by` — `pin_code`, `inside_handle`, … Always says how the door was tried.
+- `user_id` — the **platform** user id (not the site-user id), resolvable
+  against `GET /sites/{id}/users` → `user.id`.
+- `event_detail` — the precise reason: `no_access`, `suspended`, `offline`, or
+  `null`.
+
+**`user_id: ee8f17b4-701b-4aa6-9f1c-22f71cc61ca6` is a sentinel, not a user.**
+It resolves to no site user and no platform user, and three different unknown
+PINs all produced it. On this site it means "PIN not known to the lock". Do not
+mistake it for a real identity.
+
+Two rejection shapes seen, and they mean different things:
+
+| `event_detail` | `user_alias` | meaning                                             |
+| -------------- | ------------ | --------------------------------------------------- |
+| `no_access`    | `null`       | PIN unknown to the lock (sentinel `user_id`)        |
+| `null`         | set          | lock knows the user, denies — e.g. `use_pin: false` |
+| `suspended`    | `null`       | user known, `subscription_state: suspended`         |
+
+### What this rules out
+
+All of these were suspected and are refuted by the same measurement — a
+`site_user` PIN opened this lock repeatedly while every one of them held:
+
+- **Propagation delay / lead time.** PINs reach this lock in under a minute.
+- **`data_sync_state: "not_synced"` on the IQ.** It reads `not_synced` in the
+  steady state, including during every successful open. There is also no way to
+  act on it: `data_sync_state` appears only on `IqResponse`, and the only write
+  path is `PUT /iqs/{id}/tree`, which needs `HARDWARE_MANAGE` **and** an OTP.
+- **Sallis / `blue_net` handling PINs differently.** Same lock, same vendor.
+- **The `site_guest` role lacking PIN rights.** Guests open fine once scheduled.
+- **`offline_keys`.** Irrelevant to PINs — the spec's `excluded=true` filter
+  says candidates "can't be pin keys", and the list holds only the two NFC tags.
+  `offline_access_keys_count: 1` does not refer to a PIN.
 
 ## 6. The working recipe (server side)
 
+Once per AccessPoint, when its access group is lazily created:
+
 ```
-POST   /v1.2/sites/{siteUuid}/guests                  {alias, expires_at}   -> site_user_id + user.id
-PATCH  /v1.2/sites/{siteUuid}/users/{site_user_id}    {use_pin: true}
-POST   /v1.2/sites/{siteUuid}/access_groups           {customer_reference}  -> access_group_id   (once per AccessPoint)
-POST   /v1.2/sites/{siteUuid}/access_groups/{ag}/locks {lock_id}                                 (once per AccessPoint)
+POST /v1.2/sites/{siteUuid}/access_groups             {customer_reference}  -> access_group_id
+POST /v1.2/sites/{siteUuid}/access_groups/{ag}/locks  {lock_id}
+POST /v1.1/sites/{siteUuid}/access_groups/{ag}/time_schedules
+     {monday…sunday: true, start_time: "00:00", end_time: "23:59"}          <- REQUIRED, see §5
+```
+
+Per booking, at grant time:
+
+```
+POST   /v1.2/sites/{siteUuid}/guests                   {alias, expires_at}  -> site_user_id + user.id
+PATCH  /v1.2/sites/{siteUuid}/users/{site_user_id}     {use_pin: true}
 POST   /v1.2/sites/{siteUuid}/access_groups/{ag}/users {user_id: user.id}   <- platform user id!
-PUT    /v1.2/sites/{siteUuid}/users/{site_user_id}/pin {}                   -> "525149"
+PUT    /v1.2/sites/{siteUuid}/users/{site_user_id}/pin {}                   -> "618263"
 …
 DELETE /v1.2/sites/{siteUuid}/users/{site_user_id}                          -> 202, seat freed
 ```
 
-Check `subscription_state === "subscribed"` after step 1; retry steps 2, 5 and 6
-on 403 `2203` / 404 `2202`.
+Check `subscription_state === "subscribed"` on the created guest; retry the
+`PATCH`, the group join and the `PUT /pin` on 403 `2203` / 404 `2202`. Allow
+~1 minute between the grant and `accessFrom` (§5).
 
 ## 7. Where the existing code does not match the API
 
@@ -170,7 +215,164 @@ on 403 `2203` / 404 `2202`.
 - `PUT /users/{id}/pin` was also run against two pre-existing site users
   (Marvin's own site user → `900412`, one `site_user` → `867353`). Their
   previous PINs no longer apply. Accepted as harmless on the test site.
-- Left behind on purpose: guest `Booking wayfinder-probe-3` and access group
-  `zzz-wayfinder-probe (delete me)` (see §5). Everything else created during the
-  measurement was deleted; the site is back at `active_user_amount: 6` plus that
-  one guest.
+- Guests `Booking wayfinder-probe-2` … `-6` and the access group
+  `zzz-wayfinder-probe (delete me)` (with its time schedule) were deleted after
+  the door test on 2026-08-18. The site is back at `active_user_amount: 5` with
+  `Alle Türen` as its only access group.
+- The system user's IQ activation was created during this measurement and is
+  now unusable: its PIN was changed and can no longer be read, so no valid OTP
+  can be produced and the activation cannot be reset via the API (§9). It needs
+  resetting through the Salto KS app or support before remote open can be
+  retested.
+- During the door test the site briefly sat at 10/10 seats. Nothing was created
+  while it did, so no guest was silently suspended (§3).
+
+## 9. Remote open needs an activated IQ — and the activation is a one-way door
+
+Measured on 2026-08-18 against IQ `5dfdc54e-…` ("IQ 01", revision 2.0,
+`otp_enabled: true`). At the time of this measurement no remote open had ever
+succeeded. **Resolved 2026-08-25: the API path works — every failure below was
+self-inflicted** (see the resolution at the end of this section). What follows
+is the activation contract, which is solid, plus the wall it ran into and why
+that wall was of our own making.
+
+### The activation, step by step
+
+| #   | Call                                                  | Answer                                                                                                                                                  |
+| --- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `GET /v1.2/sites/{site}/iqs/{iq}/secret`              | **200 with the secret, no `otp` needed** — but only _before_ activation. Afterwards `403` `2203` "Cannot get first secret for an already activated Iq." |
+| 2   | `GET /v1.2/sites/{site}/iqs/{iq}/pin?send_email=true` | `204`, PIN mailed to the calling user. The IQ then appears in `GET /v1.2/me/{site}/activated_iqs` with `activated: false`                               |
+| 3   | `PUT /v1.2/sites/{site}/iqs/{iq}/pin` `{otp, delta}`  | `204` → `activated: true` with an `activation_date`. Until this happens, the door answers `pin_not_changed`                                             |
+
+Step 1 settles a question the earlier research left open: there is no
+chicken-and-egg. The first secret is handed out for free, so the Salto-app
+detour that Zapfloor and Booking Experts document is **not** required. The
+price is that it is a single-shot read — **capture the secret on that first
+call or the IQ is unusable for remote open.**
+
+`delta` is undocumented. It is a digit-wise mod-10 difference, applied as
+**`new = old − delta`**: PIN `6596` with `delta 6995` became `0601`, not `2481`.
+
+### The OTP formula, confirmed
+
+`MD5(YYYYMMDDHHMMSS_UTC + secret + pin)`, first 5 hex characters, **whole-second
+UTC, no rounding**. Confirmed because `PUT …/iqs/{iq}/pin` validates the OTP
+before applying the change: with the wrong PIN it answers `otp_invalid`, with
+the right one `204`, fifteen seconds apart. A `delta` of `"0000"` therefore
+makes that endpoint a **side-effect-free OTP oracle** — useful, because the
+alternative is testing against a physical door.
+
+`otp_blocked` arrives after **exactly 8** failed attempts (`403`, `ErrorCode
+3102`), and clears on its own. That is far more forgiving than Salto's support
+pages suggest. Failed OTPs never reach the lock: not one attempt shows up in
+`GET /v1.1/sites/{site}/entries`.
+
+### Where it stops
+
+`PATCH /v1.2/sites/{site}/locks/{lock}/locking` rejected every self-computed OTP
+with `otp_invalid` — including the exact computation the cloud had accepted
+seconds earlier on `PUT …/pin`. Ruled out: the changed PIN, the mailed PIN, the
+opposite delta direction (also retried hours later, outside the propagation
+window), and an `Europe/Berlin` timestamp instead of UTC.
+
+Worse, a combination proven valid at 09:59:53 was rejected at 12:25 with the
+activation untouched (`activated: true`, same `activation_date`). Whether the
+PIN or the secret moved cannot be told from outside, because **neither can be
+read again**:
+
+- `GET …/iqs/{iq}/pin` → `403` `command_forbidden`
+- `GET …/iqs/{iq}/secret` → `403` `2203`
+- `DELETE …/iqs/{iq}/pin/{user_id}` → `400` `1100` **"The otp field is required."** (with the platform id and with the site-user id)
+
+So the reset that would break the deadlock itself needs a valid OTP. **A lost
+IQ-PIN cannot be recovered through the Connect API.** Recovery has to go through
+the Salto KS app/web UI, a second admin who is already activated, or Salto
+support.
+
+**Consequence for the provider.** Do not advertise a `remote` capability on the
+strength of `otp_enabled` alone (§7): remote needs an IQ the backend has
+activated itself (resolution below; `docs/specs/salto-ks-remote-open.md`). And
+the activation must persist PIN and secret atomically at the moment of
+activation — there is no second chance at either.
+
+### Second attempt, 2026-08-19: fresh user, remote right, Salto's own web app — still `otp_invalid`
+
+The first attempt left two excuses open: the system user had no remote-locking
+permission, and its activation had been touched twice. Both are gone now, and the
+result is the same. Measured with `.scratch/diag/salto-remote-door-proof.js`
+(log in `salto-remote-door-proof.log`):
+
+| UTC      | Call                                                                                                          | Answer                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 06:58    | new system user (`remote_access: true`, custom role with `REMOTE_LOCKING_*`, never activated): `GET …/secret` | 200, secret `6F6A…` (≠ the old user's `9B81…` → the secret is per user, and already creates the `activated: false` entry in `activated_iqs`) |
+| 07:02    | `GET …/pin?send_email=true`                                                                                   | 204, PIN `5109` by mail                                                                                                                      |
+| 07:05:03 | `PUT …/pin {otp(S, 5109), delta 9751}`                                                                        | **204**, `activated: true`                                                                                                                   |
+| 07:05:04 | `PATCH …/locks/{lock}/locking {unlocked, otp(S, 6458)}`                                                       | 400 `3102 otp_invalid`                                                                                                                       |
+| 07:13    | same code typed into **app-accept.saltoks.com** (same user)                                                   | `otp_invalid`                                                                                                                                |
+| 07:14    | locking with the mailed PIN `5109`                                                                            | `otp_invalid`; next call `otp_blocked`                                                                                                       |
+| 07:20    | `GET …/pin?send_email=true` after activation                                                                  | 403 `command_forbidden`                                                                                                                      |
+| 07:37    | `GET …/secret?otp=otp(S, 6458)`                                                                               | `otp_invalid` (while `PUT …/pin` still said `otp_blocked` → the block is kept per command)                                                   |
+| 08:09    | DevTools: what the web app sends                                                                              | `PATCH /v1.1/sites/{site}/locks/{lock}/locking`, body `{"locked_state":"unlocked","otp":"…"}` — byte for byte our request (we use v1.2)      |
+| 09:59    | locking with PIN `4850` (= old **+** delta, in case the IQ applies the delta the other way round)             | `otp_invalid`                                                                                                                                |
+| 10:00    | oracle `PUT …/pin delta 0000` with `6458`, then `5109`                                                        | `otp_invalid` twice, then `otp_blocked` after the **third** failure                                                                          |
+
+Ruled out today: the missing permission, the request shape (Salto's own client
+sends the same bytes), a second "real" secret behind `?otp=`, the direction of
+`delta`, a stale code (the web-app code was 67 s old, well inside Salto's 3-minute
+window). An IQ clock drift is unlikely — the entry log's IQ timestamps match our
+clock to the second. What remains is a mismatch between the cloud's and the IQ's
+view of this user's activation (`data_sync_state: not_synced`, no warning in the
+web app) — or an OTP derivation that differs from the documented one. That cannot
+be told apart from outside: the Salto KS mobile app, which would show the code
+the IQ expects, exists only for production.
+
+Two more facts for the operator: the combination the cloud accepted at
+activation is rejected a few hours later (both days), so PIN + secret are not a
+durable credential in this environment; and `otp_blocked` arrived after 3, not
+8, consecutive failures in the second round — budget one attempt per action.
+
+Also observed: from ~08:10 to ~10:00 UTC both accept identity servers
+(`identity-acc.eu.my-clay.com`, `clp-accept-identityserver.my-clay.com`)
+answered 404 on every path while production identity was fine — accept is not
+a production-grade environment, plan test sessions accordingly.
+
+**Consequence (as of 2026-08-19).** Remote open looked dead on accept; the
+suspected ways forward were Salto support or a production test with the real
+app. Both turned out to be unnecessary — see the resolution below.
+
+### Resolution, 2026-08-25 — the door opens; both riddles explained
+
+Proven at the door (fresh, never-activated system user with a reachable
+mailbox; run ~07:25 UTC; remote opening confirmed in Salto's own web app):
+
+| #   | Call                                                            | Answer                            |
+| --- | --------------------------------------------------------------- | --------------------------------- |
+| 1   | `GET …/iqs/{iq}/secret` (no OTP, user never activated)          | 200, first secret `S`             |
+| 2   | `GET …/iqs/{iq}/pin?send_email=true`                            | 204, initial PIN `P` mailed       |
+| 3   | `PUT …/iqs/{iq}/pin {otp: otp(S, P), delta: "0000"}`            | 204, `activated: true` — API-side |
+| 4   | `PATCH /v1.2/…/locks/{lock}/locking {unlocked, otp: otp(S, P)}` | **200 — the door opens remotely** |
+
+The self-computed OTP formula (§ above) is correct and sufficient. The two
+riddles this section left open dissolve into two self-inflicted causes:
+
+- **The secret is per user and the app rotates it.** Activating the user in
+  the Salto mobile app performs its own handshake and replaces the secret; the
+  app keeps the new one and no Connect endpoint ever returns it. A stored
+  first secret then fails every locking call with `otp_invalid` — silently,
+  permanently, with the activation looking untouched from outside. That is why
+  a combination "proven valid at 09:59" was dead at 12:25: the app had been in
+  play. The fix is a rule, not a call: **the system user is activated via the
+  API only, never via the app** (`docs/adr/0002-salto-iq-activation-via-api-only.md`).
+- **A real `delta` makes the PIN ambiguous.** The 08-19 run activated with
+  `delta: 9751`; afterwards `PUT …/pin` (cloud-side validation) accepted OTPs
+  that `PATCH …/locking` (IQ-side validation) rejected — the two sides
+  disagreed about which PIN now applied. `delta: "0000"` keeps the PIN equal
+  to the mailed one and removes the ambiguity; with it, the same `(S, P)`
+  passes both endpoints.
+
+Follow-ups: the first secret **survives** the API activation (step 3), so
+`(S, P)` is a durable credential as long as the app stays away; and
+`PUT …/pin` with `delta: "0000"` remains the side-effect-free OTP oracle. The
+full integration path (data model, wizard, capability rule, error handling) is
+specified in `docs/specs/salto-ks-remote-open.md`; the positive run is
+documented as an addendum in `docs/research/salto-ks-remote-open-door-proof.md`.

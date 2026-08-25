@@ -14,6 +14,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Changed
 
+- Docs: Salto KS remote open specified after the successful door proof — integration spec `docs/specs/salto-ks-remote-open.md`, ADR 0002 (IQ activation via API only, never via the app), ADR 0001 status updated to proven, glossary entries corrected
+- Docs: Salto KS research corrected to the proven state — API contract §9 resolution (app activation rotates the secret, real `delta` causes the PIN ambiguity; the API path works), positive-run addendum in the door-proof doc, remote-open status in the access-points tracking board
 - Salto KS access app: the free-text `apiBaseUrl` is replaced by `environment` (`accept` | `production`, default `accept`); the backend derives Connect API and identity server from it (accept: `clp-accept-user.my-clay.com` + `identity-acc.eu.my-clay.com`, production: `connect.my-clay.com` + `identity.eu.my-clay.com`, overridable via `SALTO_{ACCEPT,PRODUCTION}_{API_BASE_URL,IDENTITY_URL}`; the global `SALTO_IDENTITY_URL` is gone). A stored legacy `apiBaseUrl` is tolerated and only read to tell the environment. `POST /api/:tenant/access-apps/salto-ks/test` accepts `environment` and now reports the identity server's `error`/`error_description` (e.g. `invalid_client: …`) or the Connect API `Message` instead of the bare HTTP status
 
 ### Fixed

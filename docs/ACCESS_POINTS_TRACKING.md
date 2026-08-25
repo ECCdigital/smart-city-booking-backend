@@ -137,28 +137,28 @@ mitgebaut.
 
 ### B1 – Salto Tenant-Application
 
-| #    | Aufgabe                                                                                      | Plan-Ref  | Status | Notiz                                                                                                                                                                    |
-| ---- | -------------------------------------------------------------------------------------------- | --------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #    | Aufgabe                                                                                      | Plan-Ref  | Status | Notiz                                                                                                                                            |
+| ---- | -------------------------------------------------------------------------------------------- | --------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | B1.1 | `SaltoKsAccessApplication` (`clientId`/`clientSecret` verschlüsselt, `siteId`, `apiBaseUrl`) | Phase 2.1 | ✅     | `clientSecret`/System-User-`password` encrypt/decrypt, Default `https://clp-accept-user.saltoks.com`, `id: "salto-ks"` registriert, Factory grün |
 
 ### B2 – Salto API-Client
 
-| #    | Aufgabe                                                                  | Plan-Ref | Status | Notiz                                                                                                                                                           |
-| ---- | ------------------------------------------------------------------------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B2.1 | `salto-ks-api-client.js`: OAuth2 Password-Grant + Token-Caching          | Phase 3  | ✅     | `/connect/token`, In-Memory-Cache + 60s-Refresh-Skew, Connect-API- und Identity-URL folgen aus `environment` (accept/production) der App                        |
-| B2.2 | `getLocks` / `openLock`                                                  | Phase 3  | ✅     | `GET /v1.2/sites/:siteId/locks`, `PATCH /v1.2/sites/:siteId/locks/:lockId/locking`, `getAccessPoints` Alias; `siteId` wird gegen Salto-Site-UUID aufgelöst       |
-| B2.3 | `createUser` / `assignAccess` / `revokeAccess` / `deleteUser`            | Phase 3  | ✅     | Connect-API User/Access-Lifecycle, optionale PIN bei `assignAccess`                                                                                             |
-| B2.4 | `subscribeNotifications` / `unsubscribeNotifications` / `testConnection` | Phase 3  | ✅     | Subscriptions + `register/unregisterNotification` Aliases; `testConnection` = Token + Locks                                                                     |
-| B2.5 | Salto in `access-client-registry` / `index.js` registrieren              | Phase 3  | ✅     | `salto-ks` Client + Test-Handler registriert, decrypt-aware `extractArgs`                                                                                       |
+| #    | Aufgabe                                                                  | Plan-Ref | Status | Notiz                                                                                                                                                      |
+| ---- | ------------------------------------------------------------------------ | -------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B2.1 | `salto-ks-api-client.js`: OAuth2 Password-Grant + Token-Caching          | Phase 3  | ✅     | `/connect/token`, In-Memory-Cache + 60s-Refresh-Skew, Connect-API- und Identity-URL folgen aus `environment` (accept/production) der App                   |
+| B2.2 | `getLocks` / `openLock`                                                  | Phase 3  | ✅     | `GET /v1.2/sites/:siteId/locks`, `PATCH /v1.2/sites/:siteId/locks/:lockId/locking`, `getAccessPoints` Alias; `siteId` wird gegen Salto-Site-UUID aufgelöst |
+| B2.3 | `createUser` / `assignAccess` / `revokeAccess` / `deleteUser`            | Phase 3  | ✅     | Connect-API User/Access-Lifecycle, optionale PIN bei `assignAccess`                                                                                        |
+| B2.4 | `subscribeNotifications` / `unsubscribeNotifications` / `testConnection` | Phase 3  | ✅     | Subscriptions + `register/unregisterNotification` Aliases; `testConnection` = Token + Locks                                                                |
+| B2.5 | Salto in `access-client-registry` / `index.js` registrieren              | Phase 3  | ✅     | `salto-ks` Client + Test-Handler registriert, decrypt-aware `extractArgs`                                                                                  |
 
 ### B3 – Salto Access-Provider
 
-| #    | Aufgabe                                                                        | Plan-Ref  | Status | Notiz                                                                                                                  |
-| ---- | ------------------------------------------------------------------------------ | --------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
-| B3.1 | `salto-ks-access-provider.js`: `open` / `getStatus`                            | Phase 4.3 | ✅     | `open` = `openLock`; `getStatus` aus Locks-Liste (online/Batterie); kein remote `close` (Auto-Lock)                    |
-| B3.2 | `grantAuthorization` (createUser + assignAccess + PIN) / `revokeAuthorization` | Phase 4.3 | ✅     | grant gibt `authorizationId(=accessId)`/`saltoUserId`/`pin` zurück; revoke = `revokeAccess` + best-effort `deleteUser` |
-| B3.3 | Webhook (`subscribeNotifications` / `parseWebhook` / `verifyWebhookSignature`) | Phase 4.3 | ✅     | `register/unregisterWebhook` via Subscriptions; HMAC-Signaturprüfung (`x-salto-signature`)                             |
-| B3.4 | Registrierung `salto-ks` in `register-access-providers.js`                     | Phase 4.4 | ✅     | Provider-Registry-Check grün; inkl. `listAccessPoints`/`getSupportedModes` für UI                                      |
+| #    | Aufgabe                                                                        | Plan-Ref  | Status | Notiz                                                                                                                                                               |
+| ---- | ------------------------------------------------------------------------------ | --------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B3.1 | `salto-ks-access-provider.js`: `open` / `getStatus`                            | Phase 4.3 | ✅     | `open` = `openLock`; `getStatus` aus Locks-Liste (online/Batterie); kein remote `close` (Auto-Lock). Remote-Open braucht serverseitigen OTP + IQ-Aktivierung → B5.2 |
+| B3.2 | `grantAuthorization` (createUser + assignAccess + PIN) / `revokeAuthorization` | Phase 4.3 | ✅     | grant gibt `authorizationId(=accessId)`/`saltoUserId`/`pin` zurück; revoke = `revokeAccess` + best-effort `deleteUser`                                              |
+| B3.3 | Webhook (`subscribeNotifications` / `parseWebhook` / `verifyWebhookSignature`) | Phase 4.3 | ✅     | `register/unregisterWebhook` via Subscriptions; HMAC-Signaturprüfung (`x-salto-signature`)                                                                          |
+| B3.4 | Registrierung `salto-ks` in `register-access-providers.js`                     | Phase 4.4 | ✅     | Provider-Registry-Check grün; inkl. `listAccessPoints`/`getSupportedModes` für UI                                                                                   |
 
 ### B4 – Salto-spezifischer Lifecycle & Webhook-Route
 
@@ -171,15 +171,16 @@ mitgebaut.
 
 ### B5 – Migration / Aktivierung Salto
 
-| #    | Aufgabe                                         | Plan-Ref   | Status | Notiz |
-| ---- | ----------------------------------------------- | ---------- | ------ | ----- |
-| B5.1 | Salto in Staging mit echter Site/Sandbox testen | Phase 9/10 | ⬜     |       |
+| #    | Aufgabe                                                                   | Plan-Ref   | Status | Notiz                                                                                                                                                                                            |
+| ---- | ------------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| B5.1 | Salto in Staging mit echter Site/Sandbox testen                           | Phase 9/10 | ⬜     |                                                                                                                                                                                                  |
+| B5.2 | Remote-Open per Connect API umsetzen (IQ-Aktivierung, serverseitiger OTP) | Spec       | ⬜     | Weg am Türbeweis **bewiesen** (2026-08-25, Accept-Tür remote geöffnet); Spec `docs/specs/salto-ks-remote-open.md` + ADR 0002 (Aktivierung nur per API, nie App; Client-`otp`-Parameter entfällt) |
 
 **✅ Definition of Done Meilenstein B (Salto):**
 
 - [ ] Bookable kann Salto-Tür zugewiesen bekommen
 - [ ] Buchung legt Salto-User an, weist Zugang + PIN zu
-- [ ] Remote-Open funktioniert
+- [ ] Remote-Open funktioniert (Weg bewiesen + Spec liegt vor, siehe B5.2 — Umsetzung offen)
 - [ ] Webhook-Events landen in `accessLogs`
 - [ ] Revoke entfernt Access + User (Cleanup greift bei Fehlern)
 
