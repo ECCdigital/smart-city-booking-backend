@@ -99,6 +99,7 @@
               oneOf:
                 - $ref: "#/components/schemas/OpenSuccess"
                 - $ref: "#/components/schemas/OpenDenied"
+                - $ref: "#/components/schemas/OpenFailed"
       "401":
         description: Not authenticated
       "403":
@@ -157,6 +158,7 @@
               oneOf:
                 - $ref: "#/components/schemas/OpenSuccess"
                 - $ref: "#/components/schemas/OpenDenied"
+                - $ref: "#/components/schemas/OpenFailed"
       "401":
         description: Not authenticated
       "403":
@@ -406,11 +408,6 @@ components:
         Everything the client contributes to an open attempt. All fields are
         optional; a request without a body is an open without evidence.
       properties:
-        otp:
-          type: string
-          nullable: true
-          description: |
-            One-time password, for providers and locks that ask for one.
         evidence:
           type: array
           description: |
@@ -500,6 +497,33 @@ components:
                   - evidence_missing
                   - evidence_invalid
               example: ["evidence_missing"]
+
+    OpenFailed:
+      type: object
+      description: |
+        The attempt passed every check but the provider could not open the
+        door. The guest is told only the failure class - provider details stay
+        in the access audit and the admin view.
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            openFailure:
+              type: string
+              description: |
+                `temporary` - opening is not possible right now, trying again
+                in a few minutes may work (e.g. a rejected one-time password
+                or an offline lock). `configuration` - opening will not work
+                until the administration fixes the setup (e.g. a Salto KS IQ
+                that is not activated or a system user without the remote
+                right).
+              enum:
+                - temporary
+                - configuration
+              example: temporary
 
     ErrorResponse:
       type: object

@@ -131,7 +131,9 @@ class TenantController {
           (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
           (await PermissionService._isInstanceOwner(user.id))
         ) {
-          allowedTenants.push(tenant);
+          allowedTenants.push(
+            AccessAppLifecycleService.redactBackendState(tenant),
+          );
         }
       }
       response.status(200).send(allowedTenants);
@@ -168,7 +170,9 @@ class TenantController {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );
-          response.status(200).send(tenant);
+          response
+            .status(200)
+            .send(AccessAppLifecycleService.redactBackendState(tenant));
         } else {
           response.sendStatus(403);
         }
@@ -429,14 +433,17 @@ class TenantController {
           }
         });
 
-        await AccessAppLifecycleService.syncWebhooks(
-          await TenantManager.getTenant(request.body.id),
-          tenant,
-        );
+        const previousTenant = await TenantManager.getTenant(request.body.id);
+        // Backend-owned access-app state (e.g. Salto IQ activations) is
+        // neither written by a tenant update nor sent back in the answer.
+        AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
+        await AccessAppLifecycleService.syncWebhooks(previousTenant, tenant);
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
-        response.status(200).send(updatedTenant);
+        response
+          .status(200)
+          .send(AccessAppLifecycleService.redactBackendState(updatedTenant));
       } else {
         logger.warn(`User ${user?.id} not allowed to update tenant`);
         response.sendStatus(403);

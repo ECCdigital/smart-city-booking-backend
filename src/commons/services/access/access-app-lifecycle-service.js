@@ -12,6 +12,35 @@ const logger = bunyan.createLogger({
 });
 
 class AccessAppLifecycleService {
+  /**
+   * Restores the backend-owned runtime state of access applications on a
+   * tenant that is about to be stored - state the admin UI neither writes
+   * nor may drop. Today that is the Salto KS IQ activations.
+   *
+   * @param {Object|null} previousTenant The stored tenant
+   * @param {Object} nextTenant The tenant about to be stored, mutated
+   * @returns {Object} `nextTenant`
+   */
+  static preserveBackendState(previousTenant, nextTenant) {
+    const SaltoKsIqActivationService = require("./salto-ks-iq-activation-service");
+    return SaltoKsIqActivationService.preserveActivations(
+      previousTenant,
+      nextTenant,
+    );
+  }
+
+  /**
+   * Removes the backend-owned runtime state of access applications from a
+   * tenant answer - it never leaves through the API, not even encrypted.
+   *
+   * @param {Object|null} tenant The tenant about to be sent, mutated
+   * @returns {Object|null} `tenant`
+   */
+  static redactBackendState(tenant) {
+    const SaltoKsIqActivationService = require("./salto-ks-iq-activation-service");
+    return SaltoKsIqActivationService.redactActivations(tenant);
+  }
+
   static async syncWebhooks(previousTenant, nextTenant) {
     if (!Array.isArray(nextTenant?.applications)) {
       return nextTenant;
