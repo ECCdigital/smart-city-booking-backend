@@ -6,6 +6,7 @@ const { Schema } = mongoose;
 const BookableSchema = new Schema(bookableSchemaDefinition);
 
 BookableSchema.index({ tenantId: 1, id: 1 });
+BookableSchema.index({ tenantId: 1, eventId: 1, type: 1, isPublic: 1 });
 
 function hasActiveIfbsLocker(doc) {
   return (

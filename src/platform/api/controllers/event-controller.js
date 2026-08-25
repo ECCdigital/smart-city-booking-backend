@@ -1,4 +1,7 @@
 const EventManager = require("../../../commons/data-managers/event-manager");
+const {
+  BookableManager,
+} = require("../../../commons/data-managers/bookable-manager");
 const { Event } = require("../../../commons/entities/event/event");
 const { RolePermission } = require("../../../commons/entities/role/role");
 const bunyan = require("bunyan");
@@ -16,6 +19,46 @@ const logger = bunyan.createLogger({
  * Web Controller for Events.
  */
 class EventController {
+  static async getPublicEventTickets(request, response) {
+    try {
+      const tenant = request.params.tenant;
+      const eventId = request.params.id;
+      const event = await EventManager.getEvent(eventId, tenant);
+
+      if (!event || event.isPublic !== true) {
+        response.sendStatus(404);
+        return;
+      }
+
+      const requestedOffset = Number.parseInt(request.query.offset, 10);
+      const requestedLimit = Number.parseInt(request.query.limit, 10);
+      const offset = Number.isInteger(requestedOffset)
+        ? Math.max(requestedOffset, 0)
+        : 0;
+      const limit = Number.isInteger(requestedLimit)
+        ? Math.min(Math.max(requestedLimit, 1), 50)
+        : 10;
+      const { tickets, total } =
+        await BookableManager.getPublicEventBookablesPage(tenant, eventId, {
+          offset,
+          limit,
+        });
+
+      response.status(200).send({
+        tickets,
+        pagination: {
+          offset,
+          limit,
+          total,
+          hasMore: offset + tickets.length < total,
+        },
+      });
+    } catch (err) {
+      logger.warn(err);
+      response.status(500).send("could not get event tickets");
+    }
+  }
+
   static async getEvents(request, response) {
     try {
       const tenant = request.params.tenant;
