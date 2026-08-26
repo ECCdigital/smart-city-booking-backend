@@ -19,9 +19,13 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 - `GET /media/:id/file?size=<preset>` serves variants and degrades to the next larger variant and finally to the original, so a preset choice never 404s; an unknown preset name is a 400. SVG originals are served as a download
 - Caching matrix for media delivery: public originals immutable for a year, public variants cacheable for a day with a strong ETag from the variant checksum, internal media `private, no-cache` with an ETag, booking documents `private, no-store` — including `304` handling, in a shared helper (`commons/utilities/cache-headers.js`)
 
+- Role group `manageMedia` (the usual seven booleans, ownership is the uploader) and the admin interface `media`; media create/update/delete run through the `PermissionService` with own/any semantics. Listing and metadata reading are the picker right (`readAny` shows the whole library, `readOwn` only one's own uploads); the binary route keeps following the visibility of the medium
+- Migration `26-08-2026-add-manage-media-role-group` mirrors `manageBookables` into `manageMedia` for every role and adds the `media` admin interface wherever a bookable interface is managed, so no existing admin loses a workflow
+- Receipts, invoices and cancellations are stored as booking document media (`bookingId` set) instead of raw Nextcloud files. Reading follows the receipt rule — `manageBookings.readAny` or the owner of the booking, so customers reach their own invoices without a role — and the existing booking download routes keep working as a facade, falling back to the legacy Nextcloud tree for documents written before this change. Booking documents never appear in the library listing or picker, and cannot be deleted through the API
+
 ### Notes
 
-- Write access to `/media` is temporarily limited to the tenant owner; the `manageMedia` role group replaces this check in a follow-up. Usage proof and the legacy `/files` routes are untouched by this change
+- Booking documents are the system receipts the platform writes itself; the API refuses to delete them (`booking_document_not_deletable`), they only cascade with their booking. Usage proof and the legacy `/files` routes are untouched by this change
 - New dependencies `sharp` and `file-type`; sharp ships prebuilt binaries, tune it with `MEDIA_IMAGE_MAX_PIXELS` and `MEDIA_SHARP_CONCURRENCY`
 
 ## [4.2.6] — 2026-08-25

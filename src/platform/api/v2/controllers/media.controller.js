@@ -1,9 +1,11 @@
 const bunyan = require("bunyan");
 
+const BookingManager = require("../../../../commons/data-managers/booking-manager");
 const MediaManager = require("../../../../commons/data-managers/media-manager");
 const MediaService = require("../../../../commons/services/media/media-service");
 const MembershipManager = require("../../../../commons/data-managers/membership-manager");
 const PermissionService = require("../../../../commons/services/permission-service");
+const { RolePermission } = require("../../../../commons/entities/role/role");
 const {
   MEDIA_KIND,
   MEDIA_VISIBILITY,
@@ -144,46 +146,188 @@ class MediaControllerV2 {
   }
 
   /**
-   * Write access during the tracer: the tenant owner only. The `manageMedia`
-   * role group replaces this check in B3.
+   * The id of the signed-in user, or a 401.
    *
    * @param {Object} req - Express request.
-   * @param {string} tenantId - Id of the tenant.
-   * @throws {UnauthorizedError|ForbiddenError}
+   * @returns {string} Id of the user.
+   * @throws {UnauthorizedError}
    */
-  static async _assertWriteAccess(req, tenantId) {
+  static _requireUserId(req) {
     const userId = req.user?.id;
 
     if (!userId) {
       throw new UnauthorizedError("unauthorized");
     }
 
-    if (!(await PermissionService._isTenantOwner(userId, tenantId))) {
+    return userId;
+  }
+
+  /**
+   * The receipt rule: a booking document is readable for whoever may read any
+   * booking of the tenant, or for the owner of the booking itself — a paying
+   * customer gets their invoice without holding any role.
+   *
+   * @param {string} userId - Id of the user.
+   * @param {Object} media - The booking document.
+   * @returns {Promise<boolean>}
+   */
+  static async _mayReadBookingDocument(userId, media) {
+    const tenantId = media.tenantId;
+
+    if (
+      await PermissionService._allowReadAny(
+        userId,
+        tenantId,
+        RolePermission.MANAGE_BOOKINGS,
+      )
+    ) {
+      return true;
+    }
+
+    const booking = await BookingManager.getBooking(media.bookingId, tenantId);
+
+    return (
+      Boolean(booking) && PermissionService._isOwner(booking, userId, tenantId)
+    );
+  }
+
+  /**
+   * Read access to a booking document, in whatever form it is asked for.
+   *
+   * @param {Object} req - Express request.
+   * @param {Object} media - The booking document.
+   * @throws {UnauthorizedError|ForbiddenError}
+   */
+  static async _assertBookingDocumentAccess(req, media) {
+    const userId = MediaControllerV2._requireUserId(req);
+
+    if (!(await MediaControllerV2._mayReadBookingDocument(userId, media))) {
       throw new ForbiddenError("forbidden");
     }
   }
 
   /**
-   * Read access: `public` media are readable anonymously, `intern` media
-   * require an active membership in the owning tenant.
+   * Access to the metadata of a medium — the picker right: `manageMedia`
+   * read permission on the medium. Booking documents follow the receipt rule
+   * instead; their visibility is meaningless.
    *
    * @param {Object} req - Express request.
    * @param {Object} media - The medium.
    * @throws {UnauthorizedError|ForbiddenError}
    */
-  static async _assertReadAccess(req, media) {
+  static async _assertMetadataAccess(req, media) {
+    if (media.isBookingDocument()) {
+      return await MediaControllerV2._assertBookingDocumentAccess(req, media);
+    }
+
+    const userId = MediaControllerV2._requireUserId(req);
+
+    const allowed = await PermissionService._allowRead(
+      media,
+      userId,
+      media.tenantId,
+      RolePermission.MANAGE_MEDIA,
+    );
+
+    if (!allowed) {
+      throw new ForbiddenError("forbidden");
+    }
+  }
+
+  /**
+   * Access to the file of a medium: `public` media are readable anonymously,
+   * `intern` media require an active membership in the owning tenant. Booking
+   * documents follow the receipt rule.
+   *
+   * @param {Object} req - Express request.
+   * @param {Object} media - The medium.
+   * @throws {UnauthorizedError|ForbiddenError}
+   */
+  static async _assertFileAccess(req, media) {
+    if (media.isBookingDocument()) {
+      return await MediaControllerV2._assertBookingDocumentAccess(req, media);
+    }
+
     if (media.isPublic()) {
       return;
     }
 
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new UnauthorizedError("unauthorized");
-    }
+    const userId = MediaControllerV2._requireUserId(req);
 
     if (
       !(await MediaControllerV2._hasActiveMembership(userId, media.tenantId))
     ) {
+      throw new ForbiddenError("forbidden");
+    }
+  }
+
+  /**
+   * Permission to change the metadata of a medium. A booking document follows
+   * the update rights of its booking, everything else the `manageMedia` role
+   * group with the uploader as owner.
+   *
+   * @param {Object} req - Express request.
+   * @param {Object} media - The medium.
+   * @throws {UnauthorizedError|ForbiddenError}
+   */
+  static async _assertUpdateAccess(req, media) {
+    const userId = MediaControllerV2._requireUserId(req);
+    const tenantId = media.tenantId;
+
+    if (media.isBookingDocument()) {
+      const booking = await BookingManager.getBooking(
+        media.bookingId,
+        tenantId,
+      );
+
+      const allowed =
+        Boolean(booking) &&
+        (await PermissionService._allowUpdate(
+          booking,
+          userId,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ));
+
+      if (!allowed) {
+        throw new ForbiddenError("forbidden");
+      }
+
+      return;
+    }
+
+    const allowed = await PermissionService._allowUpdate(
+      media,
+      userId,
+      tenantId,
+      RolePermission.MANAGE_MEDIA,
+    );
+
+    if (!allowed) {
+      throw new ForbiddenError("forbidden");
+    }
+  }
+
+  /**
+   * Permission to delete a medium: the `manageMedia` role group with the
+   * uploader as owner. Booking documents never get here — they are refused
+   * before any permission is weighed.
+   *
+   * @param {Object} req - Express request.
+   * @param {Object} media - The medium.
+   * @throws {UnauthorizedError|ForbiddenError}
+   */
+  static async _assertDeleteAccess(req, media) {
+    const userId = MediaControllerV2._requireUserId(req);
+
+    const allowed = await PermissionService._allowDelete(
+      media,
+      userId,
+      media.tenantId,
+      RolePermission.MANAGE_MEDIA,
+    );
+
+    if (!allowed) {
       throw new ForbiddenError("forbidden");
     }
   }
@@ -211,7 +355,18 @@ class MediaControllerV2 {
    */
   static async createMedia(req, res) {
     const tenantId = req.params.tenant;
-    await MediaControllerV2._assertWriteAccess(req, tenantId);
+    const userId = MediaControllerV2._requireUserId(req);
+
+    const mayCreate = await PermissionService._allowCreate(
+      { tenantId },
+      userId,
+      tenantId,
+      RolePermission.MANAGE_MEDIA,
+    );
+
+    if (!mayCreate) {
+      throw new ForbiddenError("forbidden");
+    }
 
     const file = req.files?.file;
 
@@ -256,6 +411,7 @@ class MediaControllerV2 {
    */
   static async getMediaList(req, res) {
     const tenantId = req.params.tenant;
+    const userId = MediaControllerV2._requireUserId(req);
     const { page, pageSize, tag, q } = req.query;
 
     const kind = parseEnum(req.query.kind, MEDIA_KIND, "invalid_kind");
@@ -265,18 +421,23 @@ class MediaControllerV2 {
       "invalid_visibility",
     );
 
-    const mayReadIntern = await MediaControllerV2._hasActiveMembership(
-      req.user?.id,
+    const context = await PermissionService.createReadContext(
+      userId,
       tenantId,
+      RolePermission.MANAGE_MEDIA,
     );
 
-    const readable = mayReadIntern
-      ? Object.values(MEDIA_VISIBILITY)
-      : [MEDIA_VISIBILITY.PUBLIC];
+    if (
+      !PermissionService.canReadAllWithContext(context) &&
+      !context.hasReadOwn
+    ) {
+      throw new ForbiddenError("forbidden");
+    }
 
-    const visibility = requestedVisibility
-      ? readable.filter((value) => value === requestedVisibility)
-      : readable;
+    // readOwn alone narrows the library to what the caller uploaded.
+    const uploadedBy = PermissionService.canReadAllWithContext(context)
+      ? undefined
+      : userId;
 
     const result = await MediaManager.getMediaList({
       tenantId,
@@ -285,7 +446,8 @@ class MediaControllerV2 {
       kind,
       tag,
       q,
-      visibility,
+      visibility: requestedVisibility ? [requestedVisibility] : undefined,
+      uploadedBy,
     });
 
     return res.status(200).json({
@@ -306,7 +468,7 @@ class MediaControllerV2 {
       tenantId,
     );
 
-    await MediaControllerV2._assertReadAccess(req, media);
+    await MediaControllerV2._assertMetadataAccess(req, media);
 
     return res.status(200).json(MediaControllerV2._toResponse(media));
   }
@@ -316,12 +478,13 @@ class MediaControllerV2 {
    */
   static async updateMedia(req, res) {
     const tenantId = req.params.tenant;
-    await MediaControllerV2._assertWriteAccess(req, tenantId);
 
     const media = await MediaControllerV2._requireMedia(
       req.params.id,
       tenantId,
     );
+
+    await MediaControllerV2._assertUpdateAccess(req, media);
 
     const updates = {};
 
@@ -343,7 +506,9 @@ class MediaControllerV2 {
       MEDIA_VISIBILITY,
       "invalid_visibility",
     );
-    if (visibility !== undefined) {
+    // Visibility is meaningless for a booking document — access follows the
+    // booking alone. Storing one anyway would suggest a knob that does nothing.
+    if (visibility !== undefined && !media.isBookingDocument()) {
       updates.visibility = visibility;
     }
 
@@ -377,7 +542,7 @@ class MediaControllerV2 {
       tenantId,
     );
 
-    await MediaControllerV2._assertReadAccess(req, media);
+    await MediaControllerV2._assertFileAccess(req, media);
 
     const delivery = MediaService.describeDelivery(media, req.query?.size);
 
@@ -436,12 +601,22 @@ class MediaControllerV2 {
    */
   static async deleteMedia(req, res) {
     const tenantId = req.params.tenant;
-    await MediaControllerV2._assertWriteAccess(req, tenantId);
 
     const media = await MediaControllerV2._requireMedia(
       req.params.id,
       tenantId,
     );
+
+    // Every booking document the platform writes today is a system receipt.
+    // Those are undeletable by hand, for anyone — they only cascade with their
+    // booking, so no permission can grant it.
+    if (media.isBookingDocument()) {
+      throw new ForbiddenError("booking_document_not_deletable", {
+        bookingId: media.bookingId,
+      });
+    }
+
+    await MediaControllerV2._assertDeleteAccess(req, media);
 
     await MediaService.deleteMedia(media);
 

@@ -323,6 +323,7 @@ class UserManager {
           manageBookables: {},
           manageBookings: {},
           manageCoupons: {},
+          manageMedia: {},
         };
         tenantPermissions.push(workingPermission);
       }
@@ -353,6 +354,7 @@ class UserManager {
             "resources",
             "tickets",
             "events",
+            "media",
           ]),
         ];
       }
@@ -388,6 +390,7 @@ function mergeRoleIntoPermission(workingPermission, role) {
     "manageBookables",
     "manageBookings",
     "manageCoupons",
+    "manageMedia",
   ];
   const actions = [
     "create",

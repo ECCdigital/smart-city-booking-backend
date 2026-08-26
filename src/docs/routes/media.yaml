@@ -7,8 +7,8 @@
     summary: Upload a file into the media library
     description: |
       Uploads exactly one file per request. The bytes go to the configured
-      storage provider, the metadata becomes a medium. Writing is restricted to
-      the tenant owner.
+      storage provider, the metadata becomes a medium. Uploading requires
+      `manageMedia.create`; the uploader becomes the owner of the medium.
 
       The type is decided from the content (magic bytes plus an image decode),
       never from the file name: JPEG, PNG, WebP, GIF, SVG and PDF are accepted.
@@ -62,7 +62,7 @@
       "401":
         description: Not authenticated
       "403":
-        description: Not the tenant owner
+        description: No `manageMedia.create` permission in this tenant
       "413":
         description: |
           Above the global upload backstop of the instance, which sits above
@@ -75,9 +75,12 @@
       - Media
     summary: List media of a tenant
     description: |
-      Paginated and filtered listing — the backend of the media picker.
-      Anonymous callers only ever see `public` media; `intern` media require an
-      active membership in the tenant.
+      Paginated and filtered listing — the backend of the media picker, and
+      therefore gated by the picker right: `manageMedia.readAny` shows the whole
+      library of the tenant, `manageMedia.readOwn` only the caller's own
+      uploads. Booking documents never appear here.
+    security:
+      - bearerAuth: []
     parameters:
       - $ref: "#/components/parameters/TenantParam"
       - name: page
@@ -124,12 +127,23 @@
           application/json:
             schema:
               $ref: "#/components/schemas/MediaApiError"
+      "401":
+        description: Not authenticated
+      "403":
+        description: No media read permission in this tenant
 
 /api/v2/{tenant}/media/{id}:
   get:
     tags:
       - Media
     summary: Metadata of a medium
+    description: |
+      Reading metadata is part of the media library and needs the picker right
+      (`manageMedia.readAny`, or `manageMedia.readOwn` for one's own uploads).
+      Booking documents follow the receipt rule instead: whoever may read any
+      booking of the tenant, or the owner of the booking itself.
+    security:
+      - bearerAuth: []
     parameters:
       - $ref: "#/components/parameters/TenantParam"
       - $ref: "#/components/parameters/MediaIdParam"
@@ -141,9 +155,9 @@
             schema:
               $ref: "#/components/schemas/Media"
       "401":
-        description: An internal medium was requested anonymously
+        description: Not authenticated
       "403":
-        description: No active membership in the owning tenant
+        description: No media read permission, or no access to the booking
       "404":
         description: No such medium in this tenant
 
@@ -154,6 +168,11 @@
     description: |
       Only title, alt text, tags and visibility can change — the file of a
       medium is immutable, replacing it means uploading a new medium.
+
+      Needs `manageMedia.updateAny`, or `manageMedia.updateOwn` for one's own
+      uploads. The metadata of a booking document follows the update rights of
+      its booking instead, and a `visibility` sent for one is ignored — access
+      to a booking document follows the booking alone.
     security:
       - bearerAuth: []
     parameters:
@@ -181,7 +200,7 @@
       "401":
         description: Not authenticated
       "403":
-        description: Not the tenant owner
+        description: No media update permission, or no access to the booking
       "404":
         description: No such medium in this tenant
 
@@ -191,7 +210,11 @@
     summary: Delete a medium
     description: |
       Removes the database document first and the bytes best-effort afterwards.
-      Deleting is final — there is no trash.
+      Deleting is final — there is no trash. Needs `manageMedia.deleteAny`, or
+      `manageMedia.deleteOwn` for one's own uploads.
+
+      Booking documents cannot be deleted through the API
+      (`booking_document_not_deletable`); they only cascade with their booking.
     security:
       - bearerAuth: []
     parameters:
@@ -203,7 +226,7 @@
       "401":
         description: Not authenticated
       "403":
-        description: Not the tenant owner
+        description: No media delete permission, or a booking document
       "404":
         description: No such medium in this tenant
 
@@ -216,6 +239,13 @@
       Streams the original, or the image variant a preset resolves to, through
       the backend — every read is permission checked, there are no presigned
       storage URLs.
+
+      Unlike the metadata route, the binary follows the visibility of the
+      medium: `public` is readable anonymously, `intern` needs an active
+      membership in the owning tenant, no role required. Booking documents
+      follow the receipt rule: whoever may read any booking of the tenant, or
+      the owner of the booking itself — a customer gets their invoice without
+      holding any role.
 
       `size` names a preset, never pixels. A preset without a matching variant
       degrades to the next larger one and finally to the original, so a preset
@@ -254,9 +284,11 @@
             schema:
               $ref: "#/components/schemas/MediaApiError"
       "401":
-        description: An internal medium was requested anonymously
+        description: |
+          An internal medium or a booking document was requested anonymously
       "403":
-        description: No active membership in the owning tenant
+        description: |
+          No active membership in the owning tenant, or no access to the booking
       "404":
         description: No such medium in this tenant
       "503":

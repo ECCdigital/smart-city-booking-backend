@@ -39,6 +39,7 @@ class MediaManager {
    * @param {string} [params.tag] - Filter by a single tag.
    * @param {string} [params.q] - Free-text filter on title and file name.
    * @param {string[]} [params.visibility] - Allowed visibilities.
+   * @param {string} [params.uploadedBy] - Restrict to the media of one uploader.
    * @returns {Promise<{ items: Object[], total: number, page: number, pageSize: number }>}
    */
   static async getMediaList({
@@ -49,6 +50,7 @@ class MediaManager {
     tag,
     q,
     visibility,
+    uploadedBy,
   } = {}) {
     const safePage = Math.max(1, Number(page) || 1);
     const safePageSize = Math.min(
@@ -56,7 +58,12 @@ class MediaManager {
       Math.max(1, Number(pageSize) || DEFAULT_PAGE_SIZE),
     );
 
-    const filter = { tenantId: tenantId ?? null };
+    // Booking documents are never part of the library listing or the picker.
+    const filter = { tenantId: tenantId ?? null, bookingId: null };
+
+    if (uploadedBy) {
+      filter.uploadedBy = uploadedBy;
+    }
 
     if (kind) {
       filter.kind = kind;
@@ -94,6 +101,33 @@ class MediaManager {
       page: safePage,
       pageSize: safePageSize,
     };
+  }
+
+  /**
+   * Find the booking document a download route asks for by file name. The
+   * booking routes address their documents by the name stored in the booking
+   * attachment, not by media id.
+   *
+   * @param {string} tenantId - Tenant ID.
+   * @param {string} fileName - Original file name of the document.
+   * @param {string} [bookingId] - Restrict to the documents of one booking.
+   * @returns {Promise<Object|null>} The newest matching medium or null.
+   */
+  static async getBookingDocumentByFileName(tenantId, fileName, bookingId) {
+    if (!fileName) {
+      return null;
+    }
+
+    const rawMedia = await MediaModel.findOne({
+      tenantId: tenantId ?? null,
+      // Without a booking the name alone decides, so a caller authorised for
+      // one booking could reach another one's document — always scope when the
+      // booking is known.
+      bookingId: bookingId ? bookingId : { $ne: null },
+      originalFileName: fileName,
+    }).sort({ createdAt: -1 });
+
+    return rawMedia ? rawMedia.toEntity() : null;
   }
 
   /**

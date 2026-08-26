@@ -84,7 +84,8 @@ Example:
     "rooms",
     "resources",
     "tickets",
-    "events"
+    "events",
+    "media"
   ],
   "manageUsers": {
     "create": true,
@@ -114,6 +115,15 @@ Example:
     "deleteOwn": true
   },
   "manageCoupons": {
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteAny": true,
+    "deleteOwn": true
+  },
+  "manageMedia": {
     "create": true,
     "readAny": true,
     "readOwn": true,

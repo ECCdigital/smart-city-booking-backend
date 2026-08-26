@@ -91,10 +91,17 @@ class MediaService {
    * @param {Object} params.file - Upload as delivered by express-fileupload.
    * @param {Object} [params.metadata] - title, altText, tags, visibility.
    * @param {string} [params.uploadedBy] - Id of the uploading user.
+   * @param {string} [params.bookingId] - Linked booking, for booking documents.
    * @returns {Promise<Object>} The stored medium.
    * @throws {BadRequestError} On oversized, unsupported or unprocessable files.
    */
-  static async createMedia({ tenantId, file, metadata = {}, uploadedBy }) {
+  static async createMedia({
+    tenantId,
+    file,
+    metadata = {},
+    uploadedBy,
+    bookingId,
+  }) {
     const data = file.data;
 
     // The global express-fileupload backstop truncates instead of rejecting
@@ -138,8 +145,9 @@ class MediaService {
       title: metadata.title || file.name,
       altText: metadata.altText || "",
       tags: metadata.tags || [],
-      visibility: metadata.visibility || Media.VISIBILITY.PUBLIC,
+      visibility: metadata.visibility || MEDIA_VISIBILITY.PUBLIC,
       uploadedBy: uploadedBy || null,
+      bookingId: bookingId || null,
       storage: {
         provider: providerName,
         key: originalKey({
@@ -190,6 +198,37 @@ class MediaService {
       await MediaService._rollbackUpload(provider, written);
       throw error;
     }
+  }
+
+  /**
+   * Stores a document the platform generated for a booking (receipt, invoice,
+   * cancellation) as a booking document medium. `bookingId` is the only thing
+   * that sets it apart: access follows the receipt rule, its visibility is
+   * meaningless and it never appears in the library listing.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId - Owning tenant.
+   * @param {string} params.bookingId - The booking the document belongs to.
+   * @param {Object} params.file - `{ name, data }` of the generated document.
+   * @param {string[]} [params.tags] - Tags, e.g. `["invoice"]`.
+   * @returns {Promise<Object>} The stored medium.
+   */
+  static async createBookingDocument({ tenantId, bookingId, file, tags = [] }) {
+    if (!bookingId) {
+      throw new BadRequestError("missing_booking_id");
+    }
+
+    return await MediaService.createMedia({
+      tenantId,
+      file,
+      bookingId,
+      metadata: {
+        title: file.name,
+        tags,
+        // Meaningless for booking documents, but never the public default.
+        visibility: MEDIA_VISIBILITY.INTERN,
+      },
+    });
   }
 
   /**
@@ -302,6 +341,19 @@ class MediaService {
   static async getStream(media, key) {
     return await MediaService.providerFor(media).getStream({
       key: key || media.storage.key,
+    });
+  }
+
+  /**
+   * Reads the full bytes of a medium — for callers that hand a file on as a
+   * buffer instead of streaming it (mail attachments, document downloads).
+   *
+   * @param {Object} media - The medium.
+   * @returns {Promise<Buffer>}
+   */
+  static async getBuffer(media) {
+    return await MediaService.providerFor(media).getBuffer({
+      key: media.storage.key,
     });
   }
 
