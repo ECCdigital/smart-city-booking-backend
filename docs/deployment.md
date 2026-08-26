@@ -17,14 +17,14 @@ For a local or evaluation full stack (API + Admin UI + Storefront), see [getting
 
 The Storefront and Admin UI are separate deployments — see [architecture.md](architecture.md).
 
-| Client | Env var(s) | Value |
-|--------|------------|-------|
-| Admin UI | `VUE_APP_SERVER_BASE_URL` | Public API URL (`BACKEND_URL`) |
-| Storefront | `NUXT_API_BASE_URL` | API URL reachable from the Storefront server (BFF) |
-| Storefront | `NUXT_USER_BASE_URL` / `NUXT_PUBLIC_USER_BASE_URL` | Public Storefront URL |
-| Storefront | `NUXT_ADMIN_BASE_URL` / `NUXT_PUBLIC_ADMIN_BASE_URL` | Public Admin UI URL (optional) |
-| Backend | `FRONTEND_URL` | Public **Admin UI** URL (not the Storefront) |
-| Backend | `BACKEND_URL` | Public API URL |
+| Client     | Env var(s)                                           | Value                                              |
+| ---------- | ---------------------------------------------------- | -------------------------------------------------- |
+| Admin UI   | `VUE_APP_SERVER_BASE_URL`                            | Public API URL (`BACKEND_URL`)                     |
+| Storefront | `NUXT_API_BASE_URL`                                  | API URL reachable from the Storefront server (BFF) |
+| Storefront | `NUXT_USER_BASE_URL` / `NUXT_PUBLIC_USER_BASE_URL`   | Public Storefront URL                              |
+| Storefront | `NUXT_ADMIN_BASE_URL` / `NUXT_PUBLIC_ADMIN_BASE_URL` | Public Admin UI URL (optional)                     |
+| Backend    | `FRONTEND_URL`                                       | Public **Admin UI** URL (not the Storefront)       |
+| Backend    | `BACKEND_URL`                                        | Public API URL                                     |
 
 Full wiring matrix and Compose notes: [getting-started.md](getting-started.md).
 

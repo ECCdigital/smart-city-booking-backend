@@ -8,13 +8,13 @@ Core booking, availability, and user management work without Nextcloud.
 
 ## What is stored in Nextcloud
 
-| Use case | Examples | Storage path (per tenant) |
-|----------|----------|---------------------------|
-| **User uploads** | Images, documents, booking attachments | `public/…` or `protected/…` (via file API) |
-| **Payment receipts** | Generated PDF payment confirmations | `receipts/` |
-| **Invoices** | Generated invoice PDFs | `invoices/` |
-| **Cancellations** | Generated cancellation PDFs | `cancellations/` |
-| **Instance files** | Legal documents (terms, privacy policy files) | `public/` / `protected/` (instance level) |
+| Use case             | Examples                                      | Storage path (per tenant)                  |
+| -------------------- | --------------------------------------------- | ------------------------------------------ |
+| **User uploads**     | Images, documents, booking attachments        | `public/…` or `protected/…` (via file API) |
+| **Payment receipts** | Generated PDF payment confirmations           | `receipts/`                                |
+| **Invoices**         | Generated invoice PDFs                        | `invoices/`                                |
+| **Cancellations**    | Generated cancellation PDFs                   | `cancellations/`                           |
+| **Instance files**   | Legal documents (terms, privacy policy files) | `public/` / `protected/` (instance level)  |
 
 Files are organised per tenant under the Nextcloud user's home directory. The backend creates subfolders automatically when uploading.
 
@@ -28,11 +28,11 @@ NEXTCLOUD_USERNAME=CHANGE_ME__NEXTCLOUD_USER
 NEXTCLOUD_PASSWORD=CHANGE_ME__NEXTCLOUD_PASSWORD
 ```
 
-| Variable | Description |
-|----------|-------------|
-| `NEXTCLOUD_URL` | Base URL of your Nextcloud server (no trailing slash). The backend connects to `{NEXTCLOUD_URL}/remote.php/webdav`. |
-| `NEXTCLOUD_USERNAME` | WebDAV user with permission to read and write files |
-| `NEXTCLOUD_PASSWORD` | Password or app password for that user |
+| Variable             | Description                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `NEXTCLOUD_URL`      | Base URL of your Nextcloud server (no trailing slash). The backend connects to `{NEXTCLOUD_URL}/remote.php/webdav`. |
+| `NEXTCLOUD_USERNAME` | WebDAV user with permission to read and write files                                                                 |
+| `NEXTCLOUD_PASSWORD` | Password or app password for that user                                                                              |
 
 ### Production recommendations
 
@@ -72,10 +72,10 @@ Point the credentials at a user that exists in your local Nextcloud instance.
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-|---------|----------------|
-| `Nextcloud configuration is missing` | One or more `NEXTCLOUD_*` env vars are unset |
-| `Nextcloud service is currently unavailable` | Nextcloud unreachable, wrong credentials, or WebDAV disabled |
-| Receipt/invoice generation fails | Nextcloud not configured or write permission missing for the service user |
+| Symptom                                      | Likely cause                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `Nextcloud configuration is missing`         | One or more `NEXTCLOUD_*` env vars are unset                              |
+| `Nextcloud service is currently unavailable` | Nextcloud unreachable, wrong credentials, or WebDAV disabled              |
+| Receipt/invoice generation fails             | Nextcloud not configured or write permission missing for the service user |
 
 Check backend logs (`file-manager.js`, `file-controller.js`, `receipt-service.js`, `invoice-service.js`, `cancellation-service.js`) for detailed error messages.

@@ -6,18 +6,18 @@ The script is built and shipped from the [vue-app repository](https://github.com
 
 ## How it works
 
-| Piece | Role |
-|-------|------|
+| Piece                    | Role                                                         |
+| ------------------------ | ------------------------------------------------------------ |
 | `booking-manager.min.js` | Client SDK — built by vue-app, served from the frontend host |
-| Backend API (this repo) | Data source — bookables, events, availability, auth |
-| Your website | Hosts placeholder HTML elements (`bm-*` classes) |
+| Backend API (this repo)  | Data source — bookables, events, availability, auth          |
+| Your website             | Hosts placeholder HTML elements (`bm-*` classes)             |
 
 Source: [`src/js-web-interface/booking-manager-js.js`](https://github.com/ECCdigital/smart-city-booking-vue-app/blob/develop/src/js-web-interface/booking-manager-js.js) in the vue-app.
 
-| Build command | Output | Purpose |
-|---------------|--------|---------|
-| `npm run build` | `./dist/cdn/current/booking-manager.min.js` | Production (served as CDN) |
-| `npm run test-build` | `./public/cdn/current/booking-manager.min.js` | Local testing |
+| Build command        | Output                                        | Purpose                    |
+| -------------------- | --------------------------------------------- | -------------------------- |
+| `npm run build`      | `./dist/cdn/current/booking-manager.min.js`   | Production (served as CDN) |
+| `npm run test-build` | `./public/cdn/current/booking-manager.min.js` | Local testing              |
 
 When the vue-app frontend is deployed, the script is reachable at:
 
@@ -58,15 +58,15 @@ https://<your-frontend-host>/cdn/current/booking-manager.min.js
 
 Add placeholder elements anywhere in your HTML. The Booking Manager fills them based on CSS class / `id` and `data-*` attributes. **Class** variants can be used multiple times per page; `id` variants exist for backwards compatibility and should appear only once.
 
-| Element (class / id) | Configuration attributes | Description |
-|----------------------|--------------------------|-------------|
-| `.bm-bookable-list` | `data-type` (optional), `data-ids` (comma-separated, optional) | List of bookable objects |
-| `.bm-bookable-item` | `data-id` **or** `data-id-param` (URL query parameter) | Detail view of a single bookable |
-| `.bm-event-list` | `data-ids` (comma-separated, optional) | List of events |
-| `.bm-event-item` | `data-id` **or** `data-id-param` | Detail view of a single event |
-| `.bm-calendar` | `data-view` (`dayGridMonth` \| `timeGridWeek` \| …, default `dayGridMonth`) | Calendar showing all events |
-| `.bm-occupancy-calendar` | `data-id` (comma-separated bookable IDs), `data-view` | Occupancy calendar for bookable(s) |
-| `.bm-availability-calendar` | `data-id` (comma-separated bookable IDs), `data-view` | Calendar showing when bookable(s) are **not** available |
+| Element (class / id)        | Configuration attributes                                                    | Description                                             |
+| --------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `.bm-bookable-list`         | `data-type` (optional), `data-ids` (comma-separated, optional)              | List of bookable objects                                |
+| `.bm-bookable-item`         | `data-id` **or** `data-id-param` (URL query parameter)                      | Detail view of a single bookable                        |
+| `.bm-event-list`            | `data-ids` (comma-separated, optional)                                      | List of events                                          |
+| `.bm-event-item`            | `data-id` **or** `data-id-param`                                            | Detail view of a single event                           |
+| `.bm-calendar`              | `data-view` (`dayGridMonth` \| `timeGridWeek` \| …, default `dayGridMonth`) | Calendar showing all events                             |
+| `.bm-occupancy-calendar`    | `data-id` (comma-separated bookable IDs), `data-view`                       | Occupancy calendar for bookable(s)                      |
+| `.bm-availability-calendar` | `data-id` (comma-separated bookable IDs), `data-view`                       | Calendar showing when bookable(s) are **not** available |
 
 ### Example — list, detail, and calendar
 
