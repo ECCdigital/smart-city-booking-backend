@@ -1,5 +1,6 @@
 const assert = require("assert");
 const sinon = require("sinon");
+const sharp = require("sharp");
 
 const MediaControllerV2 = require("../src/platform/api/v2/controllers/media.controller");
 const MediaManager = require("../src/commons/data-managers/media-manager");
@@ -52,6 +53,7 @@ function createRequest({
   params = {},
   query = {},
   body = {},
+  headers = {},
   files,
 } = {}) {
   return {
@@ -59,6 +61,7 @@ function createRequest({
     params: { tenant: TENANT, ...params },
     query,
     body,
+    headers,
     files,
     on() {},
   };
@@ -103,18 +106,49 @@ function mediaFixture(overrides = {}) {
   });
 }
 
+// The upload pipeline decides on content, so the fixture has to be a real PNG.
+// 100px wide is below every preset — no variants, one byte write.
+let pngBytes;
+
 function pngUpload() {
   return {
     name: "picture.png",
     mimetype: "image/png",
-    data: Buffer.from("not really a png"),
-    size: 16,
+    data: pngBytes,
+    size: pngBytes.length,
+  };
+}
+
+function variantFixture(name, overrides = {}) {
+  return {
+    name,
+    format: "webp",
+    width: 480,
+    height: 320,
+    size: 4096,
+    checksum: `checksum-${name}`,
+    key: `${TENANT}/media/media-1/${name}.webp`,
+    ...overrides,
   };
 }
 
 describe("MediaControllerV2", function () {
   let sandbox;
   let provider;
+  let deliveryStream;
+
+  before(async function () {
+    pngBytes = await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 3,
+        background: { r: 10, g: 120, b: 200 },
+      },
+    })
+      .png()
+      .toBuffer();
+  });
 
   beforeEach(function () {
     sandbox = sinon.createSandbox();
@@ -139,6 +173,29 @@ describe("MediaControllerV2", function () {
   afterEach(function () {
     sandbox.restore();
   });
+
+  /**
+   * Puts a recording stream behind the storage so a delivery can be observed.
+   */
+  function stubDelivery() {
+    deliveryStream = createStream();
+    sandbox.stub(MediaService, "getStream").resolves(deliveryStream);
+  }
+
+  /**
+   * Serves a medium and returns the recording response.
+   */
+  async function deliver(media, { query = {}, headers = {}, user } = {}) {
+    sandbox.stub(MediaManager, "getMedia").resolves(media);
+    const res = createResponse();
+
+    await MediaControllerV2.getMediaFile(
+      createRequest({ user, params: { id: "media-1" }, query, headers }),
+      res,
+    );
+
+    return res;
+  }
 
   describe("upload", function () {
     beforeEach(function () {
@@ -529,27 +586,95 @@ describe("MediaControllerV2", function () {
   });
 
   describe("file delivery", function () {
-    it("streams the original with its content type", async function () {
-      const media = mediaFixture();
-      const stream = createStream();
-      sandbox.stub(MediaManager, "getMedia").resolves(media);
-      sandbox.stub(MediaService, "getOriginalStream").resolves(stream);
-      const res = createResponse();
+    beforeEach(stubDelivery);
 
-      await MediaControllerV2.getMediaFile(
-        createRequest({ params: { id: "media-1" } }),
-        res,
-      );
+    it("streams the original with its content type", async function () {
+      const res = await deliver(mediaFixture());
 
       assert.strictEqual(res.headers["Content-Type"], "image/png");
       assert.strictEqual(res.headers["Content-Disposition"], "inline");
-      assert.strictEqual(stream.piped, res);
+      assert.strictEqual(deliveryStream.piped, res);
+      assert.strictEqual(
+        MediaService.getStream.firstCall.args[1],
+        `${TENANT}/media/media-1/original.png`,
+      );
+    });
+
+    it("serves the requested preset from its own key", async function () {
+      const media = mediaFixture({
+        variants: [variantFixture("thumb"), variantFixture("md")],
+      });
+
+      const res = await deliver(media, { query: { size: "md" } });
+
+      assert.strictEqual(
+        MediaService.getStream.firstCall.args[1],
+        `${TENANT}/media/media-1/md.webp`,
+      );
+      assert.strictEqual(res.headers["Content-Type"], "image/webp");
+    });
+
+    it("degrades a missing preset to the next larger variant", async function () {
+      const media = mediaFixture({ variants: [variantFixture("lg")] });
+
+      await deliver(media, { query: { size: "sm" } });
+
+      assert.strictEqual(
+        MediaService.getStream.firstCall.args[1],
+        `${TENANT}/media/media-1/lg.webp`,
+      );
+    });
+
+    it("degrades to the original when no variant is large enough", async function () {
+      const media = mediaFixture({ variants: [variantFixture("thumb")] });
+
+      const res = await deliver(media, { query: { size: "lg" } });
+
+      assert.strictEqual(
+        MediaService.getStream.firstCall.args[1],
+        `${TENANT}/media/media-1/original.png`,
+      );
+      assert.strictEqual(res.headers["Content-Type"], "image/png");
+    });
+
+    it("rejects an unknown preset name", async function () {
+      sandbox.stub(MediaManager, "getMedia").resolves(mediaFixture());
+
+      await assert.rejects(
+        () =>
+          MediaControllerV2.getMediaFile(
+            createRequest({
+              params: { id: "media-1" },
+              query: { size: "xxl" },
+            }),
+            createResponse(),
+          ),
+        (error) => error.statusCode === 400 && error.code === "invalid_size",
+      );
+      assert.strictEqual(MediaService.getStream.called, false);
+    });
+
+    it("offers the original of a vector medium as a download", async function () {
+      const media = mediaFixture({
+        mimeType: "image/svg+xml",
+        originalFileName: "logo.svg",
+        storage: {
+          provider: "nextcloud",
+          key: `${TENANT}/media/media-1/original.svg`,
+        },
+        variants: [variantFixture("sm")],
+      });
+
+      const res = await deliver(media);
+
+      assert.strictEqual(
+        res.headers["Content-Disposition"],
+        'attachment; filename="logo.svg"',
+      );
     });
 
     it("hands a storage failure before the first byte to the error handler", async function () {
-      const stream = createStream();
       sandbox.stub(MediaManager, "getMedia").resolves(mediaFixture());
-      sandbox.stub(MediaService, "getOriginalStream").resolves(stream);
       const res = createResponse();
       const next = sandbox.stub();
 
@@ -558,19 +683,18 @@ describe("MediaControllerV2", function () {
         res,
         next,
       );
-      stream.handlers.error(new Error("storage down"));
+      deliveryStream.handlers.error(new Error("storage down"));
 
       const error = next.firstCall.args[0];
       assert.strictEqual(error.name, "StorageError");
       assert.strictEqual(error.statusCode, 503);
       assert.strictEqual(error.code, "storage_stream_failed");
       assert.strictEqual(res.headers["Content-Type"], undefined);
+      assert.strictEqual(res.headers["Cache-Control"], undefined);
     });
 
     it("cuts the connection when the storage fails mid-transfer", async function () {
-      const stream = createStream();
       sandbox.stub(MediaManager, "getMedia").resolves(mediaFixture());
-      sandbox.stub(MediaService, "getOriginalStream").resolves(stream);
       const res = createResponse();
       const next = sandbox.stub();
 
@@ -580,7 +704,7 @@ describe("MediaControllerV2", function () {
         next,
       );
       res.headersSent = true;
-      stream.handlers.error(new Error("storage down"));
+      deliveryStream.handlers.error(new Error("storage down"));
 
       assert.strictEqual(next.called, false);
       assert.strictEqual(res.destroyed, true);
@@ -590,7 +714,6 @@ describe("MediaControllerV2", function () {
       sandbox
         .stub(MediaManager, "getMedia")
         .resolves(mediaFixture({ visibility: "intern" }));
-      sandbox.stub(MediaService, "getOriginalStream");
 
       await assert.rejects(
         () =>
@@ -600,7 +723,83 @@ describe("MediaControllerV2", function () {
           ),
         (error) => error.statusCode === 401,
       );
-      assert.strictEqual(MediaService.getOriginalStream.called, false);
+      assert.strictEqual(MediaService.getStream.called, false);
+    });
+  });
+
+  describe("delivery caching", function () {
+    beforeEach(stubDelivery);
+
+    it("caches a public original for a year without a validator", async function () {
+      const res = await deliver(mediaFixture());
+
+      assert.strictEqual(
+        res.headers["Cache-Control"],
+        "public, max-age=31536000, immutable",
+      );
+      assert.strictEqual(res.headers["ETag"], undefined);
+    });
+
+    it("caches a public variant for a day against its own checksum", async function () {
+      const media = mediaFixture({ variants: [variantFixture("sm")] });
+
+      const res = await deliver(media, { query: { size: "sm" } });
+
+      assert.strictEqual(res.headers["Cache-Control"], "public, max-age=86400");
+      assert.strictEqual(res.headers["ETag"], '"checksum-sm"');
+    });
+
+    it("keeps a preset that degraded to the original revalidatable", async function () {
+      const media = mediaFixture({ variants: [variantFixture("thumb")] });
+
+      const res = await deliver(media, { query: { size: "lg" } });
+
+      assert.strictEqual(res.headers["Cache-Control"], "public, max-age=86400");
+      assert.strictEqual(res.headers["ETag"], '"abc"');
+    });
+
+    it("lets an internal medium be revalidated only privately", async function () {
+      MembershipManager.getMembershipByTenantAndUserID.resolves({
+        status: "active",
+      });
+
+      const res = await deliver(mediaFixture({ visibility: "intern" }), {
+        user: MEMBER,
+      });
+
+      assert.strictEqual(res.headers["Cache-Control"], "private, no-cache");
+      assert.strictEqual(res.headers["ETag"], '"abc"');
+    });
+
+    it("never stores a booking document", async function () {
+      const res = await deliver(mediaFixture({ bookingId: "booking-1" }));
+
+      assert.strictEqual(res.headers["Cache-Control"], "private, no-store");
+      assert.strictEqual(res.headers["ETag"], undefined);
+    });
+
+    it("answers a matching validator with 304 and no bytes", async function () {
+      const media = mediaFixture({ variants: [variantFixture("sm")] });
+
+      const res = await deliver(media, {
+        query: { size: "sm" },
+        headers: { "if-none-match": '"checksum-sm"' },
+      });
+
+      assert.strictEqual(res.statusCode, 304);
+      assert.strictEqual(MediaService.getStream.called, false);
+    });
+
+    it("serves the bytes when the validator does not match", async function () {
+      const media = mediaFixture({ variants: [variantFixture("sm")] });
+
+      const res = await deliver(media, {
+        query: { size: "sm" },
+        headers: { "if-none-match": '"stale"' },
+      });
+
+      assert.strictEqual(res.statusCode, null);
+      assert.strictEqual(deliveryStream.piped, res);
     });
   });
 

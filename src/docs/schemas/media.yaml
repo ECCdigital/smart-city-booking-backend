@@ -8,7 +8,11 @@ components:
       properties:
         name:
           type: string
-          description: Preset name
+          description: |
+            Preset name — request it at `/media/{id}/file?size=`. Presets that
+            would not shrink the original produce no variant, so only the ones
+            listed here exist.
+          enum: [thumb, sm, md, lg]
           example: thumb
         format:
           type: string

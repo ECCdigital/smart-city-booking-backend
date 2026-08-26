@@ -15,6 +15,9 @@ const {
   UnauthorizedError,
 } = require("../../../../errors/BaseError");
 const { StorageError } = require("../../../../errors/StorageError");
+const {
+  applyCacheHeaders,
+} = require("../../../../commons/utilities/cache-headers");
 
 const logger = bunyan.createLogger({
   name: "media.controller.v2.js",
@@ -364,7 +367,8 @@ class MediaControllerV2 {
   }
 
   /**
-   * Stream the original file of a medium.
+   * Stream the file of a medium: the original, or the variant a `?size=`
+   * preset resolves to.
    */
   static async getMediaFile(req, res, next) {
     const tenantId = req.params.tenant;
@@ -375,12 +379,23 @@ class MediaControllerV2 {
 
     await MediaControllerV2._assertReadAccess(req, media);
 
-    const stream = await MediaService.getOriginalStream(media);
+    const delivery = MediaService.describeDelivery(media, req.query?.size);
 
-    res.setHeader("Content-Type", media.mimeType || "application/octet-stream");
-    res.setHeader("Content-Disposition", "inline");
-    if (media.size) {
-      res.setHeader("Content-Length", media.size);
+    const notModified = applyCacheHeaders(req, res, {
+      cacheControl: delivery.cacheControl,
+      etag: delivery.etag,
+    });
+
+    if (notModified) {
+      return res.status(304).end();
+    }
+
+    const stream = await MediaService.getStream(media, delivery.key);
+
+    res.setHeader("Content-Type", delivery.contentType);
+    res.setHeader("Content-Disposition", delivery.disposition);
+    if (delivery.contentLength) {
+      res.setHeader("Content-Length", delivery.contentLength);
     }
 
     stream.on("error", (streamError) => {
@@ -395,6 +410,8 @@ class MediaControllerV2 {
         res.removeHeader("Content-Type");
         res.removeHeader("Content-Disposition");
         res.removeHeader("Content-Length");
+        res.removeHeader("Cache-Control");
+        res.removeHeader("ETag");
         next(
           StorageError.from(streamError, "storage_stream_failed", {
             provider: media.storage?.provider,

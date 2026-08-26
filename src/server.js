@@ -15,9 +15,18 @@ const { requestLogger } = require("./middleware/logger.js");
 const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
 const { errorHandler } = require("./middleware/error-handler");
 const { assertStorageConfig } = require("./commons/services/storage");
+const {
+  uploadBackstopBytes,
+} = require("./commons/services/media/media-config");
+const {
+  applySharpConcurrency,
+} = require("./commons/services/media/image-variants");
 
 // Fail fast when the explicitly chosen storage provider is misconfigured.
 assertStorageConfig();
+
+// Size the libvips thread pool to the container, not to the detected cores.
+applySharpConcurrency();
 
 const dbm = DatabaseManager.getInstance();
 
@@ -41,7 +50,16 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
-app.use(fileUpload());
+// Global backstop for every upload route. It sits above the largest media
+// limit on purpose: media uploads answer with their own 400, this only stops
+// requests no route would ever accept.
+app.use(
+  fileUpload({
+    limits: { fileSize: uploadBackstopBytes() },
+    abortOnLimit: true,
+    responseOnLimit: "File too large.",
+  }),
+);
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 

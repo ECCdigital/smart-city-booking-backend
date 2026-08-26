@@ -9,6 +9,12 @@
       Uploads exactly one file per request. The bytes go to the configured
       storage provider, the metadata becomes a medium. Writing is restricted to
       the tenant owner.
+
+      The type is decided from the content (magic bytes plus an image decode),
+      never from the file name: JPEG, PNG, WebP, GIF, SVG and PDF are accepted.
+      Uploads are limited per kind (images 15 MB, documents 50 MB by default).
+      Image uploads generate their variants synchronously — if one of them
+      fails, the whole upload fails and no medium is created.
     security:
       - bearerAuth: []
     parameters:
@@ -44,7 +50,11 @@
             schema:
               $ref: "#/components/schemas/Media"
       "400":
-        description: Missing file, more than one file, or invalid metadata
+        description: |
+          Missing file, more than one file, invalid metadata, a type outside the
+          allowlist (`unsupported_file_type`), a file above its limit
+          (`file_too_large`), an undecodable image (`invalid_image`) or a
+          variant that could not be rendered (`image_processing_failed`).
         content:
           application/json:
             schema:
@@ -53,6 +63,10 @@
         description: Not authenticated
       "403":
         description: Not the tenant owner
+      "413":
+        description: |
+          Above the global upload backstop of the instance, which sits above
+          every media limit.
       "503":
         description: The storage provider could not be reached
 
@@ -197,13 +211,32 @@
   get:
     tags:
       - Media
-    summary: Download the original file of a medium
+    summary: Download the file of a medium
     description: |
-      Streams the original through the backend — every read is permission
-      checked, there are no presigned storage URLs.
+      Streams the original, or the image variant a preset resolves to, through
+      the backend — every read is permission checked, there are no presigned
+      storage URLs.
+
+      `size` names a preset, never pixels. A preset without a matching variant
+      degrades to the next larger one and finally to the original, so a preset
+      choice never produces a 404. Originals of SVG media are served as a
+      download; their variants are the rendered image.
+
+      Caching follows the medium: a public original is immutable for a year, a
+      public variant is cacheable for a day and revalidated against a strong
+      ETag built from the variant checksum, an internal medium is
+      `private, no-cache` with an ETag, and a booking document is never stored.
     parameters:
       - $ref: "#/components/parameters/TenantParam"
       - $ref: "#/components/parameters/MediaIdParam"
+      - name: size
+        in: query
+        description: |
+          Image preset. Omit for the original. `thumb` is a 160×160 crop, the
+          others bound the width without enlarging: 480, 800 and 1600 pixels.
+        schema:
+          type: string
+          enum: [thumb, sm, md, lg]
     responses:
       "200":
         description: The file
@@ -212,6 +245,14 @@
             schema:
               type: string
               format: binary
+      "304":
+        description: The client's copy still matches the ETag
+      "400":
+        description: Unknown preset name
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaApiError"
       "401":
         description: An internal medium was requested anonymously
       "403":

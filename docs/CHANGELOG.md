@@ -13,10 +13,16 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 - Storage abstraction with exactly six operations (`put`, `getStream`, `getBuffer`, `stat`, `delete`, `deleteMany`) and a provider-neutral `StorageError`; Nextcloud (WebDAV) and S3 (AWS SDK v3, `S3_ENDPOINT` + `S3_FORCE_PATH_STYLE` make MinIO pure configuration) implement it. Keys follow the media identity (`{tenantId}/media/{mediaId}/original.{ext}`, instance media under `_instance/`); reading follows the provider stored on the medium, `STORAGE_PROVIDER` only steers new uploads
 - `/api/v2/:tenant/media` endpoints: upload (one file per request), paginated listing with `kind`/`tag`/`q`/`visibility` filters, metadata read and PATCH (never the file), original download and delete (database document first, bytes best-effort). `public` media are readable anonymously, `intern` media require an active membership in the owning tenant. Documented in OpenAPI from the start
 - Boot check for the storage configuration: an explicitly set `STORAGE_PROVIDER` with missing variables aborts the boot; the implicit Nextcloud default only warns
+- Media upload hardening: the type is decided from the content (magic bytes via `file-type`, plus a sharp decode for images), never from the file name; the allowlist is JPEG, PNG, WebP, GIF, SVG and PDF. Per-kind limits come from `MEDIA_MAX_IMAGE_SIZE_MB` (15) and `MEDIA_MAX_DOCUMENT_SIZE_MB` (50)
+- Global `express-fileupload` limit for every upload route (`MEDIA_UPLOAD_BACKSTOP_SIZE_MB`, by default 5 MB above the largest media limit) — the upload middleware ran without any option before
+- Image variants `thumb` (160×160 crop), `sm`/`md`/`lg` (480/800/1600 wide, never enlarged), all WebP, generated synchronously on upload: a failing variant fails the whole upload and already written bytes are removed again. Presets that would not shrink the original produce no variant, SVG originals are rasterised for all presets, animated GIFs become stills, documents get none
+- `GET /media/:id/file?size=<preset>` serves variants and degrades to the next larger variant and finally to the original, so a preset choice never 404s; an unknown preset name is a 400. SVG originals are served as a download
+- Caching matrix for media delivery: public originals immutable for a year, public variants cacheable for a day with a strong ETag from the variant checksum, internal media `private, no-cache` with an ETag, booking documents `private, no-store` — including `304` handling, in a shared helper (`commons/utilities/cache-headers.js`)
 
 ### Notes
 
-- Write access to `/media` is temporarily limited to the tenant owner; the `manageMedia` role group replaces this check in a follow-up. Image variants, upload hardening, usage proof and the legacy `/files` routes are untouched by this change
+- Write access to `/media` is temporarily limited to the tenant owner; the `manageMedia` role group replaces this check in a follow-up. Usage proof and the legacy `/files` routes are untouched by this change
+- New dependencies `sharp` and `file-type`; sharp ships prebuilt binaries, tune it with `MEDIA_IMAGE_MAX_PIXELS` and `MEDIA_SHARP_CONCURRENCY`
 
 ## [4.2.6] — 2026-08-25
 
