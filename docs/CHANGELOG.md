@@ -7,6 +7,17 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Media library core: new `media` collection (schema/model/entity/manager) as the single source of truth for platform-managed files, plus a shared media reference sub-document (`{ source: "media" | "external" }`) for later use at bookables, events and the instance
+- Storage abstraction with exactly six operations (`put`, `getStream`, `getBuffer`, `stat`, `delete`, `deleteMany`) and a provider-neutral `StorageError`; Nextcloud (WebDAV) and S3 (AWS SDK v3, `S3_ENDPOINT` + `S3_FORCE_PATH_STYLE` make MinIO pure configuration) implement it. Keys follow the media identity (`{tenantId}/media/{mediaId}/original.{ext}`, instance media under `_instance/`); reading follows the provider stored on the medium, `STORAGE_PROVIDER` only steers new uploads
+- `/api/v2/:tenant/media` endpoints: upload (one file per request), paginated listing with `kind`/`tag`/`q`/`visibility` filters, metadata read and PATCH (never the file), original download and delete (database document first, bytes best-effort). `public` media are readable anonymously, `intern` media require an active membership in the owning tenant. Documented in OpenAPI from the start
+- Boot check for the storage configuration: an explicitly set `STORAGE_PROVIDER` with missing variables aborts the boot; the implicit Nextcloud default only warns
+
+### Notes
+
+- Write access to `/media` is temporarily limited to the tenant owner; the `manageMedia` role group replaces this check in a follow-up. Image variants, upload hardening, usage proof and the legacy `/files` routes are untouched by this change
+
 ## [4.2.6] — 2026-08-25
 
 ### Added

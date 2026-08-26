@@ -1,0 +1,232 @@
+# swagger/routes/media.yaml
+
+/api/v2/{tenant}/media:
+  post:
+    tags:
+      - Media
+    summary: Upload a file into the media library
+    description: |
+      Uploads exactly one file per request. The bytes go to the configured
+      storage provider, the metadata becomes a medium. Writing is restricted to
+      the tenant owner.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [file]
+            properties:
+              file:
+                type: string
+                format: binary
+              name:
+                type: string
+                description: Title of the medium, defaults to the file name
+              altText:
+                type: string
+              tags:
+                type: string
+                description: Comma separated list or JSON array
+                example: summer,beach
+              visibility:
+                type: string
+                enum: [public, intern]
+    responses:
+      "201":
+        description: The created medium
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Media"
+      "400":
+        description: Missing file, more than one file, or invalid metadata
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaApiError"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+      "503":
+        description: The storage provider could not be reached
+
+  get:
+    tags:
+      - Media
+    summary: List media of a tenant
+    description: |
+      Paginated and filtered listing — the backend of the media picker.
+      Anonymous callers only ever see `public` media; `intern` media require an
+      active membership in the tenant.
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: page
+        in: query
+        description: 1-based page number
+        schema:
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        description: Page size, capped at 100
+        schema:
+          type: integer
+          default: 25
+      - name: kind
+        in: query
+        schema:
+          type: string
+          enum: [image, document]
+      - name: tag
+        in: query
+        schema:
+          type: string
+      - name: q
+        in: query
+        description: Free-text filter on title, alt text and file name
+        schema:
+          type: string
+      - name: visibility
+        in: query
+        schema:
+          type: string
+          enum: [public, intern]
+    responses:
+      "200":
+        description: A page of media
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaList"
+      "400":
+        description: Invalid filter value
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaApiError"
+
+/api/v2/{tenant}/media/{id}:
+  get:
+    tags:
+      - Media
+    summary: Metadata of a medium
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/MediaIdParam"
+    responses:
+      "200":
+        description: The medium
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Media"
+      "401":
+        description: An internal medium was requested anonymously
+      "403":
+        description: No active membership in the owning tenant
+      "404":
+        description: No such medium in this tenant
+
+  patch:
+    tags:
+      - Media
+    summary: Change the metadata of a medium
+    description: |
+      Only title, alt text, tags and visibility can change — the file of a
+      medium is immutable, replacing it means uploading a new medium.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/MediaIdParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MediaPatch"
+    responses:
+      "200":
+        description: The updated medium
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Media"
+      "400":
+        description: No updatable field was sent, or an invalid value
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaApiError"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+      "404":
+        description: No such medium in this tenant
+
+  delete:
+    tags:
+      - Media
+    summary: Delete a medium
+    description: |
+      Removes the database document first and the bytes best-effort afterwards.
+      Deleting is final — there is no trash.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/MediaIdParam"
+    responses:
+      "204":
+        description: The medium was deleted
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the tenant owner
+      "404":
+        description: No such medium in this tenant
+
+/api/v2/{tenant}/media/{id}/file:
+  get:
+    tags:
+      - Media
+    summary: Download the original file of a medium
+    description: |
+      Streams the original through the backend — every read is permission
+      checked, there are no presigned storage URLs.
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/MediaIdParam"
+    responses:
+      "200":
+        description: The file
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      "401":
+        description: An internal medium was requested anonymously
+      "403":
+        description: No active membership in the owning tenant
+      "404":
+        description: No such medium in this tenant
+      "503":
+        description: The storage provider could not be reached
+
+components:
+  parameters:
+    MediaIdParam:
+      name: id
+      in: path
+      required: true
+      description: Unique identifier of the medium
+      schema:
+        type: string

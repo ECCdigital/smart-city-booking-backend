@@ -3,10 +3,7 @@ const { RoleManager } = require("./role-manager");
 const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const { escapeRegex } = require("../utilities/regex-utils");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {

@@ -29,6 +29,7 @@
   "author": "Eisenschmidt Consulting Crew GmbH",
   "license": "GPL-3.0",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1118.0",
     "@azure/msal-node": "^3.1.0",
     "@exlinc/keycloak-passport": "^1.0.2",
     "axios": "^1.6.2",

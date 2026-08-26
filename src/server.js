@@ -14,6 +14,10 @@ const RuleEngine = require("./rule-engine/ruleEngine");
 const { requestLogger } = require("./middleware/logger.js");
 const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
 const { errorHandler } = require("./middleware/error-handler");
+const { assertStorageConfig } = require("./commons/services/storage");
+
+// Fail fast when the explicitly chosen storage provider is misconfigured.
+assertStorageConfig();
 
 const dbm = DatabaseManager.getInstance();
 
