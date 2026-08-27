@@ -8,6 +8,10 @@
   <br> {{booking.comment}}
 {{else}} {{/gt}}
 
+{{#each mailCustomFields}}
+  <br><strong>{{caption}}:</strong>
+  {{#if displayValue}}{{displayValue}}{{else}}<em>nicht angegeben</em>{{/if}}
+{{/each}}
 {{#if bookingPeriod}}
   <br><strong>Buchungszeitraum:</strong> {{bookingPeriod}}
 {{/if}}

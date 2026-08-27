@@ -3,6 +3,9 @@ const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const TenantManager = require("../data-managers/tenant-manager");
 const QRCode = require("qrcode");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const { renderSnippet } = require("./templates/template-loader");
 const Formatters = require("../utilities/formatters");
 
@@ -104,11 +107,24 @@ class MailDataService {
       tenant.mailBookingPeriodFormat,
     );
 
+    // Order follows the merge order of the definitions (instance → tenant →
+    // bookable); a null displayValue renders as "nicht angegeben".
+    const mailCustomFields = (booking.customFields || [])
+      .filter((field) => field.usageOptions?.showInMail === true)
+      .map((field) => ({
+        caption: field.caption,
+        displayValue: CustomFieldService.formatValueForDisplay(
+          field,
+          field.value,
+        ),
+      }));
+
     return renderSnippet("booking-details", {
       booking,
       bookingItems,
       coupon,
       bookingPeriod,
+      mailCustomFields,
     });
   }
 
