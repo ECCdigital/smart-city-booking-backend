@@ -47,27 +47,62 @@ function strongEtag(checksum) {
 }
 
 /**
+ * Whether the client's copy is at least as new as the resource.
+ *
+ * @param {string} header - Raw `If-Modified-Since` value.
+ * @param {string} lastModified - Last modification date of the resource.
+ * @returns {boolean} True if the client already holds this version.
+ */
+function notModifiedSince(header, lastModified) {
+  const since = new Date(header);
+  const modified = new Date(lastModified);
+
+  return (
+    !Number.isNaN(since.valueOf()) &&
+    !Number.isNaN(modified.valueOf()) &&
+    modified <= since
+  );
+}
+
+/**
  * Writes the caching headers of a binary response and reports whether the
  * client's copy is still current. Callers answer a `true` with `304`.
+ *
+ * A media response validates against its checksum alone; only the legacy file
+ * route, which serves bytes it has no checksum for, adds a modification date.
  *
  * @param {Object} req - Express request.
  * @param {Object} res - Express response.
  * @param {Object} params
  * @param {string} params.cacheControl - One of `CACHE_POLICY`.
  * @param {string} [params.etag] - Entity tag of the delivered bytes.
+ * @param {string} [params.lastModified] - Last modification date of the bytes.
  * @returns {boolean} True when the response may be a 304.
  */
-function applyCacheHeaders(req, res, { cacheControl, etag }) {
+function applyCacheHeaders(req, res, { cacheControl, etag, lastModified }) {
   res.setHeader("Cache-Control", cacheControl);
 
-  if (!etag) {
+  const headers = req.headers || {};
+
+  if (etag) {
+    res.setHeader("ETag", etag);
+
+    const ifNoneMatch = headers["if-none-match"];
+    if (ifNoneMatch && matchesEtag(ifNoneMatch, etag)) {
+      return true;
+    }
+  }
+
+  if (!lastModified) {
     return false;
   }
 
-  res.setHeader("ETag", etag);
+  res.setHeader("Last-Modified", lastModified);
 
-  const ifNoneMatch = (req.headers || {})["if-none-match"];
-  return Boolean(ifNoneMatch) && matchesEtag(ifNoneMatch, etag);
+  const ifModifiedSince = headers["if-modified-since"];
+  return (
+    Boolean(ifModifiedSince) && notModifiedSince(ifModifiedSince, lastModified)
+  );
 }
 
 module.exports = {

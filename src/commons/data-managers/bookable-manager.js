@@ -407,6 +407,34 @@ class BookableManager {
   }
 
   /**
+   * Find the bookables that reference a medium — its image list or one of its
+   * attachments. The usage proof is searched on demand (§4.7 of the media
+   * spec); a medium never carries a back reference.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} mediaId ID of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const docs = await BookableModel.find(
+      {
+        tenantId: tenantId,
+        $or: [
+          { "images.mediaId": mediaId },
+          { "attachments.reference.mediaId": mediaId },
+        ],
+      },
+      { id: 1, title: 1 },
+    ).lean();
+
+    return docs.map((doc) => ({ id: doc.id, title: doc.title || "" }));
+  }
+
+  /**
    * Check public bookable count limit
    * @param {string} tenantId Tenant ID
    * @returns {Promise<boolean>} True if under limit

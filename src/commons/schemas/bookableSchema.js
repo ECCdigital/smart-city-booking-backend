@@ -1,6 +1,7 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
 const { customFieldDefinitionSchema } = require("./customFieldDefinition");
+const { mediaReferenceSchema } = require("./mediaSchema");
 
 const priceCategorySchemaDefinition = {
   priceEur: { type: Number, required: true },
@@ -18,7 +19,11 @@ const attachmentSchemaDefinition = {
   title: { type: String, required: true },
   caption: { type: String, default: "" },
   type: { type: String, required: true },
-  url: { type: String, required: true },
+  // The file of an attachment is a media reference; the context fields around
+  // it stay here, at the usage site. `url` is the legacy raw address the media
+  // import (B7) converts — it is read as an external reference until then.
+  reference: { type: mediaReferenceSchema, default: undefined },
+  url: { type: String, default: "" },
   show: { type: Boolean, default: false },
   required: { type: Boolean, default: false },
   mailAttach: { type: Boolean, default: false },
@@ -103,6 +108,12 @@ const bookableSchemaDefinition = {
   title: { type: String, required: true },
   description: { type: String, default: "" },
   isPublic: { type: Boolean, default: false },
+  // The ordered image list. Position 0 is the cover image — there is no field
+  // of its own for it, reordering the list changes the cover.
+  images: { type: [mediaReferenceSchema], default: [] },
+  // Legacy single image, kept readable until the media import (B7) has moved
+  // it into `images`. It is the fallback of the derived `imgUrl` export field,
+  // never written by the application.
   imgUrl: { type: String, default: "" },
   flags: { type: [String], default: [] },
   tags: { type: [String], default: [] },

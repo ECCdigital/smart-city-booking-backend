@@ -146,6 +146,7 @@ async function generateImageVariants({ data, mimeType, sourceWidth }) {
 module.exports = {
   IMAGE_PRESETS,
   PRESET_NAMES,
+  VARIANT_FORMAT,
   VARIANT_MIME_TYPE,
   applySharpConcurrency,
   generateImageVariants,

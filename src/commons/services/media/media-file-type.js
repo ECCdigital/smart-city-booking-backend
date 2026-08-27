@@ -1,3 +1,4 @@
+const mime = require("mime-types");
 const sharp = require("sharp");
 
 const { BadRequestError } = require("../../../errors/BaseError");
@@ -5,10 +6,16 @@ const { MEDIA_KIND } = require("../../schemas/mediaSchema");
 const { imageMaxPixels } = require("./media-config");
 
 const SVG_MIME_TYPE = "image/svg+xml";
+const ICO_MIME_TYPE = "image/x-icon";
+const GENERIC_MIME_TYPE = "application/octet-stream";
 
 /**
  * The upload allowlist. The detected type decides — the file name extension is
  * never consulted, it only ever becomes part of the storage key.
+ *
+ * An image type without `sharpFormats` is one sharp cannot read: it is stored
+ * exactly as uploaded, without a decode check and without variants. Its magic
+ * bytes are still the only thing that lets it in.
  */
 const ALLOWED_TYPES = [
   {
@@ -20,6 +27,9 @@ const ALLOWED_TYPES = [
   { mimeType: "image/webp", kind: MEDIA_KIND.IMAGE, sharpFormats: ["webp"] },
   { mimeType: "image/gif", kind: MEDIA_KIND.IMAGE, sharpFormats: ["gif"] },
   { mimeType: SVG_MIME_TYPE, kind: MEDIA_KIND.IMAGE, sharpFormats: ["svg"] },
+  // The one thing an ICO is for is a favicon, which is served at its own size
+  // — so nothing is lost by having no variants (§4.9).
+  { mimeType: ICO_MIME_TYPE, kind: MEDIA_KIND.IMAGE, sharpFormats: [] },
   { mimeType: "application/pdf", kind: MEDIA_KIND.DOCUMENT, sharpFormats: [] },
 ];
 
@@ -114,7 +124,8 @@ async function readImageMetadata(data, type) {
  * formats, an XML sniff for SVG, and a sharp decode for every image on top.
  *
  * @param {Buffer} data - The uploaded bytes.
- * @returns {Promise<{mimeType: string, kind: string, image: Object|null}>}
+ * @returns {Promise<{mimeType: string, kind: string, image: Object|null,
+ *   variants: boolean}>}
  * @throws {BadRequestError} On empty files and types outside the allowlist.
  */
 async function detectUploadType(data) {
@@ -141,18 +152,56 @@ async function detectUploadType(data) {
     });
   }
 
+  const decodable =
+    type.kind === MEDIA_KIND.IMAGE && type.sharpFormats.length > 0;
+
   return {
     mimeType: type.mimeType,
     kind: type.kind,
-    image:
-      type.kind === MEDIA_KIND.IMAGE
-        ? await readImageMetadata(data, type)
-        : null,
+    image: decodable ? await readImageMetadata(data, type) : null,
+    variants: decodable,
   };
+}
+
+/**
+ * Decides the type of a file that is already in the stock. The allowlist is an
+ * upload rule, not a storage rule: the legacy tree holds whatever operators put
+ * there over the years, and the media import moves that stock as it is instead
+ * of losing it. Files outside the allowlist keep the type their name suggests
+ * and become documents; only allowlisted images get a decode check, and only a
+ * file sharp actually reads gets variants.
+ *
+ * @param {Buffer} data - The stored bytes.
+ * @param {string} [fileName] - Name the file had in the legacy tree.
+ * @returns {Promise<{mimeType: string, kind: string, image: Object|null,
+ *   variants: boolean}>}
+ * @throws {BadRequestError} On empty files.
+ */
+async function detectStoredType(data, fileName) {
+  try {
+    return await detectUploadType(data);
+  } catch (error) {
+    if (error?.code === "empty_file") {
+      throw error;
+    }
+
+    const mimeType = mime.lookup(String(fileName || "")) || GENERIC_MIME_TYPE;
+
+    return {
+      // An image sharp could not verify is still not one we dare resize; it
+      // travels as a document so nothing downstream tries to decode it.
+      mimeType,
+      kind: MEDIA_KIND.DOCUMENT,
+      image: null,
+      variants: false,
+    };
+  }
 }
 
 module.exports = {
   ALLOWED_MIME_TYPES,
+  ICO_MIME_TYPE,
   SVG_MIME_TYPE,
+  detectStoredType,
   detectUploadType,
 };

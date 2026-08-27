@@ -362,15 +362,12 @@ router.delete(
   CouponController.deleteCoupon,
 );
 
-// NEXT CLOUD
-// ==========
-router.get("/files/list", optionalAuth, FileController.getTenantFiles);
+// LEGACY FILES
+// ============
+// The tenant listing and upload are gone with the media library — the admin UI
+// picks and uploads media (§4.10). `GET /files/get` stays for good as the
+// resolver of stored legacy addresses.
 router.get("/files/get", optionalAuth, FileController.getTenantFile);
-router.post(
-  "/files",
-  AuthenticationController.isSignedIn,
-  FileController.createTenantFile,
-);
 
 // WORKFLOW
 // ========

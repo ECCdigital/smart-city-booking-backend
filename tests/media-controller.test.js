@@ -7,6 +7,9 @@ const BookingManager = require("../src/commons/data-managers/booking-manager");
 const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaService = require("../src/commons/services/media/media-service");
+const {
+  MediaUsageService,
+} = require("../src/commons/services/media/media-usage");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const storage = require("../src/commons/services/storage");
@@ -173,6 +176,10 @@ describe("MediaControllerV2", function () {
   let membership;
   let permissions;
 
+  // The usage proof is searched over the entities, which no unit test holds —
+  // tests that care about it set this list.
+  let usage;
+
   before(async function () {
     pngBytes = await sharp({
       create: {
@@ -202,6 +209,7 @@ describe("MediaControllerV2", function () {
     instance = { ownerUserIds: [] };
     membership = null;
     permissions = { tenants: [], instanceOwner: false };
+    usage = [];
 
     sandbox.stub(storage, "getStorageProvider").returns(provider);
     sandbox
@@ -213,6 +221,9 @@ describe("MediaControllerV2", function () {
     sandbox
       .stub(UserManager, "getUserPermissions")
       .callsFake(async () => permissions);
+    sandbox
+      .stub(MediaUsageService, "findUsage")
+      .callsFake(async () => usage.map((site) => ({ ...site })));
   });
 
   afterEach(function () {
@@ -1282,6 +1293,92 @@ describe("MediaControllerV2", function () {
         (error) => error.statusCode === 403,
       );
       assert.strictEqual(removeMedia.called, false);
+    });
+  });
+
+  describe("usage proof", function () {
+    const USAGE = [
+      { type: "bookable", id: "bookable-1", title: "Meeting room 1" },
+      { type: "instance", id: null, title: "instance" },
+    ];
+
+    beforeEach(function () {
+      sandbox.stub(MediaManager, "getMedia").resolves(mediaFixture());
+    });
+
+    it("answers where a medium is used", async function () {
+      grant({ manageMedia: { readAny: true } });
+      usage = USAGE;
+      const res = createResponse();
+
+      await MediaControllerV2.getMediaUsage(
+        createRequest({ user: MEMBER, params: { id: "media-1" } }),
+        res,
+      );
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.deepStrictEqual(res.body, USAGE);
+      assert.deepStrictEqual(MediaUsageService.findUsage.firstCall.args[0], {
+        tenantId: TENANT,
+        mediaId: "media-1",
+      });
+    });
+
+    it("answers an empty list for an unused medium", async function () {
+      grant({ manageMedia: { readAny: true } });
+      const res = createResponse();
+
+      await MediaControllerV2.getMediaUsage(
+        createRequest({ user: MEMBER, params: { id: "media-1" } }),
+        res,
+      );
+
+      assert.deepStrictEqual(res.body, []);
+    });
+
+    it("needs the same right as reading the metadata", async function () {
+      asActiveMember();
+
+      await assert.rejects(
+        () =>
+          MediaControllerV2.getMediaUsage(
+            createRequest({ user: MEMBER, params: { id: "media-1" } }),
+            createResponse(),
+          ),
+        (error) => error.statusCode === 403,
+      );
+    });
+
+    it("blocks the deletion of a medium in use with the same body", async function () {
+      grant({ manageMedia: { readAny: true, deleteAny: true } });
+      usage = USAGE;
+      const removeMedia = sandbox.stub(MediaManager, "removeMedia");
+
+      const usageResponse = createResponse();
+      await MediaControllerV2.getMediaUsage(
+        createRequest({ user: OWNER, params: { id: "media-1" } }),
+        usageResponse,
+      );
+
+      let conflict;
+      await assert.rejects(
+        () =>
+          MediaControllerV2.deleteMedia(
+            createRequest({ user: OWNER, params: { id: "media-1" } }),
+            createResponse(),
+          ),
+        (error) => {
+          conflict = error;
+          return error.statusCode === 409;
+        },
+      );
+
+      assert.strictEqual(
+        JSON.stringify(conflict.toJSON()),
+        JSON.stringify(usageResponse.body),
+      );
+      assert.strictEqual(removeMedia.called, false);
+      assert.strictEqual(provider.deleteMany.called, false);
     });
   });
 });

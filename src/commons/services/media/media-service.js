@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require("uuid");
 
 const MediaManager = require("../../data-managers/media-manager");
 const { Media } = require("../../entities/media/media");
-const { MEDIA_KIND, MEDIA_VISIBILITY } = require("../../schemas/mediaSchema");
+const { MEDIA_VISIBILITY } = require("../../schemas/mediaSchema");
 const { BadRequestError } = require("../../../errors/BaseError");
 const { CACHE_POLICY, strongEtag } = require("../../utilities/cache-headers");
 const storage = require("../storage");
@@ -17,11 +17,18 @@ const {
   presetByName,
 } = require("./image-variants");
 const { largestMediaLimitBytes, maxBytesForKind } = require("./media-config");
-const { SVG_MIME_TYPE, detectUploadType } = require("./media-file-type");
+const {
+  SVG_MIME_TYPE,
+  detectStoredType,
+  detectUploadType,
+} = require("./media-file-type");
 
 const logger = bunyan.createLogger({
   name: "media-service.js",
   level: process.env.LOG_LEVEL,
+  // Provider errors carry their whole request, auth header included —
+  // the standard serializer keeps the message and the stack, nothing else.
+  serializers: { err: bunyan.stdSerializers.err },
 });
 
 /**
@@ -121,14 +128,13 @@ class MediaService {
       detected.kind,
     );
 
-    const variants =
-      detected.kind === MEDIA_KIND.IMAGE
-        ? await generateImageVariants({
-            data,
-            mimeType: detected.mimeType,
-            sourceWidth: detected.image?.width,
-          })
-        : [];
+    const variants = detected.variants
+      ? await generateImageVariants({
+          data,
+          mimeType: detected.mimeType,
+          sourceWidth: detected.image?.width,
+        })
+      : [];
 
     const providerName = storage.configuredProviderName();
     const provider = storage.getStorageProvider(providerName);
@@ -173,24 +179,38 @@ class MediaService {
       })),
     });
 
+    return await MediaService._persist({
+      provider,
+      media,
+      payloads: [
+        { key: media.storage.key, data, contentType: detected.mimeType },
+        ...variants.map((variant, index) => ({
+          key: media.variants[index].key,
+          data: variant.data,
+          contentType: VARIANT_MIME_TYPE,
+        })),
+      ],
+    });
+  }
+
+  /**
+   * Writes the bytes of a medium and then its database record. Anything that
+   * fails takes the whole medium with it — bytes already written are removed
+   * again, so no half medium is left behind.
+   *
+   * @param {Object} params
+   * @param {Object} params.provider - Storage provider to write to.
+   * @param {Object} params.media - The medium to store.
+   * @param {Array<{key: string, data: Buffer, contentType: string}>} params.payloads
+   * @returns {Promise<Object>} The stored medium.
+   */
+  static async _persist({ provider, media, payloads }) {
     const written = [];
 
     try {
-      await provider.put({
-        key: media.storage.key,
-        data,
-        contentType: detected.mimeType,
-      });
-      written.push(media.storage.key);
-
-      for (let index = 0; index < variants.length; index++) {
-        const key = media.variants[index].key;
-        await provider.put({
-          key,
-          data: variants[index].data,
-          contentType: VARIANT_MIME_TYPE,
-        });
-        written.push(key);
+      for (const payload of payloads) {
+        await provider.put(payload);
+        written.push(payload.key);
       }
 
       return await MediaManager.storeMedia(media);
@@ -198,6 +218,162 @@ class MediaService {
       await MediaService._rollbackUpload(provider, written);
       throw error;
     }
+  }
+
+  /**
+   * Takes a file of the legacy tree into the media library (§4.10). The upload
+   * allowlist and the size limits are rules for what may come in, not for what
+   * is already there — the import moves the stock as it stands, keeps the place
+   * it had as its legacy path and leaves `uploadedBy` empty, because an
+   * imported file has no known uploader. Variants follow with `regenerate`.
+   *
+   * @param {Object} params
+   * @param {string|null} params.tenantId - Owning tenant, null for instance media.
+   * @param {string} params.legacyPath - The place the file had in the old tree.
+   * @param {Object} params.file - `{ name, data }` of the stored file.
+   * @param {Object} [params.metadata] - title, tags, visibility.
+   * @param {string} [params.bookingId] - Linked booking, for booking documents.
+   * @returns {Promise<Object>} The stored medium.
+   */
+  static async importMedia({
+    tenantId,
+    legacyPath,
+    file,
+    metadata = {},
+    bookingId,
+  }) {
+    const data = file.data;
+    const detected = await detectStoredType(data, file.name);
+
+    const providerName = storage.configuredProviderName();
+    const provider = storage.getStorageProvider(providerName);
+    const mediaId = uuidv4();
+
+    const media = Media.create({
+      id: mediaId,
+      tenantId: tenantId ?? null,
+      kind: detected.kind,
+      mimeType: detected.mimeType,
+      size: data.length,
+      checksum: crypto.createHash("sha256").update(data).digest("hex"),
+      originalFileName: file.name,
+      title: metadata.title || file.name,
+      altText: "",
+      tags: metadata.tags || [],
+      visibility: metadata.visibility || MEDIA_VISIBILITY.PUBLIC,
+      uploadedBy: null,
+      bookingId: bookingId || null,
+      legacyPath,
+      storage: {
+        provider: providerName,
+        key: originalKey({
+          tenantId: tenantId ?? null,
+          mediaId,
+          mimeType: detected.mimeType,
+          fileName: file.name,
+        }),
+      },
+      variants: [],
+    });
+
+    return await MediaService._persist({
+      provider,
+      media,
+      payloads: [
+        { key: media.storage.key, data, contentType: detected.mimeType },
+      ],
+    });
+  }
+
+  /**
+   * Regenerates the variants of an image medium — the way stock catches up with
+   * a changed preset set (§4.10). The variants are written to the provider the
+   * medium lives on, never to the configured one: a medium only ever moves as a
+   * whole. Variants that no longer belong to any preset are removed
+   * best-effort; whatever survives is what `cleanup` finds later.
+   *
+   * @param {Object} media - The medium to regenerate.
+   * @returns {Promise<{media: Object, added: string[], removed: string[]}>}
+   */
+  static async regenerateVariants(media) {
+    const provider = MediaService.providerFor(media);
+    const data = await provider.getBuffer({ key: media.storage.key });
+
+    const detected = await detectStoredType(data, media.originalFileName);
+
+    if (!detected.variants) {
+      return { media, added: [], removed: [] };
+    }
+
+    const variants = await generateImageVariants({
+      data,
+      mimeType: detected.mimeType,
+      sourceWidth: detected.image?.width,
+    });
+
+    const regenerated = variants.map((variant) => ({
+      name: variant.name,
+      format: variant.format,
+      width: variant.width,
+      height: variant.height,
+      size: variant.size,
+      checksum: variant.checksum,
+      key: variantKey({
+        tenantId: media.tenantId ?? null,
+        mediaId: media.id,
+        name: variant.name,
+        format: variant.format,
+      }),
+    }));
+
+    const keptKeys = new Set(regenerated.map((variant) => variant.key));
+    const removed = (media.variants || [])
+      .map((variant) => variant.key)
+      .filter((key) => key && !keptKeys.has(key));
+
+    // What the medium already has, by key. A regeneration that produces the
+    // same bytes must leave the storage alone — a second run of the command
+    // changes nothing.
+    const existing = new Map(
+      (media.variants || []).map((variant) => [variant.key, variant.checksum]),
+    );
+
+    const added = [];
+
+    for (let index = 0; index < regenerated.length; index++) {
+      const variant = regenerated[index];
+
+      if (existing.get(variant.key) === variant.checksum) {
+        continue;
+      }
+
+      await provider.put({
+        key: variant.key,
+        data: variants[index].data,
+        contentType: VARIANT_MIME_TYPE,
+      });
+      added.push(variant.key);
+    }
+
+    if (added.length === 0 && removed.length === 0) {
+      return { media, added, removed };
+    }
+
+    media.variants = regenerated;
+    const stored = await MediaManager.storeMedia(media, false);
+
+    if (removed.length > 0) {
+      try {
+        await provider.deleteMany({ keys: removed });
+      } catch (error) {
+        logger.warn(
+          { err: error, mediaId: media.id, keys: removed },
+          "Superseded variants could not be removed, leaving orphans in storage",
+        );
+      }
+    }
+
+    return { media: stored, added, removed };
   }
 
   /**

@@ -6,6 +6,8 @@ const EventService = require("../../../commons/services/event-service");
 const PermissionService = require("../../../commons/services/permission-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const UserManager = require("../../../commons/data-managers/user-manager");
+const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const { BaseError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -141,6 +143,7 @@ class EventController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
         await EventService.createEvent(tenant, event, user, withTicketsBoolean);
 
         logger.info(
@@ -152,6 +155,10 @@ class EventController {
         response.sendStatus(403);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.error(err);
       response.status(500).send("could not create event");
     }
@@ -179,6 +186,7 @@ class EventController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
         await EventManager.storeEvent(event);
         logger.info(
           `${tenant} -- updated event ${event.id} by user ${user?.id}`,
@@ -189,6 +197,10 @@ class EventController {
         response.sendStatus(403);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.error(err);
       response.status(500).send("could not update event");
     }

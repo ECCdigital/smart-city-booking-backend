@@ -7,6 +7,7 @@ const InstanceManger = require("../data-managers/instance-manager");
 const axios = require("axios");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
 const { retry } = require("../utilities/retry");
+const { embedMediaImages } = require("../services/media/mail-media");
 
 const dateTimeFormatter = new Intl.DateTimeFormat("de-DE", {
   day: "2-digit",
@@ -273,7 +274,13 @@ class MailerService {
         }
       }
 
-      const output = await MailerService.processTemplate(mailTemplate, model);
+      // Media images resolve last, on the finished body: they can come from a
+      // snippet, a tenant template or a bookable note, and this is the one
+      // place all three have already been rendered into.
+      const output = await embedMediaImages(
+        await MailerService.processTemplate(mailTemplate, model),
+        tenantId,
+      );
 
       const context = tenantId ? ` for tenant ${tenantId}` : "Instance";
 

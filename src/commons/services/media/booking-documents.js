@@ -49,6 +49,26 @@ async function storeBookingDocument({ tenantId, bookingIds, file, type }) {
 }
 
 /**
+ * Removes every document of a booking — system receipts included. Booking
+ * documents have no life of their own: they cascade with their booking (§4.7),
+ * each on the same database-first, bytes-best-effort path as a manual delete.
+ *
+ * @param {Object} params
+ * @param {string} params.tenantId - Tenant of the booking.
+ * @param {string} params.bookingId - The booking being removed.
+ * @returns {Promise<number>} How many documents were removed.
+ */
+async function deleteBookingDocuments({ tenantId, bookingId }) {
+  const documents = await MediaManager.getBookingDocuments(tenantId, bookingId);
+
+  for (const document of documents) {
+    await MediaService.deleteMedia(document);
+  }
+
+  return documents.length;
+}
+
+/**
  * Reads a booking document: the medium if the library holds it, otherwise the
  * legacy Nextcloud tree, which the media import empties later.
  *
@@ -79,6 +99,7 @@ async function readBookingDocument({ tenantId, bookingId, fileName, type }) {
 
 module.exports = {
   BOOKING_DOCUMENT,
+  deleteBookingDocuments,
   isStorageFailure,
   readBookingDocument,
   storeBookingDocument,

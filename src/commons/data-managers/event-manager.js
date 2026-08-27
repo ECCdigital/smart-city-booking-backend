@@ -56,6 +56,41 @@ class EventManager {
   }
 
   /**
+   * Find the events that reference a medium — teaser image, contact person
+   * image, the photo of a speaker, the image list or one of the attachments.
+   * The usage proof is searched on demand (§4.7 of the media spec); a medium
+   * never carries a back reference.
+   *
+   * @param {string} tenantId Identifier of the tenant
+   * @param {string} mediaId Identifier of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const docs = await EventModel.find(
+      {
+        tenantId: tenantId,
+        $or: [
+          { "information.teaserImage.mediaId": mediaId },
+          { "eventOrganizer.contactPersonImage.mediaId": mediaId },
+          { "eventOrganizer.speakers.image.mediaId": mediaId },
+          { "images.mediaId": mediaId },
+          { "attachments.reference.mediaId": mediaId },
+        ],
+      },
+      { id: 1, "information.name": 1 },
+    ).lean();
+
+    return docs.map((doc) => ({
+      id: doc.id,
+      title: doc.information?.name || "",
+    }));
+  }
+
+  /**
    * Remove an event object from the database.
    *
    * @param {string} id The id of the event to remove

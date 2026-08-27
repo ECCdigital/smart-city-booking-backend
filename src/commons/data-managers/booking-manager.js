@@ -213,6 +213,74 @@ class BookingManager {
   }
 
   /**
+   * Find the bookings whose attachments reference a medium. The usage proof is
+   * searched on demand (§4.7 of the media spec); a medium never carries a back
+   * reference. Booking documents are not found this way — they hang on their
+   * booking by `bookingId` and cascade with it.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} mediaId ID of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const docs = await BookingModel.find(
+      {
+        tenantId: tenantId,
+        "attachments.reference.mediaId": mediaId,
+      },
+      { id: 1, name: 1 },
+    ).lean();
+
+    return docs.map((doc) => ({ id: doc.id, title: doc.name || "" }));
+  }
+
+  /**
+   * Every booking of a tenant that carries attachments — the stock the media
+   * import walks when it converts stored addresses into media references.
+   *
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Booking[]>} Bookings with at least one attachment
+   */
+  static async getBookingsWithAttachments(tenantId) {
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      "attachments.0": { $exists: true },
+    });
+
+    return BookingManager._toEntities(rawBookings);
+  }
+
+  /**
+   * Bookings whose attachments name a file. Generated documents are attached
+   * under `title` (receipts, cancellations) or `name` (invoices), so both are
+   * matched — this is how the media import places a legacy booking document
+   * without guessing (§4.10). An aggregated document names several bookings.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} fileName File name from the legacy document tree
+   * @returns {Promise<Booking[]>} Bookings that name the file
+   */
+  static async getBookingsByAttachmentFileName(tenantId, fileName) {
+    if (!fileName) {
+      return [];
+    }
+
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      $or: [
+        { "attachments.title": fileName },
+        { "attachments.name": fileName },
+      ],
+    });
+
+    return BookingManager._toEntities(rawBookings);
+  }
+
+  /**
    * Remove a booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID

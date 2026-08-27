@@ -1,480 +1,358 @@
+const bunyan = require("bunyan");
+const mime = require("mime-types");
+
+const MediaManager = require("../../../commons/data-managers/media-manager");
+const MediaService = require("../../../commons/services/media/media-service");
 const {
   NextcloudManager,
 } = require("../../../commons/data-managers/file-manager");
-const bunyan = require("bunyan");
-const mime = require("mime-types");
 const {
-  authenticateIfNeeded,
-} = require("../../../commons/utilities/auth-utils");
+  applyCacheHeaders,
+  CACHE_POLICY,
+} = require("../../../commons/utilities/cache-headers");
+const {
+  BadRequestError,
+  BaseError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} = require("../../../errors/BaseError");
+const {
+  PUBLIC_ROOT,
+  legacyRoot,
+  normaliseLegacyPath,
+} = require("../../../commons/services/media/legacy-path");
+const {
+  assertInstanceMediaFileAccess,
+  assertMediaFileAccess,
+  hasActiveMembership,
+} = require("../../../commons/services/media/media-access");
+const {
+  isImportPending,
+} = require("../../../commons/services/media/media-import-status");
 
 const logger = bunyan.createLogger({
   name: "file-controller.js",
   level: process.env.LOG_LEVEL,
+  // Provider errors carry their whole request, auth header included —
+  // the standard serializer keeps the message and the stack, nothing else.
+  serializers: { err: bunyan.stdSerializers.err },
 });
 
-const PUBLIC_PATH = "public";
-const PROTECTED_PATH = "protected";
-
-const withAccessLevel = (files, level) =>
-  files.map((file) => ({ ...file, accessLevel: level }));
-
-const safeGetFiles = async (tenant, path, accessLevel) => {
-  try {
-    const files = await NextcloudManager.getFiles({ tenant, rootPath: path });
-    return withAccessLevel(files, accessLevel);
-  } catch (err) {
-    logger.warn(`Failed to fetch ${accessLevel} files`, {
-      tenant,
-      error: err.message,
-    });
-    return [];
-  }
-};
-
 /**
- * The Next Cloud Controller provides Endpoints to upload and download files from the Next Cloud platform connected to
- * the booking manager instance.
+ * The permanent resolver of legacy file addresses (§4.10 of the media spec).
+ * Stored URLs in old mails, bookmarks and exports must not break, so this route
+ * stays for good: it looks a medium up by the place its bytes had in the old
+ * tree and delivers it with the media header matrix (§4.6).
+ *
+ * Until the media import has run, the same route still serves the legacy tree
+ * directly — but with the media permission checks in front of it, never with
+ * the old "any signed-in user may read protected files" rule.
  */
 class FileController {
-  static async getFiles(request, response) {
-    const {
-      user,
-      query: { includeProtected = "false" },
-    } = request;
-    const includeProtectedBool = includeProtected !== "false";
+  /**
+   * The legacy path a request asks for.
+   *
+   * @param {Object} request - Express request.
+   * @returns {string} The normalised legacy path.
+   * @throws {BadRequestError} When the parameter is missing or unusable.
+   */
+  static _requireLegacyPath(request) {
+    const legacyPath = normaliseLegacyPath(request.query?.name);
 
-    try {
-      const canAccessProtected =
-        includeProtectedBool && (await authenticateIfNeeded(request, true));
-
-      const [publicFiles, protectedFiles] = await Promise.all([
-        safeGetFiles(undefined, PUBLIC_PATH, "public"),
-        canAccessProtected
-          ? safeGetFiles(undefined, PROTECTED_PATH, "protected")
-          : [],
-      ]);
-
-      const allFiles = [...publicFiles, ...protectedFiles];
-      logger.info(
-        `Instance -- sending ${allFiles.length} files to user ${user?.id}. `,
-      );
-      response.status(200).send(allFiles);
-    } catch (err) {
-      logger.error("Error getting files from Nextcloud.", {
-        error: err.message,
-        statusCode: err.statusCode,
-      });
-
-      if (err.isNextcloudError) {
-        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        return response.status(statusCode).json({
-          error:
-            "Nextcloud service is currently unavailable. Please try again later.",
-          details:
-            process.env.NODE_ENV === "development" ? err.message : undefined,
-        });
-      }
-
-      return response.status(500).json({
-        error: "Error getting files from Nextcloud.",
-      });
+    if (!legacyPath) {
+      throw new BadRequestError("missing_file_name");
     }
+
+    return legacyPath;
   }
 
   /**
-   * Get a list of all public files related to a tenant.
+   * Serves a medium the resolver found: the same bytes, headers and cache
+   * policy the media route would answer with.
+   *
+   * @param {Object} request - Express request.
+   * @param {Object} response - Express response.
+   * @param {Function} next - Express next.
+   * @param {Object} media - The resolved medium.
+   * @returns {Promise<void>}
    */
-  static async getTenantFiles(request, response) {
-    const {
-      params: { tenant },
-      user,
-      query: { includeProtected = "false" },
-    } = request;
+  static async _sendMedia(request, response, next, media) {
+    const delivery = MediaService.describeDelivery(media);
 
-    if (!tenant) {
-      return response.status(400).json({ error: "Tenant is required." });
-    }
-
-    const includeProtectedBool = includeProtected === "true";
-
-    try {
-      const canAccessProtected =
-        includeProtectedBool && (await authenticateIfNeeded(request, true));
-
-      const [publicFiles, protectedFiles] = await Promise.all([
-        safeGetFiles(tenant, PUBLIC_PATH, "public"),
-        canAccessProtected
-          ? safeGetFiles(tenant, PROTECTED_PATH, "protected")
-          : [],
-      ]);
-
-      const allFiles = [...publicFiles, ...protectedFiles];
-
-      logger.info(
-        `${tenant} -- sending ${allFiles.length} files to user ${user?.id ?? "anonymous"}`,
-      );
-
-      return response.status(200).json(allFiles);
-    } catch (err) {
-      logger.error("Error getting files from Nextcloud.", {
-        error: err.message,
-        statusCode: err.statusCode,
-        tenant,
-      });
-
-      if (err.isNextcloudError) {
-        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        return response.status(statusCode).json({
-          error:
-            "Nextcloud service is currently unavailable. Please try again later.",
-          details:
-            process.env.NODE_ENV === "development" ? err.message : undefined,
-        });
-      }
-
-      return response.status(500).json({
-        error: "Error getting files from Nextcloud.",
-      });
-    }
-  }
-
-  static async getFile(request, response) {
-    const {
-      query: { name: filename },
-    } = request;
-
-    if (!filename) {
-      logger.warn(`Instance -- Missing required parameters.`);
-      response.status(400).send("Missing required parameters.");
+    if (
+      applyCacheHeaders(request, response, {
+        cacheControl: delivery.cacheControl,
+        etag: delivery.etag,
+      })
+    ) {
+      response.status(304).end();
       return;
     }
 
-    try {
-      const isPublicPath = filename.startsWith(`/${PUBLIC_PATH}/`);
-      const isProtectedPath = filename.startsWith(`/${PROTECTED_PATH}/`);
+    const stream = await MediaService.getStream(media, delivery.key);
 
-      const hasAccess =
-        isPublicPath ||
-        (isProtectedPath && (await authenticateIfNeeded(request, true)));
+    response.setHeader("Content-Type", delivery.contentType);
+    response.setHeader("Content-Disposition", delivery.disposition);
+    if (delivery.contentLength) {
+      response.setHeader("Content-Length", delivery.contentLength);
+    }
 
-      if (!hasAccess) {
-        logger.warn(`Instance -- Unauthorized.`);
-        return response.status(401).send("Unauthorized.");
-      }
+    FileController._pipe(
+      request,
+      response,
+      stream,
+      { mediaId: media.id },
+      next,
+    );
+  }
 
-      const stat = await NextcloudManager.statFile({ filename: filename });
+  /**
+   * Serves a file straight from the legacy tree — the fallback for an
+   * installation whose media import has not run yet. The bytes come from the
+   * old place, the permission check is the new one.
+   *
+   * @param {Object} request - Express request.
+   * @param {Object} response - Express response.
+   * @param {Function} next - Express next.
+   * @param {Object} params
+   * @param {string|null} params.tenantId - Tenant of the file.
+   * @param {string} params.legacyPath - The path to serve.
+   * @returns {Promise<void>}
+   */
+  static async _sendLegacyFile(
+    request,
+    response,
+    next,
+    { tenantId, legacyPath },
+  ) {
+    const isPublic = legacyRoot(legacyPath) === PUBLIC_ROOT;
 
-      const contentType =
-        mime.lookup(filename) || stat?.mime || "application/octet-stream";
-      response.setHeader("Content-Type", contentType);
-      response.setHeader(
-        "Cache-Control",
-        isPublicPath
-          ? "public, max-age=31536000, immutable"
-          : "private, max-age=0, no-cache",
+    const stat = await NextcloudManager.statFile({
+      tenantID: tenantId || undefined,
+      filename: legacyPath,
+    });
+
+    // The legacy tree has no checksum of its own, so its validators are the
+    // ones the storage reports.
+    if (
+      applyCacheHeaders(request, response, {
+        cacheControl: isPublic
+          ? CACHE_POLICY.PUBLIC_IMMUTABLE
+          : CACHE_POLICY.PRIVATE_NO_CACHE,
+        etag: stat?.etag,
+        lastModified: stat?.lastmod,
+      })
+    ) {
+      response.status(304).end();
+      return;
+    }
+
+    response.setHeader(
+      "Content-Type",
+      mime.lookup(legacyPath) || stat?.mime || "application/octet-stream",
+    );
+    response.setHeader("Content-Disposition", "inline");
+
+    const stream = await NextcloudManager.createReadStream({
+      tenantID: tenantId || undefined,
+      filename: legacyPath,
+    });
+
+    FileController._pipe(
+      request,
+      response,
+      stream,
+      { tenantId, legacyPath },
+      next,
+    );
+  }
+
+  /**
+   * Pipes a file stream to the response. Once the first byte is out there is no
+   * way back to an error page — the wire is cut instead; before that the
+   * central error handler still answers.
+   *
+   * @param {Object} request - Express request.
+   * @param {Object} response - Express response.
+   * @param {Object} stream - The readable stream.
+   * @param {Object} context - What was being served, for the log.
+   * @param {Function} [next] - Express next, where one is still usable.
+   * @returns {void}
+   */
+  static _pipe(request, response, stream, context, next) {
+    stream.on("error", (streamError) => {
+      logger.error(
+        { err: streamError, ...context },
+        "Error while streaming a legacy file address",
       );
-      response.setHeader("Content-Disposition", "inline");
 
-      if (stat?.etag) response.setHeader("ETag", stat.etag);
-      if (stat?.lastmod) response.setHeader("Last-Modified", stat.lastmod);
-
-      const inm = request.headers["if-none-match"];
-      const ims = request.headers["if-modified-since"];
-      const notModifiedByEtag = inm && stat?.etag && inm === stat.etag;
-      const notModifiedByTime =
-        ims && stat?.lastmod && new Date(stat.lastmod) <= new Date(ims);
-
-      if (notModifiedByEtag || notModifiedByTime) {
-        return response.status(304).end();
+      if (response.headersSent) {
+        response.destroy();
+        return;
       }
 
-      const stream = await NextcloudManager.createReadStream({
-        filename,
-      });
+      response.removeHeader("Content-Type");
+      response.removeHeader("Content-Disposition");
+      response.removeHeader("Content-Length");
+      response.removeHeader("Cache-Control");
+      response.removeHeader("ETag");
+      response.removeHeader("Last-Modified");
 
-      logger.info(`Instance -- sending file ${filename}`);
+      const failure = new BaseError("file_stream_failed", 503);
 
-      stream.on("error", (streamError) => {
-        logger.error("Error during file streaming from Nextcloud.", {
-          error: streamError.message,
-          statusCode: streamError.status || 500,
-          filename,
-        });
-        if (!response.headersSent) {
-          const statusCode = streamError.status >= 500 ? 503 : 500;
-          response.status(statusCode).send({
-            error:
-              "Error streaming file from Nextcloud. Please try again later.",
-            details:
-              process.env.NODE_ENV === "development"
-                ? streamError.message
-                : undefined,
-          });
-        } else {
-          response.destroy();
-        }
-      });
-      request.on("close", () => {
-        if (!response.writableEnded) {
-          stream.destroy();
-        }
-      });
+      if (next) {
+        next(failure);
+      } else {
+        response.status(failure.statusCode).json(failure.toJSON());
+      }
+    });
 
-      stream.pipe(response);
-    } catch (err) {
-      logger.error("Error downloading file from Nextcloud.", {
-        error: err.message,
-        statusCode: err.statusCode,
-        filename,
-      });
+    request.on("close", () => {
+      if (!response.writableEnded) {
+        stream.destroy();
+      }
+    });
 
-      if (err.isNextcloudError) {
-        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        return response.status(statusCode).send({
-          error:
-            "Nextcloud service is currently unavailable. Please try again later.",
-          details:
-            process.env.NODE_ENV === "development" ? err.message : undefined,
-        });
+    stream.pipe(response);
+  }
+
+  /**
+   * Answers a resolver request in one scope.
+   *
+   * @param {Object} request - Express request.
+   * @param {Object} response - Express response.
+   * @param {Function} next - Express next.
+   * @param {Object} scope - Tenant or instance scope behaviour.
+   * @returns {Promise<void>}
+   */
+  static async _resolve(request, response, next, scope) {
+    let legacyPath;
+
+    try {
+      legacyPath = FileController._requireLegacyPath(request);
+      const tenantId = scope.tenantId(request);
+
+      const media = await MediaManager.getMediaByLegacyPath(
+        tenantId,
+        legacyPath,
+      );
+
+      if (media) {
+        await scope.assertMediaAccess(request, media);
+        return await FileController._sendMedia(request, response, next, media);
       }
 
-      return response.status(500).send({
-        error: "Error downloading file from Nextcloud.",
+      // Once the import has run, the library is the whole truth: an address
+      // nothing answers for is gone, not waiting in the old tree.
+      if (!(await isImportPending())) {
+        throw new NotFoundError("file_not_found", { name: legacyPath });
+      }
+
+      await scope.assertLegacyAccess(request, legacyPath);
+
+      return await FileController._sendLegacyFile(request, response, next, {
+        tenantId,
+        legacyPath,
       });
+    } catch (error) {
+      if (error?.isNextcloudError) {
+        logger.warn(
+          { err: error, legacyPath },
+          "Legacy storage could not answer",
+        );
+
+        return next(
+          new BaseError(
+            "legacy_storage_unavailable",
+            error.statusCode >= 500 || !error.statusCode
+              ? 503
+              : error.statusCode,
+            { name: legacyPath },
+          ),
+        );
+      }
+
+      // Express 4 does not forward rejected handlers on its own.
+      return next(error);
     }
   }
 
   /**
-   * Download a file from the public folder of a tenant.
+   * Read access to a file the import has not taken over yet. Public files stay
+   * anonymous; everything else needs an active membership in the owning tenant
+   * — the old check let any signed-in user through, whatever tenant they
+   * belonged to (§4.3).
+   *
+   * @param {Object} request - Express request.
+   * @param {string} tenantId - Tenant of the file.
+   * @param {string} legacyPath - The requested path.
+   * @returns {Promise<void>}
+   * @throws {UnauthorizedError|ForbiddenError}
    */
-  static async getTenantFile(request, response) {
-    const {
-      params: { tenant },
-      query: { name: filename },
-    } = request;
-
-    if (!tenant || !filename) {
-      logger.warn(`${tenant} -- Missing required parameters.`);
-      return response.status(400).send("Missing required parameters.");
+  static async _assertLegacyTenantAccess(request, tenantId, legacyPath) {
+    if (legacyRoot(legacyPath) === PUBLIC_ROOT) {
+      return;
     }
 
-    try {
-      const isPublicPath = filename.startsWith(`/${PUBLIC_PATH}/`);
-      const isProtectedPath = filename.startsWith(`/${PROTECTED_PATH}/`);
+    const userId = request.user?.id;
 
-      const hasAccess =
-        isPublicPath ||
-        (isProtectedPath && (await authenticateIfNeeded(request, true)));
-
-      if (!hasAccess) {
-        logger.warn(`${tenant} -- Unauthorized.`);
-        return response.status(401).send("Unauthorized.");
-      }
-
-      const stat = await NextcloudManager.statFile({
-        tenantID: tenant,
-        filename,
-      });
-
-      const contentType =
-        mime.lookup(filename) || stat?.mime || "application/octet-stream";
-      response.setHeader("Content-Type", contentType);
-      response.setHeader(
-        "Cache-Control",
-        isPublicPath
-          ? "public, max-age=31536000, immutable"
-          : "private, max-age=0, no-cache",
-      );
-      response.setHeader("Content-Disposition", "inline");
-
-      if (stat?.etag) response.setHeader("ETag", stat.etag);
-      if (stat?.lastmod) response.setHeader("Last-Modified", stat.lastmod);
-
-      const inm = request.headers["if-none-match"];
-      const ims = request.headers["if-modified-since"];
-      const notModifiedByEtag = inm && stat?.etag && inm === stat.etag;
-      const notModifiedByTime =
-        ims && stat?.lastmod && new Date(stat.lastmod) <= new Date(ims);
-
-      if (notModifiedByEtag || notModifiedByTime) {
-        return response.status(304).end();
-      }
-
-      const stream = await NextcloudManager.createReadStream({
-        tenantID: tenant,
-        filename,
-      });
-
-      logger.info(`${tenant} -- sending file ${filename}`);
-
-      stream.on("error", (streamError) => {
-        logger.error("Error during file streaming from Nextcloud.", {
-          error: streamError.message,
-          statusCode: streamError.status || 500,
-          tenant,
-          filename,
-        });
-
-        if (!response.headersSent) {
-          const statusCode = streamError.status >= 500 ? 503 : 500;
-          response.status(statusCode).send({
-            error:
-              "Error streaming file from Nextcloud. Please try again later.",
-            details:
-              process.env.NODE_ENV === "development"
-                ? streamError.message
-                : undefined,
-          });
-        } else {
-          response.destroy();
-        }
-      });
-
-      request.on("close", () => {
-        if (!response.writableEnded) {
-          stream.destroy();
-        }
-      });
-
-      stream.pipe(response);
-    } catch (err) {
-      logger.error("Error downloading file from Nextcloud.", {
-        error: err.message,
-        statusCode: err.statusCode,
-        tenant,
-        filename,
-      });
-
-      if (err.isNextcloudError) {
-        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        return response.status(statusCode).send({
-          error:
-            "Nextcloud service is currently unavailable. Please try again later.",
-          details:
-            process.env.NODE_ENV === "development" ? err.message : undefined,
-        });
-      }
-
-      return response.status(500).send({
-        error: "Error downloading file from Nextcloud.",
-      });
-    }
-  }
-
-  static async createFile(request, response) {
-    const {
-      user,
-      files: { file },
-      body: { accessLevel, customDirectory },
-    } = request;
-
-    if (!file) {
-      logger.warn(
-        `Instance -- could not upload file. Missing required parameters.`,
-      );
-      return response.status(400).send("Missing required parameters.");
+    if (!userId) {
+      throw new UnauthorizedError("unauthorized");
     }
 
-    if (!file.name || file.name.includes("..") || file.name.includes("/")) {
-      return response.status(400).send("Invalid filename.");
-    }
-
-    try {
-      const subFolder =
-        (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
-        "/" +
-        customDirectory;
-      await NextcloudManager.createFile({
-        file,
-        subFolder,
-      });
-      logger.info(
-        `Instance -- file uploaded successfully by user ${user?.id ?? "anonymous"}.`,
-      );
-
-      return response.status(201).send("File uploaded successfully.");
-    } catch (err) {
-      logger.error("Error uploading file to Nextcloud.", {
-        error: err.message,
-        statusCode: err.statusCode,
-        filename: file?.name,
-      });
-
-      if (err.isNextcloudError) {
-        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        return response.status(statusCode).send({
-          error:
-            "Nextcloud service is currently unavailable. Please try again later.",
-          details:
-            process.env.NODE_ENV === "development" ? err.message : undefined,
-        });
-      }
-
-      return response.status(500).send({
-        error: "Error uploading file to Nextcloud.",
-      });
+    if (!(await hasActiveMembership(userId, tenantId))) {
+      throw new ForbiddenError("forbidden");
     }
   }
 
   /**
-   * Upload a file to the public folder of a tenant.
+   * Read access to a tenant-less legacy file. There is no membership that could
+   * narrow it, so `intern` means any signed-in user of the instance (§4.9).
+   *
+   * @param {Object} request - Express request.
+   * @param {string} legacyPath - The requested path.
+   * @returns {void}
+   * @throws {UnauthorizedError}
    */
-  static async createTenantFile(request, response) {
-    const {
-      params: { tenant },
-      user,
-      files: { file },
-      body: { accessLevel, customDirectory },
-    } = request;
-
-    if (!tenant || !file) {
-      logger.warn(
-        `${tenant} -- could not upload file. Missing required parameters.`,
-      );
-      return response.status(400).send("Missing required parameters.");
+  static _assertLegacyInstanceAccess(request, legacyPath) {
+    if (legacyRoot(legacyPath) === PUBLIC_ROOT) {
+      return;
     }
 
-    if (!file.name || file.name.includes("..") || file.name.includes("/")) {
-      return response.status(400).send("Invalid filename.");
+    if (!request.user?.id) {
+      throw new UnauthorizedError("unauthorized");
     }
+  }
 
-    try {
-      const subFolder =
-        (accessLevel === "public" ? PUBLIC_PATH : PROTECTED_PATH) +
-        "/" +
-        customDirectory;
-      await NextcloudManager.createFile({
-        tenantID: tenant,
-        file,
-        subFolder,
-      });
-      logger.info(
-        `${tenant} -- file uploaded successfully by user ${user?.id ?? "anonymous"}.`,
-      );
+  /**
+   * Resolve a tenant-less legacy address.
+   */
+  static async getFile(request, response, next) {
+    return await FileController._resolve(request, response, next, {
+      tenantId: () => null,
+      assertMediaAccess: (req, media) =>
+        assertInstanceMediaFileAccess(req.user?.id, media),
+      assertLegacyAccess: (req, legacyPath) =>
+        FileController._assertLegacyInstanceAccess(req, legacyPath),
+    });
+  }
 
-      return response.status(201).send("File uploaded successfully.");
-    } catch (err) {
-      logger.error("Error uploading file to Nextcloud.", {
-        error: err.message,
-        statusCode: err.statusCode,
-        tenant,
-        filename: file?.name,
-      });
-
-      if (err.isNextcloudError) {
-        const statusCode = err.statusCode >= 500 ? 503 : err.statusCode;
-        return response.status(statusCode).send({
-          error:
-            "Nextcloud service is currently unavailable. Please try again later.",
-          details:
-            process.env.NODE_ENV === "development" ? err.message : undefined,
-        });
-      }
-
-      return response.status(500).send({
-        error: "Error uploading file to Nextcloud.",
-      });
-    }
+  /**
+   * Resolve a legacy address of a tenant.
+   */
+  static async getTenantFile(request, response, next) {
+    return await FileController._resolve(request, response, next, {
+      tenantId: (req) => req.params.tenant,
+      assertMediaAccess: (req, media) =>
+        assertMediaFileAccess(req.user?.id, media),
+      assertLegacyAccess: (req, legacyPath) =>
+        FileController._assertLegacyTenantAccess(
+          req,
+          req.params.tenant,
+          legacyPath,
+        ),
+    });
   }
 }
 

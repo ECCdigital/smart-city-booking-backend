@@ -91,7 +91,8 @@ components:
           enum: [public, intern]
           description: |
             `public` media are readable anonymously, `intern` media require an
-            active membership in the owning tenant.
+            active membership in the owning tenant — or, for instance media,
+            any signed-in user of the instance.
           example: public
         uploadedBy:
           type: string
@@ -109,7 +110,9 @@ components:
             $ref: "#/components/schemas/MediaVariant"
         url:
           type: string
-          description: Relative URL of the original file
+          description: |
+            Relative URL of the original file. Instance media take `instance`
+            where the tenant id stands.
           example: /api/v2/tenant1/media/8f1c2a44/file
         createdAt:
           type: string
@@ -154,7 +157,37 @@ components:
         url:
           type: string
           nullable: true
-          description: Required when `source` is `external`
+          description: |
+            Required when `source` is `external`. On entity exports this field
+            also carries the resolved delivery address of a `media` reference
+            (`/api/v2/{tenant}/media/{id}/file`, or
+            `/api/v2/instance/media/{id}/file` at the instance), so frontends
+            never assemble media routes themselves.
+
+    MediaUsageSite:
+      type: object
+      description: One entity that references the medium.
+      properties:
+        type:
+          type: string
+          enum: [bookable, event, booking, instance]
+          example: bookable
+        id:
+          type: string
+          nullable: true
+          description: Id of the entity — null for the instance, which is a singleton
+          example: 3f9a1c22-8d4e-4a1b-9f6c-0b2d3e4f5a6b
+        title:
+          type: string
+          example: Meeting room 1
+
+    MediaUsage:
+      type: array
+      description: |
+        The usage proof of a medium: one entry per usage site, searched on
+        demand. An empty array means the medium is unused and can be deleted.
+      items:
+        $ref: "#/components/schemas/MediaUsageSite"
 
     MediaApiError:
       type: object

@@ -1,6 +1,11 @@
 const { bookableSchemaDefinition } = require("../../schemas/bookableSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const {
+  enrichAttachment,
+  enrichMediaReferences,
+  mediaReferenceUrl,
+} = require("../../services/media/media-reference");
+const {
   validateBlockPeriods,
   validateBookingModeExclusivity,
 } = require("../../utilities/block-period-validation");
@@ -310,6 +315,28 @@ class Bookable {
     return this;
   }
 
+  /**
+   * The cover image of the bookable: the first reference of the image list —
+   * determined by position, never by a field of its own. An empty list means
+   * "no cover image"; a bookable the media import has not touched yet falls
+   * back to its legacy `imgUrl`.
+   *
+   * @returns {Object|null} The reference, or null when there is none.
+   */
+  get coverImage() {
+    return this.images?.[0] ?? this.imgUrl ?? null;
+  }
+
+  /**
+   * The address the cover image is served under — the derived read field every
+   * frontend and the HTML endpoint have always known as `imgUrl`.
+   *
+   * @returns {string} The URL, empty when there is no cover image.
+   */
+  get coverImageUrl() {
+    return mediaReferenceUrl(this.coverImage, this.tenantId) || "";
+  }
+
   get hasExternalPricing() {
     return (
       this.externalProviders?.some(
@@ -353,7 +380,10 @@ class Bookable {
       type: this.type,
       title: this.title,
       description: this.description,
-      imgUrl: this.imgUrl,
+      images: enrichMediaReferences(this.images, this.tenantId),
+      // Derived from the cover image, so storefront v4 and the HTML endpoint
+      // keep reading the single address they always read.
+      imgUrl: this.coverImageUrl,
       flags: this.flags,
       tags: this.tags,
       location: this.location,
@@ -383,7 +413,9 @@ class Bookable {
       relatedBookableIds: this.relatedBookableIds,
       checkoutBookableIds: this.checkoutBookableIds,
       eventId: this.eventId,
-      attachments: this.attachments,
+      attachments: (this.attachments || []).map((attachment) =>
+        enrichAttachment(attachment, this.tenantId),
+      ),
       customFields: this.customFields,
       customFieldValues: this.customFieldValues,
       cancellationPolicy: this.cancellationPolicy,

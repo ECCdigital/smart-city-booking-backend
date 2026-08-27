@@ -3,7 +3,6 @@ const bunyan = require("bunyan");
 const BookingManager = require("../../../../commons/data-managers/booking-manager");
 const MediaManager = require("../../../../commons/data-managers/media-manager");
 const MediaService = require("../../../../commons/services/media/media-service");
-const MembershipManager = require("../../../../commons/data-managers/membership-manager");
 const PermissionService = require("../../../../commons/services/permission-service");
 const { RolePermission } = require("../../../../commons/entities/role/role");
 const {
@@ -16,14 +15,29 @@ const {
   NotFoundError,
   UnauthorizedError,
 } = require("../../../../errors/BaseError");
+const { MediaInUseError } = require("../../../../errors/MediaInUseError");
 const { StorageError } = require("../../../../errors/StorageError");
+const {
+  MediaUsageService,
+} = require("../../../../commons/services/media/media-usage");
 const {
   applyCacheHeaders,
 } = require("../../../../commons/utilities/cache-headers");
+const {
+  mediaFileUrl,
+} = require("../../../../commons/services/media/media-reference");
+const {
+  assertBookingDocumentAccess,
+  assertInstanceMediaFileAccess,
+  assertMediaFileAccess,
+} = require("../../../../commons/services/media/media-access");
 
 const logger = bunyan.createLogger({
   name: "media.controller.v2.js",
   level: process.env.LOG_LEVEL,
+  // Provider errors carry their whole request, auth header included —
+  // the standard serializer keeps the message and the stack, nothing else.
+  serializers: { err: bunyan.stdSerializers.err },
 });
 
 const PATCHABLE_FIELDS = ["title", "altText", "tags", "visibility"];
@@ -81,10 +95,28 @@ function parseEnum(value, allowed, code) {
 }
 
 /**
- * Media library endpoints. Resources are returned as plain JSON without an
- * envelope; URLs are always relative.
+ * Media library endpoints, serving both scopes of the library: the media of a
+ * tenant and the instance media (§4.9). The handlers are the same; what a
+ * scope decides is the tenant a request addresses and who may do what in it.
+ *
+ * Resources are returned as plain JSON without an envelope; URLs are always
+ * relative.
  */
 class MediaControllerV2 {
+  /**
+   * The scope a request runs in. The instance routes carry no `:tenant`, and
+   * an instance medium is exactly a medium without a tenant — so the absence
+   * of the parameter is the scope. Should a tenant route ever lose it, the
+   * request lands in the stricter of the two scopes and finds no tenant
+   * medium.
+   *
+   * @param {Object} req - Express request.
+   * @returns {Object} The scope of the request.
+   */
+  static _scope(req) {
+    return req.params?.tenant ? TENANT_SCOPE : INSTANCE_SCOPE;
+  }
+
   /**
    * Public representation of a medium. Storage keys stay internal.
    *
@@ -115,34 +147,10 @@ class MediaControllerV2 {
         size: variant.size,
         checksum: variant.checksum,
       })),
-      // Instance media (no tenant) get their own delivery route with B6.
-      url: media.tenantId
-        ? `/api/v2/${media.tenantId}/media/${media.id}/file`
-        : null,
+      url: mediaFileUrl(media.id, media.tenantId),
       createdAt: media.createdAt ?? null,
       updatedAt: media.updatedAt ?? null,
     };
-  }
-
-  /**
-   * Whether the user is an active member of the tenant. `intern` media
-   * require membership — being signed in anywhere is not enough.
-   *
-   * @param {string} userId - Id of the user.
-   * @param {string} tenantId - Id of the tenant.
-   * @returns {Promise<boolean>}
-   */
-  static async _hasActiveMembership(userId, tenantId) {
-    if (!userId) {
-      return false;
-    }
-
-    const membership = await MembershipManager.getMembershipByTenantAndUserID(
-      tenantId,
-      userId,
-    );
-
-    return membership?.status === "active";
   }
 
   /**
@@ -163,50 +171,6 @@ class MediaControllerV2 {
   }
 
   /**
-   * The receipt rule: a booking document is readable for whoever may read any
-   * booking of the tenant, or for the owner of the booking itself — a paying
-   * customer gets their invoice without holding any role.
-   *
-   * @param {string} userId - Id of the user.
-   * @param {Object} media - The booking document.
-   * @returns {Promise<boolean>}
-   */
-  static async _mayReadBookingDocument(userId, media) {
-    const tenantId = media.tenantId;
-
-    if (
-      await PermissionService._allowReadAny(
-        userId,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-      )
-    ) {
-      return true;
-    }
-
-    const booking = await BookingManager.getBooking(media.bookingId, tenantId);
-
-    return (
-      Boolean(booking) && PermissionService._isOwner(booking, userId, tenantId)
-    );
-  }
-
-  /**
-   * Read access to a booking document, in whatever form it is asked for.
-   *
-   * @param {Object} req - Express request.
-   * @param {Object} media - The booking document.
-   * @throws {UnauthorizedError|ForbiddenError}
-   */
-  static async _assertBookingDocumentAccess(req, media) {
-    const userId = MediaControllerV2._requireUserId(req);
-
-    if (!(await MediaControllerV2._mayReadBookingDocument(userId, media))) {
-      throw new ForbiddenError("forbidden");
-    }
-  }
-
-  /**
    * Access to the metadata of a medium — the picker right: `manageMedia`
    * read permission on the medium. Booking documents follow the receipt rule
    * instead; their visibility is meaningless.
@@ -217,7 +181,7 @@ class MediaControllerV2 {
    */
   static async _assertMetadataAccess(req, media) {
     if (media.isBookingDocument()) {
-      return await MediaControllerV2._assertBookingDocumentAccess(req, media);
+      return await assertBookingDocumentAccess(req.user?.id, media);
     }
 
     const userId = MediaControllerV2._requireUserId(req);
@@ -244,21 +208,7 @@ class MediaControllerV2 {
    * @throws {UnauthorizedError|ForbiddenError}
    */
   static async _assertFileAccess(req, media) {
-    if (media.isBookingDocument()) {
-      return await MediaControllerV2._assertBookingDocumentAccess(req, media);
-    }
-
-    if (media.isPublic()) {
-      return;
-    }
-
-    const userId = MediaControllerV2._requireUserId(req);
-
-    if (
-      !(await MediaControllerV2._hasActiveMembership(userId, media.tenantId))
-    ) {
-      throw new ForbiddenError("forbidden");
-    }
+    return await assertMediaFileAccess(req.user?.id, media);
   }
 
   /**
@@ -333,6 +283,89 @@ class MediaControllerV2 {
   }
 
   /**
+   * Permission to upload into the library of a tenant.
+   *
+   * @param {Object} req - Express request.
+   * @throws {UnauthorizedError|ForbiddenError}
+   */
+  static async _assertCreateAccess(req) {
+    const tenantId = req.params.tenant;
+    const userId = MediaControllerV2._requireUserId(req);
+
+    const allowed = await PermissionService._allowCreate(
+      { tenantId },
+      userId,
+      tenantId,
+      RolePermission.MANAGE_MEDIA,
+    );
+
+    if (!allowed) {
+      throw new ForbiddenError("forbidden");
+    }
+  }
+
+  /**
+   * How much of a tenant library the caller may list: everything with
+   * `manageMedia.readAny`, only their own uploads with `readOwn` alone.
+   *
+   * @param {Object} req - Express request.
+   * @returns {Promise<{uploadedBy: string|undefined}>} The listing narrowing.
+   * @throws {UnauthorizedError|ForbiddenError}
+   */
+  static async _resolveListScope(req) {
+    const tenantId = req.params.tenant;
+    const userId = MediaControllerV2._requireUserId(req);
+
+    const context = await PermissionService.createReadContext(
+      userId,
+      tenantId,
+      RolePermission.MANAGE_MEDIA,
+    );
+
+    if (
+      !PermissionService.canReadAllWithContext(context) &&
+      !context.hasReadOwn
+    ) {
+      throw new ForbiddenError("forbidden");
+    }
+
+    return {
+      uploadedBy: PermissionService.canReadAllWithContext(context)
+        ? undefined
+        : userId,
+    };
+  }
+
+  /**
+   * Every write to the instance library, and every look into it, belongs to
+   * the instance owner alone — there is no tenant whose roles could grant it
+   * (§4.9).
+   *
+   * @param {Object} req - Express request.
+   * @throws {UnauthorizedError|ForbiddenError}
+   */
+  static async _assertInstanceOwner(req) {
+    const userId = MediaControllerV2._requireUserId(req);
+
+    if (!(await PermissionService._isInstanceOwner(userId))) {
+      throw new ForbiddenError("forbidden");
+    }
+  }
+
+  /**
+   * Access to the file of an instance medium: `public` is readable
+   * anonymously, `intern` means any signed-in user of the instance — there is
+   * no membership that could narrow it further (§4.9).
+   *
+   * @param {Object} req - Express request.
+   * @param {Object} media - The medium.
+   * @throws {UnauthorizedError}
+   */
+  static _assertInstanceFileAccess(req, media) {
+    return assertInstanceMediaFileAccess(req.user?.id, media);
+  }
+
+  /**
    * Loads a medium of the tenant or fails with 404.
    *
    * @param {string} mediaId - Id of the medium.
@@ -354,19 +387,10 @@ class MediaControllerV2 {
    * Upload a single file into the media library.
    */
   static async createMedia(req, res) {
-    const tenantId = req.params.tenant;
-    const userId = MediaControllerV2._requireUserId(req);
+    const scope = MediaControllerV2._scope(req);
+    const tenantId = scope.tenantId(req);
 
-    const mayCreate = await PermissionService._allowCreate(
-      { tenantId },
-      userId,
-      tenantId,
-      RolePermission.MANAGE_MEDIA,
-    );
-
-    if (!mayCreate) {
-      throw new ForbiddenError("forbidden");
-    }
+    await scope.assertCreate(req);
 
     const file = req.files?.file;
 
@@ -410,8 +434,8 @@ class MediaControllerV2 {
    * List media of a tenant — the backend of the media picker.
    */
   static async getMediaList(req, res) {
-    const tenantId = req.params.tenant;
-    const userId = MediaControllerV2._requireUserId(req);
+    const scope = MediaControllerV2._scope(req);
+    const tenantId = scope.tenantId(req);
     const { page, pageSize, tag, q } = req.query;
 
     const kind = parseEnum(req.query.kind, MEDIA_KIND, "invalid_kind");
@@ -421,23 +445,7 @@ class MediaControllerV2 {
       "invalid_visibility",
     );
 
-    const context = await PermissionService.createReadContext(
-      userId,
-      tenantId,
-      RolePermission.MANAGE_MEDIA,
-    );
-
-    if (
-      !PermissionService.canReadAllWithContext(context) &&
-      !context.hasReadOwn
-    ) {
-      throw new ForbiddenError("forbidden");
-    }
-
-    // readOwn alone narrows the library to what the caller uploaded.
-    const uploadedBy = PermissionService.canReadAllWithContext(context)
-      ? undefined
-      : userId;
+    const { uploadedBy } = await scope.resolveListScope(req);
 
     const result = await MediaManager.getMediaList({
       tenantId,
@@ -462,13 +470,13 @@ class MediaControllerV2 {
    * Metadata of a single medium.
    */
   static async getMedia(req, res) {
-    const tenantId = req.params.tenant;
+    const scope = MediaControllerV2._scope(req);
     const media = await MediaControllerV2._requireMedia(
       req.params.id,
-      tenantId,
+      scope.tenantId(req),
     );
 
-    await MediaControllerV2._assertMetadataAccess(req, media);
+    await scope.assertMetadata(req, media);
 
     return res.status(200).json(MediaControllerV2._toResponse(media));
   }
@@ -477,14 +485,15 @@ class MediaControllerV2 {
    * Change the metadata of a medium — never its file.
    */
   static async updateMedia(req, res) {
-    const tenantId = req.params.tenant;
+    const scope = MediaControllerV2._scope(req);
+    const tenantId = scope.tenantId(req);
 
     const media = await MediaControllerV2._requireMedia(
       req.params.id,
       tenantId,
     );
 
-    await MediaControllerV2._assertUpdateAccess(req, media);
+    await scope.assertUpdate(req, media);
 
     const updates = {};
 
@@ -536,13 +545,14 @@ class MediaControllerV2 {
    * preset resolves to.
    */
   static async getMediaFile(req, res, next) {
-    const tenantId = req.params.tenant;
+    const scope = MediaControllerV2._scope(req);
+    const tenantId = scope.tenantId(req);
     const media = await MediaControllerV2._requireMedia(
       req.params.id,
       tenantId,
     );
 
-    await MediaControllerV2._assertFileAccess(req, media);
+    await scope.assertFile(req, media);
 
     const delivery = MediaService.describeDelivery(media, req.query?.size);
 
@@ -597,10 +607,34 @@ class MediaControllerV2 {
   }
 
   /**
-   * Delete a medium: database document first, bytes best-effort.
+   * The usage proof of a medium: every entity that references it. Read like
+   * the metadata — whoever may see a medium may see where it is used.
+   */
+  static async getMediaUsage(req, res) {
+    const scope = MediaControllerV2._scope(req);
+    const tenantId = scope.tenantId(req);
+    const media = await MediaControllerV2._requireMedia(
+      req.params.id,
+      tenantId,
+    );
+
+    await scope.assertMetadata(req, media);
+
+    const usage = await MediaUsageService.findUsage({
+      tenantId,
+      mediaId: media.id,
+    });
+
+    return res.status(200).json(usage);
+  }
+
+  /**
+   * Delete a medium: blocked while it is in use, otherwise database document
+   * first and bytes best-effort. There is no recycle bin.
    */
   static async deleteMedia(req, res) {
-    const tenantId = req.params.tenant;
+    const scope = MediaControllerV2._scope(req);
+    const tenantId = scope.tenantId(req);
 
     const media = await MediaControllerV2._requireMedia(
       req.params.id,
@@ -616,7 +650,16 @@ class MediaControllerV2 {
       });
     }
 
-    await MediaControllerV2._assertDeleteAccess(req, media);
+    await scope.assertDelete(req, media);
+
+    const usage = await MediaUsageService.findUsage({
+      tenantId,
+      mediaId: media.id,
+    });
+
+    if (usage.length > 0) {
+      throw new MediaInUseError(usage);
+    }
 
     await MediaService.deleteMedia(media);
 
@@ -628,5 +671,45 @@ class MediaControllerV2 {
     return res.status(204).end();
   }
 }
+
+/**
+ * The media of a tenant: the `manageMedia` role group decides who may pick,
+ * change and delete, the visibility of a medium decides who may read its file,
+ * and booking documents follow the receipt rule (§4.3).
+ */
+const TENANT_SCOPE = Object.freeze({
+  tenantId: (req) => req.params.tenant,
+  assertCreate: (req) => MediaControllerV2._assertCreateAccess(req),
+  resolveListScope: (req) => MediaControllerV2._resolveListScope(req),
+  assertMetadata: (req, media) =>
+    MediaControllerV2._assertMetadataAccess(req, media),
+  assertFile: (req, media) => MediaControllerV2._assertFileAccess(req, media),
+  assertUpdate: (req, media) =>
+    MediaControllerV2._assertUpdateAccess(req, media),
+  assertDelete: (req, media) =>
+    MediaControllerV2._assertDeleteAccess(req, media),
+});
+
+/**
+ * The instance media: no tenant, so no role could grant anything — managing
+ * them is the instance owner's alone, and `intern` means any signed-in user
+ * (§4.9). Booking documents never live here; they always belong to a booking
+ * of a tenant.
+ */
+const INSTANCE_SCOPE = Object.freeze({
+  tenantId: () => null,
+  assertCreate: (req) => MediaControllerV2._assertInstanceOwner(req),
+  resolveListScope: async (req) => {
+    await MediaControllerV2._assertInstanceOwner(req);
+    // The owner sees the whole instance library; there is no `readOwn` here
+    // that could narrow it.
+    return { uploadedBy: undefined };
+  },
+  assertMetadata: (req) => MediaControllerV2._assertInstanceOwner(req),
+  assertFile: (req, media) =>
+    MediaControllerV2._assertInstanceFileAccess(req, media),
+  assertUpdate: (req) => MediaControllerV2._assertInstanceOwner(req),
+  assertDelete: (req) => MediaControllerV2._assertInstanceOwner(req),
+});
 
 module.exports = MediaControllerV2;

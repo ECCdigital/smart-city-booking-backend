@@ -8,6 +8,9 @@ const {
 const logger = bunyan.createLogger({
   name: "storage-provider.js",
   level: process.env.LOG_LEVEL,
+  // Provider errors carry their whole request, auth header included —
+  // the standard serializer keeps the message and the stack, nothing else.
+  serializers: { err: bunyan.stdSerializers.err },
 });
 
 /**

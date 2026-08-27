@@ -104,12 +104,16 @@ class NextcloudManager extends FileManager {
     const statusText = error.response?.statusText || "Service Unavailable";
     const message = error.message || defaultMessage;
 
-    logger.error("Nextcloud error occurred:", {
-      message,
-      statusCode,
-      statusText,
-      originalError: error.message,
-    });
+    // "Not found" is an answer, not an incident — see `getFiles`.
+    logger[statusCode === 404 ? "debug" : "error"](
+      "Nextcloud error occurred:",
+      {
+        message,
+        statusCode,
+        statusText,
+        originalError: error.message,
+      },
+    );
 
     return new NextcloudError(
       `${defaultMessage}: ${statusCode} ${statusText}`,
@@ -169,7 +173,16 @@ class NextcloudManager extends FileManager {
           });
       });
     } catch (error) {
-      logger.error(`Failed to get files for tenant ${tenant} at ${rootPath}`, {
+      // A directory that does not exist is an ordinary answer for the one
+      // caller left, the media import, which asks after every tree an
+      // installation could have. The error still travels; only the log volume
+      // is toned down. The retry helper may already have normalised the client
+      // error, which carries its status as `statusCode` and has no `response`.
+      const notFound =
+        error?.statusCode === 404 || error?.response?.status === 404;
+      const level = notFound ? "debug" : "error";
+
+      logger[level](`Failed to get files for tenant ${tenant} at ${rootPath}`, {
         error: error.message,
       });
       throw NextcloudManager._handleError(error, "Failed to retrieve files");
@@ -314,6 +327,49 @@ class NextcloudManager extends FileManager {
         error,
         "Failed to retrieve file metadata",
       );
+    }
+  }
+
+  /**
+   * Removes a single file from the legacy tree. Only `purge-legacy` of the
+   * media CLI ever calls this — the import itself never deletes.
+   *
+   * @param {Object} params - The parameters for the method.
+   * @param {string} [params.tenantID] - The tenant the file belongs to.
+   * @param {string} params.filename - Path of the file below the tenant.
+   * @returns {Promise<void>}
+   */
+  static async deleteFile({ tenantID, filename } = {}) {
+    if (!filename || typeof filename !== "string") {
+      throw new TypeError("filename is required and must be a string");
+    }
+
+    const clean = (s) => String(s).replace(/^\/+|\/+$/g, "");
+
+    const segments = [tenantID ? clean(tenantID) : "", clean(filename)].filter(
+      Boolean,
+    );
+
+    if (
+      segments.some(
+        (seg) => seg === ".." || seg.includes("../") || seg.includes("..\\"),
+      )
+    ) {
+      throw new Error("Invalid path segment");
+    }
+
+    const path = segments.join("/");
+
+    try {
+      return await NextcloudManager._retryWithBackoff(async () => {
+        const client = NextcloudManager._getClient();
+        await client.deleteFile(path);
+      });
+    } catch (error) {
+      logger.error(`Failed to delete file ${filename} for tenant ${tenantID}`, {
+        error: error.message,
+      });
+      throw NextcloudManager._handleError(error, "Failed to delete file");
     }
   }
 

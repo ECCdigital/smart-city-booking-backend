@@ -23,9 +23,49 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 - Migration `26-08-2026-add-manage-media-role-group` mirrors `manageBookables` into `manageMedia` for every role and adds the `media` admin interface wherever a bookable interface is managed, so no existing admin loses a workflow
 - Receipts, invoices and cancellations are stored as booking document media (`bookingId` set) instead of raw Nextcloud files. Reading follows the receipt rule — `manageBookings.readAny` or the owner of the booking, so customers reach their own invoices without a role — and the existing booking download routes keep working as a facade, falling back to the legacy Nextcloud tree for documents written before this change. Booking documents never appear in the library listing or picker, and cannot be deleted through the API
 
+- `GET /api/v2/:tenant/media/:id/usage` answers the usage proof of a medium — every bookable, event, booking and the instance that references it, searched on demand over the reference sites; there is no `usedBy` field and no back reference at the medium. Read like the metadata
+- Deleting a medium that is still in use answers `409` with exactly the body of `/usage`, so the admin UI shows one list no matter which call produced it. Without usage, deletion stays final: database document first, bytes best-effort — a failed byte removal leaves an accepted orphan for the later media CLI to clean up
+- Removing a booking now cascades to its documents (system receipts included): they go before the booking itself, on the same database-first, bytes-best-effort path
+
+- Bookables carry an ordered image list (`images`) of media references instead of a single image; position 0 is the cover image, so reordering the list changes the cover and an empty list means there is none. `imgUrl` stays in exports as a derived read field with the address of the cover image, so storefront v4 and the HTML endpoint are unchanged — the HTML endpoint still shows only the cover image
+- Every image site of an event is a media reference now — teaser image, contact person image, the image list (`images`) and the photo of each speaker (`eventOrganizer.speakers[].image`). All of them keep going out under their old names as the address they resolve to, so the public structure and the HTML markup are unchanged; the image list stays a plain list, the title image of an event is and stays the teaser image. With that the usage proof covers the whole event, and deleting a medium that only hangs on a speaker or in the image list is blocked instead of silent
+- Attachments of bookables, events and bookings carry a media reference under `reference` next to their context fields (`title`, `caption`, `show`, `required`, `mailAttach`); the checkout copies it into the booking. Exported references are enriched with the delivery URL
+- Saving a bookable or event validates every medium it references: it has to belong to the tenant, the saver needs the picker right, and a publicly visible entity may only reference `public` media
+- `mailAttach` attachments that are media references are read through the media service instead of an HTTP self-call to the platform's own public URL — which is why `mailAttach` now works for `intern` media too. External references are still fetched over HTTP
+- Media images in mails follow the visibility of the medium: a public image is embedded at `?size=sm`, an intern one is only linked, since a mail client fetches images anonymously
+
+- `/api/v2/instance/media` opens the media library for instance-wide content: the same routes as the tenant library, addressed with `instance` where a tenant id would stand, for media without a tenant (keys under `_instance/`). Managing it belongs to the instance owner alone, and `intern` means any signed-in user of the instance — there is no tenant whose membership could narrow it. Instance and tenant media stay strictly separated in both directions: neither appears in the other's listing, and neither can be referenced from the other's entities
+- Instance branding and legal documents carry media references (`branding.logo`, `branding.favicon`, and `reference` inside `dataProtection`/`legalNotice`/`termsAndConditions`); `branding.logoUrl`/`faviconUrl` and the `url` of each legal document stay as derived read fields, so nothing downstream has to learn about media. Saving them validates that the medium is an instance medium the instance owner may pick, and branding takes `public` media only
+- ICO joins the upload allowlist for favicons. It passes on its magic bytes alone and gets no variants — sharp cannot read it
+
+- Media CLI (`node src/cli/media-cli.js`) with `import`, `regenerate`, `verify`, `cleanup` and `purge-legacy`, each with `--dry-run` and a report of what was processed, skipped, left unplaced or failed. Deliberately not a boot migration: an update never waits on a file move. Every command is idempotent — a second run changes nothing
+- `import` turns the whole legacy file stock into media: `public/` and `protected/` of every tenant and the tenant-less trees (which become instance media), folder names become tags, the tree decides the visibility, and the place a file had is kept as its legacy path. Bytes are copied to the currently configured storage provider, so the import is the storage move as well; the source is left where it is and `uploadedBy` stays empty. Variants follow with `regenerate`
+- `import` then converts every stored address into a media reference — bookable cover images and attachments, every image site of an event and its attachments, instance branding and legal documents, and the attachment copies on bookings. Resolution is host-independent: stored URLs carry the host of the environment they were uploaded in, so only the path decides. Addresses that are not ours stay external references, and tenant and instance scopes never resolve into each other
+- Legacy booking documents (`receipts/`, `invoices/`, `cancellations/`) are placed by matching their file name against the `title` and `name` of the booking attachments; an aggregated document becomes one medium per booking it names. A file no attachment names is reported, never guessed
+- `GET /api/files/get` and `GET /api/:tenant/files/get` stay for good as the resolver of stored legacy addresses: they look a medium up by its legacy path and deliver it with the media caching matrix. Until the import has run they still serve the legacy tree directly — but with the media permission checks in front of it, so a protected file now needs an active membership in the owning tenant instead of any session at all. Once the import has run, the library is the whole truth and an unknown address is a `404`
+- An installation whose media import has not run boots with a warning, never an error
+
+### Fixed
+
+- Storage failures no longer write credentials into the log. A raw webdav or axios error carries its whole request — `Authorization` header and session cookies included — and bunyan without an error serializer wrote all of it out; the media, storage and legacy-file loggers now use the standard serializer, which keeps the message and the stack and nothing else
+- A legacy tree that does not exist is logged at debug instead of error. The media import asks after every tree an installation could have, and an installation without cancellations does not have a `cancellations/` folder — those misses buried the report the command exists to produce
+
+### Changed
+
+- The media CLI resolves its `.env` from the repository rather than the working directory, so it runs from anywhere; a failing command prints its error instead of the whole help text
+- Who may read the file of a medium now lives in one media access service instead of the media controller, so the media route and the legacy resolver answer the question identically
+- `applyCacheHeaders` also owns `Last-Modified` and its `If-Modified-Since` comparison, for the legacy resolver, which serves bytes it has no checksum for
+
+### Removed
+
+- The tenant-less `GET /api/files/list` and `POST /api/files` are gone, replaced by `/api/v2/instance/media`; the upload route ran without any authentication middleware
+- The tenant file listing `GET /api/:tenant/files/list` and the upload `POST /api/:tenant/files` are gone with the admin UI switching to the media library. `GET /api/:tenant/files/get` stays as the resolver of legacy addresses
+
 ### Notes
 
-- Booking documents are the system receipts the platform writes itself; the API refuses to delete them (`booking_document_not_deletable`), they only cascade with their booking. Usage proof and the legacy `/files` routes are untouched by this change
+- Booking documents are the system receipts the platform writes itself; the API refuses to delete them (`booking_document_not_deletable`), they only cascade with their booking
+- Legacy plain URLs (`imgUrl` of a bookable, the image fields of an event, the `url` of an attachment) stay readable and are read as external references until the media import converts them; nothing is rewritten on save
+- `purge-legacy` removes only files a medium answers for; whatever the import could not take — an unplaced booking document above all — stays in the tree and is reported. `cleanup` reaches the key space of known media only, because the storage contract has no `list`: bytes of an already deleted medium remain the operator's to remove
 - New dependencies `sharp` and `file-type`; sharp ships prebuilt binaries, tune it with `MEDIA_IMAGE_MAX_PIXELS` and `MEDIA_SHARP_CONCURRENCY`
 
 ## [4.2.6] — 2026-08-25

@@ -105,7 +105,7 @@ class HtmlEngine {
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
       htmlOutput += this.generateImageHtml(
-        bookable.imgUrl,
+        bookable.coverImageUrl,
         "cover-image",
         bookable.title,
       );
@@ -177,7 +177,7 @@ class HtmlEngine {
     let htmlOutput = '<div class="bookable-item">';
 
     htmlOutput += this.generateImageHtml(
-      bookable.imgUrl,
+      bookable.coverImageUrl,
       "cover-image",
       bookable.title,
     );
@@ -281,7 +281,7 @@ class HtmlEngine {
 
       htmlOutput += `<li class="event" rel="${tags.trim()}">`;
       htmlOutput += this.generateImageHtml(
-        event.information.teaserImage,
+        event.teaserImageUrl,
         "cover-image",
         event.information.name,
       );
@@ -377,7 +377,7 @@ class HtmlEngine {
     htmlOutput += `<h1>Informationen</h1>`;
     htmlOutput += `<h2>${event.information.name || ""}</h2>`;
     htmlOutput += this.generateImageHtml(
-      event.information.teaserImage,
+      event.teaserImageUrl,
       "teaser-image",
       event.information.name,
     );
@@ -464,7 +464,7 @@ class HtmlEngine {
 
     if (event.eventOrganzier) {
       htmlOutput += this.generateImageHtml(
-        event.eventOrganizer.contactPersonImage,
+        event.contactPersonImageUrl,
         "contact-person-image",
         event.eventOrganizer.contactPersonName,
       );
@@ -479,11 +479,13 @@ class HtmlEngine {
       }</div>`;
     }
 
-    if (event.eventOrganizer.speakers.length > 0) {
+    const speakers = event.speakersWithImageUrls;
+
+    if (speakers.length > 0) {
       htmlOutput += `<h6>Referenten</h6>`;
       htmlOutput += `<ul class="speaker-list">`;
 
-      event.eventOrganizer.speakers.forEach((speaker) => {
+      speakers.forEach((speaker) => {
         htmlOutput += `<li class="speaker">`;
         htmlOutput += speaker.name
           ? `<div class="speaker-name">${speaker.name || ""}</div>`
@@ -555,9 +557,17 @@ class HtmlEngine {
       htmlOutput += `<div class="event-images">`;
       htmlOutput += `<h5>Bilder</h5>`;
       htmlOutput += '<ul class="event-images-list">';
-      event.images.forEach((image) => {
+      const imageUrls = event.imageUrls;
+
+      event.images.forEach((image, index) => {
         htmlOutput += '<li class="event-image">';
-        htmlOutput += this.generateImageHtml(image, "event-image", image.name);
+        // The address is derived, the alt text still comes from the stored
+        // entry — the markup stays the one it has always been.
+        htmlOutput += this.generateImageHtml(
+          imageUrls[index],
+          "event-image",
+          image.name,
+        );
         htmlOutput += "</li>";
       });
       htmlOutput += "</ul>";

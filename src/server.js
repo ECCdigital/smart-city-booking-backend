@@ -21,6 +21,9 @@ const {
 const {
   applySharpConcurrency,
 } = require("./commons/services/media/image-variants");
+const {
+  warnIfImportPending,
+} = require("./commons/services/media/media-import-status");
 
 // Fail fast when the explicitly chosen storage provider is misconfigured.
 assertStorageConfig();
@@ -158,6 +161,9 @@ dbm.connect().then(() => {
     try {
       await seed(dbm.dbClient.connection);
       await runMigrations(dbm.dbClient.connection);
+      // Not migrating is not an error: the legacy resolver route keeps serving
+      // the old tree until the media CLI has run (§4.10).
+      await warnIfImportPending();
       if (process.env.RULE_ENGINE_ENABLED === "true") {
         await RuleEngine.initEngine();
       }

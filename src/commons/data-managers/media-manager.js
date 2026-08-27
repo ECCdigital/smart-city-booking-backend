@@ -104,6 +104,52 @@ class MediaManager {
   }
 
   /**
+   * Find an imported medium by the place its bytes had in the legacy tree —
+   * the lookup behind the permanent resolver route `GET /files/get?name=`
+   * (§4.10). Only imported media carry a legacy path.
+   *
+   * @param {string|null} tenantId - Tenant ID (null for instance media).
+   * @param {string} legacyPath - Normalised legacy path.
+   * @returns {Promise<Object|null>} The medium or null.
+   */
+  static async getMediaByLegacyPath(tenantId, legacyPath) {
+    if (!legacyPath) {
+      return null;
+    }
+
+    const rawMedia = await MediaModel.findOne({
+      tenantId: tenantId ?? null,
+      legacyPath,
+    });
+
+    return rawMedia ? rawMedia.toEntity() : null;
+  }
+
+  /**
+   * Every medium matching a filter, unpaginated — the media CLI walks the whole
+   * stock (regenerate, verify, cleanup) and has no page to show it on.
+   *
+   * @param {Object} [filter] - Mongo filter, e.g. `{ kind: "image" }`.
+   * @returns {Promise<Object[]>} The matching media.
+   */
+  static async getAllMedia(filter = {}) {
+    const rawMedia = await MediaModel.find(filter).sort({ createdAt: 1 });
+
+    return rawMedia.map((raw) => raw.toEntity());
+  }
+
+  /**
+   * How many media the import brought over. Zero means the media import has not
+   * run on this installation — the boot warning and the legacy fallback of the
+   * resolver route hang off that (§4.10).
+   *
+   * @returns {Promise<number>} Number of imported media.
+   */
+  static async countImportedMedia() {
+    return await MediaModel.countDocuments({ legacyPath: { $ne: null } });
+  }
+
+  /**
    * Find the booking document a download route asks for by file name. The
    * booking routes address their documents by the name stored in the booking
    * attachment, not by media id.
@@ -128,6 +174,27 @@ class MediaManager {
     }).sort({ createdAt: -1 });
 
     return rawMedia ? rawMedia.toEntity() : null;
+  }
+
+  /**
+   * All documents of one booking — the media that cascade when the booking is
+   * removed, system receipts included.
+   *
+   * @param {string} tenantId - Tenant ID.
+   * @param {string} bookingId - The booking the documents belong to.
+   * @returns {Promise<Object[]>} The booking documents.
+   */
+  static async getBookingDocuments(tenantId, bookingId) {
+    if (!bookingId) {
+      return [];
+    }
+
+    const rawMedia = await MediaModel.find({
+      tenantId: tenantId ?? null,
+      bookingId,
+    });
+
+    return rawMedia.map((raw) => raw.toEntity());
   }
 
   /**
