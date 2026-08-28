@@ -1,0 +1,125 @@
+# swagger/routes/tenants.yaml
+#
+# The tenant API is not documented here in full — only the legal documents a
+# tenant files, since that is the part the media library added. Both operations
+# accept and return the whole tenant; the bodies below name `legalDocuments`
+# alone and leave the remaining tenant fields undocumented.
+
+/api/tenants:
+  put:
+    tags:
+      - Tenants
+    summary: Store a tenant, legal documents included
+    description: |
+      Writes a tenant. `legalDocuments` has no endpoint of its own — it travels
+      with the tenant like every other field, and is only stored when the
+      payload carries it. Whoever saves has to own the tenant or the instance;
+      the medium behind a document is checked at the same time, so a save can
+      be refused for the reference rather than the tenant.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id]
+            properties:
+              id:
+                type: string
+                example: tenant1
+              legalDocuments:
+                $ref: "#/components/schemas/TenantLegalDocuments"
+    responses:
+      "200":
+        description: |
+          An existing tenant was updated: the stored tenant, every document
+          reference carrying the address it resolves to in `url`.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                legalDocuments:
+                  $ref: "#/components/schemas/TenantLegalDocuments"
+      "201":
+        description: |
+          An unknown id created a tenant instead. The body is empty — read the
+          new tenant back with `GET /api/tenants/{id}`.
+      "400":
+        description: |
+          The list breaks a shape rule (a known type twice, a title on a known
+          type, `other` without one), or a medium may not be referenced —
+          `media_reference_unknown` for one that is not a medium of this tenant,
+          `media_reference_not_public` for an `intern` one.
+      "403":
+        description: Neither tenant owner nor instance owner, or no right to pick the medium
+
+  get:
+    tags:
+      - Tenants
+    summary: List the tenants the caller owns, legal documents included
+    description: |
+      Every tenant the caller owns, read the same way as a single one — each
+      media reference of the legal documents carries the address it resolves
+      to. With `publicTenants=true` the list switches to the public tenant
+      export, which does not carry legal documents at all.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: publicTenants
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Return the public export instead, without legal documents
+    responses:
+      "200":
+        description: The tenants
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  legalDocuments:
+                    $ref: "#/components/schemas/TenantLegalDocuments"
+
+/api/tenants/{id}:
+  get:
+    tags:
+      - Tenants
+    summary: Read a tenant, legal documents included
+    description: |
+      Reads the whole tenant for its owner. Every media reference of the legal
+      documents carries the address it resolves to; nothing is normalised on the
+      way in, only on the way out.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        example: tenant1
+    responses:
+      "200":
+        description: The tenant
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                legalDocuments:
+                  $ref: "#/components/schemas/TenantLegalDocuments"
+      "403":
+        description: Neither tenant owner nor instance owner

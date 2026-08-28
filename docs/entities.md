@@ -56,13 +56,31 @@ Example:
   "catalogParticipation": {
     "visible": true,
     "restricted": false
-  }
+  },
+  "legalDocuments": [
+    {
+      "type": "termsAndConditions",
+      "title": "",
+      "reference": { "source": "media", "mediaId": "8f1c2a44-…", "url": null }
+    },
+    {
+      "type": "other",
+      "title": "Hausordnung",
+      "reference": {
+        "source": "external",
+        "mediaId": null,
+        "url": "https://example.com/hausordnung.pdf"
+      }
+    }
+  ]
 }
 ```
 
 > **Note:** Sensitive information (e.g. `noreplyPassword`, payment-related secrets) is stored encrypted in the database.
 
 `cancellationRefundTiers` defines the tenant-wide refund proposal at cancellation time. Thresholds use calendar days in `Europe/Berlin`. An empty array preserves the default full refund. Below the lowest configured threshold, that tier continues to apply.
+
+`legalDocuments` holds the legal documents of the tenant, in the same role the instance fields `dataProtection`, `legalNotice` and `termsAndConditions` play for the deployment as a whole. Unlike those it is a list of `{ type, title, reference }`, where `type` is one of `dataProtection`, `legalNotice`, `termsAndConditions`, `rightOfWithdrawal` or `other`. A known type appears at most once and carries no title — its label comes from the admin UI translation; `other` requires a title and no two `other` documents may share one. `reference` is a media reference: a `public` medium of the same tenant, or an external link. On the way out it carries the address it resolves to in `url`; the public tenant export does not include the field. Tenant documents are filed and maintained here, they are not delivered to end users.
 
 ### Roles
 
