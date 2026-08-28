@@ -47,6 +47,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 - `GET /api/files/get` and `GET /api/:tenant/files/get` stay for good as the resolver of stored legacy addresses: they look a medium up by its legacy path and deliver it with the media caching matrix. Until the import has run they still serve the legacy tree directly — but with the media permission checks in front of it, so a protected file now needs an active membership in the owning tenant instead of any session at all. Once the import has run, the library is the whole truth and an unknown address is a `404`
 - An installation whose media import has not run boots with a warning, never an error
 
+- Tenants carry their own legal documents (`legalDocuments`): a list of `{ type, title, reference }` with the types `dataProtection`, `legalNotice`, `termsAndConditions`, `rightOfWithdrawal` and `other`. A known type may appear only once and carries no title; `other` needs one and no two may share it. Unlike the instance documents this is a typed subdocument list — the tenant has no legacy stock to keep readable. Migration `28-08-2026-add-tenant-legal-documents` starts the field empty everywhere
+
 ### Fixed
 
 - Storage failures no longer write credentials into the log. A raw webdav or axios error carries its whole request — `Authorization` header and session cookies included — and bunyan without an error serializer wrote all of it out; the media, storage and legacy-file loggers now use the standard serializer, which keeps the message and the stack and nothing else
