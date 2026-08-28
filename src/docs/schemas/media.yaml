@@ -174,7 +174,7 @@ components:
       properties:
         type:
           type: string
-          enum: [bookable, event, booking, instance]
+          enum: [bookable, event, booking, instance, tenant]
           example: bookable
         id:
           type: string

@@ -11,6 +11,7 @@ const InstanceModel = require("../src/commons/data-managers/models/instanceModel
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaModel = require("../src/commons/data-managers/models/mediaModel");
 const MediaService = require("../src/commons/services/media/media-service");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const BookingService = require("../src/commons/services/checkout/booking-service");
 const LockerService = require("../src/commons/services/locker/locker-service");
 const {
@@ -158,6 +159,9 @@ describe("media usage proof", function () {
       sandbox
         .stub(InstanceManager, "getMediaUsage")
         .resolves([{ id: null, title: "instance" }]);
+      sandbox
+        .stub(TenantManager, "getMediaUsage")
+        .resolves([{ id: TENANT, title: "Stadt" }]);
 
       const usage = await MediaUsageService.findUsage({
         tenantId: TENANT,
@@ -169,6 +173,7 @@ describe("media usage proof", function () {
         { type: "event", id: "event-1", title: "Summer party" },
         { type: "booking", id: BOOKING, title: "Jane Doe" },
         { type: "instance", id: null, title: "instance" },
+        { type: "tenant", id: TENANT, title: "Stadt" },
       ]);
     });
 
@@ -177,6 +182,7 @@ describe("media usage proof", function () {
       sandbox.stub(EventManager, "getMediaUsage").resolves([]);
       sandbox.stub(BookingManager, "getMediaUsage").resolves([]);
       sandbox.stub(InstanceManager, "getMediaUsage").resolves([]);
+      sandbox.stub(TenantManager, "getMediaUsage").resolves([]);
 
       const usage = await MediaUsageService.findUsage({
         tenantId: TENANT,

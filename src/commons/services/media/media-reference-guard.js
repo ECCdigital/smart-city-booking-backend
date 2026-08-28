@@ -10,6 +10,7 @@ const {
   instanceBrandingReferences,
   instanceDocumentReferences,
 } = require("./instance-media");
+const { tenantDocumentReferences } = require("./tenant-media");
 
 /**
  * Guards the way into the reference sites of an entity (§4.3 of the media
@@ -139,6 +140,31 @@ class MediaReferenceGuard {
       userId,
       references: MediaReferenceGuard.eventReferences(event),
       requirePublic: Boolean(event.isPublic),
+    });
+  }
+
+  /**
+   * Checks the reference sites of a tenant before it is stored: the legal
+   * documents it files. A legal document is meant to be published, so only
+   * public media may sit behind it; a medium of another tenant or of the
+   * instance is unknown to the tenant-scoped lookup and refused like any other
+   * unknown one.
+   *
+   * The scope comes from the caller, not from the payload: the tenant boundary
+   * is worth nothing if the object being checked may declare which tenant it
+   * belongs to.
+   *
+   * @param {Object} tenant - The tenant being saved.
+   * @param {string} tenantId - Tenant the caller resolved and checked.
+   * @param {string} userId - Who is saving.
+   * @returns {Promise<void>}
+   */
+  static async assertTenantStorable(tenant, tenantId, userId) {
+    await MediaReferenceGuard.assertReferencesStorable({
+      tenantId: tenantId || tenant.id,
+      userId,
+      references: tenantDocumentReferences(tenant),
+      requirePublic: true,
     });
   }
 

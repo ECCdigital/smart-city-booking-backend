@@ -33,6 +33,20 @@ function mediaFileUrl(mediaId, tenantId) {
 }
 
 /**
+ * Strips the mongoose wrapping off a stored sub-object, so the export paths
+ * work on a plain copy instead of a subdocument that carries more than the
+ * fields they care about.
+ *
+ * @param {Object} value - The stored value.
+ * @returns {Object} A plain copy.
+ */
+function plainObject(value) {
+  return typeof value?.toObject === "function"
+    ? value.toObject()
+    : { ...value };
+}
+
+/**
  * Reads a reference site. Anything the media library wrote is already a
  * reference; a bare string is legacy — a plain URL that the media import has
  * not converted yet. It reads as an external reference, which is exactly what
@@ -59,9 +73,7 @@ function toMediaReference(value) {
     return null;
   }
 
-  // Mongoose subdocuments carry more than the three fields we care about.
-  const reference =
-    typeof value.toObject === "function" ? value.toObject() : value;
+  const reference = plainObject(value);
 
   if (reference.source) {
     return {
@@ -166,10 +178,7 @@ function enrichAttachment(attachment, tenantId) {
     return null;
   }
 
-  const plain =
-    typeof attachment.toObject === "function"
-      ? attachment.toObject()
-      : { ...attachment };
+  const plain = plainObject(attachment);
 
   const reference = enrichMediaReference(
     plain.reference ?? plain.url,
@@ -216,6 +225,7 @@ module.exports = {
   enrichMediaReferences,
   mediaFileUrl,
   mediaReferenceUrl,
+  plainObject,
   toMediaReference,
   validateMediaReference,
 };

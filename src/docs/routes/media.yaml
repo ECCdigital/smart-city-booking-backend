@@ -253,7 +253,7 @@
       Where a medium is referenced — bookable images and attachments, the
       teaser image, contact person image, image list and speaker photos of an
       event and its attachments, booking attachments, instance branding and
-      legal documents. The search runs on
+      legal documents, and the legal documents of the tenant. The search runs on
       demand over those reference sites; a medium never carries a back
       reference, so the answer can never go stale.
 

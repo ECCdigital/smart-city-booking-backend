@@ -1,6 +1,7 @@
 const BookingManager = require("../../data-managers/booking-manager");
 const EventManager = require("../../data-managers/event-manager");
 const InstanceManager = require("../../data-managers/instance-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 
 /**
@@ -12,6 +13,7 @@ const USAGE_TYPE = Object.freeze({
   EVENT: "event",
   BOOKING: "booking",
   INSTANCE: "instance",
+  TENANT: "tenant",
 });
 
 /**
@@ -42,7 +44,9 @@ class MediaUsageService {
    *
    * The instance is searched for every medium, not only for instance media: a
    * tenant medium must never end up in an instance context, but if one ever
-   * did, blocking its deletion is the safe answer.
+   * did, blocking its deletion is the safe answer. The tenant is searched the
+   * other way round — only in its own scope, because an instance medium has no
+   * tenant whose legal documents could hold it.
    *
    * @param {Object} params
    * @param {string|null} params.tenantId - Tenant of the medium.
@@ -55,11 +59,12 @@ class MediaUsageService {
       return [];
     }
 
-    const [bookables, events, bookings, instance] = await Promise.all([
+    const [bookables, events, bookings, instance, tenant] = await Promise.all([
       BookableManager.getMediaUsage(tenantId, mediaId),
       EventManager.getMediaUsage(tenantId, mediaId),
       BookingManager.getMediaUsage(tenantId, mediaId),
       InstanceManager.getMediaUsage(mediaId),
+      TenantManager.getMediaUsage(tenantId, mediaId),
     ]);
 
     return [
@@ -67,6 +72,7 @@ class MediaUsageService {
       ...labelled(USAGE_TYPE.EVENT, events),
       ...labelled(USAGE_TYPE.BOOKING, bookings),
       ...labelled(USAGE_TYPE.INSTANCE, instance),
+      ...labelled(USAGE_TYPE.TENANT, tenant),
     ];
   }
 }

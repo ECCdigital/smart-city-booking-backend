@@ -1,4 +1,4 @@
-const { enrichMediaReference } = require("./media-reference");
+const { enrichMediaReference, plainObject } = require("./media-reference");
 
 /**
  * The reference sites of the instance itself (§4.9 of the media spec): the two
@@ -26,18 +26,6 @@ const DOCUMENT_FIELDS = Object.freeze([
   "legalNotice",
   "termsAndConditions",
 ]);
-
-/**
- * Strips the mongoose wrapping off a stored sub-object.
- *
- * @param {Object} value - The stored value.
- * @returns {Object} A plain copy.
- */
-function plainObject(value) {
-  return typeof value?.toObject === "function"
-    ? value.toObject()
-    : { ...value };
-}
 
 /**
  * The branding as it goes out: both references enriched with the URL they

@@ -48,6 +48,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 - An installation whose media import has not run boots with a warning, never an error
 
 - Tenants carry their own legal documents (`legalDocuments`): a list of `{ type, title, reference }` with the types `dataProtection`, `legalNotice`, `termsAndConditions`, `rightOfWithdrawal` and `other`. A known type may appear only once and carries no title; `other` needs one and no two may share it. Unlike the instance documents this is a typed subdocument list — the tenant has no legacy stock to keep readable. Migration `28-08-2026-add-tenant-legal-documents` starts the field empty everywhere
+- Tenant legal documents are a media reference site: the usage proof and the deletion block cover them, so a medium a tenant document references answers `409` with the new usage type `tenant` instead of being deleted. The matching save-time check is in place in the media reference guard — the medium has to belong to the tenant, the saver has to be allowed to pick it, and it has to be `public`, since a legal document is meant to be published — and takes effect once the tenant API accepts the field
 
 ### Fixed
 
