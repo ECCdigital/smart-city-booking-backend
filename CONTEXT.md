@@ -37,8 +37,8 @@ Die zweistufige Lese-Einstufung eines Mediums: _public_ (für jedermann lesbar, 
 _Avoid_: protected (das ist der Alt-Pfad im Storage), accessLevel (Alt-Feldname), eingeschränkt (als dritte Stufe — gibt es nicht)
 
 **Buchungsdokument**:
-Ein Dokument-Medium mit Verknüpfung zu einer Buchung — allein diese Verknüpfung zeichnet es aus, es gibt keine eigene Dateiart. Erscheint nicht im Mediathek-Picker; lesbar nur für Buchungs-Berechtigte und den Eigentümer der Buchung.
-_Avoid_: Rechnung (als Oberbegriff — Rechnungen sind eine Sorte Buchungsdokument), Invoice-File
+Ein Dokument-Medium mit Verknüpfung zu einer oder mehreren Buchungen — allein diese Verknüpfung zeichnet es aus, es gibt keine eigene Dateiart. Ein aggregierter Beleg ist ein einziges Medium, das alle zugehörigen Buchungen verknüpft — nie eine Kopie je Buchung. Erscheint nicht im Mediathek-Picker; lesbar, wer mindestens eine der verknüpften Buchungen sehen darf (Berechtigte wie Eigentümer). Verliert eine gelöschte Buchung als Verknüpfung und verschwindet mit der letzten — ein Buchungsdokument ohne Buchung gibt es nicht.
+_Avoid_: Rechnung (als Oberbegriff — Rechnungen sind eine Sorte Buchungsdokument), Invoice-File, Sammelbeleg-Kopie (aggregierte Belege sind ein Medium, keine Kopien)
 
 **Instanz-Medium**:
 Ein Medium ohne Tenant-Zuordnung — instanzweite Inhalte wie Branding und Rechts-Dokumente. Gleiches Datenmodell, keine eigene Entität; _intern_ bedeutet hier „jeder angemeldete Nutzer der Instanz" (es gibt keinen Tenant, dessen Angehörigkeit zählen könnte). Strikt von Tenant-Kontexten getrennt: Instanz-Medien sind nur in Instanz-Kontexten referenzierbar und erscheinen nie in Tenant-Pickern — wer ein Instanz-Bild im Tenant nutzen will, lädt es dort neu hoch. Verwaltet allein vom Instance-Owner.
@@ -49,7 +49,7 @@ Der am Medium gespeicherte Ablageort seiner Bytes: ein Provider für das ganze M
 _Avoid_: Storage-Provider (unqualifiziert — das ist die Instanz-Konfiguration), Pfad, URL (das ist die Auslieferungs-Adresse)
 
 **Alt-Pfad (eines Mediums)**:
-Der beim Import festgehaltene Speicherpfad der Alt-Welt (public/protected-Baum), über den die dauerhaft bestehende Alt-Route ein Medium auflöst — hostunabhängig, weil gespeicherte Alt-URLs den Host ihrer Upload-Umgebung eingebacken haben. Nur importierte Medien tragen ihn; neu hochgeladene nie.
+Der beim Import festgehaltene Speicherpfad der Alt-Welt (public/protected-Baum), über den die dauerhaft bestehende Alt-Route ein Medium auflöst — hostunabhängig, weil gespeicherte Alt-URLs den Host ihrer Upload-Umgebung eingebacken haben. Nur importierte Medien tragen ihn; neu hochgeladene nie. Pro Tenant eindeutig: jede Alt-Datei wird genau ein Medium — auch wenn dieselben Bytes an mehreren Alt-Pfaden liegen, bleibt jeder Fundort sein eigenes Medium (Identität zählt, nicht Inhalt).
 _Avoid_: legacyPath (als Sprechbegriff — das ist der Feldname), Legacy-URL (das ist die ganze gespeicherte Adresse, nicht der Pfad)
 
 **Verwendungsnachweis (eines Mediums)**:

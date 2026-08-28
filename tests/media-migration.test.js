@@ -179,19 +179,23 @@ describe("media migration", () => {
       trees.set(`${TENANT}|receipts`, [RECEIPT_PATH]);
     });
 
-    it("links a document to every booking whose attachment names it", async () => {
+    it("becomes one medium referencing every booking whose attachment names it", async () => {
       BookingManager.getBookingsByAttachmentFileName
         .withArgs(TENANT, "invoice-1.pdf")
         .resolves([{ id: "booking-1" }, { id: "booking-2" }]);
 
       await runImport();
 
-      const bookingIds = MediaManager.storeMedia
+      const documents = MediaManager.storeMedia
         .getCalls()
-        .map((call) => call.args[0].bookingId)
-        .filter(Boolean);
+        .map((call) => call.args[0])
+        .filter((media) => (media.bookingIds || []).length > 0);
 
-      assert.deepStrictEqual(bookingIds, ["booking-1", "booking-2"]);
+      assert.strictEqual(documents.length, 1);
+      assert.deepStrictEqual(documents[0].bookingIds, [
+        "booking-1",
+        "booking-2",
+      ]);
     });
 
     it("totals its steps without repeating what they reported", async () => {

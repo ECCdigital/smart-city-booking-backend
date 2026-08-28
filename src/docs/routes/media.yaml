@@ -219,7 +219,8 @@
       uploads.
 
       Booking documents cannot be deleted through the API
-      (`booking_document_not_deletable`); they only cascade with their booking.
+      (`booking_document_not_deletable`); they only cascade with their
+      bookings — the medium goes with the last booking that references it.
     security:
       - bearerAuth: []
     parameters:

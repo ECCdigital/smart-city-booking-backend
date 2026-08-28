@@ -62,14 +62,15 @@ class Media {
   }
 
   /**
-   * A medium linked to a booking is a booking document: reading follows the
-   * receipt rule, its visibility is meaningless and it never shows up in the
-   * media picker.
+   * A medium linked to at least one booking is a booking document: reading
+   * follows the receipt rule, its visibility is meaningless and it never shows
+   * up in the media picker. A document with zero bookings is not a valid
+   * state — the medium dies with its last booking (§4.7).
    *
    * @returns {boolean}
    */
   isBookingDocument() {
-    return Boolean(this.bookingId);
+    return Array.isArray(this.bookingIds) && this.bookingIds.length > 0;
   }
 }
 

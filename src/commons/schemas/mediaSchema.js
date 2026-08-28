@@ -129,8 +129,11 @@ const mediaSchemaDefinition = {
 
   // Ownership for the own/any media permissions (B3)
   uploadedBy: { type: String, default: null },
-  // The sole marker that turns a medium into a booking document (B3)
-  bookingId: { type: String, default: null },
+  // The sole marker that turns a medium into a booking document (B3): a
+  // non-empty list of the bookings it belongs to. An aggregated document is
+  // one medium referencing every booking of its group; normal media never
+  // carry the field.
+  bookingIds: { type: [String], default: null },
   // Only set by the media import (B7), never on fresh uploads
   legacyPath: { type: String, default: null },
 

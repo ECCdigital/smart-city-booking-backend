@@ -176,8 +176,8 @@ async function importLegacyMedia({ dryRun = false } = {}) {
  * `cancellations/`) with their bookings. The only link the old world left is
  * the file name in the booking attachment, so that is what is matched — a file
  * no attachment names stays where it is and goes into the report as an orphan.
- * An aggregated document names several bookings and becomes one medium per
- * booking, because a medium carries exactly one booking.
+ * An aggregated document names several bookings and becomes one medium that
+ * references them all — one file, one medium, whatever the number of bookings.
  *
  * @param {Object} [params]
  * @param {boolean} [params.dryRun] - Whether to only rehearse.
@@ -229,21 +229,19 @@ async function importBookingDocuments({ dryRun = false } = {}) {
             legacyPath: file.legacyPath,
           });
 
-          for (const booking of bookings) {
-            await MediaService.importMedia({
-              tenantId: tenant.id,
-              legacyPath: file.legacyPath,
-              file: { name: file.fileName, data },
-              bookingId: booking.id,
-              metadata: {
-                title: file.fileName,
-                tags: [type.tag],
-                // Meaningless for a booking document, but never the public
-                // default — access follows the booking alone.
-                visibility: legacyVisibility(file.legacyPath),
-              },
-            });
-          }
+          await MediaService.importMedia({
+            tenantId: tenant.id,
+            legacyPath: file.legacyPath,
+            file: { name: file.fileName, data },
+            bookingIds: bookings.map((booking) => booking.id),
+            metadata: {
+              title: file.fileName,
+              tags: [type.tag],
+              // Meaningless for a booking document, but never the public
+              // default — access follows the bookings alone.
+              visibility: legacyVisibility(file.legacyPath),
+            },
+          });
 
           report.processedOne();
         } catch (error) {

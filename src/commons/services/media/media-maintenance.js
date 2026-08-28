@@ -10,6 +10,17 @@ const { variantKey } = require("../storage/media-keys");
 const { BOOKING_DOCUMENT } = require("./booking-documents");
 const { LEGACY_ROOTS } = require("./legacy-path");
 const { listLegacyTree } = require("./media-import");
+const { MediaUsageService } = require("./media-usage");
+
+/**
+ * How a scope reads in a report — `null` is the instance, not a nameless tenant.
+ *
+ * @param {string|null} tenantId - The tenant of a medium.
+ * @returns {string}
+ */
+function scopeLabel(tenantId) {
+  return tenantId ?? "instance";
+}
 
 /**
  * Every key a medium claims: the original plus each variant it actually lists.
@@ -191,6 +202,206 @@ async function cleanup({ dryRun = false } = {}) {
 }
 
 /**
+ * How many media a scope holds, keyed by tenant.
+ *
+ * @param {Object[]} media - The media to count.
+ * @returns {Map<string|null, number>}
+ */
+function countByScope(media) {
+  const counts = new Map();
+
+  for (const medium of media) {
+    const key = medium.tenantId ?? null;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return counts;
+}
+
+/**
+ * The legacy paths that more than one medium claims. One legacy file is one
+ * medium per tenant (§4.10) — a group larger than one is stock from before that
+ * rule, and its size is what tells an operator which kind of run they are
+ * cleaning up after.
+ *
+ * @param {Object[]} media - Imported media.
+ * @returns {{groups: number, media: number, largest: number}}
+ */
+function duplicateLegacyPaths(media) {
+  const sizes = new Map();
+
+  for (const medium of media) {
+    // The pair is the identity, so the separator must not occur in a path.
+    const key = `${scopeLabel(medium.tenantId)}\u0000${medium.legacyPath}`;
+    sizes.set(key, (sizes.get(key) || 0) + 1);
+  }
+
+  const duplicates = [...sizes.values()].filter((size) => size > 1);
+
+  return {
+    groups: duplicates.length,
+    media: duplicates.reduce((sum, size) => sum + size, 0),
+    largest: duplicates.reduce((largest, size) => Math.max(largest, size), 0),
+  };
+}
+
+/**
+ * Writes what a scope holds after a purge into the report — the check an
+ * operator runs the command for: no imported media left, and how much library
+ * is still there.
+ *
+ * @param {MigrationReport} report - The report to write into.
+ * @param {Object} params
+ * @param {boolean} params.dryRun - Whether the run was a rehearsal.
+ * @param {Object[]} params.media - The media the run looked at.
+ * @param {string} [params.tenantId] - The tenant the run was restricted to.
+ * @returns {Promise<void>}
+ */
+async function noteRemaining(report, { dryRun, media, tenantId }) {
+  if (dryRun) {
+    report.note("dry run — nothing was deleted, the scope is unchanged");
+    return;
+  }
+
+  // An explicitly named tenant is reported even when it held nothing, because
+  // that is the answer the operator asked for.
+  const scopes = new Set(media.map((medium) => medium.tenantId ?? null));
+  if (tenantId !== undefined) {
+    scopes.add(tenantId ?? null);
+  }
+
+  const parts = [];
+
+  for (const scopeTenantId of scopes) {
+    const [imported, total] = await Promise.all([
+      MediaManager.countMedia({
+        tenantId: scopeTenantId,
+        legacyPath: { $ne: null },
+      }),
+      MediaManager.countMedia({ tenantId: scopeTenantId }),
+    ]);
+
+    parts.push(
+      `${scopeLabel(scopeTenantId)}: ${imported} imported of ${total} media`,
+    );
+  }
+
+  report.note(`remaining — ${parts.join(", ") || "nothing was in scope"}`);
+}
+
+/**
+ * Removes every imported medium of a scope, so a broken or superseded import
+ * can simply be run again. The legacy tree is the source it comes back from and
+ * stays untouched — this command is the counterpart of `purge-legacy`, not a
+ * step towards it.
+ *
+ * Deliberately generic over `legacyPath`: an operator cleans up after an import
+ * run, not after one known tenant, and `--tenant` narrows it where that matters.
+ *
+ * @param {Object} [params]
+ * @param {boolean} [params.dryRun] - Whether to only rehearse.
+ * @param {string} [params.tenantId] - Restrict to one tenant.
+ * @returns {Promise<MigrationReport>}
+ */
+async function purgeImported({ dryRun = false, tenantId } = {}) {
+  const report = new MigrationReport("purge-imported", dryRun);
+
+  report.note(
+    "the legacy tree stays untouched — the import is the source of truth and " +
+      "is meant to run again afterwards",
+  );
+  report.note(
+    "the indexes of a pre-reference-model stock (`bookingId_1`, " +
+      "`legacyPath_1`) are not dropped here — remove them by hand once the " +
+      "scope is clean",
+  );
+
+  const scope = { legacyPath: { $ne: null } };
+  if (tenantId !== undefined) {
+    scope.tenantId = tenantId ?? null;
+  }
+
+  const media = await MediaManager.getAllMedia(scope);
+  const found = [...countByScope(media)]
+    .map(([scopeTenantId, count]) => `${scopeLabel(scopeTenantId)}: ${count}`)
+    .join(", ");
+
+  report.note(
+    `found ${media.length} imported media${found ? ` — ${found}` : ""}`,
+  );
+
+  const duplicates = duplicateLegacyPaths(media);
+  report.note(
+    duplicates.groups === 0
+      ? "duplicate legacy paths: none"
+      : `duplicate legacy paths: ${duplicates.groups} group` +
+          `${duplicates.groups === 1 ? "" : "s"}, ${duplicates.media} media, ` +
+          `largest ${duplicates.largest}`,
+  );
+
+  // Deleting through the service skips the in-use check the API route makes
+  // (§4.7), so it is made here — once, for the whole scope. A single finding
+  // stops the run: half a purge would leave references pointing at nothing,
+  // and which of them is safe to drop is not this command's call.
+  for (const medium of media) {
+    try {
+      const usage = await MediaUsageService.findUsage({
+        tenantId: medium.tenantId,
+        mediaId: medium.id,
+      });
+
+      if (usage.length > 0) {
+        const sites = usage.map((site) => `${site.type}:${site.id}`).join(", ");
+        report.failed(`media:${medium.id}`, `still referenced by ${sites}`);
+      }
+    } catch (error) {
+      report.failed(`media:${medium.id}`, error);
+    }
+  }
+
+  if (report.errors.length > 0) {
+    report.note(
+      "nothing was deleted — resolve the references above, then run the " +
+        "command again",
+    );
+    return report;
+  }
+
+  for (const medium of media) {
+    try {
+      if (dryRun) {
+        report.processedOne();
+        continue;
+      }
+
+      const removed = await MediaService.deleteMedia(medium);
+
+      // Bytes go best-effort, and once the document is gone `cleanup` can no
+      // longer reach that key space — so whatever survives is named here.
+      for (const key of claimedKeys(medium)) {
+        if (await keyExists(medium, key)) {
+          report.orphan(`media:${medium.id}`, `bytes left in storage: ${key}`);
+        }
+      }
+
+      if (!removed) {
+        // Someone got there first; the target state holds either way.
+        report.skippedOne();
+        continue;
+      }
+
+      report.processedOne();
+    } catch (error) {
+      report.failed(`media:${medium.id}`, error);
+    }
+  }
+
+  await noteRemaining(report, { dryRun, media, tenantId });
+
+  return report;
+}
+
+/**
  * Empties the legacy tree — deliberately its own command, run only once the
  * import is verified. A file is removed only where a medium answers for its
  * legacy path; anything the import could not take, an unplaced booking document
@@ -259,6 +470,7 @@ async function purgeLegacy({ dryRun = false } = {}) {
 
 module.exports = {
   cleanup,
+  purgeImported,
   purgeLegacy,
   regenerate,
   verify,

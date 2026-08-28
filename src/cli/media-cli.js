@@ -13,6 +13,7 @@ const { hideBin } = require("yargs/helpers");
 const dbm = require("../commons/utilities/database-manager");
 const {
   cleanup,
+  purgeImported,
   purgeLegacy,
   regenerate,
   verify,
@@ -134,6 +135,20 @@ yargs(hideBin(process.argv))
     "Remove stale variant bytes in the key space of known media",
     (builder) => builder.options(dryRunOption),
     (argv) => run(() => cleanup({ dryRun: argv.dryRun }), argv),
+  )
+  .command(
+    "purge-imported",
+    "Remove the imported media again, so the import can run from scratch",
+    (builder) =>
+      builder.options(dryRunOption).option("tenant", {
+        type: "string",
+        describe: "Restrict to one tenant",
+      }),
+    (argv) =>
+      run(
+        () => purgeImported({ dryRun: argv.dryRun, tenantId: argv.tenant }),
+        argv,
+      ),
   )
   .command(
     "purge-legacy",

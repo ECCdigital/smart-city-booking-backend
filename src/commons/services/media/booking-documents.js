@@ -25,10 +25,10 @@ function isStorageFailure(error) {
 }
 
 /**
- * Stores a generated document as a booking document medium — one per booking.
- * An aggregated document is attached to every booking of the group, so every
- * booking owner has to reach it under the receipt rule; a single medium could
- * only ever carry one `bookingId`.
+ * Stores a generated document as a booking document medium — one medium with
+ * one byte copy, whatever the number of bookings. An aggregated document
+ * carries every booking of the group as a reference, so every booking owner
+ * reaches the same medium under the receipt rule (§4.7).
  *
  * @param {Object} params
  * @param {string} params.tenantId - Tenant of the bookings.
@@ -38,31 +38,42 @@ function isStorageFailure(error) {
  * @returns {Promise<void>}
  */
 async function storeBookingDocument({ tenantId, bookingIds, file, type }) {
-  for (const bookingId of bookingIds) {
-    await MediaService.createBookingDocument({
-      tenantId,
-      bookingId,
-      file,
-      tags: [type.tag],
-    });
-  }
+  await MediaService.createBookingDocument({
+    tenantId,
+    bookingIds,
+    file,
+    tags: [type.tag],
+  });
 }
 
 /**
- * Removes every document of a booking — system receipts included. Booking
- * documents have no life of their own: they cascade with their booking (§4.7),
- * each on the same database-first, bytes-best-effort path as a manual delete.
+ * Detaches a removed booking from its documents — system receipts included.
+ * Booking documents have no life of their own: each one loses the reference of
+ * the removed booking, and with its last reference the medium itself goes
+ * (§4.7), on the same database-first, bytes-best-effort path as a manual
+ * delete. A shared aggregated document survives as long as any of its bookings
+ * does.
  *
  * @param {Object} params
  * @param {string} params.tenantId - Tenant of the booking.
  * @param {string} params.bookingId - The booking being removed.
- * @returns {Promise<number>} How many documents were removed.
+ * @returns {Promise<number>} How many documents lost the booking.
  */
 async function deleteBookingDocuments({ tenantId, bookingId }) {
   const documents = await MediaManager.getBookingDocuments(tenantId, bookingId);
 
   for (const document of documents) {
-    await MediaService.deleteMedia(document);
+    // One atomic pull per document — concurrent deletions of bookings sharing
+    // an aggregated document must not lose each other's update.
+    const updated = await MediaManager.removeBookingReference(
+      document.id,
+      tenantId,
+      bookingId,
+    );
+
+    if (updated && (updated.bookingIds || []).length === 0) {
+      await MediaService.deleteMedia(updated);
+    }
   }
 
   return documents.length;

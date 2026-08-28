@@ -83,13 +83,14 @@ report without writing anything.
 node src/cli/media-cli.js import --dry-run
 ```
 
-| Command        | What it does                                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `import`       | Turns the legacy stock into media, places booking documents and rewrites stored addresses                             |
-| `regenerate`   | Generates the image variants of the existing stock, each medium at its own provider                                   |
-| `verify`       | Checks that every medium's bytes are where the database says they are                                                 |
-| `cleanup`      | Removes stale variant bytes in the key space of known media                                                           |
-| `purge-legacy` | Removes the imported files from the legacy tree — separate and explicit, and only where a medium answers for the file |
+| Command          | What it does                                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `import`         | Turns the legacy stock into media, places booking documents and rewrites stored addresses                             |
+| `regenerate`     | Generates the image variants of the existing stock, each medium at its own provider                                   |
+| `verify`         | Checks that every medium's bytes are where the database says they are                                                 |
+| `cleanup`        | Removes stale variant bytes in the key space of known media                                                           |
+| `purge-imported` | Removes the imported media again, so the import can run from scratch — the legacy tree stays untouched                |
+| `purge-legacy`   | Removes the imported files from the legacy tree — separate and explicit, and only where a medium answers for the file |
 
 `import` does three things in order, because a reference can only point at a
 medium that exists:
@@ -102,9 +103,9 @@ medium that exists:
    ever removes it. `uploadedBy` stays empty: an imported file has no known
    uploader.
 2. **Booking documents.** `receipts/`, `invoices/` and `cancellations/` are matched
-   against the `title` and `name` of the booking attachments. An aggregated
-   document becomes one medium per booking it names; a file no attachment names is
-   reported as an orphan and left alone.
+   against the `title` and `name` of the booking attachments. One legacy file
+   becomes **one** medium, referencing every booking it names; a file no
+   attachment names is reported as an orphan and left alone.
 3. **Stored addresses → media references.** Bookable cover images and attachments,
    every image site of an event (teaser image, contact person image, image list
    and speaker photos) and its attachments, instance branding and legal
@@ -123,6 +124,31 @@ node src/cli/media-cli.js verify
 
 Only once `verify` is clean is `purge-legacy` worth running. The CLI never
 deletes as a side effect of anything else.
+
+An import that has to be repeated from scratch — one that broke off halfway, or
+one from before a change to how media are built — is taken back with
+`purge-imported`:
+
+```bash
+node src/cli/media-cli.js purge-imported --tenant <id> --dry-run
+node src/cli/media-cli.js purge-imported --tenant <id>
+node src/cli/media-cli.js import
+```
+
+It removes every medium that carries a legacy path (`--tenant` narrows it to one
+tenant, otherwise the whole stock) and leaves the legacy tree alone — that tree
+is what the next `import` reads. Before deleting anything it looks for entities
+that still reference the media: a single finding stops the run, names the
+references and deletes nothing, because the third import step may already have
+rewritten stored addresses. Bytes go best-effort like everywhere, so a key the
+storage still holds afterwards is reported as an orphan and is the operator's to
+remove — `cleanup` cannot reach the key space of a medium that no longer exists.
+The report closes with what each scope is left with; a second run finds nothing
+and changes nothing.
+
+The pre-reference-model indexes (`bookingId_1`, `legacyPath_1`) are not dropped
+by the command — drop them by hand once the scope is clean, so the partial unique
+index on `{tenantId, legacyPath}` builds.
 
 ## Local development
 

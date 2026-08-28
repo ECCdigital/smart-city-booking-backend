@@ -130,7 +130,7 @@ function bookingDocumentFixture(overrides = {}) {
     title: "invoice-1.pdf",
     visibility: "intern",
     uploadedBy: null,
-    bookingId: "booking-1",
+    bookingIds: ["booking-1"],
     storage: {
       provider: "nextcloud",
       key: `${TENANT}/media/media-1/original.pdf`,
@@ -462,6 +462,10 @@ describe("MediaControllerV2", function () {
 
       assert.strictEqual(res.statusCode, 200);
       assert.strictEqual(res.body.id, "media-1");
+      // Booking references are always an array in responses — empty on
+      // normal media, and the scalar field is gone.
+      assert.deepStrictEqual(res.body.bookingIds, []);
+      assert.strictEqual("bookingId" in res.body, false);
     });
 
     it("serves an uploader their own medium with readOwn", async function () {
@@ -853,6 +857,53 @@ describe("MediaControllerV2", function () {
         assert.strictEqual(deliveryStream.piped, res);
       });
 
+      it("serves an aggregated document to the owner of any referenced booking", async function () {
+        // OR semantics (§4.3): one readable booking of the group is enough.
+        BookingManager.getBooking.restore();
+        sandbox
+          .stub(BookingManager, "getBooking")
+          .callsFake(async (bookingId) =>
+            bookingId === "booking-2"
+              ? {
+                  id: "booking-2",
+                  tenantId: TENANT,
+                  assignedUserId: CUSTOMER.id,
+                }
+              : {
+                  id: bookingId,
+                  tenantId: TENANT,
+                  assignedUserId: "someone-else",
+                },
+          );
+
+        const res = await deliver(
+          bookingDocumentFixture({ bookingIds: ["booking-1", "booking-2"] }),
+          { user: CUSTOMER },
+        );
+
+        assert.strictEqual(deliveryStream.piped, res);
+      });
+
+      it("refuses a user who owns none of the referenced bookings", async function () {
+        BookingManager.getBooking.restore();
+        sandbox.stub(BookingManager, "getBooking").resolves({
+          id: "booking-1",
+          tenantId: TENANT,
+          assignedUserId: "someone-else",
+        });
+
+        await assert.rejects(
+          () =>
+            deliver(
+              bookingDocumentFixture({
+                bookingIds: ["booking-1", "booking-2"],
+              }),
+              { user: CUSTOMER },
+            ),
+          (error) => error.statusCode === 403,
+        );
+      });
+
       it("serves the tenant owner", async function () {
         asTenantOwner();
 
@@ -937,6 +988,40 @@ describe("MediaControllerV2", function () {
       assert.strictEqual(res.body.visibility, "intern");
     });
 
+    it("lets the owner of any referenced booking update with updateOwn", async function () {
+      // OR semantics on the write side too: one updatable booking is enough.
+      BookingManager.getBooking.restore();
+      sandbox
+        .stub(BookingManager, "getBooking")
+        .callsFake(async (bookingId) => ({
+          id: bookingId,
+          tenantId: TENANT,
+          assignedUserId:
+            bookingId === "booking-2" ? MEMBER.id : "someone-else",
+        }));
+      sandbox
+        .stub(MediaManager, "getMedia")
+        .resolves(
+          bookingDocumentFixture({ bookingIds: ["booking-1", "booking-2"] }),
+        );
+      sandbox
+        .stub(MediaManager, "storeMedia")
+        .callsFake(async (media) => media);
+      grant({ manageBookings: { updateOwn: true } });
+      const res = createResponse();
+
+      await MediaControllerV2.updateMedia(
+        createRequest({
+          user: MEMBER,
+          params: { id: "media-1" },
+          body: { title: "Invoice 2026-1" },
+        }),
+        res,
+      );
+
+      assert.strictEqual(res.statusCode, 200);
+    });
+
     it("refuses metadata changes to a user with media rights only", async function () {
       sandbox.stub(MediaManager, "getMedia").resolves(bookingDocumentFixture());
       grant({ manageMedia: { updateAny: true } });
@@ -968,7 +1053,9 @@ describe("MediaControllerV2", function () {
           ),
         (error) =>
           error.statusCode === 403 &&
-          error.code === "booking_document_not_deletable",
+          error.code === "booking_document_not_deletable" &&
+          // The refusal names the bookings the document belongs to.
+          Array.isArray(error.params.bookingIds),
       );
       assert.strictEqual(removeMedia.called, false);
     });

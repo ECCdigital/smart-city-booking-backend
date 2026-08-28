@@ -47,6 +47,18 @@ function asciiFileName(fileName) {
 }
 
 /**
+ * Normalises booking references for storage: a booking document carries its
+ * non-empty list, everything else carries no field at all — the invariant
+ * `Media.isBookingDocument()` relies on.
+ *
+ * @param {string[]} [bookingIds] - Linked bookings, if any.
+ * @returns {string[]|null}
+ */
+function normaliseBookingIds(bookingIds) {
+  return bookingIds?.length ? bookingIds : null;
+}
+
+/**
  * Rejects an upload above a byte limit.
  *
  * @param {number} size - Size of the upload in bytes.
@@ -98,7 +110,7 @@ class MediaService {
    * @param {Object} params.file - Upload as delivered by express-fileupload.
    * @param {Object} [params.metadata] - title, altText, tags, visibility.
    * @param {string} [params.uploadedBy] - Id of the uploading user.
-   * @param {string} [params.bookingId] - Linked booking, for booking documents.
+   * @param {string[]} [params.bookingIds] - Linked bookings, for booking documents.
    * @returns {Promise<Object>} The stored medium.
    * @throws {BadRequestError} On oversized, unsupported or unprocessable files.
    */
@@ -107,7 +119,7 @@ class MediaService {
     file,
     metadata = {},
     uploadedBy,
-    bookingId,
+    bookingIds,
   }) {
     const data = file.data;
 
@@ -153,7 +165,7 @@ class MediaService {
       tags: metadata.tags || [],
       visibility: metadata.visibility || MEDIA_VISIBILITY.PUBLIC,
       uploadedBy: uploadedBy || null,
-      bookingId: bookingId || null,
+      bookingIds: normaliseBookingIds(bookingIds),
       storage: {
         provider: providerName,
         key: originalKey({
@@ -232,7 +244,7 @@ class MediaService {
    * @param {string} params.legacyPath - The place the file had in the old tree.
    * @param {Object} params.file - `{ name, data }` of the stored file.
    * @param {Object} [params.metadata] - title, tags, visibility.
-   * @param {string} [params.bookingId] - Linked booking, for booking documents.
+   * @param {string[]} [params.bookingIds] - Linked bookings, for booking documents.
    * @returns {Promise<Object>} The stored medium.
    */
   static async importMedia({
@@ -240,7 +252,7 @@ class MediaService {
     legacyPath,
     file,
     metadata = {},
-    bookingId,
+    bookingIds,
   }) {
     const data = file.data;
     const detected = await detectStoredType(data, file.name);
@@ -262,7 +274,7 @@ class MediaService {
       tags: metadata.tags || [],
       visibility: metadata.visibility || MEDIA_VISIBILITY.PUBLIC,
       uploadedBy: null,
-      bookingId: bookingId || null,
+      bookingIds: normaliseBookingIds(bookingIds),
       legacyPath,
       storage: {
         provider: providerName,
@@ -377,27 +389,34 @@ class MediaService {
   }
 
   /**
-   * Stores a document the platform generated for a booking (receipt, invoice,
-   * cancellation) as a booking document medium. `bookingId` is the only thing
-   * that sets it apart: access follows the receipt rule, its visibility is
-   * meaningless and it never appears in the library listing.
+   * Stores a document the platform generated for one or more bookings
+   * (receipt, invoice, cancellation) as a booking document medium.
+   * `bookingIds` is the only thing that sets it apart: access follows the
+   * receipt rule, its visibility is meaningless and it never appears in the
+   * library listing. An aggregated document is one medium referencing every
+   * booking of its group.
    *
    * @param {Object} params
    * @param {string} params.tenantId - Owning tenant.
-   * @param {string} params.bookingId - The booking the document belongs to.
+   * @param {string[]} params.bookingIds - The bookings the document belongs to.
    * @param {Object} params.file - `{ name, data }` of the generated document.
    * @param {string[]} [params.tags] - Tags, e.g. `["invoice"]`.
    * @returns {Promise<Object>} The stored medium.
    */
-  static async createBookingDocument({ tenantId, bookingId, file, tags = [] }) {
-    if (!bookingId) {
-      throw new BadRequestError("missing_booking_id");
+  static async createBookingDocument({
+    tenantId,
+    bookingIds,
+    file,
+    tags = [],
+  }) {
+    if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+      throw new BadRequestError("missing_booking_ids");
     }
 
     return await MediaService.createMedia({
       tenantId,
       file,
-      bookingId,
+      bookingIds,
       metadata: {
         title: file.name,
         tags,
@@ -469,8 +488,8 @@ class MediaService {
     const variant = MediaService.resolveVariant(media, requestedSize);
 
     // A booking document is never cached anywhere; its visibility is
-    // meaningless, access follows the booking.
-    const isBookingDocument = Boolean(media.bookingId);
+    // meaningless, access follows its bookings.
+    const isBookingDocument = media.isBookingDocument();
     const checksum = variant ? variant.checksum : media.checksum;
 
     let cacheControl = CACHE_POLICY.PUBLIC_IMMUTABLE;

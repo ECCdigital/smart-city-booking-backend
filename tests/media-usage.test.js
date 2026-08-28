@@ -43,7 +43,7 @@ function documentFixture(overrides = {}) {
     mimeType: "application/pdf",
     size: 100,
     originalFileName: "invoice-1.pdf",
-    bookingId: BOOKING,
+    bookingIds: [BOOKING],
     visibility: "intern",
     storage: {
       provider: "nextcloud",
@@ -226,6 +226,11 @@ describe("media deletion", function () {
         documentFixture({ id: "media-2", tags: ["invoice"] }),
       ];
       sandbox.stub(MediaManager, "getBookingDocuments").resolves(documents);
+      sandbox
+        .stub(MediaManager, "removeBookingReference")
+        .callsFake(async (mediaId) =>
+          documentFixture({ id: mediaId, bookingIds: [] }),
+        );
       const removeMedia = sandbox
         .stub(MediaManager, "removeMedia")
         .resolves(true);
@@ -237,9 +242,55 @@ describe("media deletion", function () {
 
       assert.strictEqual(count, 2);
       assert.deepStrictEqual(
+        MediaManager.removeBookingReference.getCalls().map((call) => call.args),
+        [
+          ["media-1", TENANT, BOOKING],
+          ["media-2", TENANT, BOOKING],
+        ],
+      );
+      assert.deepStrictEqual(
         removeMedia.getCalls().map((call) => call.args[0]),
         ["media-1", "media-2"],
       );
+    });
+
+    it("only lose the reference while other bookings still hold the document", async function () {
+      sandbox.stub(MediaManager, "getBookingDocuments").resolves([
+        documentFixture({
+          id: "media-1",
+          bookingIds: [BOOKING, "booking-2"],
+        }),
+      ]);
+      sandbox
+        .stub(MediaManager, "removeBookingReference")
+        .resolves(
+          documentFixture({ id: "media-1", bookingIds: ["booking-2"] }),
+        );
+      const removeMedia = sandbox.stub(MediaManager, "removeMedia");
+
+      const count = await deleteBookingDocuments({
+        tenantId: TENANT,
+        bookingId: BOOKING,
+      });
+
+      assert.strictEqual(count, 1);
+      assert.strictEqual(removeMedia.called, false);
+    });
+
+    it("drop a reference with one atomic pull, never a read-modify-write", async function () {
+      // Two concurrent booking deletions on the same aggregated medium must
+      // not lose each other's update (ticket 01: `$pull`).
+      sandbox.stub(MediaModel, "findOneAndUpdate").returns({
+        toEntity: () => documentFixture({ bookingIds: [] }),
+      });
+
+      await MediaManager.removeBookingReference("media-1", TENANT, BOOKING);
+
+      assert.deepStrictEqual(MediaModel.findOneAndUpdate.firstCall.args, [
+        { id: "media-1", tenantId: TENANT },
+        { $pull: { bookingIds: BOOKING } },
+        { new: true },
+      ]);
     });
 
     it("are searched by their booking alone", async function () {
@@ -252,7 +303,7 @@ describe("media deletion", function () {
       assert.strictEqual(documents.length, 1);
       assert.deepStrictEqual(MediaModel.find.firstCall.args[0], {
         tenantId: TENANT,
-        bookingId: BOOKING,
+        bookingIds: BOOKING,
       });
     });
 
@@ -265,6 +316,9 @@ describe("media deletion", function () {
       const getDocuments = sandbox
         .stub(MediaManager, "getBookingDocuments")
         .resolves([documentFixture()]);
+      sandbox
+        .stub(MediaManager, "removeBookingReference")
+        .resolves(documentFixture({ bookingIds: [] }));
       const removeMedia = sandbox
         .stub(MediaManager, "removeMedia")
         .resolves(true);

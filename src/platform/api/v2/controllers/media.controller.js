@@ -1,6 +1,5 @@
 const bunyan = require("bunyan");
 
-const BookingManager = require("../../../../commons/data-managers/booking-manager");
 const MediaManager = require("../../../../commons/data-managers/media-manager");
 const MediaService = require("../../../../commons/services/media/media-service");
 const PermissionService = require("../../../../commons/services/permission-service");
@@ -30,6 +29,7 @@ const {
   assertBookingDocumentAccess,
   assertInstanceMediaFileAccess,
   assertMediaFileAccess,
+  mayUpdateBookingDocument,
 } = require("../../../../commons/services/media/media-access");
 
 const logger = bunyan.createLogger({
@@ -137,7 +137,7 @@ class MediaControllerV2 {
       tags: media.tags || [],
       visibility: media.visibility,
       uploadedBy: media.uploadedBy ?? null,
-      bookingId: media.bookingId ?? null,
+      bookingIds: media.bookingIds ?? [],
       storage: { provider: media.storage?.provider },
       variants: (media.variants || []).map((variant) => ({
         name: variant.name,
@@ -213,7 +213,7 @@ class MediaControllerV2 {
 
   /**
    * Permission to change the metadata of a medium. A booking document follows
-   * the update rights of its booking, everything else the `manageMedia` role
+   * the update rights of its bookings, everything else the `manageMedia` role
    * group with the uploader as owner.
    *
    * @param {Object} req - Express request.
@@ -222,24 +222,9 @@ class MediaControllerV2 {
    */
   static async _assertUpdateAccess(req, media) {
     const userId = MediaControllerV2._requireUserId(req);
-    const tenantId = media.tenantId;
 
     if (media.isBookingDocument()) {
-      const booking = await BookingManager.getBooking(
-        media.bookingId,
-        tenantId,
-      );
-
-      const allowed =
-        Boolean(booking) &&
-        (await PermissionService._allowUpdate(
-          booking,
-          userId,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ));
-
-      if (!allowed) {
+      if (!(await mayUpdateBookingDocument(userId, media))) {
         throw new ForbiddenError("forbidden");
       }
 
@@ -249,7 +234,7 @@ class MediaControllerV2 {
     const allowed = await PermissionService._allowUpdate(
       media,
       userId,
-      tenantId,
+      media.tenantId,
       RolePermission.MANAGE_MEDIA,
     );
 
@@ -646,7 +631,7 @@ class MediaControllerV2 {
     // booking, so no permission can grant it.
     if (media.isBookingDocument()) {
       throw new ForbiddenError("booking_document_not_deletable", {
-        bookingId: media.bookingId,
+        bookingIds: media.bookingIds,
       });
     }
 

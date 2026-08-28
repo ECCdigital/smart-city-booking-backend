@@ -98,10 +98,14 @@ components:
           type: string
           nullable: true
           description: Id of the uploading user (ownership for media permissions)
-        bookingId:
-          type: string
-          nullable: true
-          description: Set only on booking documents
+        bookingIds:
+          type: array
+          items:
+            type: string
+          description: |
+            The bookings a booking document belongs to — non-empty exactly on
+            booking documents, empty on normal media. An aggregated document
+            is one medium referencing every booking of its group.
         storage:
           $ref: "#/components/schemas/MediaStorage"
         variants:

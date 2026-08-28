@@ -59,7 +59,9 @@ class MediaManager {
     );
 
     // Booking documents are never part of the library listing or the picker.
-    const filter = { tenantId: tenantId ?? null, bookingId: null };
+    // Normal media carry no booking references at all, so `null` (which also
+    // matches an absent field) is the whole non-document stock.
+    const filter = { tenantId: tenantId ?? null, bookingIds: null };
 
     if (uploadedBy) {
       filter.uploadedBy = uploadedBy;
@@ -139,6 +141,17 @@ class MediaManager {
   }
 
   /**
+   * How many media match a filter — for the media CLI, which reports what a
+   * scope holds without needing the documents themselves.
+   *
+   * @param {Object} [filter] - Mongo filter, e.g. `{ tenantId: "t1" }`.
+   * @returns {Promise<number>} Number of matching media.
+   */
+  static async countMedia(filter = {}) {
+    return await MediaModel.countDocuments(filter);
+  }
+
+  /**
    * How many media the import brought over. Zero means the media import has not
    * run on this installation — the boot warning and the legacy fallback of the
    * resolver route hang off that (§4.10).
@@ -164,14 +177,21 @@ class MediaManager {
       return null;
     }
 
-    const rawMedia = await MediaModel.findOne({
+    const filter = {
       tenantId: tenantId ?? null,
-      // Without a booking the name alone decides, so a caller authorised for
-      // one booking could reach another one's document — always scope when the
-      // booking is known.
-      bookingId: bookingId ? bookingId : { $ne: null },
       originalFileName: fileName,
-    }).sort({ createdAt: -1 });
+    };
+
+    // Without a booking the name alone decides, so a caller authorised for
+    // one booking could reach another one's document — always scope when the
+    // booking is known.
+    if (bookingId) {
+      filter.bookingIds = bookingId;
+    } else {
+      filter["bookingIds.0"] = { $exists: true };
+    }
+
+    const rawMedia = await MediaModel.findOne(filter).sort({ createdAt: -1 });
 
     return rawMedia ? rawMedia.toEntity() : null;
   }
@@ -191,10 +211,35 @@ class MediaManager {
 
     const rawMedia = await MediaModel.find({
       tenantId: tenantId ?? null,
-      bookingId,
+      bookingIds: bookingId,
     });
 
     return rawMedia.map((raw) => raw.toEntity());
+  }
+
+  /**
+   * Drops one booking reference from a medium in a single atomic update, so
+   * concurrent deletions of bookings sharing an aggregated document can never
+   * lose each other's write. The caller decides what to do with a medium whose
+   * reference list ran empty.
+   *
+   * @param {string} mediaId - Unique ID of the medium.
+   * @param {string} tenantId - Tenant ID.
+   * @param {string} bookingId - The booking reference to drop.
+   * @returns {Promise<Object|null>} The updated medium or null.
+   */
+  static async removeBookingReference(mediaId, tenantId, bookingId) {
+    if (!mediaId || !bookingId) {
+      throw new Error("mediaId and bookingId are required.");
+    }
+
+    const updated = await MediaModel.findOneAndUpdate(
+      { id: mediaId, tenantId: tenantId ?? null },
+      { $pull: { bookingIds: bookingId } },
+      { new: true },
+    );
+
+    return updated ? updated.toEntity() : null;
   }
 
   /**

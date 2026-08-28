@@ -38,9 +38,31 @@ async function hasActiveMembership(userId, tenantId) {
 }
 
 /**
+ * Whether any booking a document references satisfies a predicate — the OR
+ * semantics every booking document rule shares, checked with an early exit.
+ * References to bookings that no longer exist are skipped.
+ *
+ * @param {Object} media - The booking document.
+ * @param {Function} predicate - Receives a booking, returns (a promise of) a boolean.
+ * @returns {Promise<boolean>}
+ */
+async function anyReferencedBooking(media, predicate) {
+  for (const bookingId of media.bookingIds || []) {
+    const booking = await BookingManager.getBooking(bookingId, media.tenantId);
+
+    if (booking && (await predicate(booking))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * The receipt rule: a booking document is readable for whoever may read any
- * booking of the tenant, or for the owner of the booking itself — a paying
- * customer gets their invoice without holding any role.
+ * booking of the tenant, or for the owner of one of its bookings — a paying
+ * customer gets their invoice without holding any role, and an aggregated
+ * document is readable for every participant of its group.
  *
  * @param {string} userId - Id of the user.
  * @param {Object} media - The booking document.
@@ -59,10 +81,27 @@ async function mayReadBookingDocument(userId, media) {
     return true;
   }
 
-  const booking = await BookingManager.getBooking(media.bookingId, tenantId);
+  return await anyReferencedBooking(media, (booking) =>
+    PermissionService._isOwner(booking, userId, tenantId),
+  );
+}
 
-  return (
-    Boolean(booking) && PermissionService._isOwner(booking, userId, tenantId)
+/**
+ * The write side of the receipt rule: the metadata of a booking document may
+ * be changed by whoever may update one of its bookings.
+ *
+ * @param {string} userId - Id of the user.
+ * @param {Object} media - The booking document.
+ * @returns {Promise<boolean>}
+ */
+async function mayUpdateBookingDocument(userId, media) {
+  return await anyReferencedBooking(media, (booking) =>
+    PermissionService._allowUpdate(
+      booking,
+      userId,
+      media.tenantId,
+      RolePermission.MANAGE_BOOKINGS,
+    ),
   );
 }
 
@@ -138,4 +177,5 @@ module.exports = {
   assertMediaFileAccess,
   hasActiveMembership,
   mayReadBookingDocument,
+  mayUpdateBookingDocument,
 };

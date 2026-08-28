@@ -27,7 +27,7 @@ function documentFixture(overrides = {}) {
     mimeType: "application/pdf",
     size: 100,
     originalFileName: "invoice-1.pdf",
-    bookingId: BOOKING,
+    bookingIds: [BOOKING],
     visibility: "intern",
     storage: {
       provider: "nextcloud",
@@ -48,6 +48,49 @@ describe("booking documents in the media library", function () {
     sandbox.restore();
   });
 
+  describe("Media.isBookingDocument", function () {
+    it("is true exactly for a medium with at least one booking reference", function () {
+      assert.strictEqual(documentFixture().isBookingDocument(), true);
+      assert.strictEqual(
+        documentFixture({ bookingIds: ["b-1", "b-2"] }).isBookingDocument(),
+        true,
+      );
+    });
+
+    it("is false for normal media, whether the field is absent or empty", function () {
+      assert.strictEqual(
+        documentFixture({ bookingIds: null }).isBookingDocument(),
+        false,
+      );
+      assert.strictEqual(
+        documentFixture({ bookingIds: [] }).isBookingDocument(),
+        false,
+      );
+    });
+  });
+
+  describe("the media model indexes", function () {
+    it("replace the scalar booking index with the multikey one", function () {
+      const indexes = MediaModel.schema.indexes().map(([fields]) => fields);
+
+      assert.ok(indexes.some((fields) => fields.bookingIds === 1));
+      assert.ok(!indexes.some((fields) => fields.bookingId === 1));
+    });
+
+    it("hold one medium per legacy file and tenant", function () {
+      const index = MediaModel.schema
+        .indexes()
+        .find(([fields]) => fields.tenantId === 1 && fields.legacyPath === 1);
+
+      assert.ok(index, "compound legacy path index exists");
+      assert.strictEqual(index[1].unique, true);
+      // Partial: normal media carry `legacyPath: null` and must stay exempt.
+      assert.deepStrictEqual(index[1].partialFilterExpression, {
+        legacyPath: { $type: "string" },
+      });
+    });
+  });
+
   describe("MediaManager", function () {
     it("keeps booking documents out of the library listing", async function () {
       const query = {
@@ -60,9 +103,9 @@ describe("booking documents in the media library", function () {
 
       await MediaManager.getMediaList({ tenantId: TENANT });
 
-      assert.strictEqual(MediaModel.find.firstCall.args[0].bookingId, null);
+      assert.strictEqual(MediaModel.find.firstCall.args[0].bookingIds, null);
       assert.strictEqual(
-        MediaModel.countDocuments.firstCall.args[0].bookingId,
+        MediaModel.countDocuments.firstCall.args[0].bookingIds,
         null,
       );
     });
@@ -95,7 +138,7 @@ describe("booking documents in the media library", function () {
       assert.strictEqual(media.id, "media-1");
       assert.deepStrictEqual(MediaModel.findOne.firstCall.args[0], {
         tenantId: TENANT,
-        bookingId: { $ne: null },
+        "bookingIds.0": { $exists: true },
         originalFileName: "invoice-1.pdf",
       });
     });
@@ -112,7 +155,7 @@ describe("booking documents in the media library", function () {
       );
 
       assert.strictEqual(
-        MediaModel.findOne.firstCall.args[0].bookingId,
+        MediaModel.findOne.firstCall.args[0].bookingIds,
         BOOKING,
       );
     });
@@ -129,20 +172,20 @@ describe("booking documents in the media library", function () {
   });
 
   describe("MediaService.createBookingDocument", function () {
-    it("marks the medium with its booking and keeps it out of the public web", async function () {
+    it("marks the medium with all its bookings and keeps it out of the public web", async function () {
       const createMedia = sandbox
         .stub(MediaService, "createMedia")
         .callsFake(async (params) => params);
 
       const result = await MediaService.createBookingDocument({
         tenantId: TENANT,
-        bookingId: BOOKING,
+        bookingIds: [BOOKING, "booking-2"],
         file: { name: "invoice-1.pdf", data: Buffer.from("pdf") },
         tags: ["invoice"],
       });
 
       assert.strictEqual(createMedia.calledOnce, true);
-      assert.strictEqual(result.bookingId, BOOKING);
+      assert.deepStrictEqual(result.bookingIds, [BOOKING, "booking-2"]);
       assert.strictEqual(result.tenantId, TENANT);
       assert.strictEqual(result.metadata.visibility, "intern");
       assert.deepStrictEqual(result.metadata.tags, ["invoice"]);
@@ -156,7 +199,18 @@ describe("booking documents in the media library", function () {
             tenantId: TENANT,
             file: { name: "x.pdf", data: Buffer.from("pdf") },
           }),
-        (error) => error.code === "missing_booking_id",
+        (error) => error.code === "missing_booking_ids",
+      );
+
+      // A booking document with zero bookings is not a valid state (§4.7).
+      await assert.rejects(
+        () =>
+          MediaService.createBookingDocument({
+            tenantId: TENANT,
+            bookingIds: [],
+            file: { name: "x.pdf", data: Buffer.from("pdf") },
+          }),
+        (error) => error.code === "missing_booking_ids",
       );
     });
   });
@@ -195,7 +249,7 @@ describe("booking documents in the media library", function () {
       assert.strictEqual(NextcloudManager.createFile.called, false);
       const args = createBookingDocument.firstCall.args[0];
       assert.strictEqual(args.tenantId, TENANT);
-      assert.strictEqual(args.bookingId, BOOKING);
+      assert.deepStrictEqual(args.bookingIds, [BOOKING]);
       assert.strictEqual(args.file.name, "receipt-1.pdf");
       assert.deepStrictEqual(args.tags, ["receipt"]);
     });
@@ -229,9 +283,9 @@ describe("booking documents in the media library", function () {
       ]);
     });
 
-    it("links an aggregated document to every booking of the group", async function () {
-      // The aggregated receipt is attached to all bookings of the group, so
-      // every owner has to reach it — one medium could only name one booking.
+    it("stores an aggregated document once, referencing every booking of the group", async function () {
+      // The aggregated receipt is one medium with one byte copy; every booking
+      // of the group reaches it through its own reference (§4.7).
       sandbox.stub(BookingManager, "getBookings").resolves([
         { id: "booking-1", tenantId: TENANT, attachments: [] },
         { id: "booking-2", tenantId: TENANT, attachments: [] },
@@ -247,9 +301,9 @@ describe("booking documents in the media library", function () {
         "booking-3",
       ]);
 
-      assert.strictEqual(createBookingDocument.callCount, 3);
+      assert.strictEqual(createBookingDocument.callCount, 1);
       assert.deepStrictEqual(
-        createBookingDocument.getCalls().map((call) => call.args[0].bookingId),
+        createBookingDocument.firstCall.args[0].bookingIds,
         ["booking-1", "booking-2", "booking-3"],
       );
     });
