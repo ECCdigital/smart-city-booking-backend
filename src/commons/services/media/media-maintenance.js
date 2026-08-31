@@ -1,11 +1,18 @@
+const crypto = require("node:crypto");
+
 const MediaManager = require("../../data-managers/media-manager");
 const MediaService = require("./media-service");
 const TenantManager = require("../../data-managers/tenant-manager");
-const { MEDIA_KIND } = require("../../schemas/mediaSchema");
+const storage = require("../storage");
+const { MEDIA_KIND, STORAGE_PROVIDER } = require("../../schemas/mediaSchema");
 const { MigrationReport } = require("./migration-report");
 const { NextcloudManager } = require("../../data-managers/file-manager");
 const { StorageNotFoundError } = require("../../../errors/StorageError");
-const { PRESET_NAMES, VARIANT_FORMAT } = require("./image-variants");
+const {
+  PRESET_NAMES,
+  VARIANT_FORMAT,
+  VARIANT_MIME_TYPE,
+} = require("./image-variants");
 const { variantKey } = require("../storage/media-keys");
 const { BOOKING_DOCUMENT } = require("./booking-documents");
 const { LEGACY_ROOTS } = require("./legacy-path");
@@ -402,6 +409,183 @@ async function purgeImported({ dryRun = false, tenantId } = {}) {
 }
 
 /**
+ * Every file of a medium as the relocation sees it: its unchanged key, the
+ * size and checksum the database claims, and the content type to store it
+ * under at the target.
+ *
+ * @param {Object} media - The medium.
+ * @returns {{key: string, size: number|null, checksum: string, contentType: string}[]}
+ */
+function fileEntries(media) {
+  return [
+    {
+      key: media.storage?.key,
+      size: media.size ?? null,
+      checksum: media.checksum || "",
+      contentType: media.mimeType,
+    },
+    ...(media.variants || []).map((variant) => ({
+      key: variant.key,
+      size: variant.size ?? null,
+      checksum: variant.checksum || "",
+      contentType: VARIANT_MIME_TYPE,
+    })),
+  ].filter((file) => Boolean(file.key));
+}
+
+/**
+ * Copies one file of a medium to the target provider and verifies the copy
+ * before anyone relies on it: size always (`stat` at the target against what
+ * the database claims), checksum where the database has one. The checksum is
+ * computed from the very bytes that were copied — one download, no second.
+ *
+ * The provider contract takes buffers, not streams, so the file passes through
+ * memory; media are capped by the upload limits, which keeps that safe.
+ *
+ * @param {Object} params
+ * @param {import("../storage/storage-provider").StorageProvider} params.source
+ * @param {import("../storage/storage-provider").StorageProvider} params.target
+ * @param {{key: string, size: number|null, checksum: string, contentType: string}} params.file
+ * @returns {Promise<void>}
+ * @throws {Error} When the source misses the file or the copy does not verify.
+ */
+async function copyAndVerify({ source, target, file }) {
+  let data;
+
+  try {
+    data = await source.getBuffer({ key: file.key });
+  } catch (error) {
+    if (error instanceof StorageNotFoundError) {
+      throw new Error(`missing source bytes: ${file.key}`);
+    }
+    throw error;
+  }
+
+  const checksum = crypto.createHash("sha256").update(data).digest("hex");
+
+  await target.put({
+    key: file.key,
+    data,
+    contentType: file.contentType,
+  });
+
+  const stat = await target.stat({ key: file.key });
+  const expectedSize = file.size ?? data.length;
+
+  if (stat.size !== expectedSize) {
+    throw new Error(
+      `size mismatch at ${target.name} for ${file.key}: ` +
+        `expected ${expectedSize}, found ${stat.size}`,
+    );
+  }
+
+  if (file.checksum && file.checksum !== checksum) {
+    throw new Error(`checksum mismatch for ${file.key}`);
+  }
+}
+
+/**
+ * Moves the stock to one storage provider (§4.2 of the media spec): every
+ * medium whose storage location is not the target yet travels as a whole —
+ * original plus all variants, under unchanged keys — or not at all. Only after
+ * every file is copied and verified does the medium's `storage.provider` flip;
+ * from that moment every delivery path reads from the target. The bytes at the
+ * old provider stay where they are — their disposal is the operator's, never
+ * this command's.
+ *
+ * Safe to run during operation and safe to abort: before the flip nothing has
+ * happened but harmless copies at the target, after the flip the medium has
+ * fully moved. A second run skips everything that already lives at the target
+ * and simply overwrites the half-finished copies of media that failed.
+ *
+ * @param {Object} params
+ * @param {string} params.to - Target provider, `nextcloud` or `s3`.
+ * @param {boolean} [params.dryRun] - Whether to only rehearse.
+ * @param {string} [params.tenantId] - Restrict to one tenant.
+ * @returns {Promise<MigrationReport>}
+ */
+async function relocate({ dryRun = false, tenantId, to } = {}) {
+  if (!Object.values(STORAGE_PROVIDER).includes(to)) {
+    throw new Error(
+      `Unknown target provider "${to}". Expected one of: ` +
+        Object.values(STORAGE_PROVIDER).join(", "),
+    );
+  }
+
+  const report = new MigrationReport("relocate", dryRun);
+
+  report.note(
+    "the bytes at the old provider stay in place — removing them is the " +
+      "operator's job",
+  );
+
+  const filter = { "storage.provider": { $ne: to } };
+  if (tenantId !== undefined) {
+    filter.tenantId = tenantId ?? null;
+  }
+
+  const media = await MediaManager.getAllMedia(filter);
+
+  const fileCount = media.reduce(
+    (sum, medium) => sum + fileEntries(medium).length,
+    0,
+  );
+  const found = [...countByScope(media)]
+    .map(([scopeTenantId, count]) => `${scopeLabel(scopeTenantId)}: ${count}`)
+    .join(", ");
+
+  report.note(
+    `found ${media.length} media (${fileCount} files) not at ${to}` +
+      `${found ? ` — ${found}` : ""}`,
+  );
+
+  const target = storage.getStorageProvider(to);
+
+  for (const medium of media) {
+    try {
+      if (dryRun) {
+        // What a real run would trip over: files the database claims but the
+        // source provider does not hold — the same view `verify` takes.
+        const missing = [];
+
+        for (const file of fileEntries(medium)) {
+          if (!(await keyExists(medium, file.key))) {
+            missing.push(file.key);
+          }
+        }
+
+        if (missing.length > 0) {
+          report.failed(
+            `media:${medium.id}`,
+            `missing source bytes: ${missing.join(", ")}`,
+          );
+          continue;
+        }
+
+        report.processedOne();
+        continue;
+      }
+
+      const source = MediaService.providerFor(medium);
+
+      for (const file of fileEntries(medium)) {
+        await copyAndVerify({ source, target, file });
+      }
+
+      // The flip — atomic per medium, and only after every file made it.
+      medium.storage.provider = to;
+      await MediaManager.storeMedia(medium, false);
+
+      report.processedOne();
+    } catch (error) {
+      report.failed(`media:${medium.id}`, error);
+    }
+  }
+
+  return report;
+}
+
+/**
  * Empties the legacy tree — deliberately its own command, run only once the
  * import is verified. A file is removed only where a medium answers for its
  * legacy path; anything the import could not take, an unplaced booking document
@@ -473,5 +657,6 @@ module.exports = {
   purgeImported,
   purgeLegacy,
   regenerate,
+  relocate,
   verify,
 };

@@ -91,6 +91,7 @@ node src/cli/media-cli.js import --dry-run
 | `cleanup`        | Removes stale variant bytes in the key space of known media                                                           |
 | `purge-imported` | Removes the imported media again, so the import can run from scratch — the legacy tree stays untouched                |
 | `purge-legacy`   | Removes the imported files from the legacy tree — separate and explicit, and only where a medium answers for the file |
+| `relocate`       | Moves every medium's bytes to the provider given with `--to` (copy, verify, then flip) — the source bytes stay behind |
 
 `import` does three things in order, because a reference can only point at a
 medium that exists:

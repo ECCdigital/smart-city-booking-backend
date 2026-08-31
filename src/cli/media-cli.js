@@ -16,9 +16,11 @@ const {
   purgeImported,
   purgeLegacy,
   regenerate,
+  relocate,
   verify,
 } = require("../commons/services/media/media-maintenance");
 const { runImport } = require("../commons/services/media/media-import");
+const { STORAGE_PROVIDER } = require("../commons/schemas/mediaSchema");
 
 /**
  * The media CLI (§4.10 of the media spec): the move of the legacy file stock
@@ -129,6 +131,33 @@ yargs(hideBin(process.argv))
     // that every command of the CLI takes the same options.
     (builder) => builder.options(dryRunOption),
     (argv) => run(() => verify({ dryRun: argv.dryRun }), argv),
+  )
+  .command(
+    "relocate",
+    "Move every medium's bytes to the given storage provider",
+    (builder) =>
+      builder
+        .options(dryRunOption)
+        .option("to", {
+          type: "string",
+          choices: Object.values(STORAGE_PROVIDER),
+          demandOption: true,
+          describe: "Target storage provider",
+        })
+        .option("tenant", {
+          type: "string",
+          describe: "Restrict to one tenant",
+        }),
+    (argv) =>
+      run(
+        () =>
+          relocate({
+            dryRun: argv.dryRun,
+            tenantId: argv.tenant,
+            to: argv.to,
+          }),
+        argv,
+      ),
   )
   .command(
     "cleanup",
