@@ -143,6 +143,7 @@ describe("instance media", function () {
       put: sandbox.stub().resolves({ key: "k", size: 16 }),
       getStream: sandbox.stub().resolves(createStream()),
       deleteMany: sandbox.stub().resolves(),
+      deletePrefix: sandbox.stub().resolves(),
     };
 
     instance = { ownerUserIds: [OWNER.id] };

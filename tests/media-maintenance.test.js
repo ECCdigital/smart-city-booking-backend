@@ -79,6 +79,7 @@ describe("media maintenance", () => {
         return { size: 1 };
       }),
       deleteMany: sandbox.stub().resolves(),
+      deletePrefix: sandbox.stub().resolves(),
     };
 
     sandbox.stub(storage, "getStorageProvider").returns(provider);

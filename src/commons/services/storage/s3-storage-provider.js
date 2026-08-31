@@ -187,6 +187,45 @@ class S3StorageProvider extends StorageProvider {
       }
     }
   }
+
+  async deletePrefix({ prefix }) {
+    const { ListObjectsV2Command } = require("@aws-sdk/client-s3");
+    // The trailing slash keeps `.../media-1` from also matching `.../media-10`.
+    const boundedPrefix = prefix.endsWith("/") ? prefix : `${prefix}/`;
+    let continuationToken;
+
+    do {
+      let response;
+
+      try {
+        response = await this._getClient().send(
+          new ListObjectsV2Command({
+            Bucket: this._bucket,
+            Prefix: boundedPrefix,
+            ...(continuationToken
+              ? { ContinuationToken: continuationToken }
+              : {}),
+          }),
+        );
+      } catch (error) {
+        throw this._toStorageError(
+          error,
+          "storage_delete_prefix_failed",
+          prefix,
+        );
+      }
+
+      const keys = (response.Contents || []).map((object) => object.Key);
+
+      if (keys.length > 0) {
+        await this.deleteMany({ keys });
+      }
+
+      continuationToken = response.IsTruncated
+        ? response.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+  }
 }
 
 module.exports = { S3StorageProvider };

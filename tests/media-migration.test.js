@@ -73,6 +73,7 @@ describe("media migration", () => {
       stat: sandbox.stub().resolves({ size: 1 }),
       delete: sandbox.stub().resolves(),
       deleteMany: sandbox.stub().resolves(),
+      deletePrefix: sandbox.stub().resolves(),
     };
 
     sandbox.stub(storage, "configuredProviderName").returns("nextcloud");

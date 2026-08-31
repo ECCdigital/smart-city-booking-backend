@@ -14,7 +14,7 @@ const logger = bunyan.createLogger({
 });
 
 /**
- * The storage provider contract — exactly six operations, deliberately no
+ * The storage provider contract — exactly seven operations, deliberately no
  * `list`: usage proof runs over the database, cleanup over the media CLI.
  *
  * Every implementation normalises client failures onto `StorageError`
@@ -152,6 +152,20 @@ class StorageProvider {
    */
   // eslint-disable-next-line no-unused-vars
   async deleteMany({ keys }) {
+    throw new Error("Not implemented");
+  }
+
+  /**
+   * Remove every key under a prefix — and, on backends with real directories,
+   * the directory itself, so no empty folder stays behind. Removing a missing
+   * prefix is not an error.
+   *
+   * @param {Object} params
+   * @param {string} params.prefix - Prefix to remove, without trailing slash.
+   * @returns {Promise<void>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  async deletePrefix({ prefix }) {
     throw new Error("Not implemented");
   }
 }

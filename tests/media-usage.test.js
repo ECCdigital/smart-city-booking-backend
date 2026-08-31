@@ -204,6 +204,7 @@ describe("media deletion", function () {
     provider = {
       delete: sandbox.stub().resolves(),
       deleteMany: sandbox.stub().resolves(),
+      deletePrefix: sandbox.stub().resolves(),
     };
 
     sandbox.stub(MediaService, "providerFor").returns(provider);
@@ -217,12 +218,12 @@ describe("media deletion", function () {
     const removeMedia = sandbox
       .stub(MediaManager, "removeMedia")
       .resolves(true);
-    provider.deleteMany.rejects(new Error("storage down"));
+    provider.deletePrefix.rejects(new Error("storage down"));
 
     const removed = await MediaService.deleteMedia(documentFixture());
 
     assert.strictEqual(removed, true);
-    assert.ok(removeMedia.calledBefore(provider.deleteMany));
+    assert.ok(removeMedia.calledBefore(provider.deletePrefix));
   });
 
   describe("booking documents", function () {

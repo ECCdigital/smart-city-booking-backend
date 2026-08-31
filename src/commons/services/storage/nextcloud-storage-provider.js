@@ -129,6 +129,17 @@ class NextcloudStorageProvider extends StorageProvider {
       await this.delete({ key });
     }
   }
+
+  async deletePrefix({ prefix }) {
+    const client = this._getClient();
+
+    try {
+      // WebDAV DELETE on a collection removes it with everything inside.
+      await client.deleteFile(prefix);
+    } catch (error) {
+      this._throwUnlessMissing(error, "storage_delete_prefix_failed", prefix);
+    }
+  }
 }
 
 module.exports = { NextcloudStorageProvider };

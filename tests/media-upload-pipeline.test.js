@@ -110,6 +110,7 @@ describe("Media upload pipeline", function () {
       stat: sandbox.stub().resolves({}),
       delete: sandbox.stub().resolves(),
       deleteMany: sandbox.stub().resolves(),
+      deletePrefix: sandbox.stub().resolves(),
     };
 
     sandbox.stub(storage, "getStorageProvider").returns(provider);
@@ -343,28 +344,35 @@ describe("Media upload pipeline", function () {
   });
 
   describe("atomicity", function () {
-    it("writes no medium and removes written bytes when a byte write fails", async function () {
+    function mediaFolderOf(key) {
+      return key.split("/").slice(0, -1).join("/");
+    }
+
+    it("writes no medium and removes the media folder when a byte write fails", async function () {
       const data = await png(2000);
       provider.put.onCall(2).rejects(new Error("storage down"));
 
       await assert.rejects(() => createMedia(data, "large.png"));
 
       assert.strictEqual(stored.length, 0);
-      assert.strictEqual(provider.deleteMany.callCount, 1);
-      const removed = provider.deleteMany.firstCall.args[0].keys;
-      assert.strictEqual(removed.length, 2);
-      assert.ok(removed[0].endsWith("/original.png"));
-      assert.ok(removed[1].endsWith("/thumb.webp"));
+      assert.strictEqual(provider.deletePrefix.callCount, 1);
+      assert.strictEqual(
+        provider.deletePrefix.firstCall.args[0].prefix,
+        mediaFolderOf(provider.put.firstCall.args[0].key),
+      );
     });
 
-    it("removes the bytes when the medium cannot be stored", async function () {
+    it("removes the media folder when the medium cannot be stored", async function () {
       const data = await png(600);
       MediaManager.storeMedia.rejects(new Error("database down"));
 
       await assert.rejects(() => createMedia(data, "medium.png"));
 
-      assert.strictEqual(provider.deleteMany.callCount, 1);
-      assert.strictEqual(provider.deleteMany.firstCall.args[0].keys.length, 3);
+      assert.strictEqual(provider.deletePrefix.callCount, 1);
+      assert.strictEqual(
+        provider.deletePrefix.firstCall.args[0].prefix,
+        mediaFolderOf(provider.put.firstCall.args[0].key),
+      );
     });
   });
 });

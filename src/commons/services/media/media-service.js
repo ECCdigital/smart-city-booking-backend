@@ -8,7 +8,11 @@ const { MEDIA_VISIBILITY } = require("../../schemas/mediaSchema");
 const { BadRequestError } = require("../../../errors/BaseError");
 const { CACHE_POLICY, strongEtag } = require("../../utilities/cache-headers");
 const storage = require("../storage");
-const { originalKey, variantKey } = require("../storage/media-keys");
+const {
+  mediaPrefix,
+  originalKey,
+  variantKey,
+} = require("../storage/media-keys");
 const {
   IMAGE_PRESETS,
   PRESET_NAMES,
@@ -78,22 +82,24 @@ function assertWithinLimit(size, maxBytes, kind) {
  */
 class MediaService {
   /**
-   * Removes bytes written by a failed upload so no half medium is left behind.
+   * Removes everything a failed upload left in storage — bytes and the
+   * medium's folder — so no half medium is left behind.
    *
    * @param {Object} provider - The storage provider the bytes went to.
-   * @param {string[]} keys - Keys written so far.
+   * @param {Object} media - The medium whose upload failed.
    * @returns {Promise<void>}
    */
-  static async _rollbackUpload(provider, keys) {
-    if (keys.length === 0) {
-      return;
-    }
+  static async _rollbackUpload(provider, media) {
+    const prefix = mediaPrefix({
+      tenantId: media.tenantId ?? null,
+      mediaId: media.id,
+    });
 
     try {
-      await provider.deleteMany({ keys });
+      await provider.deletePrefix({ prefix });
     } catch (error) {
       logger.warn(
-        { err: error, keys },
+        { err: error, prefix },
         "Rollback of a failed upload left orphans in storage",
       );
     }
@@ -217,17 +223,14 @@ class MediaService {
    * @returns {Promise<Object>} The stored medium.
    */
   static async _persist({ provider, media, payloads }) {
-    const written = [];
-
     try {
       for (const payload of payloads) {
         await provider.put(payload);
-        written.push(payload.key);
       }
 
       return await MediaManager.storeMedia(media);
     } catch (error) {
-      await MediaService._rollbackUpload(provider, written);
+      await MediaService._rollbackUpload(provider, media);
       throw error;
     }
   }
@@ -554,8 +557,10 @@ class MediaService {
 
   /**
    * Deletes a medium: database document first, bytes best-effort afterwards.
-   * A failed byte removal leaves an orphan in the storage — accepted, the
-   * media CLI cleans up.
+   * The whole storage folder of the medium goes, not just the recorded keys —
+   * otherwise an empty folder would stay behind on every deletion. A failed
+   * byte removal leaves an orphan in the storage — accepted, the media CLI
+   * cleans up.
    *
    * @param {Object} media - The medium to delete.
    * @returns {Promise<boolean>} True if the document was removed.
@@ -563,16 +568,16 @@ class MediaService {
   static async deleteMedia(media) {
     const removed = await MediaManager.removeMedia(media.id, media.tenantId);
 
-    const keys = [
-      media.storage?.key,
-      ...(media.variants || []).map((variant) => variant.key),
-    ].filter(Boolean);
+    const prefix = mediaPrefix({
+      tenantId: media.tenantId ?? null,
+      mediaId: media.id,
+    });
 
     try {
-      await MediaService.providerFor(media).deleteMany({ keys });
+      await MediaService.providerFor(media).deletePrefix({ prefix });
     } catch (error) {
       logger.warn(
-        { err: error, mediaId: media.id, keys },
+        { err: error, mediaId: media.id, prefix },
         "Media bytes could not be removed, leaving orphans in storage",
       );
     }

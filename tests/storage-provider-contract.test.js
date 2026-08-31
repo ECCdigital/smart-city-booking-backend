@@ -64,8 +64,13 @@ function fakeWebdavClient(store) {
       };
     },
     async deleteFile(path) {
-      if (!store.has(path)) throw webdavError(404);
-      store.delete(path);
+      // WebDAV DELETE removes a collection with everything inside.
+      const folder = `${path.replace(/\/$/, "")}/`;
+      const keys = [...store.keys()].filter(
+        (key) => key === path || key.startsWith(folder),
+      );
+      if (keys.length === 0) throw webdavError(404);
+      for (const key of keys) store.delete(key);
     },
   };
 }
@@ -125,6 +130,15 @@ function fakeS3Client(store) {
             store.delete(object.Key);
           }
           return {};
+        case "ListObjectsV2Command": {
+          const keys = [...store.keys()].filter((key) =>
+            key.startsWith(input.Prefix),
+          );
+          return {
+            Contents: keys.map((Key) => ({ Key })),
+            IsTruncated: false,
+          };
+        }
         default:
           throw new Error(`Unexpected command ${command.constructor.name}`);
       }
@@ -296,6 +310,46 @@ for (const implementation of IMPLEMENTATIONS) {
         () => provider.getBuffer({ key: otherKey }),
         (error) => error instanceof StorageNotFoundError,
       );
+    });
+
+    it("removes every key under a prefix, the folder included", async function () {
+      const variantKey = "tenant1/media/media-1/thumb.webp";
+      await provider.put({ key: KEY, data: BYTES, contentType: "image/png" });
+      await provider.put({
+        key: variantKey,
+        data: BYTES,
+        contentType: "image/webp",
+      });
+
+      await provider.deletePrefix({ prefix: "tenant1/media/media-1" });
+
+      await assert.rejects(
+        () => provider.getBuffer({ key: KEY }),
+        (error) => error instanceof StorageNotFoundError,
+      );
+      await assert.rejects(
+        () => provider.getBuffer({ key: variantKey }),
+        (error) => error instanceof StorageNotFoundError,
+      );
+    });
+
+    it("leaves a sibling medium whose id merely starts the same", async function () {
+      const siblingKey = "tenant1/media/media-10/original.png";
+      await provider.put({ key: KEY, data: BYTES, contentType: "image/png" });
+      await provider.put({
+        key: siblingKey,
+        data: BYTES,
+        contentType: "image/png",
+      });
+
+      await provider.deletePrefix({ prefix: "tenant1/media/media-1" });
+
+      const buffer = await provider.getBuffer({ key: siblingKey });
+      assert.strictEqual(buffer.toString(), BYTES.toString());
+    });
+
+    it("treats deleting a missing prefix as done", async function () {
+      await provider.deletePrefix({ prefix: "tenant1/media/nope" });
     });
 
     it("normalises backend failures onto StorageError", async function () {

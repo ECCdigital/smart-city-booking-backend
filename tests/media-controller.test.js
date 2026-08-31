@@ -204,6 +204,7 @@ describe("MediaControllerV2", function () {
       stat: sandbox.stub().resolves({ size: 16 }),
       delete: sandbox.stub().resolves(),
       deleteMany: sandbox.stub().resolves(),
+      deletePrefix: sandbox.stub().resolves(),
     };
 
     instance = { ownerUserIds: [] };
@@ -1318,16 +1319,16 @@ describe("MediaControllerV2", function () {
       );
 
       assert.strictEqual(res.statusCode, 204);
-      assert.ok(removeMedia.calledBefore(provider.deleteMany));
-      assert.deepStrictEqual(provider.deleteMany.firstCall.args[0].keys, [
-        `${TENANT}/media/media-1/original.png`,
-      ]);
+      assert.ok(removeMedia.calledBefore(provider.deletePrefix));
+      assert.deepStrictEqual(provider.deletePrefix.firstCall.args[0], {
+        prefix: `${TENANT}/media/media-1`,
+      });
     });
 
     it("still succeeds when the bytes cannot be removed", async function () {
       grant({ manageMedia: { deleteAny: true } });
       sandbox.stub(MediaManager, "removeMedia").resolves(true);
-      provider.deleteMany.rejects(new Error("storage down"));
+      provider.deletePrefix.rejects(new Error("storage down"));
       const res = createResponse();
 
       await MediaControllerV2.deleteMedia(
@@ -1465,7 +1466,7 @@ describe("MediaControllerV2", function () {
         JSON.stringify(usageResponse.body),
       );
       assert.strictEqual(removeMedia.called, false);
-      assert.strictEqual(provider.deleteMany.called, false);
+      assert.strictEqual(provider.deletePrefix.called, false);
     });
   });
 });
