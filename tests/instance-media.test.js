@@ -19,6 +19,7 @@ const {
 const TENANT = "tenant1";
 const OWNER = { id: "instance-owner" };
 const SIGNED_IN = { id: "someone" };
+const BACKEND_URL = "https://booking.example.org";
 
 function createResponse() {
   return {
@@ -535,6 +536,17 @@ describe("instance media", function () {
   });
 
   describe("derived read fields", function () {
+    let backendUrl;
+
+    beforeEach(function () {
+      backendUrl = process.env.BACKEND_URL;
+      process.env.BACKEND_URL = BACKEND_URL;
+    });
+
+    afterEach(function () {
+      process.env.BACKEND_URL = backendUrl;
+    });
+
     it("derives logoUrl and faviconUrl from the stored references", function () {
       const exported = new Instance({
         branding: {
@@ -546,17 +558,41 @@ describe("instance media", function () {
         },
       }).exportWithMedia();
 
+      // Absolute: the store front fetches these server side, with no origin of
+      // its own to resolve a relative address against.
       assert.strictEqual(
         exported.branding.logoUrl,
-        "/api/v2/instance/media/logo-1/file",
+        `${BACKEND_URL}/api/v2/instance/media/logo-1/file`,
       );
       assert.strictEqual(
         exported.branding.faviconUrl,
-        "/api/v2/instance/media/favicon-1/file",
+        `${BACKEND_URL}/api/v2/instance/media/favicon-1/file`,
       );
+      // The reference itself keeps the relative URL every reference site carries.
       assert.strictEqual(
         exported.branding.logo.url,
         "/api/v2/instance/media/logo-1/file",
+      );
+    });
+
+    it("prefers a stored reference over the legacy address beside it", function () {
+      const exported = new Instance({
+        branding: {
+          active: true,
+          logo: { source: "media", mediaId: "logo-1" },
+          favicon: { source: "media", mediaId: "favicon-1" },
+          logoUrl: "https://example.org/stale-logo.png",
+          faviconUrl: "https://example.org/stale-favicon.ico",
+        },
+      }).exportWithMedia();
+
+      assert.strictEqual(
+        exported.branding.logoUrl,
+        `${BACKEND_URL}/api/v2/instance/media/logo-1/file`,
+      );
+      assert.strictEqual(
+        exported.branding.faviconUrl,
+        `${BACKEND_URL}/api/v2/instance/media/favicon-1/file`,
       );
     });
 
@@ -570,9 +606,23 @@ describe("instance media", function () {
 
       assert.strictEqual(
         exported.branding.logoUrl,
-        "/api/files/get?name=/public/l.png",
+        `${BACKEND_URL}/api/files/get?name=/public/l.png`,
       );
       assert.strictEqual(exported.branding.logo, null);
+    });
+
+    it("leaves an absolute legacy branding URL untouched", function () {
+      const exported = new Instance({
+        branding: {
+          active: true,
+          logoUrl: "https://cdn.example.org/logo.png",
+        },
+      }).exportWithMedia();
+
+      assert.strictEqual(
+        exported.branding.logoUrl,
+        "https://cdn.example.org/logo.png",
+      );
     });
 
     it("mirrors a legal document reference into its url", function () {
@@ -587,7 +637,7 @@ describe("instance media", function () {
 
       assert.strictEqual(
         exported.termsAndConditions.url,
-        "/api/v2/instance/media/doc-1/file",
+        `${BACKEND_URL}/api/v2/instance/media/doc-1/file`,
       );
       // A medium is a plain URL to whoever reads it — nothing downstream has
       // to learn about media to follow it.
@@ -609,6 +659,37 @@ describe("instance media", function () {
         url: "https://example.org/impressum",
         fileName: "",
       });
+    });
+
+    it("prefers a document reference over the legacy address beside it", function () {
+      const exported = new Instance({
+        dataProtection: {
+          source: "url",
+          url: "https://example.org/stale-datenschutz",
+          fileName: "",
+          reference: { source: "media", mediaId: "doc-2" },
+        },
+      }).exportWithMedia();
+
+      assert.strictEqual(
+        exported.dataProtection.url,
+        `${BACKEND_URL}/api/v2/instance/media/doc-2/file`,
+      );
+    });
+
+    it("makes a relative legacy document address absolute", function () {
+      const exported = new Instance({
+        legalNotice: {
+          source: "file",
+          url: "/api/files/get?name=/public/impressum.pdf",
+          fileName: "impressum.pdf",
+        },
+      }).exportWithMedia();
+
+      assert.strictEqual(
+        exported.legalNotice.url,
+        `${BACKEND_URL}/api/files/get?name=/public/impressum.pdf`,
+      );
     });
   });
 });
