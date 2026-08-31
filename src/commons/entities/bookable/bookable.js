@@ -1,6 +1,7 @@
 const { bookableSchemaDefinition } = require("../../schemas/bookableSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const {
+  absoluteUrl,
   enrichAttachment,
   enrichMediaReferences,
   mediaReferenceUrl,
@@ -371,19 +372,27 @@ class Bookable {
 
   /**
    * Export public bookable information
+   * @param {Object} [options]
+   * @param {boolean} [options.absoluteMediaUrls] - Resolve media addresses to
+   *   absolute URLs, for consumers outside the platform's own host — the
+   *   HTML/JSON embed interfaces (§4.4 keeps everything else relative).
    * @returns {Object} Public bookable data
    */
-  exportPublic() {
+  exportPublic({ absoluteMediaUrls = false } = {}) {
+    const resolveUrl = (url) => (absoluteMediaUrls ? absoluteUrl(url) : url);
+
     return {
       id: this.id,
       tenantId: this.tenantId,
       type: this.type,
       title: this.title,
       description: this.description,
-      images: enrichMediaReferences(this.images, this.tenantId),
+      images: enrichMediaReferences(this.images, this.tenantId).map(
+        (reference) => ({ ...reference, url: resolveUrl(reference.url) }),
+      ),
       // Derived from the cover image, so storefront v4 and the HTML endpoint
       // keep reading the single address they always read.
-      imgUrl: this.coverImageUrl,
+      imgUrl: resolveUrl(this.coverImageUrl) || "",
       flags: this.flags,
       tags: this.tags,
       location: this.location,
@@ -413,9 +422,22 @@ class Bookable {
       relatedBookableIds: this.relatedBookableIds,
       checkoutBookableIds: this.checkoutBookableIds,
       eventId: this.eventId,
-      attachments: (this.attachments || []).map((attachment) =>
-        enrichAttachment(attachment, this.tenantId),
-      ),
+      attachments: (this.attachments || []).map((attachment) => {
+        const enriched = enrichAttachment(attachment, this.tenantId);
+
+        if (!enriched || !absoluteMediaUrls) {
+          return enriched;
+        }
+
+        return {
+          ...enriched,
+          url: resolveUrl(enriched.url),
+          reference: enriched.reference && {
+            ...enriched.reference,
+            url: resolveUrl(enriched.reference.url),
+          },
+        };
+      }),
       customFields: this.customFields,
       customFieldValues: this.customFieldValues,
       cancellationPolicy: this.cancellationPolicy,

@@ -246,6 +246,120 @@ describe("media references at bookables and events", function () {
     });
   });
 
+  describe("absolute urls for the embed interfaces", function () {
+    it("resolves every media address of a bookable to an absolute url", function () {
+      const exported = bookableFixture({
+        images: [
+          mediaReference("media-1"),
+          externalReference("https://other.example.org/pic.jpg"),
+        ],
+        attachments: [
+          {
+            id: "attachment-1",
+            title: "House rules",
+            type: "document",
+            reference: mediaReference("media-9"),
+          },
+        ],
+      }).exportPublic({ absoluteMediaUrls: true });
+
+      assert.strictEqual(
+        exported.imgUrl,
+        `${BACKEND_URL}/api/v2/${TENANT}/media/media-1/file`,
+      );
+      assert.strictEqual(
+        exported.images[0].url,
+        `${BACKEND_URL}/api/v2/${TENANT}/media/media-1/file`,
+      );
+      assert.strictEqual(
+        exported.images[1].url,
+        "https://other.example.org/pic.jpg",
+      );
+      assert.strictEqual(
+        exported.attachments[0].url,
+        `${BACKEND_URL}/api/v2/${TENANT}/media/media-9/file`,
+      );
+      assert.strictEqual(
+        exported.attachments[0].reference.url,
+        `${BACKEND_URL}/api/v2/${TENANT}/media/media-9/file`,
+      );
+    });
+
+    it("keeps an empty cover image empty", function () {
+      assert.strictEqual(
+        bookableFixture().exportPublic({ absoluteMediaUrls: true }).imgUrl,
+        "",
+      );
+    });
+
+    it("resolves every image site of an event to an absolute url", function () {
+      const exported = eventFixture({
+        information: {
+          name: "Summer party",
+          teaserImage: mediaReference("media-3"),
+        },
+        eventOrganizer: {
+          name: "City",
+          contactPersonImage: mediaReference("media-4"),
+          speakers: [{ name: "Jane Doe", image: mediaReference("media-6") }],
+        },
+        images: [mediaReference("media-5")],
+      }).exportPublic({ absoluteMediaUrls: true });
+
+      assert.strictEqual(
+        exported.information.teaserImage,
+        `${BACKEND_URL}/api/v2/${TENANT}/media/media-3/file`,
+      );
+      assert.strictEqual(
+        exported.eventOrganizer.contactPersonImage,
+        `${BACKEND_URL}/api/v2/${TENANT}/media/media-4/file`,
+      );
+      assert.deepStrictEqual(exported.eventOrganizer.speakers, [
+        {
+          name: "Jane Doe",
+          image: `${BACKEND_URL}/api/v2/${TENANT}/media/media-6/file`,
+        },
+      ]);
+      assert.deepStrictEqual(exported.images, [
+        `${BACKEND_URL}/api/v2/${TENANT}/media/media-5/file`,
+      ]);
+    });
+
+    it("renders the html markup with absolute media addresses", async function () {
+      const {
+        BookableManager,
+      } = require("../src/commons/data-managers/bookable-manager");
+      const ExternalPriceService = require("../src/commons/services/external-price-service");
+      sandbox.stub(BookableManager, "getRelatedBookables").resolves([]);
+      sandbox.stub(ExternalPriceService, "resolve").resolves(null);
+
+      const html = await HtmlEngine.bookable(
+        bookableFixture({
+          images: [mediaReference("media-1")],
+          attachments: [
+            {
+              id: "attachment-1",
+              title: "House rules",
+              type: "document",
+              reference: mediaReference("media-9"),
+            },
+          ],
+        }),
+      );
+
+      assert.ok(
+        html.includes(
+          `<img src="${BACKEND_URL}/api/v2/${TENANT}/media/media-1/file" class="cover-image"`,
+        ),
+      );
+      assert.ok(
+        html.includes(
+          `<a href="${BACKEND_URL}/api/v2/${TENANT}/media/media-9/file" target="_blank">House rules</a>`,
+        ),
+      );
+    });
+  });
+
   describe("reference validation on save", function () {
     it("rejects a medium that does not belong to the tenant", async function () {
       sandbox.stub(MediaManager, "getMedia").resolves(null);

@@ -112,21 +112,32 @@ function mediaReferenceUrl(value, tenantId) {
 }
 
 /**
- * The absolute address of a reference, for the places a relative URL is
- * worthless because it leaves the platform: mails and calendar files.
+ * Makes a relative delivery URL absolute by prefixing the backend host, for
+ * the places a relative URL is worthless because it leaves the platform:
+ * mails, calendar files, and the HTML/JSON embed interfaces.
+ *
+ * @param {string|null} url - A resolved delivery URL.
+ * @returns {string|null} The absolute URL; already-absolute and empty values
+ *   pass through untouched.
+ */
+function absoluteUrl(url) {
+  if (!url || !url.startsWith("/")) {
+    return url ?? null;
+  }
+
+  return `${(process.env.BACKEND_URL || "").replace(/\/+$/, "")}${url}`;
+}
+
+/**
+ * The absolute address of a reference — `mediaReferenceUrl` behind
+ * `absoluteUrl`.
  *
  * @param {Object|string|null} value - The stored value of a reference site.
  * @param {string} tenantId - Tenant the referencing entity belongs to.
  * @returns {string|null} The absolute URL, or null when the site is empty.
  */
 function absoluteMediaReferenceUrl(value, tenantId) {
-  const url = mediaReferenceUrl(value, tenantId);
-
-  if (!url || !url.startsWith("/")) {
-    return url;
-  }
-
-  return `${(process.env.BACKEND_URL || "").replace(/\/+$/, "")}${url}`;
+  return absoluteUrl(mediaReferenceUrl(value, tenantId));
 }
 
 /**
@@ -219,6 +230,7 @@ module.exports = {
   INSTANCE_MEDIA_SCOPE,
   MEDIA_REFERENCE_SOURCE,
   absoluteMediaReferenceUrl,
+  absoluteUrl,
   collectMediaIds,
   enrichAttachment,
   enrichMediaReference,

@@ -53,6 +53,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- The HTML and JSON embed interfaces resolve media addresses to absolute URLs (`BACKEND_URL`) again — cover images (`imgUrl`), image lists, event teaser/speaker images and attachment links were relative delivery routes since the media library, which foreign websites embedding the interfaces cannot load. The storefront and admin API keep their relative URLs
+- Attachments with a media reference render a working link in the HTML detail views — the raw stored entry has no `url` anymore
 - Storage failures no longer write credentials into the log. A raw webdav or axios error carries its whole request — `Authorization` header and session cookies included — and bunyan without an error serializer wrote all of it out; the media, storage and legacy-file loggers now use the standard serializer, which keeps the message and the stack and nothing else
 - A legacy tree that does not exist is logged at debug instead of error. The media import asks after every tree an installation could have, and an installation without cancellations does not have a `cancellations/` folder — those misses buried the report the command exists to produce
 

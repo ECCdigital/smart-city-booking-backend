@@ -2,6 +2,7 @@ const { eventSchemaDefinition } = require("../../schemas/eventSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const {
   absoluteMediaReferenceUrl,
+  absoluteUrl,
   mediaReferenceUrl,
   toMediaReference,
   validateMediaReference,
@@ -157,7 +158,15 @@ class Event {
     return !this.isPast(now) && !this.isFuture(now);
   }
 
-  exportPublic() {
+  /**
+   * @param {Object} [options]
+   * @param {boolean} [options.absoluteMediaUrls] - Resolve media addresses to
+   *   absolute URLs, for consumers outside the platform's own host — the
+   *   HTML/JSON embed interfaces (§4.4 keeps everything else relative).
+   */
+  exportPublic({ absoluteMediaUrls = false } = {}) {
+    const resolveUrl = (url) => (absoluteMediaUrls ? absoluteUrl(url) : url);
+
     return {
       id: this.id,
       tenantId: this.tenantId,
@@ -168,14 +177,17 @@ class Event {
       // structure is exactly the one it has always been.
       eventOrganizer: {
         ...this.eventOrganizer,
-        contactPersonImage: this.contactPersonImageUrl,
-        speakers: this.speakersWithImageUrls,
+        contactPersonImage: resolveUrl(this.contactPersonImageUrl) || "",
+        speakers: this.speakersWithImageUrls.map((speaker) => ({
+          ...speaker,
+          image: resolveUrl(speaker.image) || "",
+        })),
       },
       format: this.format,
-      images: this.imageUrls,
+      images: this.imageUrls.map((url) => resolveUrl(url) || ""),
       information: {
         ...this.information,
-        teaserImage: this.teaserImageUrl,
+        teaserImage: resolveUrl(this.teaserImageUrl) || "",
       },
       schedules: this.schedules,
       externalBookingUrl: this.externalBookingUrl,

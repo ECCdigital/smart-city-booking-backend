@@ -4,6 +4,10 @@ const {
 const TenantManager = require("../../commons/data-managers/tenant-manager");
 const ExternalPriceService = require("../../commons/services/external-price-service");
 const InstanceManager = require("../../commons/data-managers/instance-manager");
+const {
+  absoluteUrl,
+  enrichAttachment,
+} = require("../../commons/services/media/media-reference");
 
 class HtmlEngine {
   /**
@@ -104,8 +108,10 @@ class HtmlEngine {
       const tenantObj = await TenantManager.getTenant(bookable.tenantId);
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
+      // The markup is embedded on foreign websites, so every media address has
+      // to be absolute.
       htmlOutput += this.generateImageHtml(
-        bookable.coverImageUrl,
+        absoluteUrl(bookable.coverImageUrl),
         "cover-image",
         bookable.title,
       );
@@ -177,7 +183,7 @@ class HtmlEngine {
     let htmlOutput = '<div class="bookable-item">';
 
     htmlOutput += this.generateImageHtml(
-      bookable.coverImageUrl,
+      absoluteUrl(bookable.coverImageUrl),
       "cover-image",
       bookable.title,
     );
@@ -197,11 +203,14 @@ class HtmlEngine {
       htmlOutput += '<ul class="attachments">';
       bookable.attachments
         .filter((attachment) => attachment.type !== "agreement")
+        // A media attachment stores its file under `reference`, so the address
+        // has to be resolved — and absolutized for the embedding website.
+        .map((attachment) => enrichAttachment(attachment, bookable.tenantId))
         .forEach((attachment) => {
           htmlOutput += '<li class="attachment">';
           htmlOutput +=
             '<a href="' +
-            attachment.url +
+            absoluteUrl(attachment.url) +
             '" target="_blank">' +
             attachment.title +
             "</a>";
@@ -281,7 +290,7 @@ class HtmlEngine {
 
       htmlOutput += `<li class="event" rel="${tags.trim()}">`;
       htmlOutput += this.generateImageHtml(
-        event.teaserImageUrl,
+        absoluteUrl(event.teaserImageUrl),
         "cover-image",
         event.information.name,
       );
@@ -377,7 +386,7 @@ class HtmlEngine {
     htmlOutput += `<h1>Informationen</h1>`;
     htmlOutput += `<h2>${event.information.name || ""}</h2>`;
     htmlOutput += this.generateImageHtml(
-      event.teaserImageUrl,
+      absoluteUrl(event.teaserImageUrl),
       "teaser-image",
       event.information.name,
     );
@@ -464,7 +473,7 @@ class HtmlEngine {
 
     if (event.eventOrganzier) {
       htmlOutput += this.generateImageHtml(
-        event.contactPersonImageUrl,
+        absoluteUrl(event.contactPersonImageUrl),
         "contact-person-image",
         event.eventOrganizer.contactPersonName,
       );
@@ -491,7 +500,7 @@ class HtmlEngine {
           ? `<div class="speaker-name">${speaker.name || ""}</div>`
           : "";
         htmlOutput += this.generateImageHtml(
-          speaker.image,
+          absoluteUrl(speaker.image),
           "speaker-image",
           speaker.name,
         );
@@ -564,7 +573,7 @@ class HtmlEngine {
         // The address is derived, the alt text still comes from the stored
         // entry — the markup stays the one it has always been.
         htmlOutput += this.generateImageHtml(
-          imageUrls[index],
+          absoluteUrl(imageUrls[index]),
           "event-image",
           image.name,
         );
@@ -581,8 +590,15 @@ class HtmlEngine {
         htmlOutput += `<h5>Anhänge</h5>`;
         htmlOutput += '<ul class="event-attachment-list">';
         event.attachments.forEach((eventAttachment) => {
+          // Legacy entries are bare URLs; converted ones carry their file
+          // under `reference` — either way the link has to leave absolute.
+          const attachment =
+            typeof eventAttachment === "string"
+              ? { title: eventAttachment, url: eventAttachment }
+              : enrichAttachment(eventAttachment, event.tenantId);
+
           htmlOutput += '<li class="event-attachment">';
-          htmlOutput += `<a href="${eventAttachment}" target="_blank">${eventAttachment}</a>`;
+          htmlOutput += `<a href="${absoluteUrl(attachment.url)}" target="_blank">${attachment.title || attachment.url}</a>`;
           htmlOutput += "</li>";
         });
         htmlOutput += "</ul>";
