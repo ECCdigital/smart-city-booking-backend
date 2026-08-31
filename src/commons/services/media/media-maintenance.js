@@ -526,12 +526,28 @@ async function relocate({ dryRun = false, tenantId, to } = {}) {
 
   const media = await MediaManager.getAllMedia(filter);
 
-  const fileCount = media.reduce(
-    (sum, medium) => sum + fileEntries(medium).length,
+  // What would move, per scope — media and files, the numbers an operator
+  // sizes the run with.
+  const scopes = new Map();
+
+  for (const medium of media) {
+    const key = medium.tenantId ?? null;
+    const entry = scopes.get(key) || { media: 0, files: 0 };
+    entry.media += 1;
+    entry.files += fileEntries(medium).length;
+    scopes.set(key, entry);
+  }
+
+  const fileCount = [...scopes.values()].reduce(
+    (sum, entry) => sum + entry.files,
     0,
   );
-  const found = [...countByScope(media)]
-    .map(([scopeTenantId, count]) => `${scopeLabel(scopeTenantId)}: ${count}`)
+  const found = [...scopes]
+    .map(
+      ([scopeTenantId, entry]) =>
+        `${scopeLabel(scopeTenantId)}: ${entry.media} media ` +
+        `(${entry.files} files)`,
+    )
     .join(", ");
 
   report.note(
@@ -572,9 +588,10 @@ async function relocate({ dryRun = false, tenantId, to } = {}) {
         await copyAndVerify({ source, target, file });
       }
 
-      // The flip — atomic per medium, and only after every file made it.
-      medium.storage.provider = to;
-      await MediaManager.storeMedia(medium, false);
+      // The flip — atomic per medium, only after every file made it, and
+      // targeted at the one field, so a run during operation never overwrites
+      // concurrent edits with the stale document it fetched at the start.
+      await MediaManager.setStorageProvider(medium.id, medium.tenantId, to);
 
       report.processedOne();
     } catch (error) {

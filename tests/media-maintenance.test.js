@@ -347,7 +347,7 @@ describe("media maintenance", () => {
     let targetBytes;
     let source;
     let target;
-    let storeMedia;
+    let setStorageProvider;
 
     beforeEach(() => {
       sourceBytes = new Map([
@@ -390,7 +390,9 @@ describe("media maintenance", () => {
         name === "s3" ? target : source,
       );
 
-      storeMedia = sandbox.stub(MediaManager, "storeMedia").resolves({});
+      setStorageProvider = sandbox
+        .stub(MediaManager, "setStorageProvider")
+        .resolves();
       MediaManager.getAllMedia.resolves([movableMedium()]);
     });
 
@@ -410,12 +412,14 @@ describe("media maintenance", () => {
         "image/webp",
       );
 
-      // The flip happens once, after copy and verification, keys untouched.
-      assert.strictEqual(storeMedia.callCount, 1);
-      const [flipped, upsert] = storeMedia.firstCall.args;
-      assert.strictEqual(flipped.storage.provider, "s3");
-      assert.strictEqual(flipped.storage.key, ORIGINAL_KEY);
-      assert.strictEqual(upsert, false);
+      // The flip happens once, after copy and verification — a targeted
+      // update, so nothing else of the medium is ever written back.
+      assert.strictEqual(setStorageProvider.callCount, 1);
+      assert.deepStrictEqual(setStorageProvider.firstCall.args, [
+        "media-1",
+        TENANT,
+        "s3",
+      ]);
     });
 
     it("only fetches media that are not at the target yet", async () => {
@@ -439,7 +443,7 @@ describe("media maintenance", () => {
 
       assert.ok(
         report.notes.some((note) =>
-          /1 media \(2 files\).*tenant1: 1/.test(note),
+          /1 media \(2 files\).*tenant1: 1 media \(2 files\)/.test(note),
         ),
       );
     });
@@ -449,7 +453,7 @@ describe("media maintenance", () => {
 
       assert.strictEqual(report.processed, 1);
       assert.strictEqual(target.put.callCount, 0);
-      assert.strictEqual(storeMedia.callCount, 0);
+      assert.strictEqual(setStorageProvider.callCount, 0);
     });
 
     it("reports missing source bytes in a dry run", async () => {
@@ -470,7 +474,7 @@ describe("media maintenance", () => {
       assert.strictEqual(report.processed, 0);
       assert.strictEqual(report.errors.length, 1);
       assert.match(report.errors[0].message, /missing source bytes/);
-      assert.strictEqual(storeMedia.callCount, 0);
+      assert.strictEqual(setStorageProvider.callCount, 0);
     });
 
     it("leaves a medium in place when the copy does not verify", async () => {
@@ -481,7 +485,7 @@ describe("media maintenance", () => {
       assert.strictEqual(report.processed, 0);
       assert.strictEqual(report.errors.length, 1);
       assert.match(report.errors[0].message, /size mismatch/);
-      assert.strictEqual(storeMedia.callCount, 0);
+      assert.strictEqual(setStorageProvider.callCount, 0);
     });
 
     it("flags a checksum mismatch before the flip", async () => {
@@ -494,7 +498,7 @@ describe("media maintenance", () => {
       assert.strictEqual(report.processed, 0);
       assert.strictEqual(report.errors.length, 1);
       assert.match(report.errors[0].message, /checksum mismatch/);
-      assert.strictEqual(storeMedia.callCount, 0);
+      assert.strictEqual(setStorageProvider.callCount, 0);
     });
 
     it("moves a medium without a stored checksum on size alone", async () => {
@@ -506,7 +510,7 @@ describe("media maintenance", () => {
 
       assert.strictEqual(report.processed, 1);
       assert.strictEqual(report.errors.length, 0);
-      assert.strictEqual(storeMedia.callCount, 1);
+      assert.strictEqual(setStorageProvider.callCount, 1);
     });
 
     it("keeps going when one medium fails", async () => {
@@ -525,8 +529,8 @@ describe("media maintenance", () => {
       assert.strictEqual(report.processed, 1);
       assert.strictEqual(report.errors.length, 1);
       assert.strictEqual(report.errors[0].subject, "media:media-2");
-      assert.strictEqual(storeMedia.callCount, 1);
-      assert.strictEqual(storeMedia.firstCall.args[0].id, "media-1");
+      assert.strictEqual(setStorageProvider.callCount, 1);
+      assert.strictEqual(setStorageProvider.firstCall.args[0], "media-1");
     });
 
     it("rejects an unknown target provider", async () => {

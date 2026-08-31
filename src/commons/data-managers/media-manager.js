@@ -272,6 +272,32 @@ class MediaManager {
   }
 
   /**
+   * Flip the storage provider of a medium — a targeted update, so a
+   * relocation running during operation never writes back the stale document
+   * it fetched at the start of its run.
+   *
+   * @param {string} mediaId - Unique ID of the medium.
+   * @param {string|null} tenantId - Tenant ID, null for instance media.
+   * @param {string} provider - The provider the medium's bytes now live on.
+   * @returns {Promise<void>}
+   */
+  static async setStorageProvider(mediaId, tenantId, provider) {
+    if (!mediaId) {
+      throw new Error("mediaId is required.");
+    }
+
+    const result = await MediaModel.updateOne(
+      { id: mediaId, tenantId: tenantId ?? null },
+      { $set: { "storage.provider": provider } },
+      { runValidators: true },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new Error("Media not found for update.");
+    }
+  }
+
+  /**
    * Remove a medium from the database. Bytes are removed separately.
    *
    * @param {string} mediaId - Unique ID of the medium.
