@@ -56,13 +56,31 @@ Example:
   "catalogParticipation": {
     "visible": true,
     "restricted": false
-  }
+  },
+  "legalDocuments": [
+    {
+      "type": "termsAndConditions",
+      "title": "",
+      "reference": { "source": "media", "mediaId": "8f1c2a44-…", "url": null }
+    },
+    {
+      "type": "other",
+      "title": "Hausordnung",
+      "reference": {
+        "source": "external",
+        "mediaId": null,
+        "url": "https://example.com/hausordnung.pdf"
+      }
+    }
+  ]
 }
 ```
 
 > **Note:** Sensitive information (e.g. `noreplyPassword`, payment-related secrets) is stored encrypted in the database.
 
 `cancellationRefundTiers` defines the tenant-wide refund proposal at cancellation time. Thresholds use calendar days in `Europe/Berlin`. An empty array preserves the default full refund. Below the lowest configured threshold, that tier continues to apply.
+
+`legalDocuments` holds the legal documents of the tenant, in the same role the instance fields `dataProtection`, `legalNotice` and `termsAndConditions` play for the deployment as a whole. Unlike those it is a list of `{ type, title, reference }`, where `type` is one of `dataProtection`, `legalNotice`, `termsAndConditions`, `rightOfWithdrawal` or `other`. A known type appears at most once and carries no title — its label comes from the admin UI translation; `other` requires a title and no two `other` documents may share one. `reference` is a media reference: a `public` medium of the same tenant, or an external link. On the way out it carries the address it resolves to in `url`; the public tenant export does not include the field. Tenant documents are filed and maintained here, they are not delivered to end users.
 
 ### Roles
 
@@ -84,7 +102,8 @@ Example:
     "rooms",
     "resources",
     "tickets",
-    "events"
+    "events",
+    "media"
   ],
   "manageUsers": {
     "create": true,
@@ -114,6 +133,15 @@ Example:
     "deleteOwn": true
   },
   "manageCoupons": {
+    "create": true,
+    "readAny": true,
+    "readOwn": true,
+    "updateAny": true,
+    "updateOwn": true,
+    "deleteAny": true,
+    "deleteOwn": true
+  },
+  "manageMedia": {
     "create": true,
     "readAny": true,
     "readOwn": true,
@@ -403,39 +431,39 @@ Example:
 
 Key fields of a booking:
 
-| Field            | Description                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
-| id               | Unique identifier of the booking.                                                                                   |
-| tenantId         | Tenant to which the booking belongs.                                                                                |
-| assignedUserId   | ID of the user who made the booking (may be empty for guest bookings).                                              |
-| timeBegin        | Start timestamp of the booking (epoch millis).                                                                      |
-| timeEnd          | End timestamp of the booking (epoch millis).                                                                        |
-| timeCreated      | Timestamp when the booking was created.                                                                             |
-| timePaid         | Timestamp when the booking was paid (if applicable).                                                                |
-| bookableItems    | Array of booked items (bookable id, tenant, amount, and snapshot of the used bookable configuration).               |
-| couponCode       | Coupon code applied to the booking (if any).                                                                        |
-| \_couponUsed     | Snapshot of the used coupon (id, tenant, discount and validity).                                                    |
-| priceEur         | Total price in Euro (without additional taxes).                                                                     |
-| vatIncludedEur   | VAT amount included in `priceEur`.                                                                                  |
-| isCommitted      | Whether the booking is committed (confirmed) from the system’s perspective.                                         |
-| isPayed          | Whether the booking has been paid.                                                                                  |
-| isRejected       | Whether the booking has been rejected.                                                                              |
-| name             | Name of the person who made the booking.                                                                            |
-| company          | Company of the person who made the booking.                                                                         |
-| street           | Street address of the person who made the booking.                                                                  |
-| zipCode          | Zip code of the person who made the booking.                                                                        |
-| location         | City or location of the person who made the booking.                                                                |
-| mail             | Email address of the person who made the booking.                                                                   |
-| phone            | Phone number of the person who made the booking.                                                                    |
-| comment          | Comment or special requests from the customer.                                                                      |
-| internalComments | Internal comments visible only to administrators.                                                                   |
-| rejectionReason  | Reason why a booking has been rejected (if applicable).                                                             |
+| Field              | Description                                                                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| id                 | Unique identifier of the booking.                                                                                            |
+| tenantId           | Tenant to which the booking belongs.                                                                                         |
+| assignedUserId     | ID of the user who made the booking (may be empty for guest bookings).                                                       |
+| timeBegin          | Start timestamp of the booking (epoch millis).                                                                               |
+| timeEnd            | End timestamp of the booking (epoch millis).                                                                                 |
+| timeCreated        | Timestamp when the booking was created.                                                                                      |
+| timePaid           | Timestamp when the booking was paid (if applicable).                                                                         |
+| bookableItems      | Array of booked items (bookable id, tenant, amount, and snapshot of the used bookable configuration).                        |
+| couponCode         | Coupon code applied to the booking (if any).                                                                                 |
+| \_couponUsed       | Snapshot of the used coupon (id, tenant, discount and validity).                                                             |
+| priceEur           | Total price in Euro (without additional taxes).                                                                              |
+| vatIncludedEur     | VAT amount included in `priceEur`.                                                                                           |
+| isCommitted        | Whether the booking is committed (confirmed) from the system’s perspective.                                                  |
+| isPayed            | Whether the booking has been paid.                                                                                           |
+| isRejected         | Whether the booking has been rejected.                                                                                       |
+| name               | Name of the person who made the booking.                                                                                     |
+| company            | Company of the person who made the booking.                                                                                  |
+| street             | Street address of the person who made the booking.                                                                           |
+| zipCode            | Zip code of the person who made the booking.                                                                                 |
+| location           | City or location of the person who made the booking.                                                                         |
+| mail               | Email address of the person who made the booking.                                                                            |
+| phone              | Phone number of the person who made the booking.                                                                             |
+| comment            | Comment or special requests from the customer.                                                                               |
+| internalComments   | Internal comments visible only to administrators.                                                                            |
+| rejectionReason    | Reason why a booking has been rejected (if applicable).                                                                      |
 | cancellationRefund | Persisted refund audit for the latest cancellation while the booking is rejected. Cleared when the cancellation is reverted. |
-| attachments      | Attachments related to the booking. Cancellation attachments include the applied refund audit data described below. |
-| lockerInfo       | Information about locker assignments associated with this booking.                                                  |
-| paymentProvider  | Identifier of the payment provider used (if any).                                                                   |
-| paymentMethod    | Human readable payment method (e.g. credit card, invoice).                                                          |
-| hooks            | Technical hooks triggered for this booking (e.g. webhooks).                                                         |
+| attachments        | Attachments related to the booking. Cancellation attachments include the applied refund audit data described below.          |
+| lockerInfo         | Information about locker assignments associated with this booking.                                                           |
+| paymentProvider    | Identifier of the payment provider used (if any).                                                                            |
+| paymentMethod      | Human readable payment method (e.g. credit card, invoice).                                                                   |
+| hooks              | Technical hooks triggered for this booking (e.g. webhooks).                                                                  |
 
 Cancellation attachments may contain a `cancellation` object with:
 

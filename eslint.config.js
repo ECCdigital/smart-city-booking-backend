@@ -2,6 +2,11 @@ const eslintPluginPrettierRecommended = require("eslint-plugin-prettier/recommen
 
 module.exports = [
   {
+    // Local-only scratchpads and agent state, mirroring .prettierignore.
+    // `.claude/worktrees` in particular holds whole second copies of the repo.
+    ignores: [".scratch/**", ".claude/**"],
+  },
+  {
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",

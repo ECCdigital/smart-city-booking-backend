@@ -1,8 +1,13 @@
 const PdfService = require("../../pdf-service/pdf-service");
-const { NextcloudManager } = require("../../data-managers/file-manager");
 const IdGenerator = require("../../utilities/id-generator");
 const TenantManager = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
+const {
+  BOOKING_DOCUMENT,
+  isStorageFailure,
+  readBookingDocument,
+  storeBookingDocument,
+} = require("../media/booking-documents");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -24,13 +29,11 @@ class ReceiptService {
         receiptNumber,
       );
 
-      await NextcloudManager.createFile({
-        tenantID: tenantId,
-        file: {
-          data: pdfData.buffer,
-          name: pdfData.name,
-        },
-        subFolder: "receipts",
+      await storeBookingDocument({
+        tenantId,
+        bookingIds: [bookingId],
+        file: { data: pdfData.buffer, name: pdfData.name },
+        type: BOOKING_DOCUMENT.RECEIPT,
       });
 
       return {
@@ -41,8 +44,8 @@ class ReceiptService {
         timeCreated: Date.now(),
       };
     } catch (err) {
-      if (err.isNextcloudError) {
-        logger.error("Failed to create receipt in Nextcloud", {
+      if (isStorageFailure(err)) {
+        logger.error("Failed to store receipt", {
           tenantId,
           bookingId,
           error: err.message,
@@ -94,13 +97,11 @@ class ReceiptService {
         receiptNumber,
       );
 
-      await NextcloudManager.createFile({
-        tenantID: tenantId,
-        file: {
-          data: pdfData.buffer,
-          name: pdfData.name,
-        },
-        subFolder: "receipts",
+      await storeBookingDocument({
+        tenantId,
+        bookingIds: bookings.map((booking) => booking.id),
+        file: { data: pdfData.buffer, name: pdfData.name },
+        type: BOOKING_DOCUMENT.RECEIPT,
       });
 
       return {
@@ -111,8 +112,8 @@ class ReceiptService {
         timeCreated: Date.now(),
       };
     } catch (err) {
-      if (err.isNextcloudError) {
-        logger.error("Failed to create aggregated receipt in Nextcloud", {
+      if (isStorageFailure(err)) {
+        logger.error("Failed to store aggregated receipt", {
           tenantId,
           bookingIds,
           error: err.message,
@@ -126,16 +127,27 @@ class ReceiptService {
     }
   }
 
-  static async getReceipt(tenantId, receiptName) {
+  /**
+   * The receipt file, as a facade over the media library: receipts written
+   * since the media library exists are booking documents, older ones still
+   * live in the legacy Nextcloud tree until the media import moves them.
+   *
+   * @param {string} tenantId - Tenant of the booking.
+   * @param {string} receiptName - File name stored on the booking attachment.
+   * @param {string} [bookingId] - Booking the receipt belongs to.
+   * @returns {Promise<Buffer>} The receipt bytes.
+   */
+  static async getReceipt(tenantId, receiptName, bookingId) {
     try {
-      return await NextcloudManager.getFile({
-        tenant: tenantId,
-        subFolder: "receipts",
-        filename: receiptName,
+      return await readBookingDocument({
+        tenantId,
+        bookingId,
+        fileName: receiptName,
+        type: BOOKING_DOCUMENT.RECEIPT,
       });
     } catch (err) {
-      if (err.isNextcloudError) {
-        logger.error("Failed to get receipt from Nextcloud", {
+      if (isStorageFailure(err)) {
+        logger.error("Failed to get receipt", {
           tenantId,
           receiptName,
           error: err.message,

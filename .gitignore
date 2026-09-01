@@ -373,3 +373,6 @@ AGENTS.override.md
 
 # Scratch: local-only scratchpad (not committed)
 /.scratch
+
+# Claude Code: local-only agent state (not committed)
+/.claude

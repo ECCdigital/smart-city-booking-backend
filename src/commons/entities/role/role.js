@@ -9,6 +9,7 @@ const RolePermission = Object.freeze({
   MANAGE_ROLES: "manageRoles",
   MANAGE_BOOKINGS: "manageBookings",
   MANAGE_COUPONS: "manageCoupons",
+  MANAGE_MEDIA: "manageMedia",
   FREE_BOOKINGS: "freeBookings",
 });
 

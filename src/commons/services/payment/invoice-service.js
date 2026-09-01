@@ -1,8 +1,13 @@
 const IdGenerator = require("../../utilities/id-generator");
 const BookingManager = require("../../data-managers/booking-manager");
-const { NextcloudManager } = require("../../data-managers/file-manager");
 const PdfService = require("../../pdf-service/pdf-service");
 const TenantManager = require("../../data-managers/tenant-manager");
+const {
+  BOOKING_DOCUMENT,
+  isStorageFailure,
+  readBookingDocument,
+  storeBookingDocument,
+} = require("../media/booking-documents");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -24,13 +29,11 @@ class InvoiceService {
         invoiceNumber,
       );
 
-      await NextcloudManager.createFile({
-        tenantID: tenantId,
-        file: {
-          data: pdfData.buffer,
-          name: pdfData.name,
-        },
-        subFolder: "invoices",
+      await storeBookingDocument({
+        tenantId,
+        bookingIds: [bookingId],
+        file: { data: pdfData.buffer, name: pdfData.name },
+        type: BOOKING_DOCUMENT.INVOICE,
       });
 
       return {
@@ -41,8 +44,8 @@ class InvoiceService {
         timeCreated: Date.now(),
       };
     } catch (error) {
-      if (error.isNextcloudError) {
-        logger.error("Failed to create invoice in Nextcloud", {
+      if (isStorageFailure(error)) {
+        logger.error("Failed to store invoice", {
           tenantId,
           bookingId,
           error: error.message,
@@ -96,13 +99,11 @@ class InvoiceService {
         { groupBookingId, bookings: resolvedBookings },
       );
 
-      await NextcloudManager.createFile({
-        tenantID: tenantId,
-        file: {
-          data: pdfData.buffer,
-          name: pdfData.name,
-        },
-        subFolder: "invoices",
+      await storeBookingDocument({
+        tenantId,
+        bookingIds: resolvedBookings.map((booking) => booking.id),
+        file: { data: pdfData.buffer, name: pdfData.name },
+        type: BOOKING_DOCUMENT.INVOICE,
       });
 
       return {
@@ -113,8 +114,8 @@ class InvoiceService {
         timeCreated: Date.now(),
       };
     } catch (error) {
-      if (error.isNextcloudError) {
-        logger.error("Failed to create aggregated invoice in Nextcloud", {
+      if (isStorageFailure(error)) {
+        logger.error("Failed to store aggregated invoice", {
           tenantId,
           bookingIds,
           error: error.message,
@@ -159,16 +160,27 @@ class InvoiceService {
     };
   }
 
-  static async getInvoice(tenantId, invoiceName) {
+  /**
+   * The invoice file, as a facade over the media library: invoices written
+   * since the media library exists are booking documents, older ones still
+   * live in the legacy Nextcloud tree until the media import moves them.
+   *
+   * @param {string} tenantId - Tenant of the booking.
+   * @param {string} invoiceName - File name stored on the booking attachment.
+   * @param {string} [bookingId] - Booking the invoice belongs to.
+   * @returns {Promise<Buffer>} The invoice bytes.
+   */
+  static async getInvoice(tenantId, invoiceName, bookingId) {
     try {
-      return await NextcloudManager.getFile({
-        tenant: tenantId,
-        subFolder: "invoices",
-        filename: invoiceName,
+      return await readBookingDocument({
+        tenantId,
+        bookingId,
+        fileName: invoiceName,
+        type: BOOKING_DOCUMENT.INVOICE,
       });
     } catch (err) {
-      if (err.isNextcloudError) {
-        logger.error("Failed to get invoice from Nextcloud", {
+      if (isStorageFailure(err)) {
+        logger.error("Failed to get invoice", {
           tenantId,
           invoiceName,
           error: err.message,

@@ -36,6 +36,11 @@ const {
 const {
   getCancellationRefundTiersError,
 } = require("../../../commons/utilities/cancellation-refund-tiers");
+const {
+  getLegalDocumentsError,
+} = require("../../../commons/utilities/legal-documents");
+const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const { BaseError } = require("../../../errors/BaseError");
 const Formatters = require("../../../commons/utilities/formatters");
 
 const PDF_TEMPLATE_FIELDS = {
@@ -101,6 +106,13 @@ function validateCancellationRefundTiersField(body) {
   return getCancellationRefundTiersError(body.cancellationRefundTiers);
 }
 
+function validateLegalDocumentsField(body) {
+  if (!Object.prototype.hasOwnProperty.call(body, "legalDocuments")) {
+    return null;
+  }
+  return getLegalDocumentsError(body.legalDocuments);
+}
+
 const logger = bunyan.createLogger({
   name: "tenant-controller.js",
   level: process.env.LOG_LEVEL,
@@ -130,7 +142,7 @@ class TenantController {
           (await PermissionService._isTenantOwner(user.id, tenant.id)) ||
           (await PermissionService._isInstanceOwner(user.id))
         ) {
-          allowedTenants.push(tenant);
+          allowedTenants.push(tenant.exportWithMedia());
         }
       }
       response.status(200).send(allowedTenants);
@@ -167,7 +179,7 @@ class TenantController {
           logger.info(
             `Sending tenant ${tenant.id} to user ${user?.id} with details`,
           );
-          response.status(200).send(tenant);
+          response.status(200).send(tenant.exportWithMedia());
         } else {
           response.sendStatus(403);
         }
@@ -253,6 +265,11 @@ class TenantController {
         return response.status(400).send(cancellationRefundTiersError);
       }
 
+      const legalDocumentsError = validateLegalDocumentsField(request.body);
+      if (legalDocumentsError) {
+        return response.status(400).send(legalDocumentsError);
+      }
+
       tenant.ownerUserIds = [user.id];
       if ((await TenantManager.checkTenantCount()) === false) {
         throw new Error(`Maximum number of tenants reached.`);
@@ -266,6 +283,18 @@ class TenantController {
         instance.ownerUserIds.includes(user.id);
 
       if (hasPermission) {
+        // `storeTenant` routes an unknown id here, so this is the second half
+        // of the tenant write path and gets the same media check — after the
+        // permission gate, so someone who may not create a tenant hears that
+        // and not what is wrong with their media. A tenant that does not exist
+        // yet owns no media, so any medium named here is refused, which beats
+        // storing a reference nobody ever checked.
+        await MediaReferenceGuard.assertTenantStorable(
+          tenant,
+          tenant.id,
+          user.id,
+        );
+
         const membership = new Membership({
           tenantId: tenant.id,
           userId: user.id,
@@ -313,6 +342,10 @@ class TenantController {
         response.sendStatus(403);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        return response.status(err.statusCode).send(err.toJSON());
+      }
+
       logger.error(err);
       response.status(500).send("could not create tenant");
     }
@@ -372,6 +405,7 @@ class TenantController {
           "cancellationRefundTiers",
           "pdfBookingLayout",
           "pdfBookingTableMeta",
+          "legalDocuments",
         ];
 
         if (
@@ -422,6 +456,22 @@ class TenantController {
           return response.status(400).send(cancellationRefundTiersError);
         }
 
+        const legalDocumentsError = validateLegalDocumentsField(request.body);
+        if (legalDocumentsError) {
+          return response.status(400).send(legalDocumentsError);
+        }
+
+        // Checked is what the request brings, not what is already stored: a
+        // medium that turned `intern` after it was picked must not block the
+        // next change to an unrelated field. The scope, on the other hand, is
+        // the tenant that was just resolved and checked, never one the payload
+        // names.
+        await MediaReferenceGuard.assertTenantStorable(
+          request.body,
+          tenant.id,
+          user.id,
+        );
+
         fields.forEach((field) => {
           if (Object.prototype.hasOwnProperty.call(request.body, field)) {
             tenant[field] = request.body[field];
@@ -430,12 +480,18 @@ class TenantController {
 
         const updatedTenant = await TenantManager.storeTenant(tenant);
         logger.info(`updated tenant ${tenant.id} by user ${user?.id}`);
-        response.status(200).send(updatedTenant);
+        response.status(200).send(updatedTenant.exportWithMedia());
       } else {
         logger.warn(`User ${user?.id} not allowed to update tenant`);
         response.sendStatus(403);
       }
     } catch (err) {
+      // A refused media reference has to reach the admin UI with its code — the
+      // blanket 500 below would hide why the save was rejected.
+      if (err instanceof BaseError) {
+        return response.status(err.statusCode).send(err.toJSON());
+      }
+
       logger.error(err);
       response.status(500).send("could not update tenant");
     }

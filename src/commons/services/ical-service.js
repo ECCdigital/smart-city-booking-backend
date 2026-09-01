@@ -312,7 +312,9 @@ class ICalService {
       .replace(/&nbsp;/g, " ")
       .trim();
 
-    const teaserImage = info.teaserImage || null;
+    // A calendar file is read outside the platform, so the teaser image needs
+    // its absolute address, not the relative one the APIs hand out.
+    const teaserImage = event.teaserImageAbsoluteUrl || null;
 
     const descriptionWithImage = teaserImage
       ? [plainDescription, `Bild: ${teaserImage}`].filter(Boolean).join("\n\n")

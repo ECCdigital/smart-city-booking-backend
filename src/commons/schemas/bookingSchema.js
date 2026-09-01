@@ -1,5 +1,6 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
+const { mediaReferenceSchema } = require("./mediaSchema");
 
 const bookingHookSchemaDefinition = {
   id: { type: String, required: true },
@@ -67,6 +68,10 @@ const attachmentSchemaDefinition = {
   title: { type: String },
   name: { type: String },
   bookableId: { type: String },
+  // The checkout copies the reference of the bookable attachment through, so
+  // the mail path can load the file from the media library instead of calling
+  // the platform's own public URL (§4.8). `url` stays the legacy address.
+  reference: { type: mediaReferenceSchema, default: undefined },
   url: { type: String },
   accepted: { type: Boolean },
   invoiceId: { type: String },

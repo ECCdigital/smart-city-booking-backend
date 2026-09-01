@@ -10,6 +10,8 @@ const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
 const BookableService = require("../../../commons/services/bookable-service");
+const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const { BaseError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -45,7 +47,9 @@ class BookableController {
         `${tenant} -- Returning ${bookables.length} public bookables to user ${user?.id}`,
       );
 
-      response.status(200).send(bookables);
+      response
+        .status(200)
+        .send(bookables.map((bookable) => bookable.withResolvedMediaUrls()));
     } catch (err) {
       logger.error(err);
       response.status(500).send(`Could not get bookables`);
@@ -142,7 +146,7 @@ class BookableController {
       logger.info(
         `${tenant} -- Returning bookable ${bookable.id} to user ${user?.id}`,
       );
-      response.status(200).send(bookable);
+      response.status(200).send(bookable.withResolvedMediaUrls());
     } catch (err) {
       logger.error(`${tenant} -- ${err.message}`);
       response.status(500).send(`Could not get bookable`);
@@ -274,6 +278,7 @@ class BookableController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -286,6 +291,10 @@ class BookableController {
         response.sendStatus(403);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.error(err);
       response.status(500).send("Could not create bookable");
     }
@@ -335,6 +344,7 @@ class BookableController {
           RolePermission.MANAGE_BOOKABLES,
         )
       ) {
+        await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
@@ -347,6 +357,10 @@ class BookableController {
         response.sendStatus(403);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.error(err);
       response.status(500).send("Could not update bookable");
     }

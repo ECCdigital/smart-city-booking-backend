@@ -388,6 +388,7 @@ class BundleCheckoutService {
         type: attachment.type,
         title: attachment.title,
         bookableId: attachment.bookableId,
+        reference: attachment.reference || undefined,
         url: attachment.url,
         accepted: status ? status.accepted : undefined,
         mailAttach: attachment.mailAttach,
