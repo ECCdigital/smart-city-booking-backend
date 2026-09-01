@@ -897,7 +897,11 @@ class BookingController {
         return response.sendStatus(403);
       }
 
-      const receipt = await ReceiptService.getReceipt(tenant, receiptId);
+      const receipt = await ReceiptService.getReceipt(
+        tenant,
+        receiptId,
+        bookingId,
+      );
 
       logger.info(
         `${tenant} -- sending receipt ${receiptId} to user ${user?.id}`,
@@ -1003,7 +1007,11 @@ class BookingController {
         return response.sendStatus(403);
       }
 
-      const invoice = await InvoiceService.getInvoice(tenant, invoiceId);
+      const invoice = await InvoiceService.getInvoice(
+        tenant,
+        invoiceId,
+        bookingId,
+      );
 
       logger.info(
         `${tenant} -- sending invoice ${invoiceId} to user ${user?.id}`,
@@ -1155,6 +1163,7 @@ class BookingController {
         await CancellationReceiptService.getCancellation(
           tenant,
           cancellationReceiptId,
+          bookingId,
         );
 
       logger.info(

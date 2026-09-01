@@ -282,11 +282,9 @@ class MailSenderService {
       });
 
       const messageAfter = afterOverrideSource
-        ? renderSnippet(
-            afterSnippetKey(mailType.templateName),
-            variables,
-            { overrideSource: afterOverrideSource },
-          )
+        ? renderSnippet(afterSnippetKey(mailType.templateName), variables, {
+            overrideSource: afterOverrideSource,
+          })
         : "";
 
       const subject = subjectOverrideSource

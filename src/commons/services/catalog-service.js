@@ -85,7 +85,13 @@ class CatalogService {
         portalUrl: portal.portalUrl,
         catalog: catalog.exportPublic(),
         tenants: allowedTenants.map((tenant) => {
-          return { id: tenant.id, name: tenant.name, contactName: tenant.contactName, mail: tenant.mail, phone: tenant.phone };
+          return {
+            id: tenant.id,
+            name: tenant.name,
+            contactName: tenant.contactName,
+            mail: tenant.mail,
+            phone: tenant.phone,
+          };
         }),
       };
     }

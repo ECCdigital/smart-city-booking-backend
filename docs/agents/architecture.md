@@ -4,9 +4,9 @@
 
 This repository is the backend API. Related frontend repositories:
 
-| Component | Repository |
-|-----------|------------|
-| Admin UI | https://github.com/ECCdigital/smart-city-booking-vue-app |
+| Component  | Repository                                                   |
+| ---------- | ------------------------------------------------------------ |
+| Admin UI   | https://github.com/ECCdigital/smart-city-booking-vue-app     |
 | Storefront | https://github.com/ECCdigital/smart-city-booking-store-front |
 
 Both frontends consume this API. Changes to endpoints, auth, or response shapes may need updates in those repos.
@@ -63,12 +63,12 @@ Instance (global deployment config)
 
 ## Key patterns
 
-| Layer | Pattern | Example |
-|-------|---------|---------|
-| Entity | Plain JS class with hooks | `src/commons/entities/booking/booking.js` |
-| Manager | DB CRUD + queries | `src/commons/data-managers/booking-manager.js` |
-| Service | Business logic | `src/commons/services/checkout/booking-service.js` |
-| Controller | HTTP request/response | `src/platform/api/controllers/booking-controller.js` |
+| Layer      | Pattern                   | Example                                              |
+| ---------- | ------------------------- | ---------------------------------------------------- |
+| Entity     | Plain JS class with hooks | `src/commons/entities/booking/booking.js`            |
+| Manager    | DB CRUD + queries         | `src/commons/data-managers/booking-manager.js`       |
+| Service    | Business logic            | `src/commons/services/checkout/booking-service.js`   |
+| Controller | HTTP request/response     | `src/platform/api/controllers/booking-controller.js` |
 
 Controllers should stay thin — delegate to services and managers.
 
@@ -81,10 +81,10 @@ Controllers should stay thin — delegate to services and managers.
 
 ## Version lines
 
-| Branch | Version | Notes |
-|--------|---------|-------|
-| `develop` | v4.x dev | Active development |
+| Branch        | Version     | Notes               |
+| ------------- | ----------- | ------------------- |
+| `develop`     | v4.x dev    | Active development  |
 | `version/4.x` | v4.x stable | Production releases |
-| `version/3.x` | v3.x LTS | Maintenance only |
+| `version/3.x` | v3.x LTS    | Maintenance only    |
 
 Work on `develop` unless told otherwise.

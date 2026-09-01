@@ -3,10 +3,7 @@ const { RoleManager } = require("./role-manager");
 const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const { escapeRegex } = require("../utilities/regex-utils");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
@@ -326,6 +323,7 @@ class UserManager {
           manageBookables: {},
           manageBookings: {},
           manageCoupons: {},
+          manageMedia: {},
         };
         tenantPermissions.push(workingPermission);
       }
@@ -356,6 +354,7 @@ class UserManager {
             "resources",
             "tickets",
             "events",
+            "media",
           ]),
         ];
       }
@@ -391,6 +390,7 @@ function mergeRoleIntoPermission(workingPermission, role) {
     "manageBookables",
     "manageBookings",
     "manageCoupons",
+    "manageMedia",
   ];
   const actions = [
     "create",

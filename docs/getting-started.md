@@ -8,11 +8,11 @@ For API-only setup, see the [README Quick Start](../README.md#quick-start). For 
 
 ## What you need
 
-| Component | Repository |
-|-----------|------------|
+| Component   | Repository                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------- |
 | Backend API | [smart-city-booking-backend](https://github.com/ECCdigital/smart-city-booking-backend) (this repo) |
-| Admin UI | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app) |
-| Storefront | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) |
+| Admin UI    | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app)             |
+| Storefront  | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front)     |
 
 **Prerequisites (local npm path):**
 
@@ -30,10 +30,10 @@ For API-only setup, see the [README Quick Start](../README.md#quick-start). For 
 
 ## Version alignment
 
-| Component | Branch / line | Notes |
-|-----------|---------------|-------|
-| Backend | `develop` or `version/4.x` | v4 API |
-| Admin UI | `develop` or `version/4.x` | Must match backend major line |
+| Component  | Branch / line              | Notes                                |
+| ---------- | -------------------------- | ------------------------------------ |
+| Backend    | `develop` or `version/4.x` | v4 API                               |
+| Admin UI   | `develop` or `version/4.x` | Must match backend major line        |
 | Storefront | `develop` or `version/1.x` | Storefront v1.x ↔ backend v4.x only |
 
 v3 uses the vue-app for both admin and public flows (`version/3.x`). This guide is for **v4** with a separate Storefront.
@@ -61,12 +61,12 @@ v3 uses the vue-app for both admin and public flows (`version/3.x`). This guide 
 
 ## Ports (local defaults)
 
-| Service | Host port |
-|---------|-----------|
-| Backend API | `8081` |
-| Admin UI | `8080` |
-| Storefront | `3000` |
-| MongoDB | `27017` |
+| Service     | Host port |
+| ----------- | --------- |
+| Backend API | `8081`    |
+| Admin UI    | `8080`    |
+| Storefront  | `3000`    |
+| MongoDB     | `27017`   |
 
 ---
 
@@ -74,14 +74,14 @@ v3 uses the vue-app for both admin and public flows (`version/3.x`). This guide 
 
 `FRONTEND_URL` on the backend is the **Admin UI** base URL. Do **not** set it to the Storefront. The Storefront identity is configured with Storefront `NUXT_*` variables.
 
-| Variable | Where | Points to |
-|----------|-------|-----------|
-| `BACKEND_URL` | Backend | Public API URL (e.g. `http://localhost:8081`) |
-| `FRONTEND_URL` | Backend | **Admin UI** URL (e.g. `http://localhost:8080`) |
-| `VUE_APP_SERVER_BASE_URL` | Admin UI | API URL reachable from the browser |
-| `NUXT_API_BASE_URL` | Storefront | API URL for the **server-side** (**`8081`**, not `8080`) |
-| `NUXT_USER_BASE_URL` / `NUXT_PUBLIC_USER_BASE_URL` | Storefront | Public Storefront URL |
-| `NUXT_ADMIN_BASE_URL` / `NUXT_PUBLIC_ADMIN_BASE_URL` | Storefront | Admin UI URL (optional nav link) |
+| Variable                                             | Where      | Points to                                                |
+| ---------------------------------------------------- | ---------- | -------------------------------------------------------- |
+| `BACKEND_URL`                                        | Backend    | Public API URL (e.g. `http://localhost:8081`)            |
+| `FRONTEND_URL`                                       | Backend    | **Admin UI** URL (e.g. `http://localhost:8080`)          |
+| `VUE_APP_SERVER_BASE_URL`                            | Admin UI   | API URL reachable from the browser                       |
+| `NUXT_API_BASE_URL`                                  | Storefront | API URL for the **server-side** (**`8081`**, not `8080`) |
+| `NUXT_USER_BASE_URL` / `NUXT_PUBLIC_USER_BASE_URL`   | Storefront | Public Storefront URL                                    |
+| `NUXT_ADMIN_BASE_URL` / `NUXT_PUBLIC_ADMIN_BASE_URL` | Storefront | Admin UI URL (optional nav link)                         |
 
 ### Copy-paste examples (local npm)
 
@@ -182,12 +182,12 @@ cp .env.full-stack.example .env
 docker compose up -d --build
 ```
 
-| Service | URL |
-|---------|-----|
+| Service     | URL                   |
+| ----------- | --------------------- |
 | Backend API | http://localhost:8081 |
-| Admin UI | http://localhost:8080 |
-| Storefront | http://localhost:3000 |
-| MongoDB | localhost:27017 |
+| Admin UI    | http://localhost:8080 |
+| Storefront  | http://localhost:3000 |
+| MongoDB     | localhost:27017       |
 
 **Compose URL rules:**
 
@@ -227,28 +227,28 @@ Without a tenant and public bookables, the Storefront will look empty even if al
 
 ## Verify
 
-| Check | How |
-|-------|-----|
-| API alive | `GET http://localhost:8081/healthz/live` → `200` |
-| API ready | `GET http://localhost:8081/healthz/ready` → `200` (MongoDB connected) |
-| Admin login | Sign in at http://localhost:8080 |
-| Storefront | http://localhost:3000 shows catalog / tenant content after bootstrap |
-| Booking path | Create a test booking in the Storefront against a public bookable |
+| Check        | How                                                                   |
+| ------------ | --------------------------------------------------------------------- |
+| API alive    | `GET http://localhost:8081/healthz/live` → `200`                      |
+| API ready    | `GET http://localhost:8081/healthz/ready` → `200` (MongoDB connected) |
+| Admin login  | Sign in at http://localhost:8080                                      |
+| Storefront   | http://localhost:3000 shows catalog / tenant content after bootstrap  |
+| Booking path | Create a test booking in the Storefront against a public bookable     |
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-|---------|--------------|
-| Storefront cannot load catalog / auth fails | `NUXT_API_BASE_URL` points at `8080` (Admin) instead of the API (`8081` locally, or `http://backend:8081` in Compose) |
-| Email / redirect links open Admin instead of Storefront (or the reverse) | Confusing `FRONTEND_URL` with Storefront URLs — `FRONTEND_URL` must be Admin; Storefront uses `NUXT_USER_*` |
-| Storefront empty | No tenant, no public bookables, or portal/catalog not enabled |
-| Uploads / PDF receipts fail | Nextcloud not configured — see [nextcloud.md](nextcloud.md) |
-| Admin cannot reach API | Wrong `VUE_APP_SERVER_BASE_URL`; CORS reflects the request origin (Admin talks to the API from the browser) |
-| Compose: Storefront cannot reach API | BFF still using `localhost` inside the container — use the Docker service name (`backend`) |
-| Compose / Docker: `npm ci` fails with `sizeCalculation` / `maxSize` | Backend Dockerfile must use Node 22 LTS (not Node 25); pull latest Dockerfile and rebuild |
-| Auth cookies in production Storefront | In `NODE_ENV=production`, cookies require HTTPS behind a reverse proxy |
+| Symptom                                                                  | Likely cause                                                                                                          |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Storefront cannot load catalog / auth fails                              | `NUXT_API_BASE_URL` points at `8080` (Admin) instead of the API (`8081` locally, or `http://backend:8081` in Compose) |
+| Email / redirect links open Admin instead of Storefront (or the reverse) | Confusing `FRONTEND_URL` with Storefront URLs — `FRONTEND_URL` must be Admin; Storefront uses `NUXT_USER_*`           |
+| Storefront empty                                                         | No tenant, no public bookables, or portal/catalog not enabled                                                         |
+| Uploads / PDF receipts fail                                              | Nextcloud not configured — see [nextcloud.md](nextcloud.md)                                                           |
+| Admin cannot reach API                                                   | Wrong `VUE_APP_SERVER_BASE_URL`; CORS reflects the request origin (Admin talks to the API from the browser)           |
+| Compose: Storefront cannot reach API                                     | BFF still using `localhost` inside the container — use the Docker service name (`backend`)                            |
+| Compose / Docker: `npm ci` fails with `sizeCalculation` / `maxSize`      | Backend Dockerfile must use Node 22 LTS (not Node 25); pull latest Dockerfile and rebuild                             |
+| Auth cookies in production Storefront                                    | In `NODE_ENV=production`, cookies require HTTPS behind a reverse proxy                                                |
 
 ---
 

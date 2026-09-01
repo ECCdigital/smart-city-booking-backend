@@ -48,6 +48,10 @@ const {
   ForbiddenError,
   UnauthorizedError,
 } = require("../../../errors/BaseError");
+const { deleteBookingDocuments } = require("../media/booking-documents");
+const MediaManager = require("../../data-managers/media-manager");
+const MediaService = require("../media/media-service");
+const { toMediaReference } = require("../media/media-reference");
 const { resolveCheckoutId } = require("../../utilities/checkout-utils");
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const { CheckoutError } = require("../../../errors/CheckoutError");
@@ -424,6 +428,7 @@ class BookingService {
       try {
         const mailAttachments = await prepareMailAttachments(
           booking.attachments,
+          tenantId,
         );
         logger.info(
           `${tenantId} -- Prepared ${mailAttachments.length} mail attachments for booking ${booking.id}`,
@@ -559,6 +564,7 @@ class BookingService {
 
         const mailAttachments = await prepareMailAttachments(
           allBookingAttachments,
+          tenantId,
         );
 
         logger.info(
@@ -619,6 +625,14 @@ class BookingService {
     const lockerServiceInstance = LockerService.getInstance();
     await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
     await AccessService.revokeForBooking(booking.tenantId, booking.id);
+
+    // Documents go first: a booking document that outlived its booking would
+    // be unreachable and undeletable — nobody could ever grant access to it.
+    await deleteBookingDocuments({
+      tenantId: booking.tenantId,
+      bookingId: booking.id,
+    });
+
     await BookingManager.removeBooking(booking.id, booking.tenantId);
   }
 
@@ -1945,6 +1959,9 @@ class BookingService {
 }
 
 module.exports = BookingService;
+// The mail path is the one caller outside this file that has to be exercised
+// on its own: whether `mailAttach` reaches the recipient decides at this seam.
+module.exports.prepareMailAttachments = prepareMailAttachments;
 
 async function generateBookingReference(
   tenantId,
@@ -2076,26 +2093,94 @@ async function sendEmailToOrganizer(eventIds, tenantId, booking) {
 }
 
 /**
- * Downloads and prepares attachments for email sending
+ * Loads a `mailAttach` attachment that points at a medium. The bytes come
+ * straight out of the media library instead of through the platform's own
+ * public URL, which is why `mailAttach` works for intern media at all: an
+ * HTTP self-call would have to authenticate as somebody.
+ *
+ * @param {Object} att - The booking attachment.
+ * @param {string} tenantId - Tenant of the booking.
+ * @returns {Promise<Object|null>} Nodemailer attachment, null when unreadable.
+ */
+async function loadMediaMailAttachment(att, tenantId) {
+  const mediaId = att.reference.mediaId;
+  const media = await MediaManager.getMedia(mediaId, tenantId);
+
+  if (!media) {
+    logger.error(`Attachment medium ${mediaId} not found in ${tenantId}`);
+    return null;
+  }
+
+  const content = await MediaService.getBuffer(media);
+  const filename = extractFilename(media.originalFileName, att.title);
+
+  return {
+    filename,
+    content,
+    contentType: determineContentType(media.mimeType, filename),
+  };
+}
+
+/**
+ * Downloads an attachment that is not held by the media library — an external
+ * reference or a legacy raw URL.
+ *
+ * @param {Object} att - The booking attachment.
+ * @param {string} url - The address to fetch.
+ * @returns {Promise<Object>} Nodemailer attachment.
+ */
+async function downloadMailAttachment(att, url) {
+  const response = await axios.get(url, {
+    responseType: "arraybuffer",
+    timeout: 30000,
+    maxContentLength: 25 * 1024 * 1024,
+  });
+
+  const filename = extractFilename(url, att.title);
+
+  return {
+    filename,
+    content: Buffer.from(response.data),
+    contentType: determineContentType(
+      response.headers["content-type"],
+      filename,
+    ),
+  };
+}
+
+/**
+ * Prepares the attachments of a booking for email sending. Media references
+ * are read through the media service, everything else over HTTP.
+ *
  * @param {Array} attachments - Array of attachment objects from booking
+ * @param {string} tenantId - Tenant the booking belongs to
  * @returns {Promise<Array>} - Array of attachments in nodemailer format
  */
-async function prepareMailAttachments(attachments) {
+async function prepareMailAttachments(attachments, tenantId) {
   if (!attachments || !Array.isArray(attachments)) {
     return [];
   }
 
-  const attachmentsToMail = attachments.filter(
-    (att) => att.mailAttach === true && att.url,
-  );
-
   const uniqueAttachments = [];
-  const seenUrls = new Set();
+  const seen = new Set();
 
-  for (const att of attachmentsToMail) {
-    if (!seenUrls.has(att.url)) {
-      uniqueAttachments.push(att);
-      seenUrls.add(att.url);
+  for (const att of attachments) {
+    if (att.mailAttach !== true) {
+      continue;
+    }
+
+    const reference = toMediaReference(att.reference ?? att.url);
+    if (!reference) {
+      continue;
+    }
+
+    const key = reference.mediaId
+      ? `media:${reference.mediaId}`
+      : `url:${reference.url}`;
+
+    if (!seen.has(key)) {
+      uniqueAttachments.push({ att, reference });
+      seen.add(key);
     }
   }
 
@@ -2104,34 +2189,23 @@ async function prepareMailAttachments(attachments) {
   }
 
   const downloadedAttachments = await Promise.all(
-    uniqueAttachments.map(async (att) => {
+    uniqueAttachments.map(async ({ att, reference }) => {
       try {
-        const response = await axios.get(att.url, {
-          responseType: "arraybuffer",
-          timeout: 30000,
-          maxContentLength: 25 * 1024 * 1024,
-        });
+        const attachment = reference.mediaId
+          ? await loadMediaMailAttachment({ ...att, reference }, tenantId)
+          : await downloadMailAttachment(att, reference.url);
 
-        const filename = extractFilename(att.url, att.title);
-
-        const contentType = determineContentType(
-          response.headers["content-type"],
-          filename,
-        );
+        if (!attachment) {
+          return null;
+        }
 
         logger.debug(
-          `Downloaded attachment: ${filename} (${contentType}, ${response.data.byteLength} bytes)`,
+          `Prepared attachment: ${attachment.filename} (${attachment.contentType}, ${attachment.content.length} bytes)`,
         );
-
-        const attachment = {
-          filename: filename,
-          content: Buffer.from(response.data),
-          contentType: contentType,
-        };
 
         if (!isAttachmentSafe(attachment)) {
           logger.warn(
-            `Attachment ${filename} failed safety validation, skipping`,
+            `Attachment ${attachment.filename} failed safety validation, skipping`,
           );
           return null;
         }
@@ -2139,7 +2213,7 @@ async function prepareMailAttachments(attachments) {
         return attachment;
       } catch (err) {
         logger.error(
-          `Failed to download attachment from ${att.url}: ${err.message}`,
+          `Failed to prepare attachment ${reference.mediaId || reference.url}: ${err.message}`,
         );
         return null;
       }

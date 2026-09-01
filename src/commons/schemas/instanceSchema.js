@@ -27,17 +27,22 @@ const instanceSchemaDefinition = {
   mailEnabled: { type: Boolean, default: false },
   contactAddress: { type: String, default: "" },
   contactUrl: { type: String, default: "" },
+  // The legal documents carry a media reference in `reference` (§4.9); the
+  // legacy `{ source, url, fileName }` form stays as the derived read field
+  // until the vue-app picks media itself. They stay untyped objects for the
+  // same reason the event reference sites do: a subdocument type would cast
+  // legacy stock on `init` and make it unreadable.
   dataProtection: {
     type: Object,
-    default: () => ({ source: "url", url: "", fileName: "" }),
+    default: () => ({ source: "url", url: "", fileName: "", reference: null }),
   },
   legalNotice: {
     type: Object,
-    default: () => ({ source: "url", url: "", fileName: "" }),
+    default: () => ({ source: "url", url: "", fileName: "", reference: null }),
   },
   termsAndConditions: {
     type: Object,
-    default: () => ({ source: "url", url: "", fileName: "" }),
+    default: () => ({ source: "url", url: "", fileName: "", reference: null }),
   },
   allowAllUsersToCreateTenant: { type: Boolean, default: false },
   allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
@@ -63,6 +68,8 @@ const instanceSchemaDefinition = {
   },
   publicOffersEnabled: { type: Boolean, default: false },
   portalUrl: { type: String, default: "" },
+  // `logo` and `favicon` hold the media references (§4.9); `logoUrl` and
+  // `faviconUrl` stay the derived read fields the frontends use.
   branding: {
     type: Object,
     default: () => ({
@@ -70,6 +77,8 @@ const instanceSchemaDefinition = {
       theme: {
         colors: { primary: "", secondary: "" },
       },
+      logo: null,
+      favicon: null,
       logoUrl: "",
       faviconUrl: "",
     }),

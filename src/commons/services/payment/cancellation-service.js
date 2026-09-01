@@ -1,8 +1,13 @@
 const PdfService = require("../../pdf-service/pdf-service");
-const { NextcloudManager } = require("../../data-managers/file-manager");
 const IdGenerator = require("../../utilities/id-generator");
 const TenantManager = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
+const {
+  BOOKING_DOCUMENT,
+  isStorageFailure,
+  readBookingDocument,
+  storeBookingDocument,
+} = require("../media/booking-documents");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -51,13 +56,11 @@ class CancellationService {
         },
       );
 
-      await NextcloudManager.createFile({
-        tenantID: tenantId,
-        file: {
-          data: pdfData.buffer,
-          name: pdfData.name,
-        },
-        subFolder: "cancellations",
+      await storeBookingDocument({
+        tenantId,
+        bookingIds: [bookingId],
+        file: { data: pdfData.buffer, name: pdfData.name },
+        type: BOOKING_DOCUMENT.CANCELLATION,
       });
 
       return {
@@ -71,8 +74,8 @@ class CancellationService {
         timeCreated: options.refundCalculation?.cancelledAt ?? Date.now(),
       };
     } catch (err) {
-      if (err.isNextcloudError) {
-        logger.error("Failed to create cancellation in Nextcloud", {
+      if (isStorageFailure(err)) {
+        logger.error("Failed to store cancellation", {
           tenantId,
           bookingId,
           error: err.message,
@@ -152,13 +155,11 @@ class CancellationService {
         },
       );
 
-      await NextcloudManager.createFile({
-        tenantID: tenantId,
-        file: {
-          data: pdfData.buffer,
-          name: pdfData.name,
-        },
-        subFolder: "cancellations",
+      await storeBookingDocument({
+        tenantId,
+        bookingIds: bookings.map((booking) => booking.id),
+        file: { data: pdfData.buffer, name: pdfData.name },
+        type: BOOKING_DOCUMENT.CANCELLATION,
       });
 
       return {
@@ -172,8 +173,8 @@ class CancellationService {
         timeCreated: options.refundCalculations?.[0]?.cancelledAt ?? Date.now(),
       };
     } catch (err) {
-      if (err.isNextcloudError) {
-        logger.error("Failed to create aggregated cancellation in Nextcloud", {
+      if (isStorageFailure(err)) {
+        logger.error("Failed to store aggregated cancellation", {
           tenantId,
           bookingIds,
           error: err.message,
@@ -187,16 +188,27 @@ class CancellationService {
     }
   }
 
-  static async getCancellation(tenantId, cancellationName) {
+  /**
+   * The cancellation file, as a facade over the media library: cancellations
+   * written since the media library exists are booking documents, older ones
+   * still live in the legacy Nextcloud tree until the media import moves them.
+   *
+   * @param {string} tenantId - Tenant of the booking.
+   * @param {string} cancellationName - File name stored on the attachment.
+   * @param {string} [bookingId] - Booking the cancellation belongs to.
+   * @returns {Promise<Buffer>} The cancellation bytes.
+   */
+  static async getCancellation(tenantId, cancellationName, bookingId) {
     try {
-      return await NextcloudManager.getFile({
-        tenant: tenantId,
-        subFolder: "cancellations",
-        filename: cancellationName,
+      return await readBookingDocument({
+        tenantId,
+        bookingId,
+        fileName: cancellationName,
+        type: BOOKING_DOCUMENT.CANCELLATION,
       });
     } catch (err) {
-      if (err.isNextcloudError) {
-        logger.error("Failed to get cancellation from Nextcloud", {
+      if (isStorageFailure(err)) {
+        logger.error("Failed to get cancellation", {
           tenantId,
           cancellationName,
           error: err.message,

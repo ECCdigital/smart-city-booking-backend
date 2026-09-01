@@ -25,6 +25,7 @@
 Beide Discovery-Dokumente sind ohne Token per GET erreichbar (HTTP 200).
 
 **Accept (`identity-acc.eu.my-clay.com`):**
+
 - `token_endpoint`: `https://identity-acc.eu.my-clay.com/connect/token`
 - `grant_types_supported`: enthält `password`, `client_credentials`, `authorization_code`, `refresh_token`, … (Password-Grant vorhanden)
 - kein `resource`-Feld / keine explizite Audience-Angabe in der Discovery
@@ -35,32 +36,33 @@ Beide Discovery-Dokumente sind ohne Token per GET erreichbar (HTTP 200).
   - **kein** `core_api`, **kein** `core_api.full_access`, **kein** `hardware_api.full_access`, **kein** `clp_api`
 
 **Prod (`identity.eu.my-clay.com`, nur Vergleich, kein Token-Request):**
+
 - Nahezu identische Scope-Liste; ebenfalls `core_api.full`, `core_api.standard`, `hardware_api`; ebenfalls kein `core_api`/`clp_api`.
 
 Wichtig: `scopes_supported` listet, was der **Identity-Server global kennt** — nicht, was **unser Client** anfordern darf.
 
 ## Ergebnistabelle
 
-| Versuch | Scope | Token? (aud/scope) | Core-API-Aufruf | Status | Antwort |
-|--------|-------|--------------------|-----------------|--------|---------|
-| 1 | `user_api.full_access` | **Ja** — `aud=user_api`, `scope=user_api.full_access` | `GET /v1.2/iqs` | 401 | `WWW-Authenticate: Bearer error="invalid_token", error_description="The audience 'user_api' is invalid"` |
-| 1b | `user_api.full_access` | Ja (s.o.) | `GET /v1.2/locks` | 401 | dito ("audience 'user_api' is invalid") |
-| 1c | `user_api.full_access` | Ja (s.o.) | `GET /v1.2/collections` | 401 | dito |
-| 1d | `user_api.full_access` | Ja (s.o.) | `GET /v1.2/accessors?$top=1` | 401 | dito |
-| 2 | `hardware_api` | **Nein** | — | 400 | `error=invalid_scope` |
-| 3 | `hardware_api.full_access` | Nein | — | 400 | `invalid_scope` |
-| 4 | `core_api` | Nein | — | 400 | `invalid_scope` |
-| 5 | `core_api.full_access` | Nein | — | 400 | `invalid_scope` |
-| 6 | `core_api.full` | Nein | — | 400 | `invalid_scope` |
-| 7 | `core_api.standard` | Nein | — | 400 | `invalid_scope` |
-| 8 | `clp_api` | Nein | — | 400 | `invalid_scope` |
-| 9 | `openid profile` | Nein | — | 400 | `invalid_scope` |
-| 10 | `core_api.full core_api.standard` | Nein | — | 400 | `invalid_scope` |
-| 11 | `user_api.full_access core_api.full` | Nein | — | 400 | `invalid_scope` |
-| 12 | `user_api.full_access hardware_api` | Nein | — | 400 | `invalid_scope` |
-| — | (ohne Token) | — | `GET /v1.2/iqs`, `/locks`, `/collections`, `/accessors` | 401 | `WWW-Authenticate: Bearer`, leerer Body |
-| — | Swagger UI | — | `GET /swagger/index.html` | 200 | `text/html` (öffentlich erreichbar) |
-| — | Swagger Spec | — | `GET /swagger/v1.2/swagger.json` | 200 | JSON |
+| Versuch | Scope                                | Token? (aud/scope)                                    | Core-API-Aufruf                                         | Status | Antwort                                                                                                  |
+| ------- | ------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| 1       | `user_api.full_access`               | **Ja** — `aud=user_api`, `scope=user_api.full_access` | `GET /v1.2/iqs`                                         | 401    | `WWW-Authenticate: Bearer error="invalid_token", error_description="The audience 'user_api' is invalid"` |
+| 1b      | `user_api.full_access`               | Ja (s.o.)                                             | `GET /v1.2/locks`                                       | 401    | dito ("audience 'user_api' is invalid")                                                                  |
+| 1c      | `user_api.full_access`               | Ja (s.o.)                                             | `GET /v1.2/collections`                                 | 401    | dito                                                                                                     |
+| 1d      | `user_api.full_access`               | Ja (s.o.)                                             | `GET /v1.2/accessors?$top=1`                            | 401    | dito                                                                                                     |
+| 2       | `hardware_api`                       | **Nein**                                              | —                                                       | 400    | `error=invalid_scope`                                                                                    |
+| 3       | `hardware_api.full_access`           | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 4       | `core_api`                           | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 5       | `core_api.full_access`               | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 6       | `core_api.full`                      | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 7       | `core_api.standard`                  | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 8       | `clp_api`                            | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 9       | `openid profile`                     | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 10      | `core_api.full core_api.standard`    | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 11      | `user_api.full_access core_api.full` | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| 12      | `user_api.full_access hardware_api`  | Nein                                                  | —                                                       | 400    | `invalid_scope`                                                                                          |
+| —       | (ohne Token)                         | —                                                     | `GET /v1.2/iqs`, `/locks`, `/collections`, `/accessors` | 401    | `WWW-Authenticate: Bearer`, leerer Body                                                                  |
+| —       | Swagger UI                           | —                                                     | `GET /swagger/index.html`                               | 200    | `text/html` (öffentlich erreichbar)                                                                      |
+| —       | Swagger Spec                         | —                                                     | `GET /swagger/v1.2/swagger.json`                        | 200    | JSON                                                                                                     |
 
 ## Interpretation
 
@@ -96,12 +98,14 @@ Die für Remote-Open interessanten Bausteine sind in der Core-Spec vorhanden, ko
 **Token-Endpoint, Baseline (`user_api.full_access`):** `HTTP 200`, Token dekodiert → `aud="user_api"`, `scope="user_api.full_access"` (Token nicht gespeichert).
 
 **Token-Endpoint, alle Core-/Hardware-Scopes:**
+
 ```
 HTTP 400
 {"error":"invalid_scope"}
 ```
 
 **Core API mit Baseline-Token (alle vier Endpunkte identisch):**
+
 ```
 HTTP 401
 WWW-Authenticate: Bearer error="invalid_token", error_description="The audience 'user_api' is invalid"
@@ -109,6 +113,7 @@ WWW-Authenticate: Bearer error="invalid_token", error_description="The audience 
 ```
 
 **Core API ohne Token (alle vier Endpunkte):**
+
 ```
 HTTP 401
 WWW-Authenticate: Bearer

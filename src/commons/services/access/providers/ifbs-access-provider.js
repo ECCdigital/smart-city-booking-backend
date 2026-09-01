@@ -50,7 +50,9 @@ class IfbsAccessProvider extends AccessProvider {
 
     if (bookingContext.lastOpenBoxId) {
       try {
-        const result = await client.monitorOpenBox(bookingContext.lastOpenBoxId);
+        const result = await client.monitorOpenBox(
+          bookingContext.lastOpenBoxId,
+        );
 
         return {
           ...this._mapOpenBoxStatus(result, { includeReceived: true }),

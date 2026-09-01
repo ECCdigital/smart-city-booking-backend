@@ -3,11 +3,31 @@ const { Schema } = require("mongoose");
 const {
   getCancellationRefundTiersError,
 } = require("../utilities/cancellation-refund-tiers");
+const {
+  LEGAL_DOCUMENT_TYPES,
+  getLegalDocumentsError,
+} = require("../utilities/legal-documents");
+const { mediaReferenceSchema } = require("./mediaSchema");
 
 const cancellationRefundTierSchema = new Schema(
   {
     daysBeforeStart: { type: Number, required: true, min: 0 },
     refundPercentage: { type: Number, required: true, min: 0, max: 100 },
+  },
+  { _id: false },
+);
+
+/**
+ * A legal document of the tenant (spec §2.1). Unlike the instance documents,
+ * this is a typed subdocument: the tenant carries no legacy stock that an
+ * `init` cast could make unreadable, so the warning in `instanceSchema.js` does
+ * not apply here (§3).
+ */
+const legalDocumentSchema = new Schema(
+  {
+    type: { type: String, enum: LEGAL_DOCUMENT_TYPES, required: true },
+    title: { type: String, default: "" },
+    reference: { type: mediaReferenceSchema },
   },
   { _id: false },
 );
@@ -90,6 +110,12 @@ const tenantSchemaDefinition = {
   bookableCustomFields: {
     type: [customFieldDefinitionSchema],
     default: [],
+  },
+
+  legalDocuments: {
+    type: [legalDocumentSchema],
+    default: [],
+    validate: (documents) => !getLegalDocumentsError(documents),
   },
 };
 

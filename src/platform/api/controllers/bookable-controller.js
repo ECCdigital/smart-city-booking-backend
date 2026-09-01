@@ -13,6 +13,7 @@ const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
 const BookableService = require("../../../commons/services/bookable-service");
+const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -48,7 +49,9 @@ class BookableController {
         `${tenant} -- Returning ${bookables.length} public bookables to user ${user?.id}`,
       );
 
-      response.status(200).send(bookables);
+      response
+        .status(200)
+        .send(bookables.map((bookable) => bookable.withResolvedMediaUrls()));
     } catch (err) {
       logger.error(err);
       response.status(500).send(`Could not get bookables`);
@@ -145,7 +148,7 @@ class BookableController {
       logger.info(
         `${tenant} -- Returning bookable ${bookable.id} to user ${user?.id}`,
       );
-      response.status(200).send(bookable);
+      response.status(200).send(bookable.withResolvedMediaUrls());
     } catch (err) {
       logger.error(`${tenant} -- ${err.message}`);
       response.status(500).send(`Could not get bookable`);
@@ -279,6 +282,7 @@ class BookableController {
       ) {
         await BookableController._validateAccessPointIds(bookable, tenant);
         BookableController._validateAccessBuffers(bookable);
+        await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -348,6 +352,7 @@ class BookableController {
       ) {
         await BookableController._validateAccessPointIds(bookable, tenant);
         BookableController._validateAccessBuffers(bookable);
+        await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
         await BookableManager.storeBookable(bookable);
         logger.info(
           `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,

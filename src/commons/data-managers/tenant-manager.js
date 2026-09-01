@@ -147,6 +147,35 @@ class TenantManager {
   }
 
   /**
+   * Find the tenant that references a medium in one of its legal documents.
+   * The usage proof is searched on demand (§4.7 of the media spec); a medium
+   * never carries a back reference.
+   *
+   * Instance media run through the same proof with `tenantId: null`. A tenant
+   * document never references one, and searching across all tenants would be
+   * the wrong answer rather than a wider one — so that case answers empty.
+   *
+   * @param {string|null} tenantId Tenant of the medium
+   * @param {string} mediaId ID of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!tenantId || !mediaId) {
+      return [];
+    }
+
+    const doc = await TenantModel.findOne(
+      {
+        id: tenantId,
+        "legalDocuments.reference.mediaId": mediaId,
+      },
+      { id: 1, name: 1 },
+    ).lean();
+
+    return doc ? [{ id: doc.id, title: doc.name || "" }] : [];
+  }
+
+  /**
    * Check if more tenants can be created
    * @returns {Promise<boolean>} True if more tenants can be created
    */

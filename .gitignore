@@ -377,3 +377,6 @@ AGENTS.override.md
 .scratch
 CONTEXT.md
 docs/specs/*
+
+# Claude Code: local-only agent state (not committed)
+/.claude

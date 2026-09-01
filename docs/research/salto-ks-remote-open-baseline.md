@@ -2,13 +2,13 @@
 
 Gemessen am **2026-08-19 12:55:14 UTC** (zweiter, identischer Lauf; erster Lauf 2026-08-19 12:54:36 UTC mit identischen Werten).
 
-| | |
-|---|---|
-| Umgebung | `accept` — API `https://clp-accept-user.my-clay.com`, Identity `https://identity-acc.eu.my-clay.com` |
-| Site | `DE4520168385` (`site_uid`), UUID `00d20e57-9ac2-4b76-a65d-7911bfb00da2`, `customer_reference` "Biletado-ECC GmbH_Bad Belzig" |
-| Tenant | `test` (`4d3f2474-a429-4320-9b61-c8de5d58fe84`), Application `salto-ks` (`siteId: DE4520168385`, `environment: accept`) |
-| Methode | Nur `GET` gegen die Connect API + `POST /connect/token` (Password Grant). Kein `/locking`, kein `/pin`, kein `/secret`. Einmal-Skript unter `/tmp/`, nicht im Repo. |
-| Spec-Referenz | `.scratch/salto.json` (Connect API v-latest) |
+|               |                                                                                                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Umgebung      | `accept` — API `https://clp-accept-user.my-clay.com`, Identity `https://identity-acc.eu.my-clay.com`                                                                |
+| Site          | `DE4520168385` (`site_uid`), UUID `00d20e57-9ac2-4b76-a65d-7911bfb00da2`, `customer_reference` "Biletado-ECC GmbH_Bad Belzig"                                       |
+| Tenant        | `test` (`4d3f2474-a429-4320-9b61-c8de5d58fe84`), Application `salto-ks` (`siteId: DE4520168385`, `environment: accept`)                                             |
+| Methode       | Nur `GET` gegen die Connect API + `POST /connect/token` (Password Grant). Kein `/locking`, kein `/pin`, kein `/secret`. Einmal-Skript unter `/tmp/`, nicht im Repo. |
+| Spec-Referenz | `.scratch/salto.json` (Connect API v-latest)                                                                                                                        |
 
 Maskierung: E-Mails (`m***@e***.de`), Vor-/Nachnamen (`M***`), Telefon (`***`). Tag-Nummern, MACs und alle UUIDs sind unmaskiert, Token/Secrets erscheinen nirgends.
 
@@ -16,44 +16,44 @@ Maskierung: E-Mails (`m***@e***.de`), Vor-/Nachnamen (`M***`), Telefon (`***`). 
 
 `PATCH /v1.2/sites/{site_id}/locks/{id}/locking` verlangt laut Spec `REMOTE_LOCKING_ALL` (bzw. `REMOTE_LOCKING_ACCESSIBLE`), Body `LockingRequest { locked_state: RequestLockStates, otp?: string }`; `RequestLockStates = none|locked|office_mode|uncertain|unlocked`. Die Aktivierung am IQ (`/me/{site_id}/activated_iqs`, Schema `IqPinResponse`, "Status of Iq pin") ist die Quelle des OTP.
 
-| Vorbedingung für Remote-Open (laut Spec) | Messwert | erfüllt / offen / unbekannt |
-|---|---|---|
+| Vorbedingung für Remote-Open (laut Spec)                 | Messwert                                                                                                                                                                                                                                                                                                                                                                                                                                        | erfüllt / offen / unbekannt                      |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------- | -------- | ----------------------------------------------------------------------------------------------------------- |
 | Recht `REMOTE_LOCKING_ALL` / `REMOTE_LOCKING_ACCESSIBLE` | `GET /v2/sites/{id}/me/permissions` → **403**, `GET /v2/sites/{id}/me/roles` → **403**, `/v2/sites/{id}/roles` und `/v2/sites/{id}/permissions` → **403** (RFC-7807-Body). Rollen des System-Users laut `/v1.2/sites/{id}/me`: `test` ("Test", `is_hierarchical: true`, custom), `site_remote_office_mode_user`, `site_mobile_user` — **nicht** `site_admin`. Welche Permission-Codes die Rolle `test` trägt, ist über die API nicht auslesbar. | **unbekannt** (nur per Verhalten/Web-UI prüfbar) |
-| `remote_access: true` am Site-User des Tokens | `/v1.2/sites/{id}/me` → `remote_access: true`, `blocked: false`, `subscription_state: subscribed`, `use_pin: true`, `expires_at: null` | **erfüllt** |
-| Lock `online` | `/v1.2/sites/{id}/locks/4d77312f-…` → `online: true`, `iq_link_state: attached`, `locked_state: locked`, `lock_type: escutcheon_pin`, `communication_type: blue_net`, `battery_level: fresh`, `privacy_mode: false` | **erfüllt** |
-| IQ `online` | `/v1.2/sites/{id}/iqs/5dfdc54e-…` → `online: true`, `state: active`, `signal_strength: 21`, `revision: 2.0`; am Lock `iq.is_online: true` | **erfüllt** |
-| IQ `otp_enabled` | IQ → `otp_enabled: true`; am Lock `iq.otp_enabled: true`; in `activated_iqs` des System-Users `otp_enabled: true` | **erfüllt** |
-| System-User am IQ aktiviert (OTP-Quelle) | `GET /v1.2/me/{site_id}/activated_iqs` → `[{ iq_id: 5dfdc54e-…, activated: true, activation_date: 2026-08-19T07:05:04Z }]`; `GET /v1.2/sites/{id}/users/be523f65-…/activated_iqs` → `[{ id: 5dfdc54e-…, customer_reference: "IQ 01", otp_enabled: true }]` | **erfüllt** (seit heute 07:05 UTC) |
-| IQ `data_sync_state` | `not_synced` (Enum: `synced|pending|not_synced|failed`) | **offen** — IQ meldet online, aber Konfiguration nicht synchronisiert; Auswirkung auf Remote-Open unbekannt |
-| IQ `restore_required` | `false`, `reset_date: null` | **erfüllt** |
-| (Kontext) Site-Subscription | `subscription_valid: true`, `active_user_amount: 5`, `subscribed_user_amount: 10`, `active_iq_amount: 1`, `pin_enabled: true`, `installation_state: released`, `time_zone: Europe/Berlin`, `mkey_compatible: true`, `store_events_ttl: 90.00:00:00` | erfüllt |
-| (Kontext) Token | `aud: user_api`, `scope: [user_api.full_access]`, `iss: https://identity-acc.eu.my-clay.com`, `exp-iat = 3600 s`, `amr: [password]`, `idp: local`, `typ: at+jwt`, `alg: RS256`; Zusatz-Claims `product_id`, `tenant_id`, `identity_id`, `skip_email`, `profile_id_f9616ba5-…` | erfüllt |
+| `remote_access: true` am Site-User des Tokens            | `/v1.2/sites/{id}/me` → `remote_access: true`, `blocked: false`, `subscription_state: subscribed`, `use_pin: true`, `expires_at: null`                                                                                                                                                                                                                                                                                                          | **erfüllt**                                      |
+| Lock `online`                                            | `/v1.2/sites/{id}/locks/4d77312f-…` → `online: true`, `iq_link_state: attached`, `locked_state: locked`, `lock_type: escutcheon_pin`, `communication_type: blue_net`, `battery_level: fresh`, `privacy_mode: false`                                                                                                                                                                                                                             | **erfüllt**                                      |
+| IQ `online`                                              | `/v1.2/sites/{id}/iqs/5dfdc54e-…` → `online: true`, `state: active`, `signal_strength: 21`, `revision: 2.0`; am Lock `iq.is_online: true`                                                                                                                                                                                                                                                                                                       | **erfüllt**                                      |
+| IQ `otp_enabled`                                         | IQ → `otp_enabled: true`; am Lock `iq.otp_enabled: true`; in `activated_iqs` des System-Users `otp_enabled: true`                                                                                                                                                                                                                                                                                                                               | **erfüllt**                                      |
+| System-User am IQ aktiviert (OTP-Quelle)                 | `GET /v1.2/me/{site_id}/activated_iqs` → `[{ iq_id: 5dfdc54e-…, activated: true, activation_date: 2026-08-19T07:05:04Z }]`; `GET /v1.2/sites/{id}/users/be523f65-…/activated_iqs` → `[{ id: 5dfdc54e-…, customer_reference: "IQ 01", otp_enabled: true }]`                                                                                                                                                                                      | **erfüllt** (seit heute 07:05 UTC)               |
+| IQ `data_sync_state`                                     | `not_synced` (Enum: `synced                                                                                                                                                                                                                                                                                                                                                                                                                     | pending                                          | not_synced | failed`) | **offen** — IQ meldet online, aber Konfiguration nicht synchronisiert; Auswirkung auf Remote-Open unbekannt |
+| IQ `restore_required`                                    | `false`, `reset_date: null`                                                                                                                                                                                                                                                                                                                                                                                                                     | **erfüllt**                                      |
+| (Kontext) Site-Subscription                              | `subscription_valid: true`, `active_user_amount: 5`, `subscribed_user_amount: 10`, `active_iq_amount: 1`, `pin_enabled: true`, `installation_state: released`, `time_zone: Europe/Berlin`, `mkey_compatible: true`, `store_events_ttl: 90.00:00:00`                                                                                                                                                                                             | erfüllt                                          |
+| (Kontext) Token                                          | `aud: user_api`, `scope: [user_api.full_access]`, `iss: https://identity-acc.eu.my-clay.com`, `exp-iat = 3600 s`, `amr: [password]`, `idp: local`, `typ: at+jwt`, `alg: RS256`; Zusatz-Claims `product_id`, `tenant_id`, `identity_id`, `skip_email`, `profile_id_f9616ba5-…`                                                                                                                                                                   | erfüllt                                          |
 
 **Fazit:** Alle per API messbaren Hardware-/User-Vorbedingungen sind erfüllt, insbesondere ist der System-User seit 2026-08-19 07:05 UTC am IQ aktiviert (das war bei der Messung vom 2026-08-18 — `Otp is invalid` — noch nicht der Fall). Offen bleiben (a) das Recht `REMOTE_LOCKING_*` der Custom-Rolle `test` (v2-Permission-API antwortet 403) und (b) `data_sync_state: not_synced` am IQ.
 
 ## 2. Identifikatoren
 
-| Objekt | Id |
-|---|---|
-| Site | `00d20e57-9ac2-4b76-a65d-7911bfb00da2` (`site_uid` `DE4520168385`) |
-| IQ „IQ 01“ | `5dfdc54e-8335-11f0-a2ed-6045bd92d38f` (MAC `3B.9E.05`) |
-| Lock „Tür 01“ | `4d77312f-4a87-41db-a97b-f9d948dcc908` (MAC `0163813000002C`, Vendor `sallis`) |
-| System-User — Site-User-Id (`/sites/{id}/me`.id) | `be523f65-6e55-446c-91a5-337d69bb27a2` |
-| System-User — Plattform-User-Id (`/me`.id, `user.id`) | `40c32eb0-62d4-4e16-b60e-5c359dca7f18` |
-| System-User — Token `sub` | `1021b7ba-e938-4e03-b596-a9a03ad3068b` (Identity-Subject, ≠ Plattform-User-Id) |
-| Token `client_id` | `f74143dc-2b18-4004-b656-40a5a556b4a1` |
-| Rolle `test` (custom, hierarchisch) | `3bf83b0a-aeb0-4554-a766-94306b723741` |
+| Objekt                                                | Id                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Site                                                  | `00d20e57-9ac2-4b76-a65d-7911bfb00da2` (`site_uid` `DE4520168385`)             |
+| IQ „IQ 01“                                            | `5dfdc54e-8335-11f0-a2ed-6045bd92d38f` (MAC `3B.9E.05`)                        |
+| Lock „Tür 01“                                         | `4d77312f-4a87-41db-a97b-f9d948dcc908` (MAC `0163813000002C`, Vendor `sallis`) |
+| System-User — Site-User-Id (`/sites/{id}/me`.id)      | `be523f65-6e55-446c-91a5-337d69bb27a2`                                         |
+| System-User — Plattform-User-Id (`/me`.id, `user.id`) | `40c32eb0-62d4-4e16-b60e-5c359dca7f18`                                         |
+| System-User — Token `sub`                             | `1021b7ba-e938-4e03-b596-a9a03ad3068b` (Identity-Subject, ≠ Plattform-User-Id) |
+| Token `client_id`                                     | `f74143dc-2b18-4004-b656-40a5a556b4a1`                                         |
+| Rolle `test` (custom, hierarchisch)                   | `3bf83b0a-aeb0-4554-a766-94306b723741`                                         |
 
 ## 3. Site-User-Übersicht (`GET /v1.2/sites/{id}/users?$top=100`, 6 Einträge)
 
-| Site-User-Id | Plattform-User-Id | Rollen | `remote_access` | `subscription_state` | `blocked` | am IQ aktiviert (`…/users/{id}/activated_iqs`) |
-|---|---|---|---|---|---|---|
-| `04f6d454-f7a0-4c45-84e3-00d36622b267` | `cdaaf4aa-beae-483f-baa9-6a5f0fc9dc1f` | `site_user` | false | subscribed | false | nein |
-| `1d8b32c6-a652-4079-bd71-f92360a82766` | `c6f84b4f-34b8-4d5e-abae-43f359d12c1c` | `site_pod_member`, `site_admin`, `site_mobile_user` | true | subscribed | false | ja (IQ 01) |
-| `9d09f81e-5420-477e-af19-b55de8aaa2f2` | `13407b4c-644f-4e4c-bc62-cec05552fc6f` | `site_admin` | true | subscribed | false | nein |
-| `bb82669f-7568-4729-bb95-07c1c22471a0` | `45c85495-a598-4d1e-ba97-20c657486346` | `site_user`, `site_mobile_user` | true | suspended | false | nein |
-| `be523f65-6e55-446c-91a5-337d69bb27a2` (System-User) | `40c32eb0-62d4-4e16-b60e-5c359dca7f18` | `test`, `site_remote_office_mode_user`, `site_mobile_user` | true | subscribed | false | ja (IQ 01) |
-| `efc8f3f4-e448-4b6d-b0f2-dafa5807b761` | `29b5f559-0785-437a-b061-bcd519e41fb0` | `site_admin` | true | subscribed | false | nein |
+| Site-User-Id                                         | Plattform-User-Id                      | Rollen                                                     | `remote_access` | `subscription_state` | `blocked` | am IQ aktiviert (`…/users/{id}/activated_iqs`) |
+| ---------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------- | --------------- | -------------------- | --------- | ---------------------------------------------- |
+| `04f6d454-f7a0-4c45-84e3-00d36622b267`               | `cdaaf4aa-beae-483f-baa9-6a5f0fc9dc1f` | `site_user`                                                | false           | subscribed           | false     | nein                                           |
+| `1d8b32c6-a652-4079-bd71-f92360a82766`               | `c6f84b4f-34b8-4d5e-abae-43f359d12c1c` | `site_pod_member`, `site_admin`, `site_mobile_user`        | true            | subscribed           | false     | ja (IQ 01)                                     |
+| `9d09f81e-5420-477e-af19-b55de8aaa2f2`               | `13407b4c-644f-4e4c-bc62-cec05552fc6f` | `site_admin`                                               | true            | subscribed           | false     | nein                                           |
+| `bb82669f-7568-4729-bb95-07c1c22471a0`               | `45c85495-a598-4d1e-ba97-20c657486346` | `site_user`, `site_mobile_user`                            | true            | suspended            | false     | nein                                           |
+| `be523f65-6e55-446c-91a5-337d69bb27a2` (System-User) | `40c32eb0-62d4-4e16-b60e-5c359dca7f18` | `test`, `site_remote_office_mode_user`, `site_mobile_user` | true            | subscribed           | false     | ja (IQ 01)                                     |
+| `efc8f3f4-e448-4b6d-b0f2-dafa5807b761`               | `29b5f559-0785-437a-b061-bcd519e41fb0` | `site_admin`                                               | true            | subscribed           | false     | nein                                           |
 
 Form der Antwort: `{ items, next_page_link, count }` — sowohl mit `$top=100` als auch ohne Query (Kontrollaufruf, 200). Das widerspricht der Notiz „bare array“ für `/users` in `salto-ks-api-contract.md` (gemessen 2026-08-18).
 
@@ -61,57 +61,57 @@ Nur zwei Site-User sind am IQ aktiviert: der System-User (`be523f65-…`) und de
 
 ## 4. Letzte Ereignisse (`GET /v1.1/sites/{id}/entries?$top=20&$orderby=utc_date_time desc`)
 
-| utc_date_time | event_category | event_detail | access_by | access_detail | user | exit_requested |
-|---|---|---|---|---|---|---|
-| 2026-08-19T12:50:38Z | easy_office_mode | end | tag | 02309289 | M*** A*** | false |
-| 2026-08-19T12:50:32Z | easy_office_mode | start | tag | 02305075 | L*** S*** | false |
-| 2026-08-19T12:50:28Z | lock_rejected |  | tag | 02307300 | — | false |
-| 2026-08-19T12:50:24Z | lock_rejected |  | tag | 02309102 | — | false |
-| 2026-08-19T12:50:20Z | lock_rejected |  | tag | 02306295 | — | false |
-| 2026-08-19T12:50:16Z | easy_office_mode | end | tag | 02309289 | M*** A*** | false |
-| 2026-08-19T12:50:06Z | easy_office_mode | start | tag | 02309289 | M*** A*** | false |
-| 2026-08-19T12:49:08Z | easy_office_mode | end | tag | 02309289 | M*** A*** | false |
-| 2026-08-19T12:49:02Z | easy_office_mode | start | tag | 02309289 | M*** A*** | false |
-| 2026-08-19T10:14:04Z | easy_office_mode | end | tag | 02309289 | M*** A*** | false |
-| 2026-08-19T10:14:00Z | easy_office_mode | start | tag | 02309289 | M*** A*** | false |
-| 2026-08-19T09:46:42Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:46:40Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:46:38Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:46:30Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:46:20Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:44:14Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:44:12Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:43:14Z | lock_opened |  | inside_handle |  | — | true |
-| 2026-08-19T09:01:50Z | easy_office_mode | end | tag | 02309289 | M*** A*** | false |
+| utc_date_time        | event_category   | event_detail | access_by     | access_detail | user      | exit_requested |
+| -------------------- | ---------------- | ------------ | ------------- | ------------- | --------- | -------------- |
+| 2026-08-19T12:50:38Z | easy_office_mode | end          | tag           | 02309289      | M**_ A_** | false          |
+| 2026-08-19T12:50:32Z | easy_office_mode | start        | tag           | 02305075      | L**_ S_** | false          |
+| 2026-08-19T12:50:28Z | lock_rejected    |              | tag           | 02307300      | —         | false          |
+| 2026-08-19T12:50:24Z | lock_rejected    |              | tag           | 02309102      | —         | false          |
+| 2026-08-19T12:50:20Z | lock_rejected    |              | tag           | 02306295      | —         | false          |
+| 2026-08-19T12:50:16Z | easy_office_mode | end          | tag           | 02309289      | M**_ A_** | false          |
+| 2026-08-19T12:50:06Z | easy_office_mode | start        | tag           | 02309289      | M**_ A_** | false          |
+| 2026-08-19T12:49:08Z | easy_office_mode | end          | tag           | 02309289      | M**_ A_** | false          |
+| 2026-08-19T12:49:02Z | easy_office_mode | start        | tag           | 02309289      | M**_ A_** | false          |
+| 2026-08-19T10:14:04Z | easy_office_mode | end          | tag           | 02309289      | M**_ A_** | false          |
+| 2026-08-19T10:14:00Z | easy_office_mode | start        | tag           | 02309289      | M**_ A_** | false          |
+| 2026-08-19T09:46:42Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:46:40Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:46:38Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:46:30Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:46:20Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:44:14Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:44:12Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:43:14Z | lock_opened      |              | inside_handle |               | —         | true           |
+| 2026-08-19T09:01:50Z | easy_office_mode | end          | tag           | 02309289      | M**_ A_** | false          |
 
 Beobachtete `access_by`-Werte: `tag`, `inside_handle`. Laut Spec (`EntryResponse.access_by`: "What was used for access (tag, remote, etc.)") wäre für einen späteren Remote-Open `access_by: remote` zu erwarten, voraussichtlich mit `event_category: lock_opened` und gesetzter `user_id` (Plattform-User-Id des System-Users). `lock_rejected`-Einträge tragen `user_id: null` und nur die Tag-Nummer in `access_detail`.
 
 ## 5. Alle Aufrufe (Methode, Pfad, Status)
 
-| # | Methode | Pfad | Status |
-|---|---|---|---|
-| 0 | POST | `https://identity-acc.eu.my-clay.com/connect/token` (grant_type=password, scope=user_api.full_access, Basic clientId:clientSecret) | 200 |
-| 1 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2` | 200 |
-| 2 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/iqs` | 200 |
-| 3 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/iqs/5dfdc54e-8335-11f0-a2ed-6045bd92d38f` | 200 |
-| 4 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/locks` | 200 |
-| 5 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/locks/4d77312f-4a87-41db-a97b-f9d948dcc908` | 200 |
-| 6 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/me` | 200 |
-| 7 | GET | `/v1.2/me` | 200 |
-| 8 | GET | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/me/roles` | 403 |
-| 9 | GET | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/me/permissions` | 403 |
-| 10 | GET | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/roles` | 403 |
-| 11 | GET | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/permissions` | 403 |
-| 12 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/roles` | 200 |
-| 13 | GET | `/v1.2/me/00d20e57-9ac2-4b76-a65d-7911bfb00da2/activated_iqs` | 200 |
-| 14 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/be523f65-6e55-446c-91a5-337d69bb27a2/activated_iqs` | 200 |
-| 15 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users?$top=100` | 200 |
-| 16 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/04f6d454-f7a0-4c45-84e3-00d36622b267/activated_iqs` | 200 |
-| 17 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/1d8b32c6-a652-4079-bd71-f92360a82766/activated_iqs` | 200 |
-| 18 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/9d09f81e-5420-477e-af19-b55de8aaa2f2/activated_iqs` | 200 |
-| 19 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/bb82669f-7568-4729-bb95-07c1c22471a0/activated_iqs` | 200 |
-| 20 | GET | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/efc8f3f4-e448-4b6d-b0f2-dafa5807b761/activated_iqs` | 200 |
-| 21 | GET | `/v1.1/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/entries?$top=20&$orderby=utc_date_time desc` | 200 |
+| #   | Methode | Pfad                                                                                                                               | Status |
+| --- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 0   | POST    | `https://identity-acc.eu.my-clay.com/connect/token` (grant_type=password, scope=user_api.full_access, Basic clientId:clientSecret) | 200    |
+| 1   | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2`                                                                                 | 200    |
+| 2   | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/iqs`                                                                             | 200    |
+| 3   | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/iqs/5dfdc54e-8335-11f0-a2ed-6045bd92d38f`                                        | 200    |
+| 4   | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/locks`                                                                           | 200    |
+| 5   | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/locks/4d77312f-4a87-41db-a97b-f9d948dcc908`                                      | 200    |
+| 6   | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/me`                                                                              | 200    |
+| 7   | GET     | `/v1.2/me`                                                                                                                         | 200    |
+| 8   | GET     | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/me/roles`                                                                          | 403    |
+| 9   | GET     | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/me/permissions`                                                                    | 403    |
+| 10  | GET     | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/roles`                                                                             | 403    |
+| 11  | GET     | `/v2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/permissions`                                                                       | 403    |
+| 12  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/roles`                                                                           | 200    |
+| 13  | GET     | `/v1.2/me/00d20e57-9ac2-4b76-a65d-7911bfb00da2/activated_iqs`                                                                      | 200    |
+| 14  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/be523f65-6e55-446c-91a5-337d69bb27a2/activated_iqs`                        | 200    |
+| 15  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users?$top=100`                                                                  | 200    |
+| 16  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/04f6d454-f7a0-4c45-84e3-00d36622b267/activated_iqs`                        | 200    |
+| 17  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/1d8b32c6-a652-4079-bd71-f92360a82766/activated_iqs`                        | 200    |
+| 18  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/9d09f81e-5420-477e-af19-b55de8aaa2f2/activated_iqs`                        | 200    |
+| 19  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/bb82669f-7568-4729-bb95-07c1c22471a0/activated_iqs`                        | 200    |
+| 20  | GET     | `/v1.2/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/users/efc8f3f4-e448-4b6d-b0f2-dafa5807b761/activated_iqs`                        | 200    |
+| 21  | GET     | `/v1.1/sites/00d20e57-9ac2-4b76-a65d-7911bfb00da2/entries?$top=20&$orderby=utc_date_time desc`                                     | 200    |
 
 ## 6. Rohantworten (maskiert)
 
@@ -131,14 +131,10 @@ Beobachtete `access_by`-Werte: `tag`, `inside_handle`. Laut Spec (`EntryResponse
   "payload": {
     "iss": "https://identity-acc.eu.my-clay.com",
     "aud": "user_api",
-    "scope": [
-      "user_api.full_access"
-    ],
+    "scope": ["user_api.full_access"],
     "client_id": "f74143dc-2b18-4004-b656-40a5a556b4a1",
     "sub": "1021b7ba-e938-4e03-b596-a9a03ad3068b",
-    "amr": [
-      "password"
-    ],
+    "amr": ["password"],
     "idp": "local",
     "auth_time": 1787144114,
     "iat": 1787144114,

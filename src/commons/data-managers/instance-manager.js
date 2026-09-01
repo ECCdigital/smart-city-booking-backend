@@ -8,12 +8,15 @@ const {
 } = require("../services/custom-field/custom-field-service");
 const { InstanceCache } = require("../services/instance/instance-cache");
 const { BookableManager } = require("./bookable-manager");
+const { exportInstanceBranding } = require("../services/media/instance-media");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
   theme: {
     colors: { primary: "", secondary: "" },
   },
+  logo: null,
+  favicon: null,
   logoUrl: "",
   faviconUrl: "",
 });
@@ -102,10 +105,12 @@ class InstanceManager {
     if (cached) return cached;
 
     const raw = await InstanceModel.findOne({}, { branding: 1 }).lean();
-    const branding = {
+    // `logoUrl`/`faviconUrl` are derived from the stored media references
+    // (§4.9), so every catalog endpoint keeps reading the fields it always did.
+    const branding = exportInstanceBranding({
       ...DEFAULT_BRANDING,
       ...(raw?.branding ?? {}),
-    };
+    });
 
     InstanceCache.setBranding(branding);
     return branding;
@@ -135,6 +140,36 @@ class InstanceManager {
 
     InstanceCache.setPortal(portal);
     return portal;
+  }
+
+  /**
+   * Whether the instance itself references a medium — branding (logo, favicon)
+   * or one of the legal documents. The usage proof is searched on demand (§4.7
+   * of the media spec); a medium never carries a back reference. The instance
+   * is a singleton, so a hit has no id of its own.
+   *
+   * @param {string} mediaId - Id of the medium.
+   * @returns {Promise<Array<{id: null, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const raw = await InstanceModel.findOne(
+      {
+        $or: [
+          { "branding.logo.mediaId": mediaId },
+          { "branding.favicon.mediaId": mediaId },
+          { "dataProtection.reference.mediaId": mediaId },
+          { "legalNotice.reference.mediaId": mediaId },
+          { "termsAndConditions.reference.mediaId": mediaId },
+        ],
+      },
+      { _id: 1 },
+    ).lean();
+
+    return raw ? [{ id: null, title: "instance" }] : [];
   }
 
   /**

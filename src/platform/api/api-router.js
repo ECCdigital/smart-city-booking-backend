@@ -306,13 +306,13 @@ router.get(
 );
 router.get("/catalog/:slug", optionalAuth, CatalogController.getCatalogBySlug);
 
-router.get("/files/list", FileController.getFiles);
-router.get("/files/get", FileController.getFile);
-router.post(
-  "/files",
-  AuthenticationController.isSignedIn,
-  FileController.createFile,
-);
+// The tenant-less listing and upload are gone with the instance media library
+// (§4.9) — `/api/v2/instance/media` replaces them. `GET /files/get` stays as
+// the resolver of legacy paths (§4.10).
+// `optionalAuth` because the resolver serves public media anonymously and only
+// needs the session for internal ones — without it no signed-in user would ever
+// be recognised here.
+router.get("/files/get", optionalAuth, FileController.getFile);
 
 //Bookings
 router.get(
