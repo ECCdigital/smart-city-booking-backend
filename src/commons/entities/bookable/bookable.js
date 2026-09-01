@@ -445,6 +445,26 @@ class Bookable {
   }
 
   /**
+   * The stored bookable with every media reference site resolved to the
+   * address it is served under — for the routes that return the raw entity
+   * rather than `exportPublic`, so their consumers never receive a media
+   * reference without its URL.
+   *
+   * @returns {Object} A plain copy with `images`, `imgUrl` and `attachments`
+   *   resolved; every other field exactly as stored.
+   */
+  withResolvedMediaUrls() {
+    return {
+      ...this,
+      images: enrichMediaReferences(this.images, this.tenantId),
+      imgUrl: this.coverImageUrl,
+      attachments: (this.attachments || []).map((attachment) =>
+        enrichAttachment(attachment, this.tenantId),
+      ),
+    };
+  }
+
+  /**
    * Export bookable summary
    * @returns {Object} Summary data
    */

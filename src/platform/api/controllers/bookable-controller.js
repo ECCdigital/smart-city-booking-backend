@@ -47,7 +47,9 @@ class BookableController {
         `${tenant} -- Returning ${bookables.length} public bookables to user ${user?.id}`,
       );
 
-      response.status(200).send(bookables);
+      response
+        .status(200)
+        .send(bookables.map((bookable) => bookable.withResolvedMediaUrls()));
     } catch (err) {
       logger.error(err);
       response.status(500).send(`Could not get bookables`);
@@ -144,7 +146,7 @@ class BookableController {
       logger.info(
         `${tenant} -- Returning bookable ${bookable.id} to user ${user?.id}`,
       );
-      response.status(200).send(bookable);
+      response.status(200).send(bookable.withResolvedMediaUrls());
     } catch (err) {
       logger.error(`${tenant} -- ${err.message}`);
       response.status(500).send(`Could not get bookable`);

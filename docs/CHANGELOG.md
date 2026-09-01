@@ -54,6 +54,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- The public bookable routes (`/bookables/public`, `/bookables/public/:id`) resolve media references again — they serve the raw entity, whose stored references carry no `url` since the media library, so the storefront checkout lost its cover image (`imgUrl` empty, `images[].url` null) while the JSON embed interface kept working through `exportPublic`
 - Nextcloud storage uses the `/remote.php/dav/files/{user}` endpoint instead of the legacy `/remote.php/webdav`. The legacy endpoint answers PROPFIND on a missing path with a malformed 207 multistatus instead of a 404, which crashed the webdav client during recursive directory creation and made every media upload fail with `storage_put_failed`
 - The HTML and JSON embed interfaces resolve media addresses to absolute URLs (`BACKEND_URL`) again — cover images (`imgUrl`), image lists, event teaser/speaker images and attachment links were relative delivery routes since the media library, which foreign websites embedding the interfaces cannot load. The storefront and admin API keep their relative URLs
 - Attachments with a media reference render a working link in the HTML detail views — the raw stored entry has no `url` anymore
