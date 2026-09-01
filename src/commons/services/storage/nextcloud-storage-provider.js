@@ -13,13 +13,21 @@ const MAX_BODY_LENGTH = 100 * 1024 * 1024;
 function createWebdavClient() {
   const { createClient } = require("webdav");
 
-  return createClient(`${process.env.NEXTCLOUD_URL}/remote.php/webdav`, {
-    username: process.env.NEXTCLOUD_USERNAME,
-    password: process.env.NEXTCLOUD_PASSWORD,
-    timeout: WEBDAV_TIMEOUT,
-    maxBodyLength: MAX_BODY_LENGTH,
-    maxContentLength: MAX_BODY_LENGTH,
-  });
+  // The legacy /remote.php/webdav endpoint answers PROPFIND on missing paths
+  // with a malformed 207 instead of a 404, which breaks the webdav client's
+  // recursive directory creation. The dav/files endpoint behaves correctly.
+  const username = process.env.NEXTCLOUD_USERNAME;
+
+  return createClient(
+    `${process.env.NEXTCLOUD_URL}/remote.php/dav/files/${encodeURIComponent(username)}`,
+    {
+      username,
+      password: process.env.NEXTCLOUD_PASSWORD,
+      timeout: WEBDAV_TIMEOUT,
+      maxBodyLength: MAX_BODY_LENGTH,
+      maxContentLength: MAX_BODY_LENGTH,
+    },
+  );
 }
 
 /**

@@ -47,13 +47,20 @@ class NextcloudManager extends FileManager {
       );
     }
 
-    return createClient(`${nextCloudUrl}/remote.php/webdav`, {
-      username: process.env.NEXTCLOUD_USERNAME,
-      password: process.env.NEXTCLOUD_PASSWORD,
-      timeout: NextcloudManager.TIMEOUT,
-      maxBodyLength: 100 * 1024 * 1024, // 100MB
-      maxContentLength: 100 * 1024 * 1024, // 100MB
-    });
+    // The legacy /remote.php/webdav endpoint answers PROPFIND on missing
+    // paths with a malformed 207 instead of a 404 — use dav/files instead.
+    const username = process.env.NEXTCLOUD_USERNAME;
+
+    return createClient(
+      `${nextCloudUrl}/remote.php/dav/files/${encodeURIComponent(username)}`,
+      {
+        username,
+        password: process.env.NEXTCLOUD_PASSWORD,
+        timeout: NextcloudManager.TIMEOUT,
+        maxBodyLength: 100 * 1024 * 1024, // 100MB
+        maxContentLength: 100 * 1024 * 1024, // 100MB
+      },
+    );
   }
 
   /**
