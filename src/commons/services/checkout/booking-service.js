@@ -246,10 +246,9 @@ class BookingService {
         );
 
         if (existingAddon) {
-          if (existingAddon.amount !== mandatoryAddon.amount) {
-            existingAddon.amount = mandatoryAddon.amount;
-            filteredAddons.push(existingAddon);
-          }
+          // Correct the amount in place; the item is already in bookableItems,
+          // so it must not be returned again or it gets priced twice.
+          existingAddon.amount = mandatoryAddon.amount;
         } else {
           filteredAddons.push({
             bookableId: mandatoryAddon.bookableId,
