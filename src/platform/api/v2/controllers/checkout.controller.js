@@ -12,7 +12,7 @@ const {
 } = require("../../../../commons/utilities/group-booking-permissions");
 const {
   resolveCheckoutId,
-  withMandatoryAddons,
+  resolveCheckoutItems,
 } = require("../../../../commons/utilities/checkout-utils");
 const {
   normalizeCheckError,
@@ -285,7 +285,7 @@ class CheckoutControllerV2 {
     const { bookableItems, bookingAttempts: rawAttempts } = resolved;
 
     try {
-      const resolvedItems = await withMandatoryAddons(bookableItems, tenantId);
+      const resolvedItems = await resolveCheckoutItems(bookableItems, tenantId);
 
       const attempts = await Promise.all(
         rawAttempts.map(async (attempt, index) => {

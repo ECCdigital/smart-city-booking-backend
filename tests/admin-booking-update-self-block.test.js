@@ -1,5 +1,8 @@
 const assert = require("assert");
 const sinon = require("sinon");
+const {
+  CheckoutPolicy,
+} = require("../src/commons/services/checkout/checkout-policy");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
@@ -449,7 +452,7 @@ describe("BookingService.createBooking — admin create never hard-fails checks"
       tenantId: TENANT_ID,
       user: { id: "admin@example.com" },
       simulate: true,
-      manualBooking: true,
+      policy: CheckoutPolicy.ADMIN_MANUAL,
       bookingAttempt: {
         timeBegin: Date.UTC(2026, 5, 15, 10, 0, 0),
         timeEnd: Date.UTC(2026, 5, 15, 11, 0, 0),

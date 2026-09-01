@@ -1,7 +1,6 @@
-const {
-  ItemCheckoutService,
-  ManualItemCheckoutService,
-} = require("./item-checkout-service");
+const { ItemCheckoutService } = require("./item-checkout-service");
+const checkoutPolicy = require("./checkout-policy");
+const { CheckoutPolicy } = checkoutPolicy;
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
@@ -34,34 +33,64 @@ class BundleCheckoutService {
    * @param {Array} attachmentStatus - The attachments of the user.
    * @param {string} paymentProvider - The payment method.
    * @param {Array} attachments - The attachments.
-   * @param {boolean} bookWithoutDiscount - When true, booking discounts are ignored.
+   * @param {boolean} bookWithoutDiscount - Request wish to ignore booking
+   *   discounts. Only honored under SELF_SERVICE; ADMIN_MANUAL always
+   *   suppresses discounts.
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} customFieldValues - Checkout custom field values.
+   * @param {string|null} amendedBookingId - The booking being amended, if any.
+   *   Server-derived; excluded from capacity checks so an update never
+   *   collides with itself.
+   * @param {string} [policy] - The checkout policy (see checkout-policy.js).
+   * @param {Object} [adminOverrides] - ADMIN_MANUAL only: admin-authoritative
+   *   values. Passing this under SELF_SERVICE is an error.
+   * @param {string} [adminOverrides.internalComments]
+   * @param {string} [adminOverrides.rejectionReason]
+   * @param {boolean} [adminOverrides.isCommitted]
+   * @param {boolean} [adminOverrides.isPayed]
+   * @param {boolean} [adminOverrides.isRejected]
+   * @param {string} [adminOverrides.paymentMethod]
+   * @param {Array} [adminOverrides.lockerInfo] - Reused when non-empty.
+   * @param {Array} [adminOverrides.accessInfo]
+   * @param {Object} [adminOverrides.cancellationPolicy] - Replaces the policy
+   *   aggregated from the bookables.
    */
-  constructor({
-    user,
-    tenant,
-    timeBegin,
-    timeEnd,
-    timeCreated,
-    timePaid,
-    bookableItems,
-    couponCode,
-    name,
-    company,
-    street,
-    zipCode,
-    location,
-    email,
-    phone,
-    comment,
-    attachmentStatus,
-    paymentProvider,
-    attachments,
-    bookWithoutDiscount,
-    checkoutId,
-    customFieldValues,
-  }) {
+  constructor(
+    {
+      user,
+      tenant,
+      timeBegin,
+      timeEnd,
+      timeCreated,
+      timePaid,
+      bookableItems,
+      couponCode,
+      name,
+      company,
+      street,
+      zipCode,
+      location,
+      email,
+      phone,
+      comment,
+      attachmentStatus,
+      paymentProvider,
+      attachments,
+      bookWithoutDiscount,
+      checkoutId,
+      customFieldValues,
+      amendedBookingId,
+    },
+    policy = CheckoutPolicy.SELF_SERVICE,
+    adminOverrides = undefined,
+  ) {
+    this.policy = checkoutPolicy.assertCheckoutPolicy(policy);
+    if (adminOverrides && !checkoutPolicy.acceptsAdminOverrides(policy)) {
+      throw new Error(
+        "adminOverrides are only accepted under the ADMIN_MANUAL checkout policy",
+      );
+    }
+    this.adminOverrides = adminOverrides || {};
     this.user = user;
     this.tenant = tenant;
     this.timeBegin = timeBegin;
@@ -81,11 +110,18 @@ class BundleCheckoutService {
     this.attachmentStatus = attachmentStatus;
     this.paymentProvider = paymentProvider;
     this.attachments = attachments || [];
-    this.bookWithoutDiscount = bookWithoutDiscount;
+    this.bookWithoutDiscount = checkoutPolicy.bookWithoutDiscount(
+      this.policy,
+      bookWithoutDiscount,
+    );
     this.checkoutId = checkoutId;
     this.customFieldValues = Array.isArray(customFieldValues)
       ? customFieldValues
       : [];
+    this.amendedBookingId = amendedBookingId || null;
+    // One cache shared by all items of the bundle, so external providers are
+    // asked once per checkout instead of once per item.
+    this.externalCache = new Map();
   }
 
   async _getUsedCoupon() {
@@ -121,18 +157,30 @@ class BundleCheckoutService {
   }
 
   async createItemCheckoutService(bookableItem) {
-    const itemCheckoutService = new ItemCheckoutService({
-      user: this.user,
-      tenantId: this.tenant,
-      timeBegin: this.timeBegin,
-      timeEnd: this.timeEnd,
-      bookableId: bookableItem.bookableId,
-      amount: bookableItem.amount,
-      couponCode: await this._itemCouponCode(),
-      bookWithoutDiscount: this.bookWithoutDiscount,
-      checkoutId: this.checkoutId,
-    });
-    await itemCheckoutService.init();
+    const itemCheckoutService = new ItemCheckoutService(
+      {
+        user: this.user,
+        tenantId: this.tenant,
+        timeBegin: this.timeBegin,
+        timeEnd: this.timeEnd,
+        bookableId: bookableItem.bookableId,
+        amount: bookableItem.amount,
+        couponCode: await this._itemCouponCode(),
+        bookWithoutDiscount: this.bookWithoutDiscount,
+        checkoutId: this.checkoutId,
+        excludeBookingIds: this.amendedBookingId ? [this.amendedBookingId] : [],
+        externalCache: this.externalCache,
+      },
+      this.policy,
+    );
+
+    // Under ADMIN_MANUAL the admin-edited bookable snapshot drives pricing;
+    // without one (or under SELF_SERVICE) the stored bookable is loaded.
+    await itemCheckoutService.init(
+      checkoutPolicy.acceptsAdminOverrides(this.policy)
+        ? bookableItem._bookableUsed
+        : null,
+    );
 
     return itemCheckoutService;
   }
@@ -284,10 +332,16 @@ class BundleCheckoutService {
   }
 
   async isPaymentComplete() {
+    if (typeof this.adminOverrides.isPayed === "boolean") {
+      return this.adminOverrides.isPayed;
+    }
     return (await this.userPriceEur()) === 0;
   }
 
   async isAutoCommit() {
+    if (typeof this.adminOverrides.isCommitted === "boolean") {
+      return this.adminOverrides.isCommitted;
+    }
     for (const bookableItem of this.bookableItems) {
       const bookable = await BookableManager.getBookable(
         bookableItem.bookableId,
@@ -300,14 +354,20 @@ class BundleCheckoutService {
   }
 
   performRejected() {
+    if (typeof this.adminOverrides.isRejected === "boolean") {
+      return this.adminOverrides.isRejected;
+    }
     return false;
   }
 
   setPaymentMethod() {
-    return "";
+    return this.adminOverrides.paymentMethod ?? "";
   }
 
   async getLockerInfo() {
+    if (this.adminOverrides.lockerInfo?.length > 0) {
+      return this.adminOverrides.lockerInfo;
+    }
     let lockerInfo = [];
     try {
       for (const bookableItem of this.bookableItems) {
@@ -494,206 +554,26 @@ class BundleCheckoutService {
       delete booking._couponUsed._id;
     }
 
-    return booking;
-  }
-}
+    if (checkoutPolicy.acceptsAdminOverrides(this.policy)) {
+      // The admin books on behalf of the customer: the booking belongs to the
+      // customer's mail address, not to the admin who entered it.
+      booking.assignedUserId = primaryEmailFromMail(this.email);
+      booking.internalComments = this.adminOverrides.internalComments || "";
+      booking.rejectionReason = this.adminOverrides.rejectionReason || "";
+      booking.accessInfo = this.adminOverrides.accessInfo || [];
 
-/**
- * Class representing a manual bundle checkout service.
- * @extends BundleCheckoutService
- */
-class ManualBundleCheckoutService extends BundleCheckoutService {
-  /**
-   * Create a manual bundle checkout service.
-   * @param {string} user - The user ID.
-   * @param {string} tenant - The tenant ID.
-   * @param {Date} timeBegin - The start time.
-   * @param {Date} timeEnd - The end time.
-   * @param {Date} timePaid - The payment time.
-   * @param timeCreated - The creation time.
-   * @param {Array} bookableItems - The items to be booked.
-   * @param {string} couponCode - The coupon code.
-   * @param {string} name - The name of the user.
-   * @param {string} company - The company of the user.
-   * @param {string} street - The street of the user.
-   * @param {string} zipCode - The zip code of the user.
-   * @param {string} location - The location of the user.
-   * @param {string} email - The email of the user.
-   * @param {string} phone - The phone number of the user.
-   * @param {string} comment - The comment of the user.
-   * @param {string} internalComments - Internal comments for administrative purposes.
-   * @param {string} rejectionReason - Reason for rejection if the booking is rejected.
-   * @param {boolean} isCommit - The commit status.
-   * @param {boolean} isPayed - The payment status.
-   * @param {boolean} isRejected - The reject status.
-   * @param {Array} attachmentStatus - The attachments of the user.
-   * @param {string} paymentProvider - The payment method.
-   * @param {string} paymentMethod - The payment method.
-   * @param {Array} hooks - The hooks.
-   * @param {Array} attachments - The attachments.
-   * @param {boolean} bookWithoutDiscount - When true, booking discounts are ignored.
-   * @param {string} checkoutId - The checkout ID.
-   * @param {Array} lockerInfo - The locker info.
-   * @param {Array} customFieldValues - Checkout custom field values.
-   * @param {Array} accessInfo - The provisioned access-point info.
-   * @param {Object} [cancellationPolicy] - Admin override for the booking's
-   *   cancellation policy. When provided, it replaces the value aggregated
-   *   from the underlying bookables.
-   * @param {string|string[]|null} [excludeBookingIds] Booking IDs ignored in
-   *   capacity checks (e.g. validate while editing an existing booking).
-   * @param {boolean} [capacityChecksOnly] When true, item checkAll is a no-op
-   *   so admin manual create/update never hard-fail. Use validate endpoints for
-   *   informational availability.
-   */
-  constructor({
-    user,
-    tenant,
-    timeBegin,
-    timeEnd,
-    timePaid,
-    timeCreated,
-    bookableItems,
-    couponCode,
-    name,
-    company,
-    street,
-    zipCode,
-    location,
-    email,
-    phone,
-    comment,
-    internalComments,
-    rejectionReason,
-    isCommit,
-    isPayed,
-    isRejected,
-    attachmentStatus,
-    paymentProvider,
-    paymentMethod,
-    hooks,
-    attachments,
-    bookWithoutDiscount,
-    checkoutId,
-    lockerInfo,
-    customFieldValues,
-    accessInfo,
-    cancellationPolicy,
-    excludeBookingIds,
-    capacityChecksOnly = false,
-  }) {
-    super({
-      user,
-      tenant,
-      timeBegin,
-      timeEnd,
-      timeCreated,
-      timePaid,
-      bookableItems,
-      couponCode,
-      name,
-      company,
-      street,
-      zipCode,
-      location,
-      email,
-      phone,
-      comment,
-      attachmentStatus,
-      paymentProvider,
-      attachments,
-      bookWithoutDiscount,
-      checkoutId,
-      customFieldValues,
-    });
-    this.isCommitted = isCommit;
-    this.isPayed = isPayed;
-    this.isRejected = isRejected;
-    this.paymentMethod = paymentMethod;
-    this.hooks = hooks;
-    this.internalComments = internalComments || "";
-    this.rejectionReason = rejectionReason || "";
-    this.lockerInfo = lockerInfo || null;
-    this.accessInfo = accessInfo || [];
-    this.cancellationPolicyOverride = cancellationPolicy;
-    this.excludeBookingIds = excludeBookingIds;
-    this.capacityChecksOnly = Boolean(capacityChecksOnly);
-  }
-
-  async createItemCheckoutService(bookableItem) {
-    const itemCheckoutService = new ManualItemCheckoutService({
-      user: this.user,
-      tenantId: this.tenant,
-      timeBegin: this.timeBegin,
-      timeEnd: this.timeEnd,
-      bookableId: bookableItem.bookableId,
-      amount: bookableItem.amount,
-      couponCode: await this._itemCouponCode(),
-      bookWithoutDiscount: this.bookWithoutDiscount,
-      excludeBookingIds: this.excludeBookingIds,
-      capacityChecksOnly: this.capacityChecksOnly,
-    });
-
-    await itemCheckoutService.init(bookableItem._bookableUsed);
-
-    return itemCheckoutService;
-  }
-
-  checkAll() {
-    return true;
-  }
-
-  async isAutoCommit() {
-    if (
-      this.isCommitted !== undefined &&
-      typeof this.isCommitted === "boolean"
-    ) {
-      return this.isCommitted;
-    } else {
-      return await super.isAutoCommit();
-    }
-  }
-
-  async isPaymentComplete() {
-    if (this.isPayed !== undefined && typeof this.isPayed === "boolean") {
-      return this.isPayed;
-    } else {
-      return await super.isPaymentComplete();
-    }
-  }
-
-  performRejected() {
-    return this.isRejected;
-  }
-
-  setPaymentMethod() {
-    return this.paymentMethod;
-  }
-
-  async prepareBooking(options = {}) {
-    const booking = await super.prepareBooking(options);
-    booking.assignedUserId = primaryEmailFromMail(this.email);
-    booking.internalComments = this.internalComments;
-    booking.rejectionReason = this.rejectionReason;
-    booking.accessInfo = this.accessInfo;
-
-    if (
-      this.cancellationPolicyOverride &&
-      typeof this.cancellationPolicyOverride === "object"
-    ) {
-      booking.cancellationPolicy = {
-        ...booking.cancellationPolicy,
-        ...this.cancellationPolicyOverride,
-      };
+      if (
+        this.adminOverrides.cancellationPolicy &&
+        typeof this.adminOverrides.cancellationPolicy === "object"
+      ) {
+        booking.cancellationPolicy = {
+          ...booking.cancellationPolicy,
+          ...this.adminOverrides.cancellationPolicy,
+        };
+      }
     }
 
     return booking;
-  }
-
-  async getLockerInfo() {
-    if (this.lockerInfo && this.lockerInfo.length > 0) {
-      return this.lockerInfo;
-    }
-    return super.getLockerInfo();
   }
 }
 
@@ -725,5 +605,4 @@ function mergeAttachments(existingAttachments, newAttachments) {
 
 module.exports = {
   BundleCheckoutService,
-  ManualBundleCheckoutService,
 };

@@ -6,9 +6,7 @@ const {
 const { AvailabilityContext } = require("./availability/availability-context");
 const { ContextDataProvider } = require("../availability/providers");
 const checkWindowAvailabilityModule = require("../availability/check-window-availability");
-const {
-  ManualItemCheckoutService,
-} = require("./checkout/item-checkout-service");
+const { ItemCheckoutService } = require("./checkout/item-checkout-service");
 const { NotFoundError, BadRequestError } = require("../../errors/BaseError");
 
 class BlockPeriodService {
@@ -142,7 +140,7 @@ class BlockPeriodService {
     timeEnd,
     amount,
   ) {
-    const checkout = new ManualItemCheckoutService({
+    const checkout = new ItemCheckoutService({
       user,
       tenantId,
       timeBegin,

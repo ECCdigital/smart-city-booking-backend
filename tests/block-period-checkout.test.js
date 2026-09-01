@@ -17,7 +17,7 @@ const {
   InMemoryAvailabilityDataProvider,
 } = require("../src/commons/availability/providers");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
   CHECK_TYPES,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
@@ -188,7 +188,7 @@ describe("block period checkout and availability rules", () => {
   it("ignores opening hours during checkout for block-period bookables", async () => {
     const bookable = blockPeriodBookable();
     const instance = getWeekendInstance();
-    const checkout = new ManualItemCheckoutService({
+    const checkout = new ItemCheckoutService({
       user: "user-1",
       tenantId: TENANT_ID,
       timeBegin: instance.timeBegin,
@@ -231,7 +231,7 @@ describe("block period checkout and availability rules", () => {
   it("accepts a full block period through checkout checkBlockPeriod", async () => {
     const bookable = blockPeriodBookable();
     const instance = getWeekendInstance();
-    const checkout = new ManualItemCheckoutService({
+    const checkout = new ItemCheckoutService({
       user: "user-1",
       tenantId: TENANT_ID,
       timeBegin: instance.timeBegin,

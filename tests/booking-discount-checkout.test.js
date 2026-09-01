@@ -2,10 +2,13 @@ const assert = require("assert");
 const sinon = require("sinon");
 const { Bookable } = require("../src/commons/entities/bookable/bookable");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const CouponService = require("../src/commons/services/coupon-service");
+const {
+  CheckoutPolicy,
+} = require("../src/commons/services/checkout/checkout-policy");
 
 const TENANT_ID = "tenant-1";
 const USER_ID = "user-1";
@@ -26,7 +29,7 @@ function discountBookable(overrides = {}) {
 }
 
 async function createCheckoutService(bookable, options = {}) {
-  const service = new ManualItemCheckoutService({
+  const service = new ItemCheckoutService({
     user: USER_ID,
     tenantId: TENANT_ID,
     timeBegin: Date.now(),
@@ -239,7 +242,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
       tenantId: TENANT_ID,
       user: { id: ADMIN_ID },
       simulate: false,
-      manualBooking: true,
+      policy: CheckoutPolicy.ADMIN_MANUAL,
       bookingAttempt: {
         timeBegin: TIME_BEGIN,
         timeEnd: TIME_END,

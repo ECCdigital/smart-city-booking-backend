@@ -10,7 +10,7 @@ const {
 } = require("../src/commons/services/availability/availability-context");
 const checkWindowAvailabilityModule = require("../src/commons/availability/check-window-availability");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const {
   generateBlockPeriodInstances,
@@ -83,10 +83,8 @@ describe("BlockPeriodService", () => {
     sinon
       .stub(checkWindowAvailabilityModule, "checkWindowAvailability")
       .resolves({ available: true });
-    sinon.stub(ManualItemCheckoutService.prototype, "init").resolves();
-    sinon
-      .stub(ManualItemCheckoutService.prototype, "regularPriceEur")
-      .resolves(50);
+    sinon.stub(ItemCheckoutService.prototype, "init").resolves();
+    sinon.stub(ItemCheckoutService.prototype, "regularPriceEur").resolves(50);
 
     const result = await BlockPeriodService.getAvailableBlockPeriods(
       "tenant-1",

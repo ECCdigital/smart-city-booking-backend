@@ -12,6 +12,9 @@ const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const InvoiceService = require("../../../commons/services/payment/invoice-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
+const {
+  CheckoutPolicy,
+} = require("../../../commons/services/checkout/checkout-policy");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const PermissionsService = require("../../../commons/services/permission-service");
 const {
@@ -415,7 +418,7 @@ class BookingController {
         user,
         simulate: false,
         bookingAttempt: request.body,
-        manualBooking: true,
+        policy: CheckoutPolicy.ADMIN_MANUAL,
         checkoutId,
       });
       return response.status(200).send(newBooking);

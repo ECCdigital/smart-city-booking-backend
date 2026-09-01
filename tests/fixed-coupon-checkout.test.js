@@ -2,7 +2,7 @@ const assert = require("assert");
 const sinon = require("sinon");
 const { Bookable } = require("../src/commons/entities/bookable/bookable");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const CouponManager = require("../src/commons/data-managers/coupon-manager");
 const CouponService = require("../src/commons/services/coupon-service");
@@ -29,7 +29,7 @@ function couponBookable(overrides = {}) {
 }
 
 async function createCheckoutService(bookable, options = {}) {
-  const service = new ManualItemCheckoutService({
+  const service = new ItemCheckoutService({
     user: USER_ID,
     tenantId: TENANT_ID,
     timeBegin: Date.now(),

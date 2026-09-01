@@ -10,6 +10,20 @@ Multi-Tenant-Backend für die Buchung kommunaler Ressourcen (Räume, Flächen, G
 Die pro Feld-Definition getroffene Wahl, ob der im Checkout eingegebene Wert im Buchungsdetails-Block aller Buchungs-Mails erscheint — für alle Empfänger gleich, Kunde wie Betreiber. Nur Checkout-Felder können sie tragen; ein leeres Feld mit Mail-Sichtbarkeit erscheint als „nicht angegeben", es fällt nicht weg.
 _Avoid_: mailAttach (das sind Datei-Anhänge), Mail-Flag, showInMail (als Sprechbegriff — das ist der Feldname)
 
+### Checkout
+
+**Checkout-Policy (einer Buchung)**:
+Die Regel-Lage, unter der eine Buchung entsteht oder geändert wird — _Selbstbuchung_ oder _manuelle Buchung_. Hängt am Vorgang, nicht an der Person; genau ein Wert überquert die Checkout-Schnittstelle, und was er bedeutet, entscheidet allein das Checkout-Modul — nie der Aufrufer durch Flag-Kombinationen.
+_Avoid_: manualBooking (Alt-Flag), capacityChecksOnly (Fehlbezeichnung — es gab nie eine Nur-Kapazität-Prüfung), Buchungsmodus, Admin-Flag
+
+**Selbstbuchung**:
+Die Checkout-Policy des Storefront-Wegs: alle Buchbarkeits-Prüfungen laufen, automatische Rabatte und Pflicht-Addons werden angewendet. Ein Buchender kann auf seinen eigenen automatischen Rabatt verzichten — mehr Einfluss auf die Policy hat ein Client nicht.
+_Avoid_: normale Buchung, Kundenbuchung
+
+**Manuelle Buchung**:
+Die Checkout-Policy, bei der die Angaben des Erfassenden autoritativ sind: keine Buchbarkeits-Prüfungen, keine automatischen Rabatte, keine automatisch ergänzten Pflicht-Addons, eingegebene Preise gelten, die Rechnungsberechtigung wird nicht geprüft. Jede Buchungs-Änderung ist eine manuelle Buchung — auch die des Eigentümers an der eigenen Buchung.
+_Avoid_: Admin-Buchung (auch Eigentümer-Updates sind manuell), Buchung ohne Prüfung
+
 ### Mediathek
 
 **Medium**:

@@ -5,7 +5,7 @@ const MembershipManager = require("../src/commons/data-managers/membership-manag
 const CouponService = require("../src/commons/services/coupon-service");
 const PaymentUtils = require("../src/commons/utilities/payment-utils");
 const {
-  withMandatoryAddons,
+  resolveCheckoutItems,
 } = require("../src/commons/utilities/checkout-utils");
 
 const TENANT_ID = "tenant-1";
@@ -201,7 +201,7 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
     assert.strictEqual(stored.priceEur, 3 * PARENT_PRICE + 3 * ADDON_PRICE);
   });
 
-  it("resolves the same items on the checkout path as withMandatoryAddons on the validate path", async function () {
+  it("resolves the same items on the checkout path as resolveCheckoutItems on the validate path", async function () {
     const addon = plainBookable({
       id: "addon-a",
       title: "Addon A",
@@ -227,7 +227,7 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
       { bookableId: addon.id, amount: 1 },
     ];
 
-    const validatedItems = await withMandatoryAddons(cart(), TENANT_ID);
+    const validatedItems = await resolveCheckoutItems(cart(), TENANT_ID);
 
     await BookingService.createBooking({
       tenantId: TENANT_ID,
