@@ -14,6 +14,7 @@ const MediaService = require("../src/commons/services/media/media-service");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const BookingService = require("../src/commons/services/checkout/booking-service");
 const LockerService = require("../src/commons/services/locker/locker-service");
+const AccessService = require("../src/commons/services/access/access-service");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
@@ -332,6 +333,7 @@ describe("media deletion", function () {
       sandbox
         .stub(LockerService, "getInstance")
         .returns({ handleCancel: sandbox.stub().resolves() });
+      sandbox.stub(AccessService, "revokeForBooking").resolves([]);
 
       await BookingService.cancelBooking(TENANT, BOOKING);
 

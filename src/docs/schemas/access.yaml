@@ -2,20 +2,197 @@ components:
   schemas:
     OpenResult:
       type: object
-      description: Result returned after triggering an access point open
+      description: >
+        The answer to a successful open. The lock is being dealt with; whether
+        there is anything left to wait for is what `openProcessId` says.
       properties:
         openProcessId:
           type: string
-          description: Identifier to poll the open status
+          nullable: true
+          description: >
+            The process to poll at `/open-status`, or `null` when the open is
+            already done and there is nothing to poll. The answer therefore
+            says by itself whether polling is called for.
+          example: "OB-5512"
+
+    AccessPointStatus:
+      type: object
+      description: >
+        The state of an access point as its provider reports it. Only these
+        named fields leave the API - what the provider answered beyond them
+        stays in the access audit. `null` carries meaning and is not `false`:
+        it says the provider does not report this.
+      properties:
+        open:
+          type: boolean
+          nullable: true
+          description: Whether the lock is released, i.e. the door can be opened
+        locked:
+          type: boolean
+          nullable: true
+          description: Whether the lock is engaged
+        doorOpen:
+          type: boolean
+          nullable: true
+          description: >
+            The physical door position, which only a lock with a door sensor
+            reports.
+        statusSource:
+          type: string
+          nullable: true
+          enum: [provider_status]
+          description: >
+            Where the answer came from. `null` after a close whose lock could
+            not be read afterwards - the close itself did go through.
 
     OpenStatus:
-      type: object
-      description: Status of a running open process
-      properties:
-        openProcessId:
-          type: string
+      allOf:
+        - $ref: "#/components/schemas/AccessPointStatus"
+        - type: object
+          description: The state of an open attempt
+          properties:
+            statusSource:
+              type: string
+              enum: [open_process, last_event, provider_status]
+              description: >
+                Which source answered: the running open process, the last event
+                the door reported, or the lock's own state.
+            confirmed:
+              type: boolean
+              nullable: true
+              description: Whether the hardware confirmed the open
+            errorCode:
+              oneOf:
+                - type: string
+                - type: integer
+              nullable: true
+              description: |
+                How the attempt failed, `null` when it did not.
+                Known codes:
+                - `1904` – waiting timed out
+              example: 1904
+            errorMessage:
+              type: string
+              nullable: true
+              description: Human-readable error description, `null` on success
+              example: "waiting timed out"
 
     AccessPoint:
       type: object
-      description: An access point linked to a booking
+      description: >
+        An access point as the API hands it out. One projection for both ways
+        to a door - the access points of a booking and a resolved scan code -
+        so a client reads one shape either way. A resolved scan knows no
+        booking and carries the core fields alone.
+
+        What only the server needs never appears here: the provider
+        configuration, external ids, and above all the scan codes, since a
+        client that knew the code of a door could forge the evidence for it.
       properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+          description: The tenant the access point belongs to
+        type:
+          type: string
+          enum: [locker, door]
+        provider:
+          type: string
+          description: >
+            Which provider drives the lock. Meant as a key, e.g. for looking up
+            a service contact - not as something to show or to branch on.
+        label:
+          type: string
+        mode:
+          type: string
+          enum: [remote, authorization, both]
+        validationRuleTypes:
+          type: array
+          description: >
+            What this user has to prove at this access point before it opens -
+            not the door's configuration. Empty for a user with the
+            `MANAGE_BOOKINGS` permission and for lockers, which are never asked
+            for evidence. It says what is demanded, never whether it will work:
+            a rule whose preconditions are unmet still reports itself at
+            opening time as `evidence_rule_unavailable`.
+          items:
+            type: string
+            enum: [qrScan]
+          example: ["qrScan"]
+        capabilities:
+          type: array
+          description: >
+            The actions a client may offer for this access point. `unlatch` is
+            deliberately absent - pulling the latch is decided behind `/open`,
+            per lock.
+          items:
+            type: string
+            enum: [open, close, getStatus]
+          example: ["open", "close", "getStatus"]
+        accessBuffer:
+          $ref: "#/components/schemas/ResolvedAccessBuffer"
+          description: Only on the booking ways
+        accessFrom:
+          type: integer
+          nullable: true
+          description: >
+            Unix timestamp (ms) from which the access point may be operated for
+            this booking (booking start minus the lead buffer). Only on the
+            booking ways.
+        accessTo:
+          type: integer
+          nullable: true
+          description: >
+            Unix timestamp (ms) until which the access point may be operated for
+            this booking (booking end plus the lag buffer). Only on the booking
+            ways.
+        isProvisioned:
+          type: boolean
+          description: >
+            Whether the access for this booking is set up. Only on the booking
+            ways; lockers are provisioned by their very existence.
+        externalBookingId:
+          type: string
+          nullable: true
+          description: >
+            The booking id the provider knows this locker by. Lockers only, and
+            only on the booking ways.
+
+    ResolvedAccessBuffer:
+      type: object
+      description: >
+        Resolved lead/lag time (in milliseconds) around a booking during which
+        the access point can still be operated. Resolved from the bookable
+        configuration (`accessPointDetails.accessBuffer`), which applies to all
+        access points of that bookable. Both values default to 0 (no buffer).
+      properties:
+        beforeMs:
+          type: integer
+          minimum: 0
+          description: Milliseconds before the booking start during which access is allowed
+          example: 900000
+        afterMs:
+          type: integer
+          minimum: 0
+          description: Milliseconds after the booking end during which access is allowed
+          example: 900000
+
+    AccessBuffer:
+      type: object
+      description: >
+        Lead/lag time (in minutes) around a booking during which the access
+        point can still be operated. Configured once on the bookable
+        (`accessPointDetails.accessBuffer`) for all of its access points. Both
+        values default to 0 (no buffer).
+      properties:
+        before:
+          type: integer
+          minimum: 0
+          description: Minutes before the booking start during which access is allowed
+          example: 15
+        after:
+          type: integer
+          minimum: 0
+          description: Minutes after the booking end during which access is allowed
+          example: 15

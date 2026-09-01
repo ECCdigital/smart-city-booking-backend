@@ -370,9 +370,13 @@ test.js
 
 # Codex: local-only agent overrides (not committed)
 AGENTS.override.md
+.claude
 
 # Scratch: local-only scratchpad (not committed)
 /.scratch
+.scratch
+CONTEXT.md
+docs/specs/*
 
 # Claude Code: local-only agent state (not committed)
 /.claude

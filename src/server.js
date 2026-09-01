@@ -14,6 +14,7 @@ const RuleEngine = require("./rule-engine/ruleEngine");
 const { requestLogger } = require("./middleware/logger.js");
 const lazyBrowser = require("./commons/pdf-service/LazyBrowser");
 const { errorHandler } = require("./middleware/error-handler");
+const SaltoKsCleanupService = require("./commons/services/access/salto-ks-cleanup-service");
 const { assertStorageConfig } = require("./commons/services/storage");
 const {
   uploadBackstopBytes,
@@ -118,7 +119,7 @@ app.get("/healthz/ready", async (req, res) => {
     }
 
     res.status(200).json({ status: "ok" });
-  } catch (err) {
+  } catch {
     res.status(503).json({
       status: "unavailable",
     });
@@ -167,6 +168,9 @@ dbm.connect().then(() => {
       if (process.env.RULE_ENGINE_ENABLED === "true") {
         await RuleEngine.initEngine();
       }
+      if (process.env.SALTO_KS_CLEANUP_ENABLED !== "false") {
+        SaltoKsCleanupService.start();
+      }
     } catch (err) {
       logger.error("Error during application initialization steps", err);
     }
@@ -192,6 +196,7 @@ async function gracefulShutdown(signal) {
     }
 
     logger.info("Closing browser instance...");
+    SaltoKsCleanupService.stop();
     await lazyBrowser.cleanup();
     logger.info("Browser closed successfully");
 

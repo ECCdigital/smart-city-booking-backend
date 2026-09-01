@@ -1,13 +1,76 @@
 # swagger/routes/access.yaml
 
+/api/{tenant}/access/resolve-scan/{scanCode}:
+  get:
+    tags:
+      - Access
+    summary: Resolve a scanned sticker code to an access point
+    description: |
+      Translates a printed scan code into the access point it identifies.
+      Requires authentication — there is no public endpoint that turns a scan
+      code into a door name.
+
+      Follows the soft-fail contract: as long as the server can process the
+      request, it answers with HTTP 200 and `{ success, data }`. A current
+      code returns the access point in the shared projection; a code found only
+      in `previousScanCodes` returns `stale_scan_code` (the user is holding an
+      outdated sticker); anything else returns `unknown_scan_code`.
+
+      Failed resolutions are recorded in the access audit with
+      `action: "scan"`. Successful resolutions are not audited.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: scanCode
+        in: path
+        required: true
+        description: The scanned sticker code
+        schema:
+          type: string
+    responses:
+      "200":
+        description: |
+          The request was processed. `success: true` carries the access point,
+          `success: false` the reason the code did not resolve.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/ResolveScanSuccess"
+                - $ref: "#/components/schemas/ResolveScanFailure"
+      "401":
+        description: Not authenticated
+      "500":
+        description: Could not resolve scan code
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
 /api/{tenant}/access/{accessPointId}/open:
   post:
     tags:
       - Access
     summary: Open an access point
     description: |
-      Triggers the opening of a specific access point.
-      Requires booking ownership or `MANAGE_BOOKINGS` permission.
+      Triggers the opening of a specific access point. Requires booking
+      ownership or `MANAGE_BOOKINGS` permission, a committed and (if priced)
+      paid booking, and the current time to be inside the booking's access
+      window including its buffer.
+
+      On top of those fixed booking checks the access point may configure
+      validation rules that demand evidence of presence, e.g. a scan of the QR
+      code on the door. All configured rules have to be fulfilled. This applies
+      to every channel: at a door requiring a scan, a remote open from the
+      booking view is refused with `evidence_missing`. Users with the
+      `MANAGE_BOOKINGS` permission are exempt from the rules - the booking
+      checks still apply to them - and the exemption is recorded in the audit.
+
+      Every attempt that could be processed - opened as well as refused -
+      answers with HTTP 200 and the envelope `{ success, data }`; refused
+      attempts are recorded in the access audit with `result: "denied"` and
+      their blocking reasons.
     security:
       - bearerAuth: []
     parameters:
@@ -19,9 +82,125 @@
         schema:
           type: string
       - $ref: "#/components/parameters/BookingIdQueryParam"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OpenRequest"
     responses:
       "200":
-        description: Access point successfully opened
+        description: |
+          The attempt was processed. `success: true` carries the open result,
+          `success: false` the reasons why the attempt was refused.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/OpenSuccess"
+                - $ref: "#/components/schemas/OpenDenied"
+                - $ref: "#/components/schemas/OpenFailed"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          The booking does not exist or does not include the access point.
+      "500":
+        description: Could not open access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access/{accessPointId}/unlatch:
+  post:
+    tags:
+      - Access
+    summary: Unlatch an access point
+    deprecated: true
+    description: |
+      Pulls the latch of a specific access point so the door physically opens,
+      instead of only releasing the lock. Requires a provider and device that
+      support unlatching (e.g. a Nuki Smart Lock mounted on a door with a
+      latch).
+
+      Guarded exactly like `/open` - the same booking checks, the same
+      validation rules, the same audit entries - because it opens the same
+      door.
+
+      No client needs this route: where a lock can pull its latch, `/open` does
+      so by itself, per lock and behind the server.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point to unlatch
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OpenRequest"
+    responses:
+      "200":
+        description: |
+          The attempt was processed. `success: true` carries the started open,
+          `success: false` the reasons why the attempt was refused.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/OpenSuccess"
+                - $ref: "#/components/schemas/OpenDenied"
+                - $ref: "#/components/schemas/OpenFailed"
+      "401":
+        description: Not authenticated
+      "403":
+        description: |
+          The booking does not exist or does not include the access point.
+      "500":
+        description: Could not unlatch access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access/{accessPointId}/close:
+  post:
+    tags:
+      - Access
+    summary: Close an access point
+    description: |
+      Locks a specific access point again. Requires booking ownership or
+      `MANAGE_BOOKINGS` permission, a valid booking and the current time inside
+      the booking's access window including its buffer.
+
+      Answers with the state the lock is in afterwards, in the shape of
+      `/status`, so a client does not have to ask for it separately. That state
+      is read from the lock, not assumed from the command: a lock takes its
+      time to turn, so directly after a close it may still report itself as
+      unlocked. A lock that cannot be read afterwards answers with all fields
+      `null` and `statusSource: null`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point to close
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: The state of the access point after closing
         content:
           application/json:
             schema:
@@ -31,13 +210,57 @@
                   type: boolean
                   example: true
                 data:
-                  $ref: "#/components/schemas/OpenResult"
+                  $ref: "#/components/schemas/AccessPointStatus"
       "401":
         description: Not authenticated
       "403":
         description: Forbidden
       "500":
-        description: Could not open access point
+        description: Could not close access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
+/api/{tenant}/access/{accessPointId}/status:
+  get:
+    tags:
+      - Access
+    summary: Get the state of an access point
+    description: |
+      Asks the provider what state the lock is in. Requires booking ownership
+      or `MANAGE_BOOKINGS` permission, a valid booking and the current time
+      inside the booking's access window including its buffer.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: accessPointId
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+      - $ref: "#/components/parameters/BookingIdQueryParam"
+    responses:
+      "200":
+        description: The state of the access point
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  $ref: "#/components/schemas/AccessPointStatus"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Forbidden
+      "500":
+        description: Could not get access point status
         content:
           application/json:
             schema:
@@ -63,8 +286,11 @@
       - $ref: "#/components/parameters/BookingIdQueryParam"
       - name: openProcessId
         in: query
-        required: true
-        description: Identifier of the open process (returned by the open endpoint)
+        required: false
+        description: |
+          The process the open answered with. Given, the process itself is
+          asked; left out, the last event the door reported answers, and
+          failing that the lock's own state. `statusSource` says which.
         schema:
           type: string
     responses:
@@ -80,8 +306,6 @@
                   example: true
                 data:
                   $ref: "#/components/schemas/OpenStatus"
-      "400":
-        description: Missing `openProcessId` query parameter
       "401":
         description: Not authenticated
       "403":
@@ -99,10 +323,14 @@
       - Access
     summary: List access points for a booking
     description: |
-      Returns all access points linked to the given booking.
+      Returns all access points linked to the given booking, in the same
+      projection a resolved scan code answers with, plus the fields the booking
+      adds.
 
-      **Note:** This endpoint is not fully implemented yet and currently
-      returns only `{ "success": true }` without data.
+      Listing does not require the booking to be within its access window -
+      what a booking opens should be readable at any time - but it does require
+      a valid booking and either its ownership or the `MANAGE_BOOKINGS`
+      permission.
     security:
       - bearerAuth: []
     parameters:
@@ -110,7 +338,7 @@
       - $ref: "#/components/parameters/BookingIdQueryParam"
     responses:
       "200":
-        description: List of access points (not fully implemented)
+        description: The access points of the booking
         content:
           application/json:
             schema:
@@ -121,9 +349,6 @@
                   example: true
                 data:
                   type: array
-                  nullable: true
-                  description: |
-                    Not yet implemented – currently omitted from the response.
                   items:
                     $ref: "#/components/schemas/AccessPoint"
       "401":
@@ -139,55 +364,166 @@
 
 components:
   schemas:
-    OpenResult:
+    ResolveScanSuccess:
       type: object
-      description: Result returned after triggering an access point open
+      description: The scan code resolved to an access point
       properties:
-        processId:
-          type: integer
-          description: Identifier of the access point process
-          example: 27415
-        openProcessId:
-          type: integer
-          description: Identifier to poll the open status
-          example: 15840
-
-    OpenStatus:
-      type: object
-      description: Status of a running open process
-      properties:
-        confirmed:
+        success:
           type: boolean
-          description: Whether the open process was confirmed by the hardware
           example: true
-        confirmedAt:
+        data:
+          allOf:
+            - $ref: "#/components/schemas/AccessPoint"
+          description: >
+            The access point in the same projection the booking ways use. A
+            scan knows no booking, so only the core fields are carried.
+
+    ResolveScanFailure:
+      type: object
+      description: The scan code did not resolve
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            reason:
+              type: string
+              enum: [stale_scan_code, unknown_scan_code]
+              description: |
+                `stale_scan_code` — the code was replaced and belongs to a
+                known access point; `unknown_scan_code` — no access point of
+                the tenant carries this code.
+            accessPointId:
+              type: string
+              nullable: true
+              description: |
+                The access point the stale code belongs to, or `null` when the
+                code is unknown.
+
+    OpenRequest:
+      type: object
+      description: |
+        Everything the client contributes to an open attempt. All fields are
+        optional; a request without a body is an open without evidence.
+      properties:
+        evidence:
+          type: array
+          description: |
+            Evidence for the validation rules of the access point. Each entry is
+            matched to a rule by its `type`; at most one entry per type counts
+            and everything else - surplus entries of a type, types this access
+            point does not ask for - is ignored rather than rejected.
+          items:
+            $ref: "#/components/schemas/AccessEvidence"
+        channel:
           type: string
-          format: date-time
-          nullable: true
-          description: Timestamp when the opening was confirmed (null if not confirmed)
-          example: "2026-03-23T14:05:12.000Z"
-        openProcessId:
-          type: string
-          description: Identifier of the open process
-          example: "15842"
-        errorCode:
-          type: integer
           nullable: true
           description: |
-            Error code if the process failed (null on success).
-            Known codes:
-            - `1904` – waiting timed out
-          example: 1904
-        errorMessage:
-          type: string
-          nullable: true
-          description: Human-readable error description (null on success)
-          example: "waiting timed out"
+            How the client says it reached the door - `qrScan` or `remote` for
+            the platform's own clients. Reported by the client and stored in the
+            audit as reported: it is diagnostic context, never part of the access
+            decision, and is therefore deliberately neither validated against
+            those two values nor interpreted. Omit it or send `null` when it is
+            unknown.
+          example: qrScan
 
-    AccessPoint:
+    AccessEvidence:
       type: object
-      description: An access point linked to a booking
+      description: |
+        One piece of evidence, identified by the rule type it answers. The
+        remaining fields depend on that type.
       properties:
+        type:
+          type: string
+          enum: [qrScan]
+          description: The validation rule this evidence answers
+        scanCode:
+          type: string
+          description: |
+            `type: qrScan` only - the code read from the QR code on the door.
+            Valid only while it is the access point's current code; rotating the
+            code invalidates every sticker carrying the old one.
+      required:
+        - type
+
+    OpenSuccess:
+      type: object
+      description: The access point was opened
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/OpenResult"
+
+    OpenDenied:
+      type: object
+      description: The open attempt was refused and recorded in the access audit
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            blockingReasons:
+              type: array
+              description: |
+                Reasons why the attempt was refused, sorted by priority (most
+                relevant first), taken from the blocking reason vocabulary
+                shared with the access audit. Empty when the user may not
+                access the booking at all, as ownership has no own reason.
+
+                The evidence reasons: `evidence_missing` - a rule asked for
+                evidence the client did not send; `evidence_invalid` - evidence
+                was sent but does not hold, e.g. a scan code that was rotated
+                out; `evidence_rule_unavailable` - the rule cannot be evaluated
+                on this access point, which blocks the door instead of being
+                skipped and needs an administrator.
+              items:
+                type: string
+                enum:
+                  - rejected
+                  - not_committed
+                  - payment_required
+                  - authorization_revoked
+                  - outside_access_window
+                  - not_provisioned
+                  - locker_not_ready
+                  - no_remote_access
+                  - evidence_rule_unavailable
+                  - evidence_missing
+                  - evidence_invalid
+              example: ["evidence_missing"]
+
+    OpenFailed:
+      type: object
+      description: |
+        The attempt passed every check but the provider could not open the
+        door. The guest is told only the failure class - provider details stay
+        in the access audit and the admin view.
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          properties:
+            openFailure:
+              type: string
+              description: |
+                `temporary` - opening is not possible right now, trying again
+                in a few minutes may work (e.g. a rejected one-time password
+                or an offline lock). `configuration` - opening will not work
+                until the administration fixes the setup (e.g. a Salto KS IQ
+                that is not activated or a system user without the remote
+                right).
+              enum:
+                - temporary
+                - configuration
+              example: temporary
 
     ErrorResponse:
       type: object

@@ -535,6 +535,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {string} checkoutId - The checkout ID.
    * @param {Array} lockerInfo - The locker info.
    * @param {Array} customFieldValues - Checkout custom field values.
+   * @param {Array} accessInfo - The provisioned access-point info.
    * @param {Object} [cancellationPolicy] - Admin override for the booking's
    *   cancellation policy. When provided, it replaces the value aggregated
    *   from the underlying bookables.
@@ -575,6 +576,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     checkoutId,
     lockerInfo,
     customFieldValues,
+    accessInfo,
     cancellationPolicy,
     excludeBookingIds,
     capacityChecksOnly = false,
@@ -611,6 +613,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     this.internalComments = internalComments || "";
     this.rejectionReason = rejectionReason || "";
     this.lockerInfo = lockerInfo || null;
+    this.accessInfo = accessInfo || [];
     this.cancellationPolicyOverride = cancellationPolicy;
     this.excludeBookingIds = excludeBookingIds;
     this.capacityChecksOnly = Boolean(capacityChecksOnly);
@@ -671,6 +674,7 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     booking.assignedUserId = primaryEmailFromMail(this.email);
     booking.internalComments = this.internalComments;
     booking.rejectionReason = this.rejectionReason;
+    booking.accessInfo = this.accessInfo;
 
     if (
       this.cancellationPolicyOverride &&

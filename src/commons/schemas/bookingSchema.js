@@ -107,6 +107,7 @@ const bookingSchemaDefinition = {
   isRejected: { type: Boolean, default: false },
   location: { type: String, default: "" },
   lockerInfo: { type: [Object], default: [] },
+  accessInfo: { type: [Object], default: [] },
   mail: {
     type: String,
     required: true,

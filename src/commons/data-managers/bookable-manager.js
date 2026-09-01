@@ -267,6 +267,7 @@ class BookableManager {
           connectToField: "id",
           as: "allRelatedBookables",
           maxDepth: 100,
+          restrictSearchWithMatch: { tenantId: tenantId },
         },
       },
     ];
@@ -290,6 +291,57 @@ class BookableManager {
         BookableModel.applyIfbsProvider(doc);
         return doc.toEntity();
       });
+  }
+
+  /**
+   * Get all bookables of a tenant that have at least one active access point
+   * configured. Used as the (small) seed set for resolving which bookings
+   * grant an access authorization.
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} Bookables with active access points
+   */
+  static async getBookablesWithAccessPoints(tenantId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      "accessPointDetails.active": true,
+      "accessPointDetails.accessPointIds.0": { $exists: true },
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get all bookables of a tenant that expose a specific access point (by id)
+   * via their active access point configuration. Several bookables may
+   * reference the same access point, e.g. a main entrance shared by rooms.
+   * @param {string} tenantId Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<Bookable[]>} Bookables exposing the access point
+   */
+  static async getBookablesByAccessPointId(tenantId, accessPointId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      "accessPointDetails.active": true,
+      "accessPointDetails.accessPointIds": accessPointId,
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Remove an access point reference from every bookable of a tenant. Called
+   * when the access point itself is deleted, so no bookable is left pointing at
+   * an access point that no longer exists.
+   * @param {string} tenantId Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<void>}
+   */
+  static async detachAccessPoint(tenantId, accessPointId) {
+    await BookableModel.updateMany(
+      {
+        tenantId: tenantId,
+        "accessPointDetails.accessPointIds": accessPointId,
+      },
+      { $pull: { "accessPointDetails.accessPointIds": accessPointId } },
+    );
   }
 
   /**
@@ -352,7 +404,21 @@ class BookableManager {
 
     return Array.from(uniqueMap.values())
       .map((obj) => BookableModel.hydrate(obj))
-      .map((doc) => doc.toEntity());
+      .map((doc) => {
+        BookableModel.applyIfbsProvider(doc);
+        return doc.toEntity();
+      });
+  }
+
+  /**
+   * Get all parent bookables (recursive lookup).
+   * Alias of {@link BookableManager.getAncestorBookables}.
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of parent bookables
+   */
+  static async getAllParentBookables(id, tenantId) {
+    return BookableManager.getAncestorBookables(id, tenantId);
   }
 
   /**

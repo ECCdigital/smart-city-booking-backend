@@ -23,7 +23,7 @@ class LockerController {
 
       if (
         !(await LockerController._canRead(user.id, tenant)) &&
-        (await PermissionService._allowWriteAny(
+        (await PermissionService._allowUpdateAny(
           user.id,
           tenant,
           RolePermission.MANAGE_TENANTS,

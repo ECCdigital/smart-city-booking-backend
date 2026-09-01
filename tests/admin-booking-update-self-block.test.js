@@ -10,6 +10,7 @@ const EventManager = require("../src/commons/data-managers/event-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
 const LockerService = require("../src/commons/services/locker/locker-service");
+const AccessService = require("../src/commons/services/access/access-service");
 const BookingService = require("../src/commons/services/checkout/booking-service");
 
 const TENANT_ID = "tenant-1";
@@ -177,6 +178,9 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       handlePreReserve: sinon.stub().resolves(),
       getAvailableLocker: sinon.stub().resolves([]),
     });
+    sinon.stub(AccessService, "updateForBooking").resolves([]);
+    sinon.stub(AccessService, "provisionForBooking").resolves([]);
+    sinon.stub(AccessService, "revokeForBooking").resolves([]);
   });
 
   afterEach(() => {
@@ -423,6 +427,9 @@ describe("BookingService.createBooking — admin create never hard-fails checks"
       handlePreReserve: sinon.stub().resolves(),
       getAvailableLocker: sinon.stub().resolves([]),
     });
+    sinon.stub(AccessService, "updateForBooking").resolves([]);
+    sinon.stub(AccessService, "provisionForBooking").resolves([]);
+    sinon.stub(AccessService, "revokeForBooking").resolves([]);
   });
 
   afterEach(() => {

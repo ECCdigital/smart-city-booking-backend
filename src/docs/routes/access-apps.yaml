@@ -1,0 +1,221 @@
+# swagger/routes/access-apps.yaml
+
+/api/{tenant}/access-apps/salto-ks/iqs:
+  get:
+    tags:
+      - Access Apps
+    summary: List the Salto KS IQs with their activation state
+    description: |
+      The IQs of the tenant's Salto site, live from the Connect API, merged
+      with the local IQ activation state. This is what the IQ activation
+      wizard renders. Requires the `MANAGE_TENANTS` permission, like the
+      connection test.
+
+      An IQ without a local activation entry is `not_activated`. Secrets and
+      PINs never appear in the answer.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    responses:
+      "200":
+        description: The IQs of the site
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/SaltoKsIq"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing `MANAGE_TENANTS` permission
+      "500":
+        description: Could not list Salto KS IQs
+
+/api/{tenant}/access-apps/salto-ks/iqs/{iqId}/activation/start:
+  post:
+    tags:
+      - Access Apps
+    summary: Start the activation of an IQ
+    description: |
+      Fetches the single-shot first secret of the IQ (only possible while the
+      system user was never activated there), stores it encrypted, and then
+      asks Salto to mail the initial IQ-PIN to the system user's mailbox. The
+      secret is persisted before the mail is triggered, so a lost wizard can
+      be completed later with the mailed PIN.
+
+      Called again while the activation is `pending_pin`, only the PIN mail is
+      repeated - the first secret exists exactly once.
+
+      Requires the `MANAGE_TENANTS` permission.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/SaltoKsIqIdParam"
+    responses:
+      "200":
+        description: The activation is waiting for the mailed PIN
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaltoKsIqActivationState"
+      "400":
+        description: |
+          `salto_iq_activation_exists` - the IQ is already activated locally;
+          discard the activation first. `salto_iq_already_activated_at_salto` -
+          Salto refuses the first secret because the system user was activated
+          at this IQ before (e.g. via the Salto app); this cannot be healed
+          through the API - the IQ or user has to be reset on the Salto side.
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing `MANAGE_TENANTS` permission
+      "500":
+        description: Could not start Salto KS IQ activation
+
+/api/{tenant}/access-apps/salto-ks/iqs/{iqId}/activation/complete:
+  post:
+    tags:
+      - Access Apps
+    summary: Complete the activation with the mailed PIN
+    description: |
+      The admin enters the PIN Salto mailed to the system user's mailbox - the
+      one manual capture of the wizard. The backend activates the system user
+      at the IQ with a self-computed one-time password and `delta: "0000"`, so
+      the PIN stays the mailed one.
+
+      Requires the `MANAGE_TENANTS` permission.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/SaltoKsIqIdParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              pin:
+                type: string
+                description: The 4-digit IQ-PIN from the mail
+                example: "1234"
+            required:
+              - pin
+    responses:
+      "200":
+        description: The IQ is activated for remote open
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaltoKsIqActivationState"
+      "400":
+        description: |
+          `salto_iq_invalid_pin` - the pin is not four digits.
+          `salto_iq_activation_not_started` - there is no stored secret to
+          complete with. `salto_iq_activation_otp_rejected` - Salto refused
+          the one-time password; the activation stays `pending_pin` so the
+          step can be retried with the right PIN.
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing `MANAGE_TENANTS` permission
+      "500":
+        description: Could not complete Salto KS IQ activation
+
+/api/{tenant}/access-apps/salto-ks/iqs/{iqId}/activation:
+  delete:
+    tags:
+      - Access Apps
+    summary: Discard the local activation of an IQ
+    description: |
+      Removes the locally stored activation entry - the IQ is `not_activated`
+      again. Calls nothing at Salto. This is the first step of a
+      re-activation after an IQ reset, an IQ swap or a dead activation.
+
+      Requires the `MANAGE_TENANTS` permission.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/SaltoKsIqIdParam"
+    responses:
+      "200":
+        description: The local entry is gone
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaltoKsIqActivationState"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing `MANAGE_TENANTS` permission
+      "500":
+        description: Could not discard Salto KS IQ activation
+
+components:
+  schemas:
+    SaltoKsIq:
+      type: object
+      description: One IQ of the site - live Salto flags plus the local state
+      properties:
+        id:
+          type: string
+          description: Salto IQ UUID
+        customerReference:
+          type: string
+          description: The name of the IQ at Salto
+        otpEnabled:
+          type: boolean
+          description: |
+            Whether remote commands at this IQ demand a one-time password.
+            IQs without it need no activation for remote open.
+        online:
+          type: boolean
+          nullable: true
+        restoreRequired:
+          type: boolean
+          description: |
+            Salto reports the IQ was reset; a working activation flips to
+            `reactivation_required` when this is seen.
+        state:
+          type: string
+          description: The local activation state
+          enum:
+            - not_activated
+            - pending_pin
+            - activated
+            - degraded
+            - reactivation_required
+        activatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+          description: The last Salto error booked on this activation
+
+    SaltoKsIqActivationState:
+      type: object
+      properties:
+        iqId:
+          type: string
+        state:
+          type: string
+          enum:
+            - not_activated
+            - pending_pin
+            - activated
+
+  parameters:
+    SaltoKsIqIdParam:
+      name: iqId
+      in: path
+      required: true
+      description: Salto IQ UUID
+      schema:
+        type: string

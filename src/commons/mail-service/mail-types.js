@@ -117,6 +117,14 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
   },
+
+  ACCESS_PROVISIONED: {
+    templateName: "access-provisioned",
+    subject: (ctx) => `Zugangsdaten zu Ihrer Buchung im ${ctx.tenant.name}`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+  },
 });
 
 module.exports = { MailType };
