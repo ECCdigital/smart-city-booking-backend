@@ -157,9 +157,100 @@ class SaltoKsAccessApplication extends AccessApplication {
   }
 }
 
+function isEncrypted(value) {
+  return value?.iv != null && value?.data != null;
+}
+
+/**
+ * The iFBS bike box API of a tenant: one server, one API key, and the
+ * secret phrase the booking checksums are made with. `customerService` is
+ * what the tenant tells its customers about the boxes. Configured as a
+ * locker application until the locker fold migrated it.
+ */
+class IfbsAccessApplication extends AccessApplication {
+  constructor(params) {
+    super(params);
+    this.serverUrl = params.serverUrl || "";
+    this.apiKeyID = params.apiKeyID || "";
+    this.apiKey = params.apiKey || null;
+    this.secretPhrase = params.secretPhrase || "";
+    this.customerService = params.customerService || null;
+  }
+
+  decrypt() {
+    if (isEncrypted(this.apiKey)) {
+      this.apiKey = SecurityUtils.decrypt(this.apiKey);
+    }
+    if (isEncrypted(this.secretPhrase)) {
+      this.secretPhrase = SecurityUtils.decrypt(this.secretPhrase);
+    }
+  }
+
+  encrypt() {
+    if (this.apiKey && typeof this.apiKey === "string") {
+      this.apiKey = SecurityUtils.encrypt(this.apiKey);
+    }
+    if (this.secretPhrase && typeof this.secretPhrase === "string") {
+      this.secretPhrase = SecurityUtils.encrypt(this.secretPhrase);
+    }
+  }
+
+  static get Schema() {
+    return {
+      ...super.Schema,
+      serverUrl: { type: String, default: "" },
+      apiKeyID: { type: String, default: "" },
+      apiKey: { type: Object, default: null },
+      secretPhrase: { type: Object, default: "" },
+      customerService: { type: Object, default: null },
+    };
+  }
+}
+
+/**
+ * The Pareva locker system of a tenant: one server, one locker system
+ * (`lockerId`) whose sizes are the access points, spoken with basic auth.
+ * Configured as a locker application until the locker fold migrated it.
+ */
+class ParevaAccessApplication extends AccessApplication {
+  constructor(params) {
+    super(params);
+    this.serverUrl = params.serverUrl || "";
+    this.version = params.version || 1;
+    this.lockerId = params.lockerId || "";
+    this.user = params.user || "";
+    this.password = params.password || null;
+  }
+
+  decrypt() {
+    if (isEncrypted(this.password)) {
+      this.password = SecurityUtils.decrypt(this.password);
+    }
+  }
+
+  encrypt() {
+    if (this.password && typeof this.password === "string") {
+      this.password = SecurityUtils.encrypt(this.password);
+    }
+  }
+
+  static get Schema() {
+    return {
+      ...super.Schema,
+      serverUrl: { type: String, default: "" },
+      version: { type: Number, default: 1 },
+      lockerId: { type: String, default: "" },
+      user: { type: String, default: "" },
+      password: { type: Object, default: null },
+    };
+  }
+}
+
 const accessAppTypes = {
   nuki: NukiAccessApplication,
   "salto-ks": SaltoKsAccessApplication,
+  ifbs: IfbsAccessApplication,
+  pareva: ParevaAccessApplication,
 };
 
 function createAccessApplication(params) {
@@ -175,6 +266,8 @@ module.exports = {
   AccessApplication,
   NukiAccessApplication,
   SaltoKsAccessApplication,
+  IfbsAccessApplication,
+  ParevaAccessApplication,
   accessAppTypes,
   createAccessApplication,
   registerAccessAppType,

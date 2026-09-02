@@ -165,6 +165,12 @@ function createCollection(documents, indexes) {
       indexes.delete(name);
     },
 
+    async deleteMany(filter = {}) {
+      for (let i = documents.length - 1; i >= 0; i -= 1) {
+        if (matches(documents[i], filter)) documents.splice(i, 1);
+      }
+    },
+
     async drop() {
       documents.length = 0;
     },

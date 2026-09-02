@@ -1,15 +1,16 @@
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
-const { createClient } = require("../../locker/clients/locker-client-registry");
+const { createClient } = require("../clients/access-client-registry");
 const {
   AccessCapability,
   AccessPointMode,
 } = require("../../../entities/access/access-point");
 const { NotFoundError } = require("../../../../errors/BaseError");
 
-require("../../locker/clients");
+require("../clients");
 
 const PROVIDER_ID = "pareva";
+const APP_TYPE = "access";
 
 /**
  * Pareva locker systems: an access point is a size (product) of the
@@ -37,7 +38,7 @@ class ParevaAccessProvider extends AccessProvider {
     const rawApp = this._findActiveApplication(
       tenantData || (await TenantManager.getTenant(tenant)),
       PROVIDER_ID,
-      AccessProvider.lockerApplicationTypes,
+      [APP_TYPE],
     );
 
     if (!rawApp) {

@@ -11,7 +11,8 @@ const {
 } = require("../../entities/bookable/bookable");
 const CouponService = require("../coupon-service");
 const providerRegistry = require("./providers/checkout-provider-registry");
-const { createClient } = require("../locker/clients/locker-client-registry");
+const { createClient } = require("../access/clients/access-client-registry");
+require("../access/clients");
 const { CHECK_TYPES } = require("../../availability/checkout-check-types");
 const { CheckoutDataProvider } = require("../../availability/providers");
 const {
@@ -164,7 +165,8 @@ class ItemCheckoutService {
   }
 
   /**
-   * Resolves external providers from lockerDetails + tenant config.
+   * Resolves the external providers the bookable declares, with the
+   * tenant's application of each.
    * @returns {Promise<BaseCheckoutProvider[]>}
    */
   async _resolveExternalProviders() {

@@ -1039,28 +1039,42 @@ describe("access provider dialects: the adapters as they answer", () => {
       ]);
     });
 
-    for (const type of ["access", "locker"]) {
-      it(`builds its client from the tenant's iFBS application of type '${type}'`, async () => {
-        sinon.stub(TenantManager, "getTenant").resolves({
-          id: TENANT,
-          applications: [
-            {
-              type,
-              id: "ifbs",
-              active: true,
-              serverUrl: "https://ifbs.example.test/api",
-              apiKey: "key",
-              secretPhrase: "phrase",
-            },
-          ],
-        });
+    const ifbsApplication = (type) => ({
+      id: TENANT,
+      applications: [
+        {
+          type,
+          id: "ifbs",
+          active: true,
+          serverUrl: "https://ifbs.example.test/api",
+          apiKey: "key",
+          secretPhrase: "phrase",
+        },
+      ],
+    });
 
-        const client = await new IfbsAccessProvider()._getClient(TENANT);
+    it("builds its client from the tenant's iFBS access application", async () => {
+      sinon
+        .stub(TenantManager, "getTenant")
+        .resolves(ifbsApplication("access"));
 
-        expect(client).to.be.instanceOf(IfbsApiClient);
-        expect(client).to.include({ apiKey: "key", secretPhrase: "phrase" });
-      });
-    }
+      const client = await new IfbsAccessProvider()._getClient(TENANT);
+
+      expect(client).to.be.instanceOf(IfbsApiClient);
+      expect(client).to.include({ apiKey: "key", secretPhrase: "phrase" });
+    });
+
+    it("no longer looks under the locker application type the migration retired", async () => {
+      sinon
+        .stub(TenantManager, "getTenant")
+        .resolves(ifbsApplication("locker"));
+
+      await rejects(
+        new IfbsAccessProvider()._getClient(TENANT),
+        Error,
+        "ifbs_application_not_found",
+      );
+    });
 
     it("maps a missing iFBS application to a configuration AccessOpenError", async () => {
       sinon.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
@@ -1217,29 +1231,39 @@ describe("access provider dialects: the adapters as they answer", () => {
       ]);
     });
 
-    for (const type of ["access", "locker"]) {
-      it(`builds its client from the tenant's Pareva application of type '${type}'`, async () => {
-        TenantManager.getTenant.resolves({
-          id: TENANT,
-          applications: [
-            {
-              type,
-              id: "pareva",
-              active: true,
-              serverUrl: "https://pareva.example.test",
-              lockerId: "L1",
-              user: "user",
-              password: "password",
-            },
-          ],
-        });
+    const parevaApplication = (type) => ({
+      id: TENANT,
+      applications: [
+        {
+          type,
+          id: "pareva",
+          active: true,
+          serverUrl: "https://pareva.example.test",
+          lockerId: "L1",
+          user: "user",
+          password: "password",
+        },
+      ],
+    });
 
-        const client = await new ParevaAccessProvider()._getClient(TENANT);
+    it("builds its client from the tenant's Pareva access application", async () => {
+      TenantManager.getTenant.resolves(parevaApplication("access"));
 
-        expect(client).to.be.instanceOf(ParevaApiClient);
-        expect(client.lockerId).to.equal("L1");
-      });
-    }
+      const client = await new ParevaAccessProvider()._getClient(TENANT);
+
+      expect(client).to.be.instanceOf(ParevaApiClient);
+      expect(client.lockerId).to.equal("L1");
+    });
+
+    it("no longer looks under the locker application type the migration retired", async () => {
+      TenantManager.getTenant.resolves(parevaApplication("locker"));
+
+      await rejects(
+        new ParevaAccessProvider()._getClient(TENANT),
+        Error,
+        "pareva_application_not_found",
+      );
+    });
 
     it("throws pareva_application_not_found for a tenant without one", async () => {
       await rejects(

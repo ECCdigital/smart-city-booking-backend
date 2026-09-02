@@ -267,7 +267,6 @@ const bookableSchemaDefinition = {
     type: [new Schema(attachmentSchemaDefinition, { _id: false })],
     default: [],
   },
-  lockerDetails: { type: Object, default: { active: false, units: [] } },
   accessPointDetails: {
     type: Object,
     default: {
