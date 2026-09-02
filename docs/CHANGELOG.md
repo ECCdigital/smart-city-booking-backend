@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Changed
+
+- Access provider seam typed: `open`/`unlatch` answer an `OpenOutcome` (`{ state: "opened" | "pending", openProcessId }`), `getStatus` a `LockStatus` (`{ open, locked, doorOpen }`, each `true`/`false`/`null`), `close` nothing, and the new interface method `getOpenProgress(accessPoint, openProcessId)` (capability `getOpenProgress`, iFBS) an `OpenProgress`. `AccessService` no longer sniffs provider dialects and branches on `capabilities` only; the audit log stores the typed outcome instead of the raw provider answer. `open`/`unlatch` throw only `AccessOpenError` (`configuration` | `temporary`) at every provider now, so the access endpoints answer `openFailure` for NUKI and iFBS failures too instead of HTTP 500. HTTP response shapes are unchanged; a failed iFBS poll at `/open-status` now reports `open: null`, `confirmed: null` (unknown) instead of `false`. iFBS lockers no longer declare `close` - the iFBS API has no command for it and the call always failed
+
 ### Added
 
 - Access provider contract test against NUKI, Salto KS, iFBS and an in-memory test provider, plus characterization tests that pin today's provider dialects. Access providers accept an injected API client (`{ client }`) for tests; production behaviour is unchanged

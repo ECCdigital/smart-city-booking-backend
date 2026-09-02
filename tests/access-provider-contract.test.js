@@ -6,7 +6,6 @@
  *
  * Cases the Provider-Outcomes spec promises but which only hold after the
  * seam is typed are `it.skip` with the ticket that makes them true:
- * (2) OpenOutcome, LockStatus, OpenProgress and the error contract;
  * (3) Grant and Revocation. The spec lives with the effort's map, not in
  * the repo.
  */
@@ -79,10 +78,7 @@ function parameterNames(fn) {
  * Each implementation carries `today`: the facts about its dialect that the
  * active cases pin as they are now, and that the typed seam changes. They
  * choose between `it` and `it.skip` per implementation until then.
- *   openNamesProcess  the open answer carries an open process to poll
- *   mapsClientErrors  a broken client ends in an AccessOpenError
  *   revokeIdempotent  a second revoke of the same grant does not throw
- *   arityDrift        capabilities whose parameter count differs from the base
  */
 const IMPLEMENTATIONS = [
   {
@@ -109,10 +105,7 @@ const IMPLEMENTATIONS = [
       return new NukiAccessProvider({ client: brokenNukiApiClient() });
     },
     today: {
-      openNamesProcess: false,
-      mapsClientErrors: false,
       revokeIdempotent: false,
-      arityDrift: ["getSupportedModes", "unregisterWebhook"],
     },
   },
   {
@@ -142,10 +135,7 @@ const IMPLEMENTATIONS = [
       return new SaltoKsAccessProvider({ client: brokenSaltoKsApiClient() });
     },
     today: {
-      openNamesProcess: false,
-      mapsClientErrors: false,
       revokeIdempotent: false,
-      arityDrift: ["getSupportedModes", "unregisterWebhook", "parseWebhook"],
     },
   },
   {
@@ -170,10 +160,7 @@ const IMPLEMENTATIONS = [
       return new IfbsAccessProvider({ client: brokenIfbsApiClient() });
     },
     today: {
-      openNamesProcess: true,
-      mapsClientErrors: false,
       revokeIdempotent: false,
-      arityDrift: [],
     },
   },
   {
@@ -202,12 +189,7 @@ const IMPLEMENTATIONS = [
       return new InMemoryAccessProvider({ broken: true });
     },
     today: {
-      openNamesProcess: false,
-      mapsClientErrors: true,
       revokeIdempotent: true,
-      // The base class is what drifts here: it declares `getSupportedModes()`
-      // without the parameters every adapter takes.
-      arityDrift: ["getSupportedModes"],
     },
   },
 ];
@@ -244,19 +226,7 @@ for (const implementation of IMPLEMENTATIONS) {
       }
     });
 
-    it("drifts from the base class in parameter count exactly where it does today", function () {
-      const base = AccessProvider.prototype;
-      const drift = capabilities.filter(
-        (capability) =>
-          typeof base[capability] === "function" &&
-          parameterNames(base[capability]).length !==
-            parameterNames(provider[capability]).length,
-      );
-
-      assert.deepStrictEqual(drift, today.arityDrift);
-    });
-
-    it.skip("agrees with the base class in the parameter list of every capability (2)", function () {
+    it("agrees with the base class in the parameter list of every capability", function () {
       const base = AccessProvider.prototype;
       for (const capability of capabilities) {
         assert.deepStrictEqual(
@@ -310,27 +280,7 @@ for (const implementation of IMPLEMENTATIONS) {
       },
     );
 
-    when("open")("opens and answers with a plain object", async function () {
-      const outcome = await provider.open(accessPoint, bookingContext);
-
-      assert.strictEqual(typeof outcome, "object");
-      assert.notStrictEqual(outcome, null);
-    });
-
-    when("open")(
-      "names an open process only where the provider opens asynchronously",
-      async function () {
-        const outcome = await provider.open(accessPoint, bookingContext);
-
-        if (today.openNamesProcess) {
-          assert.ok(outcome.openProcessId != null);
-        } else {
-          assert.strictEqual(outcome.openProcessId ?? null, null);
-        }
-      },
-    );
-
-    it.skip("answers an open with an OpenOutcome (2)", async function () {
+    when("open")("answers an open with an OpenOutcome", async function () {
       const outcome = await provider.open(accessPoint, bookingContext);
 
       assert.deepStrictEqual(Object.keys(outcome).sort(), [
@@ -342,40 +292,78 @@ for (const implementation of IMPLEMENTATIONS) {
         outcome.state === "pending",
         outcome.openProcessId !== null,
       );
-    });
-
-    when("getStatus")("reads the status without throwing", async function () {
-      const status = await provider.getStatus(accessPoint, bookingContext);
-
-      assert.strictEqual(typeof status, "object");
-    });
-
-    it.skip("answers the status as a LockStatus of booleans or null (2)", async function () {
-      const status = await provider.getStatus(accessPoint, bookingContext);
-
-      assert.deepStrictEqual(Object.keys(status).sort(), [
-        "doorOpen",
-        "locked",
-        "open",
-      ]);
-      for (const value of Object.values(status)) {
-        assert.ok(value === null || typeof value === "boolean");
+      if (outcome.openProcessId !== null) {
+        assert.strictEqual(typeof outcome.openProcessId, "string");
       }
     });
 
-    it.skip("answers the progress of an open process as an OpenProgress (2)", async function () {
-      const outcome = await provider.open(accessPoint, bookingContext);
-      const progress = await provider.getOpenProgress(
-        accessPoint,
-        outcome.openProcessId,
-      );
+    when("unlatch")(
+      "answers an unlatch with an OpenOutcome",
+      async function () {
+        const outcome = await provider.unlatch(accessPoint, bookingContext);
 
-      assert.deepStrictEqual(Object.keys(progress).sort(), [
-        "confirmed",
-        "confirmedAt",
-        "errorCode",
-        "errorMessage",
-      ]);
+        assert.deepStrictEqual(Object.keys(outcome).sort(), [
+          "openProcessId",
+          "state",
+        ]);
+        assert.strictEqual(
+          outcome.state === "pending",
+          outcome.openProcessId !== null,
+        );
+      },
+    );
+
+    when("getStatus")(
+      "answers the status as a LockStatus of booleans or null",
+      async function () {
+        const status = await provider.getStatus(accessPoint, bookingContext);
+
+        assert.deepStrictEqual(Object.keys(status).sort(), [
+          "doorOpen",
+          "locked",
+          "open",
+        ]);
+        for (const value of Object.values(status)) {
+          assert.ok(value === null || typeof value === "boolean");
+        }
+      },
+    );
+
+    when("getOpenProgress")(
+      "answers the progress of an open process as an OpenProgress",
+      async function () {
+        const outcome = await provider.open(accessPoint, bookingContext);
+        const progress = await provider.getOpenProgress(
+          accessPoint,
+          outcome.openProcessId,
+        );
+
+        assert.deepStrictEqual(Object.keys(progress).sort(), [
+          "confirmed",
+          "confirmedAt",
+          "errorCode",
+          "errorMessage",
+        ]);
+        assert.ok([true, false, null].includes(progress.confirmed));
+      },
+    );
+
+    when("getOpenProgress")(
+      "answers a failed poll with the reason instead of throwing",
+      async function () {
+        const broken = implementation.createBroken();
+
+        const progress = await broken.getOpenProgress(accessPoint, "1");
+
+        assert.strictEqual(progress.confirmed, null);
+        assert.strictEqual(typeof progress.errorMessage, "string");
+      },
+    );
+
+    when("close")("closes and answers nothing", async function () {
+      const answer = await provider.close(accessPoint, bookingContext);
+
+      assert.strictEqual(answer, undefined);
     });
 
     when("grantAuthorization")(
@@ -462,18 +450,36 @@ for (const implementation of IMPLEMENTATIONS) {
       assert.ok([true, false, null].includes(revocation.principalRemoved));
     });
 
-    (declares("open") && today.mapsClientErrors ? it : it.skip)(
-      "fails an open on a broken client with an AccessOpenError, never a raw error (2)",
+    when("open")(
+      "fails an open on a broken client with an AccessOpenError, never a raw error",
       async function () {
         const broken = implementation.createBroken();
 
         await assert.rejects(
           () => broken.open(accessPoint, bookingContext),
           (error) => {
-            assert.ok(error instanceof AccessOpenError);
+            assert.ok(
+              error instanceof AccessOpenError,
+              `expected an AccessOpenError, got ${error.constructor.name}: ${error.message}`,
+            );
             assert.ok(
               ["configuration", "temporary"].includes(error.failureClass),
             );
+            return true;
+          },
+        );
+      },
+    );
+
+    when("unlatch")(
+      "fails an unlatch on a broken client with an AccessOpenError, never a raw error",
+      async function () {
+        const broken = implementation.createBroken();
+
+        await assert.rejects(
+          () => broken.unlatch(accessPoint, bookingContext),
+          (error) => {
+            assert.ok(error instanceof AccessOpenError);
             return true;
           },
         );

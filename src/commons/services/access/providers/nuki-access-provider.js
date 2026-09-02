@@ -7,6 +7,8 @@ const { NukiApiClient, NUKI_ACTIONS } = require("../clients/nuki-api-client");
 const {
   deriveSupportedModes,
 } = require("../../../entities/access/access-point");
+const { AccessOpenError } = require("../../../../errors/AccessOpenError");
+const { NotFoundError } = require("../../../../errors/BaseError");
 
 require("../clients");
 
@@ -19,6 +21,13 @@ const logger = bunyan.createLogger({
 });
 
 class NukiAccessProvider extends AccessProvider {
+  /**
+   * @private
+   * @param {string} tenant Tenant the client acts for
+   * @returns {Promise<Object>} The tenant's Nuki API client
+   * @throws {NotFoundError} `nuki_application_not_found` when the tenant
+   *   has no active Nuki application
+   */
   async _getClient(tenant) {
     if (this._client) {
       return this._client;
@@ -30,12 +39,34 @@ class NukiAccessProvider extends AccessProvider {
     );
 
     if (!rawApp) {
-      throw new Error(
-        `No active access application '${PROVIDER_ID}' found for tenant '${tenant}'`,
-      );
+      throw new NotFoundError("nuki_application_not_found", { tenant });
     }
 
     return createClient(rawApp);
+  }
+
+  /**
+   * @private
+   * The client for an open attempt, whose failures are the guest's to see
+   * as a failure class: no active Nuki application is a configuration
+   * failure, a tenant that cannot be read right now a temporary one.
+   *
+   * @param {string} tenant Tenant the door belongs to
+   * @returns {Promise<Object>} The tenant's Nuki API client
+   * @throws {AccessOpenError}
+   */
+  async _getClientForOpen(tenant) {
+    try {
+      return await this._getClient(tenant);
+    } catch (err) {
+      throw err instanceof NotFoundError
+        ? AccessOpenError.configuration(
+            `No active access application '${PROVIDER_ID}' found for tenant '${tenant}'`,
+          )
+        : AccessOpenError.temporary(
+            `Nuki application of tenant '${tenant}' could not be read: ${err.message}`,
+          );
+    }
   }
 
   /**
@@ -49,25 +80,20 @@ class NukiAccessProvider extends AccessProvider {
    * cannot pull its latch is asked to unlock right away, so nobody waits out a
    * failed action in front of the door.
    *
+   * Nuki carries the action out before it answers, so the outcome is
+   * always `opened` and there is no process to poll.
+   *
    * @param {Object} accessPoint The access point to open
    * @param {Object} bookingContext The booking the door is opened for
-   * @returns {Promise<Object>} The provider's answer to the action
+   * @returns {Promise<import("./access-provider").OpenOutcome>}
    */
   async open(accessPoint, bookingContext) {
-    const client = await this._getClient(bookingContext.tenant);
+    const client = await this._getClientForOpen(bookingContext.tenant);
     const action = (await this._hasLatch(client, accessPoint))
       ? NUKI_ACTIONS.UNLATCH
       : NUKI_ACTIONS.UNLOCK;
-    const providerResponse = await client.executeAction(
-      accessPoint.externalId,
-      action,
-    );
 
-    return {
-      success: true,
-      state: "open",
-      providerResponse,
-    };
+    return this._executeOpenAction(client, accessPoint, action);
   }
 
   /**
@@ -98,38 +124,84 @@ class NukiAccessProvider extends AccessProvider {
 
   async close(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
-    const providerResponse = await client.executeAction(
-      accessPoint.externalId,
-      NUKI_ACTIONS.LOCK,
-    );
-
-    return {
-      success: true,
-      state: "closed",
-      providerResponse,
-    };
+    await client.executeAction(accessPoint.externalId, NUKI_ACTIONS.LOCK);
   }
 
-  // Pulls the latch so the door physically opens, instead of only releasing
-  // the lock (unlock). Requires a Nuki actor that is mounted on a door with a
-  // latch (i.e. not an Opener/Box).
+  /**
+   * Pulls the latch so the door physically opens, instead of only releasing
+   * the lock (unlock). Requires a Nuki actor that is mounted on a door with
+   * a latch (i.e. not an Opener/Box).
+   *
+   * @param {Object} accessPoint The access point to unlatch
+   * @param {Object} bookingContext The booking the door is unlatched for
+   * @returns {Promise<import("./access-provider").OpenOutcome>}
+   */
   async unlatch(accessPoint, bookingContext) {
-    const client = await this._getClient(bookingContext.tenant);
-    const providerResponse = await client.executeAction(
-      accessPoint.externalId,
-      NUKI_ACTIONS.UNLATCH,
-    );
+    const client = await this._getClientForOpen(bookingContext.tenant);
 
-    return {
-      success: true,
-      state: "open",
-      providerResponse,
-    };
+    return this._executeOpenAction(client, accessPoint, NUKI_ACTIONS.UNLATCH);
   }
 
+  /**
+   * @private
+   * Sends the action that opens the door and turns whatever Nuki answers
+   * into the failure class the guest may see: a smartlock Nuki does not
+   * know or a token it refuses are configuration, everything else - the
+   * lock offline, Nuki down, the network - is temporary.
+   *
+   * @param {Object} client The tenant's Nuki API client
+   * @param {Object} accessPoint The access point being opened
+   * @param {number} action The Nuki action to send
+   * @returns {Promise<import("./access-provider").OpenOutcome>}
+   * @throws {AccessOpenError}
+   */
+  async _executeOpenAction(client, accessPoint, action) {
+    try {
+      await client.executeAction(accessPoint.externalId, action);
+    } catch (err) {
+      throw this._mapOpenError(err, accessPoint);
+    }
+
+    return { state: "opened", openProcessId: null };
+  }
+
+  /** @private */
+  _mapOpenError(err, accessPoint) {
+    const status = err?.response?.status;
+    const detail = err.message || String(err);
+
+    if (status === 404) {
+      return AccessOpenError.configuration(
+        `Nuki does not know smartlock '${accessPoint.externalId}': ${detail}`,
+      );
+    }
+
+    if (status === 401 || status === 403) {
+      return AccessOpenError.configuration(
+        `Nuki refused the action on smartlock '${accessPoint.externalId}' - check the API token: ${detail}`,
+      );
+    }
+
+    return AccessOpenError.temporary(
+      `Nuki open of smartlock '${accessPoint.externalId}' failed: ${detail}`,
+    );
+  }
+
+  /**
+   * The lock's state as the Nuki Web API reports it, reduced to the three
+   * questions of a LockStatus: `open` is whether the lock currently grants
+   * access (unlocked, unlatched, lock'n'go), `locked` whether the bolt is
+   * thrown, `doorOpen` what the door sensor says where there is one.
+   *
+   * @param {Object} accessPoint The access point to read
+   * @param {Object} bookingContext The booking it is read for
+   * @returns {Promise<import("./access-provider").LockStatus>}
+   */
   async getStatus(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
-    return client.getSmartlockState(accessPoint.externalId);
+    const state = await client.getSmartlockState(accessPoint.externalId);
+
+    return { open: state.open, locked: state.locked, doorOpen: state.doorOpen };
   }
 
   async grantAuthorization(accessPoint, bookingContext) {
@@ -242,13 +314,13 @@ class NukiAccessProvider extends AccessProvider {
     return client.registerNotification(callbackUrl);
   }
 
-  async unregisterWebhook(tenant, notificationId) {
-    if (!notificationId) {
+  async unregisterWebhook(tenant, id) {
+    if (!id) {
       return { success: true, skipped: true, reason: "missing notificationId" };
     }
 
     const client = await this._getClient(tenant);
-    return client.unregisterNotification(notificationId);
+    return client.unregisterNotification(id);
   }
 
   parseWebhook(rawPayload, _headers = {}) {

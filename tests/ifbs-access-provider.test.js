@@ -1,3 +1,4 @@
+const assert = require("assert");
 const { expect } = require("chai");
 const sinon = require("sinon");
 
@@ -18,6 +19,8 @@ describe("IfbsAccessProvider.getStatus", () => {
     accessTo: 2_000,
   };
 
+  const unknown = { open: null, locked: null, doorOpen: null };
+
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     provider = new IfbsAccessProvider();
@@ -32,24 +35,14 @@ describe("IfbsAccessProvider.getStatus", () => {
     sandbox.restore();
   });
 
-  it("returns usage window status when no open process is known", async () => {
-    sandbox.useFakeTimers({ now: 1_500 });
-
+  it("knows nothing without an open process, and does not ask iFBS", async () => {
     const status = await provider.getStatus({}, bookingContext);
 
-    expect(status).to.deep.include({
-      bookingId: "booking-17",
-      usageState: "active",
-      state: "active",
-      open: null,
-      locked: null,
-      doorOpen: null,
-    });
+    expect(status).to.deep.equal(unknown);
     expect(client.monitorOpenBox.called).to.equal(false);
   });
 
-  it("polls monitorOpenBox when lastOpenBoxId is present", async () => {
-    sandbox.useFakeTimers({ now: 1_500 });
+  it("polls monitorOpenBox when lastOpenBoxId is present and answers a confirmed open as open", async () => {
     client.monitorOpenBox.resolves({
       OpenBox_ID: "9",
       BoxControlReceived: "true",
@@ -65,20 +58,25 @@ describe("IfbsAccessProvider.getStatus", () => {
 
     expect(client.monitorOpenBox.calledOnce).to.equal(true);
     expect(client.monitorOpenBox.firstCall.args).to.deep.equal(["9"]);
-    expect(status).to.deep.include({
-      openProcessId: "9",
-      confirmed: true,
-      confirmedAt: "2018-11-21 13:42:40",
-      boxControlReceived: true,
-      receivedAt: "2018-11-21 13:42:38",
-      open: true,
-      state: "open",
-      usageState: "active",
-    });
+    expect(status).to.deep.equal({ open: true, locked: false, doorOpen: null });
   });
 
-  it("falls back to usage window when the open process no longer exists", async () => {
-    sandbox.useFakeTimers({ now: 3_000 });
+  it("answers an open process the box has not confirmed as unknown", async () => {
+    client.monitorOpenBox.resolves({
+      OpenBox_ID: "9",
+      BoxControlReceived: "true",
+      BoxControlConfirmed: "false",
+    });
+
+    const status = await provider.getStatus(
+      {},
+      { ...bookingContext, lastOpenBoxId: "9" },
+    );
+
+    expect(status).to.deep.equal(unknown);
+  });
+
+  it("answers unknown when the open process no longer exists", async () => {
     client.monitorOpenBox.rejects(
       new IfbsApiError("monitorOpenBox.php", {
         ErrNo: 1802,
@@ -91,10 +89,20 @@ describe("IfbsAccessProvider.getStatus", () => {
       { ...bookingContext, lastOpenBoxId: "9" },
     );
 
-    expect(status).to.deep.include({
-      bookingId: "booking-17",
-      usageState: "expired",
-      state: "expired",
-    });
+    expect(status).to.deep.equal(unknown);
+  });
+
+  it("lets any other iFBS failure through", async () => {
+    client.monitorOpenBox.rejects(
+      new IfbsApiError("monitorOpenBox.php", {
+        ErrNo: 1000,
+        ErrMsg: "Internal error",
+      }),
+    );
+
+    await assert.rejects(
+      provider.getStatus({}, { ...bookingContext, lastOpenBoxId: "9" }),
+      IfbsApiError,
+    );
   });
 });

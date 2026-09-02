@@ -8,6 +8,7 @@ const {
 const SaltoKsIqActivationService = require("../salto-ks-iq-activation-service");
 const { AccessPointMode } = require("../../../entities/access/access-point");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
+const { NotFoundError } = require("../../../../errors/BaseError");
 
 require("../clients");
 
@@ -47,6 +48,12 @@ class SaltoKsAccessProvider extends AccessProvider {
    * from the caller - and at most one OTP is spent per attempt: a rejection
    * is booked and reported, not retried with a fresh computation.
    *
+   * Salto opens the lock before it answers, so the outcome is always
+   * `opened` and there is no process to poll.
+   *
+   * @param {Object} accessPoint The access point to open
+   * @param {Object} bookingContext The booking the door is opened for
+   * @returns {Promise<import("./access-provider").OpenOutcome>}
    * @throws {AccessOpenError} With the failure class the guest may see;
    *   the message carries the Salto detail for the audit log.
    */
@@ -54,6 +61,27 @@ class SaltoKsAccessProvider extends AccessProvider {
     const tenant = bookingContext.tenant;
     const lockId = String(accessPoint.externalId);
 
+    try {
+      return await this._open(tenant, lockId);
+    } catch (err) {
+      if (err instanceof AccessOpenError) {
+        throw err;
+      }
+      throw this._mapClientError(err, tenant, lockId);
+    }
+  }
+
+  /**
+   * @private
+   * The open attempt itself; every failure of it is classified by the
+   * caller. Only the locking call has a mapping of its own, because only
+   * there an OTP can be rejected and has to be booked on the IQ.
+   *
+   * @param {string} tenant Tenant the lock belongs to
+   * @param {string} lockId The Salto id of the lock
+   * @returns {Promise<import("./access-provider").OpenOutcome>}
+   */
+  async _open(tenant, lockId) {
     // A lock whose IQ is already known can be refused - backoff after
     // otp_blocked, missing activation - without any Salto call (§4/§7 of the
     // spec). When this passes, the attempt continues on live data.
@@ -105,9 +133,8 @@ class SaltoKsAccessProvider extends AccessProvider {
       ? await SaltoKsIqActivationService.resolveOtpForOpen(tenant, iq)
       : { otp: null };
 
-    let providerResponse;
     try {
-      providerResponse = await client.openLock(lockId, { otp });
+      await client.openLock(lockId, { otp });
     } catch (err) {
       throw await this._mapOpenError(err, tenant, iq);
     }
@@ -116,11 +143,7 @@ class SaltoKsAccessProvider extends AccessProvider {
       await SaltoKsIqActivationService.recordOpenSuccess(tenant, iq.id);
     }
 
-    return {
-      success: true,
-      state: "open",
-      providerResponse,
-    };
+    return { state: "opened", openProcessId: null };
   }
 
   /**
@@ -155,6 +178,43 @@ class SaltoKsAccessProvider extends AccessProvider {
     return AccessOpenError.temporary(`Salto KS open failed: ${detail}`);
   }
 
+  /**
+   * @private
+   * Everything that fails on the way to the locking call - reading the
+   * tenant's application, listing locks and IQs - as the failure class the
+   * guest may see: no Salto application and a refused system user are
+   * configuration, the rest is temporary.
+   */
+  _mapClientError(err, tenant, lockId) {
+    const detail = err.message || String(err);
+
+    if (err instanceof NotFoundError) {
+      return AccessOpenError.configuration(
+        `No active Salto KS application found for tenant '${tenant}': ${detail}`,
+      );
+    }
+
+    if (classifySaltoError(err) === "forbidden") {
+      return AccessOpenError.configuration(
+        `Salto KS refused to read lock '${lockId}' - check the system user's rights: ${detail}`,
+      );
+    }
+
+    return AccessOpenError.temporary(
+      `Salto KS could not be read for lock '${lockId}': ${detail}`,
+    );
+  }
+
+  /**
+   * The lock's state from the site's lock listing: `locked_state` is the
+   * only thing Salto says about the bolt, and it says nothing about the
+   * door itself. A lock Salto does not list, or lists without a state, is
+   * unknown on every count.
+   *
+   * @param {Object} accessPoint The access point to read
+   * @param {Object} bookingContext The booking it is read for
+   * @returns {Promise<import("./access-provider").LockStatus>}
+   */
   async getStatus(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
     const locks = await client.getLocks();
@@ -165,22 +225,15 @@ class SaltoKsAccessProvider extends AccessProvider {
 
     const lockedState = lock?.locked_state ?? null;
 
-    return {
-      lockId: String(accessPoint.externalId),
-      name: lock?.customer_reference || "",
-      online: lock?.online ?? null,
-      state:
-        lockedState === "locked"
-          ? "locked"
-          : lockedState === "unlocked"
-            ? "unlocked"
-            : null,
-      lockedState,
-      batteryLevel: lock?.battery_level ?? null,
-      batteryCritical: lock?.battery_level === "critical" ? true : null,
-      leftOpenAlarm: lock?.left_open_alarm ?? null,
-      intrusionAlarm: lock?.intrusion_alarm ?? null,
-    };
+    if (lockedState === "locked") {
+      return { open: false, locked: true, doorOpen: null };
+    }
+
+    if (lockedState === "unlocked") {
+      return { open: true, locked: false, doorOpen: null };
+    }
+
+    return { open: null, locked: null, doorOpen: null };
   }
 
   async grantAuthorization(accessPoint, bookingContext) {
@@ -389,16 +442,16 @@ class SaltoKsAccessProvider extends AccessProvider {
     return client.subscribeNotifications(callbackUrl);
   }
 
-  async unregisterWebhook(tenant, subscriptionId) {
-    if (!subscriptionId) {
+  async unregisterWebhook(tenant, id) {
+    if (!id) {
       return { success: true, skipped: true, reason: "missing subscriptionId" };
     }
 
     const client = await this._getClient(tenant);
-    return client.unsubscribeNotifications(subscriptionId);
+    return client.unsubscribeNotifications(id);
   }
 
-  parseWebhook(rawPayload) {
+  parseWebhook(rawPayload, _headers = {}) {
     const payload =
       typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
 

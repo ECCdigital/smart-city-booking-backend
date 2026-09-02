@@ -1,11 +1,13 @@
 /**
- * Characterization of the access provider seam as it is today: the three
- * dialects NUKI, Salto KS and iFBS answer in, and what `AccessService` makes
- * of them - the sniffing in `_resolveOpen`/`_resolveLocked`, the fields that
- * land in `accessInfo`, how revoke failures are treated. Nothing here is the
- * target contract; every expectation is the observed behaviour, pinned so
- * that typing the seam (Provider-Outcomes tickets 2 and 3) changes it on
- * purpose, never by accident.
+ * Characterization of the access provider seam: how NUKI, Salto KS and iFBS
+ * answer, and what `AccessService` makes of it. The result-bearing methods
+ * - open, unlatch, close, getStatus, getOpenProgress - answer in the typed
+ * shapes of `access-provider.js` and every open failure is an
+ * `AccessOpenError` (Provider-Outcomes ticket 2); the expectations on those
+ * are the contract. Grants and revocations still answer in each provider's
+ * own dialect, and what lands in `accessInfo` follows it - those
+ * expectations are the observed behaviour, pinned so that ticket 3 changes
+ * it on purpose, never by accident.
  *
  * The adapters run for real over fake API clients that replace only the
  * HTTP transport (`tests/helpers/fake-*-api-client.js`). The target contract
@@ -48,6 +50,7 @@ const { AccessOpenError } = require("../src/errors/AccessOpenError");
 const {
   FakeNukiApiClient,
   brokenNukiApiClient,
+  nukiHttpError,
 } = require("./helpers/fake-nuki-api-client");
 const {
   FakeSaltoKsApiClient,
@@ -132,6 +135,16 @@ function rejects(promise, ErrorClass, message) {
   });
 }
 
+/** Asserts a rejection with an AccessOpenError of the given failure class. */
+function rejectsOpen(promise, failureClass, message = "") {
+  return assert.rejects(promise, (error) => {
+    expect(error).to.be.instanceOf(AccessOpenError);
+    expect(error.failureClass).to.equal(failureClass);
+    expect(error.message).to.include(message);
+    return true;
+  });
+}
+
 /** Asserts a rejection with a client error the adapter did not map. */
 function rejectsRaw(promise, check) {
   return assert.rejects(promise, (error) => {
@@ -141,7 +154,7 @@ function rejectsRaw(promise, check) {
   });
 }
 
-describe("access provider dialects: the adapters as they answer today", () => {
+describe("access provider dialects: the adapters as they answer", () => {
   let clients;
 
   beforeEach(() => {
@@ -155,44 +168,37 @@ describe("access provider dialects: the adapters as they answer today", () => {
       provider = new NukiAccessProvider({ client: clients.nuki });
     });
 
-    it("answers an open with a fixed success and the raw provider response", async () => {
+    it("answers an open as opened, with no process to poll", async () => {
       const outcome = await provider.open(NUKI_DOOR, doorContext());
 
-      expect(outcome).to.deep.equal({
-        success: true,
-        state: "open",
-        providerResponse: "",
-      });
+      expect(outcome).to.deep.equal({ state: "opened", openProcessId: null });
       expect(clients.nuki.actions).to.deep.equal([
         { smartlockId: "1001", action: NUKI_ACTIONS.UNLATCH },
       ]);
     });
 
-    it("answers the status as the client's own smartlock state, unmapped", async () => {
+    it("answers the status as a LockStatus read off the smartlock state", async () => {
       const status = await provider.getStatus(NUKI_DOOR, doorContext());
 
-      expect(Object.keys(status).sort()).to.deep.equal([
-        "batteryCharge",
-        "batteryCharging",
-        "batteryCritical",
-        "doorOpen",
-        "doorSensorState",
-        "doorStateCode",
-        "lockState",
-        "lockStateCode",
-        "locked",
-        "name",
-        "open",
-        "providerResponse",
-        "serverState",
-        "smartlockId",
-        "state",
-      ]);
-      expect(status).to.include({
-        smartlockId: "1001",
-        locked: true,
+      expect(status).to.deep.equal({
         open: false,
-        lockState: "locked",
+        locked: true,
+        doorOpen: null,
+      });
+    });
+
+    it("answers a smartlock without a state as unknown on every count", async () => {
+      provider = new NukiAccessProvider({
+        client: new FakeNukiApiClient({
+          smartlocks: [nukiSmartlock({ state: undefined })],
+        }),
+      });
+
+      const status = await provider.getStatus(NUKI_DOOR, doorContext());
+
+      expect(status).to.deep.equal({
+        open: null,
+        locked: null,
         doorOpen: null,
       });
     });
@@ -256,12 +262,41 @@ describe("access provider dialects: the adapters as they answer today", () => {
       );
     });
 
-    it("lets a broken client's error escape raw from an open", async () => {
+    it("maps a broken client to a temporary AccessOpenError on an open", async () => {
       const broken = new NukiAccessProvider({ client: brokenNukiApiClient() });
 
-      await rejectsRaw(broken.open(NUKI_DOOR, doorContext()), (err) =>
-        expect(err.response.status).to.equal(500),
+      await rejectsOpen(broken.open(NUKI_DOOR, doorContext()), "temporary");
+    });
+
+    it("maps a smartlock Nuki does not know to a configuration AccessOpenError", async () => {
+      await rejectsOpen(
+        provider.open({ ...NUKI_DOOR, externalId: "9999" }, doorContext()),
+        "configuration",
+        "does not know smartlock '9999'",
       );
+    });
+
+    it("maps a refused token to a configuration AccessOpenError", async () => {
+      const broken = new NukiAccessProvider({
+        client: brokenNukiApiClient(nukiHttpError(401)),
+      });
+
+      await rejectsOpen(broken.open(NUKI_DOOR, doorContext()), "configuration");
+    });
+
+    it("maps a missing Nuki application to a configuration AccessOpenError", async () => {
+      sinon.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
+      const unconfigured = new NukiAccessProvider();
+
+      try {
+        await rejectsOpen(
+          unconfigured.open(NUKI_DOOR, doorContext()),
+          "configuration",
+          "No active access application 'nuki'",
+        );
+      } finally {
+        sinon.restore();
+      }
     });
   });
 
@@ -352,29 +387,47 @@ describe("access provider dialects: the adapters as they answer today", () => {
       provider = new SaltoKsAccessProvider({ client: clients["salto-ks"] });
     });
 
-    it("answers an open with a fixed success and the raw provider response", async () => {
+    it("answers an open as opened, with no process to poll", async () => {
       const outcome = await provider.open(SALTO_DOOR, doorContext());
 
-      expect(outcome).to.deep.equal({
-        success: true,
-        state: "open",
-        providerResponse: saltoLock({ locked_state: "unlocked" }),
-      });
+      expect(outcome).to.deep.equal({ state: "opened", openProcessId: null });
+      // An IQ without OTP: the lock is opened without one.
+      expect(clients["salto-ks"].openings).to.deep.equal([
+        { lockId: SALTO_LOCK_ID, otp: undefined },
+      ]);
     });
 
-    it("answers the status as a rich object with a locked/unlocked/null state", async () => {
-      const status = await provider.getStatus(SALTO_DOOR, doorContext());
+    const lockedStates = [
+      { lockedState: "locked", expected: { open: false, locked: true } },
+      { lockedState: "unlocked", expected: { open: true, locked: false } },
+      { lockedState: undefined, expected: { open: null, locked: null } },
+    ];
+
+    for (const { lockedState, expected } of lockedStates) {
+      it(`answers a lock in locked_state '${lockedState}' as a LockStatus`, async () => {
+        provider = new SaltoKsAccessProvider({
+          client: new FakeSaltoKsApiClient({
+            locks: [saltoLock({ locked_state: lockedState })],
+            iqs: [saltoIq()],
+          }),
+        });
+
+        const status = await provider.getStatus(SALTO_DOOR, doorContext());
+
+        expect(status).to.deep.equal({ ...expected, doorOpen: null });
+      });
+    }
+
+    it("answers a lock Salto does not list as unknown on every count", async () => {
+      const status = await provider.getStatus(
+        { ...SALTO_DOOR, externalId: "no-such-lock" },
+        doorContext(),
+      );
 
       expect(status).to.deep.equal({
-        lockId: SALTO_LOCK_ID,
-        name: "Tür 01",
-        online: true,
-        state: "locked",
-        lockedState: "locked",
-        batteryLevel: null,
-        batteryCritical: null,
-        leftOpenAlarm: null,
-        intrusionAlarm: null,
+        open: null,
+        locked: null,
+        doorOpen: null,
       });
     });
 
@@ -497,13 +550,35 @@ describe("access provider dialects: the adapters as they answer today", () => {
       }
     });
 
-    it("lets a client failure before the open call escape raw", async () => {
+    it("maps a client failure before the open call to a temporary AccessOpenError", async () => {
       const broken = new SaltoKsAccessProvider({
         client: brokenSaltoKsApiClient(),
       });
 
-      await rejectsRaw(broken.open(SALTO_DOOR, doorContext()), (err) =>
-        expect(err.response.status).to.equal(500),
+      await rejectsOpen(broken.open(SALTO_DOOR, doorContext()), "temporary");
+    });
+
+    it("maps a refused lock listing to a configuration AccessOpenError", async () => {
+      const broken = new SaltoKsAccessProvider({
+        client: brokenSaltoKsApiClient(
+          saltoHttpError(403, { Message: "Forbidden" }),
+        ),
+      });
+
+      await rejectsOpen(
+        broken.open(SALTO_DOOR, doorContext()),
+        "configuration",
+      );
+    });
+
+    it("maps a lock Salto does not list to a configuration AccessOpenError", async () => {
+      await rejectsOpen(
+        provider.open(
+          { ...SALTO_DOOR, externalId: "no-such-lock" },
+          doorContext(),
+        ),
+        "configuration",
+        "does not list lock",
       );
     });
 
@@ -536,26 +611,23 @@ describe("access provider dialects: the adapters as they answer today", () => {
       provider = new IfbsAccessProvider({ client: clients.ifbs });
     });
 
-    it("answers an open with the booking and open-box process ids only", async () => {
+    it("answers an open as pending, with the open-box process to poll", async () => {
       const outcome = await provider.open(IFBS_LOCKER, lockerContext());
 
-      expect(outcome).to.deep.equal({
-        processId: "booking-17",
-        openProcessId: "1",
-      });
+      expect(outcome).to.deep.equal({ state: "pending", openProcessId: "1" });
     });
 
-    it("cannot close: the client has no closeBox, although close is a declared capability", async () => {
-      expect(IfbsAccessProvider.capabilities).to.include("close");
+    it("declares no close: iFBS has no command to close a box", async () => {
+      expect(IfbsAccessProvider.capabilities).not.to.include("close");
 
       await rejects(
         provider.close(IFBS_LOCKER, lockerContext()),
-        TypeError,
-        "client.closeBox is not a function",
+        Error,
+        "close() is not supported by",
       );
     });
 
-    it("answers the status of a known open process as a mapped open-box status", async () => {
+    it("answers a confirmed open process as open and unlocked", async () => {
       await provider.open(IFBS_LOCKER, lockerContext());
       clients.ifbs.confirm("1");
 
@@ -565,75 +637,130 @@ describe("access provider dialects: the adapters as they answer today", () => {
       });
 
       expect(status).to.deep.equal({
-        openProcessId: "1",
-        confirmed: true,
-        confirmedAt: "2026-09-02 10:00:02",
         open: true,
-        state: "open",
-        boxControlReceived: true,
-        receivedAt: "2026-09-02 10:00:00",
-        bookingId: "booking-17",
-        usageState: "active",
+        locked: false,
+        doorOpen: null,
       });
     });
 
-    it("answers the status without a known process as the usage window", async () => {
-      const context = lockerContext();
+    it("answers an open process the box has not confirmed as unknown", async () => {
+      await provider.open(IFBS_LOCKER, lockerContext());
 
-      const status = await provider.getStatus(IFBS_LOCKER, context);
+      const status = await provider.getStatus(IFBS_LOCKER, {
+        ...lockerContext(),
+        lastOpenBoxId: "1",
+      });
 
       expect(status).to.deep.equal({
-        bookingId: "booking-17",
-        usageState: "active",
-        accessFrom: context.accessFrom,
-        accessTo: context.accessTo,
         open: null,
         locked: null,
         doorOpen: null,
-        state: "active",
       });
     });
 
-    it("answers the progress of an open process off the interface, via getOpenStatus(tenant, id)", async () => {
-      await provider.open(IFBS_LOCKER, lockerContext());
+    it("answers an open process iFBS no longer knows as unknown", async () => {
+      const status = await provider.getStatus(IFBS_LOCKER, {
+        ...lockerContext(),
+        lastOpenBoxId: "99",
+      });
 
-      const progress = await provider.getOpenStatus(TENANT, "1");
+      expect(status).to.deep.equal({
+        open: null,
+        locked: null,
+        doorOpen: null,
+      });
+    });
+
+    it("answers the status without a known process as unknown, without asking iFBS", async () => {
+      const broken = new IfbsAccessProvider({ client: brokenIfbsApiClient() });
+
+      const status = await broken.getStatus(IFBS_LOCKER, lockerContext());
+
+      expect(status).to.deep.equal({
+        open: null,
+        locked: null,
+        doorOpen: null,
+      });
+    });
+
+    it("answers the progress of an open process as an OpenProgress", async () => {
+      const outcome = await provider.open(IFBS_LOCKER, lockerContext());
+
+      const progress = await provider.getOpenProgress(
+        IFBS_LOCKER,
+        outcome.openProcessId,
+      );
 
       expect(progress).to.deep.equal({
-        openProcessId: "1",
         confirmed: true,
         confirmedAt: "2026-09-02 10:00:02",
-        open: true,
-        state: "open",
-        waitTime: 2,
+        errorCode: null,
+        errorMessage: null,
       });
     });
 
-    it("answers a failed poll with the iFBS error number and message", async () => {
-      const progress = await provider.getOpenStatus(TENANT, "99");
+    it("answers a box that has not confirmed yet as not confirmed", async () => {
+      clients.ifbs.confirmsOnWait = false;
+      const outcome = await provider.open(IFBS_LOCKER, lockerContext());
+
+      const progress = await provider.getOpenProgress(
+        IFBS_LOCKER,
+        outcome.openProcessId,
+      );
 
       expect(progress).to.deep.equal({
-        openProcessId: "99",
         confirmed: false,
         confirmedAt: null,
-        open: null,
-        state: "pending",
+        errorCode: null,
+        errorMessage: null,
+      });
+    });
+
+    it("answers a failed poll with confirmed unknown and the iFBS error number and message", async () => {
+      const progress = await provider.getOpenProgress(IFBS_LOCKER, "99");
+
+      expect(progress).to.deep.equal({
+        confirmed: null,
+        confirmedAt: null,
         errorCode: ERR_NO_WAIT_PROCESS_NOT_FOUND,
         errorMessage: "OpenBox process not found",
       });
     });
 
-    it("lets a broken client's error escape raw from an open", async () => {
+    it("answers an unreachable API on a poll as confirmed unknown, with the network error", async () => {
       const broken = new IfbsAccessProvider({ client: brokenIfbsApiClient() });
 
-      await rejectsRaw(broken.open(IFBS_LOCKER, lockerContext()), (err) =>
-        expect(err.code).to.equal("ECONNREFUSED"),
+      const progress = await broken.getOpenProgress(IFBS_LOCKER, "1");
+
+      expect(progress).to.deep.equal({
+        confirmed: null,
+        confirmedAt: null,
+        errorCode: null,
+        errorMessage: "connect ECONNREFUSED",
+      });
+    });
+
+    it("maps a broken client to a temporary AccessOpenError on an open", async () => {
+      const broken = new IfbsAccessProvider({ client: brokenIfbsApiClient() });
+
+      await rejectsOpen(
+        broken.open(IFBS_LOCKER, lockerContext()),
+        "temporary",
+        "ECONNREFUSED",
+      );
+    });
+
+    it("maps an iFBS refusal to a temporary AccessOpenError carrying the error number", async () => {
+      await rejectsOpen(
+        provider.open(IFBS_LOCKER, doorContext({ externalBookingId: "gone" })),
+        "temporary",
+        "(1701): Booking not found",
       );
     });
   });
 });
 
-describe("access provider dialects: what AccessService makes of them today", () => {
+describe("access provider dialects: what AccessService makes of them", () => {
   let sandbox;
   let clients;
 
@@ -753,7 +880,7 @@ describe("access provider dialects: what AccessService makes of them today", () 
   }
 
   describe("open", () => {
-    it("reads no open process out of a NUKI open and audits the raw answer", async () => {
+    it("answers a NUKI open with no process to poll and audits the outcome", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
 
       const outcome = await AccessService.open(
@@ -768,14 +895,13 @@ describe("access provider dialects: what AccessService makes of them today", () 
         data: { openProcessId: null },
       });
       expect(loggedPayload("open").payload).to.deep.equal({
-        success: true,
-        state: "open",
-        providerResponse: "",
+        state: "opened",
+        openProcessId: null,
         validatedEvidence: [],
       });
     });
 
-    it("reads the open-box process out of an iFBS open, as a string", async () => {
+    it("answers an iFBS open with the open-box process to poll and audits the outcome", async () => {
       stubBooking(lockerBooking());
 
       const outcome = await AccessService.open(
@@ -790,13 +916,13 @@ describe("access provider dialects: what AccessService makes of them today", () 
         data: { openProcessId: "1" },
       });
       expect(loggedPayload("open").payload).to.deep.equal({
-        processId: "booking-17",
+        state: "pending",
         openProcessId: "1",
         validatedEvidence: [],
       });
     });
 
-    it("reads no open process out of a Salto open and audits the raw answer", async () => {
+    it("answers a Salto open with no process to poll and audits the outcome", async () => {
       stubBooking(createBooking(), [SALTO_DOOR]);
 
       const outcome = await AccessService.open(
@@ -810,13 +936,11 @@ describe("access provider dialects: what AccessService makes of them today", () 
         success: true,
         data: { openProcessId: null },
       });
-      expect(loggedPayload("open").payload).to.include({
-        success: true,
-        state: "open",
+      expect(loggedPayload("open").payload).to.deep.equal({
+        state: "opened",
+        openProcessId: null,
+        validatedEvidence: [],
       });
-      expect(loggedPayload("open").payload.providerResponse).to.deep.equal(
-        saltoLock({ locked_state: "unlocked" }),
-      );
     });
 
     it("opens through the in-memory provider like any other", async () => {
@@ -836,19 +960,19 @@ describe("access provider dialects: what AccessService makes of them today", () 
       expect(loggedPayload("open")).to.include({ result: "success" });
     });
 
-    it("rethrows a raw NUKI client error after auditing the failure", async () => {
+    it("rethrows NUKI's classified AccessOpenError after auditing the failure", async () => {
       clients.nuki = brokenNukiApiClient();
       registerFakeProviders();
       stubBooking(createBooking(), [NUKI_DOOR]);
 
-      await rejectsRaw(
+      await rejectsOpen(
         AccessService.open(TENANT, "booking-1", "door-1", "user-1"),
-        (err) => expect(err.response.status).to.equal(500),
+        "temporary",
       );
-      expect(loggedPayload("open")).to.include({
-        result: "failure",
-        errorMessage: "Request failed with status code 500",
-      });
+      expect(loggedPayload("open")).to.include({ result: "failure" });
+      expect(loggedPayload("open").errorMessage).to.include(
+        "Request failed with status code 500",
+      );
     });
 
     it("rethrows Salto's classified AccessOpenError after auditing the failure", async () => {
@@ -872,7 +996,7 @@ describe("access provider dialects: what AccessService makes of them today", () 
   });
 
   describe("getStatus", () => {
-    it("takes NUKI's booleans as they are", async () => {
+    it("answers NUKI's LockStatus with its source, and audits the LockStatus", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
 
       const status = await AccessService.getStatus(
@@ -887,9 +1011,10 @@ describe("access provider dialects: what AccessService makes of them today", () 
         doorOpen: null,
         statusSource: "provider_status",
       });
-      expect(loggedPayload("status").payload).to.include({
-        lockState: "locked",
-        smartlockId: "1001",
+      expect(loggedPayload("status").payload).to.deep.equal({
+        open: false,
+        locked: true,
+        doorOpen: null,
       });
     });
 
@@ -921,7 +1046,7 @@ describe("access provider dialects: what AccessService makes of them today", () 
     ];
 
     for (const { lockedState, expected } of saltoStates) {
-      it(`sniffs Salto's state '${lockedState}' into open/locked`, async () => {
+      it(`answers Salto's locked_state '${lockedState}' as the adapter maps it`, async () => {
         clients = createClients({
           saltoLocks: [saltoLock({ locked_state: lockedState })],
         });
@@ -953,9 +1078,10 @@ describe("access provider dialects: what AccessService makes of them today", () 
         doorOpen: null,
         statusSource: "provider_status",
       });
-      expect(loggedPayload("status").payload).to.include({
-        usageState: "active",
-        state: "active",
+      expect(loggedPayload("status").payload).to.deep.equal({
+        open: null,
+        locked: null,
+        doorOpen: null,
       });
     });
 
@@ -993,7 +1119,7 @@ describe("access provider dialects: what AccessService makes of them today", () 
   });
 
   describe("getOpenStatus", () => {
-    it("polls the iFBS open process when the provider has getOpenStatus", async () => {
+    it("polls the iFBS open process where the provider declares getOpenProgress", async () => {
       stubBooking(lockerBooking());
       await clients.ifbs.openBox("booking-17");
 
@@ -1015,7 +1141,7 @@ describe("access provider dialects: what AccessService makes of them today", () 
       });
     });
 
-    it("reports a failed iFBS poll as not open, with the error", async () => {
+    it("reports a failed iFBS poll as unknown, with the error", async () => {
       stubBooking(lockerBooking());
 
       const status = await AccessService.getOpenStatus(
@@ -1026,17 +1152,17 @@ describe("access provider dialects: what AccessService makes of them today", () 
       );
 
       expect(status).to.deep.equal({
-        open: false,
+        open: null,
         locked: null,
         doorOpen: null,
         statusSource: "open_process",
-        confirmed: false,
+        confirmed: null,
         errorCode: ERR_NO_WAIT_PROCESS_NOT_FOUND,
         errorMessage: "OpenBox process not found",
       });
     });
 
-    it("ignores an open process id where the provider has no getOpenStatus", async () => {
+    it("ignores an open process id where the provider declares no getOpenProgress", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
 
       const status = await AccessService.getOpenStatus(
@@ -1116,46 +1242,42 @@ describe("access provider dialects: what AccessService makes of them today", () 
     });
   });
 
-  describe("the status sniffing in _resolveOpen/_resolveLocked", () => {
-    // Ticket 2 deletes both helpers together with this table; until then it
-    // is the complete word on how a provider answer becomes open/locked.
-    const answers = [
-      { given: { open: true, locked: false }, open: true, locked: false },
-      { given: { open: false, locked: true }, open: false, locked: true },
-      { given: { open: true }, open: true, locked: false },
-      { given: { open: false }, open: false, locked: null },
-      { given: { confirmed: true }, open: true, locked: false },
-      { given: { confirmed: false }, open: false, locked: null },
-      { given: { state: "open" }, open: true, locked: false },
-      { given: { state: "unlocked" }, open: true, locked: false },
-      { given: { state: "closed" }, open: false, locked: true },
-      { given: { state: "locked" }, open: false, locked: true },
-      { given: { state: "active" }, open: null, locked: null },
-      { given: { locked: true }, open: null, locked: true },
-      { given: { open: true, state: "locked" }, open: true, locked: true },
-      { given: {}, open: null, locked: null },
-    ];
+  describe("the projection of an open's progress onto the status endpoint", () => {
+    it("reports an iFBS open the box has not confirmed yet as not open, unknown whether locked", async () => {
+      clients.ifbs.confirmsOnWait = false;
+      stubBooking(lockerBooking());
+      await clients.ifbs.openBox("booking-17");
 
-    for (const { given, open, locked } of answers) {
-      it(`reads ${JSON.stringify(given)} as open ${open}, locked ${locked}`, () => {
-        expect(
-          AccessService._toStatusResponse(given, "provider_status"),
-        ).to.deep.equal({
-          open,
-          locked,
-          doorOpen: null,
-          statusSource: "provider_status",
-        });
+      const status = await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        "7",
+        "1",
+      );
+
+      expect(status).to.deep.equal({
+        open: false,
+        locked: null,
+        doorOpen: null,
+        statusSource: "open_process",
+        confirmed: false,
+        errorCode: null,
+        errorMessage: null,
       });
-    }
+    });
 
-    it("takes doorOpen only as a boolean", () => {
-      expect(
-        AccessService._toStatusResponse({ doorOpen: "open" }).doorOpen,
-      ).to.equal(null);
-      expect(
-        AccessService._toStatusResponse({ doorOpen: true }).doorOpen,
-      ).to.equal(true);
+    it("audits the OpenProgress of a polled process, and the event behind a last-event answer", async () => {
+      stubBooking(lockerBooking());
+      await clients.ifbs.openBox("booking-17");
+
+      await AccessService.getOpenStatus(TENANT, "booking-1", "7", "1");
+
+      expect(loggedPayload("status").payload).to.deep.equal({
+        confirmed: true,
+        confirmedAt: "2026-09-02 10:00:02",
+        errorCode: null,
+        errorMessage: null,
+      });
     });
   });
 
@@ -1196,13 +1318,13 @@ describe("access provider dialects: what AccessService makes of them today", () 
       expect(loggedPayload("close")).to.include({ result: "failure" });
     });
 
-    it("fails on an iFBS locker with a TypeError, although iFBS declares close", async () => {
+    it("fails on an iFBS locker, which declares no close", async () => {
       stubBooking(lockerBooking());
 
       await rejects(
         AccessService.close(TENANT, "booking-1", "7", "user-1"),
-        TypeError,
-        "client.closeBox is not a function",
+        Error,
+        "close() is not supported by",
       );
       expect(loggedPayload("close")).to.include({ result: "failure" });
     });

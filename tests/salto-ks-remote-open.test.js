@@ -121,7 +121,7 @@ describe("SaltoKsAccessProvider.open", () => {
         IQ_ID,
       ),
     ).to.be.true;
-    expect(result.success).to.be.true;
+    expect(result).to.deep.equal({ state: "opened", openProcessId: null });
   });
 
   it("never takes an OTP from the caller", async () => {
