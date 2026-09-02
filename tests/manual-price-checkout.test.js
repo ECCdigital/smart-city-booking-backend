@@ -154,25 +154,71 @@ describe("manualPriceEur on a bookable item", function () {
   });
 });
 
-describe("BundleCheckoutService strips client-supplied manual prices", function () {
-  it("removes manualPriceEur from the items under SELF_SERVICE", function () {
-    const items = [{ bookableId: "room-a", amount: 1, manualPriceEur: 0 }];
-    new BundleCheckoutService(
-      { tenant: TENANT_ID, bookableItems: items },
-      CheckoutPolicy.SELF_SERVICE,
-    );
-
-    assert.strictEqual("manualPriceEur" in items[0], false);
+describe("a manual price never reaches a self-service booking", function () {
+  beforeEach(function () {
+    sinon
+      .stub(MembershipManager, "getMembershipByTenantAndUserID")
+      .resolves({ userId: "kunde@example.com", roles: [] });
+    sinon
+      .stub(MembershipManager, "getMembershipsByTenantAndRoles")
+      .resolves([]);
+    sinon.stub(BookableManager, "getBookable").resolves(perDayBookable());
+    sinon
+      .stub(BundleCheckoutService.prototype, "generateBookingReference")
+      .resolves("TEST-REF");
+    sinon.stub(LockerService, "getInstance").returns({
+      getAvailableLocker: async () => [],
+    });
+    // Availability checks are covered by their own tests; here only the
+    // pricing and the shape of the prepared booking matter.
+    sinon.stub(ItemCheckoutService.prototype, "checkAll").resolves(true);
   });
 
-  it("keeps manualPriceEur on the items under ADMIN_MANUAL", function () {
-    const items = [{ bookableId: "room-a", amount: 1, manualPriceEur: 42 }];
-    new BundleCheckoutService(
-      { tenant: TENANT_ID, bookableItems: items },
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  function bundle(policy, adminOverrides, items) {
+    return new BundleCheckoutService(
+      {
+        user: "kunde@example.com",
+        tenant: TENANT_ID,
+        timeBegin: TIME_BEGIN,
+        timeEnd: TIME_END,
+        bookableItems: items,
+        email: "kunde@example.com",
+      },
+      policy,
+      adminOverrides,
+    );
+  }
+
+  const callerItems = () => [
+    { bookableId: "room-a", amount: 1, manualPriceEur: 0 },
+  ];
+
+  it("prepares a SELF_SERVICE booking at the category price without the field, leaving the caller's items untouched", async function () {
+    const items = callerItems();
+    const service = bundle(CheckoutPolicy.SELF_SERVICE, undefined, items);
+
+    const booking = await service.prepareBooking();
+
+    assert.strictEqual(booking.priceEur, 5);
+    assert.strictEqual("manualPriceEur" in booking.bookableItems[0], false);
+    assert.strictEqual(items[0].manualPriceEur, 0);
+  });
+
+  it("prepares an ADMIN_MANUAL booking at the manual price and keeps the field", async function () {
+    const service = bundle(
       CheckoutPolicy.ADMIN_MANUAL,
+      { isCommitted: false, isPayed: false, isRejected: false },
+      callerItems(),
     );
 
-    assert.strictEqual(items[0].manualPriceEur, 42);
+    const booking = await service.prepareBooking();
+
+    assert.strictEqual(booking.priceEur, 0);
+    assert.strictEqual(booking.bookableItems[0].manualPriceEur, 0);
   });
 });
 
