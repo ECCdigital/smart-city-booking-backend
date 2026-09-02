@@ -171,7 +171,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
   let TenantManager;
   let EventManager;
   let OpeningHoursManager;
-  let LockerService;
+  let AccessService;
   let WorkflowService;
 
   before(function () {
@@ -183,7 +183,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
     TenantManager = require("../src/commons/data-managers/tenant-manager");
     EventManager = require("../src/commons/data-managers/event-manager");
     OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
-    LockerService = require("../src/commons/services/locker/locker-service");
+    AccessService = require("../src/commons/services/access/access-service");
     WorkflowService = require("../src/commons/services/workflow/workflow-service");
   });
 
@@ -230,11 +230,8 @@ describe("BookingService.createBooking — manual create ignores booking discoun
     sinon.stub(TenantManager, "getTenant").resolves(null);
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
-    sinon.stub(LockerService, "getInstance").returns({
-      getAvailableLocker: sinon.stub().resolves([]),
-      handleCreate: sinon.stub().resolves(),
-      handlePreReserve: sinon.stub().resolves(),
-    });
+    sinon.stub(AccessService, "holdForBooking").resolves([]);
+    sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(CouponService, "incrementCouponUsage").resolves();
     sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
 

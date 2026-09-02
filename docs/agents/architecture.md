@@ -76,7 +76,7 @@ Controllers should stay thin — delegate to services and managers.
 
 - **Payment:** GiroCockpit, PM Payment (provider pattern in `src/commons/services/payment/`)
 - **File storage:** Nextcloud/WebDAV (`docs/nextcloud.md`)
-- **Lockers:** IFBS, Pareva (adapters in `src/commons/services/access/providers/`, clients in `src/commons/services/access/clients/`; the checkout still runs through `src/commons/services/locker/` until the locker fold completes)
+- **Lockers:** IFBS, Pareva (adapters in `src/commons/services/access/providers/`, clients in `src/commons/services/access/clients/`; the checkout runs through `AccessService`, only the `/locker` configuration routes still use `src/commons/services/locker/` until the locker fold's migration)
 - **SSO:** Keycloak, Azure MSAL
 
 ## Version lines

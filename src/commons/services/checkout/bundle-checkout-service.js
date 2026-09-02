@@ -5,7 +5,6 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { COUPON_TYPE } = require("../../entities/coupon/coupon");
-const LockerService = require("../locker/locker-service");
 const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
 
 /**
@@ -52,8 +51,8 @@ class BundleCheckoutService {
    * @param {boolean} [adminOverrides.isPayed]
    * @param {boolean} [adminOverrides.isRejected]
    * @param {string} [adminOverrides.paymentMethod]
-   * @param {Array} [adminOverrides.lockerInfo] - Reused when non-empty.
-   * @param {Array} [adminOverrides.accessInfo]
+   * @param {Array} [adminOverrides.accessInfo] - The access of the booking
+   *   being amended, doors and compartments alike, so it is carried over.
    * @param {Object} [adminOverrides.cancellationPolicy] - Replaces the policy
    *   aggregated from the bookables.
    */
@@ -375,30 +374,6 @@ class BundleCheckoutService {
     return this.adminOverrides.paymentMethod ?? "";
   }
 
-  async getLockerInfo() {
-    if (this.adminOverrides.lockerInfo?.length > 0) {
-      return this.adminOverrides.lockerInfo;
-    }
-    let lockerInfo = [];
-    try {
-      for (const bookableItem of this.bookableItems) {
-        const lockerServiceInstance = LockerService.getInstance();
-        lockerInfo = lockerInfo.concat(
-          await lockerServiceInstance.getAvailableLocker(
-            bookableItem.bookableId,
-            this.tenant,
-            this.timeBegin,
-            this.timeEnd,
-            bookableItem.amount,
-          ),
-        );
-      }
-    } catch (error) {
-      throw new Error(error);
-    }
-    return lockerInfo;
-  }
-
   /**
    * Aggregate the cancellation policy of all bookable items in the bundle.
    * Restrictive rule: every item must allow user cancellation, otherwise the
@@ -552,7 +527,6 @@ class BundleCheckoutService {
       isRejected: this.performRejected(),
       paymentProvider: this.paymentProvider,
       paymentMethod: this.setPaymentMethod(),
-      lockerInfo: await this.getLockerInfo(),
       customFieldValues: this.customFieldValues,
       cancellationPolicy,
     };

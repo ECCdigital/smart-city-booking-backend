@@ -65,6 +65,9 @@
  * @property {string|null} externalPrincipalId
  * @property {string|null} secret
  * @property {string|null} [compartment] Locker providers only
+ * @property {Object|null} [metadata] What the provider said about the
+ *   compartment beyond its handle and number, for the platform to show and
+ *   never to act on - iFBS: `{ boxId, price }`. Locker providers only
  */
 
 /**
@@ -90,6 +93,8 @@
  *   ms; `null` where it does not lapse
  * @property {string|null} compartment The compartment held, where the
  *   provider chose one already
+ * @property {Object|null} [metadata] What the provider said about the
+ *   compartment beyond that, as at the {@link Grant}
  */
 
 /**
@@ -197,6 +202,21 @@ class AccessProvider {
    *   has none that is active
    */
   _findActiveApplication(tenantData, providerId, types) {
+    return AccessProvider.findActiveApplication(tenantData, providerId, types);
+  }
+
+  /**
+   * The active application of a provider in a tenant, looked up under the
+   * given application types in order - the one lookup the adapters and the
+   * service share.
+   *
+   * @param {Object|null} tenantData The tenant as `TenantManager` answers it
+   * @param {string} providerId The provider's id, e.g. `ifbs`
+   * @param {string[]} types Application types to look under, in order
+   * @returns {Object|null} The raw application, or `null` when the tenant
+   *   has none that is active
+   */
+  static findActiveApplication(tenantData, providerId, types) {
     const applications = tenantData?.applications || [];
 
     for (const type of types) {

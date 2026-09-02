@@ -161,6 +161,10 @@ class IfbsAccessProvider extends AccessProvider {
       holdId: String(box.Booking_ID),
       expiresAt: heldAt + HOLD_TTL_MS,
       compartment: String(box.nummer),
+      metadata: {
+        boxId: box.Box_ID != null ? String(box.Box_ID) : null,
+        price: box.price ?? null,
+      },
     };
   }
 
@@ -182,8 +186,9 @@ class IfbsAccessProvider extends AccessProvider {
    * that lapsed - or none at all - is replaced by a fresh `getBox` first.
    * The grant is the iFBS `Booking_ID` and names the box as the
    * compartment - the one of the hold it consumed, or of the box it took
-   * afresh; iFBS keeps no principal and hands out no secret - the box opens
-   * through the API.
+   * afresh, whose id and price come along as `metadata` (a stored hold
+   * carries none: the entry keeps what its hold said); iFBS keeps no
+   * principal and hands out no secret - the box opens through the API.
    *
    * @param {Object} accessPoint The location
    * @param {Object} bookingContext The booking, with the `hold` to consume
@@ -216,6 +221,7 @@ class IfbsAccessProvider extends AccessProvider {
       externalPrincipalId: null,
       secret: null,
       compartment: hold.compartment,
+      metadata: hold.metadata ?? null,
     };
   }
 

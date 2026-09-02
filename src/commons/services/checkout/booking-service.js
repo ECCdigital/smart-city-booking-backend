@@ -9,7 +9,6 @@ const { v4: uuidV4 } = require("uuid");
 const { BundleCheckoutService } = require("./bundle-checkout-service");
 const ReceiptService = require("../payment/receipt-service");
 const InvoiceService = require("../payment/invoice-service");
-const LockerService = require("../locker/locker-service");
 const AccessService = require("../access/access-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
@@ -290,24 +289,19 @@ class BookingService {
         `${tenantId}, cid ${checkoutId} -- Booking ${booking.id} stored by user ${user?.id}`,
       );
 
+      // The compartments of the booking's locker systems are held first
+      // - the hold checks their capacity and fails where none is left -
+      // and, for a booking paid at once, granted right after with the
+      // doors. Either failing rolls the booking back: it never existed.
       try {
-        const lockerServiceInstance = LockerService.getInstance();
+        await AccessService.holdForBooking(booking.tenantId, booking.id);
 
         if (booking.isCommitted && booking.isPayed) {
-          await lockerServiceInstance.handleCreate(
-            booking.tenantId,
-            booking.id,
-          );
           await AccessService.provisionForBooking(booking.tenantId, booking.id);
-        } else {
-          await lockerServiceInstance.handlePreReserve(
-            booking.tenantId,
-            booking.id,
-          );
         }
       } catch (err) {
         logger.error(
-          `${tenantId}, cid ${checkoutId} -- Locker reservation failed ` +
+          `${tenantId}, cid ${checkoutId} -- Access setup failed ` +
             `for booking ${booking.id}, rolling back: ${err.message}`,
         );
 
@@ -561,8 +555,6 @@ class BookingService {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
 
-    const lockerServiceInstance = LockerService.getInstance();
-    await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
     await AccessService.revokeForBooking(booking.tenantId, booking.id);
 
     // Documents go first: a booking document that outlived its booking would
@@ -642,7 +634,6 @@ class BookingService {
           isPayed: isPayed,
           isRejected: isRejected,
           paymentMethod: updatedBooking.paymentMethod,
-          lockerInfo: oldBooking.lockerInfo,
           accessInfo: oldBooking.accessInfo,
           cancellationPolicy: updatedBooking.cancellationPolicy,
         },
@@ -679,8 +670,6 @@ class BookingService {
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
 
-      const lockerServiceInstance = LockerService.getInstance();
-
       if (onCommit) {
         await BookingService.commitBooking(tenantId, booking);
       }
@@ -706,11 +695,6 @@ class BookingService {
       }
 
       if (booking.isCommitted && booking.isPayed && !onUnreject) {
-        await lockerServiceInstance.handleUpdate(
-          updatedBooking.tenantId,
-          oldBooking,
-          booking,
-        );
         if (!booking.isRejected) {
           await AccessService.updateForBooking(
             updatedBooking.tenantId,
@@ -719,23 +703,24 @@ class BookingService {
           );
         }
       } else if (onUnreject) {
-        await lockerServiceInstance.handleCreate(
-          updatedBooking.tenantId,
-          booking.id,
-        );
         await AccessService.provisionForBooking(
           updatedBooking.tenantId,
           booking.id,
         );
       } else {
-        await lockerServiceInstance.handlePreReserve(
-          updatedBooking.tenantId,
-          booking.id,
-        );
+        // Not paid (any more): whatever was granted is taken back, and the
+        // compartments are held for what the booking books now - unless it
+        // is rejected, which claims nothing.
         await AccessService.revokeForBooking(
           updatedBooking.tenantId,
           booking.id,
         );
+        if (!booking.isRejected) {
+          await AccessService.holdForBooking(
+            updatedBooking.tenantId,
+            booking.id,
+          );
+        }
       }
 
       return booking;
@@ -783,11 +768,6 @@ class BookingService {
 
       if (isNoPaymentRequired(originBooking)) {
         try {
-          const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(
-            originBooking.tenantId,
-            originBooking.id,
-          );
           await AccessService.provisionForBooking(
             originBooking.tenantId,
             originBooking.id,
@@ -795,7 +775,7 @@ class BookingService {
         } catch (err) {
           await BookingManager.storeBooking(snapshotBooking);
           throw new BaseError("booking_commit_failed", {
-            message: `Error during locker creation: ${err.message}`,
+            message: `Error during access setup: ${err.message}`,
           });
         }
 
@@ -890,11 +870,6 @@ class BookingService {
     if (bookings.every((booking) => isNoPaymentRequired(booking))) {
       for (const booking of bookings) {
         try {
-          const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(
-            booking.tenantId,
-            booking.id,
-          );
           await AccessService.provisionForBooking(booking.tenantId, booking.id);
         } catch (err) {
           logger.error(err);
@@ -977,9 +952,9 @@ class BookingService {
         );
       }
 
+      // A grant that fails now leaves the booking paid: the failure stands
+      // in the audit log for the administration to take up.
       try {
-        const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCreate(booking.tenantId, booking.id);
         await AccessService.provisionForBooking(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
@@ -1017,11 +992,6 @@ class BookingService {
         logger.info(`${tenantId} -- booking ${booking.id} set to payed`);
 
         try {
-          const lockerServiceInstance = LockerService.getInstance();
-          await lockerServiceInstance.handleCreate(
-            booking.tenantId,
-            booking.id,
-          );
           await AccessService.provisionForBooking(booking.tenantId, booking.id);
         } catch (err) {
           logger.error(err);
@@ -1300,8 +1270,6 @@ class BookingService {
       }
 
       try {
-        const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
         await AccessService.revokeForBooking(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);
@@ -1452,8 +1420,6 @@ class BookingService {
       await BookingManager.storeBooking(booking);
 
       try {
-        const lockerServiceInstance = LockerService.getInstance();
-        await lockerServiceInstance.handleCancel(booking.tenantId, booking.id);
         await AccessService.revokeForBooking(booking.tenantId, booking.id);
       } catch (err) {
         logger.error(err);

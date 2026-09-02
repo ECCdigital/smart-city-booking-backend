@@ -4,6 +4,7 @@ const AccessProvider = require("./providers/access-provider");
 const BookingManager = require("../../data-managers/booking-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const GrantCleanupService = require("./grant-cleanup-service");
@@ -30,6 +31,16 @@ const PLATFORM_HOLD = Object.freeze({
   expiresAt: null,
   compartment: null,
 });
+
+/**
+ * Until the migration of the locker fold (step 4) moves them into
+ * `accesspoints`, locker systems are configured at the bookable as
+ * `lockerDetails.units`. The resolver stands in for their rows with
+ * synthesized ones under this prefix: `locker:<provider>:<externalId>`.
+ * The migration remaps the entries made under such an id.
+ */
+const CONFIGURED_LOCKER_SYSTEM_PREFIX = "locker:";
+const IFBS = "ifbs";
 
 class AccessService {
   /**
@@ -592,7 +603,9 @@ class AccessService {
    *
    * A hold the provider refuses, or a capacity that is exceeded, is thrown;
    * the checkout then rolls the booking back. Entries held or granted
-   * already are left alone, so the call is safe to repeat.
+   * already are left alone, so the call is safe to repeat; entries only
+   * held beyond what the booking books now - an unpaid booking that was
+   * changed - are dropped, their provider hold lapsing by itself.
    *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
@@ -606,6 +619,7 @@ class AccessService {
       bookingId,
     );
 
+    this._trimHeldCompartments(booking, lockerSystems);
     this._ensureCompartmentEntries(booking, lockerSystems);
 
     const platformHeld = new Map();
@@ -619,7 +633,7 @@ class AccessService {
       if (!provider.constructor.capabilities.includes("hold")) {
         Object.assign(entry, { hold: { ...PLATFORM_HOLD } });
         if (system.bookable) {
-          platformHeld.set(system.bookable.id, system.bookable);
+          platformHeld.set(String(entry.accessPointId), system);
         }
         continue;
       }
@@ -633,6 +647,7 @@ class AccessService {
         Object.assign(entry, {
           hold: this._toStoredHold(hold),
           compartment: hold.compartment ?? null,
+          metadata: hold.metadata ?? null,
         });
         await this._log({
           tenantId: tenant,
@@ -659,8 +674,8 @@ class AccessService {
 
     await BookingManager.storeBooking(booking);
 
-    for (const bookable of platformHeld.values()) {
-      await this._assertCompartmentCapacity(tenant, booking, bookable);
+    for (const system of platformHeld.values()) {
+      await this._assertCompartmentCapacity(tenant, booking, system);
     }
 
     return booking.accessInfo;
@@ -718,6 +733,7 @@ class AccessService {
           Object.assign(entry, {
             hold: this._toStoredHold(hold),
             compartment: hold.compartment ?? null,
+            metadata: hold.metadata ?? entry.metadata ?? null,
           });
           renewed = true;
           await this._log({
@@ -977,6 +993,7 @@ class AccessService {
             entry.hold?.compartment ??
             entry.compartment ??
             null,
+          metadata: grant.metadata ?? entry.metadata ?? null,
           externalBookingId: String(grant.authorizationId),
           principalRemovedAt: null,
           principalCleanupAttemptedAt: null,
@@ -2243,6 +2260,7 @@ class AccessService {
           bookableId: system.bookable?.id ?? null,
           hold: null,
           compartment: null,
+          metadata: null,
           externalBookingId: null,
           isProvisioned: false,
           provisionedAt: null,
@@ -2251,6 +2269,49 @@ class AccessService {
         });
       }
     }
+  }
+
+  /**
+   * @private
+   * Drops the entries only held - not granted, not revoked - beyond what
+   * the booking books now: at a locker system it no longer books, or past
+   * the amount its item books, the granted ones counted first. What the
+   * provider holds for them lapses by itself.
+   *
+   * @param {Object} booking The booking, written into
+   * @param {Map<string, Object>} lockerSystems The systems and how many
+   *   compartments each is owed
+   */
+  static _trimHeldCompartments(booking, lockerSystems) {
+    if (!Array.isArray(booking.accessInfo)) {
+      return;
+    }
+
+    const compartments = this._compartmentEntries(booking);
+    const allowance = new Map();
+    for (const [accessPointId, system] of lockerSystems) {
+      const granted = compartments.filter(
+        (entry) =>
+          String(entry.accessPointId) === accessPointId &&
+          entry.grant &&
+          !entry.revokedAt,
+      ).length;
+      allowance.set(accessPointId, Math.max(system.amount - granted, 0));
+    }
+
+    booking.accessInfo = booking.accessInfo.filter((entry) => {
+      if (
+        entry.accessPointType !== AccessPointType.LOCKER ||
+        entry.grant ||
+        entry.revokedAt
+      ) {
+        return true;
+      }
+      const key = String(entry.accessPointId);
+      const left = allowance.get(key) ?? 0;
+      allowance.set(key, left - 1);
+      return left > 0;
+    });
   }
 
   /**
@@ -2271,12 +2332,24 @@ class AccessService {
    * Fails where the bookable has fewer compartments than the bookings in
    * this booking's window take, this booking included. The occupancy is
    * counted off the bookings' items, which is what `bookable.amount` is the
-   * capacity of.
+   * capacity of. At a locker system still configured at the bookable (see
+   * {@link _addConfiguredLockerSystems}) the unit's amount is the capacity
+   * and the occupancy is the compartments the bookings hold or have at
+   * that system - those of bookings stored before the fold count only once
+   * the migration has made entries of them.
    *
+   * @param {string} tenant Tenant ID
+   * @param {Object} booking The booking that holds
+   * @param {{ accessPoint: Object, bookable: Object }} system The locker
+   *   system held at, with the bookable that books it
    * @throws {ConflictError} `compartments_unavailable`
    */
-  static async _assertCompartmentCapacity(tenant, booking, bookable) {
-    const capacity = Number(bookable.amount);
+  static async _assertCompartmentCapacity(tenant, booking, system) {
+    const { accessPoint, bookable } = system;
+    const configured = Number.isFinite(accessPoint.capacity);
+    const capacity = configured
+      ? accessPoint.capacity
+      : Number(bookable.amount);
     if (!Number.isFinite(capacity)) {
       return;
     }
@@ -2289,7 +2362,11 @@ class AccessService {
       booking.id,
     );
     const occupied = [...others, booking].reduce(
-      (sum, concurrent) => sum + this._itemAmount(concurrent, bookable.id),
+      (sum, concurrent) =>
+        sum +
+        (configured
+          ? this._activeCompartmentsAt(concurrent, accessPoint)
+          : this._itemAmount(concurrent, bookable.id)),
       0,
     );
 
@@ -2300,6 +2377,22 @@ class AccessService {
         occupied,
       });
     }
+  }
+
+  /**
+   * @private
+   * How many compartments a booking holds or has at a locker system: its
+   * unrevoked entries there, whether made at the system's row or at the
+   * synthesized one of the same provider and external id.
+   */
+  static _activeCompartmentsAt(booking, accessPoint) {
+    return this._compartmentEntries(booking).filter(
+      (entry) =>
+        !entry.revokedAt &&
+        (String(entry.accessPointId) === String(accessPoint.id) ||
+          (entry.provider === accessPoint.provider &&
+            String(entry.externalId) === String(accessPoint.externalId))),
+    ).length;
   }
 
   /**
@@ -2339,8 +2432,169 @@ class AccessService {
         String(entry.accessPointId),
       ),
     );
+    const configuredLockerSystemIds = await this._addConfiguredLockerSystems(
+      tenant,
+      sortedBookables,
+      booking,
+      accessPointsById,
+    );
 
-    return { bookableRelations, sortedBookables, accessPointsById };
+    return {
+      bookableRelations,
+      sortedBookables,
+      accessPointsById,
+      configuredLockerSystemIds,
+    };
+  }
+
+  /**
+   * @private
+   * Stands in for the rows of the locker systems still configured at the
+   * bookables as `lockerDetails.units`, until the migration of the locker
+   * fold moves them into `accesspoints`: one synthesized row per unit whose
+   * provider the tenant has an active application for, under the id
+   * `locker:<provider>:<externalId>`, with the unit's amount as `capacity`
+   * for the platform hold. A bookable that references a stored locker
+   * system already is left to its rows. A compartment entry left at a
+   * synthesized id after the bookable dropped the unit is resolved from
+   * the entry itself, so it can still be revoked.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object[]} bookables The bookables of the booking
+   * @param {Object} booking The booking
+   * @param {Map<string, Object>} accessPointsById The loaded rows, written
+   *   into
+   * @returns {Promise<Map<string, string[]>>} bookableId -> the ids of the
+   *   locker systems synthesized for it
+   */
+  static async _addConfiguredLockerSystems(
+    tenant,
+    bookables,
+    booking,
+    accessPointsById,
+  ) {
+    const configured = new Map();
+    const units = bookables.flatMap((bookable) =>
+      this._bookableReferencesLockerSystem(bookable, accessPointsById) ||
+      bookable.lockerDetails?.active !== true
+        ? []
+        : (bookable.lockerDetails.units || []).map((unit) => ({
+            bookable,
+            unit,
+          })),
+    );
+    const orphaned = this._compartmentEntries(booking).filter(
+      (entry) =>
+        String(entry.accessPointId).startsWith(
+          CONFIGURED_LOCKER_SYSTEM_PREFIX,
+        ) && !accessPointsById.has(String(entry.accessPointId)),
+    );
+
+    if (!units.length && !orphaned.length) {
+      return configured;
+    }
+
+    const tenantData = units.length
+      ? await TenantManager.getTenant(tenant)
+      : null;
+
+    for (const { bookable, unit } of units) {
+      const provider = unit.lockerSystem;
+      const externalId = provider === IFBS ? unit.locationId : unit.id;
+      if (
+        !provider ||
+        externalId == null ||
+        !this._hasActiveApplication(tenantData, provider)
+      ) {
+        continue;
+      }
+
+      const id = `${CONFIGURED_LOCKER_SYSTEM_PREFIX}${provider}:${externalId}`;
+      if (!accessPointsById.has(id)) {
+        accessPointsById.set(id, {
+          ...this._configuredLockerSystemRow(tenant, id, provider, externalId),
+          label: bookable.title || "",
+          mode:
+            provider === IFBS
+              ? AccessPointMode.REMOTE
+              : AccessPointMode.AUTHORIZATION,
+          capacity: Number(unit.amount),
+        });
+      }
+      const ids = configured.get(bookable.id) || [];
+      if (!ids.includes(id)) {
+        ids.push(id);
+      }
+      configured.set(bookable.id, ids);
+    }
+
+    for (const entry of orphaned) {
+      const id = String(entry.accessPointId);
+      if (!accessPointsById.has(id)) {
+        accessPointsById.set(id, {
+          ...this._configuredLockerSystemRow(
+            tenant,
+            id,
+            entry.provider,
+            entry.externalId,
+          ),
+          mode: entry.mode || AccessPointMode.AUTHORIZATION,
+        });
+      }
+    }
+
+    return configured;
+  }
+
+  /**
+   * @private
+   * The row of a locker system configured at the bookable, as far as the
+   * unit says: what the providers and the resolver read off a stored one.
+   */
+  static _configuredLockerSystemRow(tenant, id, provider, externalId) {
+    return {
+      id,
+      tenantId: tenant,
+      type: AccessPointType.LOCKER,
+      provider,
+      externalId: String(externalId),
+      label: "",
+      validationRules: [],
+    };
+  }
+
+  /**
+   * @private
+   * Whether a bookable references a stored locker system - one configured
+   * the new way, whose `lockerDetails` are then not the truth any more.
+   */
+  static _bookableReferencesLockerSystem(bookable, accessPointsById) {
+    if (bookable.accessPointDetails?.active !== true) {
+      return false;
+    }
+
+    return (bookable.accessPointDetails.accessPointIds || []).some((id) => {
+      const accessPoint = accessPointsById.get(String(id));
+      return (
+        accessPoint &&
+        this._accessPointKind(accessPoint).type === AccessPointType.LOCKER
+      );
+    });
+  }
+
+  /**
+   * @private
+   * Whether the tenant has an active application of the provider, under
+   * the application types a locker provider's adapter looks under.
+   */
+  static _hasActiveApplication(tenantData, providerId) {
+    return Boolean(
+      AccessProvider.findActiveApplication(
+        tenantData,
+        providerId,
+        AccessProvider.lockerApplicationTypes,
+      ),
+    );
   }
 
   /**
@@ -2357,19 +2611,26 @@ class AccessService {
    *   amount: number }>}
    */
   static _resolveLockerSystems(tenant, booking, sources) {
-    const { bookableRelations, sortedBookables, accessPointsById } = sources;
+    const {
+      bookableRelations,
+      sortedBookables,
+      accessPointsById,
+      configuredLockerSystemIds,
+    } = sources;
     const systems = new Map();
 
     for (const bookable of sortedBookables) {
-      if (
-        bookable.accessPointDetails?.active !== true ||
-        (bookableRelations.get(bookable.id) || "self") !== "self"
-      ) {
+      if ((bookableRelations.get(bookable.id) || "self") !== "self") {
         continue;
       }
 
-      for (const accessPointId of bookable.accessPointDetails.accessPointIds ||
-        []) {
+      const referenced =
+        bookable.accessPointDetails?.active === true
+          ? bookable.accessPointDetails.accessPointIds || []
+          : [];
+      const configured = configuredLockerSystemIds?.get(bookable.id) || [];
+
+      for (const accessPointId of [...referenced, ...configured]) {
         const key = String(accessPointId);
         const accessPoint = accessPointsById.get(key);
         if (

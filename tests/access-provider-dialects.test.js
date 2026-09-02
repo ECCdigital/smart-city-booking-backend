@@ -840,6 +840,10 @@ describe("access provider dialects: the adapters as they answer", () => {
       const hold = await provider.hold(IFBS_LOCKER, context);
 
       expect(hold).to.include({ holdId: "100", compartment: IFBS_BOX_NUMBER });
+      expect(hold.metadata).to.deep.equal({
+        boxId: `box-${IFBS_BOX_NUMBER}`,
+        price: "1.50",
+      });
       expect(hold.expiresAt).to.be.within(
         before + HOLD_TTL_MS,
         Date.now() + HOLD_TTL_MS,
@@ -908,6 +912,7 @@ describe("access provider dialects: the adapters as they answer", () => {
         externalPrincipalId: null,
         secret: null,
         compartment: IFBS_BOX_NUMBER,
+        metadata: { boxId: `box-${IFBS_BOX_NUMBER}`, price: "1.50" },
       });
       expect(clients.ifbs.bookings.get("100").state).to.equal("booked");
     });
