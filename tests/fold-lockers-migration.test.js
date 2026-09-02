@@ -493,14 +493,23 @@ describe("02-09-2026-fold-lockers-into-access-points migration", () => {
       expect(bookable("room")).to.deep.equal(room);
     });
 
-    it("puts lockerInfo back at the bookings and takes the compartments out of accessInfo", () => {
+    it("puts lockerInfo back at the bookings and the compartments under the ids the checkout fold made", () => {
       for (const stored of bookings().filter((doc) => doc.lockerInfo)) {
         expect(booking(stored.id).lockerInfo).to.deep.equal(
           stored.lockerInfo.map(withoutPreReservedAt),
         );
-        expect(compartments(stored.id)).to.deep.equal([]);
+        expect(
+          compartments(stored.id).map((entry) => entry.accessPointId),
+        ).to.deep.equal(
+          stored.lockerInfo.map(
+            (record) => `locker:${record.lockerSystem}:${record.id}`,
+          ),
+        );
       }
-      expect(booking("ifbs-confirmed").accessInfo).to.deep.equal([DOOR_ENTRY]);
+      expect(booking("ifbs-confirmed").accessInfo[0]).to.deep.equal(DOOR_ENTRY);
+      expect(booking("fold-3").accessInfo).to.deep.equal(
+        bookings()[5].accessInfo,
+      );
       expect(booking("fold-3").lockerInfo).to.deep.equal([
         {
           id: IFBS_LOCATION,

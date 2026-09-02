@@ -28,9 +28,7 @@ class ApplicationFactory {
       return new PaymentClass(data);
     }
 
-    // `locker` is what iFBS and Pareva were configured as before the locker
-    // fold's migration retyped them; one not migrated yet still reads.
-    if (data.type === "access" || data.type === "locker") {
+    if (data.type === "access") {
       return createAccessApplication(data);
     }
 

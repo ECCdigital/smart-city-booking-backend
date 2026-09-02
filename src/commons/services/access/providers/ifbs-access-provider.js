@@ -328,6 +328,11 @@ class IfbsAccessProvider extends AccessProvider {
     return IfbsApiClient.userId(rawUser);
   }
 
+  /** How long iFBS keeps a held box, in milliseconds. */
+  static get holdTtlMs() {
+    return HOLD_TTL_MS;
+  }
+
   static get capabilities() {
     // No close: iFBS has no command to close a box - the door of a locker
     // is shut by hand. No getStatus: without an open process iFBS knows

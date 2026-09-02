@@ -57,7 +57,7 @@ async function findLocation(tenant, provider, locationId) {
   );
 }
 
-async function answerLocation(request, response, failure) {
+async function answerLocation(request, response, message) {
   try {
     const { tenant, provider, locationId } = request.params;
 
@@ -77,7 +77,7 @@ async function answerLocation(request, response, failure) {
 
     return response.status(200).send(location);
   } catch (err) {
-    return fail(response, err, failure);
+    return fail(response, err, message);
   }
 }
 

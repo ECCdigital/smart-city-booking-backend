@@ -255,3 +255,56 @@ components:
           type: object
           description: The provider's own record of the access point
           additionalProperties: true
+
+    BookableLockerDetails:
+      type: object
+      readOnly: true
+      description: |
+        `lockerDetails` of a bookable as the bookable routes answer it: read
+        only, derived from the locker rows (`type: locker`) among the
+        bookable's `accessPointDetails.accessPointIds`. A value sent in is
+        ignored; locker systems are configured as access points.
+      properties:
+        active:
+          type: boolean
+          description: Whether the bookable's access points are switched on and a locker system is among them
+        units:
+          type: array
+          items:
+            type: object
+            description: |
+              An iFBS location `{ lockerSystem: "ifbs", locationId, amount }`
+              or a size `{ id, lockerSystem, amount }`; `amount` is the
+              bookable's.
+            additionalProperties: true
+
+    BookingLockerInfo:
+      type: array
+      readOnly: true
+      description: |
+        `lockerInfo` of a booking as the booking routes answer it: read
+        only, one record per compartment, derived from the booking's
+        `accessInfo` entries of type `locker`. A value sent in is ignored.
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+            description: The iFBS location or the Pareva size
+          lockerSystem:
+            type: string
+            enum: [ifbs, pareva]
+          bookableId:
+            type: string
+            nullable: true
+          isConfirmed:
+            type: boolean
+            description: Granted and not revoked
+          processId:
+            type: string
+            nullable: true
+            description: The grant's authorization id once confirmed
+          ifbsMetadata:
+            type: object
+            description: iFBS only - `boxId`, `nummer`, `price`, `bookingId`
+            additionalProperties: true

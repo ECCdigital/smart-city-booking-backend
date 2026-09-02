@@ -33,10 +33,18 @@ function deriveLockerDetails(bookable, accessPoints) {
   };
 }
 
+/**
+ * A locker row as the unit the bookable used to be configured with: an
+ * iFBS location, or a size of any other provider.
+ *
+ * @param {Object} row The locker row
+ * @param {number} amount The unit's amount
+ * @returns {Object}
+ */
 function toUnit(row, amount) {
   return row.provider === IFBS
     ? { lockerSystem: IFBS, locationId: row.externalId, amount }
     : { id: row.externalId, lockerSystem: row.provider, amount };
 }
 
-module.exports = { deriveLockerDetails };
+module.exports = { deriveLockerDetails, toUnit };
