@@ -61,7 +61,7 @@ function createDoorEntry({ accessBuffer, bookingContext, ...overrides } = {}) {
 function stubResolvedDoors(sandbox, booking, doors) {
   sandbox
     .stub(AccessService, "_getBookingAccessPointsFromBooking")
-    .resolves({ booking, doors, lockers: [] });
+    .resolves({ booking, doors, compartments: [] });
 }
 
 describe("AccessService.canOperate", () => {

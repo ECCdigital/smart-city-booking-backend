@@ -377,6 +377,19 @@ describe("Compartments on the access seam", function () {
       await assert.rejects(AccessService.refreshHolds(TENANT, ["booking-1"]));
     });
 
+    it("takes a hold for a compartment the provider never held for - an entry made without one", async function () {
+      storeBooking("bikebox");
+      await AccessService.holdForBooking(TENANT, "booking-1");
+      const booking = stored();
+      booking.accessInfo[0].hold = null;
+      store.set(booking.id, booking);
+
+      await AccessService.refreshHolds(TENANT, ["booking-1"]);
+
+      expect(compartments()[0].hold).to.include({ holdId: "101" });
+      expect(ifbs.bookingsInState("held")).to.have.length(2);
+    });
+
     it("has nothing to renew for Pareva and for compartments granted already", async function () {
       storeBooking("locker-s", 1);
       await AccessService.holdForBooking(TENANT, "booking-1");
@@ -469,6 +482,36 @@ describe("Compartments on the access seam", function () {
 
       expect(compartments()).to.have.length(1);
       expect(ifbs.bookings.size).to.equal(1);
+    });
+
+    it("keeps the grants made before one is refused, so the next attempt grants nothing twice", async function () {
+      storeBooking("locker-s", 2);
+      const startRental = pareva.startRental.bind(pareva);
+      let calls = 0;
+      pareva.startRental = async (...args) => {
+        calls += 1;
+        if (calls === 2) {
+          throw new Error("Pareva is down");
+        }
+        return startRental(...args);
+      };
+
+      await assert.rejects(
+        AccessService.provisionForBooking(TENANT, "booking-1"),
+        /Pareva is down/,
+      );
+
+      const granted = compartments().filter((entry) => entry.grant);
+      expect(granted).to.have.length(1);
+      expect(granted[0].grant.authorizationId).to.equal("process-1");
+      pareva.startRental = startRental;
+
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+
+      expect(pareva.rentalsInState("open")).to.have.length(2);
+      expect(
+        compartments().map((entry) => entry.grant.authorizationId),
+      ).to.deep.equal(["process-1", "process-2"]);
     });
 
     it("audits a refused grant and rethrows it", async function () {

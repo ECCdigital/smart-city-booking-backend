@@ -123,7 +123,12 @@ describe("AccessService bookable access point inheritance", () => {
           .map((id) => bookablesById.get(id)),
       );
 
-    const doors = await AccessService._getDoorAccessPoints("tenant-1", booking);
+    const doors = (
+      await AccessService._getBookingAccessPointsFromBooking(
+        "tenant-1",
+        booking,
+      )
+    ).doors;
 
     expect(doors.map(({ accessPoint }) => accessPoint.id)).to.deep.equal([
       "door-shared",
@@ -171,10 +176,12 @@ describe("AccessService bookable access point inheritance", () => {
     sandbox.stub(BookableManager, "getAllParentBookables").resolves([]);
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([selfBookable]);
 
-    const [door] = await AccessService._getDoorAccessPoints(
-      "tenant-1",
-      booking,
-    );
+    const [door] = (
+      await AccessService._getBookingAccessPointsFromBooking(
+        "tenant-1",
+        booking,
+      )
+    ).doors;
 
     expect(door.accessPoint).to.include({
       id: "door-self",
@@ -204,10 +211,12 @@ describe("AccessService bookable access point inheritance", () => {
     sandbox.stub(BookableManager, "getAllParentBookables").resolves([]);
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([selfBookable]);
 
-    const [door] = await AccessService._getDoorAccessPoints(
-      "tenant-1",
-      booking,
-    );
+    const [door] = (
+      await AccessService._getBookingAccessPointsFromBooking(
+        "tenant-1",
+        booking,
+      )
+    ).doors;
 
     expect(door.accessPoint.validationRules).to.deep.equal([]);
   });
@@ -233,7 +242,12 @@ describe("AccessService bookable access point inheritance", () => {
     );
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([selfBookable]);
 
-    const doors = await AccessService._getDoorAccessPoints("tenant-1", booking);
+    const doors = (
+      await AccessService._getBookingAccessPointsFromBooking(
+        "tenant-1",
+        booking,
+      )
+    ).doors;
 
     expect(getRelatedBookables.notCalled).to.be.true;
     expect(getAllParentBookables.notCalled).to.be.true;
@@ -328,18 +342,17 @@ describe("AccessService compartments of a booking", () => {
       .stub(AccessPointManager, "getAccessPointsByIds")
       .resolves([BIKE_BOXES]);
 
-    const { lockers, doors, lockerSystems } =
+    const { compartments, doors, lockerSystems } =
       await AccessService._getBookingAccessPointsFromBooking(
         "tenant-1",
         booking([GRANTED, HELD]),
       );
 
     expect(doors).to.deep.equal([]);
-    expect(lockers.map(({ accessPoint }) => accessPoint.id)).to.deep.equal([
-      "loc-7:27473",
-      "loc-7:hold",
-    ]);
-    expect(lockers[0].accessPoint).to.include({
+    expect(compartments.map(({ accessPoint }) => accessPoint.id)).to.deep.equal(
+      ["loc-7:27473", "loc-7:hold"],
+    );
+    expect(compartments[0].accessPoint).to.include({
       type: "locker",
       provider: "ifbs",
       externalId: "7",
@@ -349,7 +362,7 @@ describe("AccessService compartments of a booking", () => {
       bookableId: "bikebox",
       relation: "self",
     });
-    expect(lockers[0].bookingContext).to.deep.include({
+    expect(compartments[0].bookingContext).to.deep.include({
       tenant: "tenant-1",
       bookingId: "booking-1",
       timeBegin: 1000,
@@ -363,8 +376,10 @@ describe("AccessService compartments of a booking", () => {
       isProvisioned: true,
       revokedAt: null,
     });
-    expect(lockers[0].bookingContext.grant.authorizationId).to.equal("27473");
-    expect(lockers[1].bookingContext).to.deep.include({
+    expect(compartments[0].bookingContext.grant.authorizationId).to.equal(
+      "27473",
+    );
+    expect(compartments[1].bookingContext).to.deep.include({
       hold: HELD.hold,
       compartment: "62100104",
       externalBookingId: null,
@@ -399,13 +414,13 @@ describe("AccessService compartments of a booking", () => {
       .stub(AccessPointManager, "getAccessPointsByIds")
       .resolves([BIKE_BOXES]);
 
-    const { lockers, lockerSystems } =
+    const { compartments, lockerSystems } =
       await AccessService._getBookingAccessPointsFromBooking(
         "tenant-1",
         booking([]),
       );
 
-    expect(lockers).to.deep.equal([]);
+    expect(compartments).to.deep.equal([]);
     expect(lockerSystems.size).to.equal(0);
   });
 
@@ -415,16 +430,16 @@ describe("AccessService compartments of a booking", () => {
       .stub(AccessPointManager, "getAccessPointsByIds")
       .resolves([BIKE_BOXES]);
 
-    const { lockers, lockerSystems } =
+    const { compartments, lockerSystems } =
       await AccessService._getBookingAccessPointsFromBooking(
         "tenant-1",
         booking([GRANTED]),
       );
 
     expect(getAccessPointsByIds.firstCall.args[1]).to.deep.equal(["loc-7"]);
-    expect(lockers.map(({ accessPoint }) => accessPoint.id)).to.deep.equal([
-      "loc-7:27473",
-    ]);
+    expect(compartments.map(({ accessPoint }) => accessPoint.id)).to.deep.equal(
+      ["loc-7:27473"],
+    );
     expect(lockerSystems.get("loc-7")).to.include({
       bookable: null,
       amount: 0,

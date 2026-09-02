@@ -83,7 +83,7 @@ function stubResolvedDoor(
   sandbox.stub(BookingManager, "getBooking").resolves(booking);
   sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
     booking,
-    lockers: [],
+    compartments: [],
     doors: [
       {
         accessPoint: {
@@ -127,7 +127,7 @@ function stubResolvedCompartment(sandbox, booking) {
   sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
     booking,
     doors: [],
-    lockers: [
+    compartments: [
       {
         accessPoint: {
           id: "loc-7:booking-17",

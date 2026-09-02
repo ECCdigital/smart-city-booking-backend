@@ -119,7 +119,7 @@ describe("AccessService.canOperate with buffer", () => {
   function stubDoor(booking, accessBuffer) {
     sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
       booking,
-      lockers: [],
+      compartments: [],
       doors: [
         {
           accessPoint: { id: "door-1", tenant: "tenant-1", type: "door" },
@@ -137,7 +137,7 @@ describe("AccessService.canOperate with buffer", () => {
     sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
       booking,
       doors: [],
-      lockers: [
+      compartments: [
         {
           accessPoint: {
             id: "loc-1:ifbs-booking-99",
