@@ -493,7 +493,6 @@ components:
                   - authorization_revoked
                   - outside_access_window
                   - not_provisioned
-                  - locker_not_ready
                   - no_remote_access
                   - evidence_rule_unavailable
                   - evidence_missing

@@ -1,7 +1,8 @@
 /**
  * The locks, IQs and booking context the access provider tests share: one
  * NUKI smart lock with a keypad, one Salto keypad lock on an IQ without OTP,
- * one iFBS booking - each in the shape its API lists it.
+ * one iFBS location with one booked box, one Pareva size - each in the
+ * shape its API lists it.
  */
 
 const {
@@ -10,10 +11,15 @@ const {
 const { FAKE_SITE_ID } = require("./fake-salto-ks-api-client");
 
 const TENANT = "tenant-1";
+const TENANT_MAIL = "stadt@example.test";
 const MINUTE = 60 * 1000;
 const SALTO_LOCK_ID = "4d77312f-4a87-41db-a97b-f9d948dcc908";
 const SALTO_IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
 const IFBS_BOOKING_ID = "booking-17";
+const IFBS_LOCATION_ID = "7";
+const IFBS_BOX_NUMBER = "62100103";
+const PAREVA_LOCKER_ID = "locker-1";
+const PAREVA_SIZE = "S";
 
 function nukiSmartlock(overrides = {}) {
   return {
@@ -55,6 +61,7 @@ function saltoIq(overrides = {}) {
 function tenantWithSaltoApp() {
   return {
     id: TENANT,
+    mail: TENANT_MAIL,
     applications: [
       {
         type: "access",
@@ -89,10 +96,15 @@ function bookingContext(overrides = {}) {
 
 module.exports = {
   TENANT,
+  TENANT_MAIL,
   MINUTE,
   SALTO_LOCK_ID,
   SALTO_IQ_ID,
   IFBS_BOOKING_ID,
+  IFBS_LOCATION_ID,
+  IFBS_BOX_NUMBER,
+  PAREVA_LOCKER_ID,
+  PAREVA_SIZE,
   nukiSmartlock,
   saltoLock,
   saltoIq,

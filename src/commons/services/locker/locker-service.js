@@ -1,11 +1,6 @@
 const { BookableManager } = require("../../data-managers/bookable-manager");
-const { getTenantAppByType } = require("../../data-managers/tenant-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const BookingManager = require("../../data-managers/booking-manager");
-const {
-  getConcurrentBookings,
-  getBooking,
-  getBookingsByTimeRange,
-} = require("../../data-managers/booking-manager");
 const { createLocker } = require("./locker-registry");
 require("./index");
 const bunyan = require("bunyan");
@@ -80,7 +75,10 @@ class LockerService {
         return [];
       }
 
-      const lockerApps = await getTenantAppByType(tenantId, APP_TYPE);
+      const lockerApps = await TenantManager.getTenantAppByType(
+        tenantId,
+        APP_TYPE,
+      );
       const bookableLockerDetails = bookable.lockerDetails;
       const activeLockerApps = LockerService.getActiveLockerApps(lockerApps);
 
@@ -90,7 +88,7 @@ class LockerService {
       ) {
         let occupiedUnits = [];
         const possibleUnits = bookableLockerDetails.units;
-        const concurrentBookings = await getConcurrentBookings(
+        const concurrentBookings = await BookingManager.getConcurrentBookings(
           bookableId,
           tenantId,
           timeBegin,
@@ -194,7 +192,7 @@ class LockerService {
    */
   async checkLockerAvailability(tenantId, unitId, timeBegin, timeEnd) {
     try {
-      const booking = await getBookingsByTimeRange(
+      const booking = await BookingManager.getBookingsByTimeRange(
         tenantId,
         timeBegin,
         timeEnd,
@@ -220,7 +218,7 @@ class LockerService {
    */
   async handlePreReserve(tenantId, bookingId) {
     try {
-      const booking = await getBooking(bookingId, tenantId);
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
       if (!booking) {
         throw new Error("Booking not found");
       }
@@ -283,7 +281,7 @@ class LockerService {
    */
   async refreshPreReservations(tenantId, bookingIds) {
     for (const bookingId of bookingIds) {
-      const booking = await getBooking(bookingId, tenantId);
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
       if (!booking) continue;
 
       const lockerUnits = LockerService.assignedLocker(booking);
@@ -326,7 +324,7 @@ class LockerService {
    */
   async handleCreate(tenantId, bookingId) {
     try {
-      const booking = await getBooking(bookingId, tenantId);
+      const booking = await BookingManager.getBooking(bookingId, tenantId);
       if (!booking) {
         throw new Error("Booking not found");
       }

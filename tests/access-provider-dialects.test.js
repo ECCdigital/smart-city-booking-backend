@@ -1,8 +1,9 @@
 /**
- * Characterization of the access provider seam: how NUKI, Salto KS and iFBS
- * answer, and what `AccessService` makes of it. The result-bearing methods
- * - open, unlatch, close, getStatus, getOpenProgress, grantAuthorization,
- * revokeAuthorization - answer in the typed shapes of `access-provider.js`
+ * Characterization of the access provider seam: how NUKI, Salto KS, iFBS
+ * and Pareva answer, and what `AccessService` makes of it. The
+ * result-bearing methods - open, unlatch, close, getStatus, getOpenProgress,
+ * hold, grantAuthorization, revokeAuthorization - answer in the typed shapes
+ * of `access-provider.js`
  * and every open failure is an `AccessOpenError`; the expectations on those
  * are the contract. What lands in `accessInfo` is the Grant as the service
  * stores it, its secret encrypted, with the principal fields the cleanup
@@ -25,9 +26,13 @@ const AccessLogService = require("../src/commons/services/access/access-log-serv
 const NukiAccessProvider = require("../src/commons/services/access/providers/nuki-access-provider");
 const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
 const IfbsAccessProvider = require("../src/commons/services/access/providers/ifbs-access-provider");
+const ParevaAccessProvider = require("../src/commons/services/access/providers/pareva-access-provider");
 const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
+const IfbsApiClient = require("../src/commons/services/access/clients/ifbs-api-client");
+const IfbsApiError = require("../src/commons/services/access/clients/ifbs-api-error");
+const ParevaApiClient = require("../src/commons/services/access/clients/pareva-api-client");
 const {
   NUKI_ACTIONS,
   NUKI_AUTH_TYPES,
@@ -38,6 +43,7 @@ const {
 } = require("../src/commons/data-managers/bookable-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const UserManager = require("../src/commons/data-managers/user-manager");
 const PermissionsService = require("../src/commons/services/permission-service");
 const MailController = require("../src/commons/mail-service/mail-controller");
 const SecurityUtils = require("../src/commons/utilities/security-utils");
@@ -63,14 +69,24 @@ const {
   ERR_NO_WAIT_PROCESS_NOT_FOUND,
 } = require("./helpers/fake-ifbs-api-client");
 const {
+  FakeParevaApiClient,
+  brokenParevaApiClient,
+  parevaHttpError,
+} = require("./helpers/fake-pareva-api-client");
+const {
   InMemoryAccessProvider,
   PROVIDER_ID: IN_MEMORY_PROVIDER_ID,
 } = require("./helpers/in-memory-access-provider");
 const {
   TENANT,
+  TENANT_MAIL,
   MINUTE,
   SALTO_LOCK_ID,
   IFBS_BOOKING_ID,
+  IFBS_LOCATION_ID,
+  IFBS_BOX_NUMBER,
+  PAREVA_LOCKER_ID,
+  PAREVA_SIZE,
   nukiSmartlock,
   saltoLock,
   saltoIq,
@@ -87,7 +103,20 @@ function createClients({ nukiSmartlocks, saltoLocks } = {}) {
       locks: saltoLocks || [saltoLock()],
       iqs: [saltoIq()],
     }),
-    ifbs: new FakeIfbsApiClient({ bookingIds: [IFBS_BOOKING_ID] }),
+    ifbs: new FakeIfbsApiClient({
+      locations: [
+        {
+          LocationID: IFBS_LOCATION_ID,
+          Name: "Bahnhof",
+          boxes: [IFBS_BOX_NUMBER],
+        },
+      ],
+      bookingIds: [IFBS_BOOKING_ID],
+    }),
+    pareva: new FakeParevaApiClient({
+      lockerId: PAREVA_LOCKER_ID,
+      sizes: [PAREVA_SIZE],
+    }),
   };
 }
 
@@ -113,7 +142,25 @@ const SALTO_DOOR = {
   validationRules: [],
 };
 
-const IFBS_LOCKER = { id: "7", type: "locker", provider: "ifbs" };
+const IFBS_LOCKER = {
+  id: "location-7",
+  tenantId: TENANT,
+  type: "locker",
+  provider: "ifbs",
+  externalId: IFBS_LOCATION_ID,
+  mode: AccessPointMode.REMOTE,
+};
+
+const PAREVA_LOCKER = {
+  id: "size-s",
+  tenantId: TENANT,
+  type: "locker",
+  provider: "pareva",
+  externalId: PAREVA_SIZE,
+  mode: AccessPointMode.AUTHORIZATION,
+};
+
+const HOLD_TTL_MS = 2 * MINUTE;
 
 /**
  * The same doors with a remote way in: opening through the API is refused at
@@ -660,11 +707,25 @@ describe("access provider dialects: the adapters as they answer", () => {
 
   describe("iFBS", () => {
     let provider;
-    const lockerContext = () =>
-      doorContext({ externalBookingId: IFBS_BOOKING_ID });
+    const lockerContext = (overrides = {}) =>
+      doorContext({ externalBookingId: IFBS_BOOKING_ID, ...overrides });
+    const futureContext = () => {
+      const now = Date.now();
+      return lockerContext({
+        timeBegin: now + 10 * MINUTE,
+        timeEnd: now + 70 * MINUTE,
+        accessFrom: now + 10 * MINUTE,
+        accessTo: now + 70 * MINUTE,
+      });
+    };
 
     beforeEach(() => {
       provider = new IfbsAccessProvider({ client: clients.ifbs });
+      sinon.stub(UserManager, "getRawUser").resolves(null);
+    });
+
+    afterEach(() => {
+      sinon.restore();
     });
 
     it("answers an open as pending, with the open-box process to poll", async () => {
@@ -683,60 +744,14 @@ describe("access provider dialects: the adapters as they answer", () => {
       );
     });
 
-    it("answers a confirmed open process as open and unlocked", async () => {
-      await provider.open(IFBS_LOCKER, lockerContext());
-      clients.ifbs.confirm("1");
+    it("declares no getStatus: without an open process iFBS knows nothing about a box", async () => {
+      expect(IfbsAccessProvider.capabilities).not.to.include("getStatus");
 
-      const status = await provider.getStatus(IFBS_LOCKER, {
-        ...lockerContext(),
-        lastOpenBoxId: "1",
-      });
-
-      expect(status).to.deep.equal({
-        open: true,
-        locked: false,
-        doorOpen: null,
-      });
-    });
-
-    it("answers an open process the box has not confirmed as unknown", async () => {
-      await provider.open(IFBS_LOCKER, lockerContext());
-
-      const status = await provider.getStatus(IFBS_LOCKER, {
-        ...lockerContext(),
-        lastOpenBoxId: "1",
-      });
-
-      expect(status).to.deep.equal({
-        open: null,
-        locked: null,
-        doorOpen: null,
-      });
-    });
-
-    it("answers an open process iFBS no longer knows as unknown", async () => {
-      const status = await provider.getStatus(IFBS_LOCKER, {
-        ...lockerContext(),
-        lastOpenBoxId: "99",
-      });
-
-      expect(status).to.deep.equal({
-        open: null,
-        locked: null,
-        doorOpen: null,
-      });
-    });
-
-    it("answers the status without a known process as unknown, without asking iFBS", async () => {
-      const broken = new IfbsAccessProvider({ client: brokenIfbsApiClient() });
-
-      const status = await broken.getStatus(IFBS_LOCKER, lockerContext());
-
-      expect(status).to.deep.equal({
-        open: null,
-        locked: null,
-        doorOpen: null,
-      });
+      await rejects(
+        provider.getStatus(IFBS_LOCKER, lockerContext()),
+        Error,
+        "getStatus() is not supported by",
+      );
     });
 
     it("answers the progress of an open process as an OpenProgress", async () => {
@@ -813,6 +828,419 @@ describe("access provider dialects: the adapters as they answer", () => {
         "(1701): Booking not found",
       );
     });
+
+    it("answers a hold with the box iFBS chose, lapsing in two minutes", async () => {
+      const context = lockerContext();
+      const before = Date.now();
+
+      const hold = await provider.hold(IFBS_LOCKER, context);
+
+      expect(hold).to.include({ holdId: "100", compartment: IFBS_BOX_NUMBER });
+      expect(hold.expiresAt).to.be.within(
+        before + HOLD_TTL_MS,
+        Date.now() + HOLD_TTL_MS,
+      );
+      const [held] = clients.ifbs.bookingsInState("held");
+      expect(held).to.include({
+        Booking_ID: "100",
+        nummer: IFBS_BOX_NUMBER,
+        LocationID: IFBS_LOCATION_ID,
+        from: IfbsApiClient.formatDate(context.timeBegin),
+        to: IfbsApiClient.formatDate(context.timeEnd),
+        userId: 1,
+      });
+    });
+
+    it("asks iFBS for the box in the name of the booking's user, by the user's database id", async () => {
+      UserManager.getRawUser.resolves({ _id: "64f1" });
+
+      await provider.hold(
+        IFBS_LOCKER,
+        lockerContext({
+          booking: { assignedUserId: "erika@example.test" },
+        }),
+      );
+
+      expect(UserManager.getRawUser.firstCall.args).to.deep.equal([
+        "erika@example.test",
+      ]);
+      expect(clients.ifbs.bookingsInState("held")[0].userId).to.equal("0164f1");
+    });
+
+    it("throws iFBS' own refusal when the location has no box left", async () => {
+      await provider.hold(IFBS_LOCKER, lockerContext());
+
+      await rejectsRaw(provider.hold(IFBS_LOCKER, lockerContext()), (err) => {
+        expect(err).to.be.instanceOf(IfbsApiError);
+        expect(err.errNo).to.equal(1201);
+      });
+    });
+
+    it("renews a hold by holding again: a fresh Booking_ID, the box iFBS chooses", async () => {
+      clients.ifbs.locations.get(IFBS_LOCATION_ID).boxes.push("62100104");
+      const context = lockerContext();
+      const first = await provider.hold(IFBS_LOCKER, context);
+
+      const renewed = await provider.refreshHold(IFBS_LOCKER, {
+        ...context,
+        hold: first,
+      });
+
+      expect(renewed.holdId).to.equal("101");
+      expect(renewed.compartment).to.equal("62100104");
+    });
+
+    it("confirms the held box on a grant, proving it with the checksum, and answers the Booking_ID as the grant", async () => {
+      const context = lockerContext();
+      const hold = await provider.hold(IFBS_LOCKER, context);
+
+      const grant = await provider.grantAuthorization(IFBS_LOCKER, {
+        ...context,
+        hold,
+      });
+
+      expect(grant).to.deep.equal({
+        authorizationId: "100",
+        externalPrincipalId: null,
+        secret: null,
+      });
+      expect(clients.ifbs.bookings.get("100").state).to.equal("booked");
+    });
+
+    it("takes a fresh box on a grant when the hold lapsed", async () => {
+      const clock = sinon.useFakeTimers({
+        now: Date.now(),
+        toFake: ["Date"],
+      });
+      const context = lockerContext();
+      const hold = await provider.hold(IFBS_LOCKER, context);
+      clock.tick(HOLD_TTL_MS + 1);
+
+      const grant = await provider.grantAuthorization(IFBS_LOCKER, {
+        ...context,
+        hold,
+      });
+
+      expect(grant.authorizationId).to.equal("101");
+      expect(clients.ifbs.bookings.get("101").state).to.equal("booked");
+      clock.restore();
+    });
+
+    it("grants without a hold by taking a box first", async () => {
+      const grant = await provider.grantAuthorization(
+        IFBS_LOCKER,
+        lockerContext(),
+      );
+
+      expect(grant.authorizationId).to.equal("100");
+      expect(clients.ifbs.bookingsInState("booked")).to.have.length(2);
+    });
+
+    it("throws iFBS' own refusal when it rejects the confirmation", async () => {
+      const context = lockerContext();
+      const hold = await provider.hold(IFBS_LOCKER, context);
+
+      await rejectsRaw(
+        provider.grantAuthorization(IFBS_LOCKER, {
+          ...context,
+          hold: { ...hold, compartment: "wrong" },
+        }),
+        (err) => {
+          expect(err).to.be.instanceOf(IfbsApiError);
+          expect(err.errMsg).to.equal("Invalid checksum");
+        },
+      );
+    });
+
+    it("revokes a booking that has not begun by cancelling the usage", async () => {
+      const grant = await provider.grantAuthorization(
+        IFBS_LOCKER,
+        futureContext(),
+      );
+
+      const revocation = await provider.revokeAuthorization(IFBS_LOCKER, grant);
+
+      expect(revocation).to.deep.equal({ principalRemoved: null });
+      expect(clients.ifbs.bookings.get(grant.authorizationId).state).to.equal(
+        "cancelled",
+      );
+    });
+
+    it("revokes a booking that has begun by ending the usage as of now", async () => {
+      const grant = await provider.grantAuthorization(
+        IFBS_LOCKER,
+        lockerContext(),
+      );
+
+      const revocation = await provider.revokeAuthorization(IFBS_LOCKER, grant);
+
+      expect(revocation).to.deep.equal({ principalRemoved: null });
+      const booking = clients.ifbs.bookings.get(grant.authorizationId);
+      expect(booking.state).to.equal("ended");
+      expect(booking.endedAt).to.equal(IfbsApiClient.formatDate(Date.now()));
+    });
+
+    it("tolerates revoking a booking iFBS no longer has", async () => {
+      const grant = await provider.grantAuthorization(
+        IFBS_LOCKER,
+        futureContext(),
+      );
+      await provider.revokeAuthorization(IFBS_LOCKER, grant);
+
+      const again = await provider.revokeAuthorization(IFBS_LOCKER, grant);
+      const never = await provider.revokeAuthorization(IFBS_LOCKER, {
+        authorizationId: "unknown",
+        externalPrincipalId: null,
+        secret: null,
+      });
+
+      expect(again).to.deep.equal({ principalRemoved: null });
+      expect(never).to.deep.equal({ principalRemoved: null });
+    });
+
+    it("throws the network error when iFBS cannot be reached on a revoke", async () => {
+      const broken = new IfbsAccessProvider({ client: brokenIfbsApiClient() });
+
+      await rejectsRaw(
+        broken.revokeAuthorization(IFBS_LOCKER, {
+          authorizationId: "100",
+          externalPrincipalId: null,
+          secret: null,
+        }),
+        (err) => expect(err.code).to.equal("ECONNREFUSED"),
+      );
+    });
+
+    it("lists the locations as locker access points that open remotely", async () => {
+      const points = await provider.listAccessPoints(TENANT);
+
+      expect(points).to.deep.equal([
+        {
+          id: IFBS_LOCATION_ID,
+          type: "locker",
+          provider: "ifbs",
+          externalId: IFBS_LOCATION_ID,
+          locationId: IFBS_LOCATION_ID,
+          label: "Bahnhof",
+          capabilities: ["remote"],
+          supportedModes: [AccessPointMode.REMOTE],
+          metadata: { LocationID: IFBS_LOCATION_ID, Name: "Bahnhof" },
+        },
+      ]);
+    });
+
+    for (const type of ["access", "locker"]) {
+      it(`builds its client from the tenant's iFBS application of type '${type}'`, async () => {
+        sinon.stub(TenantManager, "getTenant").resolves({
+          id: TENANT,
+          applications: [
+            {
+              type,
+              id: "ifbs",
+              active: true,
+              serverUrl: "https://ifbs.example.test/api",
+              apiKey: "key",
+              secretPhrase: "phrase",
+            },
+          ],
+        });
+
+        const client = await new IfbsAccessProvider()._getClient(TENANT);
+
+        expect(client).to.be.instanceOf(IfbsApiClient);
+        expect(client).to.include({ apiKey: "key", secretPhrase: "phrase" });
+      });
+    }
+
+    it("maps a missing iFBS application to a configuration AccessOpenError", async () => {
+      sinon.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
+
+      await rejectsOpen(
+        new IfbsAccessProvider().open(IFBS_LOCKER, lockerContext()),
+        "configuration",
+        "ifbs_application_not_found",
+      );
+    });
+  });
+
+  describe("Pareva", () => {
+    let provider;
+
+    beforeEach(() => {
+      provider = new ParevaAccessProvider({ client: clients.pareva });
+      sinon.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
+    });
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    it("declares neither open nor getStatus nor hold: Pareva hands out the code itself, and the stored booking is the claim", () => {
+      expect(ParevaAccessProvider.capabilities).to.deep.equal([
+        "grantAuthorization",
+        "revokeAuthorization",
+        "listAccessPoints",
+      ]);
+    });
+
+    it("answers a grant as a Grant: the rental's process, no principal, no secret", async () => {
+      const context = doorContext();
+
+      const grant = await provider.grantAuthorization(PAREVA_LOCKER, context);
+
+      expect(grant).to.deep.equal({
+        authorizationId: "process-1",
+        externalPrincipalId: null,
+        secret: null,
+      });
+      expect(clients.pareva.rentalsInState("open")).to.deep.equal([
+        {
+          processId: "process-1",
+          size: PAREVA_SIZE,
+          state: "open",
+          managerAssignment: false,
+          email: "erika@example.test",
+          plannedBegin: String(context.timeBegin),
+          date_estimate_delivery: String(context.timeEnd - context.timeBegin),
+          fromEmail: TENANT_MAIL,
+          itemName: "",
+          additionalInfo: {},
+        },
+      ]);
+    });
+
+    it("throws Pareva's own error when it does not offer the size", async () => {
+      await rejectsRaw(
+        provider.grantAuthorization(
+          { ...PAREVA_LOCKER, externalId: "XXL" },
+          doorContext(),
+        ),
+        (err) => expect(err.response.status).to.equal(404),
+      );
+    });
+
+    it("throws when Pareva answers a rental without a process", async () => {
+      sinon.stub(clients.pareva, "startRental").resolves({});
+
+      await rejects(
+        provider.grantAuthorization(PAREVA_LOCKER, doorContext()),
+        Error,
+        "without a processId",
+      );
+    });
+
+    it("revokes by cancelling the rental, with no principal to remove", async () => {
+      const grant = await provider.grantAuthorization(
+        PAREVA_LOCKER,
+        doorContext(),
+      );
+
+      const revocation = await provider.revokeAuthorization(
+        PAREVA_LOCKER,
+        grant,
+      );
+
+      expect(revocation).to.deep.equal({ principalRemoved: null });
+      expect(clients.pareva.rentals.get("process-1").state).to.equal(
+        "cancelled",
+      );
+    });
+
+    it("tolerates revoking a rental Pareva no longer has", async () => {
+      const grant = await provider.grantAuthorization(
+        PAREVA_LOCKER,
+        doorContext(),
+      );
+      await provider.revokeAuthorization(PAREVA_LOCKER, grant);
+
+      const again = await provider.revokeAuthorization(PAREVA_LOCKER, grant);
+
+      expect(again).to.deep.equal({ principalRemoved: null });
+    });
+
+    it("throws when Pareva refuses the cancel, since the person keeps the compartment", async () => {
+      sinon
+        .stub(clients.pareva, "cancelRental")
+        .resolves({ success: false, reason: "already picked up" });
+
+      await rejects(
+        provider.revokeAuthorization(PAREVA_LOCKER, {
+          authorizationId: "process-1",
+          externalPrincipalId: null,
+          secret: null,
+        }),
+        Error,
+        "refused to cancel rental 'process-1': already picked up",
+      );
+    });
+
+    it("throws Pareva's own error when the cancel fails for any other reason", async () => {
+      const broken = new ParevaAccessProvider({
+        client: brokenParevaApiClient(parevaHttpError(500)),
+      });
+
+      await rejectsRaw(
+        broken.revokeAuthorization(PAREVA_LOCKER, {
+          authorizationId: "process-1",
+          externalPrincipalId: null,
+          secret: null,
+        }),
+        (err) => expect(err.response.status).to.equal(500),
+      );
+    });
+
+    it("lists the sizes as locker access points that take a code, located at the locker system", async () => {
+      const points = await provider.listAccessPoints(TENANT);
+
+      expect(points).to.deep.equal([
+        {
+          id: PAREVA_SIZE,
+          type: "locker",
+          provider: "pareva",
+          externalId: PAREVA_SIZE,
+          locationId: PAREVA_LOCKER_ID,
+          label: PAREVA_SIZE,
+          capabilities: ["authorization"],
+          supportedModes: [AccessPointMode.AUTHORIZATION],
+          metadata: { size: PAREVA_SIZE },
+        },
+      ]);
+    });
+
+    for (const type of ["access", "locker"]) {
+      it(`builds its client from the tenant's Pareva application of type '${type}'`, async () => {
+        TenantManager.getTenant.resolves({
+          id: TENANT,
+          applications: [
+            {
+              type,
+              id: "pareva",
+              active: true,
+              serverUrl: "https://pareva.example.test",
+              lockerId: "L1",
+              user: "user",
+              password: "password",
+            },
+          ],
+        });
+
+        const client = await new ParevaAccessProvider()._getClient(TENANT);
+
+        expect(client).to.be.instanceOf(ParevaApiClient);
+        expect(client.lockerId).to.equal("L1");
+      });
+    }
+
+    it("throws pareva_application_not_found for a tenant without one", async () => {
+      await rejects(
+        new ParevaAccessProvider().grantAuthorization(
+          PAREVA_LOCKER,
+          doorContext(),
+        ),
+        Error,
+        "pareva_application_not_found",
+      );
+    });
   });
 });
 
@@ -846,6 +1274,14 @@ describe("access provider dialects: what AccessService makes of them", () => {
       },
     );
     registerAccessProvider(
+      "pareva",
+      class extends ParevaAccessProvider {
+        constructor() {
+          super({ client: clients.pareva });
+        }
+      },
+    );
+    registerAccessProvider(
       IN_MEMORY_PROVIDER_ID,
       class extends InMemoryAccessProvider {
         constructor() {
@@ -859,6 +1295,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
     registerAccessProvider("nuki", NukiAccessProvider);
     registerAccessProvider("salto-ks", SaltoKsAccessProvider);
     registerAccessProvider("ifbs", IfbsAccessProvider);
+    registerAccessProvider("pareva", ParevaAccessProvider);
   });
 
   beforeEach(() => {
@@ -1123,7 +1560,9 @@ describe("access provider dialects: what AccessService makes of them", () => {
       });
     }
 
-    it("knows nothing about an iFBS locker without an open process", async () => {
+    it("answers unknown for an iFBS locker without asking, since its provider declares no getStatus", async () => {
+      clients.ifbs = brokenIfbsApiClient();
+      registerFakeProviders();
       stubBooking(lockerBooking());
 
       const status = await AccessService.getStatus(TENANT, "booking-1", "7");
@@ -1153,21 +1592,6 @@ describe("access provider dialects: what AccessService makes of them", () => {
       expect(status).to.deep.equal({
         open: false,
         locked: true,
-        doorOpen: null,
-        statusSource: "provider_status",
-      });
-    });
-
-    it("reads a confirmed iFBS open process as open and unlocked", async () => {
-      stubBooking(lockerBooking({ nummer: 7, lastOpenBoxId: "1" }));
-      await clients.ifbs.openBox("booking-17");
-      clients.ifbs.confirm("1");
-
-      const status = await AccessService.getStatus(TENANT, "booking-1", "7");
-
-      expect(status).to.deep.equal({
-        open: true,
-        locked: false,
         doorOpen: null,
         statusSource: "provider_status",
       });

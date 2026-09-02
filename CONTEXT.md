@@ -77,8 +77,20 @@ _Avoid_: usedBy (als Feld — existiert nicht), Rückreferenz, Usage-Index
 ### Zugang
 
 **AccessPoint**:
-Ein physischer Zugangspunkt (Tür oder Schließfach), den die Plattform über einen Provider (z.B. NUKI, Salto) öffnen und schließen kann.
-_Avoid_: Tür (als Entity-Name), Door, Schloss, Lock
+Ein physischer Zugangspunkt, den die Plattform über einen Provider (z.B. NUKI, Salto, iFBS, Pareva) einer Buchung zuordnet: eine Tür (geteilt, fest konfiguriert) oder eine Schließfachanlage (exklusiv, je Buchung ein Fach zugeteilt). Ein AccessPoint ohne Bedien-Capability ist zulässig — die Plattform muss ihn nicht öffnen können.
+_Avoid_: Tür (als Entity-Name), Door, Schloss, Lock, Locker
+
+**Schließfachanlage**:
+Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Die Plattform kennt vor der Buchung nur die Anlage, nie das Fach. Kapazität ist Sache des Bookables, nicht der Anlage.
+_Avoid_: Locker, Locker-Unit, Location (als Entity), Schließfach (unqualifiziert — das ist das Fach)
+
+**Fach**:
+Das einer Buchung zugeteilte Abteil einer Schließfachanlage. Lebt im Grant der Buchung für die Anlage; bei iFBS trägt es die Boxnummer, an der der Buchende seine Box erkennt.
+_Avoid_: Box (als Begriff — iFBS-Jargon), Unit, Locker
+
+**Vormerkung**:
+Der Anspruch einer noch unbezahlten Buchung auf ein Fach, vor dem Grant. Wird vom Provider gehalten (iFBS, befristet und erneuerbar) oder von der Plattform (Pareva, durch die gespeicherte Buchung selbst). Scheitert die Vormerkung im Checkout, entsteht die Buchung nicht; scheitert der Grant nach der Zahlung, bleibt die Buchung und der Fall geht an die Verwaltung.
+_Avoid_: Hold (als Sprechbegriff), Pre-Reservation, Reservierung (das ist die Buchung)
 
 **Standort**:
 Die optionale physische Verortung eines AccessPoints — Koordinaten, wahlweise ergänzt um eine Adresse. Kein eigenständiges Aggregat.
@@ -124,7 +136,7 @@ Die eine Form, in der ein AccessPoint nach außen geht — für die Türen einer
 _Avoid_: DTO, View-Model, Payload (als Entity-Name)
 
 **Capability (eines AccessPoints)**:
-Eine Aktion, die ein Client an diesem AccessPoint anbieten darf: `open`, `close`, `getStatus`. Gefiltert aus dem, was die Provider-Klasse deklariert — der Provider selbst ist nie Grund zu verzweigen.
+Eine Aktion, die ein Client an diesem AccessPoint anbieten darf: `open`, `close`, `getStatus`. Gefiltert aus dem, was die Provider-Klasse deklariert — der Provider selbst ist nie Grund zu verzweigen. Kann leer sein (eine Pareva-Schließfachanlage).
 _Avoid_: Feature, Fähigkeit, Provider-Capability (das sind die Deklarationen der Provider-Klasse, nicht die des AccessPoints)
 
 **Salto-Guest**:

@@ -1,8 +1,8 @@
 /**
  * The contract every access provider adapter has to keep at the seam
  * `AccessService` talks through. One suite, run against every adapter -
- * NUKI, Salto KS and iFBS over fake API clients, plus the in-memory provider
- * that tests use as the fourth implementation.
+ * NUKI, Salto KS, iFBS and Pareva over fake API clients, plus the in-memory
+ * provider that tests use as the fifth implementation.
  */
 
 const assert = require("assert");
@@ -12,7 +12,9 @@ const AccessProvider = require("../src/commons/services/access/providers/access-
 const NukiAccessProvider = require("../src/commons/services/access/providers/nuki-access-provider");
 const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
 const IfbsAccessProvider = require("../src/commons/services/access/providers/ifbs-access-provider");
+const ParevaAccessProvider = require("../src/commons/services/access/providers/pareva-access-provider");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const UserManager = require("../src/commons/data-managers/user-manager");
 const {
   AccessPointMode,
 } = require("../src/commons/entities/access/access-point");
@@ -31,6 +33,10 @@ const {
   brokenIfbsApiClient,
 } = require("./helpers/fake-ifbs-api-client");
 const {
+  FakeParevaApiClient,
+  brokenParevaApiClient,
+} = require("./helpers/fake-pareva-api-client");
+const {
   InMemoryAccessProvider,
   PROVIDER_ID: IN_MEMORY_PROVIDER_ID,
 } = require("./helpers/in-memory-access-provider");
@@ -38,6 +44,10 @@ const {
   TENANT,
   SALTO_LOCK_ID,
   IFBS_BOOKING_ID,
+  IFBS_LOCATION_ID,
+  IFBS_BOX_NUMBER,
+  PAREVA_LOCKER_ID,
+  PAREVA_SIZE,
   nukiSmartlock,
   saltoLock,
   saltoIq,
@@ -69,10 +79,17 @@ function parameterNames(fn) {
     .filter(Boolean);
 }
 
+/**
+ * One entry per adapter. `secretBearing` says whether a grant of the adapter
+ * hands out a secret the person types - a keypad code, a PIN - or none,
+ * because the provider keeps the code to itself (Pareva) or the box opens
+ * through the API (iFBS).
+ */
 const IMPLEMENTATIONS = [
   {
     name: "nuki",
     Provider: NukiAccessProvider,
+    secretBearing: true,
     accessPoint: {
       id: "door-1",
       tenantId: TENANT,
@@ -98,6 +115,7 @@ const IMPLEMENTATIONS = [
   {
     name: "salto-ks",
     Provider: SaltoKsAccessProvider,
+    secretBearing: true,
     accessPoint: {
       id: "door-2",
       tenantId: TENANT,
@@ -126,20 +144,35 @@ const IMPLEMENTATIONS = [
   {
     name: "ifbs",
     Provider: IfbsAccessProvider,
+    secretBearing: false,
     accessPoint: {
-      id: "7",
+      id: "location-7",
       tenantId: TENANT,
       type: "locker",
       provider: "ifbs",
+      externalId: IFBS_LOCATION_ID,
       mode: AccessPointMode.REMOTE,
     },
     bookingContext: bookingContext({ externalBookingId: IFBS_BOOKING_ID }),
     create() {
-      const client = new FakeIfbsApiClient({ bookingIds: [IFBS_BOOKING_ID] });
+      const client = new FakeIfbsApiClient({
+        locations: [
+          {
+            LocationID: IFBS_LOCATION_ID,
+            boxes: [IFBS_BOX_NUMBER, "62100104"],
+          },
+        ],
+        bookingIds: [IFBS_BOOKING_ID],
+      });
       return {
         provider: new IfbsAccessProvider({ client }),
         client,
-        grantsHeld: () => 0,
+        // The pre-seeded booking is the one opened, not one granted here.
+        grantsHeld: () =>
+          client
+            .bookingsInState("booked")
+            .filter((booking) => booking.LocationID === IFBS_LOCATION_ID)
+            .length,
       };
     },
     createBroken() {
@@ -147,8 +180,37 @@ const IMPLEMENTATIONS = [
     },
   },
   {
+    name: "pareva",
+    Provider: ParevaAccessProvider,
+    secretBearing: false,
+    accessPoint: {
+      id: "size-s",
+      tenantId: TENANT,
+      type: "locker",
+      provider: "pareva",
+      externalId: PAREVA_SIZE,
+      mode: AccessPointMode.AUTHORIZATION,
+    },
+    bookingContext: bookingContext(),
+    create() {
+      const client = new FakeParevaApiClient({
+        lockerId: PAREVA_LOCKER_ID,
+        sizes: [PAREVA_SIZE],
+      });
+      return {
+        provider: new ParevaAccessProvider({ client }),
+        client,
+        grantsHeld: () => client.rentalsInState("open").length,
+      };
+    },
+    createBroken() {
+      return new ParevaAccessProvider({ client: brokenParevaApiClient() });
+    },
+  },
+  {
     name: IN_MEMORY_PROVIDER_ID,
     Provider: InMemoryAccessProvider,
+    secretBearing: true,
     accessPoint: {
       id: "door-3",
       tenantId: TENANT,
@@ -181,14 +243,18 @@ for (const implementation of IMPLEMENTATIONS) {
     const capabilities = Provider.capabilities;
     const declares = (capability) => capabilities.includes(capability);
     const when = (capability) => (declares(capability) ? it : it.skip);
+    const whenSecretBearing = (capability) =>
+      declares(capability) && implementation.secretBearing ? it : it.skip;
 
     let provider;
     let grantsHeld;
 
     beforeEach(function () {
-      // Only Salto reads the tenant's application besides the client (for
-      // the IQ activations behind `listAccessPoints`).
+      // Salto reads the tenant's application besides the client (for the
+      // IQ activations behind `listAccessPoints`), Pareva the tenant's mail
+      // address, iFBS the booking's user.
       sinon.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
+      sinon.stub(UserManager, "getRawUser").resolves(null);
       ({ provider, grantsHeld } = implementation.create());
     });
 
@@ -347,8 +413,62 @@ for (const implementation of IMPLEMENTATIONS) {
       assert.strictEqual(answer, undefined);
     });
 
+    when("hold")(
+      "answers a hold as a Hold: a handle, when it lapses and the compartment, each or null",
+      async function () {
+        const hold = await provider.hold(accessPoint, bookingContext);
+
+        assert.deepStrictEqual(Object.keys(hold).sort(), [
+          "compartment",
+          "expiresAt",
+          "holdId",
+        ]);
+        assert.ok(hold.holdId === null || typeof hold.holdId === "string");
+        assert.ok(
+          hold.expiresAt === null || typeof hold.expiresAt === "number",
+        );
+        assert.ok(
+          hold.compartment === null || typeof hold.compartment === "string",
+        );
+      },
+    );
+
+    when("hold")(
+      "declares refreshHold with hold, and answers the renewal as a Hold again",
+      async function () {
+        assert.ok(declares("refreshHold"));
+        const hold = await provider.hold(accessPoint, bookingContext);
+
+        const renewed = await provider.refreshHold(accessPoint, {
+          ...bookingContext,
+          hold,
+        });
+
+        assert.deepStrictEqual(Object.keys(renewed).sort(), [
+          "compartment",
+          "expiresAt",
+          "holdId",
+        ]);
+      },
+    );
+
+    when("hold")(
+      "grants after a hold, consuming the hold the booking context brings",
+      async function () {
+        const hold = await provider.hold(accessPoint, bookingContext);
+
+        const grant = await provider.grantAuthorization(accessPoint, {
+          ...bookingContext,
+          hold,
+        });
+
+        assert.strictEqual(typeof grant.authorizationId, "string");
+        assert.strictEqual(grantsHeld() > 0, true);
+      },
+    );
+
     when("grantAuthorization")(
-      "answers a grant as a Grant: an id, an external principal or none, and a one-time secret",
+      "answers a grant as a Grant: an id, an external principal or none, and a one-time secret or none",
       async function () {
         const grant = await provider.grantAuthorization(
           accessPoint,
@@ -365,12 +485,16 @@ for (const implementation of IMPLEMENTATIONS) {
           grant.externalPrincipalId === null ||
             typeof grant.externalPrincipalId === "string",
         );
-        assert.match(String(grant.secret), /^\d{6}$/);
+        if (implementation.secretBearing) {
+          assert.match(String(grant.secret), /^\d{6}$/);
+        } else {
+          assert.strictEqual(grant.secret, null);
+        }
         assert.strictEqual(grantsHeld() > 0, true);
       },
     );
 
-    when("grantAuthorization")(
+    whenSecretBearing("grantAuthorization")(
       "uses the PIN the booking context brings as the secret instead of generating one",
       async function () {
         const grant = await provider.grantAuthorization(accessPoint, {

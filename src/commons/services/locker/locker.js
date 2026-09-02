@@ -1,6 +1,7 @@
 const BookingManager = require("../../data-managers/booking-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
-const axios = require("axios");
+const { createClient } = require("./clients/locker-client-registry");
+require("./clients");
 /**
  * BaseLocker is a class that represents a locker reservation system.
  * It is intended to be extended by other classes that implement the specific logic for different types of lockers.
@@ -91,45 +92,16 @@ class ParevaLocker extends BaseLocker {
       const booking = await this.getBooking();
       const locker = this.getLocker(booking);
       const tenant = await this.getTenant();
-      const parevaApp = this.getParevaApp(tenant);
+      const client = createClient(this.getParevaApp(tenant));
 
-      const { user: username, password, serverUrl, lockerId } = parevaApp;
-
-      const tenantMail = tenant.mail;
-      const { mail: userEmail } = booking;
-      const productId = locker.id;
-
-      const [timeBeginTimestamp, timeEndTimestamp] = [
-        new Date(timeBegin).getTime(),
-        new Date(timeEnd).getTime(),
-      ];
-      const duration = timeEndTimestamp - timeBeginTimestamp;
-      const trimmedUrl = serverUrl.replace(/\/$/, "");
-
-      const data = JSON.stringify({
-        managerAssignment: false,
-        email: userEmail,
-        plannedBegin: `${timeBeginTimestamp}`,
-        date_estimate_delivery: `${duration}`,
-        fromEmail: tenantMail,
-        itemName: "",
-        additionalInfo: {},
+      const rental = await client.startRental(locker.id, {
+        email: booking.mail,
+        fromEmail: tenant.mail,
+        plannedBegin: timeBegin,
+        plannedEnd: timeEnd,
       });
 
-      const base64Credentials = Buffer.from(`${username}:${password}`).toString(
-        "base64",
-      );
-
-      const config = this.createAxiosConfig(
-        "post",
-        `${trimmedUrl}/locker/${lockerId}/rental/${productId}/open`,
-        base64Credentials,
-        data,
-      );
-
-      const response = await axios.request(config);
-
-      locker.processId = response.data.processId;
+      locker.processId = rental.processId;
       locker.isConfirmed = true;
       delete locker.preReservedAt;
       return locker;
@@ -153,28 +125,15 @@ class ParevaLocker extends BaseLocker {
     const tenant = await this.getTenant();
     const { processId } = locker;
     try {
-      const parevaApp = this.getParevaApp(tenant);
-
-      const { user: username, password, serverUrl, lockerId } = parevaApp;
-      const trimmedUrl = serverUrl.replace(/\/$/, "");
-
-      const base64Credentials = Buffer.from(`${username}:${password}`).toString(
-        "base64",
-      );
+      const client = createClient(this.getParevaApp(tenant));
 
       if (!processId) {
         return { success: false, processId: null };
       }
 
-      const config = this.createAxiosConfig(
-        "post",
-        `${trimmedUrl}/locker/${lockerId}/process/${processId}/cancel`,
-        base64Credentials,
-      );
+      const answer = await client.cancelRental(processId);
 
-      const response = await axios.request(config);
-
-      if (response.status !== 200 || response.data.success !== true) {
+      if (answer?.success !== true) {
         return { success: false, processId: locker.processId };
       }
 
@@ -200,22 +159,6 @@ class ParevaLocker extends BaseLocker {
     );
     if (!parevaApp) throw new Error("Pareva application not found");
     return parevaApp;
-  }
-
-  createAxiosConfig(method, url, base64Credentials, data = null) {
-    const config = {
-      method,
-      maxBodyLength: Infinity,
-      url,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${base64Credentials}`,
-      },
-    };
-    if (data) {
-      config.data = data;
-    }
-    return config;
   }
 }
 

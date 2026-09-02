@@ -2,11 +2,25 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 
 const AccessInfoService = require("../src/commons/services/access/access-info-service");
+const AccessProvider = require("../src/commons/services/access/providers/access-provider");
 const {
   getAccessProvider,
+  registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
 
 require("../src/commons/services/access/providers/register-access-providers");
+
+// A provider that opens but does not list its access points - registered
+// for this suite only, since every production provider lists by now.
+const BLIND_PROVIDER = "blind";
+registerAccessProvider(
+  BLIND_PROVIDER,
+  class BlindAccessProvider extends AccessProvider {
+    static get capabilities() {
+      return ["open"];
+    }
+  },
+);
 
 function createAccessPoint(overrides = {}) {
   return {
@@ -145,7 +159,7 @@ describe("AccessInfoService.getSupportedModes", () => {
 
   it("reports null for a provider that cannot list its access points", async () => {
     const modes = await AccessInfoService.getSupportedModes(
-      createAccessPoint({ provider: "ifbs" }),
+      createAccessPoint({ provider: BLIND_PROVIDER }),
       "tenant-1",
     );
 

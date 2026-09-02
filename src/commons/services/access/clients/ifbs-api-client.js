@@ -1,6 +1,7 @@
 const axios = require("axios");
+const crypto = require("crypto");
 const bunyan = require("bunyan");
-const BaseLockerApiClient = require("./base-locker-api-client");
+const BaseAccessApiClient = require("./base-access-api-client");
 const IfbsApiError = require("./ifbs-api-error");
 
 const logger = bunyan.createLogger({
@@ -8,7 +9,13 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
-class IfbsApiClient extends BaseLockerApiClient {
+/**
+ * The iFBS bike box API: one GET per command, the API key as a query
+ * parameter, and every answer carrying `success` as a string. An answer
+ * with `success: "false"` is raised as an {@link IfbsApiError} with the
+ * error number and message iFBS gives.
+ */
+class IfbsApiClient extends BaseAccessApiClient {
   constructor(serverUrl, apiKey, secretPhrase, options = {}) {
     super(serverUrl);
     this.apiKey = apiKey;
@@ -129,14 +136,6 @@ class IfbsApiClient extends BaseLockerApiClient {
     return result;
   }
 
-  async monitorOpenBox(openBoxID) {
-    const response = await this._get("monitorOpenBox.php", {
-      OpenBox_ID: openBoxID,
-    });
-    const { success, ...result } = response;
-    return result;
-  }
-
   async waitForOpenBox(openBoxID, timeout = 20) {
     const response = await this._get(
       "waitForOpenBox.php",
@@ -149,6 +148,60 @@ class IfbsApiClient extends BaseLockerApiClient {
     const { success, ...result } = response;
     return result;
   }
+
+  /**
+   * The `User_ID` iFBS is told on `getBox`: the platform user's database id
+   * behind a fixed prefix, or `1` - the anonymous user - when the booking
+   * has no user the platform knows.
+   *
+   * @param {Object|null} rawUser The user as `UserManager.getRawUser`
+   *   answers it, or nothing
+   * @returns {string|number}
+   */
+  static userId(rawUser) {
+    if (!rawUser?._id) {
+      return 1;
+    }
+    return `01${rawUser._id.toString()}`;
+  }
+
+  /**
+   * A timestamp as iFBS takes it: "YYYY-MM-DD HH:mm", local time.
+   *
+   * @param {number|Date} timestamp
+   * @returns {string}
+   */
+  static formatDate(timestamp) {
+    const d = new Date(timestamp);
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-` +
+      `${pad(d.getDate())} ` +
+      `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  }
+
+  /**
+   * The checksum `bookIt` proves a booking with, as the iFBS specification
+   * has it: md5(nummer + urlEncode(DATEfrom) + urlEncode(DATEto) +
+   * secretPhrase).
+   *
+   * @param {string|number} nummer The box number `getBox` answered
+   * @param {string} dateFrom As of {@link IfbsApiClient.formatDate}
+   * @param {string} dateTo As of {@link IfbsApiClient.formatDate}
+   * @param {string} secretPhrase The tenant's iFBS secret phrase
+   * @returns {string}
+   */
+  static checksum(nummer, dateFrom, dateTo, secretPhrase) {
+    const encode = (value) =>
+      new URLSearchParams({ v: value }).toString().slice(2);
+
+    const raw =
+      String(nummer) + encode(dateFrom) + encode(dateTo) + secretPhrase;
+
+    return crypto.createHash("md5").update(raw).digest("hex");
+  }
+
   static get capabilities() {
     return [
       "getLocations",
@@ -162,7 +215,6 @@ class IfbsApiClient extends BaseLockerApiClient {
       "cancelUsage",
       "endUsage",
       "openBox",
-      "monitorOpenBox",
       "waitForOpenBox",
       "getBookings",
     ];
@@ -183,7 +235,7 @@ class IfbsApiClient extends BaseLockerApiClient {
         errorCode: data.ErrNo || null,
       };
     } catch (err) {
-      return BaseLockerApiClient.handleConnectionError(err);
+      return BaseAccessApiClient.handleConnectionError(err);
     }
   }
 
