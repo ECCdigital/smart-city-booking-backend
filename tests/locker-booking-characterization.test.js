@@ -6,9 +6,9 @@
  * against booking outcomes and the fake providers, never against the
  * stack's internals, so the same assertions took the fold off once the
  * checkout ran through `AccessService` (ticket 3): `lockerInfo` is the
- * derived read field the spec keeps, and the locker systems are still
- * configured at the bookable as `lockerDetails.units` until the migration
- * of ticket 4.
+ * derived read field the spec keeps, and the locker systems are rows of
+ * `accesspoints` the bookables reference, as the migration of ticket 4
+ * leaves them.
  *
  * The provider APIs are the fakes of `tests/helpers/`, installed at the
  * access provider registry the service resolves its adapters from. Below
@@ -74,6 +74,35 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const HOLD_TTL_MS = 2 * MINUTE;
 
+/** The iFBS location as the migration stored it. */
+const BIKE_BOXES = {
+  id: "loc-7",
+  tenantId: TENANT,
+  type: "locker",
+  provider: "ifbs",
+  externalId: IFBS_LOCATION,
+  providerLocationId: IFBS_LOCATION,
+  label: "Fahrradbox",
+  mode: "remote",
+  validationRules: [],
+  scanCode: "code-loc-7",
+};
+
+/** The Pareva size as the migration stored it. */
+const SIZE_S_LOCKERS = {
+  id: "size-s",
+  tenantId: TENANT,
+  type: "locker",
+  provider: "pareva",
+  externalId: SIZE_S,
+  providerLocationId: PAREVA_LOCKER_ID,
+  label: "Schließfach S",
+  mode: "authorization",
+  validationRules: [],
+  scanCode: "code-size-s",
+};
+const LOCKER_SYSTEMS = [BIKE_BOXES, SIZE_S_LOCKERS];
+
 // A weekday slot well in the future: what a customer books today.
 const TIME_BEGIN = Date.UTC(2027, 5, 21, 10, 0, 0);
 const TIME_END = Date.UTC(2027, 5, 21, 12, 0, 0);
@@ -84,7 +113,7 @@ const tenant = () => ({
   cancellationRefundTiers: [],
   applications: [
     {
-      type: "locker",
+      type: "access",
       id: "ifbs",
       active: true,
       serverUrl: "https://ifbs.example.test",
@@ -92,7 +121,7 @@ const tenant = () => ({
       secretPhrase: "secret-phrase",
     },
     {
-      type: "locker",
+      type: "access",
       id: "pareva",
       active: true,
       serverUrl: "https://pareva.example.test",
@@ -124,26 +153,21 @@ function bookable(overrides = {}) {
   });
 }
 
-/** A bike box bookable: iFBS location 7, two boxes on offer. */
+/** A bike box bookable at iFBS location 7; iFBS knows how many boxes. */
 const bikeBox = () =>
   bookable({
     id: "bikebox",
     title: "Fahrradbox",
-    lockerDetails: {
-      active: true,
-      units: [{ lockerSystem: "ifbs", locationId: IFBS_LOCATION, amount: 2 }],
-    },
+    accessPointDetails: { active: true, accessPointIds: [BIKE_BOXES.id] },
   });
 
-/** A locker bookable: Pareva size S, two compartments on offer. */
+/** A locker bookable of Pareva size S, two compartments on offer. */
 const lockerS = () =>
   bookable({
     id: "locker-s",
     title: "Schließfach S",
-    lockerDetails: {
-      active: true,
-      units: [{ id: SIZE_S, lockerSystem: "pareva", amount: "2" }],
-    },
+    amount: 2,
+    accessPointDetails: { active: true, accessPointIds: [SIZE_S_LOCKERS.id] },
   });
 
 describe("locker booking outcomes: what the locker stack leaves at the booking and the providers", function () {
@@ -253,7 +277,11 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
       .resolves([]);
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
-    sinon.stub(AccessPointManager, "getAccessPointsByIds").resolves([]);
+    sinon
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .callsFake(async (tenantId, ids) =>
+        LOCKER_SYSTEMS.filter((row) => ids.includes(row.id)),
+      );
     sinon.stub(MediaManager, "getBookingDocuments").resolves([]);
 
     sinon.stub(CouponService, "incrementCouponUsage").resolves();
@@ -374,13 +402,14 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     });
 
     it("counts Pareva compartments against the concurrent bookings of the bookable", async function () {
-      // A booking of one compartment of the size, as the fold stores it.
+      // A booking of one compartment of the size.
       concurrentBookings = [
         {
           id: "OTHER-1",
+          bookableItems: [{ bookableId: "locker-s", amount: 1 }],
           accessInfo: [
             {
-              accessPointId: "locker:pareva:S",
+              accessPointId: SIZE_S_LOCKERS.id,
               accessPointType: "locker",
               provider: "pareva",
               externalId: SIZE_S,

@@ -377,7 +377,7 @@ Key fields of a bookable:
 | permittedRoles               | List of role IDs that are allowed to book. If empty, every user including guests may book (depending on other rules).                                                                                                                                              |
 | bookingDiscounts             | Per-user and per-role booking discounts (`users[].userId`, `users[].discountPercent`, `roles[].roleId`, `roles[].discountPercent`; integer 0–100). Highest matching discount applies.                                                                              |
 | attachments                  | Attachments: `id`, `title`, `caption`, `type`, `url`, `show`, `required`, `mailAttach`.                                                                                                                                                                            |
-| lockerDetails                | Configuration for locker integrations (e.g. units).                                                                                                                                                                                                                |
+| lockerDetails                | Read-only. Derived from the locker rows (`type: locker`) among `accessPointDetails.accessPointIds`: `active`, and one unit per row with the bookable's `amount`; never stored, a value sent in is ignored. Locker systems are configured as access points.         |
 | requiredFields               | Checkout fields required from the user (default: `address`, `zipCode`, `city`).                                                                                                                                                                                    |
 | externalProviders            | External pricing/availability providers: `active`, `provider`, `handles`, `config`.                                                                                                                                                                                |
 | customFieldDefinitions       | Tenant/bookable-level custom field definitions.                                                                                                                                                                                                                    |
@@ -663,7 +663,7 @@ Applications are embedded in the **Instance** or **Tenant** `applications` array
 
 Common base fields: `type`, `id`, `active`, `title`.
 
-**Tenant application types:** `auth`, `payment`, `locker`, `card-auth`
+**Tenant application types:** `auth`, `payment`, `access`, `card-auth` (`locker` was retired by the locker fold's migration; iFBS and Pareva are `access` applications)
 
 **Instance application types:** `auth` (e.g. Keycloak SSO with `id: "keycloak"`)
 
@@ -858,21 +858,24 @@ Example:
 
 ### AccessPoint
 
-Access points represent physical access integrations (e.g. lockers) linked to bookings.
+Access points are tenant-wide entities (`accesspoints` collection) a bookable references through `accessPointDetails.accessPointIds`: a door (`type: door`, shared, configured once) or a locker system (`type: locker`, exclusive, a compartment assigned per booking - an iFBS location or a Pareva size).
 
 Example:
 
 ```json
 {
-  "id": "ap-123",
-  "tenant": "default",
+  "id": "6f1c0f6e-6f0f-4d0e-9f0a-2b1c9d4e5f60",
+  "tenantId": "default",
   "type": "locker",
-  "provider": "ilockit",
-  "externalId": "locker-unit-42",
-  "locationId": "building-a",
-  "label": "Box 12",
-  "metadata": {}
+  "provider": "ifbs",
+  "externalId": "7",
+  "providerLocationId": "7",
+  "label": "Fahrradboxen Bahnhof",
+  "mode": "remote",
+  "config": {},
+  "location": null,
+  "validationRules": []
 }
 ```
 
-Types include `locker`. Providers are integration-specific (e.g. `ilockit`, `nuki`, `salto`).
+Providers are `nuki`, `salto-ks`, `ifbs` and `pareva`. `scanCode` and `previousScanCodes` are stored but never returned. Capacity of a locker system is the bookable's `amount`.

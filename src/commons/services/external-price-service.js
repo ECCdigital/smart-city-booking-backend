@@ -1,6 +1,7 @@
 const { getTenantAppById } = require("../data-managers/tenant-manager");
-const providerRegistry = require("./checkout/providers/checkout-provider-registry");
-const { createClient } = require("./locker/clients/locker-client-registry");
+const providerRegistry = require("./checkout/providers/register");
+const { createClient } = require("./access/clients/access-client-registry");
+require("./access/clients");
 
 class ExternalPriceService {
   /**
@@ -24,27 +25,61 @@ class ExternalPriceService {
     const categories = [];
 
     for (const decl of declarations) {
-      if (!providerRegistry.has(decl.provider)) continue;
-
-      const app = await getTenantAppById(tenantId, decl.provider);
-      if (!app?.active) continue;
-
-      const client = createClient(app);
-
-      const provider = providerRegistry.resolve(decl.provider, client, {
-        bookable,
-        unit: decl.config,
+      const external = await this.categoriesOf(
         tenantId,
-        externalCache: sharedCache,
-      });
-
-      if (typeof provider.getExternalPriceCategories === "function") {
-        const extCats = await provider.getExternalPriceCategories();
-        categories.push(...extCats);
+        decl.provider,
+        decl.config,
+        { bookable, sharedCache },
+      );
+      if (external) {
+        categories.push(...external);
       }
     }
 
     return categories.length > 0 ? categories : null;
+  }
+
+  /**
+   * The price categories one checkout price provider answers for a
+   * configuration - an iFBS location, say - with the tenant's application
+   * of the provider.
+   *
+   * @param {string} tenantId
+   * @param {string} provider The checkout provider, e.g. `ifbs`
+   * @param {Object} config What the provider prices, as `externalProviders[].config`
+   *   declares it
+   * @param {Object} [options]
+   * @param {Object} [options.bookable={}] The bookable priced, where there is one
+   * @param {Map} [options.sharedCache] Cache shared across calls
+   * @returns {Promise<Object[]|null>} The categories, `[]` where the provider
+   *   answers none, `null` where there is no such provider or the tenant
+   *   has no active application for it
+   */
+  static async categoriesOf(
+    tenantId,
+    provider,
+    config,
+    { bookable = {}, sharedCache = new Map() } = {},
+  ) {
+    if (!providerRegistry.has(provider)) return null;
+
+    const app = await getTenantAppById(tenantId, provider);
+    if (!app?.active) return null;
+
+    const client = createClient(app);
+
+    const checkoutProvider = providerRegistry.resolve(provider, client, {
+      bookable,
+      unit: config,
+      tenantId,
+      externalCache: sharedCache,
+    });
+
+    if (typeof checkoutProvider.getExternalPriceCategories !== "function") {
+      return [];
+    }
+
+    return checkoutProvider.getExternalPriceCategories();
   }
 }
 

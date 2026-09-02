@@ -287,10 +287,7 @@ class BookableManager {
 
     return Array.from(uniqueMap.values())
       .map((obj) => BookableModel.hydrate(obj))
-      .map((doc) => {
-        BookableModel.applyIfbsProvider(doc);
-        return doc.toEntity();
-      });
+      .map((doc) => doc.toEntity());
   }
 
   /**
@@ -404,10 +401,7 @@ class BookableManager {
 
     return Array.from(uniqueMap.values())
       .map((obj) => BookableModel.hydrate(obj))
-      .map((doc) => {
-        BookableModel.applyIfbsProvider(doc);
-        return doc.toEntity();
-      });
+      .map((doc) => doc.toEntity());
   }
 
   /**

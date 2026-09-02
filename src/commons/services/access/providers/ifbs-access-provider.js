@@ -2,7 +2,7 @@ const bunyan = require("bunyan");
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const UserManager = require("../../../data-managers/user-manager");
-const { createClient } = require("../../locker/clients/locker-client-registry");
+const { createClient } = require("../clients/access-client-registry");
 const IfbsApiClient = require("../clients/ifbs-api-client");
 const IfbsApiError = require("../clients/ifbs-api-error");
 const {
@@ -12,9 +12,10 @@ const {
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
 
-require("../../locker/clients");
+require("../clients");
 
 const PROVIDER_ID = "ifbs";
+const APP_TYPE = "access";
 
 // How long iFBS keeps a box after `getBox` before it releases it again.
 const HOLD_TTL_MS = 2 * 60 * 1000;
@@ -44,11 +45,9 @@ class IfbsAccessProvider extends AccessProvider {
     }
 
     const tenantData = await TenantManager.getTenant(tenant);
-    const rawApp = this._findActiveApplication(
-      tenantData,
-      PROVIDER_ID,
-      AccessProvider.lockerApplicationTypes,
-    );
+    const rawApp = this._findActiveApplication(tenantData, PROVIDER_ID, [
+      APP_TYPE,
+    ]);
 
     if (!rawApp) {
       throw new NotFoundError("ifbs_application_not_found", { tenant });
@@ -327,6 +326,11 @@ class IfbsAccessProvider extends AccessProvider {
       : null;
 
     return IfbsApiClient.userId(rawUser);
+  }
+
+  /** How long iFBS keeps a held box, in milliseconds. */
+  static get holdTtlMs() {
+    return HOLD_TTL_MS;
   }
 
   static get capabilities() {

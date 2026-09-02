@@ -148,11 +148,6 @@
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
 
-// Where a locker provider's application is looked for in a tenant: as
-// `access` first, as `locker` second - iFBS and Pareva are configured as
-// locker applications until the locker fold migrates them (ticket 4).
-const LOCKER_APPLICATION_TYPES = Object.freeze(["access", "locker"]);
-
 /** A lock nobody could read: unknown on every count. */
 const UNKNOWN_LOCK_STATUS = Object.freeze({
   open: null,
@@ -178,16 +173,6 @@ class AccessProvider {
    */
   static get unknownLockStatus() {
     return UNKNOWN_LOCK_STATUS;
-  }
-
-  /**
-   * The application types a locker provider's adapter looks under, in
-   * order, for {@link AccessProvider#_findActiveApplication}.
-   *
-   * @returns {string[]}
-   */
-  static get lockerApplicationTypes() {
-    return LOCKER_APPLICATION_TYPES;
   }
 
   /**

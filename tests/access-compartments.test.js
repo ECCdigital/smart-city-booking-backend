@@ -84,7 +84,7 @@ const tenant = () => ({
   mail: "stadt@example.test",
   applications: [
     {
-      type: "locker",
+      type: "access",
       id: "ifbs",
       active: true,
       serverUrl: "https://ifbs.example.test",
@@ -92,7 +92,7 @@ const tenant = () => ({
       secretPhrase: "secret-phrase",
     },
     {
-      type: "locker",
+      type: "access",
       id: "pareva",
       active: true,
       serverUrl: "https://pareva.example.test",
@@ -701,106 +701,21 @@ describe("Compartments on the access seam", function () {
     });
   });
 
-  /**
-   * Until the migration of step 4 moves them into `accesspoints`, locker
-   * systems are configured at the bookable as `lockerDetails.units`. The
-   * resolver stands in for the rows with synthesized ones, so a booking of
-   * such a bookable gets its compartments the same way.
-   */
-  describe("locker systems configured at the bookable (until the migration)", function () {
-    const LEGACY_BOOKABLES = {
-      "bikebox-legacy": {
-        id: "bikebox-legacy",
-        title: "Fahrradbox",
-        amount: 10,
-        lockerDetails: {
-          active: true,
-          units: [
-            { lockerSystem: "ifbs", locationId: IFBS_LOCATION, amount: 2 },
-          ],
-        },
-      },
-      "locker-s-legacy": {
-        id: "locker-s-legacy",
-        title: "Schließfach S",
-        amount: 10,
-        lockerDetails: {
-          active: true,
-          units: [{ id: SIZE_S, lockerSystem: "pareva", amount: "2" }],
-        },
-      },
-    };
-
-    beforeEach(function () {
+  describe("locker systems still written at the bookable as lockerDetails", function () {
+    it("gives no compartment for them - the rows of the migration are the only locker systems", async function () {
       BookableManager.getBookablesByIds.callsFake(async (tenantId, ids) =>
-        ids.map((id) => LEGACY_BOOKABLES[id] || BOOKABLES[id]).filter(Boolean),
+        ids.map((id) => ({
+          id,
+          title: "Fahrradbox",
+          amount: 10,
+          lockerDetails: {
+            active: true,
+            units: [
+              { lockerSystem: "ifbs", locationId: IFBS_LOCATION, amount: 2 },
+            ],
+          },
+        })),
       );
-    });
-
-    it("holds a box at the iFBS location of the unit, at a locker system named after it", async function () {
-      storeBooking("bikebox-legacy");
-
-      await AccessService.holdForBooking(TENANT, "booking-1");
-
-      const [entry] = compartments();
-      expect(entry).to.deep.include({
-        accessPointId: "locker:ifbs:7",
-        provider: "ifbs",
-        externalId: IFBS_LOCATION,
-        mode: "remote",
-        bookableId: "bikebox-legacy",
-        compartment: BOX_A,
-      });
-      expect(entry.hold).to.include({ holdId: "100" });
-    });
-
-    it("counts Pareva compartments against the unit's amount, over the unrevoked compartments the concurrent bookings have at the size", async function () {
-      concurrentBookings = [
-        {
-          id: "booking-0",
-          accessInfo: [
-            {
-              accessPointId: "locker:pareva:S",
-              accessPointType: "locker",
-              provider: "pareva",
-              externalId: SIZE_S,
-              grant: { authorizationId: "p-0" },
-            },
-            {
-              accessPointId: "locker:pareva:S",
-              accessPointType: "locker",
-              provider: "pareva",
-              externalId: SIZE_S,
-              grant: { authorizationId: "p-1" },
-              revokedAt: now,
-            },
-          ],
-        },
-      ];
-      storeBooking("locker-s-legacy", 2);
-
-      await assert.rejects(AccessService.holdForBooking(TENANT, "booking-1"));
-
-      storeBooking("locker-s-legacy", 1);
-      await AccessService.holdForBooking(TENANT, "booking-1");
-      expect(compartments()).to.have.length(1);
-    });
-
-    it("gives a granted box back after the bookable dropped the unit", async function () {
-      storeBooking("bikebox-legacy");
-      await AccessService.provisionForBooking(TENANT, "booking-1");
-      BookableManager.getBookablesByIds.callsFake(async (tenantId, ids) =>
-        ids.map((id) => ({ id, title: id, amount: 10 })),
-      );
-
-      await AccessService.revokeForBooking(TENANT, "booking-1");
-
-      expect(ifbs.bookings.get("100").state).to.equal("ended");
-      expect(compartments()[0].revokedAt).to.be.a("number");
-    });
-
-    it("leaves a unit alone whose provider the tenant has no active application for", async function () {
-      TenantManager.getTenant.resolves({ ...tenant(), applications: [] });
       storeBooking("bikebox-legacy");
 
       const accessInfo = await AccessService.holdForBooking(
@@ -809,41 +724,7 @@ describe("Compartments on the access seam", function () {
       );
 
       expect(accessInfo).to.deep.equal([]);
-    });
-
-    it("prefers the stored row where the bookable references one", async function () {
-      LEGACY_BOOKABLES["bikebox-both"] = {
-        ...LEGACY_BOOKABLES["bikebox-legacy"],
-        id: "bikebox-both",
-        accessPointDetails: { active: true, accessPointIds: [BIKE_BOXES.id] },
-      };
-      storeBooking("bikebox-both");
-
-      await AccessService.holdForBooking(TENANT, "booking-1");
-
-      expect(compartments().map((entry) => entry.accessPointId)).to.deep.equal([
-        BIKE_BOXES.id,
-      ]);
-      delete LEGACY_BOOKABLES["bikebox-both"];
-    });
-
-    it("lists the compartment under the synthesized locker system", async function () {
-      storeBooking("bikebox-legacy");
-      await AccessService.provisionForBooking(TENANT, "booking-1");
-
-      const listed = await AccessService.getByBooking(TENANT, "booking-1", {
-        userId: "user-1",
-      });
-
-      expect(listed).to.have.length(1);
-      expect(listed[0]).to.include({
-        id: "locker:ifbs:7:100",
-        type: "locker",
-        provider: "ifbs",
-        label: "Fahrradbox",
-        isProvisioned: true,
-        compartment: BOX_A,
-      });
+      expect(ifbs.bookings.size).to.equal(0);
     });
   });
 

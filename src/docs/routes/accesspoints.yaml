@@ -344,7 +344,13 @@ components:
         type:
           type: string
           enum: [door, locker]
-          description: Only `door` is used in V1.
+          description: |
+            `door`: shared, configured once, opened by whoever books a
+            bookable that references it. `locker`: a locker system - an
+            iFBS location or a Pareva size - whose provider assigns a
+            compartment per booking; `externalId` is the location or size,
+            `providerLocationId` the iFBS location or the Pareva locker
+            system. Capacity is the bookable's `amount`, never the row's.
           example: door
         provider:
           type: string

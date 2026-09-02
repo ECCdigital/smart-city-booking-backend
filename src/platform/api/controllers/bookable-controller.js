@@ -14,6 +14,9 @@ const {
 } = require("../../../commons/utilities/opening-hours-manager");
 const BookableService = require("../../../commons/services/bookable-service");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const {
+  withLockerDetails,
+} = require("../../../commons/services/access/bookable-locker-details");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -49,9 +52,12 @@ class BookableController {
         `${tenant} -- Returning ${bookables.length} public bookables to user ${user?.id}`,
       );
 
-      response
-        .status(200)
-        .send(bookables.map((bookable) => bookable.withResolvedMediaUrls()));
+      response.status(200).send(
+        await withLockerDetails(
+          tenant,
+          bookables.map((bookable) => bookable.withResolvedMediaUrls()),
+        ),
+      );
     } catch (err) {
       logger.error(err);
       response.status(500).send(`Could not get bookables`);
@@ -108,7 +114,9 @@ class BookableController {
         `${tenant} -- Returning ${allowedBookables.length} bookables to user ${user?.id}`,
       );
 
-      response.status(200).send(allowedBookables);
+      response
+        .status(200)
+        .send(await withLockerDetails(tenant, allowedBookables));
     } catch (err) {
       logger.error(err);
       response.status(500).send(`Could not get bookables`);
@@ -148,7 +156,10 @@ class BookableController {
       logger.info(
         `${tenant} -- Returning bookable ${bookable.id} to user ${user?.id}`,
       );
-      response.status(200).send(bookable.withResolvedMediaUrls());
+      const [withDetails] = await withLockerDetails(tenant, [
+        bookable.withResolvedMediaUrls(),
+      ]);
+      response.status(200).send(withDetails);
     } catch (err) {
       logger.error(`${tenant} -- ${err.message}`);
       response.status(500).send(`Could not get bookable`);
@@ -217,7 +228,8 @@ class BookableController {
       logger.info(
         `${tenant} -- Returning bookable ${bookable.id} to user ${user?.id}`,
       );
-      response.status(200).send(bookable);
+      const [withDetails] = await withLockerDetails(tenant, [bookable]);
+      response.status(200).send(withDetails);
     } catch (err) {
       logger.error(`${tenant} -- ${err.message}`);
       response.status(500).send(`Could not get bookable`);
