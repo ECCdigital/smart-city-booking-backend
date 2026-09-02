@@ -4,10 +4,11 @@
  * NUKI, Salto KS and iFBS over fake API clients, plus the in-memory provider
  * that tests use as the fourth implementation.
  *
- * Cases the spec (`.scratch/architecture/provider-outcomes/spec.md`)
- * promises but which only hold after the seam is typed are `it.skip` with
- * the ticket that makes them true: (2) OpenOutcome, LockStatus,
- * OpenProgress and the error contract; (3) Grant and Revocation.
+ * Cases the Provider-Outcomes spec promises but which only hold after the
+ * seam is typed are `it.skip` with the ticket that makes them true:
+ * (2) OpenOutcome, LockStatus, OpenProgress and the error contract;
+ * (3) Grant and Revocation. The spec lives with the effort's map, not in
+ * the repo.
  */
 
 const assert = require("assert");
@@ -21,32 +22,35 @@ const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const {
   AccessPointMode,
 } = require("../src/commons/entities/access/access-point");
-const {
-  NUKI_DEVICE_TYPES,
-} = require("../src/commons/services/access/clients/nuki-api-client");
 const { AccessOpenError } = require("../src/errors/AccessOpenError");
 
 const {
   FakeNukiApiClient,
-  BrokenNukiApiClient,
+  brokenNukiApiClient,
 } = require("./helpers/fake-nuki-api-client");
 const {
   FakeSaltoKsApiClient,
-  BrokenSaltoKsApiClient,
-  FAKE_SITE_ID,
+  brokenSaltoKsApiClient,
 } = require("./helpers/fake-salto-ks-api-client");
 const {
   FakeIfbsApiClient,
-  BrokenIfbsApiClient,
+  brokenIfbsApiClient,
 } = require("./helpers/fake-ifbs-api-client");
 const {
   InMemoryAccessProvider,
+  PROVIDER_ID: IN_MEMORY_PROVIDER_ID,
 } = require("./helpers/in-memory-access-provider");
+const {
+  TENANT,
+  SALTO_LOCK_ID,
+  IFBS_BOOKING_ID,
+  nukiSmartlock,
+  saltoLock,
+  saltoIq,
+  tenantWithSaltoApp,
+  bookingContext,
+} = require("./helpers/access-provider-fixtures");
 
-const TENANT = "tenant-1";
-const MINUTE = 60 * 1000;
-const SALTO_LOCK_ID = "4d77312f-4a87-41db-a97b-f9d948dcc908";
-const SALTO_IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
 const ALL_MODES = Object.values(AccessPointMode);
 
 /**
@@ -56,27 +60,30 @@ const ALL_MODES = Object.values(AccessPointMode);
  */
 function parameterNames(fn) {
   const source = fn.toString();
-  const list = source.slice(source.indexOf("(") + 1, source.indexOf(")"));
-  return list
+  const start = source.indexOf("(") + 1;
+  let depth = 1;
+  let end = start;
+  while (end < source.length && depth > 0) {
+    if (source[end] === "(") depth += 1;
+    if (source[end] === ")") depth -= 1;
+    end += 1;
+  }
+  return source
+    .slice(start, end - 1)
     .split(",")
     .map((parameter) => parameter.split("=")[0].trim().replace(/^_/, ""))
     .filter(Boolean);
 }
 
-function bookingContext(overrides = {}) {
-  const now = Date.now();
-  return {
-    tenant: TENANT,
-    bookingId: "booking-1",
-    timeBegin: now - 5 * MINUTE,
-    timeEnd: now + 55 * MINUTE,
-    accessFrom: now - 5 * MINUTE,
-    accessTo: now + 55 * MINUTE,
-    booking: { name: "Erika Muster", mail: "erika@example.test" },
-    ...overrides,
-  };
-}
-
+/*
+ * Each implementation carries `today`: the facts about its dialect that the
+ * active cases pin as they are now, and that the typed seam changes. They
+ * choose between `it` and `it.skip` per implementation until then.
+ *   openNamesProcess  the open answer carries an open process to poll
+ *   mapsClientErrors  a broken client ends in an AccessOpenError
+ *   revokeIdempotent  a second revoke of the same grant does not throw
+ *   arityDrift        capabilities whose parameter count differs from the base
+ */
 const IMPLEMENTATIONS = [
   {
     name: "nuki",
@@ -91,18 +98,7 @@ const IMPLEMENTATIONS = [
     },
     bookingContext: bookingContext(),
     create() {
-      const client = new FakeNukiApiClient({
-        smartlocks: [
-          {
-            smartlockId: 1001,
-            name: "Main door",
-            type: NUKI_DEVICE_TYPES.SMART_LOCK_3_4,
-            accountId: 77,
-            config: { keypadPaired: true },
-            state: { state: 1, doorState: 0 },
-          },
-        ],
-      });
+      const client = new FakeNukiApiClient({ smartlocks: [nukiSmartlock()] });
       return {
         provider: new NukiAccessProvider({ client }),
         client,
@@ -110,7 +106,7 @@ const IMPLEMENTATIONS = [
       };
     },
     createBroken() {
-      return new NukiAccessProvider({ client: new BrokenNukiApiClient() });
+      return new NukiAccessProvider({ client: brokenNukiApiClient() });
     },
     today: {
       openNamesProcess: false,
@@ -132,21 +128,9 @@ const IMPLEMENTATIONS = [
     },
     bookingContext: bookingContext(),
     create() {
-      // An IQ without OTP needs no local activation, so the open runs without
-      // the activation service reading the tenant.
       const client = new FakeSaltoKsApiClient({
-        locks: [
-          {
-            id: SALTO_LOCK_ID,
-            customer_reference: "Tür 01",
-            lock_type: "escutcheon_pin",
-            online: true,
-            locked_state: "locked",
-            siteId: FAKE_SITE_ID,
-            iq: { id: SALTO_IQ_ID, otp_enabled: false },
-          },
-        ],
-        iqs: [{ id: SALTO_IQ_ID, otp_enabled: false, restore_required: false }],
+        locks: [saltoLock()],
+        iqs: [saltoIq()],
       });
       return {
         provider: new SaltoKsAccessProvider({ client }),
@@ -155,9 +139,7 @@ const IMPLEMENTATIONS = [
       };
     },
     createBroken() {
-      return new SaltoKsAccessProvider({
-        client: new BrokenSaltoKsApiClient(),
-      });
+      return new SaltoKsAccessProvider({ client: brokenSaltoKsApiClient() });
     },
     today: {
       openNamesProcess: false,
@@ -175,9 +157,9 @@ const IMPLEMENTATIONS = [
       provider: "ifbs",
       mode: AccessPointMode.REMOTE,
     },
-    bookingContext: bookingContext({ externalBookingId: "booking-17" }),
+    bookingContext: bookingContext({ externalBookingId: IFBS_BOOKING_ID }),
     create() {
-      const client = new FakeIfbsApiClient({ bookingIds: ["booking-17"] });
+      const client = new FakeIfbsApiClient({ bookingIds: [IFBS_BOOKING_ID] });
       return {
         provider: new IfbsAccessProvider({ client }),
         client,
@@ -185,7 +167,7 @@ const IMPLEMENTATIONS = [
       };
     },
     createBroken() {
-      return new IfbsAccessProvider({ client: new BrokenIfbsApiClient() });
+      return new IfbsAccessProvider({ client: brokenIfbsApiClient() });
     },
     today: {
       openNamesProcess: true,
@@ -195,12 +177,12 @@ const IMPLEMENTATIONS = [
     },
   },
   {
-    name: "in-memory",
+    name: IN_MEMORY_PROVIDER_ID,
     Provider: InMemoryAccessProvider,
     accessPoint: {
       id: "door-3",
       type: "door",
-      provider: "in-memory",
+      provider: IN_MEMORY_PROVIDER_ID,
       externalId: "lock-1",
       label: "Main door",
       mode: AccessPointMode.AUTHORIZATION,
@@ -230,26 +212,6 @@ const IMPLEMENTATIONS = [
   },
 ];
 
-function stubSaltoTenant() {
-  sinon.stub(TenantManager, "getTenant").resolves({
-    id: TENANT,
-    applications: [
-      {
-        type: "access",
-        id: "salto-ks",
-        active: true,
-        clientId: "client-id",
-        clientSecret: "client-secret",
-        username: "system-user@example.test",
-        password: "password",
-        siteId: FAKE_SITE_ID,
-        environment: "accept",
-        iqActivations: [],
-      },
-    ],
-  });
-}
-
 for (const implementation of IMPLEMENTATIONS) {
   describe(`access provider contract: ${implementation.name}`, function () {
     const { Provider, accessPoint, bookingContext, today } = implementation;
@@ -263,7 +225,7 @@ for (const implementation of IMPLEMENTATIONS) {
     beforeEach(function () {
       // Only Salto reads the tenant's application besides the client (for
       // the IQ activations behind `listAccessPoints`).
-      stubSaltoTenant();
+      sinon.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
       ({ provider, grantsHeld } = implementation.create());
     });
 
@@ -282,7 +244,7 @@ for (const implementation of IMPLEMENTATIONS) {
       }
     });
 
-    it("only drifts from the base class arity where the spec already lists it", function () {
+    it("drifts from the base class in parameter count exactly where it does today", function () {
       const base = AccessProvider.prototype;
       const drift = capabilities.filter(
         (capability) =>

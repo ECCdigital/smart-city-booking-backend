@@ -19,17 +19,6 @@ const logger = bunyan.createLogger({
 });
 
 class NukiAccessProvider extends AccessProvider {
-  /**
-   * @param {Object} [options]
-   * @param {Object} [options.client] A ready API client used for every tenant
-   *   instead of one built from the tenant's application. Tests inject a fake
-   *   here; the registry constructs the provider without one.
-   */
-  constructor({ client = null } = {}) {
-    super();
-    this._client = client;
-  }
-
   async _getClient(tenant) {
     if (this._client) {
       return this._client;

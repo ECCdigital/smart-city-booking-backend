@@ -7,17 +7,6 @@ const APP_TYPE = "locker";
 
 class IfbsAccessProvider extends AccessProvider {
   /**
-   * @param {Object} [options]
-   * @param {Object} [options.client] A ready API client used for every tenant
-   *   instead of one built from the tenant's application. Tests inject a fake
-   *   here; the registry constructs the provider without one.
-   */
-  constructor({ client = null } = {}) {
-    super();
-    this._client = client;
-  }
-
-  /**
    * Creates an iFBS API client for the given tenant.
    * @private
    */

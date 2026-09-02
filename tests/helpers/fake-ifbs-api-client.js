@@ -116,20 +116,17 @@ class FakeIfbsApiClient extends IfbsApiClient {
 }
 
 /** An iFBS client whose every request fails with the given error. */
-class BrokenIfbsApiClient extends IfbsApiClient {
-  constructor(error = ifbsNetworkError()) {
-    super("https://ifbs.fake", "api-key", "secret-phrase");
-    this.error = error;
-  }
-
-  async _get() {
-    throw this.error;
-  }
+function brokenIfbsApiClient(error = ifbsNetworkError()) {
+  const client = new FakeIfbsApiClient();
+  client._get = async () => {
+    throw error;
+  };
+  return client;
 }
 
 module.exports = {
   FakeIfbsApiClient,
-  BrokenIfbsApiClient,
+  brokenIfbsApiClient,
   ifbsNetworkError,
   ERR_NO_MONITOR_PROCESS_NOT_FOUND,
   ERR_NO_WAIT_PROCESS_NOT_FOUND,

@@ -147,27 +147,19 @@ class FakeSaltoKsApiClient extends SaltoKsApiClient {
 }
 
 /** A Salto client whose every request fails with the given error. */
-class BrokenSaltoKsApiClient extends SaltoKsApiClient {
-  constructor(error = saltoHttpError(500, { Message: "Internal error" })) {
-    super("client-id", "client-secret", FAKE_SITE_ID, "accept", {
-      username: "system-user@example.test",
-      password: "password",
-    });
-    this.error = error;
-  }
-
-  async _getToken() {
-    return "fake-token";
-  }
-
-  async _request() {
-    throw this.error;
-  }
+function brokenSaltoKsApiClient(
+  error = saltoHttpError(500, { Message: "Internal error" }),
+) {
+  const client = new FakeSaltoKsApiClient();
+  client._request = async () => {
+    throw error;
+  };
+  return client;
 }
 
 module.exports = {
   FakeSaltoKsApiClient,
-  BrokenSaltoKsApiClient,
+  brokenSaltoKsApiClient,
   saltoHttpError,
   FAKE_SITE_ID,
 };

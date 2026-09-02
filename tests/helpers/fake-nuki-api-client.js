@@ -25,14 +25,6 @@ function nukiHttpError(status, data = {}) {
   });
 }
 
-/** A network failure as axios raises it - no response at all. */
-function nukiNetworkError(code = "ECONNREFUSED") {
-  return Object.assign(new Error(`connect ${code}`), {
-    isAxiosError: true,
-    code,
-  });
-}
-
 // What a lock action leaves the lock in (`state.state` codes of the Nuki
 // Web API): lock -> locked, unlock -> unlocked, unlatch -> unlatched.
 const STATE_AFTER_ACTION = Object.freeze({
@@ -132,20 +124,12 @@ class FakeNukiApiClient extends NukiApiClient {
 }
 
 /** A Nuki client whose every request fails with the given error. */
-class BrokenNukiApiClient extends NukiApiClient {
-  constructor(error = nukiHttpError(500)) {
-    super("fake-token", "https://nuki.fake");
-    this.error = error;
-  }
-
-  async _request() {
-    throw this.error;
-  }
+function brokenNukiApiClient(error = nukiHttpError(500)) {
+  const client = new FakeNukiApiClient();
+  client._request = async () => {
+    throw error;
+  };
+  return client;
 }
 
-module.exports = {
-  FakeNukiApiClient,
-  BrokenNukiApiClient,
-  nukiHttpError,
-  nukiNetworkError,
-};
+module.exports = { FakeNukiApiClient, brokenNukiApiClient, nukiHttpError };

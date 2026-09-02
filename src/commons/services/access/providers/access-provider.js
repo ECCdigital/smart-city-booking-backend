@@ -1,4 +1,14 @@
 class AccessProvider {
+  /**
+   * @param {Object} [options]
+   * @param {Object} [options.client] A ready API client used for every tenant
+   *   instead of one built from the tenant's application. Tests inject a fake
+   *   here; the registry constructs the provider without one.
+   */
+  constructor({ client = null } = {}) {
+    this._client = client;
+  }
+
   async open(accessPoint, bookingContext) {
     throw new Error(`open() is not supported by ${this.constructor.name}`);
   }
