@@ -30,9 +30,7 @@ const NO_BUFFER = Object.freeze({ beforeMs: 0, afterMs: 0 });
  * code of a door could forge the evidence for it.
  *
  * @param {Object} accessPoint The access point, as stored or as resolved for a
- *   booking. Its evidence requirements are read from `validationRules` (stored
- *   form) or `validationRuleTypes` (resolved form, which carries the types
- *   only).
+ *   booking - both carry its rules in `validationRules`.
  * @param {Object} [options]
  * @param {Object|null} [options.decision=null] The access decision for the
  *   booking (`access-decision.js`), which says what this access point demands

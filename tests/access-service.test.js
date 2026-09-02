@@ -141,6 +141,77 @@ describe("AccessService bookable access point inheritance", () => {
     expect(doors[1].bookingContext.grant.authorizationId).to.equal("auth-1");
   });
 
+  it("hands the stored door along with its rules and scan code, so nothing reads it again", async () => {
+    const selfBookable = createBookable("room", "Room", ["door-self"]);
+    const booking = {
+      id: "booking-1",
+      tenantId: "tenant-1",
+      timeBegin: 1,
+      timeEnd: 2,
+      bookableItems: [{ bookableId: "room" }],
+      accessInfo: [],
+    };
+
+    sandbox.stub(AccessPointManager, "getAccessPointsByIds").resolves([
+      {
+        id: "door-self",
+        tenantId: "tenant-1",
+        type: "door",
+        provider: "nuki",
+        externalId: "door-self-external",
+        label: "Door",
+        mode: "remote",
+        config: {},
+        scanCode: "current-code",
+        previousScanCodes: ["retired-code"],
+        validationRules: [{ type: "qrScan" }],
+      },
+    ]);
+    sandbox.stub(BookableManager, "getRelatedBookables").resolves([]);
+    sandbox.stub(BookableManager, "getAllParentBookables").resolves([]);
+    sandbox.stub(BookableManager, "getBookablesByIds").resolves([selfBookable]);
+
+    const [door] = await AccessService._getDoorAccessPoints(
+      "tenant-1",
+      booking,
+    );
+
+    expect(door.accessPoint).to.include({
+      id: "door-self",
+      type: "door",
+      scanCode: "current-code",
+      bookableId: "room",
+      relation: "self",
+    });
+    expect(door.accessPoint.validationRules).to.deep.equal([
+      { type: "qrScan" },
+    ]);
+  });
+
+  it("resolves a stored door without a rules field as one without rules", async () => {
+    const selfBookable = createBookable("room", "Room", ["door-self"]);
+    const booking = {
+      id: "booking-1",
+      tenantId: "tenant-1",
+      timeBegin: 1,
+      timeEnd: 2,
+      bookableItems: [{ bookableId: "room" }],
+      accessInfo: [],
+    };
+
+    stubAccessPoints(["door-self"]);
+    sandbox.stub(BookableManager, "getRelatedBookables").resolves([]);
+    sandbox.stub(BookableManager, "getAllParentBookables").resolves([]);
+    sandbox.stub(BookableManager, "getBookablesByIds").resolves([selfBookable]);
+
+    const [door] = await AccessService._getDoorAccessPoints(
+      "tenant-1",
+      booking,
+    );
+
+    expect(door.accessPoint.validationRules).to.deep.equal([]);
+  });
+
   it("can disable inherited parents and children by environment flag", async () => {
     process.env.ACCESS_POINTS_INHERIT_PARENTS = "false";
     process.env.ACCESS_POINTS_INHERIT_CHILDREN = "false";

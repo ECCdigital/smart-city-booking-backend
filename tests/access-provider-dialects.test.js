@@ -115,6 +115,14 @@ const SALTO_DOOR = {
 
 const IFBS_LOCKER = { id: "7", type: "locker", provider: "ifbs" };
 
+/**
+ * The same doors with a remote way in: opening through the API is refused at
+ * a door that only takes a code, so the open dialects are exercised at doors
+ * that take both.
+ */
+const REMOTE_NUKI_DOOR = { ...NUKI_DOOR, mode: AccessPointMode.BOTH };
+const REMOTE_SALTO_DOOR = { ...SALTO_DOOR, mode: AccessPointMode.BOTH };
+
 const IN_MEMORY_DOOR = {
   id: "door-3",
   tenantId: TENANT,
@@ -929,7 +937,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
 
   describe("open", () => {
     it("answers a NUKI open with no process to poll and audits the outcome", async () => {
-      stubBooking(createBooking(), [NUKI_DOOR]);
+      stubBooking(createBooking(), [REMOTE_NUKI_DOOR]);
 
       const outcome = await AccessService.open(
         TENANT,
@@ -971,7 +979,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
     });
 
     it("answers a Salto open with no process to poll and audits the outcome", async () => {
-      stubBooking(createBooking(), [SALTO_DOOR]);
+      stubBooking(createBooking(), [REMOTE_SALTO_DOOR]);
 
       const outcome = await AccessService.open(
         TENANT,
@@ -1011,7 +1019,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
     it("rethrows NUKI's classified AccessOpenError after auditing the failure", async () => {
       clients.nuki = brokenNukiApiClient();
       registerFakeProviders();
-      stubBooking(createBooking(), [NUKI_DOOR]);
+      stubBooking(createBooking(), [REMOTE_NUKI_DOOR]);
 
       await rejectsOpen(
         AccessService.open(TENANT, "booking-1", "door-1", "user-1"),
@@ -1028,7 +1036,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
         ErrorCode: 1001,
         Message: "Forbidden",
       });
-      stubBooking(createBooking(), [SALTO_DOOR]);
+      stubBooking(createBooking(), [REMOTE_SALTO_DOOR]);
 
       await assert.rejects(
         AccessService.open(TENANT, "booking-1", "door-2", "user-1"),

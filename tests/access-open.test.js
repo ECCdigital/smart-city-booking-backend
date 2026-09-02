@@ -70,26 +70,16 @@ function createBooking(overrides = {}) {
   });
 }
 
+/**
+ * A door as the resolver hands it to the open path: the stored access point,
+ * rules and scan code included, paired with the booking context it was
+ * resolved with. The open path reads nothing else.
+ */
 function stubResolvedDoor(
   sandbox,
   booking,
-  { accessPoint = {}, entity = {} } = {},
+  { accessPoint = {}, bookingContext = {} } = {},
 ) {
-  sandbox.stub(AccessPointManager, "getAccessPoint").resolves(
-    entity && {
-      id: "door-1",
-      tenantId: "tenant-1",
-      type: "door",
-      provider: TEST_PROVIDER,
-      externalId: "lock-1",
-      label: "Main door",
-      mode: AccessPointMode.REMOTE,
-      scanCode: "current-code",
-      previousScanCodes: ["retired-code"],
-      validationRules: [],
-      ...entity,
-    },
-  );
   sandbox.stub(BookingManager, "getBooking").resolves(booking);
   sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
     booking,
@@ -98,13 +88,16 @@ function stubResolvedDoor(
       {
         accessPoint: {
           id: "door-1",
-          tenant: "tenant-1",
+          tenantId: "tenant-1",
           type: "door",
           provider: TEST_PROVIDER,
           externalId: "lock-1",
           label: "Main door",
           mode: AccessPointMode.REMOTE,
           config: {},
+          scanCode: "current-code",
+          previousScanCodes: ["retired-code"],
+          validationRules: [],
           ...accessPoint,
         },
         bookingContext: {
@@ -114,7 +107,10 @@ function stubResolvedDoor(
           timeEnd: booking.timeEnd,
           accessBuffer: { beforeMs: 0, afterMs: 0 },
           isProvisioned: true,
+          grant: null,
+          revokedAt: null,
           booking,
+          ...bookingContext,
         },
       },
     ],
@@ -122,7 +118,6 @@ function stubResolvedDoor(
 }
 
 function stubResolvedLocker(sandbox, booking) {
-  sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
   sandbox.stub(BookingManager, "getBooking").resolves(booking);
   sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
     booking,
@@ -411,7 +406,7 @@ describe("AccessService.open with validation rules", () => {
   }
 
   it("opens when the presented code is the door's current one", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     const outcome = await open({
       evidence: [{ type: "qrScan", scanCode: "current-code" }],
@@ -426,7 +421,7 @@ describe("AccessService.open with validation rules", () => {
   });
 
   it("denies a remote open without evidence at a door that requires a scan", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     const outcome = await open({ channel: "remote" });
 
@@ -444,7 +439,7 @@ describe("AccessService.open with validation rules", () => {
   });
 
   it("denies a code that was rotated out", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     const outcome = await open({
       evidence: [{ type: "qrScan", scanCode: "retired-code" }],
@@ -458,7 +453,7 @@ describe("AccessService.open with validation rules", () => {
 
   it("fails closed when a configured rule cannot be evaluated", async () => {
     stubResolvedDoor(sandbox, createBooking(), {
-      entity: { validationRules: [{ type: "retiredRule" }] },
+      accessPoint: { validationRules: [{ type: "retiredRule" }] },
     });
 
     const outcome = await open({});
@@ -470,7 +465,7 @@ describe("AccessService.open with validation rules", () => {
   });
 
   it("holds a booker with the manage-bookings permission to the rules", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     const outcome = await open({ hasManagePermission: true });
 
@@ -487,7 +482,7 @@ describe("AccessService.open with validation rules", () => {
   });
 
   it("lets a manager skip the rules of a booking that is not theirs and audits it", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     const outcome = await open({ hasManagePermission: true }, "manager-9");
 
@@ -500,7 +495,7 @@ describe("AccessService.open with validation rules", () => {
   });
 
   it("lets a booker with the manage-bookings permission in once they scan", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     const outcome = await open({
       hasManagePermission: true,
@@ -527,7 +522,7 @@ describe("AccessService.open with validation rules", () => {
 
   it("checks the booking before it asks for evidence", async () => {
     stubResolvedDoor(sandbox, createBooking({ isCommitted: false }), {
-      entity: QR_RULE,
+      accessPoint: QR_RULE,
     });
 
     const outcome = await open({});
@@ -542,7 +537,7 @@ describe("AccessService.open with validation rules", () => {
   });
 
   it("audits the reported channel unchanged, on success and on denial", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: QR_RULE });
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     await open({
       channel: "qrScan",
@@ -562,8 +557,10 @@ describe("AccessService.open with validation rules", () => {
     expect(AccessLogService.log.firstCall.args[0].channel).to.equal(null);
   });
 
-  it("fails closed when the door disappeared while it was being opened", async () => {
-    stubResolvedDoor(sandbox, createBooking(), { entity: null });
+  it("fails closed when the rules of the door are unknown", async () => {
+    stubResolvedDoor(sandbox, createBooking(), {
+      accessPoint: { validationRules: null },
+    });
 
     const outcome = await open({});
 
@@ -586,7 +583,130 @@ describe("AccessService.open with validation rules", () => {
     );
 
     expect(outcome.success).to.be.true;
-    expect(AccessPointManager.getAccessPoint.called).to.be.false;
+  });
+
+  it("judges the evidence by the door the resolver handed over, without reading it again", async () => {
+    stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
+    sandbox
+      .stub(AccessPointManager, "getAccessPoint")
+      .rejects(new Error("the open path must not read the door a second time"));
+
+    const outcome = await open({
+      evidence: [{ type: "qrScan", scanCode: "current-code" }],
+    });
+
+    expect(outcome.success).to.be.true;
+  });
+});
+
+describe("AccessService open and unlatch at a door that only takes a code", () => {
+  let sandbox;
+
+  const GRANTED = {
+    isProvisioned: true,
+    grant: { authorizationId: "auth-1" },
+  };
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    providerOpen = sandbox.stub().resolves({ state: "opened" });
+    providerUnlatch = sandbox.stub().resolves({ state: "opened" });
+    sandbox.stub(AccessLogService, "log").resolves();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  function stubCodeDoor(bookingContext) {
+    stubResolvedDoor(sandbox, createBooking(), {
+      accessPoint: { mode: AccessPointMode.AUTHORIZATION },
+      bookingContext,
+    });
+  }
+
+  for (const action of ["open", "unlatch"]) {
+    it(`refuses a remote ${action} to the booker, since the door has no remote way in`, async () => {
+      stubCodeDoor(GRANTED);
+
+      const outcome = await AccessService[action](
+        "tenant-1",
+        "booking-1",
+        "door-1",
+        "user-1",
+        { channel: "remote" },
+      );
+
+      expect(outcome).to.deep.equal({
+        success: false,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS],
+      });
+      expect(providerOpen.called).to.be.false;
+      expect(providerUnlatch.called).to.be.false;
+
+      const logged = AccessLogService.log.firstCall.args[0];
+      expect(logged).to.include({
+        action,
+        result: "denied",
+        accessRole: "booker",
+        channel: "remote",
+      });
+      expect(logged.blockingReasons).to.deep.equal([
+        ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
+      ]);
+    });
+  }
+
+  it("refuses the management the same way - there is no door to open remotely", async () => {
+    stubCodeDoor(GRANTED);
+
+    const outcome = await AccessService.open(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "manager-1",
+      { hasManagePermission: true },
+    );
+
+    expect(outcome).to.deep.equal({
+      success: false,
+      blockingReasons: [ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS],
+    });
+    expect(providerOpen.called).to.be.false;
+  });
+
+  it("names the missing grant before the missing remote way", async () => {
+    stubCodeDoor({ isProvisioned: false, grant: null });
+
+    const outcome = await AccessService.open(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "user-1",
+    );
+
+    expect(outcome.blockingReasons).to.deep.equal([
+      ACCESS_BLOCKING_REASONS.NOT_PROVISIONED,
+      ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
+    ]);
+    expect(providerOpen.called).to.be.false;
+  });
+
+  it("opens a door that takes a code and a remote command alike", async () => {
+    stubResolvedDoor(sandbox, createBooking(), {
+      accessPoint: { mode: AccessPointMode.BOTH },
+      bookingContext: GRANTED,
+    });
+
+    const outcome = await AccessService.open(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "user-1",
+    );
+
+    expect(outcome.success).to.be.true;
+    expect(providerOpen.calledOnce).to.be.true;
   });
 });
 
@@ -604,7 +724,7 @@ describe("AccessService close, unlatch and status with validation rules", () => 
     sandbox.stub(AccessLogService, "log").resolves();
     // Ownership is left to the data: the booking is assigned to "user-1".
     stubResolvedDoor(sandbox, createBooking(), {
-      entity: { validationRules: [{ type: "qrScan" }] },
+      accessPoint: { validationRules: [{ type: "qrScan" }] },
     });
   });
 

@@ -37,7 +37,7 @@ function createBooking(overrides = {}) {
  * A door as the booking way resolves it internally: the access point itself
  * plus the booking context it was resolved with.
  */
-function createDoorEntry({ accessBuffer, ...overrides } = {}) {
+function createDoorEntry({ accessBuffer, bookingContext, ...overrides } = {}) {
   return {
     accessPoint: {
       id: "door-1",
@@ -49,6 +49,7 @@ function createDoorEntry({ accessBuffer, ...overrides } = {}) {
     bookingContext: {
       accessBuffer: accessBuffer || { beforeMs: 0, afterMs: 0 },
       isProvisioned: true,
+      ...bookingContext,
     },
   };
 }
@@ -95,6 +96,56 @@ describe("AccessService.canOperate", () => {
       false,
     );
     expect(allowed).to.be.true;
+  });
+
+  it("lets a door that only takes a code be closed and asked for its status once it is granted", async () => {
+    const now = Date.now();
+    const booking = createBooking({
+      timeBegin: now - 10 * MINUTE,
+      timeEnd: now + 60 * MINUTE,
+    });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
+      createDoorEntry({
+        mode: AccessPointMode.AUTHORIZATION,
+        bookingContext: { grant: { authorizationId: "auth-1" } },
+      }),
+    ]);
+    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+
+    const allowed = await AccessService.canOperate(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      false,
+    );
+    expect(allowed).to.be.true;
+  });
+
+  it("refuses a door that only takes a code while its grant is missing", async () => {
+    const now = Date.now();
+    const booking = createBooking({
+      timeBegin: now - 10 * MINUTE,
+      timeEnd: now + 60 * MINUTE,
+    });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
+      createDoorEntry({
+        mode: AccessPointMode.AUTHORIZATION,
+        bookingContext: { isProvisioned: false },
+      }),
+    ]);
+    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+
+    const allowed = await AccessService.canOperate(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      false,
+    );
+    expect(allowed).to.be.false;
   });
 
   it("returns false when the access point is not part of the booking", async () => {
