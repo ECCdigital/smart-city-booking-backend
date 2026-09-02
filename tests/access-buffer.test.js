@@ -116,13 +116,46 @@ describe("AccessService.canOperate with buffer", () => {
     sandbox.restore();
   });
 
-  function stubDoor(accessBuffer) {
-    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
-      {
-        accessPoint: { id: "door-1", tenant: "tenant-1", type: "door" },
-        bookingContext: { accessBuffer },
-      },
-    ]);
+  function stubDoor(booking, accessBuffer) {
+    sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
+      booking,
+      compartments: [],
+      doors: [
+        {
+          accessPoint: { id: "door-1", tenant: "tenant-1", type: "door" },
+          bookingContext: { accessBuffer },
+        },
+      ],
+    });
+  }
+
+  /**
+   * A granted compartment of an iFBS location as the resolver hands it
+   * over, with the buffer of its bookable.
+   */
+  function stubCompartment(booking, accessBuffer) {
+    sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
+      booking,
+      doors: [],
+      compartments: [
+        {
+          accessPoint: {
+            id: "loc-1:ifbs-booking-99",
+            tenantId: "tenant-1",
+            type: "locker",
+            provider: "ifbs",
+            mode: "remote",
+            validationRules: [],
+          },
+          bookingContext: {
+            accessBuffer,
+            isProvisioned: true,
+            grant: { authorizationId: "ifbs-booking-99" },
+            revokedAt: null,
+          },
+        },
+      ],
+    });
   }
 
   it("allows the owner to operate within the lead time buffer", async () => {
@@ -132,7 +165,7 @@ describe("AccessService.canOperate with buffer", () => {
       timeEnd: now + 60 * MINUTE,
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    stubDoor({ beforeMs: 15 * MINUTE, afterMs: 0 });
+    stubDoor(booking, { beforeMs: 15 * MINUTE, afterMs: 0 });
     sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
@@ -152,7 +185,7 @@ describe("AccessService.canOperate with buffer", () => {
       timeEnd: now + 60 * MINUTE,
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    stubDoor({ beforeMs: 15 * MINUTE, afterMs: 0 });
+    stubDoor(booking, { beforeMs: 15 * MINUTE, afterMs: 0 });
     sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
@@ -178,55 +211,41 @@ describe("AccessService.canOperate with buffer", () => {
     expect(allowed).to.be.false;
   });
 
-  it("allows the owner to operate a locker within the booking window", async () => {
+  it("allows the owner to operate a compartment within the buffered window of its bookable", async () => {
     const now = Date.now();
     const booking = createBooking({
-      timeBegin: now - 10 * MINUTE,
+      timeBegin: now + 10 * MINUTE,
       timeEnd: now + 60 * MINUTE,
-      lockerInfo: [
-        {
-          processId: "ifbs-booking-99",
-          lockerSystem: "ifbs",
-          id: "location-1",
-        },
-      ],
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([]);
+    stubCompartment(booking, { beforeMs: 15 * MINUTE, afterMs: 0 });
     sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
       "tenant-1",
       "booking-1",
-      "ifbs-booking-99",
+      "loc-1:ifbs-booking-99",
       false,
     );
     expect(allowed).to.be.true;
   });
 
-  it("denies locker operation outside the booking window", async () => {
+  it("denies operating a compartment outside the booking window", async () => {
     const now = Date.now();
     const booking = createBooking({
       timeBegin: now + 30 * MINUTE,
       timeEnd: now + 60 * MINUTE,
-      lockerInfo: [
-        {
-          processId: "ifbs-booking-99",
-          lockerSystem: "ifbs",
-          id: "location-1",
-        },
-      ],
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([]);
+    stubCompartment(booking, { beforeMs: 0, afterMs: 0 });
     sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
       "tenant-1",
       "booking-1",
-      "ifbs-booking-99",
+      "loc-1:ifbs-booking-99",
       false,
     );
     expect(allowed).to.be.false;

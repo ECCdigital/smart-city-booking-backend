@@ -91,12 +91,21 @@ components:
       properties:
         id:
           type: string
+          description: >
+            Opaque. A door is listed under its own id; a compartment of a
+            locker system (`type: locker`) under an id of its own, one per
+            compartment of the booking, which is what the operate endpoints
+            take for it. Never a value to parse.
         tenantId:
           type: string
           description: The tenant the access point belongs to
         type:
           type: string
           enum: [locker, door]
+          description: >
+            `door`: shared, configured once. `locker`: a locker system whose
+            provider assigns a compartment per booking - each compartment is
+            listed as an access point of its own.
         provider:
           type: string
           description: >
@@ -112,8 +121,9 @@ components:
           description: >
             What this user has to prove at this access point before it opens -
             not the door's configuration. Empty for a user with the
-            `MANAGE_BOOKINGS` permission and for lockers, which are never asked
-            for evidence. It says what is demanded, never whether it will work:
+            `MANAGE_BOOKINGS` permission and at an access point without rules,
+            which locker systems usually are. It says what is demanded, never
+            whether it will work:
             a rule whose preconditions are unmet still reports itself at
             opening time as `evidence_rule_unavailable`.
           items:
@@ -150,14 +160,23 @@ components:
         isProvisioned:
           type: boolean
           description: >
-            Whether the access for this booking is set up. Only on the booking
-            ways; lockers are provisioned by their very existence.
+            Whether the access for this booking is set up: a door once its
+            access is provisioned, a compartment of a locker system once it is
+            granted and not revoked. Only on the booking ways.
         externalBookingId:
           type: string
           nullable: true
           description: >
-            The booking id the provider knows this locker by. Lockers only, and
-            only on the booking ways.
+            The booking id the provider knows this compartment by. Locker
+            systems only (`type: locker`), and only on the booking ways.
+        compartment:
+          type: string
+          nullable: true
+          description: >
+            The compartment the person looks for, where the provider names one
+            - the box number of an iFBS bike box. `null` where the provider
+            does not (Pareva mails the access code itself). Locker systems
+            only, and only on the booking ways.
 
     ResolvedAccessBuffer:
       type: object

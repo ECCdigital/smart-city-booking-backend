@@ -475,7 +475,8 @@ for (const implementation of IMPLEMENTATIONS) {
           bookingContext,
         );
 
-        assert.deepStrictEqual(Object.keys(grant).sort(), [
+        const { compartment, ...core } = grant;
+        assert.deepStrictEqual(Object.keys(core).sort(), [
           "authorizationId",
           "externalPrincipalId",
           "secret",
@@ -484,6 +485,12 @@ for (const implementation of IMPLEMENTATIONS) {
         assert.ok(
           grant.externalPrincipalId === null ||
             typeof grant.externalPrincipalId === "string",
+        );
+        // Only a locker provider names the compartment the grant is for.
+        assert.ok(
+          compartment === undefined ||
+            compartment === null ||
+            typeof compartment === "string",
         );
         if (implementation.secretBearing) {
           assert.match(String(grant.secret), /^\d{6}$/);

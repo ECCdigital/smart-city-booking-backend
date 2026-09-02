@@ -180,8 +180,10 @@ class IfbsAccessProvider extends AccessProvider {
    * Confirms the held box with `bookIt`, proving the booking with the
    * checksum over box number, time and the tenant's secret phrase. A hold
    * that lapsed - or none at all - is replaced by a fresh `getBox` first.
-   * The grant is the iFBS `Booking_ID`; iFBS keeps no principal and hands
-   * out no secret - the box opens through the API.
+   * The grant is the iFBS `Booking_ID` and names the box as the
+   * compartment - the one of the hold it consumed, or of the box it took
+   * afresh; iFBS keeps no principal and hands out no secret - the box opens
+   * through the API.
    *
    * @param {Object} accessPoint The location
    * @param {Object} bookingContext The booking, with the `hold` to consume
@@ -213,6 +215,7 @@ class IfbsAccessProvider extends AccessProvider {
       authorizationId: String(result.Booking_ID ?? hold.holdId),
       externalPrincipalId: null,
       secret: null,
+      compartment: hold.compartment,
     };
   }
 

@@ -80,25 +80,28 @@ function uiCapabilities(provider) {
 
 /**
  * What the booking adds to an access point: when it may be used and whether it
- * is ready. Lockers are provisioned by their very existence - the box was
- * assigned with the booking - and carry the booking id the provider knows them
- * by.
+ * is ready - a door once its access is set up, a compartment once it is
+ * granted and not revoked. A compartment of a locker system is listed under
+ * its own opaque id (`<accessPointId>:<authorizationId>`, `<accessPointId>:hold`
+ * before the grant) and additionally carries the booking id the provider
+ * knows it by and the compartment the person looks for - iFBS' box number -
+ * where the provider names one.
  *
  * @param {Object} accessPoint The access point being projected
  * @param {Object} bookingContext The booking context it was resolved with
  * @returns {Object} The booking fields of the projection
  */
 function bookingFields(accessPoint, bookingContext) {
-  const isLocker = accessPoint.type === AccessPointType.LOCKER;
   const fields = {
     accessFrom: bookingContext.accessFrom ?? null,
     accessTo: bookingContext.accessTo ?? null,
     accessBuffer: bookingContext.accessBuffer || { ...NO_BUFFER },
-    isProvisioned: isLocker ? true : bookingContext.isProvisioned === true,
+    isProvisioned: bookingContext.isProvisioned === true,
   };
 
-  if (isLocker) {
+  if (accessPoint.type === AccessPointType.LOCKER) {
     fields.externalBookingId = bookingContext.externalBookingId ?? null;
+    fields.compartment = bookingContext.compartment ?? null;
   }
 
   return fields;
