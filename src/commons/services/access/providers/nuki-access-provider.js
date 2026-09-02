@@ -20,6 +20,10 @@ const logger = bunyan.createLogger({
 
 class NukiAccessProvider extends AccessProvider {
   async _getClient(tenant) {
+    if (this._client) {
+      return this._client;
+    }
+
     const tenantData = await TenantManager.getTenant(tenant);
     const rawApp = tenantData?.applications?.find(
       (a) => a.type === APP_TYPE && a.id === PROVIDER_ID && a.active,

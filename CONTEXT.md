@@ -150,3 +150,31 @@ _Avoid_: OTP-Einrichtung, Remote-Freischaltung, IQ-Setup, App-Aktivierung (verbo
 **Berechtigungsweg (eines Salto-AccessPoints)**:
 Ob ein Gast per Salto-Guest-PIN am Keypad, per Remote-Open aus der Mobile-Key-Seite oder mit beidem hineinkommt. Ergibt sich aus dem Schlosstyp: nur Keypad-Schlösser kennen den PIN-Weg, Remote-Open steht jeder online am IQ hängenden Tür offen. Beim Remote-Open provisioniert die Plattform bei Salto nichts — die Buchung ist die Berechtigung, der System-User öffnet.
 _Avoid_: Zugangsart, Öffnungsart, Modus (das ist die Admin-Einstellung `remote | authorization | both`, die den Berechtigungsweg wählt)
+
+**Öffnungsergebnis**:
+Die Antwort eines Providers auf ein Öffnen: entweder sofort geöffnet oder ausstehend mit einem Öffnungsvorgang, dessen Fortschritt nachgefragt wird. Kennt keine weiteren Zustände.
+_Avoid_: Open-Result, Status (das ist der Schlosszustand), Provider-Antwort
+
+**Öffnungsvorgang**:
+Das Handle eines ausstehenden Öffnens, über das der Öffnungsfortschritt erfragt wird. Nur Provider, die asynchron öffnen (Schließfächer), erzeugen einen.
+_Avoid_: Process, Box-ID, Booking-ID (des Providers)
+
+**Öffnungsfortschritt**:
+Der Stand eines Öffnungsvorgangs: bestätigt, fehlgeschlagen mit Fehlercode, oder noch offen.
+_Avoid_: Open-Status, Polling-Antwort
+
+**Schlosszustand**:
+Was ein Schloss über sich selbst sagt, in drei voneinander unabhängigen Antworten: offen, verriegelt, Tür offen — jede auch „unbekannt". Batterie, Alarme und Nutzungsfenster gehören nicht dazu.
+_Avoid_: Lock-State, State, Status (unqualifiziert), Zustand (unqualifiziert)
+
+**Grant**:
+Die beim Provider angelegte Berechtigung einer Buchung für einen AccessPoint: ein Handle, optional ein externer Principal und optional ein Einweg-Geheimnis (der PIN, der einmalig per Mail hinausgeht). Wird an der Buchung gespeichert und beim Widerruf zurückgegeben; provider-spezifische Namen tauchen darin nie auf.
+_Avoid_: Berechtigung (unqualifiziert), Autorisierung, Provisionierung (das ist der Vorgang, der einen Grant erzeugt), Access
+
+**Externer Principal (eines Grants)**:
+Das Subjekt, das der Provider für einen Grant führt und das mit dem Grant wieder verschwinden muss. Der Salto-Guest ist der externe Principal eines Salto-Grants; ein NUKI-Grant hat keinen.
+_Avoid_: Salto-User (unqualifiziert), Nutzer, Account
+
+**Widerruf (eines Grants)**:
+Das Zurücknehmen eines Grants beim Provider, mit der Auskunft, ob der externe Principal dabei entfernt wurde. Ein wiederholter Widerruf desselben Grants ist erlaubt und holt nur nach, was fehlt.
+_Avoid_: Revoke (als deutsches Nomen), Löschung, Deprovisionierung
