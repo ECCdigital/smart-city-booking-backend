@@ -18,7 +18,6 @@ const {
 } = require("../src/commons/data-managers/bookable-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
-const LockerService = require("../src/commons/services/locker/locker-service");
 const AccessService = require("../src/commons/services/access/access-service");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
 
@@ -166,9 +165,6 @@ describe("a manual price never reaches a self-service booking", function () {
     sinon
       .stub(BundleCheckoutService.prototype, "generateBookingReference")
       .resolves("TEST-REF");
-    sinon.stub(LockerService, "getInstance").returns({
-      getAvailableLocker: async () => [],
-    });
     // Availability checks are covered by their own tests; here only the
     // pricing and the shape of the prepared booking matter.
     sinon.stub(ItemCheckoutService.prototype, "checkAll").resolves(true);
@@ -264,12 +260,7 @@ describe("BookingService.updateBooking with a manual price", function () {
       .resolves([]);
     sinon.stub(UserManager, "getRawUser").resolves(null);
     sinon.stub(TenantManager, "getTenant").resolves(null);
-    sinon.stub(LockerService, "getInstance").returns({
-      getAvailableLocker: async () => [],
-      handleUpdate: async () => {},
-      handleCreate: async () => {},
-      handlePreReserve: async () => {},
-    });
+    sinon.stub(AccessService, "holdForBooking").resolves();
     sinon.stub(AccessService, "revokeForBooking").resolves();
     sinon.stub(AccessService, "updateForBooking").resolves();
     sinon.stub(AccessService, "provisionForBooking").resolves();

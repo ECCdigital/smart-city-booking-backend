@@ -1,17 +1,19 @@
 /**
- * Characterization of what the locker stack leaves behind: what stands in
- * `booking.lockerInfo` and at iFBS and Pareva after a booking is created,
- * held, paid, changed and cancelled. Pinned against booking outcomes and
- * the fake providers, never against `LockerService`, so the same tests
- * take the locker fold off once the checkout runs through `AccessService`
- * (Locker-Fold, ticket 3) - only the shape of `lockerInfo` the spec keeps
- * as a derived read field is asserted.
+ * Characterization of what the checkout leaves behind at a booking of a
+ * locker system: what stands in `booking.lockerInfo` and at iFBS and
+ * Pareva after a booking is created, held, paid, changed and cancelled.
+ * Written against the locker stack (Locker-Fold, ticket 1) and pinned
+ * against booking outcomes and the fake providers, never against the
+ * stack's internals, so the same assertions took the fold off once the
+ * checkout ran through `AccessService` (ticket 3): `lockerInfo` is the
+ * derived read field the spec keeps, and the locker systems are still
+ * configured at the bookable as `lockerDetails.units` until the migration
+ * of ticket 4.
  *
- * The provider APIs are the fakes of `tests/helpers/`, installed at both
- * seams a locker client is built through, today and after the fold: the
- * locker client registry (`LockerService`) and the access provider registry
- * (`AccessService`). Below that everything is stubbed at the data managers,
- * with an in-memory booking store, so the services run for real.
+ * The provider APIs are the fakes of `tests/helpers/`, installed at the
+ * access provider registry the service resolves its adapters from. Below
+ * that everything is stubbed at the data managers, with an in-memory
+ * booking store, so the services run for real.
  */
 
 const assert = require("assert");
@@ -50,17 +52,11 @@ const {
 const { Bookable } = require("../src/commons/entities/bookable/bookable");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const {
-  registerClient,
-} = require("../src/commons/services/locker/clients/locker-client-registry");
-const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
 const IfbsAccessProvider = require("../src/commons/services/access/providers/ifbs-access-provider");
 const ParevaAccessProvider = require("../src/commons/services/access/providers/pareva-access-provider");
 const IfbsApiClient = require("../src/commons/services/access/clients/ifbs-api-client");
-const {
-  registerLockerClients,
-} = require("../src/commons/services/locker/clients");
 const { FakeIfbsApiClient } = require("./helpers/fake-ifbs-api-client");
 const { FakeParevaApiClient } = require("./helpers/fake-pareva-api-client");
 
@@ -150,33 +146,14 @@ const lockerS = () =>
     },
   });
 
-/** Installs a client instance in the locker client registry. */
-function registerClientInstance(providerId, instance) {
-  registerClient(
-    providerId,
-    class {
-      constructor() {
-        return instance;
-      }
-    },
-    () => [],
-  );
-}
-
 describe("locker booking outcomes: what the locker stack leaves at the booking and the providers", function () {
   let ifbs;
   let pareva;
   let store;
   let concurrentBookings;
 
-  /**
-   * The fakes, installed at both seams: the locker client registry the
-   * `LockerService` path builds clients through, and the access provider
-   * registry the `AccessService` path resolves adapters from.
-   */
+  /** The fakes, installed where the service resolves its adapters. */
   function installFakeProviders() {
-    registerClientInstance("ifbs", ifbs);
-    registerClientInstance("pareva", pareva);
     registerAccessProvider(
       "ifbs",
       class extends IfbsAccessProvider {
@@ -196,7 +173,6 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
   }
 
   after(function () {
-    registerLockerClients();
     registerAccessProvider("ifbs", IfbsAccessProvider);
     registerAccessProvider("pareva", ParevaAccessProvider);
   });
@@ -268,11 +244,6 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     });
 
     sinon.stub(TenantManager, "getTenant").resolves(tenant());
-    sinon
-      .stub(TenantManager, "getTenantAppByType")
-      .callsFake(async (tenantId, type) =>
-        tenant().applications.filter((app) => app.type === type),
-      );
     sinon.stub(UserManager, "getRawUser").resolves({ _id: CUSTOMER_DB_ID });
     sinon
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
@@ -673,36 +644,42 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
   });
 
   /**
-   * Found in passing and pinned as today's behaviour: the locker stack tells
-   * the compartments of one size in one booking apart by `id` alone, which
-   * is the size. With more than one, every entry of the size ends up with
-   * the last rental, and whatever is done to "the" compartment of the size
-   * hits all of them - rentals are orphaned at Pareva. The fold keys
-   * compartments by (access point, grant) and turns these around.
+   * The locker stack told the compartments of one size in one booking
+   * apart by `id` alone, which is the size: every entry of the size ended
+   * up with the last rental, and whatever was done to "the" compartment of
+   * the size hit all of them, orphaning rentals at Pareva. The fold keys
+   * compartments by (locker system, grant) and turns these around.
    */
-  describe("defects found in passing: more than one Pareva compartment of one size in one booking", function () {
-    it("notes the last rental at every compartment of the size once paid, orphaning the first at Pareva", async function () {
+  describe("more than one Pareva compartment of one size in one booking", function () {
+    it("notes each rental at its own compartment once paid", async function () {
       const booking = await createPaidBooking("locker-s", 2);
 
       expect(booking.lockerInfo.map((info) => info.processId)).to.deep.equal([
-        "process-2",
+        "process-1",
         "process-2",
       ]);
+      expect(pareva.rentalsInState("open")).to.have.length(2);
     });
 
-    it("lowering the amount drops every compartment of the size from the booking and cancels only the noted rental", async function () {
+    it("lowering the amount rents the new amount afresh and cancels every rental of the old", async function () {
       const booking = await createPaidBooking("locker-s", 2);
 
       await updateBooking(booking, {
         bookableItems: [{ bookableId: "locker-s", amount: 1 }],
       });
 
-      expect(stored(booking.id).lockerInfo).to.deep.equal([]);
-      expect(pareva.rentals.get("process-1").state).to.equal("open");
+      const { lockerInfo } = stored(booking.id);
+      expect(lockerInfo).to.have.length(1);
+      expect(lockerInfo[0]).to.include({
+        isConfirmed: true,
+        processId: "process-3",
+      });
+      expect(pareva.rentals.get("process-1").state).to.equal("cancelled");
       expect(pareva.rentals.get("process-2").state).to.equal("cancelled");
+      expect(pareva.rentalsInState("open")).to.have.length(1);
     });
 
-    it("cancelling frees every compartment of the size at the booking but only the noted rental at Pareva", async function () {
+    it("cancelling frees every compartment at the booking and every rental at Pareva", async function () {
       const booking = await createPaidBooking("locker-s", 2);
 
       await rejectBooking(booking.id);
@@ -710,8 +687,8 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
       for (const info of stored(booking.id).lockerInfo) {
         expect(info).to.include({ isConfirmed: false, processId: null });
       }
-      expect(pareva.rentals.get("process-1").state).to.equal("open");
-      expect(pareva.rentals.get("process-2").state).to.equal("cancelled");
+      expect(pareva.rentalsInState("open")).to.have.length(0);
+      expect(pareva.rentalsInState("cancelled")).to.have.length(2);
     });
   });
 });

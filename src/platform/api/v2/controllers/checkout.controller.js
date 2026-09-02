@@ -26,7 +26,7 @@ const {
 const { CheckoutError } = require("../../../../errors/CheckoutError");
 const { BaseError } = require("../../../../errors/BaseError");
 const PaymentUtils = require("../../../../commons/utilities/payment-utils");
-const LockerService = require("../../../../commons/services/locker/locker-service");
+const AccessService = require("../../../../commons/services/access/access-service");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -721,12 +721,11 @@ class CheckoutControllerV2 {
     const bookingIds = [booking.id];
 
     try {
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
+      await AccessService.refreshHolds(tenantId, bookingIds);
     } catch (err) {
       logger.warn(
         { tenantId, bookingId: booking.id, err: err.message },
-        "checkout: locker pre-reservation refresh failed",
+        "checkout: renewing the compartment holds failed",
       );
       throw new CheckoutError({
         reason: CHECKOUT_REASONS.LOCKER_UNAVAILABLE,
@@ -806,12 +805,11 @@ class CheckoutControllerV2 {
     }
 
     try {
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
+      await AccessService.refreshHolds(tenantId, bookingIds);
     } catch (err) {
       logger.warn(
         { tenantId, groupBookingId: groupBooking?.id, err: err.message },
-        "groupCheckout: locker pre-reservation refresh failed",
+        "groupCheckout: renewing the compartment holds failed",
       );
       throw new CheckoutError({
         reason: CHECKOUT_REASONS.LOCKER_UNAVAILABLE,

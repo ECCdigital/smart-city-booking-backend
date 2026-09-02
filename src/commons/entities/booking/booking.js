@@ -1,9 +1,21 @@
 const { bookingSchemaDefinition } = require("../../schemas/bookingSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { BookingHook, BOOKING_HOOK_TYPES } = require("./bookingHook");
+const { deriveLockerInfo } = require("./locker-info");
 
 class Booking {
   constructor(params = {}) {
+    // `lockerInfo` is read off the compartments in `accessInfo` (see
+    // locker-info.js) and never stored: an own accessor, so it goes out
+    // with the booking like any field, while a value handed in - the
+    // admin form still sends one - is dropped here.
+    Object.defineProperty(this, "lockerInfo", {
+      get: () => deriveLockerInfo(this.accessInfo),
+      set: () => {},
+      enumerable: true,
+      configurable: true,
+    });
+
     const defaults = SchemaUtils.createDefaults(bookingSchemaDefinition);
     Object.assign(this, defaults, params);
 

@@ -65,6 +65,9 @@
  * @property {string|null} externalPrincipalId
  * @property {string|null} secret
  * @property {string|null} [compartment] Locker providers only
+ * @property {Object|null} [metadata] What the provider said about the
+ *   compartment beyond its handle and number, for the platform to show and
+ *   never to act on - iFBS: `{ boxId, price }`. Locker providers only
  */
 
 /**
@@ -90,6 +93,8 @@
  *   ms; `null` where it does not lapse
  * @property {string|null} compartment The compartment held, where the
  *   provider chose one already
+ * @property {Object|null} [metadata] What the provider said about the
+ *   compartment beyond that, as at the {@link Grant}
  */
 
 /**

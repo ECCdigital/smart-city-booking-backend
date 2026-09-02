@@ -6,7 +6,6 @@ const GroupBookingManager = require("../src/commons/data-managers/group-booking-
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const CancellationService = require("../src/commons/services/payment/cancellation-service");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
-const LockerService = require("../src/commons/services/locker/locker-service");
 const AccessService = require("../src/commons/services/access/access-service");
 const MailController = require("../src/commons/mail-service/mail-controller");
 const {
@@ -41,9 +40,6 @@ function booking(overrides = {}) {
 function stubCancellationSideEffects() {
   sinon.stub(BookingManager, "storeBooking").callsFake(async (value) => value);
   sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
-  sinon.stub(LockerService, "getInstance").returns({
-    handleCancel: sinon.stub().resolves(),
-  });
   sinon.stub(AccessService, "revokeForBooking").resolves([]);
   sinon.stub(MailController, "sendBookingCancel").resolves();
   sinon.stub(MailController, "sendBookingRejection").resolves();
@@ -378,9 +374,6 @@ describe("BookingService cancellation refunds", function () {
     const storeBooking = sinon
       .stub(BookingManager, "storeBooking")
       .callsFake(async (value) => value);
-    sinon.stub(LockerService, "getInstance").returns({
-      handleCreate: sinon.stub().resolves(),
-    });
     sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(BundleCheckoutService.prototype, "prepareBooking").resolves(
       new Booking({

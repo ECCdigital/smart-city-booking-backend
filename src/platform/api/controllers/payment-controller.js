@@ -2,7 +2,7 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
-const LockerService = require("../../../commons/services/locker/locker-service");
+const AccessService = require("../../../commons/services/access/access-service");
 const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
@@ -69,10 +69,11 @@ class PaymentController {
     }
 
     try {
-      const lockerServiceInstance = LockerService.getInstance();
-      await lockerServiceInstance.refreshPreReservations(tenantId, bookingIds);
+      await AccessService.refreshHolds(tenantId, bookingIds);
     } catch (err) {
-      logger.warn(`${tenantId} -- Locker reservation failed: ${err.message}`);
+      logger.warn(
+        `${tenantId} -- renewing the compartment holds failed: ${err.message}`,
+      );
       response.status(409).send({
         message: "Locker not available anymore.",
         code: 3,

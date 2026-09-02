@@ -418,11 +418,18 @@ for (const implementation of IMPLEMENTATIONS) {
       async function () {
         const hold = await provider.hold(accessPoint, bookingContext);
 
-        assert.deepStrictEqual(Object.keys(hold).sort(), [
+        const { metadata, ...core } = hold;
+        assert.deepStrictEqual(Object.keys(core).sort(), [
           "compartment",
           "expiresAt",
           "holdId",
         ]);
+        // What the provider said beyond that is an object or nothing.
+        assert.ok(
+          metadata === undefined ||
+            metadata === null ||
+            typeof metadata === "object",
+        );
         assert.ok(hold.holdId === null || typeof hold.holdId === "string");
         assert.ok(
           hold.expiresAt === null || typeof hold.expiresAt === "number",
@@ -444,7 +451,9 @@ for (const implementation of IMPLEMENTATIONS) {
           hold,
         });
 
-        assert.deepStrictEqual(Object.keys(renewed).sort(), [
+        const core = { ...renewed };
+        delete core.metadata;
+        assert.deepStrictEqual(Object.keys(core).sort(), [
           "compartment",
           "expiresAt",
           "holdId",
@@ -475,12 +484,18 @@ for (const implementation of IMPLEMENTATIONS) {
           bookingContext,
         );
 
-        const { compartment, ...core } = grant;
+        const { compartment, metadata, ...core } = grant;
         assert.deepStrictEqual(Object.keys(core).sort(), [
           "authorizationId",
           "externalPrincipalId",
           "secret",
         ]);
+        // Only a locker provider says more about the compartment.
+        assert.ok(
+          metadata === undefined ||
+            metadata === null ||
+            typeof metadata === "object",
+        );
         assert.strictEqual(typeof grant.authorizationId, "string");
         assert.ok(
           grant.externalPrincipalId === null ||
