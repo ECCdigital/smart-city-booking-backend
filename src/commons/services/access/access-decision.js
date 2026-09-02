@@ -14,9 +14,18 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  *
  * It is computed from the booking, its access points and the point in time,
  * never from the channel a request came through. Both functions are pure and
- * synchronous - data in, decision out - and know neither the database, nor the
- * providers, nor the permission system: whether the person may manage the
- * bookings of the tenant is a fact the caller has established and hands in.
+ * synchronous - data in, decision out - and know neither the database nor the
+ * providers. They load no rights either: whether the person may manage the
+ * bookings of the tenant is a fact the caller has established and hands in,
+ * and whether the booking is theirs is read off the loaded booking with the
+ * ownership rule of the permission service.
+ *
+ * @typedef {Object} AccessPointEntry An access point of a booking, as the
+ *   resolver pairs it with the booking context it was resolved with
+ * @property {Object} accessPoint The access point - `id`, `type`, `mode` and
+ *   its rules (`validationRules`, or `validationRuleTypes` on a resolved copy)
+ * @property {Object} bookingContext What the booking adds to it -
+ *   `accessBuffer`, `isProvisioned`, `revokedAt`, `grant`
  *
  * {@link decide} answers the booking layer: the role the person acts in, which
  * access points they may operate, the prioritized reasons against it, and what
@@ -53,11 +62,7 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  *
  * @param {import("../../entities/booking/booking").Booking} booking The loaded
  *   booking
- * @param {{ accessPoint: Object, bookingContext: Object }[]} accessPoints The
- *   access points of the booking as the resolver pairs them with their booking
- *   context. Read from the access point: `id`, `type`, `mode` and the rules
- *   (`validationRules`, or `validationRuleTypes` on a resolved copy); from the
- *   context: `accessBuffer`, `isProvisioned`, `revokedAt`, `grant`
+ * @param {AccessPointEntry[]} accessPoints The access points of the booking
  * @param {Object} [options]
  * @param {string|null} [options.userId=null] The acting person
  * @param {boolean} [options.canManage=false] Whether that person may manage
