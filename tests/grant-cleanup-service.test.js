@@ -243,6 +243,17 @@ describe("GrantCleanupService", () => {
     expect(GrantCleanupService.cleanupPrincipals.callCount).to.equal(1);
   });
 
+  it("falls back to the default interval when the variable is set but empty", () => {
+    const clock = sandbox.useFakeTimers();
+    sandbox.stub(GrantCleanupService, "cleanupPrincipals").resolves();
+    process.env.GRANT_CLEANUP_INTERVAL_MS = "";
+
+    GrantCleanupService.start();
+    clock.tick(60 * 60 * 1000);
+
+    expect(GrantCleanupService.cleanupPrincipals.callCount).to.equal(1);
+  });
+
   it("stays off when the interval is disabled", () => {
     const clock = sandbox.useFakeTimers();
     sandbox.stub(GrantCleanupService, "cleanupPrincipals").resolves();

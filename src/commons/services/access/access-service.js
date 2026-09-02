@@ -6,6 +6,7 @@ const { BookableManager } = require("../../data-managers/bookable-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
 const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
+const GrantCleanupService = require("./grant-cleanup-service");
 const AccessLogService = require("./access-log-service");
 const AccessEvidenceService = require("./access-evidence-service");
 const { projectAccessPoint } = require("./access-point-projection");
@@ -17,11 +18,6 @@ const {
   ACCESS_BLOCKING_REASONS,
   prioritizeBlockingReasons,
 } = require("./access-blocking-reasons");
-
-// What a revoke records when the provider took the grant back but could not
-// remove its external principal; the cleanup job retries those.
-const PRINCIPAL_NOT_REMOVED_ERROR =
-  "The provider could not remove the external principal of the grant";
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -758,7 +754,7 @@ class AccessService {
               : bookingContext.principalRemovedAt || null,
           principalCleanupError:
             revocation.principalRemoved === false
-              ? PRINCIPAL_NOT_REMOVED_ERROR
+              ? GrantCleanupService.PRINCIPAL_NOT_REMOVED_ERROR
               : null,
         });
 

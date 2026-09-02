@@ -11,8 +11,6 @@ const NUKI_ACTIONS = Object.freeze({
 
 // `type` of a smartlock authorization as the Web API numbers it.
 const NUKI_AUTH_TYPES = Object.freeze({
-  APP: 0,
-  FOB: 2,
   KEYPAD: 13,
 });
 
@@ -162,6 +160,11 @@ class NukiApiClient extends BaseAccessApiClient {
     );
   }
 
+  /**
+   * @param {string|number} smartlockId The smartlock to list for
+   * @returns {Promise<Object[]>} The authorizations of the smartlock, each
+   *   with `id`, `name`, `type`, `code` (keypad only) and `creationDate`
+   */
   async getAuthorizations(smartlockId) {
     return this._request("get", `/smartlock/${smartlockId}/auth`);
   }

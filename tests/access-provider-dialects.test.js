@@ -282,6 +282,15 @@ describe("access provider dialects: the adapters as they answer", () => {
       }
     });
 
+    it("refuses a PIN from the booking context that Nuki's keypad would not take", async () => {
+      await rejects(
+        provider.grantAuthorization(NUKI_DOOR, doorContext({ pin: "042042" })),
+        Error,
+        "is not a Nuki keypad code",
+      );
+      expect(clients.nuki.authorizationRequests).to.deep.equal([]);
+    });
+
     it("answers a revoke with no principal to remove, the keypad code deleted", async () => {
       const grant = await provider.grantAuthorization(NUKI_DOOR, doorContext());
 

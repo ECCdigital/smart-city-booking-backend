@@ -20,6 +20,20 @@ require("./providers/register-access-providers");
 
 const DEFAULT_INTERVAL_MS = 60 * 60 * 1000;
 
+// What an entry records when the provider took the grant back but could not
+// remove its external principal - the condition this job exists for.
+const PRINCIPAL_NOT_REMOVED_ERROR =
+  "The provider could not remove the external principal of the grant";
+
+/**
+ * The first of the given environment variables that is set to something,
+ * so that an empty `GRANT_CLEANUP_INTERVAL_MS=` in a copied `.env` falls
+ * through to the older name and the default instead of reading as zero.
+ */
+function envValue(...names) {
+  return names.map((name) => process.env[name]).find((value) => value);
+}
+
 // Revoked, with a principal, and the principal not yet gone.
 const ORPHANED_PRINCIPAL_FILTER = Object.freeze({
   accessInfo: {
@@ -46,6 +60,8 @@ class GrantCleanupService {
    * Schedules the cleanup. `GRANT_CLEANUP_INTERVAL_MS` sets the interval;
    * the former `SALTO_KS_CLEANUP_INTERVAL_MS` still counts where it is the
    * only one set. An interval of zero or less disables the job.
+   *
+   * @returns {void}
    */
   static start() {
     if (GrantCleanupService._timer) {
@@ -53,8 +69,7 @@ class GrantCleanupService {
     }
 
     const intervalMs = Number(
-      process.env.GRANT_CLEANUP_INTERVAL_MS ??
-        process.env.SALTO_KS_CLEANUP_INTERVAL_MS ??
+      envValue("GRANT_CLEANUP_INTERVAL_MS", "SALTO_KS_CLEANUP_INTERVAL_MS") ??
         DEFAULT_INTERVAL_MS,
     );
 
@@ -73,6 +88,11 @@ class GrantCleanupService {
     logger.info(`Grant cleanup scheduled every ${intervalMs}ms`);
   }
 
+  /**
+   * Ends the schedule; a run in progress finishes.
+   *
+   * @returns {void}
+   */
   static stop() {
     if (GrantCleanupService._timer) {
       clearInterval(GrantCleanupService._timer);
@@ -122,7 +142,15 @@ class GrantCleanupService {
     return result;
   }
 
-  /** @private */
+  /**
+   * @private
+   * Revokes again every entry of the booking that still holds a principal,
+   * changing the entries in place.
+   *
+   * @param {Object} booking The booking whose entries are to be cleaned
+   * @returns {Promise<{ changed: boolean, principalsRemoved: number, failures: number }>}
+   *   Whether the booking is to be stored, and what the run achieved
+   */
   static async _cleanupBooking(booking) {
     let changed = false;
     let principalsRemoved = 0;
@@ -158,8 +186,7 @@ class GrantCleanupService {
             revocation,
           });
         } else {
-          info.principalCleanupError =
-            "The provider could not remove the external principal of the grant";
+          info.principalCleanupError = PRINCIPAL_NOT_REMOVED_ERROR;
           failures += 1;
           await GrantCleanupService._log(booking, info, "failure", {
             revocation,
@@ -208,7 +235,19 @@ class GrantCleanupService {
     };
   }
 
-  /** @private */
+  /**
+   * @private
+   * Books the retried revoke in the audit log as a `revoke` by the system,
+   * marked `cleanup`. A log that cannot be written never fails the run.
+   *
+   * @param {Object} booking The booking the entry belongs to
+   * @param {Object} info The accessInfo entry that was cleaned
+   * @param {"success"|"failure"} result What the retry achieved
+   * @param {Object} [details]
+   * @param {import("./providers/access-provider").Revocation} [details.revocation]
+   * @param {string} [details.errorMessage]
+   * @returns {Promise<void>}
+   */
   static async _log(booking, info, result, { revocation, errorMessage } = {}) {
     try {
       await AccessLogService.log({
@@ -236,5 +275,7 @@ class GrantCleanupService {
     }
   }
 }
+
+GrantCleanupService.PRINCIPAL_NOT_REMOVED_ERROR = PRINCIPAL_NOT_REMOVED_ERROR;
 
 module.exports = GrantCleanupService;

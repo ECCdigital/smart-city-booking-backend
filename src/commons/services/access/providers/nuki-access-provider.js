@@ -30,6 +30,7 @@ const AUTHORIZATION_NAME_MAX_LENGTH = 32;
 // Keypad codes are six digits from 1 to 9 - no zero - and may not start
 // with 12.
 const KEYPAD_DIGITS = "123456789";
+const KEYPAD_CODE = /^(?!12)[1-9]{6}$/;
 
 const logger = bunyan.createLogger({
   name: "nuki-access-provider.js",
@@ -230,6 +231,12 @@ class NukiAccessProvider extends AccessProvider {
     const secret = bookingContext.pin || this._generatePin();
     const name = this._buildAuthorizationName(accessPoint, bookingContext);
 
+    if (!KEYPAD_CODE.test(secret)) {
+      throw new Error(
+        `'${secret}' is not a Nuki keypad code: six digits from 1 to 9, not starting with 12`,
+      );
+    }
+
     await client.createAuthorization(accessPoint.externalId, {
       name,
       type: NUKI_AUTH_TYPES.KEYPAD,
@@ -256,7 +263,11 @@ class NukiAccessProvider extends AccessProvider {
    * @private
    * The id of the authorization just created, once Nuki lists it.
    *
-   * @returns {Promise<string>}
+   * @param {Object} client The tenant's Nuki API client
+   * @param {Object} accessPoint The access point the code was created at
+   * @param {string} name The name the authorization was created with
+   * @param {string} secret The keypad code it was created with
+   * @returns {Promise<string>} The authorization id
    * @throws {Error} When the listing still misses it after the last attempt
    */
   async _findCreatedAuthorization(client, accessPoint, name, secret) {
@@ -451,7 +462,7 @@ class NukiAccessProvider extends AccessProvider {
         { length: 6 },
         () => KEYPAD_DIGITS[crypto.randomInt(KEYPAD_DIGITS.length)],
       ).join("");
-    } while (pin.startsWith("12"));
+    } while (!KEYPAD_CODE.test(pin));
     return pin;
   }
 
