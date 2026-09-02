@@ -18,8 +18,15 @@ const PROVIDER_ID = "salto-ks";
 const KEYPAD_LOCK_TYPES = Object.freeze(["escutcheon_pin", "wall_reader_pin"]);
 
 class SaltoKsAccessProvider extends AccessProvider {
-  constructor() {
+  /**
+   * @param {Object} [options]
+   * @param {Object} [options.client] A ready API client used for every tenant
+   *   instead of one built from the tenant's application. Tests inject a fake
+   *   here; the registry constructs the provider without one.
+   */
+  constructor({ client = null } = {}) {
     super();
+    this._client = client;
     // Which IQ a lock hangs on, remembered from the last lock listing per
     // tenant. Only used to refuse locally (backoff, missing activation)
     // before any Salto call - a successful path always re-reads live data,
@@ -32,7 +39,7 @@ class SaltoKsAccessProvider extends AccessProvider {
   }
 
   async _getClient(tenant) {
-    return createClient(await this._getApp(tenant));
+    return this._client || createClient(await this._getApp(tenant));
   }
 
   /**
@@ -273,7 +280,7 @@ class SaltoKsAccessProvider extends AccessProvider {
    */
   async listAccessPoints(tenant) {
     const app = await this._getApp(tenant);
-    const client = createClient(app);
+    const client = this._client || createClient(app);
     const [locks, iqs] = await Promise.all([
       client.getLocks(),
       client.getIqs(),

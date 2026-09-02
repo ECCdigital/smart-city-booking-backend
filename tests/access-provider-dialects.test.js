@@ -1,0 +1,1284 @@
+/**
+ * Characterization of the access provider seam as it is today: the three
+ * dialects NUKI, Salto KS and iFBS answer in, and what `AccessService` makes
+ * of them - the sniffing in `_resolveOpen`/`_resolveLocked`, the fields that
+ * land in `accessInfo`, how revoke failures are treated. Nothing here is the
+ * target contract; every expectation is the observed behaviour, pinned so
+ * that typing the seam (Provider-Outcomes tickets 2 and 3) changes it on
+ * purpose, never by accident.
+ *
+ * The adapters run for real over fake API clients that replace only the
+ * HTTP transport (`tests/helpers/fake-*-api-client.js`).
+ */
+
+const assert = require("assert");
+const { expect } = require("chai");
+const sinon = require("sinon");
+
+process.env.CRYPTO_SECRET =
+  process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
+
+const AccessService = require("../src/commons/services/access/access-service");
+const AccessLogService = require("../src/commons/services/access/access-log-service");
+const NukiAccessProvider = require("../src/commons/services/access/providers/nuki-access-provider");
+const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
+const IfbsAccessProvider = require("../src/commons/services/access/providers/ifbs-access-provider");
+const {
+  registerAccessProvider,
+} = require("../src/commons/services/access/providers/access-provider-registry");
+const {
+  NUKI_ACTIONS,
+  NUKI_DEVICE_TYPES,
+} = require("../src/commons/services/access/clients/nuki-api-client");
+const BookingManager = require("../src/commons/data-managers/booking-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const PermissionsService = require("../src/commons/services/permission-service");
+const MailController = require("../src/commons/mail-service/mail-controller");
+const SecurityUtils = require("../src/commons/utilities/security-utils");
+const { Booking } = require("../src/commons/entities/booking/booking");
+const {
+  AccessPointMode,
+} = require("../src/commons/entities/access/access-point");
+const { AccessOpenError } = require("../src/errors/AccessOpenError");
+
+const {
+  FakeNukiApiClient,
+  BrokenNukiApiClient,
+} = require("./helpers/fake-nuki-api-client");
+const {
+  FakeSaltoKsApiClient,
+  BrokenSaltoKsApiClient,
+  saltoHttpError,
+  FAKE_SITE_ID,
+} = require("./helpers/fake-salto-ks-api-client");
+const {
+  FakeIfbsApiClient,
+  BrokenIfbsApiClient,
+  ERR_NO_WAIT_PROCESS_NOT_FOUND,
+} = require("./helpers/fake-ifbs-api-client");
+
+const TENANT = "tenant-1";
+const MINUTE = 60 * 1000;
+const SALTO_LOCK_ID = "4d77312f-4a87-41db-a97b-f9d948dcc908";
+const SALTO_IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
+
+function nukiSmartlock(overrides = {}) {
+  return {
+    smartlockId: 1001,
+    name: "Main door",
+    type: NUKI_DEVICE_TYPES.SMART_LOCK_3_4,
+    accountId: 77,
+    config: { keypadPaired: true },
+    state: { state: 1, doorState: 0 },
+    ...overrides,
+  };
+}
+
+function saltoLock(overrides = {}) {
+  return {
+    id: SALTO_LOCK_ID,
+    customer_reference: "Tür 01",
+    lock_type: "escutcheon_pin",
+    online: true,
+    locked_state: "locked",
+    siteId: FAKE_SITE_ID,
+    iq: { id: SALTO_IQ_ID, otp_enabled: false },
+    ...overrides,
+  };
+}
+
+function saltoIq() {
+  return { id: SALTO_IQ_ID, otp_enabled: false, restore_required: false };
+}
+
+function createClients({ nukiSmartlocks, saltoLocks } = {}) {
+  return {
+    nuki: new FakeNukiApiClient({
+      smartlocks: nukiSmartlocks || [nukiSmartlock()],
+    }),
+    "salto-ks": new FakeSaltoKsApiClient({
+      locks: saltoLocks || [saltoLock()],
+      iqs: [saltoIq()],
+    }),
+    ifbs: new FakeIfbsApiClient({ bookingIds: ["booking-17"] }),
+  };
+}
+
+function doorContext(overrides = {}) {
+  const now = Date.now();
+  return {
+    tenant: TENANT,
+    bookingId: "booking-1",
+    timeBegin: now - 5 * MINUTE,
+    timeEnd: now + 55 * MINUTE,
+    accessFrom: now - 5 * MINUTE,
+    accessTo: now + 55 * MINUTE,
+    booking: { name: "Erika Muster", mail: "erika@example.test" },
+    ...overrides,
+  };
+}
+
+const NUKI_DOOR = {
+  id: "door-1",
+  tenantId: TENANT,
+  type: "door",
+  provider: "nuki",
+  externalId: "1001",
+  label: "Main door",
+  mode: AccessPointMode.AUTHORIZATION,
+  validationRules: [],
+};
+
+const SALTO_DOOR = {
+  id: "door-2",
+  tenantId: TENANT,
+  type: "door",
+  provider: "salto-ks",
+  externalId: SALTO_LOCK_ID,
+  label: "Tür 01",
+  mode: AccessPointMode.AUTHORIZATION,
+  validationRules: [],
+};
+
+const IFBS_LOCKER = { id: "7", type: "locker", provider: "ifbs" };
+
+/** Asserts a rejection with the given error class and message. */
+function rejects(promise, ErrorClass, message) {
+  return assert.rejects(promise, (error) => {
+    expect(error).to.be.instanceOf(ErrorClass);
+    expect(error.message).to.include(message);
+    return true;
+  });
+}
+
+describe("access provider dialects: the adapters as they answer today", () => {
+  let clients;
+
+  beforeEach(() => {
+    clients = createClients();
+  });
+
+  describe("NUKI", () => {
+    let provider;
+
+    beforeEach(() => {
+      provider = new NukiAccessProvider({ client: clients.nuki });
+    });
+
+    it("answers an open with a fixed success and the raw provider response", async () => {
+      const outcome = await provider.open(NUKI_DOOR, doorContext());
+
+      expect(outcome).to.deep.equal({
+        success: true,
+        state: "open",
+        providerResponse: "",
+      });
+      expect(clients.nuki.actions).to.deep.equal([
+        { smartlockId: "1001", action: NUKI_ACTIONS.UNLATCH },
+      ]);
+    });
+
+    it("answers the status as the client's own smartlock state, unmapped", async () => {
+      const status = await provider.getStatus(NUKI_DOOR, doorContext());
+
+      expect(Object.keys(status).sort()).to.deep.equal([
+        "batteryCharge",
+        "batteryCharging",
+        "batteryCritical",
+        "doorOpen",
+        "doorSensorState",
+        "doorStateCode",
+        "lockState",
+        "lockStateCode",
+        "locked",
+        "name",
+        "open",
+        "providerResponse",
+        "serverState",
+        "smartlockId",
+        "state",
+      ]);
+      expect(status).to.include({
+        smartlockId: "1001",
+        locked: true,
+        open: false,
+        lockState: "locked",
+        doorOpen: null,
+      });
+    });
+
+    it("answers a grant with the authorization id, the PIN and the raw response", async () => {
+      const grant = await provider.grantAuthorization(
+        NUKI_DOOR,
+        doorContext({ pin: "424242" }),
+      );
+
+      expect(Object.keys(grant).sort()).to.deep.equal([
+        "authorizationId",
+        "pin",
+        "providerResponse",
+      ]);
+      expect(grant.authorizationId).to.equal("auth-1");
+      expect(grant.pin).to.equal("424242");
+      expect(grant.providerResponse).to.include({
+        name: "Booking booking-1 Main door",
+        type: "keypad",
+        code: "424242",
+      });
+    });
+
+    it("answers a revoke with the authorization id it deleted", async () => {
+      const grant = await provider.grantAuthorization(NUKI_DOOR, doorContext());
+
+      const revocation = await provider.revokeAuthorization(NUKI_DOOR, {
+        ...doorContext(),
+        authorizationId: grant.authorizationId,
+      });
+
+      expect(revocation).to.deep.equal({
+        success: true,
+        authorizationId: "auth-1",
+        providerResponse: "",
+      });
+    });
+
+    it("skips a revoke that has no authorization id to act on", async () => {
+      const revocation = await provider.revokeAuthorization(
+        NUKI_DOOR,
+        doorContext(),
+      );
+
+      expect(revocation).to.deep.equal({
+        success: true,
+        skipped: true,
+        reason: "missing authorizationId",
+      });
+    });
+
+    it("throws the provider's own error when revoking an authorization it no longer has", async () => {
+      await rejects(
+        provider.revokeAuthorization(NUKI_DOOR, {
+          ...doorContext(),
+          authorizationId: "auth-gone",
+        }),
+        Error,
+        "Request failed with status code 404",
+      );
+    });
+
+    it("lets a broken client's error escape raw from an open", async () => {
+      const broken = new NukiAccessProvider({
+        client: new BrokenNukiApiClient(),
+      });
+
+      try {
+        await broken.open(NUKI_DOOR, doorContext());
+        throw new Error("expected open to throw");
+      } catch (err) {
+        expect(err).not.to.be.instanceOf(AccessOpenError);
+        expect(err.response.status).to.equal(500);
+      }
+    });
+  });
+
+  describe("NUKI getSmartlockState: the states the client reports", () => {
+    // Lock states of the Nuki Web API (`state.state`) and what the client
+    // makes of them. `open` says whether the lock grants access.
+    const lockStates = [
+      { code: 0, lockState: "uncalibrated", locked: false, open: false },
+      { code: 1, lockState: "locked", locked: true, open: false },
+      { code: 2, lockState: "unlocking", locked: false, open: false },
+      { code: 3, lockState: "unlocked", locked: false, open: true },
+      { code: 4, lockState: "locking", locked: false, open: false },
+      { code: 5, lockState: "unlatched", locked: false, open: true },
+      { code: 6, lockState: "unlocked_lock_n_go", locked: false, open: true },
+      { code: 7, lockState: "unlatching", locked: false, open: true },
+      { code: 254, lockState: "motor_blocked", locked: false, open: false },
+      { code: 255, lockState: "undefined", locked: false, open: false },
+      { code: 99, lockState: "unknown", locked: false, open: false },
+    ];
+
+    for (const { code, lockState, locked, open } of lockStates) {
+      it(`maps lock state ${code} to ${lockState} (locked ${locked}, open ${open})`, async () => {
+        const client = new FakeNukiApiClient({
+          smartlocks: [nukiSmartlock({ state: { state: code } })],
+        });
+
+        const state = await client.getSmartlockState("1001");
+
+        expect(state).to.include({
+          lockState,
+          lockStateCode: code,
+          locked,
+          open,
+        });
+      });
+    }
+
+    // Door sensor states (`state.doorState`): only closed and open are
+    // known positions, everything else is "no position".
+    const doorStates = [
+      { code: 0, doorSensorState: "unavailable", doorOpen: null },
+      { code: 1, doorSensorState: "deactivated", doorOpen: null },
+      { code: 2, doorSensorState: "closed", doorOpen: false },
+      { code: 3, doorSensorState: "open", doorOpen: true },
+      { code: 4, doorSensorState: "unknown", doorOpen: null },
+      { code: 5, doorSensorState: "calibrating", doorOpen: null },
+    ];
+
+    for (const { code, doorSensorState, doorOpen } of doorStates) {
+      it(`maps door state ${code} to ${doorSensorState} (doorOpen ${doorOpen})`, async () => {
+        const client = new FakeNukiApiClient({
+          smartlocks: [nukiSmartlock({ state: { state: 1, doorState: code } })],
+        });
+
+        const state = await client.getSmartlockState("1001");
+
+        expect(state).to.include({
+          doorSensorState,
+          doorStateCode: code,
+          doorOpen,
+        });
+      });
+    }
+
+    it("reports nothing about a smartlock without a state", async () => {
+      const client = new FakeNukiApiClient({
+        smartlocks: [nukiSmartlock({ state: undefined })],
+      });
+
+      const state = await client.getSmartlockState("1001");
+
+      expect(state).to.include({
+        locked: null,
+        open: null,
+        lockState: null,
+        lockStateCode: null,
+        doorOpen: null,
+        doorSensorState: null,
+        state: null,
+      });
+    });
+  });
+
+  describe("Salto KS", () => {
+    let provider;
+
+    beforeEach(() => {
+      provider = new SaltoKsAccessProvider({ client: clients["salto-ks"] });
+    });
+
+    it("answers an open with a fixed success and the raw provider response", async () => {
+      const outcome = await provider.open(SALTO_DOOR, doorContext());
+
+      expect(outcome).to.deep.equal({
+        success: true,
+        state: "open",
+        providerResponse: saltoLock({ locked_state: "unlocked" }),
+      });
+    });
+
+    it("answers the status as a rich object with a locked/unlocked/null state", async () => {
+      const status = await provider.getStatus(SALTO_DOOR, doorContext());
+
+      expect(status).to.deep.equal({
+        lockId: SALTO_LOCK_ID,
+        name: "Tür 01",
+        online: true,
+        state: "locked",
+        lockedState: "locked",
+        batteryLevel: null,
+        batteryCritical: null,
+        leftOpenAlarm: null,
+        intrusionAlarm: null,
+      });
+    });
+
+    it("answers a grant with access id, Salto user id, PIN and both raw responses", async () => {
+      const context = doorContext({ pin: "424242" });
+
+      const grant = await provider.grantAuthorization(SALTO_DOOR, context);
+
+      expect(grant).to.deep.equal({
+        authorizationId: "access-2",
+        saltoUserId: "user-1",
+        accessId: "access-2",
+        pin: "424242",
+        providerResponse: {
+          user: {
+            id: "user-1",
+            firstName: "Erika",
+            lastName: "Muster",
+            email: "erika@example.test",
+          },
+          access: {
+            id: "access-2",
+            userId: "user-1",
+            lockIds: [SALTO_LOCK_ID],
+            validFrom: new Date(context.accessFrom).toISOString(),
+            validTo: new Date(context.accessTo).toISOString(),
+            pin: "424242",
+          },
+        },
+      });
+    });
+
+    it("answers a revoke with whether the Salto user could be deleted", async () => {
+      const grant = await provider.grantAuthorization(
+        SALTO_DOOR,
+        doorContext(),
+      );
+
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
+        ...doorContext(),
+        accessId: grant.accessId,
+        saltoUserId: grant.saltoUserId,
+      });
+
+      expect(revocation).to.deep.equal({
+        success: true,
+        authorizationId: "access-2",
+        saltoUserId: "user-1",
+        accessId: "access-2",
+        userDeleted: true,
+        providerResponse: { access: "", user: "" },
+      });
+      expect(clients["salto-ks"].users.size).to.equal(0);
+    });
+
+    it("reads the ids to revoke from the accessInfo entry on the context as well", async () => {
+      const grant = await provider.grantAuthorization(
+        SALTO_DOOR,
+        doorContext(),
+      );
+
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
+        tenant: TENANT,
+        accessInfo: {
+          accessId: grant.accessId,
+          saltoUserId: grant.saltoUserId,
+        },
+      });
+
+      expect(revocation).to.include({
+        accessId: "access-2",
+        userDeleted: true,
+      });
+    });
+
+    it("books a failed user deletion on the revoke instead of failing it", async () => {
+      const grant = await provider.grantAuthorization(
+        SALTO_DOOR,
+        doorContext(),
+      );
+      clients["salto-ks"].users.clear();
+
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
+        ...doorContext(),
+        accessId: grant.accessId,
+        saltoUserId: grant.saltoUserId,
+      });
+
+      expect(revocation).to.include({ success: true, userDeleted: false });
+      expect(revocation.providerResponse).to.deep.equal({
+        access: "",
+        userDeleteError: "User not found",
+      });
+    });
+
+    it("skips a revoke that has neither an access id nor a user id", async () => {
+      const revocation = await provider.revokeAuthorization(
+        SALTO_DOOR,
+        doorContext(),
+      );
+
+      expect(revocation).to.deep.equal({
+        success: true,
+        skipped: true,
+        reason: "missing accessId and saltoUserId",
+      });
+    });
+
+    it("maps a failure of the open call itself to an AccessOpenError", async () => {
+      clients["salto-ks"].openError = saltoHttpError(500, {
+        Message: "Internal error",
+      });
+
+      try {
+        await provider.open(SALTO_DOOR, doorContext());
+        throw new Error("expected open to throw");
+      } catch (err) {
+        expect(err).to.be.instanceOf(AccessOpenError);
+        expect(err.failureClass).to.equal("temporary");
+      }
+    });
+
+    it("lets a client failure before the open call escape raw", async () => {
+      const broken = new SaltoKsAccessProvider({
+        client: new BrokenSaltoKsApiClient(),
+      });
+
+      try {
+        await broken.open(SALTO_DOOR, doorContext());
+        throw new Error("expected open to throw");
+      } catch (err) {
+        expect(err).not.to.be.instanceOf(AccessOpenError);
+        expect(err.response.status).to.equal(500);
+      }
+    });
+  });
+
+  describe("iFBS", () => {
+    let provider;
+    const lockerContext = () =>
+      doorContext({ externalBookingId: "booking-17" });
+
+    beforeEach(() => {
+      provider = new IfbsAccessProvider({ client: clients.ifbs });
+    });
+
+    it("answers an open with the booking and open-box process ids only", async () => {
+      const outcome = await provider.open(IFBS_LOCKER, lockerContext());
+
+      expect(outcome).to.deep.equal({
+        processId: "booking-17",
+        openProcessId: "1",
+      });
+    });
+
+    it("cannot close: the client has no closeBox, although close is a declared capability", async () => {
+      expect(IfbsAccessProvider.capabilities).to.include("close");
+
+      await rejects(
+        provider.close(IFBS_LOCKER, lockerContext()),
+        TypeError,
+        "client.closeBox is not a function",
+      );
+    });
+
+    it("answers the status of a known open process as a mapped open-box status", async () => {
+      await provider.open(IFBS_LOCKER, lockerContext());
+      clients.ifbs.confirm("1");
+
+      const status = await provider.getStatus(IFBS_LOCKER, {
+        ...lockerContext(),
+        lastOpenBoxId: "1",
+      });
+
+      expect(status).to.deep.equal({
+        openProcessId: "1",
+        confirmed: true,
+        confirmedAt: "2026-09-02 10:00:02",
+        open: true,
+        state: "open",
+        boxControlReceived: true,
+        receivedAt: "2026-09-02 10:00:00",
+        bookingId: "booking-17",
+        usageState: "active",
+      });
+    });
+
+    it("answers the status without a known process as the usage window", async () => {
+      const context = lockerContext();
+
+      const status = await provider.getStatus(IFBS_LOCKER, context);
+
+      expect(status).to.deep.equal({
+        bookingId: "booking-17",
+        usageState: "active",
+        accessFrom: context.accessFrom,
+        accessTo: context.accessTo,
+        open: null,
+        locked: null,
+        doorOpen: null,
+        state: "active",
+      });
+    });
+
+    it("answers the progress of an open process off the interface, via getOpenStatus(tenant, id)", async () => {
+      await provider.open(IFBS_LOCKER, lockerContext());
+
+      const progress = await provider.getOpenStatus(TENANT, "1");
+
+      expect(progress).to.deep.equal({
+        openProcessId: "1",
+        confirmed: true,
+        confirmedAt: "2026-09-02 10:00:02",
+        open: true,
+        state: "open",
+        waitTime: 2,
+      });
+    });
+
+    it("answers a failed poll with the iFBS error number and message", async () => {
+      const progress = await provider.getOpenStatus(TENANT, "99");
+
+      expect(progress).to.deep.equal({
+        openProcessId: "99",
+        confirmed: false,
+        confirmedAt: null,
+        open: null,
+        state: "pending",
+        errorCode: ERR_NO_WAIT_PROCESS_NOT_FOUND,
+        errorMessage: "OpenBox process not found",
+      });
+    });
+
+    it("lets a broken client's error escape raw from an open", async () => {
+      const broken = new IfbsAccessProvider({
+        client: new BrokenIfbsApiClient(),
+      });
+
+      try {
+        await broken.open(IFBS_LOCKER, lockerContext());
+        throw new Error("expected open to throw");
+      } catch (err) {
+        expect(err).not.to.be.instanceOf(AccessOpenError);
+        expect(err.code).to.equal("ECONNREFUSED");
+      }
+    });
+  });
+});
+
+describe("access provider dialects: what AccessService makes of them today", () => {
+  let sandbox;
+  let clients;
+
+  function registerFakeProviders() {
+    registerAccessProvider(
+      "nuki",
+      class extends NukiAccessProvider {
+        constructor() {
+          super({ client: clients.nuki });
+        }
+      },
+    );
+    registerAccessProvider(
+      "salto-ks",
+      class extends SaltoKsAccessProvider {
+        constructor() {
+          super({ client: clients["salto-ks"] });
+        }
+      },
+    );
+    registerAccessProvider(
+      "ifbs",
+      class extends IfbsAccessProvider {
+        constructor() {
+          super({ client: clients.ifbs });
+        }
+      },
+    );
+  }
+
+  after(() => {
+    registerAccessProvider("nuki", NukiAccessProvider);
+    registerAccessProvider("salto-ks", SaltoKsAccessProvider);
+    registerAccessProvider("ifbs", IfbsAccessProvider);
+  });
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    clients = createClients();
+    registerFakeProviders();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  function createBooking(overrides = {}) {
+    const now = Date.now();
+    return new Booking({
+      id: "booking-1",
+      tenantId: TENANT,
+      assignedUserId: "user-1",
+      isCommitted: true,
+      isPayed: true,
+      priceEur: 0,
+      timeBegin: now - 5 * MINUTE,
+      timeEnd: now + 55 * MINUTE,
+      bookableItems: [{ bookableId: "room" }],
+      accessInfo: [],
+      lockerInfo: [],
+      mail: "erika@example.test",
+      name: "Erika Muster",
+      ...overrides,
+    });
+  }
+
+  /**
+   * Answers every read the service makes to resolve the access points of a
+   * booking, at the data-manager boundary: one bookable with the given doors.
+   */
+  function stubBooking(booking, doors = []) {
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    sandbox.stub(BookingManager, "storeBooking").resolves(booking);
+    sandbox.stub(BookableManager, "getBookablesByIds").resolves([
+      {
+        id: "room",
+        title: "Room",
+        accessPointDetails: {
+          active: true,
+          accessPointIds: doors.map((door) => door.id),
+        },
+      },
+    ]);
+    sandbox.stub(BookableManager, "getRelatedBookables").resolves([]);
+    sandbox.stub(BookableManager, "getAllParentBookables").resolves([]);
+    sandbox.stub(AccessPointManager, "getAccessPointsByIds").resolves(doors);
+    sandbox
+      .stub(AccessPointManager, "getAccessPoint")
+      .callsFake(async (id) => doors.find((door) => door.id === id) || null);
+    sandbox.stub(AccessLogService, "log").resolves();
+    sandbox.stub(MailController, "sendAccessProvisioned").resolves();
+    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+    sandbox.stub(TenantManager, "getTenant").resolves({
+      id: TENANT,
+      applications: [
+        {
+          type: "access",
+          id: "salto-ks",
+          active: true,
+          siteId: FAKE_SITE_ID,
+          environment: "accept",
+          iqActivations: [],
+        },
+      ],
+    });
+  }
+
+  function lockerBooking(ifbsMetadata = { nummer: 7 }) {
+    return createBooking({
+      bookableItems: [],
+      lockerInfo: [
+        { lockerSystem: "ifbs", processId: "booking-17", ifbsMetadata },
+      ],
+    });
+  }
+
+  function loggedPayload(action) {
+    return AccessLogService.log.args
+      .map(([entry]) => entry)
+      .find((entry) => entry.action === action);
+  }
+
+  describe("open", () => {
+    it("reads no open process out of a NUKI open and audits the raw answer", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      const outcome = await AccessService.open(
+        TENANT,
+        "booking-1",
+        "door-1",
+        "user-1",
+      );
+
+      expect(outcome).to.deep.equal({
+        success: true,
+        data: { openProcessId: null },
+      });
+      expect(loggedPayload("open").payload).to.deep.equal({
+        success: true,
+        state: "open",
+        providerResponse: "",
+        validatedEvidence: [],
+      });
+    });
+
+    it("reads the open-box process out of an iFBS open, as a string", async () => {
+      stubBooking(lockerBooking());
+
+      const outcome = await AccessService.open(
+        TENANT,
+        "booking-1",
+        "7",
+        "user-1",
+      );
+
+      expect(outcome).to.deep.equal({
+        success: true,
+        data: { openProcessId: "1" },
+      });
+      expect(loggedPayload("open").payload).to.deep.equal({
+        processId: "booking-17",
+        openProcessId: "1",
+        validatedEvidence: [],
+      });
+    });
+
+    it("rethrows a raw NUKI client error after auditing the failure", async () => {
+      clients.nuki = new BrokenNukiApiClient();
+      registerFakeProviders();
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      try {
+        await AccessService.open(TENANT, "booking-1", "door-1", "user-1");
+        throw new Error("expected open to throw");
+      } catch (err) {
+        expect(err).not.to.be.instanceOf(AccessOpenError);
+        expect(err.response.status).to.equal(500);
+      }
+      expect(loggedPayload("open")).to.include({
+        result: "failure",
+        errorMessage: "Request failed with status code 500",
+      });
+    });
+  });
+
+  describe("getStatus", () => {
+    it("takes NUKI's booleans as they are", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      const status = await AccessService.getStatus(
+        TENANT,
+        "booking-1",
+        "door-1",
+      );
+
+      expect(status).to.deep.equal({
+        open: false,
+        locked: true,
+        doorOpen: null,
+        statusSource: "provider_status",
+      });
+      expect(loggedPayload("status").payload).to.include({
+        lockState: "locked",
+        smartlockId: "1001",
+      });
+    });
+
+    it("passes NUKI's door sensor through", async () => {
+      clients = createClients({
+        nukiSmartlocks: [nukiSmartlock({ state: { state: 3, doorState: 3 } })],
+      });
+      registerFakeProviders();
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      const status = await AccessService.getStatus(
+        TENANT,
+        "booking-1",
+        "door-1",
+      );
+
+      expect(status).to.deep.equal({
+        open: true,
+        locked: false,
+        doorOpen: true,
+        statusSource: "provider_status",
+      });
+    });
+
+    const saltoStates = [
+      { lockedState: "locked", expected: { open: false, locked: true } },
+      { lockedState: "unlocked", expected: { open: true, locked: false } },
+      { lockedState: undefined, expected: { open: null, locked: null } },
+    ];
+
+    for (const { lockedState, expected } of saltoStates) {
+      it(`sniffs Salto's state '${lockedState}' into open/locked`, async () => {
+        clients = createClients({
+          saltoLocks: [saltoLock({ locked_state: lockedState })],
+        });
+        registerFakeProviders();
+        stubBooking(createBooking(), [SALTO_DOOR]);
+
+        const status = await AccessService.getStatus(
+          TENANT,
+          "booking-1",
+          "door-2",
+        );
+
+        expect(status).to.deep.equal({
+          ...expected,
+          doorOpen: null,
+          statusSource: "provider_status",
+        });
+      });
+    }
+
+    it("knows nothing about an iFBS locker without an open process", async () => {
+      stubBooking(lockerBooking());
+
+      const status = await AccessService.getStatus(TENANT, "booking-1", "7");
+
+      expect(status).to.deep.equal({
+        open: null,
+        locked: null,
+        doorOpen: null,
+        statusSource: "provider_status",
+      });
+      expect(loggedPayload("status").payload).to.include({
+        usageState: "active",
+        state: "active",
+      });
+    });
+
+    it("reads a confirmed iFBS open process as open and unlocked", async () => {
+      stubBooking(lockerBooking({ nummer: 7, lastOpenBoxId: "1" }));
+      await clients.ifbs.openBox("booking-17");
+      clients.ifbs.confirm("1");
+
+      const status = await AccessService.getStatus(TENANT, "booking-1", "7");
+
+      expect(status).to.deep.equal({
+        open: true,
+        locked: false,
+        doorOpen: null,
+        statusSource: "provider_status",
+      });
+    });
+  });
+
+  describe("getOpenStatus", () => {
+    it("polls the iFBS open process when the provider has getOpenStatus", async () => {
+      stubBooking(lockerBooking());
+      await clients.ifbs.openBox("booking-17");
+
+      const status = await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        "7",
+        "1",
+      );
+
+      expect(status).to.deep.equal({
+        open: true,
+        locked: false,
+        doorOpen: null,
+        statusSource: "open_process",
+        confirmed: true,
+        errorCode: null,
+        errorMessage: null,
+      });
+    });
+
+    it("reports a failed iFBS poll as not open, with the error", async () => {
+      stubBooking(lockerBooking());
+
+      const status = await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        "7",
+        "99",
+      );
+
+      expect(status).to.deep.equal({
+        open: false,
+        locked: null,
+        doorOpen: null,
+        statusSource: "open_process",
+        confirmed: false,
+        errorCode: ERR_NO_WAIT_PROCESS_NOT_FOUND,
+        errorMessage: "OpenBox process not found",
+      });
+    });
+
+    it("ignores an open process id where the provider has no getOpenStatus", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      const status = await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        "door-1",
+        "42",
+      );
+
+      expect(status).to.deep.equal({
+        open: false,
+        locked: true,
+        doorOpen: null,
+        statusSource: "provider_status",
+        confirmed: null,
+        errorCode: null,
+        errorMessage: null,
+      });
+    });
+
+    it("prefers the last webhook event over the lock's state", async () => {
+      const booking = createBooking({
+        accessInfo: [
+          {
+            accessPointId: "door-1",
+            lastEvent: { success: true, timestamp: 1725270000000 },
+          },
+        ],
+      });
+      stubBooking(booking, [NUKI_DOOR]);
+
+      const status = await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        "door-1",
+        null,
+      );
+
+      expect(status).to.deep.equal({
+        open: true,
+        locked: false,
+        doorOpen: null,
+        statusSource: "last_event",
+        confirmed: true,
+        errorCode: null,
+        errorMessage: null,
+      });
+    });
+  });
+
+  describe("close", () => {
+    it("locks a NUKI door and answers with the state read afterwards", async () => {
+      clients = createClients({
+        nukiSmartlocks: [nukiSmartlock({ state: { state: 3 } })],
+      });
+      registerFakeProviders();
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      const status = await AccessService.close(
+        TENANT,
+        "booking-1",
+        "door-1",
+        "user-1",
+      );
+
+      expect(clients.nuki.actions).to.deep.equal([
+        { smartlockId: "1001", action: NUKI_ACTIONS.LOCK },
+      ]);
+      expect(status).to.deep.equal({
+        open: false,
+        locked: true,
+        doorOpen: null,
+        statusSource: "provider_status",
+      });
+    });
+
+    it("fails on a Salto door, which declares no close", async () => {
+      stubBooking(createBooking(), [SALTO_DOOR]);
+
+      await rejects(
+        AccessService.close(TENANT, "booking-1", "door-2", "user-1"),
+        Error,
+        "close() is not supported by",
+      );
+      expect(loggedPayload("close")).to.include({ result: "failure" });
+    });
+
+    it("fails on an iFBS locker with a TypeError, although iFBS declares close", async () => {
+      stubBooking(lockerBooking());
+
+      await rejects(
+        AccessService.close(TENANT, "booking-1", "7", "user-1"),
+        TypeError,
+        "client.closeBox is not a function",
+      );
+      expect(loggedPayload("close")).to.include({ result: "failure" });
+    });
+  });
+
+  describe("provisionForBooking", () => {
+    it("stores a NUKI grant flat in accessInfo, the PIN encrypted, and mails the PIN once", async () => {
+      const booking = createBooking();
+      stubBooking(booking, [NUKI_DOOR]);
+
+      const accessInfo = await AccessService.provisionForBooking(
+        TENANT,
+        "booking-1",
+      );
+
+      expect(accessInfo).to.have.length(1);
+      const [entry] = accessInfo;
+      expect(Object.keys(entry).sort()).to.deep.equal([
+        "accessId",
+        "accessPointId",
+        "accessPointType",
+        "authorizationId",
+        "externalId",
+        "isProvisioned",
+        "mode",
+        "pin",
+        "provider",
+        "providerResponse",
+        "provisionedAt",
+        "saltoUserId",
+      ]);
+      expect(entry).to.include({
+        accessPointId: "door-1",
+        accessPointType: "door",
+        provider: "nuki",
+        externalId: "1001",
+        mode: AccessPointMode.AUTHORIZATION,
+        authorizationId: "auth-1",
+        accessId: "auth-1",
+        saltoUserId: null,
+        isProvisioned: true,
+      });
+      expect(entry.provisionedAt).to.be.a("number");
+
+      const pin = SecurityUtils.decrypt(entry.pin);
+      expect(pin).to.match(/^\d{6}$/);
+      expect(entry.providerResponse).to.include({ id: "auth-1", code: pin });
+
+      expect(MailController.sendAccessProvisioned.calledOnce).to.be.true;
+      expect(MailController.sendAccessProvisioned.firstCall.args).to.deep.equal(
+        [
+          "erika@example.test",
+          "booking-1",
+          TENANT,
+          [
+            {
+              accessPointId: "door-1",
+              label: "Main door",
+              provider: "nuki",
+              bookableTitle: "Room",
+              pin,
+            },
+          ],
+        ],
+      );
+      expect(BookingManager.storeBooking.calledOnceWith(booking)).to.be.true;
+    });
+
+    it("audits a NUKI grant with accessId null although accessInfo carries the authorization id there", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      const [entry] = await AccessService.provisionForBooking(
+        TENANT,
+        "booking-1",
+      );
+
+      expect(entry.accessId).to.equal("auth-1");
+      expect(loggedPayload("provision").payload).to.deep.include({
+        authorizationId: "auth-1",
+        accessId: null,
+        saltoUserId: null,
+      });
+    });
+
+    it("stores a Salto grant with access id, Salto user id and both raw responses", async () => {
+      stubBooking(createBooking(), [SALTO_DOOR]);
+
+      const [entry] = await AccessService.provisionForBooking(
+        TENANT,
+        "booking-1",
+      );
+
+      expect(entry).to.include({
+        provider: "salto-ks",
+        authorizationId: "access-2",
+        accessId: "access-2",
+        saltoUserId: "user-1",
+        isProvisioned: true,
+      });
+      expect(SecurityUtils.decrypt(entry.pin)).to.match(/^\d{6}$/);
+      expect(Object.keys(entry.providerResponse)).to.deep.equal([
+        "user",
+        "access",
+      ]);
+      expect(loggedPayload("provision").payload).to.deep.include({
+        authorizationId: "access-2",
+        accessId: "access-2",
+        saltoUserId: "user-1",
+      });
+    });
+
+    it("grants nothing at a door whose lock does not support the mode, and audits why", async () => {
+      clients = createClients({
+        nukiSmartlocks: [nukiSmartlock({ config: {} })],
+      });
+      registerFakeProviders();
+      stubBooking(createBooking(), [NUKI_DOOR]);
+
+      const accessInfo = await AccessService.provisionForBooking(
+        TENANT,
+        "booking-1",
+      );
+
+      expect(accessInfo).to.deep.equal([]);
+      expect(clients.nuki.authorizations.size).to.equal(0);
+      expect(loggedPayload("provision")).to.include({
+        result: "failure",
+        errorMessage:
+          "Access mode 'authorization' is not supported by access point 'door-1'",
+      });
+    });
+  });
+
+  describe("revokeForBooking", () => {
+    it("records a Salto revoke with the user deletion as Salto-specific fields", async () => {
+      const booking = createBooking();
+      stubBooking(booking, [SALTO_DOOR]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.include({
+        isProvisioned: false,
+        saltoUserCleanupError: null,
+        authorizationId: "access-2",
+        saltoUserId: "user-1",
+      });
+      expect(entry.revokedAt).to.be.a("number");
+      expect(entry.saltoUserDeletedAt).to.be.a("number");
+      expect(entry.providerResponse).to.deep.equal({ access: "", user: "" });
+      expect(clients["salto-ks"].accesses.size).to.equal(0);
+      expect(loggedPayload("revoke").payload).to.deep.equal({
+        authorizationId: "access-2",
+        accessId: "access-2",
+        saltoUserId: "user-1",
+        providerResponse: { access: "", user: "" },
+      });
+    });
+
+    it("keeps a Salto user that could not be deleted as a cleanup error", async () => {
+      stubBooking(createBooking(), [SALTO_DOOR]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+      clients["salto-ks"].users.clear();
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.include({
+        isProvisioned: false,
+        saltoUserDeletedAt: null,
+        saltoUserCleanupError: "User not found",
+      });
+    });
+
+    it("records a NUKI revoke with the Salto fields empty and an empty answer as null", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.include({
+        isProvisioned: false,
+        saltoUserDeletedAt: null,
+        saltoUserCleanupError: null,
+        // NUKI answers a delete with no body; a falsy answer is stored as null.
+        providerResponse: null,
+      });
+      expect(entry.revokedAt).to.be.a("number");
+      expect(clients.nuki.authorizations.size).to.equal(0);
+    });
+
+    it("leaves a grant provisioned when the provider refuses the revoke, and only audits it", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+      clients.nuki.authorizations.clear();
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.include({
+        isProvisioned: true,
+        authorizationId: "auth-1",
+      });
+      expect(entry).not.to.have.property("revokedAt");
+      expect(loggedPayload("revoke")).to.include({
+        result: "failure",
+        errorMessage: "Request failed with status code 404",
+      });
+    });
+  });
+});
