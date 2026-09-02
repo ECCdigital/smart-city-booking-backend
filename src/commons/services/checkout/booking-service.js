@@ -6,10 +6,7 @@ const CouponService = require("../coupon-service");
 const GroupBookingManager = require("../../data-managers/group-booking-manager");
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
-const {
-  BundleCheckoutService,
-  ManualBundleCheckoutService,
-} = require("./bundle-checkout-service");
+const { BundleCheckoutService } = require("./bundle-checkout-service");
 const ReceiptService = require("../payment/receipt-service");
 const InvoiceService = require("../payment/invoice-service");
 const LockerService = require("../locker/locker-service");
@@ -52,7 +49,12 @@ const { deleteBookingDocuments } = require("../media/booking-documents");
 const MediaManager = require("../../data-managers/media-manager");
 const MediaService = require("../media/media-service");
 const { toMediaReference } = require("../media/media-reference");
-const { resolveCheckoutId } = require("../../utilities/checkout-utils");
+const {
+  resolveCheckoutId,
+  resolveCheckoutItems,
+} = require("../../utilities/checkout-utils");
+const checkoutPolicy = require("./checkout-policy");
+const { CheckoutPolicy } = checkoutPolicy;
 const { CustomFieldService } = require("../custom-field/custom-field-service");
 const { CheckoutError } = require("../../../errors/CheckoutError");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
@@ -146,7 +148,7 @@ class BookingService {
    * @param user
    * @param bookingAttempt
    * @param simulate
-   * @param manualBooking
+   * @param policy - The checkout policy (see checkout-policy.js).
    * @param skipWorkflow
    * @param providedCheckoutId - Optional checkoutId to use instead of generating a new one
    * @returns {Promise<Booking>}
@@ -156,11 +158,12 @@ class BookingService {
     user,
     bookingAttempt,
     simulate,
-    manualBooking = false,
+    policy = CheckoutPolicy.SELF_SERVICE,
     skipWorkflow = false,
     checkoutId: providedCheckoutId,
   }) {
-    const checkoutId = uuidV4();
+    checkoutPolicy.assertCheckoutPolicy(policy);
+    const checkoutId = providedCheckoutId || uuidV4();
 
     const {
       timeBegin,
@@ -200,7 +203,10 @@ class BookingService {
     );
 
     // Check invoice payment permission
-    if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
+    if (
+      paymentProvider?.toLowerCase() === "invoice" &&
+      checkoutPolicy.requiresInvoicePermission(policy)
+    ) {
       const isPermitted = await PaymentUtils.checkInvoicePermission(
         tenantId,
         user?.id,
@@ -212,100 +218,28 @@ class BookingService {
       }
     }
 
-    async function validateMandatoryAddons(bookableItems) {
-      const bookableIds = bookableItems.map((item) => item.bookableId);
+    const checkoutItems = checkoutPolicy.resolvesMandatoryAddons(policy)
+      ? await resolveCheckoutItems(bookableItems, tenantId)
+      : bookableItems;
 
-      const bookables = await Promise.all(
-        bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
-      );
-
-      const bookableMap = new Map();
-      for (let i = 0; i < bookableIds.length; i++) {
-        bookableMap.set(bookableIds[i], bookables[i]);
-      }
-
-      const mandatoryAddons = [];
-      for (const item of bookableItems) {
-        const bookable = bookableMap.get(item.bookableId);
-        if (bookable && Array.isArray(bookable.checkoutBookableIds)) {
-          for (const addon of bookable.checkoutBookableIds) {
-            if (addon.mandatory) {
-              mandatoryAddons.push({
-                bookableId: addon.bookableId,
-                amount: item.amount,
-              });
-            }
-          }
+    const adminOverrides = checkoutPolicy.acceptsAdminOverrides(policy)
+      ? {
+          internalComments: bookingAttempt.internalComments || "",
+          rejectionReason: bookingAttempt.rejectionReason || "",
+          isCommitted: Boolean(isCommitted),
+          isPayed: Boolean(isPayed),
+          isRejected: Boolean(isRejected),
+          cancellationPolicy,
         }
-      }
+      : undefined;
 
-      const filteredAddons = [];
-      for (const mandatoryAddon of mandatoryAddons) {
-        const existingAddon = bookableItems.find(
-          (item) => item.bookableId === mandatoryAddon.bookableId,
-        );
-
-        if (existingAddon) {
-          if (existingAddon.amount !== mandatoryAddon.amount) {
-            existingAddon.amount = mandatoryAddon.amount;
-            filteredAddons.push(existingAddon);
-          }
-        } else {
-          filteredAddons.push({
-            bookableId: mandatoryAddon.bookableId,
-            amount: mandatoryAddon.amount,
-          });
-        }
-      }
-
-      return filteredAddons;
-    }
-
-    let bundleCheckoutService;
-
-    if (manualBooking) {
-      bundleCheckoutService = new ManualBundleCheckoutService({
+    const bundleCheckoutService = new BundleCheckoutService(
+      {
         user: user?.id,
         tenant: tenantId,
         timeBegin,
         timeEnd,
-        bookableItems,
-        couponCode,
-        name,
-        company,
-        street,
-        zipCode,
-        location,
-        email: mail,
-        phone,
-        comment,
-        internalComments: bookingAttempt.internalComments || "",
-        rejectionReason: bookingAttempt.rejectionReason || "",
-        isCommit: Boolean(isCommitted),
-        isPayed: Boolean(isPayed),
-        isRejected: Boolean(isRejected),
-        attachmentStatus,
-        paymentProvider,
-        // Manual/admin create must not apply the creating user's booking discounts
-        // (Admin UI shows list prices; discounts belong to self-service checkout).
-        bookWithoutDiscount: true,
-        checkoutId: providedCheckoutId,
-        customFieldValues,
-        cancellationPolicy,
-        // Same as admin update: never hard-fail on checkout rules. Informational
-        // availability is via validate endpoints.
-        capacityChecksOnly: true,
-      });
-    } else {
-      const filteredAddons = await validateMandatoryAddons(bookableItems);
-      const filteredBookableItems = bookableItems.concat(filteredAddons);
-
-      bundleCheckoutService = new BundleCheckoutService({
-        user: user?.id,
-        tenant: tenantId,
-        timeBegin,
-        timeEnd,
-        bookableItems: filteredBookableItems,
+        bookableItems: checkoutItems,
         couponCode,
         name,
         company,
@@ -320,8 +254,10 @@ class BookingService {
         bookWithoutDiscount,
         checkoutId: providedCheckoutId,
         customFieldValues,
-      });
-    }
+      },
+      policy,
+      adminOverrides,
+    );
 
     let booking = await bundleCheckoutService.prepareBooking();
 
@@ -403,7 +339,7 @@ class BookingService {
    * @param user
    * @param bookingAttempt
    * @param simulate
-   * @param manualBooking
+   * @param policy - The checkout policy (see checkout-policy.js).
    * @param checkoutId - Optional checkoutId to use instead of generating a new one
    * @returns {Promise<Booking>}
    */
@@ -412,7 +348,7 @@ class BookingService {
     user,
     bookingAttempt,
     simulate,
-    manualBooking = false,
+    policy = CheckoutPolicy.SELF_SERVICE,
     checkoutId,
   }) {
     const booking = await BookingService.createBooking({
@@ -420,7 +356,7 @@ class BookingService {
       user,
       bookingAttempt,
       simulate,
-      manualBooking,
+      policy,
       checkoutId,
     });
 
@@ -477,7 +413,7 @@ class BookingService {
    * @param bookingAttempts
    * @param paymentProvider
    * @param simulate
-   * @param manualBooking
+   * @param policy - The checkout policy (see checkout-policy.js).
    * @returns {Promise<GroupBooking>}
    */
   static async createGroupBooking({
@@ -487,7 +423,7 @@ class BookingService {
     bookingAttempts,
     paymentProvider,
     simulate,
-    manualBooking = false,
+    policy = CheckoutPolicy.SELF_SERVICE,
   }) {
     if (!Array.isArray(bookingAttempts) || bookingAttempts.length === 0) {
       throw new BadRequestError("missing_booking_attempts");
@@ -498,7 +434,10 @@ class BookingService {
     );
 
     // Check invoice payment permission
-    if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
+    if (
+      paymentProvider?.toLowerCase() === "invoice" &&
+      checkoutPolicy.requiresInvoicePermission(policy)
+    ) {
       const isPermitted = await PaymentUtils.checkInvoicePermission(
         tenantId,
         user?.id,
@@ -533,7 +472,7 @@ class BookingService {
         user,
         bookingAttempt,
         simulate,
-        manualBooking,
+        policy,
       });
 
       allBookings.push(booking);
@@ -661,47 +600,53 @@ class BookingService {
     );
 
     try {
-      const bundleCheckoutService = new ManualBundleCheckoutService({
-        user: updatedBooking.assignedUserId,
-        tenant: tenantId,
-        timeBegin: updatedBooking.timeBegin,
-        timeEnd: updatedBooking.timeEnd,
-        timeCreated: oldBooking.timeCreated,
-        timePaid: updatedBooking.timePaid
-          ? updatedBooking.timePaid
-          : oldBooking.timePaid,
-        bookableItems: updatedBooking.bookableItems,
-        couponCode: updatedBooking.couponCode,
-        name: updatedBooking.name,
-        company: updatedBooking.company,
-        street: updatedBooking.street,
-        zipCode: updatedBooking.zipCode,
-        location: updatedBooking.location,
-        email: updatedBooking.mail,
-        phone: updatedBooking.phone,
-        comment: updatedBooking.comment,
-        internalComments:
-          updatedBooking.internalComments || oldBooking.internalComments || "",
-        rejectionReason:
-          updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
-        isCommit: isCommit,
-        isPayed: isPayed,
-        isRejected: isRejected,
-        attachmentStatus: updatedBooking.attachmentStatus,
-        paymentProvider: updatedBooking.paymentProvider,
-        paymentMethod: updatedBooking.paymentMethod,
-        attachments: oldBooking.attachments,
-        lockerInfo: oldBooking.lockerInfo,
-        accessInfo: oldBooking.accessInfo,
-        // Same as manual create: admin-entered list prices must not be overwritten
-        // by the assignee's (or admin's) bookingDiscounts.
-        bookWithoutDiscount: true,
-        checkoutId,
-        customFieldValues: updatedBooking.customFieldValues,
-        cancellationPolicy: updatedBooking.cancellationPolicy,
-        excludeBookingIds: [oldBooking.id],
-        capacityChecksOnly: true,
-      });
+      // Every booking update is a manual booking (see CONTEXT.md,
+      // "Manuelle Buchung"): the entered values are authoritative, no checks
+      // run and no automatic discounts apply.
+      const bundleCheckoutService = new BundleCheckoutService(
+        {
+          user: updatedBooking.assignedUserId,
+          tenant: tenantId,
+          timeBegin: updatedBooking.timeBegin,
+          timeEnd: updatedBooking.timeEnd,
+          timeCreated: oldBooking.timeCreated,
+          timePaid: updatedBooking.timePaid
+            ? updatedBooking.timePaid
+            : oldBooking.timePaid,
+          bookableItems: updatedBooking.bookableItems,
+          couponCode: updatedBooking.couponCode,
+          name: updatedBooking.name,
+          company: updatedBooking.company,
+          street: updatedBooking.street,
+          zipCode: updatedBooking.zipCode,
+          location: updatedBooking.location,
+          email: updatedBooking.mail,
+          phone: updatedBooking.phone,
+          comment: updatedBooking.comment,
+          attachmentStatus: updatedBooking.attachmentStatus,
+          paymentProvider: updatedBooking.paymentProvider,
+          attachments: oldBooking.attachments,
+          checkoutId,
+          customFieldValues: updatedBooking.customFieldValues,
+          amendedBookingId: oldBooking.id,
+        },
+        CheckoutPolicy.ADMIN_MANUAL,
+        {
+          internalComments:
+            updatedBooking.internalComments ||
+            oldBooking.internalComments ||
+            "",
+          rejectionReason:
+            updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
+          isCommitted: isCommit,
+          isPayed: isPayed,
+          isRejected: isRejected,
+          paymentMethod: updatedBooking.paymentMethod,
+          lockerInfo: oldBooking.lockerInfo,
+          accessInfo: oldBooking.accessInfo,
+          cancellationPolicy: updatedBooking.cancellationPolicy,
+        },
+      );
 
       let booking = await bundleCheckoutService.prepareBooking({
         keepExistingId: true,

@@ -13,7 +13,7 @@ const {
   CANCELLATION_ORIGINS,
 } = require("../src/commons/services/payment/cancellation-refund-service");
 const {
-  ManualBundleCheckoutService,
+  BundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
 
@@ -377,18 +377,16 @@ describe("BookingService cancellation refunds", function () {
       handleCreate: sinon.stub().resolves(),
     });
     sinon.stub(AccessService, "provisionForBooking").resolves([]);
-    sinon
-      .stub(ManualBundleCheckoutService.prototype, "prepareBooking")
-      .resolves(
-        new Booking({
-          ...oldBooking,
-          isRejected: false,
-          rejectionReason: "",
-          priceEur: 0,
-          vatIncludedEur: 0,
-          bookableItems: [],
-        }),
-      );
+    sinon.stub(BundleCheckoutService.prototype, "prepareBooking").resolves(
+      new Booking({
+        ...oldBooking,
+        isRejected: false,
+        rejectionReason: "",
+        priceEur: 0,
+        vatIncludedEur: 0,
+        bookableItems: [],
+      }),
+    );
 
     await BookingService.updateBooking("tenant-1", {
       ...oldBooking,

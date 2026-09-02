@@ -33,7 +33,9 @@ const {
   shouldSkipOpeningHoursCheck,
 } = require("../../availability/availability-rules");
 const { CheckoutPermissions } = require("./checkout-permissions");
-const { log } = require("qrcode/lib/core/galois-field");
+const checkoutPolicy = require("./checkout-policy");
+const { CheckoutPolicy } = checkoutPolicy;
+const { BadRequestError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -56,20 +58,34 @@ class ItemCheckoutService {
    * @param {string|string[]|null} [excludeBookingIds] Booking IDs to ignore in capacity checks (e.g. the booking being edited).
    * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
    *                                Defaults to `false` (discounts are applied when configured).
+   * @param {number|null} [manualPriceEur] Explicit net price per unit entered by
+   *   the admin. Honored only under ADMIN_MANUAL, where it replaces the
+   *   category/provider price; VAT, amount and coupons apply as usual.
+   * @param {string} [policy] The checkout policy (see checkout-policy.js).
+   *   Under ADMIN_MANUAL no checks run and discounts are always suppressed.
    */
-  constructor({
-    user,
-    tenantId,
-    timeBegin,
-    timeEnd,
-    bookableId,
-    amount,
-    couponCode,
-    bookWithoutDiscount,
-    checkoutId,
-    excludeBookingIds,
-    externalCache,
-  }) {
+  constructor(
+    {
+      user,
+      tenantId,
+      timeBegin,
+      timeEnd,
+      bookableId,
+      amount,
+      couponCode,
+      bookWithoutDiscount,
+      checkoutId,
+      excludeBookingIds,
+      externalCache,
+      manualPriceEur,
+    },
+    policy = CheckoutPolicy.SELF_SERVICE,
+  ) {
+    this.policy = checkoutPolicy.assertCheckoutPolicy(policy);
+    this.manualPriceEur = ItemCheckoutService._normalizeManualPrice(
+      this.policy,
+      manualPriceEur,
+    );
     this.user = user;
     this.tenantId = tenantId;
     this.timeBegin = timeBegin;
@@ -78,7 +94,10 @@ class ItemCheckoutService {
     this.amount = Number(amount);
     this.couponCode = couponCode;
     this.originBookable = null;
-    this.bookWithoutDiscount = bookWithoutDiscount ?? false;
+    this.bookWithoutDiscount = checkoutPolicy.bookWithoutDiscount(
+      this.policy,
+      bookWithoutDiscount,
+    );
     this.checkoutId = checkoutId;
     this.excludeBookingIds = Array.isArray(excludeBookingIds)
       ? excludeBookingIds.filter(Boolean)
@@ -90,6 +109,28 @@ class ItemCheckoutService {
     this._availabilityProvider = null;
   }
 
+  /**
+   * A manual price is only meaningful under ADMIN_MANUAL; elsewhere it is
+   * dropped. Under ADMIN_MANUAL a present value has to be a finite, non-negative
+   * number — `null`/`undefined` means "no manual price, use the categories".
+   */
+  static _normalizeManualPrice(policy, manualPriceEur) {
+    if (!checkoutPolicy.acceptsManualPrice(policy)) {
+      return null;
+    }
+    if (manualPriceEur === null || manualPriceEur === undefined) {
+      return null;
+    }
+    const value = Number(manualPriceEur);
+    if (!Number.isFinite(value) || value < 0) {
+      throw new BadRequestError("invalid_manual_price", {
+        message: "Der manuelle Preis muss eine Zahl größer oder gleich 0 sein.",
+        manualPriceEur,
+      });
+    }
+    return Math.round(value * 100) / 100;
+  }
+
   _cached(key, fn) {
     if (!this._cache.has(key)) {
       this._cache.set(key, fn());
@@ -98,15 +139,27 @@ class ItemCheckoutService {
   }
 
   /**
-   * Asynchronously initializes the instance by fetching the bookable data.
+   * Asynchronously initializes the instance.
+   *
+   * When a bookable snapshot is provided it drives pricing and checks instead
+   * of the stored bookable — e.g. admin-edited price categories, or callers
+   * that already hold the bookable and want to skip the read. Without one the
+   * bookable is loaded from the database.
    *
    * @async
    * @function init
-   * @param {Object} [originBookable={}] - The bookable object to initialize with.
+   * @param {Object} [bookableSnapshot] - Optional bookable to use as-is.
    * @returns {Promise<void>} - A promise that resolves when the initialization is complete.
    */
-  async init(originBookable = {}) {
-    this.originBookable = await this.getBookable();
+  async init(bookableSnapshot = null) {
+    if (bookableSnapshot) {
+      this.originBookable =
+        bookableSnapshot instanceof Bookable
+          ? bookableSnapshot
+          : new Bookable(bookableSnapshot);
+    } else {
+      this.originBookable = await this.getBookable();
+    }
     this.externalProviders = await this._resolveExternalProviders();
   }
 
@@ -341,6 +394,9 @@ class ItemCheckoutService {
 
   async regularPriceEur() {
     return this._cached("regularPriceEur", async () => {
+      if (this.manualPriceEur !== null) {
+        return this.manualPriceEur;
+      }
       if (this.hasExternalPricing) {
         return await this._externalRegularPriceEur();
       }
@@ -507,6 +563,9 @@ class ItemCheckoutService {
 
   async regularGrossPriceEur() {
     return this._cached("regularGrossPriceEur", async () => {
+      if (this.manualPriceEur !== null) {
+        return await this._internalRegularGrossPriceEur();
+      }
       if (this.hasExternalPricing) {
         return await this._externalRegularGrossPriceEur();
       }
@@ -758,6 +817,13 @@ class ItemCheckoutService {
   }
 
   async checkAll(stopOnFirstError = true) {
+    // Under ADMIN_MANUAL nothing is checked (capacity/overlap included) —
+    // saves never hard-fail; the validate endpoints give informational
+    // availability.
+    if (!checkoutPolicy.runsChecks(this.policy)) {
+      return true;
+    }
+
     if (stopOnFirstError) {
       return await Promise.all([
         this.checkPermissions(),
@@ -823,62 +889,8 @@ class ItemCheckoutService {
   }
 }
 
-class ManualItemCheckoutService extends ItemCheckoutService {
-  constructor({
-    user,
-    tenantId,
-    timeBegin,
-    timeEnd,
-    bookableId,
-    amount,
-    couponCode,
-    bookWithoutDiscount,
-    excludeBookingIds,
-    capacityChecksOnly = false,
-  }) {
-    super({
-      user,
-      tenantId,
-      timeBegin,
-      timeEnd,
-      bookableId,
-      amount,
-      couponCode,
-      bookWithoutDiscount,
-      excludeBookingIds,
-    });
-    this.capacityChecksOnly = Boolean(capacityChecksOnly);
-  }
-
-  async init(originBookable) {
-    if (originBookable) {
-      this.originBookable =
-        originBookable instanceof Bookable
-          ? originBookable
-          : new Bookable(originBookable);
-    } else {
-      this.originBookable = await super.getBookable();
-    }
-    this.externalProviders = await this._resolveExternalProviders();
-  }
-
-  /**
-   * Admin manual create/update sets capacityChecksOnly so saves never hard-fail
-   * on checkout rules (including capacity/overlap). Informational availability
-   * is via validate endpoints (with excludeBookingIds when editing).
-   */
-  async checkAll(stopOnFirstError = true) {
-    if (this.capacityChecksOnly) {
-      return true;
-    }
-
-    return super.checkAll(stopOnFirstError);
-  }
-}
-
 module.exports = {
   ItemCheckoutService,
-  ManualItemCheckoutService,
   CheckoutPermissions,
   CHECK_TYPES,
 };
