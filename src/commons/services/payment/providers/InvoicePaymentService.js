@@ -154,8 +154,14 @@ class InvoicePaymentService extends PaymentService {
     };
   }
 
+  /**
+   * Invoices are settled outside the platform, so there is no provider
+   * notification to process.
+   */
   async paymentNotification() {
-    console.log("paymentNotification");
+    logger.debug(
+      `${this.tenantId} -- paymentNotification is a no-op for invoice payments`,
+    );
   }
 
   async paymentRequest() {

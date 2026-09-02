@@ -207,7 +207,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
       },
     });
 
-    sinon.stub(BookingManager, "getBooking").resolves({ id: null });
+    sinon.stub(BookingManager, "getBooking").resolves(null);
     const storeBooking = sinon
       .stub(BookingManager, "storeBooking")
       .callsFake(async (value) => value);
