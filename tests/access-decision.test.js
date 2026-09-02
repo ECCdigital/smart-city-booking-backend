@@ -175,21 +175,21 @@ describe("Access decision: decide", () => {
       },
     },
     {
-      name: "keeps an authorization door operable but not remotely, and says it is not provisioned",
+      name: "locks a door that only takes a code until it is granted, and says it is not provisioned",
       booking: booking(),
       accessPoints: [
         door({ mode: AccessPointMode.AUTHORIZATION }, { isProvisioned: false }),
       ],
       person: OWNER,
       expected: {
-        canOperate: true,
+        canOperate: false,
         canOperateRemote: false,
         canUseAuthorization: false,
         blockingReasons: [
           ACCESS_BLOCKING_REASONS.NOT_PROVISIONED,
           ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
         ],
-        operableAccessPointIds: ["door-1"],
+        operableAccessPointIds: [],
         remoteOperableAccessPointIds: [],
       },
     },
@@ -204,11 +204,53 @@ describe("Access decision: decide", () => {
       ],
       person: OWNER,
       expected: {
+        canOperate: false,
         canUseAuthorization: false,
         blockingReasons: [
           ACCESS_BLOCKING_REASONS.NOT_PROVISIONED,
           ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
         ],
+        operableAccessPointIds: [],
+      },
+    },
+    {
+      name: "locks a door that only takes a code once its grant is revoked",
+      booking: booking(),
+      accessPoints: [
+        door(
+          { mode: AccessPointMode.AUTHORIZATION },
+          {
+            isProvisioned: true,
+            grant: { authorizationId: "auth-1" },
+            revokedAt: NOW - MINUTE,
+          },
+        ),
+      ],
+      person: OWNER,
+      expected: {
+        canOperate: false,
+        canUseAuthorization: false,
+        blockingReasons: [
+          ACCESS_BLOCKING_REASONS.AUTHORIZATION_REVOKED,
+          ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
+        ],
+        operableAccessPointIds: [],
+      },
+    },
+    {
+      name: "keeps an unprovisioned door operable where it can also be opened remotely",
+      booking: booking(),
+      accessPoints: [
+        door({ mode: AccessPointMode.BOTH }, { isProvisioned: false }),
+      ],
+      person: OWNER,
+      expected: {
+        canOperate: true,
+        canOperateRemote: true,
+        canUseAuthorization: false,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.NOT_PROVISIONED],
+        operableAccessPointIds: ["door-1"],
+        remoteOperableAccessPointIds: ["door-1"],
       },
     },
     {
@@ -245,9 +287,31 @@ describe("Access decision: decide", () => {
       ],
       person: OWNER,
       expected: {
+        canOperate: true,
         canUseAuthorization: true,
         canOperateRemote: false,
         blockingReasons: [ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS],
+        operableAccessPointIds: ["door-1"],
+        remoteOperableAccessPointIds: [],
+      },
+    },
+    {
+      name: "locks only the door that takes a code where the other door of the booking opens remotely",
+      booking: booking(),
+      accessPoints: [
+        door(
+          { id: "door-1", mode: AccessPointMode.AUTHORIZATION },
+          { isProvisioned: false },
+        ),
+        door({ id: "door-2", mode: AccessPointMode.REMOTE }),
+      ],
+      person: OWNER,
+      expected: {
+        canOperate: true,
+        canOperateRemote: true,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.NOT_PROVISIONED],
+        operableAccessPointIds: ["door-2"],
+        remoteOperableAccessPointIds: ["door-2"],
       },
     },
     {
@@ -377,8 +441,7 @@ describe("Access decision: decide", () => {
         }),
         door({
           id: "door-2",
-          validationRules: undefined,
-          validationRuleTypes: [GEO_RULE, "qrScan"],
+          validationRules: [{ type: GEO_RULE }, { type: "qrScan" }],
         }),
         door({ id: "door-3", validationRules: [] }),
         locker(),
@@ -679,13 +742,18 @@ describe("Access decision: demandedEvidenceOf", () => {
     expect(demandedEvidenceOf(accessPoint)).to.deep.equal(["qrScan"]);
   });
 
-  it("reads the rule types of a resolved door, which carries only those", () => {
+  it("skips rules without a type", () => {
     const { accessPoint } = door({
-      validationRules: undefined,
-      validationRuleTypes: ["qrScan", 42, null],
+      validationRules: [{ type: "qrScan" }, { type: 42 }, {}, null],
     });
 
     expect(demandedEvidenceOf(accessPoint)).to.deep.equal(["qrScan"]);
+  });
+
+  it("demands nothing where the rules of the door are unknown", () => {
+    const { accessPoint } = door({ validationRules: null });
+
+    expect(demandedEvidenceOf(accessPoint)).to.deep.equal([]);
   });
 
   it("demands nothing of a locker", () => {

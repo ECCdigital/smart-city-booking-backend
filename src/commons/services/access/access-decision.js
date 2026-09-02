@@ -23,7 +23,8 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  * @typedef {Object} AccessPointEntry An access point of a booking, as the
  *   resolver pairs it with the booking context it was resolved with
  * @property {Object} accessPoint The access point - `id`, `type`, `mode` and
- *   its rules (`validationRules`, or `validationRuleTypes` on a resolved copy)
+ *   its rules (`validationRules`: the configured rules, `[]` for none, `null`
+ *   where nobody can see them)
  * @property {Object} bookingContext What the booking adds to it -
  *   `accessBuffer`, `isProvisioned`, `revokedAt`, `grant`
  *
@@ -45,12 +46,13 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  *   authorization (keypad code, key card) is usable at any door
  * @property {string[]} blockingReasons Prioritized reasons against operating,
  *   from {@link ACCESS_BLOCKING_REASONS}. Some are hints rather than locks:
- *   a revoked or unprovisioned door in its window is still operable
+ *   a door that can be opened remotely stays operable while its grant is
+ *   missing or revoked; one that only takes a code does not
  * @property {string|null} primaryBlockingReason The first of them
  * @property {string[]} operableAccessPointIds Access points that may be
  *   operated now: close, status, open-status
  * @property {string[]} remoteOperableAccessPointIds The operable ones whose
- *   mode allows an open through the API
+ *   mode allows an open through the API - the set open/unlatch check against
  * @property {boolean} evidenceWaived Whether the evidence rules do not apply
  *   to this person - only to the management at somebody else's booking
  * @property {Object<string, string[]>} demandedEvidence The rule types each
@@ -129,6 +131,10 @@ function decide(
       anyRevoked = true;
     }
 
+    // A door that only takes a code is nothing without the code: no grant or
+    // a revoked one locks it. A door that also opens remotely stays operable
+    // meanwhile, and the missing or revoked grant is a hint at it.
+    let authorizationUsable = false;
     if (!isLocker && usesAuthorization(accessPoint.mode)) {
       const isGranted =
         bookingContext.isProvisioned === true &&
@@ -136,11 +142,15 @@ function decide(
       if (!isGranted) {
         anyUnprovisioned = true;
       } else if (!revokedAt) {
+        authorizationUsable = true;
         anyAuthorizationUsable = true;
       }
     }
+    const isLocked =
+      accessPoint.mode === AccessPointMode.AUTHORIZATION &&
+      !authorizationUsable;
 
-    if (!isValid || !inWindow || !hasRole) {
+    if (!isValid || !inWindow || !hasRole || isLocked) {
       continue;
     }
 
@@ -191,8 +201,8 @@ function decide(
  * client sent is ignored rather than rejected - a client may know more evidence
  * types than this door asks for. A rule this server cannot evaluate blocks the
  * door rather than being skipped, and so do rules nobody can see
- * (`validationRules: null`, e.g. a door that vanished mid-request) - the whole
- * point of a rule is that it is not silently optional.
+ * (`validationRules: null`, as opposed to `[]` for a door without rules) - the
+ * whole point of a rule is that it is not silently optional.
  *
  * Lockers demand no evidence. The management is waived the rules of a door
  * (`decision.evidenceWaived`), which is recorded as a bypass only where there
@@ -255,12 +265,10 @@ function satisfy(decision, accessPoint, evidence = []) {
 /**
  * What an access point demands of anyone it is not waived for: the types of
  * its rules, without their configuration. Lockers demand nothing - they are
- * never asked for evidence.
+ * never asked for evidence. Where the rules are unknown there is nothing to
+ * name either; {@link satisfy} is what keeps that door shut.
  *
- * Reads the rules of a stored access point (`validationRules`) or the types a
- * resolved copy carries in their stead (`validationRuleTypes`).
- *
- * @param {Object} accessPoint The access point
+ * @param {Object} accessPoint The access point, with its `validationRules`
  * @returns {string[]} The distinct rule types
  */
 function demandedEvidenceOf(accessPoint) {
@@ -270,7 +278,7 @@ function demandedEvidenceOf(accessPoint) {
 
   const types = Array.isArray(accessPoint.validationRules)
     ? accessPoint.validationRules.map((rule) => rule?.type)
-    : accessPoint.validationRuleTypes || [];
+    : [];
 
   return [...new Set(types.filter((type) => typeof type === "string"))];
 }

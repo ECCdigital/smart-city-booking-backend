@@ -148,19 +148,6 @@ describe("Access point projection", () => {
 
       expect(view.validationRuleTypes).to.deep.equal([]);
     });
-
-    it("reads the rule types of an access point that carries only those", () => {
-      const view = projectAccessPoint({
-        id: "ap-7f3a",
-        tenantId: "rostock",
-        type: "door",
-        provider: "nuki",
-        mode: "remote",
-        validationRuleTypes: ["qrScan"],
-      });
-
-      expect(view.validationRuleTypes).to.deep.equal(["qrScan"]);
-    });
   });
 
   describe("capabilities", () => {

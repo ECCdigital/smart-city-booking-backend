@@ -97,6 +97,66 @@ describe("AccessService.canOperate", () => {
     expect(allowed).to.be.true;
   });
 
+  it("lets a door that only takes a code be closed and asked for its status once it is granted", async () => {
+    const now = Date.now();
+    const booking = createBooking({
+      timeBegin: now - 10 * MINUTE,
+      timeEnd: now + 60 * MINUTE,
+    });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
+      {
+        ...createDoorEntry({ mode: AccessPointMode.AUTHORIZATION }),
+        bookingContext: {
+          accessBuffer: { beforeMs: 0, afterMs: 0 },
+          isProvisioned: true,
+          grant: { authorizationId: "auth-1" },
+          revokedAt: null,
+        },
+      },
+    ]);
+    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+
+    const allowed = await AccessService.canOperate(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      false,
+    );
+    expect(allowed).to.be.true;
+  });
+
+  it("refuses a door that only takes a code while its grant is missing", async () => {
+    const now = Date.now();
+    const booking = createBooking({
+      timeBegin: now - 10 * MINUTE,
+      timeEnd: now + 60 * MINUTE,
+    });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
+      {
+        ...createDoorEntry({ mode: AccessPointMode.AUTHORIZATION }),
+        bookingContext: {
+          accessBuffer: { beforeMs: 0, afterMs: 0 },
+          isProvisioned: false,
+          grant: null,
+          revokedAt: null,
+        },
+      },
+    ]);
+    sandbox.stub(PermissionsService, "_isOwner").returns(true);
+
+    const allowed = await AccessService.canOperate(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      false,
+    );
+    expect(allowed).to.be.false;
+  });
+
   it("returns false when the access point is not part of the booking", async () => {
     const booking = createBooking();
     sandbox.stub(BookingManager, "getBooking").resolves(booking);

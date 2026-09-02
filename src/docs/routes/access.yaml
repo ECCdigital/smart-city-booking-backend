@@ -57,7 +57,9 @@
       Triggers the opening of a specific access point. Requires booking
       ownership or `MANAGE_BOOKINGS` permission, a committed and (if priced)
       paid booking, and the current time to be inside the booking's access
-      window including its buffer.
+      window including its buffer. Only a door with a remote way in (`mode`
+      `remote` or `both`) can be opened here; a door that only takes a code
+      refuses with `no_remote_access`, whoever asks.
 
       On top of those fixed booking checks the access point may configure
       validation rules that demand evidence of presence, e.g. a scan of the QR

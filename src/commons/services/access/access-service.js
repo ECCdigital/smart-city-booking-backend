@@ -9,6 +9,10 @@ const SecurityUtils = require("../../utilities/security-utils");
 const GrantCleanupService = require("./grant-cleanup-service");
 const AccessLogService = require("./access-log-service");
 const { decide, satisfy } = require("./access-decision");
+const {
+  ACCESS_BLOCKING_REASONS,
+  prioritizeBlockingReasons,
+} = require("./access-blocking-reasons");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { RolePermission } = require("../../entities/role/role");
@@ -50,6 +54,8 @@ class AccessService {
    *   the process to poll, or `null` when the door is already dealt with - or
    *   the prioritized reasons for the refusal. The reasons are empty when the
    *   user may not access the booking at all, as ownership has no own reason.
+   *   A door that only takes a code (`mode: authorization`) has no remote way
+   *   in and refuses with `no_remote_access`, whoever asks.
    * @throws {ForbiddenError} The booking does not exist or does not include
    *   the access point.
    */
@@ -126,24 +132,33 @@ class AccessService {
       canManage: options.hasManagePermission === true,
     });
 
-    if (!decision.operableAccessPointIds.includes(String(accessPointId))) {
+    // Opening through the API is the remote way in, which a door that only
+    // takes a code does not have - it may still be closed and asked for its
+    // status, so that refusal is named here rather than in the decision.
+    const id = String(accessPointId);
+    if (!decision.remoteOperableAccessPointIds.includes(id)) {
+      const blockingReasons = decision.operableAccessPointIds.includes(id)
+        ? prioritizeBlockingReasons([
+            ...decision.blockingReasons,
+            ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
+          ])
+        : decision.blockingReasons;
+
       return this._denyOpen({
         action,
         tenant,
         userId,
         accessPoint,
         bookingId,
-        blockingReasons: decision.blockingReasons,
+        blockingReasons,
         channel,
         accessRole: decision.accessRole,
       });
     }
 
-    const evidenceOutcome = satisfy(
-      decision,
-      await this._withStoredRules(tenant, accessPoint),
-      options.evidence,
-    );
+    // The resolver handed the door over with its rules and the scan code they
+    // are checked against; there is nothing left to read.
+    const evidenceOutcome = satisfy(decision, accessPoint, options.evidence);
 
     if (!evidenceOutcome.satisfied) {
       return this._denyOpen({
@@ -242,44 +257,6 @@ class AccessService {
     });
 
     return { success: false, blockingReasons };
-  }
-
-  /**
-   * @private
-   * The access point being opened, with the rules it is judged by.
-   *
-   * The rules live on the stored access point, which is read again here: the
-   * copy resolved through the bookable deliberately carries neither the rules
-   * nor the scan code they are checked against. Lockers are not entities of
-   * the `accesspoints` collection and have no rules to carry.
-   *
-   * A door, on the other hand, must be readable - if it disappeared while this
-   * request was running, what it demanded is unknown (`validationRules: null`)
-   * and the decision fails closed rather than opening a door whose rules nobody
-   * can see.
-   *
-   * @param {string} tenant Tenant ID
-   * @param {Object} accessPoint The resolved access point being opened
-   * @returns {Promise<Object>} The access point to hand to `satisfy`
-   */
-  static async _withStoredRules(tenant, accessPoint) {
-    if (accessPoint.type === "locker") {
-      return accessPoint;
-    }
-
-    const storedAccessPoint = await AccessPointManager.getAccessPoint(
-      accessPoint.id,
-      tenant,
-    );
-
-    if (!storedAccessPoint) {
-      logger.warn(
-        `${tenant} -- access point ${accessPoint.id} vanished while it was being opened, failing closed`,
-      );
-      return { ...accessPoint, validationRules: null };
-    }
-
-    return storedAccessPoint;
   }
 
   /**
@@ -1748,21 +1725,18 @@ class AccessService {
           const accessInfo = (booking.accessInfo || []).find(
             (info) => String(info.accessPointId) === accessPointKey,
           );
-          // The resolved copy carries the rule *types* so a client can be told
-          // what it has to prove, but neither the rule configuration nor the
-          // scan code they are checked against - the evidence check reads the
-          // stored access point again for those.
+          // The stored door travels whole - its rules and the scan code they
+          // are checked against included - so the evidence step judges by
+          // this one read and nothing reads the door again. None of it
+          // reaches a client: the projection is the boundary that keeps the
+          // scan codes in. A door stored without rules has none (`[]`).
           const resolvedAccessPoint = {
-            id: accessPoint.id,
+            ...accessPoint,
             tenantId: tenant,
             type: "door",
-            provider: accessPoint.provider,
-            externalId: accessPoint.externalId,
             label: accessPoint.label || "",
             mode: accessPoint.mode || AccessPointMode.AUTHORIZATION,
-            validationRuleTypes: (accessPoint.validationRules || []).map(
-              (rule) => rule.type,
-            ),
+            validationRules: accessPoint.validationRules || [],
             bookableId: bookable.id,
             bookableTitle: bookable.title,
             relation: bookableRelations.get(bookable.id) || "self",
