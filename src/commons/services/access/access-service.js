@@ -2287,9 +2287,10 @@ class AccessService {
       return;
     }
 
+    const compartments = this._compartmentEntries(booking);
     const allowance = new Map();
     for (const [accessPointId, system] of lockerSystems) {
-      const granted = this._compartmentEntries(booking).filter(
+      const granted = compartments.filter(
         (entry) =>
           String(entry.accessPointId) === accessPointId &&
           entry.grant &&
@@ -2333,8 +2334,9 @@ class AccessService {
    * counted off the bookings' items, which is what `bookable.amount` is the
    * capacity of. At a locker system still configured at the bookable (see
    * {@link _addConfiguredLockerSystems}) the unit's amount is the capacity
-   * and the occupancy is what the bookings note at that system, as the
-   * locker stack counted it.
+   * and the occupancy is the compartments the bookings hold or have at
+   * that system - those of bookings stored before the fold count only once
+   * the migration has made entries of them.
    *
    * @param {string} tenant Tenant ID
    * @param {Object} booking The booking that holds
@@ -2363,7 +2365,7 @@ class AccessService {
       (sum, concurrent) =>
         sum +
         (configured
-          ? this._compartmentsNotedAt(concurrent, accessPoint)
+          ? this._activeCompartmentsAt(concurrent, accessPoint)
           : this._itemAmount(concurrent, bookable.id)),
       0,
     );
@@ -2379,27 +2381,17 @@ class AccessService {
 
   /**
    * @private
-   * How many compartments a booking notes at a locker system: its
-   * unrevoked entries there or, for a booking stored before the locker
-   * fold that has no entries at all, its `lockerInfo` records of that
-   * system - which count held and confirmed alike, as the locker stack did.
+   * How many compartments a booking holds or has at a locker system: its
+   * unrevoked entries there, whether made at the system's row or at the
+   * synthesized one of the same provider and external id.
    */
-  static _compartmentsNotedAt(booking, accessPoint) {
-    const entries = this._compartmentEntries(booking);
-    if (entries.length) {
-      return entries.filter(
-        (entry) =>
-          !entry.revokedAt &&
-          (String(entry.accessPointId) === String(accessPoint.id) ||
-            (entry.provider === accessPoint.provider &&
-              String(entry.externalId) === String(accessPoint.externalId))),
-      ).length;
-    }
-
-    return (booking.lockerInfo || []).filter(
-      (info) =>
-        info.lockerSystem === accessPoint.provider &&
-        String(info.id) === String(accessPoint.externalId),
+  static _activeCompartmentsAt(booking, accessPoint) {
+    return this._compartmentEntries(booking).filter(
+      (entry) =>
+        !entry.revokedAt &&
+        (String(entry.accessPointId) === String(accessPoint.id) ||
+          (entry.provider === accessPoint.provider &&
+            String(entry.externalId) === String(accessPoint.externalId))),
     ).length;
   }
 
@@ -2520,17 +2512,12 @@ class AccessService {
       const id = `${CONFIGURED_LOCKER_SYSTEM_PREFIX}${provider}:${externalId}`;
       if (!accessPointsById.has(id)) {
         accessPointsById.set(id, {
-          id,
-          tenantId: tenant,
-          type: AccessPointType.LOCKER,
-          provider,
-          externalId: String(externalId),
+          ...this._configuredLockerSystemRow(tenant, id, provider, externalId),
           label: bookable.title || "",
           mode:
             provider === IFBS
               ? AccessPointMode.REMOTE
               : AccessPointMode.AUTHORIZATION,
-          validationRules: [],
           capacity: Number(unit.amount),
         });
       }
@@ -2545,19 +2532,35 @@ class AccessService {
       const id = String(entry.accessPointId);
       if (!accessPointsById.has(id)) {
         accessPointsById.set(id, {
-          id,
-          tenantId: tenant,
-          type: AccessPointType.LOCKER,
-          provider: entry.provider,
-          externalId: entry.externalId,
-          label: "",
+          ...this._configuredLockerSystemRow(
+            tenant,
+            id,
+            entry.provider,
+            entry.externalId,
+          ),
           mode: entry.mode || AccessPointMode.AUTHORIZATION,
-          validationRules: [],
         });
       }
     }
 
     return configured;
+  }
+
+  /**
+   * @private
+   * The row of a locker system configured at the bookable, as far as the
+   * unit says: what the providers and the resolver read off a stored one.
+   */
+  static _configuredLockerSystemRow(tenant, id, provider, externalId) {
+    return {
+      id,
+      tenantId: tenant,
+      type: AccessPointType.LOCKER,
+      provider,
+      externalId: String(externalId),
+      label: "",
+      validationRules: [],
+    };
   }
 
   /**
@@ -2585,11 +2588,12 @@ class AccessService {
    * the application types a locker provider's adapter looks under.
    */
   static _hasActiveApplication(tenantData, providerId) {
-    return (tenantData?.applications || []).some(
-      (application) =>
-        AccessProvider.lockerApplicationTypes.includes(application.type) &&
-        application.id === providerId &&
-        application.active,
+    return Boolean(
+      AccessProvider.findActiveApplication(
+        tenantData,
+        providerId,
+        AccessProvider.lockerApplicationTypes,
+      ),
     );
   }
 

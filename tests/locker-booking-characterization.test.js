@@ -374,8 +374,20 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     });
 
     it("counts Pareva compartments against the concurrent bookings of the bookable", async function () {
+      // A booking of one compartment of the size, as the fold stores it.
       concurrentBookings = [
-        { lockerInfo: [{ id: SIZE_S, lockerSystem: "pareva" }] },
+        {
+          id: "OTHER-1",
+          accessInfo: [
+            {
+              accessPointId: "locker:pareva:S",
+              accessPointType: "locker",
+              provider: "pareva",
+              externalId: SIZE_S,
+              grant: { authorizationId: "process-0" },
+            },
+          ],
+        },
       ];
 
       await assert.rejects(createUnpaidBooking("locker-s", 2));

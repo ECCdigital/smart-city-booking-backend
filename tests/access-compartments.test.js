@@ -754,29 +754,7 @@ describe("Compartments on the access seam", function () {
       expect(entry.hold).to.include({ holdId: "100" });
     });
 
-    it("counts Pareva compartments against the unit's amount, over what the concurrent bookings note at the size", async function () {
-      concurrentBookings = [
-        {
-          id: "booking-0",
-          lockerInfo: [{ id: SIZE_S, lockerSystem: "pareva" }],
-        },
-      ];
-      storeBooking("locker-s-legacy", 2);
-
-      await assert.rejects(
-        AccessService.holdForBooking(TENANT, "booking-1"),
-        (err) => {
-          expect(err.statusCode).to.equal(409);
-          return true;
-        },
-      );
-
-      storeBooking("locker-s-legacy", 1);
-      await AccessService.holdForBooking(TENANT, "booking-1");
-      expect(compartments()).to.have.length(1);
-    });
-
-    it("counts the compartments of bookings folded already at the size as well", async function () {
+    it("counts Pareva compartments against the unit's amount, over the unrevoked compartments the concurrent bookings have at the size", async function () {
       concurrentBookings = [
         {
           id: "booking-0",
