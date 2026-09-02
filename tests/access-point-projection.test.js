@@ -3,8 +3,35 @@ const { expect } = require("chai");
 const {
   projectAccessPoint,
 } = require("../src/commons/services/access/access-point-projection");
+const { decide } = require("../src/commons/services/access/access-decision");
+const { Booking } = require("../src/commons/entities/booking/booking");
 
 describe("Access point projection", () => {
+  /**
+   * The decision for a booking of `booker-1` at the projected door, made for
+   * the given user.
+   */
+  function decisionFor(accessPoint, { userId, canManage = false }) {
+    const now = Date.now();
+    const booking = new Booking({
+      id: "booking-1",
+      tenantId: "rostock",
+      assignedUserId: "booker-1",
+      isCommitted: true,
+      isPayed: true,
+      priceEur: 0,
+      timeBegin: now - 60000,
+      timeEnd: now + 60000,
+      bookableItems: [{ bookableId: "room" }],
+    });
+
+    return decide(
+      booking,
+      [{ accessPoint, bookingContext: { isProvisioned: true } }],
+      { userId, canManage, now },
+    );
+  }
+
   function storedDoor(overrides = {}) {
     return {
       id: "ap-7f3a",
@@ -71,25 +98,36 @@ describe("Access point projection", () => {
     });
 
     it("is empty for someone acting on a booking as the management", () => {
-      const view = projectAccessPoint(storedDoor(), {
-        accessRole: "manager",
+      const door = storedDoor();
+      const view = projectAccessPoint(door, {
+        decision: decisionFor(door, { userId: "manager-9", canManage: true }),
       });
 
       expect(view.validationRuleTypes).to.deep.equal([]);
     });
 
     it("demands the rules of the door from the booker of the booking", () => {
-      const view = projectAccessPoint(storedDoor(), {
-        accessRole: "booker",
+      const door = storedDoor();
+      const view = projectAccessPoint(door, {
+        decision: decisionFor(door, { userId: "booker-1", canManage: true }),
       });
 
       expect(view.validationRuleTypes).to.deep.equal(["qrScan"]);
     });
 
-    it("reports the rules of the door where no booking names a role", () => {
-      const view = projectAccessPoint(storedDoor(), { accessRole: null });
+    it("reports the rules of the door where no decision was made", () => {
+      const view = projectAccessPoint(storedDoor(), { decision: null });
 
       expect(view.validationRuleTypes).to.deep.equal(["qrScan"]);
+    });
+
+    it("demands nothing at a door the decision does not know", () => {
+      const door = storedDoor();
+      const view = projectAccessPoint(storedDoor({ id: "ap-other" }), {
+        decision: decisionFor(door, { userId: "booker-1" }),
+      });
+
+      expect(view.validationRuleTypes).to.deep.equal([]);
     });
 
     it("is empty for lockers, which are never asked for evidence", () => {

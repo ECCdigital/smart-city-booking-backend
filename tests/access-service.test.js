@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 
 const AccessService = require("../src/commons/services/access/access-service");
+const { Booking } = require("../src/commons/entities/booking/booking");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
@@ -285,6 +286,13 @@ describe("AccessService locker access window", () => {
 
   function stubLockerBooking() {
     sandbox.stub(AccessService, "_getBookingAccessPoints").resolves({
+      booking: new Booking({
+        id: "booking-1",
+        tenantId: "tenant-1",
+        isCommitted: true,
+        timeBegin: 1000,
+        timeEnd: 2000,
+      }),
       lockers: [
         {
           accessPoint: {
@@ -342,15 +350,18 @@ describe("One access point shape on both ways", () => {
     sandbox
       .stub(AccessPointManager, "getAccessPointsByIds")
       .resolves([accessPoint]);
-    sandbox.stub(BookingManager, "getBooking").resolves({
-      id: "booking-1",
-      tenantId: "tenant-1",
-      assignedUserId: "booker-1",
-      timeBegin: 1000,
-      timeEnd: 2000,
-      bookableItems: [{ bookableId: "room" }],
-      accessInfo: [{ accessPointId: "door-1", isProvisioned: true }],
-    });
+    sandbox.stub(BookingManager, "getBooking").resolves(
+      new Booking({
+        id: "booking-1",
+        tenantId: "tenant-1",
+        assignedUserId: "booker-1",
+        isCommitted: true,
+        timeBegin: 1000,
+        timeEnd: 2000,
+        bookableItems: [{ bookableId: "room" }],
+        accessInfo: [{ accessPointId: "door-1", isProvisioned: true }],
+      }),
+    );
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([
       {
         id: "room",

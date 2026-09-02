@@ -2,6 +2,7 @@ const {
   getAccessProviderCapabilities,
 } = require("./providers/access-provider-registry");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
+const { demandedEvidenceOf } = require("./access-decision");
 
 require("./providers/register-access-providers");
 
@@ -33,10 +34,10 @@ const NO_BUFFER = Object.freeze({ beforeMs: 0, afterMs: 0 });
  *   form) or `validationRuleTypes` (resolved form, which carries the types
  *   only).
  * @param {Object} [options]
- * @param {"booker"|"manager"|null} [options.accessRole=null] The role the user
- *   acts in at the booking. Only the management is exempt from the evidence
- *   rules; the booker proves what the door demands, manage permission or not.
- *   Without a booking there is no role, so nothing is waived.
+ * @param {Object|null} [options.decision=null] The access decision for the
+ *   booking (`access-decision.js`), which says what this access point demands
+ *   of the user it was made for. Without one - a resolved scan knows no
+ *   booking - the door's own rules are reported.
  * @param {Object|null} [options.bookingContext=null] The booking the access
  *   point was resolved for. Given, the booking fields are added; a resolved
  *   scan knows no booking and gets the core fields alone.
@@ -44,7 +45,7 @@ const NO_BUFFER = Object.freeze({ beforeMs: 0, afterMs: 0 });
  */
 function projectAccessPoint(
   accessPoint,
-  { accessRole = null, bookingContext = null } = {},
+  { decision = null, bookingContext = null } = {},
 ) {
   const view = {
     id: accessPoint.id,
@@ -53,7 +54,9 @@ function projectAccessPoint(
     provider: accessPoint.provider,
     label: accessPoint.label || "",
     mode: accessPoint.mode,
-    validationRuleTypes: effectiveValidationRuleTypes(accessPoint, accessRole),
+    validationRuleTypes: decision
+      ? decision.demandedEvidence[String(accessPoint.id)] ?? []
+      : demandedEvidenceOf(accessPoint),
     capabilities: uiCapabilities(accessPoint.provider),
   };
 
@@ -62,33 +65,6 @@ function projectAccessPoint(
   }
 
   return { ...view, ...bookingFields(accessPoint, bookingContext) };
-}
-
-/**
- * What this user has to prove at this access point - not what the door is
- * configured with. The answer is empty where the rules never come into play:
- * for someone acting on a booking as the management, and for lockers, which
- * are not asked for evidence at all. Whoever opens their own booking proves
- * what the door demands, even if they may manage the bookings of the tenant -
- * this says the same thing the door itself decides.
- *
- * It says what is demanded, never whether it will work: a rule whose
- * preconditions are unmet still reports itself at opening time.
- *
- * @param {Object} accessPoint The access point being projected
- * @param {"booker"|"manager"|null} accessRole The role the user acts in
- * @returns {string[]} The rule types this user has to satisfy
- */
-function effectiveValidationRuleTypes(accessPoint, accessRole) {
-  if (accessRole === "manager" || accessPoint.type === AccessPointType.LOCKER) {
-    return [];
-  }
-
-  const types = Array.isArray(accessPoint.validationRules)
-    ? accessPoint.validationRules.map((rule) => rule?.type)
-    : accessPoint.validationRuleTypes || [];
-
-  return [...new Set(types.filter((type) => typeof type === "string"))];
 }
 
 /**

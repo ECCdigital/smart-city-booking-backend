@@ -100,6 +100,10 @@ _Avoid_: Herkunft, Origin, Surface, Kanal (das ist etwas anderes), Rolle (das si
 Das Übergehen der Validierungsregeln eines AccessPoints. Steht ausschließlich der Zugriffsrolle _Verwaltung_ zu, weil dort niemand an der Tür steht, der etwas nachweisen könnte; wer als Buchender öffnet, erbringt Evidence wie jeder andere Nutzer. Nicht zu verwechseln mit der davon getrennten Fähigkeit, fremde Buchungen überhaupt zu erreichen.
 _Avoid_: Admin-Override, Skip, Bypass (unqualifiziert — es gibt zwei)
 
+**Zugangsentscheidung**:
+Die eine Antwort auf „Darf diese Person die AccessPoints dieser Buchung jetzt bedienen?“: die Zugriffsrolle, welche AccessPoints bedienbar und welche davon aus der Ferne zu öffnen sind, die priorisierten Gründe dagegen und was je AccessPoint an Evidence verlangt wird. Wird aus Buchung, AccessPoints und Zeitpunkt berechnet, nie aus dem Kanal. Die Evidence-Prüfung ist ihr zweiter Schritt, kein eigener Begriff.
+_Avoid_: Eligibility (Altname der HTTP-Form), Berechtigungsprüfung, Access-Check
+
 **Kanal (eines Öffnungsvorgangs)**:
 Wie ein Öffnen ausgelöst wurde — per Scan an der Tür oder aus der Ferne. Selbstauskunft des Clients, rein beschreibend für das Audit und nie Teil der Zugangsentscheidung. Wer eine Entscheidung binden will, nimmt die Zugriffsrolle.
 _Avoid_: Herkunft, Origin, Surface

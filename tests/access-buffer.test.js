@@ -273,4 +273,42 @@ describe("AccessService.canView", () => {
     );
     expect(allowed).to.be.false;
   });
+
+  it("lets the booker view their own booking without the manage permission", async () => {
+    const booking = createBooking({ assignedUserId: "user-1" });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+
+    const allowed = await AccessService.canView(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      false,
+    );
+    expect(allowed).to.be.true;
+  });
+
+  it("denies viewing somebody else's booking without the manage permission", async () => {
+    const booking = createBooking({ assignedUserId: "other-user" });
+    sandbox.stub(BookingManager, "getBooking").resolves(booking);
+
+    const allowed = await AccessService.canView(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      false,
+    );
+    expect(allowed).to.be.false;
+  });
+
+  it("denies viewing a booking that does not exist", async () => {
+    sandbox.stub(BookingManager, "getBooking").resolves(null);
+
+    const allowed = await AccessService.canView(
+      "user-1",
+      "tenant-1",
+      "booking-1",
+      true,
+    );
+    expect(allowed).to.be.false;
+  });
 });

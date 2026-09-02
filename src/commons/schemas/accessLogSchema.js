@@ -56,21 +56,23 @@ const accessLogSchemaDefinition = {
     default: null,
   },
   accessRole: {
-    // The capacity somebody operated the door in, not their permission:
-    // `booker` where the booking is theirs or assigned to them, `manager`
-    // where they may manage one that is not. It says why `evidenceBypassed`
-    // reads the way it does - a `false` there on its own could mean "no
-    // manage permission" just as well as "their own booking". Empty where
-    // there is no capacity to record: a refused user with no standing at
-    // the booking, and closing, status, scans and provisioning.
+    // The capacity somebody operated the door in, as the access decision
+    // (`access-decision.js`, `decide`) derived it: `booker` where the booking
+    // is theirs or assigned to them, `manager` where they may manage one that
+    // is not. It says why `evidenceBypassed` reads the way it does - a `false`
+    // there on its own could mean "no manage permission" just as well as
+    // "their own booking". Empty where there is no capacity to record: a
+    // refused user with no standing at the booking, and closing, status,
+    // scans and provisioning.
     type: String,
     enum: ["booker", "manager", null],
     default: null,
   },
   evidenceBypassed: {
-    // True only where it means something: the access point did require
-    // evidence and a user with the manage-bookings permission was let through
-    // without it, on a booking that is not their own.
+    // `bypassed` of the evidence step (`access-decision.js`, `satisfy`): true
+    // only where it means something - the access point did require evidence
+    // and the management was let through without it, on a booking that is
+    // not their own.
     type: Boolean,
     default: false,
   },

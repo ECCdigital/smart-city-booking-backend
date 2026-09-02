@@ -8,16 +8,12 @@ const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const GrantCleanupService = require("./grant-cleanup-service");
 const AccessLogService = require("./access-log-service");
-const AccessEvidenceService = require("./access-evidence-service");
+const { decide, satisfy } = require("./access-decision");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { RolePermission } = require("../../entities/role/role");
 const MailController = require("../../mail-service/mail-controller");
 const { ForbiddenError } = require("../../../errors/BaseError");
-const {
-  ACCESS_BLOCKING_REASONS,
-  prioritizeBlockingReasons,
-} = require("./access-blocking-reasons");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -28,10 +24,10 @@ class AccessService {
   /**
    * Opens an access point linked to a booking.
    *
-   * Owns the eligibility decision, in two layers: the booking checks
-   * (committed, paid, in window, ownership) apply to everyone, and on top of
-   * them the access point's own validation rules demand evidence that the
-   * person is really at the door. A refused attempt is audited
+   * Runs the access decision (`access-decision.js`) in its two steps: the
+   * booking checks (committed, paid, in window, ownership) apply to everyone,
+   * and on top of them the access point's own validation rules demand evidence
+   * that the person is really at the door. A refused attempt is audited
    * (`result: "denied"`) and reported as a soft failure instead of throwing,
    * so callers can render the reasons. Only a booking or access point that
    * cannot be resolved at all (nothing to audit against) and provider errors
@@ -72,8 +68,8 @@ class AccessService {
    * Unlatches an access point linked to a booking, i.e. pulls the latch so the
    * door physically opens instead of only releasing the lock.
    *
-   * Behind the same guard as {@link open} - eligibility and evidence - because
-   * it opens the same door. Where a lock can pull its latch, `open` does so by
+   * Behind the same guard as {@link open} - the decision and the evidence -
+   * because it opens the same door. Where a lock can pull its latch, `open` does so by
    * itself, so this is the older way to the same end and no client needs it.
    *
    * @param {string} tenant Tenant ID
@@ -99,7 +95,7 @@ class AccessService {
 
   /**
    * @private
-   * The guarded way through a door: eligibility, then evidence, then the
+   * The guarded way through a door: the decision, then the evidence, then the
    * provider - and an audit entry whichever of the three has the last word.
    * Both actions that open an access point run through here, so neither can
    * end up with the weaker check.
@@ -122,31 +118,32 @@ class AccessService {
     options,
   ) {
     const resolved = await this._resolve(tenant, bookingId, accessPointId);
-    const { accessPoint, bookingContext } = resolved;
+    const { accessPoint, bookingContext, booking } = resolved;
     const channel = options.channel ?? null;
 
-    const eligibility = this._evaluateResolvedEligibility(resolved, {
+    const decision = decide(booking, [{ accessPoint, bookingContext }], {
       userId,
-      hasManagePermission: options.hasManagePermission === true,
+      canManage: options.hasManagePermission === true,
     });
 
-    if (!eligibility.operableAccessPointIds.includes(String(accessPointId))) {
+    if (!decision.operableAccessPointIds.includes(String(accessPointId))) {
       return this._denyOpen({
         action,
         tenant,
         userId,
         accessPoint,
         bookingId,
-        blockingReasons: eligibility.blockingReasons,
+        blockingReasons: decision.blockingReasons,
         channel,
-        accessRole: eligibility.accessRole,
+        accessRole: decision.accessRole,
       });
     }
 
-    const evidenceOutcome = await this._evaluateEvidence(tenant, accessPoint, {
-      evidence: options.evidence,
-      bypass: eligibility.accessRole === "manager",
-    });
+    const evidenceOutcome = satisfy(
+      decision,
+      await this._withStoredRules(tenant, accessPoint),
+      options.evidence,
+    );
 
     if (!evidenceOutcome.satisfied) {
       return this._denyOpen({
@@ -157,7 +154,7 @@ class AccessService {
         bookingId,
         blockingReasons: evidenceOutcome.blockingReasons,
         channel,
-        accessRole: eligibility.accessRole,
+        accessRole: decision.accessRole,
       });
     }
 
@@ -177,7 +174,7 @@ class AccessService {
           validatedEvidence: evidenceOutcome.validatedEvidence,
         },
         channel,
-        accessRole: eligibility.accessRole,
+        accessRole: decision.accessRole,
         evidenceBypassed: evidenceOutcome.bypassed,
       });
       // The outcome says by itself whether polling is called for: a
@@ -196,7 +193,7 @@ class AccessService {
         result: "failure",
         errorMessage: err.message,
         channel,
-        accessRole: eligibility.accessRole,
+        accessRole: decision.accessRole,
         evidenceBypassed: evidenceOutcome.bypassed,
       });
       throw err;
@@ -249,28 +246,25 @@ class AccessService {
 
   /**
    * @private
-   * Checks the evidence requirements of the access point being opened.
+   * The access point being opened, with the rules it is judged by.
    *
-   * The requirements live on the stored access point, which is read again here:
-   * the copy resolved through the bookable deliberately carries neither the
-   * rules nor the scan code they are checked against.
+   * The rules live on the stored access point, which is read again here: the
+   * copy resolved through the bookable deliberately carries neither the rules
+   * nor the scan code they are checked against. Lockers are not entities of
+   * the `accesspoints` collection and have no rules to carry.
    *
-   * Lockers are not entities of the `accesspoints` collection and have no rules
-   * to carry. A door that has one, on the other hand, must be readable - if it
-   * disappeared while this request was running, what it demanded is unknown and
-   * the attempt fails closed rather than opening a door whose rules nobody can
-   * see.
+   * A door, on the other hand, must be readable - if it disappeared while this
+   * request was running, what it demanded is unknown (`validationRules: null`)
+   * and the decision fails closed rather than opening a door whose rules nobody
+   * can see.
    *
    * @param {string} tenant Tenant ID
    * @param {Object} accessPoint The resolved access point being opened
-   * @param {Object} opts
-   * @param {Object[]} [opts.evidence] Evidence the client sent
-   * @param {boolean} opts.bypass Whether the user may skip the rules
-   * @returns {Promise<Object>} Outcome as of {@link AccessEvidenceService.evaluate}
+   * @returns {Promise<Object>} The access point to hand to `satisfy`
    */
-  static async _evaluateEvidence(tenant, accessPoint, { evidence, bypass }) {
+  static async _withStoredRules(tenant, accessPoint) {
     if (accessPoint.type === "locker") {
-      return AccessEvidenceService.evaluate(null, evidence, { bypass });
+      return accessPoint;
     }
 
     const storedAccessPoint = await AccessPointManager.getAccessPoint(
@@ -282,12 +276,10 @@ class AccessService {
       logger.warn(
         `${tenant} -- access point ${accessPoint.id} vanished while it was being opened, failing closed`,
       );
-      return AccessEvidenceService.ruleUnavailable();
+      return { ...accessPoint, validationRules: null };
     }
 
-    return AccessEvidenceService.evaluate(storedAccessPoint, evidence, {
-      bypass,
-    });
+    return storedAccessPoint;
   }
 
   /**
@@ -548,23 +540,23 @@ class AccessService {
       tenant,
       bookingId,
     );
-    const accessRole = this._resolveAccessRole(
-      booking,
+    const entries = [...lockers, ...doors];
+    const decision = decide(booking, entries, {
       userId,
-      hasManagePermission,
-    );
+      canManage: hasManagePermission,
+    });
 
-    return [...lockers, ...doors].map(({ accessPoint, bookingContext }) =>
-      projectAccessPoint(accessPoint, { accessRole, bookingContext }),
+    return entries.map(({ accessPoint, bookingContext }) =>
+      projectAccessPoint(accessPoint, { decision, bookingContext }),
     );
   }
 
   /**
    * @private
    * Lockers and doors of a booking as one list of internal entries, lockers
-   * first. Everything that needs the full access point - eligibility, the
-   * providers, the audit log - works on these; only the API boundary projects
-   * them.
+   * first. Everything that needs the full access point - the access decision,
+   * the providers, the audit log - works on these; only the API boundary
+   * projects them.
    *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
@@ -823,212 +815,13 @@ class AccessService {
       return false;
     }
 
-    const eligibility = this._evaluateResolvedEligibility(resolved, {
+    const { accessPoint, bookingContext, booking } = resolved;
+    const decision = decide(booking, [{ accessPoint, bookingContext }], {
       userId,
-      hasManagePermission,
+      canManage: hasManagePermission,
     });
 
-    return eligibility.operableAccessPointIds.includes(String(accessPointId));
-  }
-
-  /**
-   * @private
-   * Runs {@link evaluateBookingAccessEligibility} for a single, already
-   * resolved access point.
-   * @param {Object} resolved Access point as returned by {@link _tryResolve}
-   * @param {Object} opts
-   * @param {string|null} opts.userId Acting user
-   * @param {boolean} opts.hasManagePermission Whether the user may manage
-   *   the bookings of the tenant
-   * @returns {Object} Eligibility as of {@link evaluateBookingAccessEligibility}
-   */
-  static _evaluateResolvedEligibility(
-    { accessPoint, bookingContext, booking },
-    { userId, hasManagePermission },
-  ) {
-    return this.evaluateBookingAccessEligibility(
-      booking,
-      [this._toEligibilityAccessPoint(accessPoint, bookingContext)],
-      { userId, hasManagePermission },
-    );
-  }
-
-  /**
-   * @private
-   * Derives the role someone acts in at a booking: `"booker"` when the booking
-   * is theirs (owned or assigned), `"manager"` when they may manage someone
-   * else's booking, `null` when they may do neither. Ownership beats the
-   * manage permission - whoever holds both is the booker at their own booking.
-   *
-   * The rule stands here alone, so whoever changes "who is what" changes it
-   * once. The check is synchronous and reads the already loaded booking, so
-   * asking costs no further database access.
-   *
-   * @param {import("../../entities/booking/booking").Booking} booking
-   * @param {string|null} userId Acting user
-   * @param {boolean} hasManagePermission Whether the user may manage the
-   *   bookings of the tenant
-   * @returns {"booker"|"manager"|null} The access role
-   */
-  static _resolveAccessRole(booking, userId, hasManagePermission) {
-    const isOwnBooking = Boolean(
-      userId && PermissionsService._isOwner(booking, userId, booking.tenantId),
-    );
-
-    if (isOwnBooking) {
-      return "booker";
-    }
-
-    return hasManagePermission ? "manager" : null;
-  }
-
-  /**
-   * Evaluates whether a booking's access points can be viewed or operated at a
-   * given point in time. Centralises the rules used by {@link canOperate} and
-   * the access-bookings list API.
-   *
-   * @param {import("../../entities/booking/booking").Booking} booking
-   * @param {Object[]} accessPoints Access points as returned by
-   *   {@link _toEligibilityAccessPoint}
-   * @param {Object} [opts]
-   * @param {number} [opts.now=Date.now()]
-   * @param {string|null} [opts.userId=null]
-   * @param {boolean} [opts.hasManagePermission=false]
-   * @returns {{
-   *   canView: boolean,
-   *   canOperate: boolean,
-   *   canOperateRemote: boolean,
-   *   canUseAuthorization: boolean,
-   *   accessRole: "booker"|"manager"|null,
-   *   blockingReasons: string[],
-   *   primaryBlockingReason: string|null,
-   *   operableAccessPointIds: string[],
-   * }}
-   */
-  static evaluateBookingAccessEligibility(
-    booking,
-    accessPoints = [],
-    { now = Date.now(), userId = null, hasManagePermission = false } = {},
-  ) {
-    const blockingReasons = [];
-
-    if (booking.isRejected) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.REJECTED);
-    }
-    if (!booking.isCommitted) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.NOT_COMMITTED);
-    }
-    if (booking.priceEur > 0 && !booking.isPayed) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.PAYMENT_REQUIRED);
-    }
-
-    const accessRole = this._resolveAccessRole(
-      booking,
-      userId,
-      hasManagePermission,
-    );
-    const hasPermission = accessRole !== null;
-
-    const canView = booking.isBookingValid() && hasPermission;
-    const operableAccessPointIds = [];
-    const remoteOperableAccessPointIds = [];
-
-    let anyInWindow = false;
-    let anyRevoked = false;
-    let anyNeedsAuthUnprovisioned = false;
-    let anyLockerNotReady = false;
-    let anyAuthUsable = false;
-    let hasRemoteCapablePoint = false;
-
-    for (const point of accessPoints) {
-      const pointId = String(point.id);
-      const beforeMs = point.accessBuffer?.beforeMs ?? 0;
-      const afterMs = point.accessBuffer?.afterMs ?? 0;
-      const inBufferedTimeWindow = this._isWithinBufferedTimeWindow(
-        booking,
-        beforeMs,
-        afterMs,
-        now,
-      );
-      const inWindow =
-        booking.isBookingValid() &&
-        booking.isWithinAccessWindow(beforeMs, afterMs, now);
-
-      if (inBufferedTimeWindow) {
-        anyInWindow = true;
-      }
-
-      if (this._supportsRemoteMode(point.mode)) {
-        hasRemoteCapablePoint = true;
-      }
-
-      const accessInfo = this._findAccessInfo(booking, pointId);
-      const revokedAt = accessInfo?.revokedAt ?? point.revokedAt ?? null;
-      if (revokedAt) {
-        anyRevoked = true;
-      }
-
-      if (point.type === "locker" && point.isProvisioned === false) {
-        anyLockerNotReady = true;
-      }
-
-      if (this._usesAuthorization(point.mode)) {
-        const isProvisioned =
-          point.isProvisioned === true || accessInfo?.isProvisioned === true;
-        const hasAuthorizationId = Boolean(
-          point.authorizationId || accessInfo?.grant?.authorizationId,
-        );
-        if (!isProvisioned || !hasAuthorizationId) {
-          anyNeedsAuthUnprovisioned = true;
-        } else if (!revokedAt) {
-          anyAuthUsable = true;
-        }
-      }
-
-      if (!booking.isBookingValid() || !inWindow || !hasPermission) {
-        continue;
-      }
-
-      operableAccessPointIds.push(pointId);
-
-      if (this._supportsRemoteMode(point.mode)) {
-        remoteOperableAccessPointIds.push(pointId);
-      }
-    }
-
-    if (hasPermission && accessPoints.length > 0 && !anyInWindow) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW);
-    }
-    if (anyRevoked) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.AUTHORIZATION_REVOKED);
-    }
-    if (anyNeedsAuthUnprovisioned) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.NOT_PROVISIONED);
-    }
-    if (anyLockerNotReady) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.LOCKER_NOT_READY);
-    }
-    if (
-      canView &&
-      anyInWindow &&
-      !hasRemoteCapablePoint &&
-      accessPoints.length > 0
-    ) {
-      blockingReasons.push(ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS);
-    }
-
-    const prioritized = prioritizeBlockingReasons(blockingReasons);
-
-    return {
-      canView,
-      canOperate: operableAccessPointIds.length > 0,
-      canOperateRemote: remoteOperableAccessPointIds.length > 0,
-      canUseAuthorization: anyAuthUsable,
-      accessRole,
-      blockingReasons: prioritized,
-      primaryBlockingReason: prioritized[0] ?? null,
-      operableAccessPointIds,
-    };
+    return decision.operableAccessPointIds.includes(String(accessPointId));
   }
 
   /**
@@ -1036,8 +829,8 @@ class AccessService {
    * booking. Unlike {@link canOperate} this does NOT require the booking to
    * be within its (buffered) time window - the assigned access points should
    * be visible at any time as long as the booking is valid (committed, paid
-   * if priced, not rejected) and the user is the owner or has the
-   * manage-bookings permission.
+   * if priced, not rejected) and the user has a role at it: the owner or
+   * someone with the manage-bookings permission.
    */
   static async canView(userId, tenant, bookingId, hasManagePermission) {
     const booking = await BookingManager.getBooking(bookingId, tenant);
@@ -1046,15 +839,8 @@ class AccessService {
       return false;
     }
 
-    if (!booking.isBookingValid()) {
-      return false;
-    }
-
-    if (hasManagePermission) {
-      return true;
-    }
-
-    return PermissionsService._isOwner(booking, userId, tenant);
+    return decide(booking, [], { userId, canManage: hasManagePermission })
+      .canView;
   }
 
   /**
@@ -1278,15 +1064,11 @@ class AccessService {
         (state === "active" && includeBuffer) ||
         includeEligibility;
       let entries = null;
-      let eligibilityPoints = null;
       if (needsEnrichment) {
         entries = await this._getFilteredBookingAccessPointEntries(
           booking.tenantId,
           booking.id,
           { capability, includeLockers },
-        );
-        eligibilityPoints = entries.map(({ accessPoint, bookingContext }) =>
-          this._toEligibilityAccessPoint(accessPoint, bookingContext),
         );
       }
 
@@ -1296,7 +1078,7 @@ class AccessService {
           state,
           now,
           includeBuffer,
-          eligibilityPoints,
+          entries,
           includeEligibility,
         )
       ) {
@@ -1317,30 +1099,24 @@ class AccessService {
         accessPointIds: resolved.accessPointIds,
       };
 
-      const hasManagePermission =
-        managePermissionByTenant?.get(booking.tenantId) ?? false;
-      // Determined before the blocks below, because they hang on separate
-      // flags. The eligibility asks the same deriver for itself and reports
-      // the role in its answer - one rule, one place, whoever asks.
-      const accessRole = this._resolveAccessRole(
-        booking,
+      // One decision per booking, whichever of the blocks below asks for it:
+      // the projection reads from it what each door demands of this user, and
+      // the eligibility the API hands out is the decision itself.
+      const decision = decide(booking, entries || [], {
         userId,
-        hasManagePermission,
-      );
+        canManage: managePermissionByTenant?.get(booking.tenantId) ?? false,
+        now,
+      });
 
       if (includeAccessPoints) {
         result.accessPoints = (entries || []).map(
           ({ accessPoint, bookingContext }) =>
-            projectAccessPoint(accessPoint, { accessRole, bookingContext }),
+            projectAccessPoint(accessPoint, { decision, bookingContext }),
         );
       }
 
       if (includeEligibility) {
-        result.accessEligibility = this.evaluateBookingAccessEligibility(
-          booking,
-          eligibilityPoints || [],
-          { now, userId, hasManagePermission },
-        );
+        result.accessEligibility = decision;
       }
 
       matched.push({ result, booking });
@@ -1639,7 +1415,7 @@ class AccessService {
    * @private
    * Loads the access point entries of a booking and applies the
    * capability/locker filters. Entries rather than the projection, because the
-   * eligibility decision needs fields a client never sees.
+   * access decision needs fields a client never sees.
    *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
@@ -1699,13 +1475,13 @@ class AccessService {
     state,
     now,
     includeBuffer,
-    enrichedPoints,
+    entries,
     includeEligibility = false,
   ) {
     switch (state) {
       case "active":
         if (includeBuffer) {
-          const { beforeMs, afterMs } = this._maxBuffer(enrichedPoints);
+          const { beforeMs, afterMs } = this._maxBuffer(entries);
           if (includeEligibility) {
             return this._isWithinBufferedTimeWindow(
               booking,
@@ -1730,11 +1506,11 @@ class AccessService {
    * @private
    * Largest access buffer across a booking's resolved door access points.
    */
-  static _maxBuffer(enrichedPoints) {
+  static _maxBuffer(entries) {
     let beforeMs = 0;
     let afterMs = 0;
-    for (const point of enrichedPoints || []) {
-      const buffer = point.accessBuffer || {};
+    for (const { bookingContext } of entries || []) {
+      const buffer = bookingContext?.accessBuffer || {};
       beforeMs = Math.max(beforeMs, buffer.beforeMs || 0);
       afterMs = Math.max(afterMs, buffer.afterMs || 0);
     }
@@ -1781,8 +1557,8 @@ class AccessService {
    * Resolves access point + builds booking context for the provider.
    *
    * An unresolvable target is forbidden rather than refused: neither a missing
-   * booking nor an access point outside the booking is an eligibility
-   * decision, so there is no reason vocabulary and nothing to audit against.
+   * booking nor an access point outside the booking is an access decision, so
+   * there is no reason vocabulary and nothing to audit against.
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId Access point ID
@@ -2105,41 +1881,6 @@ class AccessService {
     return (
       mode === AccessPointMode.AUTHORIZATION || mode === AccessPointMode.BOTH
     );
-  }
-
-  static _supportsRemoteMode(mode) {
-    return mode === AccessPointMode.REMOTE || mode === AccessPointMode.BOTH;
-  }
-
-  static _findAccessInfo(booking, accessPointId) {
-    return (booking.accessInfo || []).find(
-      (info) => String(info.accessPointId) === String(accessPointId),
-    );
-  }
-
-  static _toEligibilityAccessPoint(accessPoint, bookingContext) {
-    if (accessPoint.type === "locker") {
-      return {
-        ...accessPoint,
-        isProvisioned: true,
-        accessBuffer: bookingContext.accessBuffer || {
-          beforeMs: 0,
-          afterMs: 0,
-        },
-        accessFrom: bookingContext.accessFrom ?? null,
-        accessTo: bookingContext.accessTo ?? null,
-      };
-    }
-
-    return {
-      ...accessPoint,
-      authorizationId: bookingContext.grant?.authorizationId || null,
-      isProvisioned: bookingContext.isProvisioned || false,
-      revokedAt: bookingContext.revokedAt || null,
-      accessBuffer: bookingContext.accessBuffer || { beforeMs: 0, afterMs: 0 },
-      accessFrom: bookingContext.accessFrom ?? null,
-      accessTo: bookingContext.accessTo ?? null,
-    };
   }
 
   static async _resolveManagePermissionByTenant(userId, tenantIds) {
