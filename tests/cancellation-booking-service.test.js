@@ -175,13 +175,18 @@ describe("BookingService cancellation refunds", function () {
 
     clock.restore();
 
+    // The preview lists bookings chronologically, not in bookingIds order.
+    assert.deepStrictEqual(
+      preview.bookings.map((entry) => entry.bookingId),
+      ["booking-2", "booking-1"],
+    );
     assert.deepStrictEqual(
       preview.bookings.map((entry) => entry.appliedRefundPercentage),
-      [100, 50],
+      [50, 100],
     );
     assert.deepStrictEqual(
       preview.bookings.map((entry) => entry.daysBeforeStart),
-      [30, 5],
+      [5, 30],
     );
     assert.strictEqual(preview.originalAmountEur, 30);
     assert.strictEqual(preview.refundAmountEur, 20);
