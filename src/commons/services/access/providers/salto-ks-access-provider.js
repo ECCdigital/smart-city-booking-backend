@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const bunyan = require("bunyan");
 const AccessProvider = require("./access-provider");
 const { createClient } = require("../clients/access-client-registry");
 const {
@@ -13,6 +14,11 @@ const { NotFoundError } = require("../../../../errors/BaseError");
 require("../clients");
 
 const PROVIDER_ID = "salto-ks";
+
+const logger = bunyan.createLogger({
+  name: "salto-ks-access-provider.js",
+  level: process.env.LOG_LEVEL,
+});
 
 // The lock types with a keypad - the only ones that know the Salto-Guest+PIN
 // path (ADR 0001). Remote open is open to every door hanging on an IQ.
@@ -236,90 +242,110 @@ class SaltoKsAccessProvider extends AccessProvider {
     return AccessProvider.unknownLockStatus;
   }
 
+  /**
+   * Creates a Salto guest for the booking and gives it access to the lock
+   * with a PIN for the access window. The guest is the grant's external
+   * principal: it has to go when the grant goes.
+   *
+   * @param {Object} accessPoint The access point to grant access to
+   * @param {Object} bookingContext The booking that gets access
+   * @returns {Promise<import("./access-provider").Grant>}
+   * @throws {Error} Salto's own error, or one of our own when Salto answers
+   *   without the ids the grant needs
+   */
   async grantAuthorization(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
-    const pin = bookingContext.pin || this._generatePin();
+    const secret = bookingContext.pin || this._generatePin();
 
     const userResponse = await client.createUser(
       this._buildUser(bookingContext),
     );
-    const saltoUserId =
+    const externalPrincipalId =
       userResponse?.id || userResponse?.userId || userResponse?.user?.id;
 
-    if (!saltoUserId) {
+    if (!externalPrincipalId) {
       throw new Error("Salto KS createUser returned no user id");
     }
 
     const accessResponse = await client.assignAccess(
-      saltoUserId,
+      externalPrincipalId,
       [accessPoint.externalId],
       this._formatDate(bookingContext.accessFrom ?? bookingContext.timeBegin),
       this._formatDate(bookingContext.accessTo ?? bookingContext.timeEnd),
-      pin,
+      secret,
     );
-
-    const accessId =
+    const authorizationId =
       accessResponse?.id ||
       accessResponse?.accessId ||
       accessResponse?.access?.id ||
       null;
 
+    if (!authorizationId) {
+      throw new Error("Salto KS assignAccess returned no access id");
+    }
+
     return {
-      authorizationId: accessId,
-      saltoUserId,
-      accessId,
-      pin,
-      providerResponse: { user: userResponse, access: accessResponse },
+      authorizationId: String(authorizationId),
+      externalPrincipalId: String(externalPrincipalId),
+      secret,
     };
   }
 
-  async revokeAuthorization(accessPoint, bookingContext) {
-    const accessId =
-      bookingContext.accessId ||
-      bookingContext.authorizationId ||
-      bookingContext.accessInfo?.accessId ||
-      accessPoint.authorizationId;
-    const saltoUserId =
-      bookingContext.saltoUserId ||
-      bookingContext.accessInfo?.saltoUserId ||
-      accessPoint.saltoUserId;
+  /**
+   * Revokes the access and deletes the guest. An access or guest Salto no
+   * longer has is nothing to do, so a repeated revoke only finishes what
+   * is left. A guest that could not be deleted does not fail the revoke:
+   * the access is gone, and the cleanup job retries the guest.
+   *
+   * @param {Object} accessPoint The access point the grant was made for
+   * @param {import("./access-provider").Grant} grant The grant to revoke
+   * @returns {Promise<import("./access-provider").Revocation>}
+   * @throws {Error} Salto's own error when the access could not be revoked
+   */
+  async revokeAuthorization(accessPoint, grant) {
+    const authorizationId = grant?.authorizationId || null;
+    const externalPrincipalId = grant?.externalPrincipalId || null;
 
-    if (!accessId && !saltoUserId) {
-      return {
-        success: true,
-        skipped: true,
-        reason: "missing accessId and saltoUserId",
-      };
+    if (!authorizationId && !externalPrincipalId) {
+      return { principalRemoved: null };
     }
 
-    const client = await this._getClient(bookingContext.tenant);
-    const providerResponse = {};
-    let userDeleted = null;
+    const client = await this._getClient(accessPoint.tenantId);
 
-    if (accessId) {
-      providerResponse.access = await client.revokeAccess(accessId);
-    }
-
-    // Deleting the per-booking user is best-effort: a failure here must not
-    // block the revoke (the cleanup job removes orphaned users later).
-    if (saltoUserId) {
+    if (authorizationId) {
       try {
-        providerResponse.user = await client.deleteUser(saltoUserId);
-        userDeleted = true;
+        await client.revokeAccess(authorizationId);
       } catch (err) {
-        providerResponse.userDeleteError = err.message;
-        userDeleted = false;
+        if (!this._isGone(err)) {
+          throw err;
+        }
       }
     }
 
-    return {
-      success: true,
-      authorizationId: accessId || null,
-      saltoUserId: saltoUserId || null,
-      accessId: accessId || null,
-      userDeleted,
-      providerResponse,
-    };
+    if (!externalPrincipalId) {
+      return { principalRemoved: null };
+    }
+
+    try {
+      await client.deleteUser(externalPrincipalId);
+      return { principalRemoved: true };
+    } catch (err) {
+      if (this._isGone(err)) {
+        return { principalRemoved: true };
+      }
+      logger.warn(
+        `Salto KS guest ${externalPrincipalId} of access ${authorizationId} could not be deleted, leaving it to the cleanup job: ${err.message}`,
+      );
+      return { principalRemoved: false };
+    }
+  }
+
+  /**
+   * @private
+   * Whether Salto answers that the thing to delete is already gone.
+   */
+  _isGone(err) {
+    return err?.response?.status === 404;
   }
 
   /**

@@ -153,8 +153,11 @@ describe("Access point projection", () => {
           accessTo: 1755010800000,
           accessBuffer: { beforeMs: 900000, afterMs: 0 },
           isProvisioned: true,
-          authorizationId: "auth-1",
-          saltoUserId: "user-1",
+          grant: {
+            authorizationId: "auth-1",
+            externalPrincipalId: "user-1",
+            secret: null,
+          },
           lastEvent: { success: true },
           provisionedAt: 1754000000000,
         },

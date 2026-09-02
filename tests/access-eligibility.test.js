@@ -181,7 +181,7 @@ describe("AccessService.evaluateBookingAccessEligibility", () => {
       accessInfo: [
         {
           accessPointId: "door-1",
-          authorizationId: "auth-1",
+          grant: { authorizationId: "auth-1" },
           isProvisioned: true,
           revokedAt: now - 1000,
         },
@@ -211,7 +211,7 @@ describe("AccessService.evaluateBookingAccessEligibility", () => {
       accessInfo: [
         {
           accessPointId: "door-1",
-          authorizationId: "auth-1",
+          grant: { authorizationId: "auth-1" },
           isProvisioned: true,
         },
       ],

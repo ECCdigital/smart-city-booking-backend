@@ -93,7 +93,16 @@ describe("AccessService bookable access point inheritance", () => {
       timeBegin: 1,
       timeEnd: 2,
       bookableItems: [{ bookableId: "room" }],
-      accessInfo: [{ accessPointId: "door-self", authorizationId: "auth-1" }],
+      accessInfo: [
+        {
+          accessPointId: "door-self",
+          grant: {
+            authorizationId: "auth-1",
+            externalPrincipalId: null,
+            secret: null,
+          },
+        },
+      ],
     };
 
     stubAccessPoints(["door-shared", "door-self", "door-parent", "door-child"]);
@@ -128,7 +137,7 @@ describe("AccessService bookable access point inheritance", () => {
       "child",
     ]);
     expect(doors[0].accessPoint.bookableTitle).to.equal("Room");
-    expect(doors[1].bookingContext.authorizationId).to.equal("auth-1");
+    expect(doors[1].bookingContext.grant.authorizationId).to.equal("auth-1");
   });
 
   it("can disable inherited parents and children by environment flag", async () => {
@@ -268,9 +277,7 @@ describe("AccessService locker access window", () => {
       "lastOpenBoxId",
       "lastEvent",
       "provisionedAt",
-      "authorizationId",
-      "accessId",
-      "saltoUserId",
+      "grant",
       "scanCode",
       "previousScanCodes",
     );
@@ -456,7 +463,7 @@ describe("AccessService provisionForBooking", () => {
             tenant: "tenant-1",
             bookingId: "booking-1",
             isProvisioned: false,
-            authorizationId: null,
+            grant: null,
           },
         },
       ],

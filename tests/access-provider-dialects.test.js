@@ -1,13 +1,12 @@
 /**
  * Characterization of the access provider seam: how NUKI, Salto KS and iFBS
  * answer, and what `AccessService` makes of it. The result-bearing methods
- * - open, unlatch, close, getStatus, getOpenProgress - answer in the typed
- * shapes of `access-provider.js` and every open failure is an
- * `AccessOpenError` (Provider-Outcomes ticket 2); the expectations on those
- * are the contract. Grants and revocations still answer in each provider's
- * own dialect, and what lands in `accessInfo` follows it - those
- * expectations are the observed behaviour, pinned so that ticket 3 changes
- * it on purpose, never by accident.
+ * - open, unlatch, close, getStatus, getOpenProgress, grantAuthorization,
+ * revokeAuthorization - answer in the typed shapes of `access-provider.js`
+ * and every open failure is an `AccessOpenError`; the expectations on those
+ * are the contract. What lands in `accessInfo` is the Grant as the service
+ * stores it, its secret encrypted, with the principal fields the cleanup
+ * job works on.
  *
  * The adapters run for real over fake API clients that replace only the
  * HTTP transport (`tests/helpers/fake-*-api-client.js`). The target contract
@@ -31,6 +30,7 @@ const {
 } = require("../src/commons/services/access/providers/access-provider-registry");
 const {
   NUKI_ACTIONS,
+  NUKI_AUTH_TYPES,
 } = require("../src/commons/services/access/clients/nuki-api-client");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
@@ -207,62 +207,121 @@ describe("access provider dialects: the adapters as they answer", () => {
       });
     });
 
-    it("answers a grant with the authorization id, the PIN and the raw response", async () => {
-      const grant = await provider.grantAuthorization(
-        NUKI_DOOR,
-        doorContext({ pin: "424242" }),
-      );
+    it("answers a grant as a Grant, with the id Nuki lists for the keypad code it created", async () => {
+      const context = doorContext({ pin: "424242" });
 
-      expect(Object.keys(grant).sort()).to.deep.equal([
-        "authorizationId",
-        "pin",
-        "providerResponse",
-      ]);
-      expect(grant.authorizationId).to.equal("auth-1");
-      expect(grant.pin).to.equal("424242");
-      expect(grant.providerResponse).to.include({
-        name: "Booking booking-1 Main door",
-        type: "keypad",
-        code: "424242",
+      const grant = await provider.grantAuthorization(NUKI_DOOR, context);
+
+      expect(grant).to.deep.equal({
+        authorizationId: "auth-1",
+        externalPrincipalId: null,
+        secret: "424242",
       });
+      expect(clients.nuki.authorizationRequests).to.deep.equal([
+        {
+          smartlockId: "1001",
+          name: "Booking booking-1 Main door",
+          type: NUKI_AUTH_TYPES.KEYPAD,
+          allowedFromDate: new Date(context.accessFrom).toISOString(),
+          allowedUntilDate: new Date(context.accessTo).toISOString(),
+          code: 424242,
+        },
+      ]);
     });
 
-    it("answers a revoke with the authorization id it deleted", async () => {
+    it("waits for the listing when Nuki has not created the authorization yet", async () => {
+      provider = new NukiAccessProvider({
+        client: new FakeNukiApiClient({
+          smartlocks: [nukiSmartlock()],
+          authorizationListingsUntilVisible: 2,
+        }),
+        authorizationLookup: { attempts: 3, delayMs: 0 },
+      });
+
       const grant = await provider.grantAuthorization(NUKI_DOOR, doorContext());
 
-      const revocation = await provider.revokeAuthorization(NUKI_DOOR, {
-        ...doorContext(),
-        authorizationId: grant.authorizationId,
-      });
-
-      expect(revocation).to.deep.equal({
-        success: true,
-        authorizationId: "auth-1",
-        providerResponse: "",
-      });
+      expect(grant.authorizationId).to.equal("auth-1");
     });
 
-    it("skips a revoke that has no authorization id to act on", async () => {
-      const revocation = await provider.revokeAuthorization(
+    it("fails a grant whose authorization Nuki never lists", async () => {
+      provider = new NukiAccessProvider({
+        client: new FakeNukiApiClient({
+          smartlocks: [nukiSmartlock()],
+          authorizationListingsUntilVisible: 5,
+        }),
+        authorizationLookup: { attempts: 2, delayMs: 0 },
+      });
+
+      await rejects(
+        provider.grantAuthorization(NUKI_DOOR, doorContext()),
+        Error,
+        "did not list the keypad authorization",
+      );
+    });
+
+    it("keeps the authorization name within the 32 characters Nuki allows", async () => {
+      await provider.grantAuthorization(
         NUKI_DOOR,
-        doorContext(),
+        doorContext({ bookingId: "0f6c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f" }),
       );
 
-      expect(revocation).to.deep.equal({
-        success: true,
-        skipped: true,
-        reason: "missing authorizationId",
-      });
+      const [request] = clients.nuki.authorizationRequests;
+      expect(request.name).to.have.length(32);
+      expect(request.name).to.equal("Booking 0f6c1d2e-3a4b-4c5d-8e9f-");
     });
 
-    it("throws the provider's own error when revoking an authorization it no longer has", async () => {
+    it("generates keypad codes Nuki accepts: six digits without a zero, never starting with 12", async () => {
+      for (let i = 0; i < 40; i += 1) {
+        const grant = await provider.grantAuthorization(
+          NUKI_DOOR,
+          doorContext(),
+        );
+
+        expect(grant.secret).to.match(/^[1-9]{6}$/);
+        expect(grant.secret).not.to.match(/^12/);
+      }
+    });
+
+    it("refuses a PIN from the booking context that Nuki's keypad would not take", async () => {
       await rejects(
-        provider.revokeAuthorization(NUKI_DOOR, {
-          ...doorContext(),
-          authorizationId: "auth-gone",
-        }),
+        provider.grantAuthorization(NUKI_DOOR, doorContext({ pin: "042042" })),
         Error,
-        "Request failed with status code 404",
+        "is not a Nuki keypad code",
+      );
+      expect(clients.nuki.authorizationRequests).to.deep.equal([]);
+    });
+
+    it("answers a revoke with no principal to remove, the keypad code deleted", async () => {
+      const grant = await provider.grantAuthorization(NUKI_DOOR, doorContext());
+
+      const revocation = await provider.revokeAuthorization(NUKI_DOOR, grant);
+
+      expect(revocation).to.deep.equal({ principalRemoved: null });
+      expect(clients.nuki.authorizations.size).to.equal(0);
+    });
+
+    it("tolerates revoking a keypad code Nuki no longer has", async () => {
+      const revocation = await provider.revokeAuthorization(NUKI_DOOR, {
+        authorizationId: "auth-gone",
+        externalPrincipalId: null,
+        secret: null,
+      });
+
+      expect(revocation).to.deep.equal({ principalRemoved: null });
+    });
+
+    it("throws Nuki's own error when the revoke fails for any other reason", async () => {
+      const broken = new NukiAccessProvider({
+        client: brokenNukiApiClient(nukiHttpError(500)),
+      });
+
+      await rejectsRaw(
+        broken.revokeAuthorization(NUKI_DOOR, {
+          authorizationId: "auth-1",
+          externalPrincipalId: null,
+          secret: null,
+        }),
+        (err) => expect(err.response.status).to.equal(500),
       );
     });
 
@@ -387,6 +446,10 @@ describe("access provider dialects: the adapters as they answer", () => {
       provider = new SaltoKsAccessProvider({ client: clients["salto-ks"] });
     });
 
+    afterEach(() => {
+      sinon.restore();
+    });
+
     it("answers an open as opened, with no process to poll", async () => {
       const outcome = await provider.open(SALTO_DOOR, doorContext());
 
@@ -431,109 +494,113 @@ describe("access provider dialects: the adapters as they answer", () => {
       });
     });
 
-    it("answers a grant with access id, Salto user id, PIN and both raw responses", async () => {
+    it("answers a grant as a Grant: the access as its id, the guest as its external principal", async () => {
       const context = doorContext({ pin: "424242" });
 
       const grant = await provider.grantAuthorization(SALTO_DOOR, context);
 
       expect(grant).to.deep.equal({
         authorizationId: "access-2",
-        saltoUserId: "user-1",
-        accessId: "access-2",
-        pin: "424242",
-        providerResponse: {
-          user: {
-            id: "user-1",
-            firstName: "Erika",
-            lastName: "Muster",
-            email: "erika@example.test",
-          },
-          access: {
-            id: "access-2",
-            userId: "user-1",
-            lockIds: [SALTO_LOCK_ID],
-            validFrom: new Date(context.accessFrom).toISOString(),
-            validTo: new Date(context.accessTo).toISOString(),
-            pin: "424242",
-          },
-        },
+        externalPrincipalId: "user-1",
+        secret: "424242",
       });
+      expect([...clients["salto-ks"].users.values()]).to.deep.equal([
+        {
+          id: "user-1",
+          firstName: "Erika",
+          lastName: "Muster",
+          email: "erika@example.test",
+        },
+      ]);
+      expect([...clients["salto-ks"].accesses.values()]).to.deep.equal([
+        {
+          id: "access-2",
+          userId: "user-1",
+          lockIds: [SALTO_LOCK_ID],
+          validFrom: new Date(context.accessFrom).toISOString(),
+          validTo: new Date(context.accessTo).toISOString(),
+          pin: "424242",
+        },
+      ]);
     });
 
-    it("answers a revoke with whether the Salto user could be deleted", async () => {
+    it("answers a revoke with the guest removed, holding neither access nor guest afterwards", async () => {
       const grant = await provider.grantAuthorization(
         SALTO_DOOR,
         doorContext(),
       );
 
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
-        ...doorContext(),
-        accessId: grant.accessId,
-        saltoUserId: grant.saltoUserId,
-      });
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
 
-      expect(revocation).to.deep.equal({
-        success: true,
-        authorizationId: "access-2",
-        saltoUserId: "user-1",
-        accessId: "access-2",
-        userDeleted: true,
-        providerResponse: { access: "", user: "" },
-      });
+      expect(revocation).to.deep.equal({ principalRemoved: true });
+      expect(clients["salto-ks"].accesses.size).to.equal(0);
       expect(clients["salto-ks"].users.size).to.equal(0);
     });
 
-    it("reads the ids to revoke from the accessInfo entry on the context as well", async () => {
+    it("answers a guest that could not be deleted as not removed, the access revoked all the same", async () => {
       const grant = await provider.grantAuthorization(
         SALTO_DOOR,
         doorContext(),
       );
+      sinon
+        .stub(clients["salto-ks"], "deleteUser")
+        .rejects(saltoHttpError(500, { Message: "Internal error" }));
 
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
-        tenant: TENANT,
-        accessInfo: {
-          accessId: grant.accessId,
-          saltoUserId: grant.saltoUserId,
-        },
-      });
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
 
-      expect(revocation).to.include({
-        accessId: "access-2",
-        userDeleted: true,
-      });
+      expect(revocation).to.deep.equal({ principalRemoved: false });
+      expect(clients["salto-ks"].accesses.size).to.equal(0);
+      expect(clients["salto-ks"].users.size).to.equal(1);
     });
 
-    it("books a failed user deletion on the revoke instead of failing it", async () => {
+    it("tolerates revoking an access Salto no longer has, and still removes the guest", async () => {
+      const grant = await provider.grantAuthorization(
+        SALTO_DOOR,
+        doorContext(),
+      );
+      clients["salto-ks"].accesses.clear();
+
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
+
+      expect(revocation).to.deep.equal({ principalRemoved: true });
+      expect(clients["salto-ks"].users.size).to.equal(0);
+    });
+
+    it("answers a revoke of a guest Salto already deleted as removed", async () => {
       const grant = await provider.grantAuthorization(
         SALTO_DOOR,
         doorContext(),
       );
       clients["salto-ks"].users.clear();
 
-      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
-        ...doorContext(),
-        accessId: grant.accessId,
-        saltoUserId: grant.saltoUserId,
-      });
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, grant);
 
-      expect(revocation).to.include({ success: true, userDeleted: false });
-      expect(revocation.providerResponse).to.deep.equal({
-        access: "",
-        userDeleteError: "User not found",
-      });
+      expect(revocation).to.deep.equal({ principalRemoved: true });
     });
 
-    it("skips a revoke that has neither an access id nor a user id", async () => {
-      const revocation = await provider.revokeAuthorization(
+    it("throws Salto's own error when the access revoke fails for any other reason, leaving the guest", async () => {
+      const grant = await provider.grantAuthorization(
         SALTO_DOOR,
         doorContext(),
       );
+      sinon
+        .stub(clients["salto-ks"], "revokeAccess")
+        .rejects(saltoHttpError(500, { Message: "Internal error" }));
 
-      expect(revocation).to.deep.equal({
-        success: true,
-        skipped: true,
-        reason: "missing accessId and saltoUserId",
+      await rejectsRaw(provider.revokeAuthorization(SALTO_DOOR, grant), (err) =>
+        expect(err.response.status).to.equal(500),
+      );
+      expect(clients["salto-ks"].users.size).to.equal(1);
+    });
+
+    it("answers a grant without any id as nothing to revoke", async () => {
+      const revocation = await provider.revokeAuthorization(SALTO_DOOR, {
+        authorizationId: null,
+        externalPrincipalId: null,
+        secret: null,
       });
+
+      expect(revocation).to.deep.equal({ principalRemoved: null });
     });
 
     it("maps a failure of the open call itself to an AccessOpenError", async () => {
@@ -580,25 +647,6 @@ describe("access provider dialects: the adapters as they answer", () => {
         "configuration",
         "does not list lock",
       );
-    });
-
-    it("throws the provider's own error when revoking an access Salto no longer has", async () => {
-      const grant = await provider.grantAuthorization(
-        SALTO_DOOR,
-        doorContext(),
-      );
-      clients["salto-ks"].accesses.clear();
-
-      await rejectsRaw(
-        provider.revokeAuthorization(SALTO_DOOR, {
-          ...doorContext(),
-          accessId: grant.accessId,
-          saltoUserId: grant.saltoUserId,
-        }),
-        (err) => expect(err.response.status).to.equal(404),
-      );
-      // The user deletion never ran: the revoke stops at the failed access.
-      expect(clients["salto-ks"].users.size).to.equal(1);
     });
   });
 
@@ -1331,7 +1379,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
   });
 
   describe("provisionForBooking", () => {
-    it("stores a NUKI grant flat in accessInfo, the PIN encrypted, and mails the PIN once", async () => {
+    it("stores a NUKI grant in accessInfo with its secret encrypted, and mails the secret once", async () => {
       const booking = createBooking();
       stubBooking(booking, [NUKI_DOOR]);
 
@@ -1343,18 +1391,18 @@ describe("access provider dialects: what AccessService makes of them", () => {
       expect(accessInfo).to.have.length(1);
       const [entry] = accessInfo;
       expect(Object.keys(entry).sort()).to.deep.equal([
-        "accessId",
         "accessPointId",
         "accessPointType",
-        "authorizationId",
         "externalId",
+        "grant",
         "isProvisioned",
         "mode",
-        "pin",
+        "principalCleanupAttemptedAt",
+        "principalCleanupError",
+        "principalRemovedAt",
         "provider",
-        "providerResponse",
         "provisionedAt",
-        "saltoUserId",
+        "revokedAt",
       ]);
       expect(entry).to.include({
         accessPointId: "door-1",
@@ -1362,16 +1410,20 @@ describe("access provider dialects: what AccessService makes of them", () => {
         provider: "nuki",
         externalId: "1001",
         mode: AccessPointMode.AUTHORIZATION,
-        authorizationId: "auth-1",
-        accessId: "auth-1",
-        saltoUserId: null,
         isProvisioned: true,
+        revokedAt: null,
+        principalRemovedAt: null,
+        principalCleanupAttemptedAt: null,
+        principalCleanupError: null,
       });
       expect(entry.provisionedAt).to.be.a("number");
+      expect(entry.grant).to.include({
+        authorizationId: "auth-1",
+        externalPrincipalId: null,
+      });
 
-      const pin = SecurityUtils.decrypt(entry.pin);
-      expect(pin).to.match(/^\d{6}$/);
-      expect(entry.providerResponse).to.include({ id: "auth-1", code: pin });
+      const secret = SecurityUtils.decrypt(entry.grant.secret);
+      expect(secret).to.match(/^\d{6}$/);
 
       expect(MailController.sendAccessProvisioned.calledOnce).to.be.true;
       expect(MailController.sendAccessProvisioned.firstCall.args).to.deep.equal(
@@ -1385,7 +1437,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
               label: "Main door",
               provider: "nuki",
               bookableTitle: "Room",
-              pin,
+              pin: secret,
             },
           ],
         ],
@@ -1393,23 +1445,17 @@ describe("access provider dialects: what AccessService makes of them", () => {
       expect(BookingManager.storeBooking.calledOnceWith(booking)).to.be.true;
     });
 
-    it("audits a NUKI grant with accessId null although accessInfo carries the authorization id there", async () => {
+    it("audits the grant without its secret", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
 
-      const [entry] = await AccessService.provisionForBooking(
-        TENANT,
-        "booking-1",
-      );
+      await AccessService.provisionForBooking(TENANT, "booking-1");
 
-      expect(entry.accessId).to.equal("auth-1");
-      expect(loggedPayload("provision").payload).to.deep.include({
-        authorizationId: "auth-1",
-        accessId: null,
-        saltoUserId: null,
+      expect(loggedPayload("provision").payload).to.deep.equal({
+        grant: { authorizationId: "auth-1", externalPrincipalId: null },
       });
     });
 
-    it("stores a Salto grant with access id, Salto user id and both raw responses", async () => {
+    it("stores a Salto grant with the guest as its external principal", async () => {
       stubBooking(createBooking(), [SALTO_DOOR]);
 
       const [entry] = await AccessService.provisionForBooking(
@@ -1417,23 +1463,24 @@ describe("access provider dialects: what AccessService makes of them", () => {
         "booking-1",
       );
 
-      expect(entry).to.include({
-        provider: "salto-ks",
+      expect(entry).to.include({ provider: "salto-ks", isProvisioned: true });
+      expect(entry.grant).to.include({
         authorizationId: "access-2",
-        accessId: "access-2",
-        saltoUserId: "user-1",
-        isProvisioned: true,
+        externalPrincipalId: "user-1",
       });
-      expect(SecurityUtils.decrypt(entry.pin)).to.match(/^\d{6}$/);
-      expect(Object.keys(entry.providerResponse)).to.deep.equal([
-        "user",
-        "access",
-      ]);
-      expect(loggedPayload("provision").payload).to.deep.include({
-        authorizationId: "access-2",
-        accessId: "access-2",
-        saltoUserId: "user-1",
+      expect(SecurityUtils.decrypt(entry.grant.secret)).to.match(/^\d{6}$/);
+      expect(loggedPayload("provision").payload).to.deep.equal({
+        grant: { authorizationId: "access-2", externalPrincipalId: "user-1" },
       });
+    });
+
+    it("leaves a door alone that already holds a grant", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+
+      expect(clients.nuki.authorizations.size).to.equal(1);
     });
 
     it("grants nothing at a door whose lock does not support the mode, and audits why", async () => {
@@ -1459,7 +1506,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
   });
 
   describe("revokeForBooking", () => {
-    it("records a Salto revoke with the user deletion as Salto-specific fields", async () => {
+    it("records a Salto revoke with the guest removed, keeping the grant for the record", async () => {
       const booking = createBooking();
       stubBooking(booking, [SALTO_DOOR]);
       await AccessService.provisionForBooking(TENANT, "booking-1");
@@ -1468,37 +1515,43 @@ describe("access provider dialects: what AccessService makes of them", () => {
 
       expect(entry).to.include({
         isProvisioned: false,
-        saltoUserCleanupError: null,
-        authorizationId: "access-2",
-        saltoUserId: "user-1",
+        principalCleanupError: null,
       });
       expect(entry.revokedAt).to.be.a("number");
-      expect(entry.saltoUserDeletedAt).to.be.a("number");
-      expect(entry.providerResponse).to.deep.equal({ access: "", user: "" });
-      expect(clients["salto-ks"].accesses.size).to.equal(0);
-      expect(loggedPayload("revoke").payload).to.deep.equal({
+      expect(entry.principalRemovedAt).to.be.a("number");
+      expect(entry.grant).to.include({
         authorizationId: "access-2",
-        accessId: "access-2",
-        saltoUserId: "user-1",
-        providerResponse: { access: "", user: "" },
+        externalPrincipalId: "user-1",
+      });
+      expect(clients["salto-ks"].accesses.size).to.equal(0);
+      expect(clients["salto-ks"].users.size).to.equal(0);
+      expect(loggedPayload("revoke").payload).to.deep.equal({
+        grant: { authorizationId: "access-2", externalPrincipalId: "user-1" },
+        revocation: { principalRemoved: true },
       });
     });
 
-    it("keeps a Salto user that could not be deleted as a cleanup error", async () => {
+    it("keeps a guest that could not be removed as a cleanup error for the job", async () => {
       stubBooking(createBooking(), [SALTO_DOOR]);
       await AccessService.provisionForBooking(TENANT, "booking-1");
-      clients["salto-ks"].users.clear();
+      sandbox
+        .stub(clients["salto-ks"], "deleteUser")
+        .rejects(saltoHttpError(500, { Message: "Internal error" }));
 
       const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
 
       expect(entry).to.include({
         isProvisioned: false,
-        saltoUserDeletedAt: null,
-        saltoUserCleanupError: "User not found",
+        principalRemovedAt: null,
+      });
+      expect(entry.revokedAt).to.be.a("number");
+      expect(entry.principalCleanupError).to.be.a("string");
+      expect(loggedPayload("revoke").payload.revocation).to.deep.equal({
+        principalRemoved: false,
       });
     });
 
-    it("records a NUKI revoke with the Salto fields empty and an empty answer as null", async () => {
+    it("records a NUKI revoke, which has no principal to remove", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
       await AccessService.provisionForBooking(TENANT, "booking-1");
 
@@ -1506,31 +1559,66 @@ describe("access provider dialects: what AccessService makes of them", () => {
 
       expect(entry).to.include({
         isProvisioned: false,
-        saltoUserDeletedAt: null,
-        saltoUserCleanupError: null,
-        // NUKI answers a delete with no body; a falsy answer is stored as null.
-        providerResponse: null,
+        principalRemovedAt: null,
+        principalCleanupError: null,
       });
       expect(entry.revokedAt).to.be.a("number");
       expect(clients.nuki.authorizations.size).to.equal(0);
+      expect(loggedPayload("revoke").payload).to.deep.equal({
+        grant: { authorizationId: "auth-1", externalPrincipalId: null },
+        revocation: { principalRemoved: null },
+      });
     });
 
-    it("leaves a grant provisioned when the provider refuses the revoke, and only audits it", async () => {
+    it("records the revoke of a grant the provider no longer has", async () => {
       stubBooking(createBooking(), [NUKI_DOOR]);
       await AccessService.provisionForBooking(TENANT, "booking-1");
       clients.nuki.authorizations.clear();
 
       const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
 
-      expect(entry).to.include({
-        isProvisioned: true,
-        authorizationId: "auth-1",
-      });
-      expect(entry).not.to.have.property("revokedAt");
+      expect(entry.isProvisioned).to.be.false;
+      expect(entry.revokedAt).to.be.a("number");
+      expect(loggedPayload("revoke").result).to.equal("success");
+    });
+
+    it("leaves a grant provisioned when the provider refuses the revoke, and only audits it", async () => {
+      stubBooking(createBooking(), [NUKI_DOOR]);
+      await AccessService.provisionForBooking(TENANT, "booking-1");
+      sandbox
+        .stub(clients.nuki, "deleteAuthorization")
+        .rejects(nukiHttpError(500));
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.include({ isProvisioned: true, revokedAt: null });
+      expect(entry.grant.authorizationId).to.equal("auth-1");
       expect(loggedPayload("revoke")).to.include({
         result: "failure",
-        errorMessage: "Request failed with status code 404",
+        errorMessage: "Request failed with status code 500",
       });
+    });
+
+    it("revokes nothing at a door that holds no grant", async () => {
+      stubBooking(
+        createBooking({
+          accessInfo: [
+            {
+              accessPointId: "door-1",
+              provider: "nuki",
+              externalId: "1001",
+              isProvisioned: false,
+              grant: null,
+            },
+          ],
+        }),
+        [NUKI_DOOR],
+      );
+
+      const [entry] = await AccessService.revokeForBooking(TENANT, "booking-1");
+
+      expect(entry).to.not.have.property("revokedAt");
+      expect(loggedPayload("revoke")).to.equal(undefined);
     });
   });
 });

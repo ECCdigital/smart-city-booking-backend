@@ -22,8 +22,15 @@ class InMemoryAccessProvider extends AccessProvider {
    *   `{ externalId, label?, locked?, doorOpen?, supportedModes? }`
    * @param {boolean} [options.broken=false] Whether every call fails the way
    *   an unreachable provider would
+   * @param {boolean} [options.principalRemovalFails=false] Whether a revoke
+   *   takes the grant back but cannot remove its principal - the case the
+   *   cleanup job exists for
    */
-  constructor({ locks = [], broken = false } = {}) {
+  constructor({
+    locks = [],
+    broken = false,
+    principalRemovalFails = false,
+  } = {}) {
     super();
     this.locks = new Map(
       locks.map((lock) => [
@@ -43,6 +50,9 @@ class InMemoryAccessProvider extends AccessProvider {
     );
     /** @type {Map<string, Object>} authorization id -> grant */
     this.grants = new Map();
+    /** @type {Set<string>} the external principals still held */
+    this.principals = new Set();
+    this.principalRemovalFails = principalRemovalFails;
     /** @type {{ externalId: string, action: string }[]} every action taken */
     this.actions = [];
     this.broken = broken;
@@ -80,22 +90,31 @@ class InMemoryAccessProvider extends AccessProvider {
   async grantAuthorization(accessPoint, bookingContext) {
     this._lock(accessPoint);
     const authorizationId = `grant-${this._nextId++}`;
-    const pin = bookingContext.pin || "123456";
+    const externalPrincipalId = `principal-${this._nextId++}`;
+    const secret = bookingContext.pin || "123456";
     this.grants.set(authorizationId, {
       authorizationId,
+      externalPrincipalId,
       externalId: String(accessPoint.externalId),
       bookingId: bookingContext.bookingId,
-      pin,
+      secret,
     });
-    return { authorizationId, pin };
+    this.principals.add(externalPrincipalId);
+    return { authorizationId, externalPrincipalId, secret };
   }
 
-  async revokeAuthorization(accessPoint, bookingContext) {
+  async revokeAuthorization(accessPoint, grant) {
     this._failIfBroken();
-    const authorizationId = bookingContext.authorizationId || null;
     // Revoking what is already gone is nothing to do, not a failure.
-    this.grants.delete(authorizationId);
-    return { success: true, authorizationId };
+    this.grants.delete(grant?.authorizationId);
+    if (!grant?.externalPrincipalId) {
+      return { principalRemoved: null };
+    }
+    if (this.principalRemovalFails) {
+      return { principalRemoved: false };
+    }
+    this.principals.delete(grant.externalPrincipalId);
+    return { principalRemoved: true };
   }
 
   async listAccessPoints(_tenant) {
