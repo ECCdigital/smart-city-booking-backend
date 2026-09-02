@@ -1,9 +1,9 @@
 const { BaseLocker } = require("./locker");
 const TenantManager = require("../../data-managers/tenant-manager");
+const UserManager = require("../../data-managers/user-manager");
 const { createClient } = require("./clients/locker-client-registry");
-const crypto = require("crypto");
+const IfbsApiClient = require("../access/clients/ifbs-api-client");
 const bunyan = require("bunyan");
-const { getRawUser } = require("../../data-managers/user-manager");
 
 const APP_TYPE = "locker";
 
@@ -104,14 +104,9 @@ class IfbsLocker extends BaseLocker {
 
   /** @private */
   async _fetchNewBox(client, locker, booking, timeBegin, timeEnd) {
-    const user = await getRawUser(booking.assignedUserId);
-    let userID = 1;
-    if (user && user._id) {
-      userID =
-        typeof user._id === "string"
-          ? "01" + user._id
-          : "01" + user._id.toString();
-    }
+    const userID = IfbsApiClient.userId(
+      await UserManager.getRawUser(booking.assignedUserId),
+    );
 
     const dateFrom = IfbsLocker.formatDate(timeBegin);
     const dateTo = IfbsLocker.formatDate(timeEnd);
@@ -162,14 +157,9 @@ class IfbsLocker extends BaseLocker {
     const locker = this.getLocker(booking);
     const client = await this.getClient();
 
-    const user = await getRawUser(booking.assignedUserId);
-    let userID = 1;
-    if (user && user._id) {
-      userID =
-        typeof user._id === "string"
-          ? "01" + user._id
-          : "01" + user._id.toString();
-    }
+    const userID = IfbsApiClient.userId(
+      await UserManager.getRawUser(booking.assignedUserId),
+    );
 
     const dateFrom = IfbsLocker.formatDate(timeBegin);
     const dateTo = IfbsLocker.formatDate(timeEnd);
@@ -209,30 +199,17 @@ class IfbsLocker extends BaseLocker {
   }
 
   /**
-   * "YYYY-MM-DD HH:mm" – das Format, das iFBS erwartet
+   * "YYYY-MM-DD HH:mm", the format iFBS expects.
    */
   static formatDate(timestamp) {
-    const d = new Date(timestamp);
-    const pad = (n) => String(n).padStart(2, "0");
-    return (
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-` +
-      `${pad(d.getDate())} ` +
-      `${pad(d.getHours())}:${pad(d.getMinutes())}`
-    );
+    return IfbsApiClient.formatDate(timestamp);
   }
 
   /**
-   * MD5 laut iFBS-Spec:
-   * md5(nummer + urlEncode(DATEfrom) + urlEncode(DATEto) + secretPhrase)
+   * The checksum `bookIt` takes, as the client computes it.
    */
   static calculateChecksum(nummer, dateFrom, dateTo, secretPhrase) {
-    const encode = (value) =>
-      new URLSearchParams({ v: value }).toString().slice(2);
-
-    const raw =
-      String(nummer) + encode(dateFrom) + encode(dateTo) + secretPhrase;
-
-    return crypto.createHash("md5").update(raw).digest("hex");
+    return IfbsApiClient.checksum(nummer, dateFrom, dateTo, secretPhrase);
   }
 }
 

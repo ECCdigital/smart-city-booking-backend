@@ -320,7 +320,7 @@ class AccessService {
   static async _readStatusAfterClose(provider, accessPoint, bookingContext) {
     try {
       return this._toStatusResponse(
-        await provider.getStatus(accessPoint, bookingContext),
+        await this._readLockStatus(provider, accessPoint, bookingContext),
         "provider_status",
       );
     } catch (err) {
@@ -377,7 +377,11 @@ class AccessService {
       payload = { ...progress, event: lastEvent };
       response = this._toOpenStatusResponse(progress, "last_event");
     } else {
-      const lockStatus = await provider.getStatus(accessPoint, bookingContext);
+      const lockStatus = await this._readLockStatus(
+        provider,
+        accessPoint,
+        bookingContext,
+      );
       payload = lockStatus;
       response = {
         ...this._toStatusResponse(lockStatus, "provider_status"),
@@ -416,7 +420,11 @@ class AccessService {
     );
 
     const provider = getAccessProvider(accessPoint.provider);
-    const lockStatus = await provider.getStatus(accessPoint, bookingContext);
+    const lockStatus = await this._readLockStatus(
+      provider,
+      accessPoint,
+      bookingContext,
+    );
 
     await this._log({
       tenantId: tenant,
@@ -429,6 +437,26 @@ class AccessService {
     });
 
     return this._toStatusResponse(lockStatus, "provider_status");
+  }
+
+  /**
+   * @private
+   * The state of the lock as the provider reports it, or unknown on every
+   * count where the provider declares no `getStatus` - a locker system
+   * that only confirms an open process has nothing to say about a box at
+   * rest, and the service asks nothing an adapter does not declare.
+   *
+   * @param {Object} provider The provider of the access point
+   * @param {Object} accessPoint The access point to read
+   * @param {Object} bookingContext The booking it is read for
+   * @returns {Promise<Object>} A LockStatus
+   */
+  static async _readLockStatus(provider, accessPoint, bookingContext) {
+    if (!provider.constructor.capabilities.includes("getStatus")) {
+      return AccessProvider.unknownLockStatus;
+    }
+
+    return provider.getStatus(accessPoint, bookingContext);
   }
 
   /**
@@ -1626,7 +1654,6 @@ class AccessService {
         timeBegin: booking.timeBegin,
         timeEnd: booking.timeEnd,
         externalBookingId: lockerInfo.processId,
-        lastOpenBoxId: lockerInfo.ifbsMetadata?.lastOpenBoxId,
         accessBuffer: { beforeMs, afterMs },
         accessFrom: booking.timeBegin - beforeMs,
         accessTo: booking.timeEnd + afterMs,

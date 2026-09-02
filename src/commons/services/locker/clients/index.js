@@ -1,20 +1,28 @@
 const { registerClient } = require("./locker-client-registry");
 const { registerTestHandler } = require("./locker-test-registry");
-const IfbsApiClient = require("./ifbs-api-client");
-const ParevaApiClient = require("./pareva-api-client");
+const IfbsApiClient = require("../../access/clients/ifbs-api-client");
+const ParevaApiClient = require("../../access/clients/pareva-api-client");
 
-registerClient("ifbs", IfbsApiClient, (app) => [
-  app.serverUrl,
-  app.apiKey,
-  app.secretPhrase,
-]);
+/**
+ * Registers the locker API clients. Runs on load; tests that replace a
+ * client in the registry call it again to put the real one back.
+ */
+function registerLockerClients() {
+  registerClient("ifbs", IfbsApiClient, (app) => [
+    app.serverUrl,
+    app.apiKey,
+    app.secretPhrase,
+  ]);
 
-registerClient("pareva", ParevaApiClient, (app) => [
-  app.serverUrl,
-  app.lockerId,
-  app.user,
-  app.password,
-]);
+  registerClient("pareva", ParevaApiClient, (app) => [
+    app.serverUrl,
+    app.lockerId,
+    app.user,
+    app.password,
+  ]);
+}
+
+registerLockerClients();
 
 registerTestHandler("ifbs", {
   requiredFields: ["serverUrl", "apiKey"],
@@ -29,3 +37,5 @@ registerTestHandler("pareva", {
     return ParevaApiClient.testConnection(serverUrl, lockerId, user, password);
   },
 });
+
+module.exports = { registerLockerClients };

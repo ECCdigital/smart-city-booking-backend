@@ -1,8 +1,8 @@
 /**
  * The seam `AccessService` talks to a locking system through. Every adapter
- * - NUKI, Salto KS, iFBS - extends this class, declares the methods it can
- * honour in `capabilities`, and answers the result-bearing ones in the
- * closed shapes declared below. The service branches on `capabilities`
+ * - NUKI, Salto KS, iFBS, Pareva - extends this class, declares the methods
+ * it can honour in `capabilities`, and answers the result-bearing ones in
+ * the closed shapes declared below. The service branches on `capabilities`
  * only, never on what an adapter happens to have as a method, and it never
  * sees a raw provider answer: what an adapter cannot say in these shapes it
  * does not say.
@@ -72,6 +72,22 @@
  */
 
 /**
+ * The claim of a booking not yet paid on a compartment of a locker system,
+ * before the grant. A provider that holds compartments itself - iFBS keeps
+ * a box for two minutes and says which one - answers the id to confirm the
+ * hold by, when it lapses and the compartment; one that holds nothing on
+ * its side - Pareva, where the stored booking is the claim - answers an
+ * empty hold, all `null`.
+ *
+ * @typedef {Object} Hold
+ * @property {string|null} holdId The provider's handle of the hold
+ * @property {number|null} expiresAt When the provider drops the hold, epoch
+ *   ms; `null` where it does not lapse
+ * @property {string|null} compartment The compartment held, where the
+ *   provider chose one already
+ */
+
+/**
  * The booking an access point is operated for, as `AccessService` resolves
  * it. Adapters read what they need from it and write nothing back.
  *
@@ -86,6 +102,8 @@
  * @property {string} [externalBookingId] The provider's own id of the
  *   booking, where the provider - iFBS - books on its side
  * @property {string} [pin] A PIN the caller chose for the grant
+ * @property {Hold} [hold] The hold a grant consumes, where the provider
+ *   holds compartments
  */
 
 /**
@@ -120,6 +138,11 @@
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
 
+// Where a locker provider's application is looked for in a tenant: as
+// `access` first, as `locker` second - iFBS and Pareva are configured as
+// locker applications until the locker fold migrates them (ticket 4).
+const LOCKER_APPLICATION_TYPES = Object.freeze(["access", "locker"]);
+
 /** A lock nobody could read: unknown on every count. */
 const UNKNOWN_LOCK_STATUS = Object.freeze({
   open: null,
@@ -145,6 +168,42 @@ class AccessProvider {
    */
   static get unknownLockStatus() {
     return UNKNOWN_LOCK_STATUS;
+  }
+
+  /**
+   * The application types a locker provider's adapter looks under, in
+   * order, for {@link AccessProvider#_findActiveApplication}.
+   *
+   * @returns {string[]}
+   */
+  static get lockerApplicationTypes() {
+    return LOCKER_APPLICATION_TYPES;
+  }
+
+  /**
+   * @protected
+   * The active application of a provider in a tenant, looked up under the
+   * given application types in order.
+   *
+   * @param {Object|null} tenantData The tenant as `TenantManager` answers it
+   * @param {string} providerId The provider's id, e.g. `ifbs`
+   * @param {string[]} types Application types to look under, in order
+   * @returns {Object|null} The raw application, or `null` when the tenant
+   *   has none that is active
+   */
+  _findActiveApplication(tenantData, providerId, types) {
+    const applications = tenantData?.applications || [];
+
+    for (const type of types) {
+      const application = applications.find(
+        (a) => a.type === type && a.id === providerId && a.active,
+      );
+      if (application) {
+        return application;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -250,8 +309,44 @@ class AccessProvider {
   }
 
   /**
+   * Holds a compartment of a locker system for a booking that is not paid
+   * yet - optional capability `hold`, declared by locker providers only.
+   * Doors are never held.
+   *
+   * @param {Object} accessPoint The locker system to hold a compartment of
+   * @param {BookingContext} bookingContext The booking that claims it
+   * @returns {Promise<Hold>} The hold, empty where the provider holds
+   *   nothing on its side
+   * @throws {Error} The provider's own error when there is nothing left to
+   *   hold; the checkout then rolls the booking back
+   */
+  async hold(accessPoint, bookingContext) {
+    throw new Error(`hold() is not supported by ${this.constructor.name}`);
+  }
+
+  /**
+   * Renews a hold that is about to lapse, before the payment starts -
+   * declared together with `hold`. Where the provider holds nothing there
+   * is nothing to renew.
+   *
+   * @param {Object} accessPoint The locker system the hold is at
+   * @param {BookingContext} bookingContext The booking, with the `hold` to
+   *   renew
+   * @returns {Promise<Hold>} The renewed hold; the compartment may change
+   * @throws {Error} The provider's own error when the hold is lost and
+   *   nothing is left to hold
+   */
+  async refreshHold(accessPoint, bookingContext) {
+    throw new Error(
+      `refreshHold() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
    * Grants the booking an authorization at the lock - a keypad code, a
-   * guest with a PIN - for its access window.
+   * guest with a PIN, a compartment of a locker system - for its access
+   * window. A locker provider consumes the `hold` the context brings and
+   * takes a new one where it lapsed.
    *
    * @param {Object} accessPoint The access point to grant access to
    * @param {BookingContext} bookingContext The booking that gets access;
