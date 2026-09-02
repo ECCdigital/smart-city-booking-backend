@@ -18,6 +18,11 @@ const {
   prioritizeBlockingReasons,
 } = require("./access-blocking-reasons");
 
+// What a revoke records when the provider took the grant back but could not
+// remove its external principal; the cleanup job retries those.
+const PRINCIPAL_NOT_REMOVED_ERROR =
+  "The provider could not remove the external principal of the grant";
+
 const logger = bunyan.createLogger({
   name: "access-service.js",
   level: process.env.LOG_LEVEL,
@@ -612,7 +617,7 @@ class AccessService {
         continue;
       }
 
-      if (bookingContext.isProvisioned && bookingContext.authorizationId) {
+      if (bookingContext.isProvisioned && bookingContext.grant) {
         continue;
       }
 
@@ -637,27 +642,29 @@ class AccessService {
       }
 
       try {
-        const result = await provider.grantAuthorization(
+        const grant = await provider.grantAuthorization(
           accessPoint,
           bookingContext,
         );
 
+        // A fresh grant starts the entry over: whatever an earlier grant at
+        // this door left - its revocation, its principal - is history.
         this._upsertAccessInfo(booking, accessPoint, {
-          authorizationId: result.authorizationId,
-          accessId: result.accessId || result.authorizationId || null,
-          saltoUserId: result.saltoUserId || null,
-          pin: result.pin ? SecurityUtils.encrypt(result.pin) : null,
           isProvisioned: true,
           provisionedAt: Date.now(),
-          providerResponse: result.providerResponse || null,
+          revokedAt: null,
+          grant: this._toStoredGrant(grant),
+          principalRemovedAt: null,
+          principalCleanupAttemptedAt: null,
+          principalCleanupError: null,
         });
-        if (result.pin) {
+        if (grant.secret) {
           provisionedAccessPoints.push({
             accessPointId: accessPoint.id,
             label: accessPoint.label || accessPoint.id,
             provider: accessPoint.provider,
             bookableTitle: accessPoint.bookableTitle || "",
-            pin: result.pin,
+            pin: grant.secret,
           });
         }
 
@@ -667,12 +674,7 @@ class AccessService {
           bookingId,
           action: "provision",
           result: "success",
-          payload: {
-            authorizationId: result.authorizationId,
-            accessId: result.accessId || null,
-            saltoUserId: result.saltoUserId || null,
-            providerResponse: result.providerResponse || null,
-          },
+          payload: { grant: this._toAuditedGrant(grant) },
           actor: { source: "system" },
         });
       } catch (err) {
@@ -733,35 +735,31 @@ class AccessService {
         continue;
       }
 
-      if (
-        !bookingContext.authorizationId &&
-        !bookingContext.accessId &&
-        !bookingContext.saltoUserId
-      ) {
+      const grant = bookingContext.grant;
+      if (!grant) {
         continue;
       }
 
       const provider = getAccessProvider(accessPoint.provider);
 
       try {
-        const result = await provider.revokeAuthorization(
+        const revocation = await provider.revokeAuthorization(
           accessPoint,
-          bookingContext,
+          this._toProviderGrant(grant),
         );
+        const now = Date.now();
 
         this._upsertAccessInfo(booking, accessPoint, {
           isProvisioned: false,
-          revokedAt: Date.now(),
-          saltoUserDeletedAt:
-            result.userDeleted === true
-              ? Date.now()
-              : bookingContext.saltoUserDeletedAt || null,
-          saltoUserCleanupError:
-            result.userDeleted === false
-              ? result.providerResponse?.userDeleteError ||
-                "Failed to delete Salto KS user"
+          revokedAt: now,
+          principalRemovedAt:
+            revocation.principalRemoved === true
+              ? now
+              : bookingContext.principalRemovedAt || null,
+          principalCleanupError:
+            revocation.principalRemoved === false
+              ? PRINCIPAL_NOT_REMOVED_ERROR
               : null,
-          providerResponse: result.providerResponse || null,
         });
 
         await this._log({
@@ -770,12 +768,7 @@ class AccessService {
           bookingId: booking.id,
           action: "revoke",
           result: "success",
-          payload: {
-            authorizationId: bookingContext.authorizationId,
-            accessId: bookingContext.accessId || null,
-            saltoUserId: bookingContext.saltoUserId || null,
-            providerResponse: result.providerResponse || null,
-          },
+          payload: { grant: this._toAuditedGrant(grant), revocation },
           actor: { source: "system" },
         });
       } catch (err) {
@@ -987,7 +980,7 @@ class AccessService {
         const isProvisioned =
           point.isProvisioned === true || accessInfo?.isProvisioned === true;
         const hasAuthorizationId = Boolean(
-          point.authorizationId || accessInfo?.authorizationId,
+          point.authorizationId || accessInfo?.grant?.authorizationId,
         );
         if (!isProvisioned || !hasAuthorizationId) {
           anyNeedsAuthUnprovisioned = true;
@@ -2015,14 +2008,11 @@ class AccessService {
                 accessFrom: booking.timeBegin - beforeMs,
                 accessTo: booking.timeEnd + afterMs,
                 booking,
-                accessInfo,
-                authorizationId: accessInfo?.authorizationId || null,
-                accessId: accessInfo?.accessId || null,
-                saltoUserId: accessInfo?.saltoUserId || null,
+                grant: accessInfo?.grant || null,
                 isProvisioned: accessInfo?.isProvisioned || false,
                 provisionedAt: accessInfo?.provisionedAt || null,
                 revokedAt: accessInfo?.revokedAt || null,
-                saltoUserDeletedAt: accessInfo?.saltoUserDeletedAt || null,
+                principalRemovedAt: accessInfo?.principalRemovedAt || null,
                 lastEvent: accessInfo?.lastEvent || null,
               },
             },
@@ -2147,7 +2137,7 @@ class AccessService {
 
     return {
       ...accessPoint,
-      authorizationId: bookingContext.authorizationId || null,
+      authorizationId: bookingContext.grant?.authorizationId || null,
       isProvisioned: bookingContext.isProvisioned || false,
       revokedAt: bookingContext.revokedAt || null,
       accessBuffer: bookingContext.accessBuffer || { beforeMs: 0, afterMs: 0 },
@@ -2178,6 +2168,24 @@ class AccessService {
     return provider.getSupportedModes(accessPoint, tenant);
   }
 
+  /**
+   * Writes the entry of an access point into the booking's `accessInfo`,
+   * merging into the one already there. The schema keeps the entries free
+   * (`[Object]`); this is their shape:
+   *
+   *   accessPointId, accessPointType, provider, externalId, mode
+   *   isProvisioned, provisionedAt, revokedAt
+   *   grant: { authorizationId, externalPrincipalId, secret } | null
+   *     - the Grant as the provider answered it, `secret` encrypted
+   *   principalRemovedAt, principalCleanupAttemptedAt, principalCleanupError
+   *     - what became of the grant's external principal after the revoke;
+   *       the cleanup job works on these
+   *   lastEvent - the last webhook event at this lock
+   *
+   * @param {Object} booking The booking to write into
+   * @param {Object} accessPoint The access point the entry is for
+   * @param {Object} updates The fields to set
+   */
   static _upsertAccessInfo(booking, accessPoint, updates) {
     if (!Array.isArray(booking.accessInfo)) {
       booking.accessInfo = [];
@@ -2202,6 +2210,50 @@ class AccessService {
     } else {
       booking.accessInfo.push(next);
     }
+  }
+
+  /**
+   * The grant as `accessInfo` stores it: the secret encrypted, so that the
+   * booking never carries the PIN in clear.
+   *
+   * @param {import("./providers/access-provider").Grant} grant
+   * @returns {Object}
+   */
+  static _toStoredGrant(grant) {
+    return {
+      authorizationId: grant.authorizationId,
+      externalPrincipalId: grant.externalPrincipalId ?? null,
+      secret: grant.secret ? SecurityUtils.encrypt(grant.secret) : null,
+    };
+  }
+
+  /**
+   * The grant as it goes back to the provider for a revoke: the handle and
+   * the principal, and no secret - a revoke never needs it.
+   *
+   * @param {Object} storedGrant The grant as `accessInfo` holds it
+   * @returns {import("./providers/access-provider").Grant}
+   */
+  static _toProviderGrant(storedGrant) {
+    return {
+      authorizationId: storedGrant.authorizationId,
+      externalPrincipalId: storedGrant.externalPrincipalId ?? null,
+      secret: null,
+    };
+  }
+
+  /**
+   * The grant as the audit log records it: never the secret, encrypted or
+   * not.
+   *
+   * @param {Object} grant A grant, answered or stored
+   * @returns {{ authorizationId: string, externalPrincipalId: string|null }}
+   */
+  static _toAuditedGrant(grant) {
+    return {
+      authorizationId: grant.authorizationId,
+      externalPrincipalId: grant.externalPrincipalId ?? null,
+    };
   }
 
   static async _getDoorAccessPointKey(booking, tenant) {

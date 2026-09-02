@@ -3,7 +3,11 @@ const bunyan = require("bunyan");
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const { createClient } = require("../clients/access-client-registry");
-const { NukiApiClient, NUKI_ACTIONS } = require("../clients/nuki-api-client");
+const {
+  NukiApiClient,
+  NUKI_ACTIONS,
+  NUKI_AUTH_TYPES,
+} = require("../clients/nuki-api-client");
 const {
   deriveSupportedModes,
 } = require("../../../entities/access/access-point");
@@ -15,12 +19,39 @@ require("../clients");
 const APP_TYPE = "access";
 const PROVIDER_ID = "nuki";
 
+// Nuki creates an authorization asynchronously: the create answers 204 and
+// the authorization turns up in the listing a moment later. This is how
+// long a grant waits for it.
+const AUTHORIZATION_LOOKUP = Object.freeze({ attempts: 5, delayMs: 1000 });
+
+// The Web API caps an authorization name at 32 characters.
+const AUTHORIZATION_NAME_MAX_LENGTH = 32;
+
+// Keypad codes are six digits from 1 to 9 - no zero - and may not start
+// with 12.
+const KEYPAD_DIGITS = "123456789";
+
 const logger = bunyan.createLogger({
   name: "nuki-access-provider.js",
   level: process.env.LOG_LEVEL,
 });
 
 class NukiAccessProvider extends AccessProvider {
+  /**
+   * @param {Object} [options]
+   * @param {Object} [options.client] As of {@link AccessProvider}
+   * @param {Object} [options.authorizationLookup] How often and how patiently
+   *   a grant asks the listing for the authorization Nuki creates
+   *   asynchronously; tests shorten the wait
+   */
+  constructor({ client = null, authorizationLookup = {} } = {}) {
+    super({ client });
+    this._authorizationLookup = {
+      ...AUTHORIZATION_LOOKUP,
+      ...authorizationLookup,
+    };
+  }
+
   /**
    * @private
    * @param {string} tenant Tenant the client acts for
@@ -180,60 +211,112 @@ class NukiAccessProvider extends AccessProvider {
     return { open: state.open, locked: state.locked, doorOpen: state.doorOpen };
   }
 
+  /**
+   * Creates a keypad code at the smartlock for the access window of the
+   * booking. Nuki creates the authorization asynchronously and answers the
+   * create with nothing, so the id of the grant is read from the listing
+   * afterwards: the newest keypad authorization with this grant's name and
+   * code. A NUKI grant has no external principal - the code is all there
+   * is.
+   *
+   * @param {Object} accessPoint The access point to grant access to
+   * @param {Object} bookingContext The booking that gets access
+   * @returns {Promise<import("./access-provider").Grant>}
+   * @throws {Error} Nuki's own error, or one of our own when the created
+   *   authorization never turns up in the listing
+   */
   async grantAuthorization(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
-    const pin = bookingContext.pin || this._generatePin();
-    const authorization = {
-      name: this._buildAuthorizationName(accessPoint, bookingContext),
-      type: "keypad",
+    const secret = bookingContext.pin || this._generatePin();
+    const name = this._buildAuthorizationName(accessPoint, bookingContext);
+
+    await client.createAuthorization(accessPoint.externalId, {
+      name,
+      type: NUKI_AUTH_TYPES.KEYPAD,
       allowedFromDate: this._formatDate(
         bookingContext.accessFrom ?? bookingContext.timeBegin,
       ),
       allowedUntilDate: this._formatDate(
         bookingContext.accessTo ?? bookingContext.timeEnd,
       ),
-      code: pin,
-    };
+      code: Number(secret),
+    });
 
-    const providerResponse = await client.createAuthorization(
-      accessPoint.externalId,
-      authorization,
+    const authorizationId = await this._findCreatedAuthorization(
+      client,
+      accessPoint,
+      name,
+      secret,
     );
 
-    return {
-      authorizationId:
-        providerResponse?.id ||
-        providerResponse?.authId ||
-        providerResponse?.authorizationId ||
-        null,
-      pin,
-      providerResponse,
-    };
+    return { authorizationId, externalPrincipalId: null, secret };
   }
 
-  async revokeAuthorization(accessPoint, bookingContext) {
-    const authorizationId =
-      bookingContext.authorizationId || accessPoint.authorizationId;
+  /**
+   * @private
+   * The id of the authorization just created, once Nuki lists it.
+   *
+   * @returns {Promise<string>}
+   * @throws {Error} When the listing still misses it after the last attempt
+   */
+  async _findCreatedAuthorization(client, accessPoint, name, secret) {
+    const { attempts, delayMs } = this._authorizationLookup;
 
-    if (!authorizationId) {
-      return {
-        success: true,
-        skipped: true,
-        reason: "missing authorizationId",
-      };
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const listed = await client.getAuthorizations(accessPoint.externalId);
+      const created = (Array.isArray(listed) ? listed : [])
+        .filter(
+          (authorization) =>
+            authorization.name === name &&
+            String(authorization.code) === String(secret),
+        )
+        .sort((a, b) =>
+          String(a.creationDate || "").localeCompare(
+            String(b.creationDate || ""),
+          ),
+        )
+        .pop();
+
+      if (created?.id != null) {
+        return String(created.id);
+      }
+
+      if (attempt < attempts && delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
 
-    const client = await this._getClient(bookingContext.tenant);
-    const providerResponse = await client.deleteAuthorization(
-      accessPoint.externalId,
-      authorizationId,
+    throw new Error(
+      `Nuki did not list the keypad authorization '${name}' it was asked to create on smartlock '${accessPoint.externalId}'`,
     );
+  }
 
-    return {
-      success: true,
-      authorizationId,
-      providerResponse,
-    };
+  /**
+   * Deletes the keypad code. An authorization Nuki no longer has is
+   * nothing to do; there is no principal to remove.
+   *
+   * @param {Object} accessPoint The access point the grant was made for
+   * @param {import("./access-provider").Grant} grant The grant to revoke
+   * @returns {Promise<import("./access-provider").Revocation>}
+   */
+  async revokeAuthorization(accessPoint, grant) {
+    const authorizationId = grant?.authorizationId;
+
+    if (!authorizationId) {
+      return { principalRemoved: null };
+    }
+
+    const client = await this._getClient(accessPoint.tenantId);
+
+    try {
+      await client.deleteAuthorization(accessPoint.externalId, authorizationId);
+    } catch (err) {
+      if (err?.response?.status !== 404) {
+        throw err;
+      }
+    }
+
+    return { principalRemoved: null };
   }
 
   async listAccessPoints(tenant) {
@@ -340,7 +423,9 @@ class NukiAccessProvider extends AccessProvider {
 
   _buildAuthorizationName(accessPoint, bookingContext) {
     const label = accessPoint.label ? ` ${accessPoint.label}` : "";
-    return `Booking ${bookingContext.bookingId}${label}`.trim();
+    return `Booking ${bookingContext.bookingId}${label}`
+      .trim()
+      .slice(0, AUTHORIZATION_NAME_MAX_LENGTH);
   }
 
   _formatDate(value) {
@@ -360,7 +445,14 @@ class NukiAccessProvider extends AccessProvider {
   }
 
   _generatePin() {
-    return String(crypto.randomInt(100000, 1000000));
+    let pin;
+    do {
+      pin = Array.from(
+        { length: 6 },
+        () => KEYPAD_DIGITS[crypto.randomInt(KEYPAD_DIGITS.length)],
+      ).join("");
+    } while (pin.startsWith("12"));
+    return pin;
   }
 
   _safeEqual(a, b) {

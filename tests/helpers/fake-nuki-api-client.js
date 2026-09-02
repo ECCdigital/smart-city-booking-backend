@@ -39,8 +39,12 @@ class FakeNukiApiClient extends NukiApiClient {
    * @param {Object} [options]
    * @param {Object[]} [options.smartlocks] Smartlocks of the account, in the
    *   shape `GET /smartlock` lists them (`smartlockId`, `type`, `state`, ...)
+   * @param {number} [options.authorizationListingsUntilVisible=0] How many
+   *   listings of a smartlock's authorizations still miss a freshly created
+   *   one: Nuki creates authorizations asynchronously and answers the
+   *   create with a 204 before the authorization is listed
    */
-  constructor({ smartlocks = [] } = {}) {
+  constructor({ smartlocks = [], authorizationListingsUntilVisible = 0 } = {}) {
     super("fake-token", "https://nuki.fake");
     this.smartlocks = new Map(
       smartlocks.map((smartlock) => [String(smartlock.smartlockId), smartlock]),
@@ -49,7 +53,11 @@ class FakeNukiApiClient extends NukiApiClient {
     this.authorizations = new Map();
     /** @type {{ smartlockId: string, action: number }[]} every action sent */
     this.actions = [];
+    /** @type {Object[]} every authorization creation as it was requested */
+    this.authorizationRequests = [];
     this.callbacks = new Map();
+    this.authorizationListingsUntilVisible = authorizationListingsUntilVisible;
+    this._authorizationListings = 0;
     this._nextId = 1;
   }
 
@@ -84,10 +92,35 @@ class FakeNukiApiClient extends NukiApiClient {
       method === "put"
     ) {
       this._smartlock(match[1]);
+      this.authorizationRequests.push({ smartlockId: match[1], ...data });
       const id = `auth-${this._nextId++}`;
-      const authorization = { id, smartlockId: Number(match[1]), ...data };
-      this.authorizations.set(id, authorization);
-      return authorization;
+      this.authorizations.set(id, {
+        id,
+        smartlockId: Number(match[1]),
+        authId: this._nextId,
+        enabled: true,
+        creationDate: new Date().toISOString(),
+        ...data,
+        visibleFromListing:
+          this._authorizationListings + this.authorizationListingsUntilVisible,
+      });
+      // Nuki creates the authorization asynchronously and answers 204.
+      return "";
+    }
+
+    if (
+      (match = path.match(/^\/smartlock\/([^/]+)\/auth$/)) &&
+      method === "get"
+    ) {
+      this._smartlock(match[1]);
+      this._authorizationListings += 1;
+      return [...this.authorizations.values()]
+        .filter(
+          (authorization) =>
+            String(authorization.smartlockId) === match[1] &&
+            authorization.visibleFromListing < this._authorizationListings,
+        )
+        .map(({ visibleFromListing, ...authorization }) => authorization);
     }
 
     if (

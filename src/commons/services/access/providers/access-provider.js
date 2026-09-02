@@ -49,6 +49,29 @@
  */
 
 /**
+ * The authorization a provider made for a booking at an access point: the
+ * handle to take it back by, the principal the provider keeps for it where
+ * it keeps one - a Salto guest - and the secret the person at the door
+ * types. The secret is one-way: it exists in clear only in this answer, the
+ * service encrypts it before storing and mails it once. Provider names
+ * never appear in it.
+ *
+ * @typedef {Object} Grant
+ * @property {string} authorizationId
+ * @property {string|null} externalPrincipalId
+ * @property {string|null} secret
+ */
+
+/**
+ * What taking a grant back did to its external principal: removed, not
+ * removed - the grant itself is gone, the principal is left for the cleanup
+ * job to retry - or `null` when there was no principal to remove.
+ *
+ * @typedef {Object} Revocation
+ * @property {true|false|null} principalRemoved
+ */
+
+/**
  * The booking an access point is operated for, as `AccessService` resolves
  * it. Adapters read what they need from it and write nothing back.
  *
@@ -63,7 +86,6 @@
  * @property {string} [externalBookingId] The provider's own id of the
  *   booking, where the provider - iFBS - books on its side
  * @property {string} [pin] A PIN the caller chose for the grant
- * @property {string|null} [authorizationId] The grant to revoke
  */
 
 /**
@@ -233,9 +255,8 @@ class AccessProvider {
    *
    * @param {Object} accessPoint The access point to grant access to
    * @param {BookingContext} bookingContext The booking that gets access;
-   *   `pin` is used when it brings one
-   * @returns {Promise<Object>} The grant, with at least `authorizationId`
-   *   and the `pin` the person at the door types
+   *   `pin` is used as the secret when it brings one
+   * @returns {Promise<Grant>} The grant, with the secret in clear
    * @throws {Error} The provider's own error; the service rethrows it and
    *   the provisioning job tries again
    */
@@ -246,17 +267,20 @@ class AccessProvider {
   }
 
   /**
-   * Takes the authorization back. A grant the provider no longer has is
-   * nothing to do, not a failure.
+   * Takes the grant back. Revoking is idempotent: a grant or principal the
+   * provider no longer has is nothing to do, not a failure, so a revoke
+   * that failed halfway can be repeated and only does what is left.
    *
-   * @param {Object} accessPoint The access point the grant was made for
-   * @param {BookingContext} bookingContext The booking, with the
-   *   `authorizationId` to revoke
-   * @returns {Promise<Object>} The revocation
-   * @throws {Error} The provider's own error when the revoke did not go
-   *   through
+   * @param {Object} accessPoint The access point the grant was made for;
+   *   carries `tenantId`, which is how the provider finds the tenant here
+   * @param {Grant} grant The grant as it was answered; its `secret` is not
+   *   needed and the service hands it back as `null`
+   * @returns {Promise<Revocation>} Whether the external principal is gone
+   * @throws {Error} The provider's own error when the grant itself could
+   *   not be taken back; a principal that could not be removed is answered
+   *   with `principalRemoved: false`, not thrown
    */
-  async revokeAuthorization(accessPoint, bookingContext) {
+  async revokeAuthorization(accessPoint, grant) {
     throw new Error(
       `revokeAuthorization() is not supported by ${this.constructor.name}`,
     );

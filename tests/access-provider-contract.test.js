@@ -3,11 +3,6 @@
  * `AccessService` talks through. One suite, run against every adapter -
  * NUKI, Salto KS and iFBS over fake API clients, plus the in-memory provider
  * that tests use as the fourth implementation.
- *
- * Cases the Provider-Outcomes spec promises but which only hold after the
- * seam is typed are `it.skip` with the ticket that makes them true:
- * (3) Grant and Revocation. The spec lives with the effort's map, not in
- * the repo.
  */
 
 const assert = require("assert");
@@ -74,18 +69,13 @@ function parameterNames(fn) {
     .filter(Boolean);
 }
 
-/*
- * Each implementation carries `today`: the facts about its dialect that the
- * active cases pin as they are now, and that the typed seam changes. They
- * choose between `it` and `it.skip` per implementation until then.
- *   revokeIdempotent  a second revoke of the same grant does not throw
- */
 const IMPLEMENTATIONS = [
   {
     name: "nuki",
     Provider: NukiAccessProvider,
     accessPoint: {
       id: "door-1",
+      tenantId: TENANT,
       type: "door",
       provider: "nuki",
       externalId: "1001",
@@ -104,15 +94,13 @@ const IMPLEMENTATIONS = [
     createBroken() {
       return new NukiAccessProvider({ client: brokenNukiApiClient() });
     },
-    today: {
-      revokeIdempotent: false,
-    },
   },
   {
     name: "salto-ks",
     Provider: SaltoKsAccessProvider,
     accessPoint: {
       id: "door-2",
+      tenantId: TENANT,
       type: "door",
       provider: "salto-ks",
       externalId: SALTO_LOCK_ID,
@@ -134,15 +122,13 @@ const IMPLEMENTATIONS = [
     createBroken() {
       return new SaltoKsAccessProvider({ client: brokenSaltoKsApiClient() });
     },
-    today: {
-      revokeIdempotent: false,
-    },
   },
   {
     name: "ifbs",
     Provider: IfbsAccessProvider,
     accessPoint: {
       id: "7",
+      tenantId: TENANT,
       type: "locker",
       provider: "ifbs",
       mode: AccessPointMode.REMOTE,
@@ -159,15 +145,13 @@ const IMPLEMENTATIONS = [
     createBroken() {
       return new IfbsAccessProvider({ client: brokenIfbsApiClient() });
     },
-    today: {
-      revokeIdempotent: false,
-    },
   },
   {
     name: IN_MEMORY_PROVIDER_ID,
     Provider: InMemoryAccessProvider,
     accessPoint: {
       id: "door-3",
+      tenantId: TENANT,
       type: "door",
       provider: IN_MEMORY_PROVIDER_ID,
       externalId: "lock-1",
@@ -188,15 +172,12 @@ const IMPLEMENTATIONS = [
     createBroken() {
       return new InMemoryAccessProvider({ broken: true });
     },
-    today: {
-      revokeIdempotent: true,
-    },
   },
 ];
 
 for (const implementation of IMPLEMENTATIONS) {
   describe(`access provider contract: ${implementation.name}`, function () {
-    const { Provider, accessPoint, bookingContext, today } = implementation;
+    const { Provider, accessPoint, bookingContext } = implementation;
     const capabilities = Provider.capabilities;
     const declares = (capability) => capabilities.includes(capability);
     const when = (capability) => (declares(capability) ? it : it.skip);
@@ -367,88 +348,79 @@ for (const implementation of IMPLEMENTATIONS) {
     });
 
     when("grantAuthorization")(
-      "grants an authorization with an id and a one-time PIN",
+      "answers a grant as a Grant: an id, an external principal or none, and a one-time secret",
       async function () {
         const grant = await provider.grantAuthorization(
           accessPoint,
           bookingContext,
         );
 
-        assert.ok(grant.authorizationId);
-        assert.match(String(grant.pin), /^\d{6}$/);
+        assert.deepStrictEqual(Object.keys(grant).sort(), [
+          "authorizationId",
+          "externalPrincipalId",
+          "secret",
+        ]);
+        assert.strictEqual(typeof grant.authorizationId, "string");
+        assert.ok(
+          grant.externalPrincipalId === null ||
+            typeof grant.externalPrincipalId === "string",
+        );
+        assert.match(String(grant.secret), /^\d{6}$/);
         assert.strictEqual(grantsHeld() > 0, true);
       },
     );
 
     when("grantAuthorization")(
-      "uses the PIN the booking context brings instead of generating one",
+      "uses the PIN the booking context brings as the secret instead of generating one",
       async function () {
         const grant = await provider.grantAuthorization(accessPoint, {
           ...bookingContext,
           pin: "424242",
         });
 
-        assert.strictEqual(grant.pin, "424242");
+        assert.strictEqual(grant.secret, "424242");
       },
     );
 
-    it.skip("answers a grant as a Grant (3)", async function () {
-      const grant = await provider.grantAuthorization(
-        accessPoint,
-        bookingContext,
-      );
-
-      assert.deepStrictEqual(Object.keys(grant).sort(), [
-        "authorizationId",
-        "externalPrincipalId",
-        "secret",
-      ]);
-      assert.strictEqual(typeof grant.authorizationId, "string");
-    });
-
     when("revokeAuthorization")(
-      "revokes the authorization it granted",
+      "revokes the grant it made and answers a Revocation",
       async function () {
         const grant = await provider.grantAuthorization(
           accessPoint,
           bookingContext,
         );
 
-        const revocation = await provider.revokeAuthorization(accessPoint, {
-          ...bookingContext,
-          ...grant,
-        });
+        const revocation = await provider.revokeAuthorization(
+          accessPoint,
+          grant,
+        );
 
-        assert.strictEqual(typeof revocation, "object");
+        assert.deepStrictEqual(Object.keys(revocation), ["principalRemoved"]);
+        // A grant without an external principal has none to remove.
+        assert.strictEqual(
+          revocation.principalRemoved,
+          grant.externalPrincipalId === null ? null : true,
+        );
         assert.strictEqual(grantsHeld(), 0);
       },
     );
 
-    (declares("revokeAuthorization") && today.revokeIdempotent ? it : it.skip)(
-      "tolerates revoking the same authorization twice (3)",
+    when("revokeAuthorization")(
+      "tolerates revoking the same grant twice",
       async function () {
         const grant = await provider.grantAuthorization(
           accessPoint,
           bookingContext,
         );
-        const context = { ...bookingContext, ...grant };
 
-        await provider.revokeAuthorization(accessPoint, context);
-        await provider.revokeAuthorization(accessPoint, context);
+        await provider.revokeAuthorization(accessPoint, grant);
+        const again = await provider.revokeAuthorization(accessPoint, grant);
+
+        assert.deepStrictEqual(Object.keys(again), ["principalRemoved"]);
+        assert.ok([true, false, null].includes(again.principalRemoved));
+        assert.strictEqual(grantsHeld(), 0);
       },
     );
-
-    it.skip("answers a revocation as a Revocation (3)", async function () {
-      const grant = await provider.grantAuthorization(
-        accessPoint,
-        bookingContext,
-      );
-
-      const revocation = await provider.revokeAuthorization(accessPoint, grant);
-
-      assert.deepStrictEqual(Object.keys(revocation), ["principalRemoved"]);
-      assert.ok([true, false, null].includes(revocation.principalRemoved));
-    });
 
     when("open")(
       "fails an open on a broken client with an AccessOpenError, never a raw error",

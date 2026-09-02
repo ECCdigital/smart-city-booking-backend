@@ -9,6 +9,13 @@ const NUKI_ACTIONS = Object.freeze({
   LOCK_N_GO: 4,
 });
 
+// `type` of a smartlock authorization as the Web API numbers it.
+const NUKI_AUTH_TYPES = Object.freeze({
+  APP: 0,
+  FOB: 2,
+  KEYPAD: 13,
+});
+
 const NUKI_DEVICE_TYPES = Object.freeze({
   SMART_LOCK_1_2: 0,
   BOX: 1,
@@ -141,12 +148,22 @@ class NukiApiClient extends BaseAccessApiClient {
     return this.getSmartlockState(smartlockId);
   }
 
+  /**
+   * Asks Nuki to create an authorization. Nuki does so asynchronously and
+   * answers 204 without a body, so the created authorization - and its id -
+   * is only to be had from {@link NukiApiClient#getAuthorizations}
+   * afterwards.
+   */
   async createAuthorization(smartlockId, authorization) {
     return this._request(
       "put",
       `/smartlock/${smartlockId}/auth`,
       authorization,
     );
+  }
+
+  async getAuthorizations(smartlockId) {
+    return this._request("get", `/smartlock/${smartlockId}/auth`);
   }
 
   async deleteAuthorization(smartlockId, authorizationId) {
@@ -238,6 +255,7 @@ class NukiApiClient extends BaseAccessApiClient {
       "getSmartlockState",
       "getStatus",
       "createAuthorization",
+      "getAuthorizations",
       "deleteAuthorization",
       "registerNotification",
       "unregisterNotification",
@@ -295,4 +313,5 @@ module.exports = {
   NUKI_DOOR_STATES,
   NUKI_OPEN_LOCK_STATES,
   DEFAULT_NUKI_API_BASE_URL,
+  NUKI_AUTH_TYPES,
 };
