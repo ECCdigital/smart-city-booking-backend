@@ -7,6 +7,9 @@ const PaymentUtils = require("../src/commons/utilities/payment-utils");
 const {
   resolveCheckoutItems,
 } = require("../src/commons/utilities/checkout-utils");
+const {
+  BundleCheckoutService,
+} = require("../src/commons/services/checkout/bundle-checkout-service");
 
 const TENANT_ID = "tenant-1";
 const CUSTOMER_ID = "kunde@example.com";
@@ -253,5 +256,24 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
         .sort((a, b) => a.bookableId.localeCompare(b.bookableId));
 
     assert.deepStrictEqual(byId(stored.bookableItems), byId(validatedItems));
+
+    // The validate-group path prices the resolved items through
+    // validateAndGetPrices; its totals must equal what checkout stored.
+    const validateService = new BundleCheckoutService({
+      user: CUSTOMER_ID,
+      tenant: TENANT_ID,
+      timeBegin: TIME_BEGIN,
+      timeEnd: TIME_END,
+      bookableItems: validatedItems.map((item) => ({ ...item })),
+      couponCode: null,
+      bookWithoutDiscount: false,
+    });
+    const prices = await validateService.validateAndGetPrices();
+
+    assert.strictEqual(prices.userGrossPriceEur, stored.priceEur);
+    assert.strictEqual(
+      prices.userPriceEur,
+      stored.priceEur - stored.vatIncludedEur,
+    );
   });
 });

@@ -14,36 +14,38 @@ const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
 class BundleCheckoutService {
   /**
    * Create a bundle checkout service.
-   * @param {Object} user - The user Object.
-   * @param {string} tenant - The tenant ID.
-   * @param {Date} timeBegin - The start time.
-   * @param {Date} timeEnd - The end time,
-   * @param {Date} timeCreated - The creation time.
-   * @param {Date} timePaid - The payment time.
-   * @param {Array} bookableItems - The items to be booked.
-   * @param {string} couponCode - The coupon code.
-   * @param {string} name - The name of the user.
-   * @param {string} company - The company of the user.
-   * @param {string} street - The street of the user.
-   * @param {string} zipCode - The zip code of the user.
-   * @param {string} location - The location of the user.
-   * @param {string} email - The email of the user.
-   * @param {string} phone - The phone number of the user.
-   * @param {string} comment - The comment of the user.
-   * @param {Array} attachmentStatus - The attachments of the user.
-   * @param {string} paymentProvider - The payment method.
-   * @param {Array} attachments - The attachments.
-   * @param {boolean} bookWithoutDiscount - Request wish to ignore booking
+   * @param {Object} options - The checkout data (first argument).
+   * @param {Object} options.user - The user Object.
+   * @param {string} options.tenant - The tenant ID.
+   * @param {Date} options.timeBegin - The start time.
+   * @param {Date} options.timeEnd - The end time,
+   * @param {Date} options.timeCreated - The creation time.
+   * @param {Date} options.timePaid - The payment time.
+   * @param {Array} options.bookableItems - The items to be booked.
+   * @param {string} options.couponCode - The coupon code.
+   * @param {string} options.name - The name of the user.
+   * @param {string} options.company - The company of the user.
+   * @param {string} options.street - The street of the user.
+   * @param {string} options.zipCode - The zip code of the user.
+   * @param {string} options.location - The location of the user.
+   * @param {string} options.email - The email of the user.
+   * @param {string} options.phone - The phone number of the user.
+   * @param {string} options.comment - The comment of the user.
+   * @param {Array} options.attachmentStatus - The attachments of the user.
+   * @param {string} options.paymentProvider - The payment method.
+   * @param {Array} options.attachments - The attachments.
+   * @param {boolean} options.bookWithoutDiscount - Request wish to ignore booking
    *   discounts. Only honored under SELF_SERVICE; ADMIN_MANUAL always
    *   suppresses discounts.
-   * @param {string} checkoutId - The checkout ID.
-   * @param {Array} customFieldValues - Checkout custom field values.
-   * @param {string|null} amendedBookingId - The booking being amended, if any.
+   * @param {string} options.checkoutId - The checkout ID.
+   * @param {Array} options.customFieldValues - Checkout custom field values.
+   * @param {string|null} options.amendedBookingId - The booking being amended, if any.
    *   Server-derived; excluded from capacity checks so an update never
    *   collides with itself.
-   * @param {string} [policy] - The checkout policy (see checkout-policy.js).
-   * @param {Object} [adminOverrides] - ADMIN_MANUAL only: admin-authoritative
-   *   values. Passing this under SELF_SERVICE is an error.
+   * @param {string} [policy] - Second argument: the checkout policy (see
+   *   checkout-policy.js). Defaults to SELF_SERVICE.
+   * @param {Object} [adminOverrides] - Third argument, ADMIN_MANUAL only:
+   *   admin-authoritative values. Passing this under SELF_SERVICE is an error.
    * @param {string} [adminOverrides.internalComments]
    * @param {string} [adminOverrides.rejectionReason]
    * @param {boolean} [adminOverrides.isCommitted]
@@ -97,7 +99,15 @@ class BundleCheckoutService {
     this.timeEnd = timeEnd;
     this.timeCreated = timeCreated || Date.now();
     this.timePaid = timePaid;
-    this.bookableItems = bookableItems;
+    // Outside ADMIN_MANUAL a manual price must never reach the stored booking
+    // (a later admin update would honor it). Work on copies: the caller's
+    // items are left untouched.
+    this.bookableItems = checkoutPolicy.acceptsManualPrice(this.policy)
+      ? bookableItems
+      : (bookableItems || []).map((item) => {
+          const { manualPriceEur: _manualPriceEur, ...rest } = item;
+          return rest;
+        });
     this.couponCode = couponCode;
     this.name = name;
     this.company = company;
@@ -119,13 +129,6 @@ class BundleCheckoutService {
       ? customFieldValues
       : [];
     this.amendedBookingId = amendedBookingId || null;
-    if (!checkoutPolicy.acceptsManualPrice(this.policy)) {
-      // Never let a client-supplied manual price reach the stored booking —
-      // a later admin update would honor it.
-      for (const item of this.bookableItems || []) {
-        delete item.manualPriceEur;
-      }
-    }
     // One cache shared by all items of the bundle, so external providers are
     // asked once per checkout instead of once per item.
     this.externalCache = new Map();
