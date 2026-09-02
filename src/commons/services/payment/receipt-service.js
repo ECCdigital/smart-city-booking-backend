@@ -11,7 +11,7 @@ const {
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
-  name: "booking-controller.js",
+  name: "receipt-service.js",
   level: process.env.LOG_LEVEL,
 });
 

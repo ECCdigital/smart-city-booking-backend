@@ -1894,7 +1894,6 @@ class BookingService {
     if (!booking) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
-    console.log(booking);
     return booking;
   }
 

@@ -64,7 +64,7 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
   });
 
   function stubManagers(bookablesById) {
-    sinon.stub(BookingManager, "getBooking").resolves({ id: null });
+    sinon.stub(BookingManager, "getBooking").resolves(null);
     const storeBooking = sinon
       .stub(BookingManager, "storeBooking")
       .callsFake(async (value) => value);

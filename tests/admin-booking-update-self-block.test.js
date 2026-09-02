@@ -397,7 +397,7 @@ describe("BookingService.createBooking — admin create never hard-fails checks"
       preparationLeadTimeMinutes: 120,
     });
 
-    sinon.stub(BookingManager, "getBooking").resolves({ id: null });
+    sinon.stub(BookingManager, "getBooking").resolves(null);
     sinon
       .stub(BookingManager, "storeBooking")
       .callsFake(async (value) => value);

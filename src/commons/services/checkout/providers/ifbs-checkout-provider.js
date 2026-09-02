@@ -1,5 +1,6 @@
 const BaseCheckoutProvider = require("./base-checkout-provider");
 const bunyan = require("bunyan");
+const { CHECKOUT_REASONS } = require("../checkout-reasons");
 
 const logger = bunyan.createLogger({
   name: "ifbs-checkout-provider.js",
@@ -213,6 +214,7 @@ class IfbsCheckoutProvider extends BaseCheckoutProvider {
         const minHours = Math.round((minMinutes / 60) * 100) / 100;
         return {
           available: false,
+          reason: CHECKOUT_REASONS.DURATION_TOO_SHORT,
           message: `Die Mindestbuchungsdauer beträgt ${minMinutes >= 60 ? `${minHours} Stunden` : `${minMinutes} Minuten`}.`,
           minDurationMinutes: minMinutes,
           externalSource: "ifbs",
