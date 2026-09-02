@@ -28,6 +28,7 @@ const accessLogSchemaDefinition = {
       "open",
       "unlatch",
       "close",
+      "hold",
       "provision",
       "revoke",
       "status",

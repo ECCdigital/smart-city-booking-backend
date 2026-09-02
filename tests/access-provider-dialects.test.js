@@ -149,7 +149,11 @@ const IFBS_LOCKER = {
   provider: "ifbs",
   externalId: IFBS_LOCATION_ID,
   mode: AccessPointMode.REMOTE,
+  validationRules: [],
 };
+
+/** The booked box of `lockerBooking`, by the id a client operates it under. */
+const IFBS_COMPARTMENT = `${IFBS_LOCKER.id}:${IFBS_BOOKING_ID}`;
 
 const PAREVA_LOCKER = {
   id: "size-s",
@@ -903,6 +907,7 @@ describe("access provider dialects: the adapters as they answer", () => {
         authorizationId: "100",
         externalPrincipalId: null,
         secret: null,
+        compartment: IFBS_BOX_NUMBER,
       });
       expect(clients.ifbs.bookings.get("100").state).to.equal("booked");
     });
@@ -1357,11 +1362,31 @@ describe("access provider dialects: what AccessService makes of them", () => {
     sandbox.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
   }
 
-  function lockerBooking(ifbsMetadata = { nummer: 7 }) {
+  /**
+   * A booking with one box booked at the iFBS location: the compartment's
+   * entry at the location's row, granted under the iFBS booking id.
+   */
+  function lockerBooking() {
     return createBooking({
-      bookableItems: [],
-      lockerInfo: [
-        { lockerSystem: "ifbs", processId: IFBS_BOOKING_ID, ifbsMetadata },
+      accessInfo: [
+        {
+          accessPointId: IFBS_LOCKER.id,
+          accessPointType: "locker",
+          provider: "ifbs",
+          externalId: IFBS_LOCATION_ID,
+          mode: AccessPointMode.REMOTE,
+          bookableId: "room",
+          hold: null,
+          compartment: IFBS_BOX_NUMBER,
+          externalBookingId: IFBS_BOOKING_ID,
+          isProvisioned: true,
+          revokedAt: null,
+          grant: {
+            authorizationId: IFBS_BOOKING_ID,
+            externalPrincipalId: null,
+            secret: null,
+          },
+        },
       ],
     });
   }
@@ -1395,12 +1420,12 @@ describe("access provider dialects: what AccessService makes of them", () => {
     });
 
     it("answers an iFBS open with the open-box process to poll and audits the outcome", async () => {
-      stubBooking(lockerBooking());
+      stubBooking(lockerBooking(), [IFBS_LOCKER]);
 
       const outcome = await AccessService.open(
         TENANT,
         "booking-1",
-        "7",
+        IFBS_COMPARTMENT,
         "user-1",
       );
 
@@ -1563,9 +1588,13 @@ describe("access provider dialects: what AccessService makes of them", () => {
     it("answers unknown for an iFBS locker without asking, since its provider declares no getStatus", async () => {
       clients.ifbs = brokenIfbsApiClient();
       registerFakeProviders();
-      stubBooking(lockerBooking());
+      stubBooking(lockerBooking(), [IFBS_LOCKER]);
 
-      const status = await AccessService.getStatus(TENANT, "booking-1", "7");
+      const status = await AccessService.getStatus(
+        TENANT,
+        "booking-1",
+        IFBS_COMPARTMENT,
+      );
 
       expect(status).to.deep.equal({
         open: null,
@@ -1600,13 +1629,13 @@ describe("access provider dialects: what AccessService makes of them", () => {
 
   describe("getOpenStatus", () => {
     it("polls the iFBS open process where the provider declares getOpenProgress", async () => {
-      stubBooking(lockerBooking());
+      stubBooking(lockerBooking(), [IFBS_LOCKER]);
       await clients.ifbs.openBox("booking-17");
 
       const status = await AccessService.getOpenStatus(
         TENANT,
         "booking-1",
-        "7",
+        IFBS_COMPARTMENT,
         "1",
       );
 
@@ -1622,12 +1651,12 @@ describe("access provider dialects: what AccessService makes of them", () => {
     });
 
     it("reports a failed iFBS poll as unknown, with the error", async () => {
-      stubBooking(lockerBooking());
+      stubBooking(lockerBooking(), [IFBS_LOCKER]);
 
       const status = await AccessService.getOpenStatus(
         TENANT,
         "booking-1",
-        "7",
+        IFBS_COMPARTMENT,
         "99",
       );
 
@@ -1725,13 +1754,13 @@ describe("access provider dialects: what AccessService makes of them", () => {
   describe("the projection of an open's progress onto the status endpoint", () => {
     it("reports an iFBS open the box has not confirmed yet as not open, unknown whether locked", async () => {
       clients.ifbs.confirmsOnWait = false;
-      stubBooking(lockerBooking());
+      stubBooking(lockerBooking(), [IFBS_LOCKER]);
       await clients.ifbs.openBox("booking-17");
 
       const status = await AccessService.getOpenStatus(
         TENANT,
         "booking-1",
-        "7",
+        IFBS_COMPARTMENT,
         "1",
       );
 
@@ -1747,10 +1776,15 @@ describe("access provider dialects: what AccessService makes of them", () => {
     });
 
     it("audits the OpenProgress of a polled process, and the event behind a last-event answer", async () => {
-      stubBooking(lockerBooking());
+      stubBooking(lockerBooking(), [IFBS_LOCKER]);
       await clients.ifbs.openBox("booking-17");
 
-      await AccessService.getOpenStatus(TENANT, "booking-1", "7", "1");
+      await AccessService.getOpenStatus(
+        TENANT,
+        "booking-1",
+        IFBS_COMPARTMENT,
+        "1",
+      );
 
       expect(loggedPayload("status").payload).to.deep.equal({
         confirmed: true,
@@ -1799,10 +1833,10 @@ describe("access provider dialects: what AccessService makes of them", () => {
     });
 
     it("fails on an iFBS locker, which declares no close", async () => {
-      stubBooking(lockerBooking());
+      stubBooking(lockerBooking(), [IFBS_LOCKER]);
 
       await rejects(
-        AccessService.close(TENANT, "booking-1", "7", "user-1"),
+        AccessService.close(TENANT, "booking-1", IFBS_COMPARTMENT, "user-1"),
         Error,
         "close() is not supported by",
       );

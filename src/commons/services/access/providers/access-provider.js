@@ -56,10 +56,15 @@
  * service encrypts it before storing and mails it once. Provider names
  * never appear in it.
  *
+ * A locker provider additionally names the compartment the grant is for,
+ * where it chooses one - iFBS' box number - so the person knows which box
+ * to look for even when the grant took a box other than the one held.
+ *
  * @typedef {Object} Grant
  * @property {string} authorizationId
  * @property {string|null} externalPrincipalId
  * @property {string|null} secret
+ * @property {string|null} [compartment] Locker providers only
  */
 
 /**

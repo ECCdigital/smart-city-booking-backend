@@ -32,6 +32,28 @@ describe("Access point projection", () => {
     );
   }
 
+  /**
+   * A compartment as the resolver hands it over: the stored row of the locker
+   * system under the compartment's own id.
+   */
+  function compartment(overrides = {}) {
+    return {
+      id: "loc-7:BK-99182",
+      tenantId: "rostock",
+      type: "locker",
+      provider: "ifbs",
+      externalId: "7",
+      providerLocationId: "7",
+      label: "Fahrradboxen Bahnhof",
+      mode: "remote",
+      config: {},
+      validationRules: [],
+      scanCode: "the-code",
+      previousScanCodes: [],
+      ...overrides,
+    };
+  }
+
   function storedDoor(overrides = {}) {
     return {
       id: "ap-7f3a",
@@ -130,17 +152,16 @@ describe("Access point projection", () => {
       expect(view.validationRuleTypes).to.deep.equal([]);
     });
 
-    it("is empty for lockers, which are never asked for evidence", () => {
-      const view = projectAccessPoint({
-        id: "42",
-        tenantId: "rostock",
-        type: "locker",
-        provider: "ifbs",
-        mode: "remote",
-        validationRules: [{ type: "qrScan" }],
-      });
+    it("reads the rules of a locker system like those of a door - a compartment asks for nothing only where its system has no rules", () => {
+      const withRules = projectAccessPoint(
+        compartment({ validationRules: [{ type: "qrScan" }] }),
+      );
+      const withoutRules = projectAccessPoint(
+        compartment({ validationRules: [] }),
+      );
 
-      expect(view.validationRuleTypes).to.deep.equal([]);
+      expect(withRules.validationRuleTypes).to.deep.equal(["qrScan"]);
+      expect(withoutRules.validationRuleTypes).to.deep.equal([]);
     });
 
     it("is empty when the access point carries no rules", () => {
@@ -213,27 +234,64 @@ describe("Access point projection", () => {
       expect(view.isProvisioned).to.be.false;
     });
 
-    it("carries the external booking id of a locker, which its box number needs", () => {
+    it("projects a granted compartment under its opaque id, with the compartment the person looks for and the provider's booking id", () => {
+      const view = projectAccessPoint(compartment(), {
+        bookingContext: {
+          externalBookingId: "BK-99182",
+          compartment: "62100103",
+          accessFrom: 1755000000000,
+          accessTo: 1755010800000,
+          accessBuffer: { beforeMs: 0, afterMs: 0 },
+          isProvisioned: true,
+          grant: { authorizationId: "BK-99182" },
+          revokedAt: null,
+        },
+      });
+
+      expect(view).to.deep.equal({
+        id: "loc-7:BK-99182",
+        tenantId: "rostock",
+        type: "locker",
+        provider: "ifbs",
+        label: "Fahrradboxen Bahnhof",
+        mode: "remote",
+        validationRuleTypes: [],
+        capabilities: ["open"],
+        accessFrom: 1755000000000,
+        accessTo: 1755010800000,
+        accessBuffer: { beforeMs: 0, afterMs: 0 },
+        isProvisioned: true,
+        externalBookingId: "BK-99182",
+        compartment: "62100103",
+      });
+    });
+
+    it("projects a held compartment as not provisioned - provisioned is the grant, not the existence", () => {
+      const view = projectAccessPoint(compartment({ id: "loc-7:hold" }), {
+        bookingContext: {
+          externalBookingId: null,
+          compartment: "62100103",
+          isProvisioned: false,
+          grant: null,
+        },
+      });
+
+      expect(view).to.include({
+        id: "loc-7:hold",
+        isProvisioned: false,
+        externalBookingId: null,
+        compartment: "62100103",
+      });
+    });
+
+    it("offers nothing to do at a compartment of a locker system that mails its own code", () => {
       const view = projectAccessPoint(
-        {
-          id: "42",
-          tenantId: "rostock",
-          type: "locker",
-          provider: "ifbs",
-          mode: "remote",
-        },
-        {
-          bookingContext: {
-            externalBookingId: "BK-99182",
-            accessFrom: 1755000000000,
-            accessTo: 1755010800000,
-            accessBuffer: { beforeMs: 0, afterMs: 0 },
-          },
-        },
+        compartment({ id: "size-s:process-1", provider: "pareva" }),
+        { bookingContext: { compartment: null, isProvisioned: true } },
       );
 
-      expect(view.externalBookingId).to.equal("BK-99182");
-      expect(view.isProvisioned).to.be.true;
+      expect(view.capabilities).to.deep.equal([]);
+      expect(view.compartment).to.be.null;
     });
 
     it("leaves the external booking id off a door", () => {
@@ -253,6 +311,7 @@ describe("Access point projection", () => {
         "accessBuffer",
         "isProvisioned",
         "externalBookingId",
+        "compartment",
       );
     });
   });

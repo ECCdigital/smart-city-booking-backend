@@ -117,7 +117,12 @@ function stubResolvedDoor(
   });
 }
 
-function stubResolvedLocker(sandbox, booking) {
+/**
+ * A granted compartment as the resolver hands it over: the locker system's
+ * row - without rules - under the compartment's own id, paired with the
+ * entry of the booking.
+ */
+function stubResolvedCompartment(sandbox, booking) {
   sandbox.stub(BookingManager, "getBooking").resolves(booking);
   sandbox.stub(AccessService, "_getBookingAccessPointsFromBooking").resolves({
     booking,
@@ -125,11 +130,13 @@ function stubResolvedLocker(sandbox, booking) {
     lockers: [
       {
         accessPoint: {
-          id: "box-7",
-          tenant: "tenant-1",
+          id: "loc-7:booking-17",
+          tenantId: "tenant-1",
           type: "locker",
           provider: TEST_PROVIDER,
+          externalId: "7",
           mode: AccessPointMode.REMOTE,
+          validationRules: [],
         },
         bookingContext: {
           tenant: "tenant-1",
@@ -137,6 +144,10 @@ function stubResolvedLocker(sandbox, booking) {
           timeBegin: booking.timeBegin,
           timeEnd: booking.timeEnd,
           accessBuffer: { beforeMs: 0, afterMs: 0 },
+          isProvisioned: true,
+          grant: { authorizationId: "booking-17" },
+          revokedAt: null,
+          externalBookingId: "booking-17",
           booking,
         },
       },
@@ -571,14 +582,14 @@ describe("AccessService.open with validation rules", () => {
     expect(providerOpen.called).to.be.false;
   });
 
-  it("asks for no evidence at a locker, which carries no rules", async () => {
+  it("asks for no evidence at a compartment of a locker system without rules", async () => {
     const booking = createBooking();
-    stubResolvedLocker(sandbox, booking);
+    stubResolvedCompartment(sandbox, booking);
 
     const outcome = await AccessService.open(
       "tenant-1",
       "booking-1",
-      "box-7",
+      "loc-7:booking-17",
       "user-1",
     );
 

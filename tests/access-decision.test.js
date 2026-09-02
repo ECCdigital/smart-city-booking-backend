@@ -61,17 +61,27 @@ function door(accessPoint = {}, bookingContext = {}) {
   };
 }
 
-function locker(bookingContext = {}) {
+/**
+ * A compartment as the resolver hands it to the decision: the locker system's
+ * row under the compartment's own id, paired with the entry of the booking.
+ * Granted unless said otherwise - an iFBS box, opened through the API.
+ */
+function compartment(accessPoint = {}, bookingContext = {}) {
   return {
     accessPoint: {
-      id: "box-7",
+      id: "loc-7:booking-17",
       tenantId: "tenant-1",
       type: "locker",
       provider: "ifbs",
       mode: AccessPointMode.REMOTE,
+      validationRules: [],
+      ...accessPoint,
     },
     bookingContext: {
       accessBuffer: { beforeMs: 0, afterMs: 0 },
+      isProvisioned: true,
+      grant: { authorizationId: "booking-17" },
+      revokedAt: null,
       ...bookingContext,
     },
   };
@@ -334,16 +344,67 @@ describe("Access decision: decide", () => {
       },
     },
     {
-      name: "takes a locker as provisioned by its existence",
+      name: "operates a granted compartment under its own id, remotely where the locker system opens through the API",
       booking: booking(),
-      accessPoints: [locker()],
+      accessPoints: [compartment()],
       person: OWNER,
       expected: {
         canOperate: true,
         canOperateRemote: true,
+        canUseAuthorization: true,
         blockingReasons: [],
-        operableAccessPointIds: ["box-7"],
-        remoteOperableAccessPointIds: ["box-7"],
+        operableAccessPointIds: ["loc-7:booking-17"],
+        remoteOperableAccessPointIds: ["loc-7:booking-17"],
+      },
+    },
+    {
+      name: "locks a compartment without a grant, whatever the mode of the locker system - the compartment is the grant",
+      booking: booking(),
+      accessPoints: [
+        compartment(
+          { id: "loc-7:hold" },
+          { isProvisioned: false, grant: null },
+        ),
+      ],
+      person: OWNER,
+      expected: {
+        canOperate: false,
+        canOperateRemote: false,
+        canUseAuthorization: false,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.NOT_PROVISIONED],
+        operableAccessPointIds: [],
+        remoteOperableAccessPointIds: [],
+      },
+    },
+    {
+      name: "locks a compartment whose grant was revoked",
+      booking: booking(),
+      accessPoints: [compartment({}, { revokedAt: NOW - MINUTE })],
+      person: OWNER,
+      expected: {
+        canOperate: false,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.AUTHORIZATION_REVOKED],
+        operableAccessPointIds: [],
+      },
+    },
+    {
+      name: "operates a granted compartment of a locker system that mails its own code, though not remotely",
+      booking: booking(),
+      accessPoints: [
+        compartment({
+          id: "size-s:process-1",
+          provider: "pareva",
+          mode: AccessPointMode.AUTHORIZATION,
+        }),
+      ],
+      person: OWNER,
+      expected: {
+        canOperate: true,
+        canOperateRemote: false,
+        canUseAuthorization: true,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS],
+        operableAccessPointIds: ["size-s:process-1"],
+        remoteOperableAccessPointIds: [],
       },
     },
     {
@@ -432,7 +493,7 @@ describe("Access decision: decide", () => {
       },
     },
     {
-      name: "demands the rule types of each door from the booker, deduplicated, and nothing of a locker",
+      name: "demands the rule types of each door from the booker, deduplicated, and of a compartment those of its locker system",
       booking: booking(),
       accessPoints: [
         door({
@@ -444,7 +505,11 @@ describe("Access decision: decide", () => {
           validationRules: [{ type: GEO_RULE }, { type: "qrScan" }],
         }),
         door({ id: "door-3", validationRules: [] }),
-        locker(),
+        compartment(),
+        compartment({
+          id: "loc-8:booking-18",
+          validationRules: [{ type: "qrScan" }],
+        }),
       ],
       person: OWNER,
       expected: {
@@ -452,7 +517,8 @@ describe("Access decision: decide", () => {
           "door-1": ["qrScan"],
           "door-2": [GEO_RULE, "qrScan"],
           "door-3": [],
-          "box-7": [],
+          "loc-7:booking-17": [],
+          "loc-8:booking-18": ["qrScan"],
         },
       },
     },
@@ -720,8 +786,8 @@ describe("Access decision: satisfy", () => {
     ]);
   });
 
-  it("asks a locker for no evidence, and records no bypass for anyone", () => {
-    const box = locker().accessPoint;
+  it("asks a compartment for no evidence where its locker system has no rules - a property of the rules, not of the type", () => {
+    const box = compartment().accessPoint;
 
     expect(satisfy(asBooker, box, [])).to.deep.equal({
       satisfied: true,
@@ -730,6 +796,18 @@ describe("Access decision: satisfy", () => {
       validatedEvidence: [],
     });
     expect(satisfy(asManager, box, []).bypassed).to.be.false;
+  });
+
+  it("holds a compartment to the rules of its locker system like a door", () => {
+    const box = compartment({
+      scanCode: "current-code",
+      previousScanCodes: [],
+      validationRules: [{ type: "qrScan" }],
+    }).accessPoint;
+
+    expect(satisfy(asBooker, box, []).blockingReasons).to.deep.equal([
+      ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING,
+    ]);
   });
 });
 
@@ -756,7 +834,12 @@ describe("Access decision: demandedEvidenceOf", () => {
     expect(demandedEvidenceOf(accessPoint)).to.deep.equal([]);
   });
 
-  it("demands nothing of a locker", () => {
-    expect(demandedEvidenceOf(locker().accessPoint)).to.deep.equal([]);
+  it("demands of a compartment what the rules of its locker system say", () => {
+    expect(demandedEvidenceOf(compartment().accessPoint)).to.deep.equal([]);
+    expect(
+      demandedEvidenceOf(
+        compartment({ validationRules: [{ type: "qrScan" }] }).accessPoint,
+      ),
+    ).to.deep.equal(["qrScan"]);
   });
 });

@@ -26,7 +26,8 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  *   its rules (`validationRules`: the configured rules, `[]` for none, `null`
  *   where nobody can see them)
  * @property {Object} bookingContext What the booking adds to it -
- *   `accessBuffer`, `isProvisioned`, `revokedAt`, `grant`
+ *   `accessBuffer`, `isProvisioned`, `revokedAt`, `grant`. A compartment of a
+ *   locker system is one entry of its own, under the compartment's id
  *
  * {@link decide} answers the booking layer: the role the person acts in, which
  * access points they may operate, the prioritized reasons against it, and what
@@ -122,21 +123,22 @@ function decide(
       anyRemoteCapable = true;
     }
 
-    // Lockers are provisioned by their very existence: the box was assigned
-    // with the booking. Only doors carry a grant that can be missing or
-    // withdrawn.
-    const isLocker = accessPoint.type === AccessPointType.LOCKER;
-    const revokedAt = isLocker ? null : bookingContext.revokedAt ?? null;
+    const revokedAt = bookingContext.revokedAt ?? null;
     if (revokedAt) {
       anyRevoked = true;
     }
 
-    // A door that only takes a code is nothing without the code: no grant or
-    // a revoked one locks it. A door that also opens remotely stays operable
-    // meanwhile, and the missing or revoked grant is a hint at it.
+    // An access point whose grant is its only way in is nothing without the
+    // grant: no grant or a revoked one locks it. That is a door that only
+    // takes a code - and every compartment of a locker system, which is
+    // assigned by the grant whatever mode the system opens in. A door that
+    // also opens remotely stays operable meanwhile, and the missing or
+    // revoked grant is a hint at it.
     let authorizationUsable = false;
-    const takesCodeOnly = accessPoint.mode === AccessPointMode.AUTHORIZATION;
-    if (!isLocker && usesAuthorization(accessPoint.mode)) {
+    const grantIsTheOnlyWayIn =
+      accessPoint.mode === AccessPointMode.AUTHORIZATION ||
+      accessPoint.type === AccessPointType.LOCKER;
+    if (grantIsTheOnlyWayIn || usesAuthorization(accessPoint.mode)) {
       const isGranted =
         bookingContext.isProvisioned === true &&
         Boolean(bookingContext.grant?.authorizationId);
@@ -147,7 +149,7 @@ function decide(
         anyAuthorizationUsable = true;
       }
     }
-    const lockedForWantOfGrant = takesCodeOnly && !authorizationUsable;
+    const lockedForWantOfGrant = grantIsTheOnlyWayIn && !authorizationUsable;
 
     if (!isValid || !inWindow || !hasRole || lockedForWantOfGrant) {
       continue;
@@ -203,9 +205,11 @@ function decide(
  * (`validationRules: null`, as opposed to `[]` for a door without rules) - the
  * whole point of a rule is that it is not silently optional.
  *
- * Lockers demand no evidence. The management is waived the rules of a door
- * (`decision.evidenceWaived`), which is recorded as a bypass only where there
- * were rules to bypass.
+ * A compartment of a locker system is held to the rules of that system like a
+ * door to its own - a locker system without rules (`[]`) asks for nothing,
+ * and that is a property of its rules, not of its type. The management is
+ * waived the rules of a door (`decision.evidenceWaived`), which is recorded
+ * as a bypass only where there were rules to bypass.
  *
  * @param {Decision} decision The decision for the booking, as of {@link decide}
  * @param {Object} accessPoint The access point being opened, with its rules
@@ -217,10 +221,6 @@ function decide(
  *   actually proven
  */
 function satisfy(decision, accessPoint, evidence = []) {
-  if (accessPoint.type === AccessPointType.LOCKER) {
-    return evidenceOutcome({ satisfied: true });
-  }
-
   if (accessPoint.validationRules === null) {
     return evidenceOutcome({
       satisfied: false,
@@ -263,18 +263,13 @@ function satisfy(decision, accessPoint, evidence = []) {
 
 /**
  * What an access point demands of anyone it is not waived for: the types of
- * its rules, without their configuration. Lockers demand nothing - they are
- * never asked for evidence. Where the rules are unknown there is nothing to
- * name either; {@link satisfy} is what keeps that door shut.
+ * its rules, without their configuration. Where the rules are unknown there
+ * is nothing to name either; {@link satisfy} is what keeps that door shut.
  *
  * @param {Object} accessPoint The access point, with its `validationRules`
  * @returns {string[]} The distinct rule types
  */
 function demandedEvidenceOf(accessPoint) {
-  if (accessPoint.type === AccessPointType.LOCKER) {
-    return [];
-  }
-
   const types = Array.isArray(accessPoint.validationRules)
     ? accessPoint.validationRules.map((rule) => rule?.type)
     : [];

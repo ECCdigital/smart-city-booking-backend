@@ -11,13 +11,24 @@ const AccessLogService = require("./access-log-service");
 const { decide, satisfy } = require("./access-decision");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
+const { AccessPointType } = require("../../schemas/accessPointSchema");
 const { RolePermission } = require("../../entities/role/role");
 const MailController = require("../../mail-service/mail-controller");
-const { ForbiddenError } = require("../../../errors/BaseError");
+const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
   level: process.env.LOG_LEVEL,
+});
+
+/**
+ * The hold of a provider that holds nothing on its side: the stored booking
+ * is the claim, and the platform checks the capacity of the bookable.
+ */
+const PLATFORM_HOLD = Object.freeze({
+  holdId: null,
+  expiresAt: null,
+  compartment: null,
 });
 
 class AccessService {
@@ -567,11 +578,197 @@ class AccessService {
     return [...lockers, ...doors];
   }
 
-  static async provisionForBooking(tenant, bookingId) {
-    const { booking, doors } = await this._getBookingAccessPoints(
+  /**
+   * Holds a compartment of every locker system the booking books, for a
+   * booking not paid yet. One `accessInfo` entry per compartment is made at
+   * the locker system's row - `bookableItem.amount` of them per system - and
+   * each is held: by the provider where it holds compartments itself (iFBS
+   * keeps a box for two minutes), by the stored booking where it does not
+   * (Pareva). The platform-held ones are checked against the capacity of
+   * the bookable after the booking is stored, so that two checkouts racing
+   * for the last compartment cannot both get it: the occupancy of the
+   * bookable in the booking's window, this booking included, must not
+   * exceed `bookable.amount`.
+   *
+   * A hold the provider refuses, or a capacity that is exceeded, is thrown;
+   * the checkout then rolls the booking back. Entries held or granted
+   * already are left alone, so the call is safe to repeat.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @returns {Promise<Object[]>} The booking's `accessInfo`
+   * @throws {ConflictError} `compartments_unavailable` when the bookable
+   *   has no compartment left for this booking
+   */
+  static async holdForBooking(tenant, bookingId) {
+    const { booking, lockerSystems } = await this._getBookingAccessPoints(
       tenant,
       bookingId,
     );
+
+    this._ensureCompartmentEntries(booking, lockerSystems);
+
+    const platformHeld = new Map();
+    for (const entry of this._compartmentEntries(booking)) {
+      const system = lockerSystems.get(String(entry.accessPointId));
+      if (!system || entry.revokedAt || entry.grant || entry.hold) {
+        continue;
+      }
+
+      const provider = getAccessProvider(system.accessPoint.provider);
+      if (!provider.constructor.capabilities.includes("hold")) {
+        Object.assign(entry, { hold: { ...PLATFORM_HOLD } });
+        platformHeld.set(system.bookable.id, system.bookable);
+        continue;
+      }
+
+      const accessPoint = this._compartmentAccessPoint(system, entry);
+      try {
+        const hold = await provider.hold(
+          accessPoint,
+          this._compartmentContext(tenant, booking, system, entry),
+        );
+        Object.assign(entry, {
+          hold: this._toStoredHold(hold),
+          compartment: hold.compartment ?? null,
+        });
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "hold",
+          result: "success",
+          payload: { hold: entry.hold },
+          actor: { source: "system" },
+        });
+      } catch (err) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId,
+          action: "hold",
+          result: "failure",
+          errorMessage: err.message,
+          actor: { source: "system" },
+        });
+        throw err;
+      }
+    }
+
+    await BookingManager.storeBooking(booking);
+
+    for (const bookable of platformHeld.values()) {
+      await this._assertCompartmentCapacity(tenant, booking, bookable);
+    }
+
+    return booking.accessInfo;
+  }
+
+  /**
+   * Renews the holds of the given bookings before their payment starts,
+   * where the provider holds compartments itself and its hold lapses.
+   * iFBS hands out a box afresh, which may be another one; a provider that
+   * holds nothing has nothing to renew, and neither has a compartment
+   * granted already. A hold that is lost and cannot be taken again is
+   * thrown; the checkout answers it as the compartment being unavailable.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string[]} bookingIds The bookings about to be paid
+   * @returns {Promise<void>}
+   */
+  static async refreshHolds(tenant, bookingIds) {
+    for (const bookingId of bookingIds) {
+      const booking = await BookingManager.getBooking(bookingId, tenant);
+      if (!booking) {
+        continue;
+      }
+
+      const { lockerSystems } = await this._getBookingAccessPointsFromBooking(
+        tenant,
+        booking,
+      );
+      let renewed = false;
+
+      for (const entry of this._compartmentEntries(booking)) {
+        const system = lockerSystems.get(String(entry.accessPointId));
+        if (!system || entry.revokedAt || entry.grant || !entry.hold) {
+          continue;
+        }
+
+        const provider = getAccessProvider(system.accessPoint.provider);
+        if (!provider.constructor.capabilities.includes("refreshHold")) {
+          continue;
+        }
+
+        const accessPoint = this._compartmentAccessPoint(system, entry);
+        try {
+          const hold = await provider.refreshHold(
+            accessPoint,
+            this._compartmentContext(tenant, booking, system, entry),
+          );
+          Object.assign(entry, {
+            hold: this._toStoredHold(hold),
+            compartment: hold.compartment ?? null,
+          });
+          renewed = true;
+          await this._log({
+            tenantId: tenant,
+            accessPoint,
+            bookingId,
+            action: "hold",
+            result: "success",
+            payload: { hold: entry.hold, renewed: true },
+            actor: { source: "system" },
+          });
+        } catch (err) {
+          await this._log({
+            tenantId: tenant,
+            accessPoint,
+            bookingId,
+            action: "hold",
+            result: "failure",
+            errorMessage: err.message,
+            actor: { source: "system" },
+          });
+          throw err;
+        }
+      }
+
+      if (renewed) {
+        await BookingManager.storeBooking(booking);
+      }
+    }
+  }
+
+  /**
+   * Sets up the access of a booking: the doors it confers and the
+   * compartments of the locker systems it books. A door is provisioned as
+   * its mode says; a compartment is always provisioned through the grant,
+   * whatever mode its locker system opens in, consuming the hold where one
+   * was taken. Doors and compartments provisioned already are left alone.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @returns {Promise<Object[]>} The booking's `accessInfo`
+   */
+  static async provisionForBooking(tenant, bookingId) {
+    const resolved = await this._getBookingAccessPoints(tenant, bookingId);
+
+    return this._provisionResolved(tenant, resolved);
+  }
+
+  /**
+   * @private
+   * {@link provisionForBooking} on a booking resolved already, so that an
+   * update can revoke on the same object it provisions afterwards.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {{ booking: Object, doors: Object[], lockerSystems?: Map }} resolved
+   *   The booking with its doors and locker systems
+   * @returns {Promise<Object[]>} The booking's `accessInfo`
+   */
+  static async _provisionResolved(tenant, { booking, doors, lockerSystems }) {
+    const bookingId = booking.id;
     const provisionedAccessPoints = [];
 
     for (const { accessPoint, bookingContext } of doors) {
@@ -675,20 +872,194 @@ class AccessService {
       }
     }
 
+    await this._provisionCompartments(tenant, booking, lockerSystems);
+
     await BookingManager.storeBooking(booking);
     await this._sendProvisionedMail(booking, provisionedAccessPoints);
     return booking.accessInfo;
   }
 
+  /**
+   * @private
+   * Grants every compartment of the booking not granted yet. The entries
+   * are made where the checkout did not make them - a booking an admin
+   * created - and a provider that holds compartments takes one on the spot
+   * where the hold lapsed or was never taken. Every grant is audited under
+   * the compartment's id; a refused one is rethrown after the audit, like a
+   * door's.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} booking The booking, written into
+   * @param {Map<string, Object>|undefined} lockerSystems The locker systems
+   *   the booking books, as the resolver answers them
+   */
+  static async _provisionCompartments(tenant, booking, lockerSystems) {
+    if (!lockerSystems?.size) {
+      return;
+    }
+
+    this._ensureCompartmentEntries(booking, lockerSystems);
+
+    for (const entry of this._compartmentEntries(booking)) {
+      const system = lockerSystems.get(String(entry.accessPointId));
+      if (!system || entry.revokedAt || entry.grant) {
+        continue;
+      }
+
+      const provider = getAccessProvider(system.accessPoint.provider);
+      const heldAccessPoint = this._compartmentAccessPoint(system, entry);
+
+      if (!provider.constructor.capabilities.includes("grantAuthorization")) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint: heldAccessPoint,
+          bookingId: booking.id,
+          action: "provision",
+          result: "failure",
+          errorMessage: `Provider '${system.accessPoint.provider}' grants no compartments`,
+          actor: { source: "system" },
+        });
+        continue;
+      }
+
+      try {
+        const grant = await provider.grantAuthorization(
+          heldAccessPoint,
+          this._compartmentContext(tenant, booking, system, entry),
+        );
+
+        Object.assign(entry, {
+          isProvisioned: true,
+          provisionedAt: Date.now(),
+          revokedAt: null,
+          grant: this._toStoredGrant(grant),
+          hold: null,
+          compartment:
+            grant.compartment ??
+            entry.hold?.compartment ??
+            entry.compartment ??
+            null,
+          externalBookingId: String(grant.authorizationId),
+          principalRemovedAt: null,
+          principalCleanupAttemptedAt: null,
+          principalCleanupError: null,
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint: this._compartmentAccessPoint(system, entry),
+          bookingId: booking.id,
+          action: "provision",
+          result: "success",
+          payload: {
+            grant: this._toAuditedGrant(grant),
+            compartment: entry.compartment,
+          },
+          actor: { source: "system" },
+        });
+      } catch (err) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint: heldAccessPoint,
+          bookingId: booking.id,
+          action: "provision",
+          result: "failure",
+          errorMessage: err.message,
+          actor: { source: "system" },
+        });
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * Takes the access of a booking back: the grants at its doors and the
+   * compartments granted to it. A compartment only held is left alone -
+   * the hold lapses by itself. The entries stay, marked revoked.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @returns {Promise<Object[]>} The booking's `accessInfo`
+   */
   static async revokeForBooking(tenant, bookingId) {
-    const { booking, doors } = await this._getBookingAccessPoints(
-      tenant,
-      bookingId,
-    );
+    const { booking, doors, lockerSystems } =
+      await this._getBookingAccessPoints(tenant, bookingId);
 
     await this._revokeResolvedDoors(tenant, booking, doors);
+    await this._revokeCompartments(tenant, booking, lockerSystems);
     await BookingManager.storeBooking(booking);
     return booking.accessInfo;
+  }
+
+  /**
+   * @private
+   * Revokes every granted, unrevoked compartment of the booking at its
+   * provider. A revoke the provider refuses is audited and left for the
+   * next attempt, like a door's; the entry then stays granted.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} booking The booking, written into
+   * @param {Map<string, Object>|undefined} lockerSystems The locker systems
+   *   of the booking's compartments
+   */
+  static async _revokeCompartments(tenant, booking, lockerSystems) {
+    for (const entry of this._compartmentEntries(booking)) {
+      const system = lockerSystems?.get(String(entry.accessPointId));
+      if (!entry.grant || entry.revokedAt) {
+        continue;
+      }
+      if (!system) {
+        logger.warn(
+          `${tenant} -- compartment ${this._compartmentId(entry)} of booking ${booking.id} has no locker system left to revoke at`,
+        );
+        continue;
+      }
+
+      const provider = getAccessProvider(system.accessPoint.provider);
+      const accessPoint = this._compartmentAccessPoint(system, entry);
+
+      try {
+        const revocation = await provider.revokeAuthorization(
+          accessPoint,
+          this._toProviderGrant(entry.grant),
+        );
+        const now = Date.now();
+
+        Object.assign(entry, {
+          isProvisioned: false,
+          revokedAt: now,
+          hold: null,
+          principalRemovedAt:
+            revocation.principalRemoved === true
+              ? now
+              : entry.principalRemovedAt || null,
+          principalCleanupError:
+            revocation.principalRemoved === false
+              ? GrantCleanupService.PRINCIPAL_NOT_REMOVED_ERROR
+              : null,
+        });
+
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId: booking.id,
+          action: "revoke",
+          result: "success",
+          payload: { grant: this._toAuditedGrant(entry.grant), revocation },
+          actor: { source: "system" },
+        });
+      } catch (err) {
+        await this._log({
+          tenantId: tenant,
+          accessPoint,
+          bookingId: booking.id,
+          action: "revoke",
+          result: "failure",
+          errorMessage: err.message,
+          actor: { source: "system" },
+        });
+      }
+    }
   }
 
   static async _revokeResolvedDoors(tenant, booking, doors) {
@@ -769,24 +1140,53 @@ class AccessService {
     }
   }
 
+  /**
+   * Re-sets the access of a booking that changed, after the change is
+   * stored. Doors are revoked and provisioned afresh when the time or the
+   * doors changed, as before. Compartments are revoked and provisioned
+   * afresh when the time or the allocation changed - the locker systems
+   * booked or the amount of compartments at any of them - since a
+   * compartment is booked at the provider for one time and one booking.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} oldBooking The booking as it was
+   * @param {Object} newBooking The booking as it is stored now
+   * @returns {Promise<Object[]>} The booking's `accessInfo`
+   */
   static async updateForBooking(tenant, oldBooking, newBooking) {
     const changedTime =
       oldBooking.timeBegin !== newBooking.timeBegin ||
       oldBooking.timeEnd !== newBooking.timeEnd;
-    const changedAccessPoints =
-      (await this._getDoorAccessPointKey(oldBooking, tenant)) !==
-      (await this._getDoorAccessPointKey(newBooking, tenant));
+    const [oldResolved, newResolved] = await Promise.all([
+      this._getBookingAccessPointsFromBooking(tenant, oldBooking),
+      this._getBookingAccessPointsFromBooking(tenant, newBooking),
+    ]);
+    const changedDoors =
+      this._doorKey(oldResolved.doors) !== this._doorKey(newResolved.doors);
+    const changedCompartments =
+      this._compartmentKey(oldResolved.lockerSystems) !==
+      this._compartmentKey(newResolved.lockerSystems);
 
-    if (!changedTime && !changedAccessPoints) {
+    if (!changedTime && !changedDoors && !changedCompartments) {
       return newBooking.accessInfo || [];
     }
 
-    const { doors: oldDoors } = await this._getBookingAccessPointsFromBooking(
-      tenant,
-      oldBooking,
-    );
-    await this._revokeResolvedDoors(tenant, oldBooking, oldDoors);
-    return this.provisionForBooking(tenant, newBooking.id);
+    if (changedTime || changedDoors) {
+      await this._revokeResolvedDoors(tenant, oldBooking, oldResolved.doors);
+    }
+
+    // The stored booking carries the compartments as they were granted, so
+    // they are revoked on the very object that is provisioned afterwards.
+    const resolved = await this._getBookingAccessPoints(tenant, newBooking.id);
+    if (changedTime || changedCompartments) {
+      await this._revokeCompartments(
+        tenant,
+        resolved.booking,
+        resolved.lockerSystems,
+      );
+    }
+
+    return this._provisionResolved(tenant, resolved);
   }
 
   /**
@@ -842,7 +1242,7 @@ class AccessService {
   /**
    * Returns all bookings of a user that grant any access authorization
    * i.e. that resolve to at least one door access point
-   * (and, if requested, locker access points).
+   * (and, if requested, the compartments of a locker system).
    *
    * Tenant-independent: a user may have bookings across several tenants. The
    * user's committed bookings are loaded once (narrowed by status/time) and the
@@ -853,7 +1253,8 @@ class AccessService {
    * @param {string} [opts.state="all"] One of "active" | "upcoming" | "past" | "all"
    * @param {string|null} [opts.capability=null] "authorization" to restrict to provisioned authorizations
    * @param {boolean} [opts.includeAccessPoints=false] Attach the full access point list per booking
-   * @param {boolean} [opts.includeLockers=false] Treat locker access points as an authorization too
+   * @param {boolean} [opts.includeLockers=false] List the compartments of the
+   *   booking's locker systems too, each under its own id
    * @param {boolean} [opts.includeBuffer=false] Honor the access buffer for state="active"
    * @param {boolean} [opts.includeEligibility=false] Attach per-booking access eligibility
    *   (implicitly honors access buffers for `state="active"` filtering and evaluation)
@@ -920,9 +1321,9 @@ class AccessService {
 
   /**
    * Returns all bookings of a user that grant an access authorization for a
-   * specific access point. The access point may be a door (resolved via the
-   * bookables) or, when `includeLockers` is set, a locker (matched via
-   * {@link _getLockerAccessPointId}).
+   * specific access point, resolved via the bookables. A door answers its own
+   * id; a locker system answers, when `includeLockers` is set, the ids of
+   * the booking's compartments at it.
    *
    * Tenant-independent: trigger ids for the access point are resolved per
    * tenant the user has bookings in.
@@ -988,14 +1389,13 @@ class AccessService {
           : null,
       now,
       resolve: (booking) => {
-        const { triggerIds, mode } = triggerByTenant.get(booking.tenantId) || {
-          triggerIds: new Set(),
-          mode: null,
-        };
+        const { triggerIds, mode, type } = triggerByTenant.get(
+          booking.tenantId,
+        ) || { triggerIds: new Set(), mode: null, type: null };
         return this._resolveBookingAccessForPoint(
           booking,
           accessPointId,
-          mode,
+          { mode, type },
           { triggerIds, capability, includeLockers },
         );
       },
@@ -1197,7 +1597,8 @@ class AccessService {
    * directly references X, an ancestor of X (when children are inherited) or a
    * descendant of X (when parents are inherited).
    *
-   * @returns {Promise<Map<string, Map<string, string>>>} bookableId -> (accessPointId -> mode)
+   * @returns {Promise<Map<string, Map<string, { mode: string, type: string }>>>}
+   *   bookableId -> (accessPointId -> the access point's mode and type)
    */
   static async _getAccessTriggerMap(tenant) {
     const apBookables =
@@ -1223,8 +1624,7 @@ class AccessService {
       for (const accessPointId of accessPointIds) {
         pointMap.set(
           accessPointId,
-          accessPointsById.get(accessPointId).mode ||
-            AccessPointMode.AUTHORIZATION,
+          this._accessPointKind(accessPointsById.get(accessPointId)),
         );
       }
     };
@@ -1273,8 +1673,9 @@ class AccessService {
   /**
    * @private
    * Resolves the set of directly bookable ids whose booking would confer the
-   * given access point, plus the access point's mode.
-   * @returns {Promise<{ triggerIds: Set<string>, mode: string|null }>}
+   * given access point, plus the access point's mode and type.
+   * @returns {Promise<{ triggerIds: Set<string>, mode: string|null,
+   *   type: string|null }>}
    */
   static async _getTriggerBookableIdsForAccessPoint(tenant, accessPointId) {
     const apBookables = await BookableManager.getBookablesByAccessPointId(
@@ -1289,6 +1690,7 @@ class AccessService {
 
     const triggerIds = new Set();
     let mode = null;
+    let type = null;
 
     if (apBookables.length > 0) {
       const accessPoint = await AccessPointManager.getAccessPoint(
@@ -1296,7 +1698,7 @@ class AccessService {
         tenant,
       );
       if (accessPoint) {
-        mode = accessPoint.mode || AccessPointMode.AUTHORIZATION;
+        ({ mode, type } = this._accessPointKind(accessPoint));
       }
     }
 
@@ -1325,13 +1727,28 @@ class AccessService {
       }),
     );
 
-    return { triggerIds, mode };
+    return { triggerIds, mode, type };
+  }
+
+  /**
+   * @private
+   * What the list paths need to know of a stored access point: how it opens
+   * and whether it is a door or a locker system. A stored access point
+   * without a type is a door, without a mode one that takes a code.
+   */
+  static _accessPointKind(accessPoint) {
+    return {
+      mode: accessPoint.mode || AccessPointMode.AUTHORIZATION,
+      type: accessPoint.type || AccessPointType.DOOR,
+    };
   }
 
   /**
    * @private
    * Resolves which access point ids a booking confers, using the precomputed
-   * trigger map. Honors the `capability` and `includeLockers` options.
+   * trigger map: its doors, and with `includeLockers` the compartments of
+   * its locker systems, each under its own id. Honors the `capability`
+   * filter, which compartments never pass - they are no keypad code.
    */
   static _resolveBookingAccess(
     booking,
@@ -1339,7 +1756,6 @@ class AccessService {
     { capability, includeLockers },
   ) {
     const directIds = this._getBookableIds(booking);
-    const onlyAuthorization = capability === "authorization";
     const seen = new Set();
     const accessPointIds = [];
 
@@ -1349,25 +1765,17 @@ class AccessService {
         continue;
       }
 
-      for (const [accessPointId, mode] of pointMap) {
+      for (const [accessPointId, kind] of pointMap) {
         if (seen.has(accessPointId)) {
           continue;
         }
-        if (onlyAuthorization && !this._usesAuthorization(mode)) {
-          continue;
-        }
         seen.add(accessPointId);
-        accessPointIds.push(accessPointId);
-      }
-    }
-
-    if (includeLockers && !onlyAuthorization) {
-      for (const lockerInfo of booking.lockerInfo || []) {
-        const lockerId = this._getLockerAccessPointId(lockerInfo);
-        if (lockerId && !seen.has(String(lockerId))) {
-          seen.add(String(lockerId));
-          accessPointIds.push(String(lockerId));
-        }
+        accessPointIds.push(
+          ...this._conferredIds(booking, accessPointId, kind, {
+            capability,
+            includeLockers,
+          }),
+        );
       }
     }
 
@@ -1376,35 +1784,65 @@ class AccessService {
 
   /**
    * @private
-   * Resolves whether a booking confers a single, specific access point.
+   * Resolves whether a booking confers a single, specific access point - a
+   * door, or a locker system whose compartments are then answered.
    */
   static _resolveBookingAccessForPoint(
     booking,
     accessPointId,
-    mode,
+    kind,
     { triggerIds, capability, includeLockers },
   ) {
-    const onlyAuthorization = capability === "authorization";
-    const targetId = String(accessPointId);
-
     const directIds = this._getBookableIds(booking);
-    const matchesDoor =
-      triggerIds.size > 0 &&
-      directIds.some((id) => triggerIds.has(id)) &&
-      !(onlyAuthorization && !this._usesAuthorization(mode));
+    const matchesBookable =
+      triggerIds.size > 0 && directIds.some((id) => triggerIds.has(id));
 
-    const matchesLocker =
-      includeLockers &&
-      !onlyAuthorization &&
-      (booking.lockerInfo || []).some(
-        (info) => String(this._getLockerAccessPointId(info)) === targetId,
-      );
-
-    if (!matchesDoor && !matchesLocker) {
+    if (!matchesBookable) {
       return { accessPointIds: [] };
     }
 
-    return { accessPointIds: [targetId] };
+    return {
+      accessPointIds: this._conferredIds(booking, String(accessPointId), kind, {
+        capability,
+        includeLockers,
+      }),
+    };
+  }
+
+  /**
+   * @private
+   * The ids a booking confers at one access point it books: the door's own
+   * id, or the ids of the booking's compartments at a locker system.
+   *
+   * @param {Object} booking The booking
+   * @param {string} accessPointId The stored access point's id
+   * @param {{ mode: string, type: string }} kind Its mode and type
+   * @param {Object} filters `capability` and `includeLockers`
+   * @returns {string[]} The conferred ids, empty where the filters keep the
+   *   access point out
+   */
+  static _conferredIds(
+    booking,
+    accessPointId,
+    { mode, type },
+    { capability, includeLockers },
+  ) {
+    const onlyAuthorization = capability === "authorization";
+
+    if (type === AccessPointType.LOCKER) {
+      if (!includeLockers || onlyAuthorization) {
+        return [];
+      }
+      return this._compartmentEntries(booking)
+        .filter((entry) => String(entry.accessPointId) === accessPointId)
+        .map((entry) => this._compartmentId(entry));
+    }
+
+    if (onlyAuthorization && !this._usesAuthorization(mode)) {
+      return [];
+    }
+
+    return [accessPointId];
   }
 
   /**
@@ -1418,7 +1856,8 @@ class AccessService {
    * @param {Object} filters
    * @param {string|null} filters.capability `"authorization"` to keep only the
    *   access points a booking holds an authorization for
-   * @param {boolean} filters.includeLockers Whether lockers count as access
+   * @param {boolean} filters.includeLockers Whether the compartments of the
+   *   booking's locker systems are listed too
    * @returns {Promise<{ accessPoint: Object, bookingContext: Object }[]>} The
    *   entries that passed the filters
    */
@@ -1431,7 +1870,7 @@ class AccessService {
     const onlyAuthorization = capability === "authorization";
 
     return entries.filter(({ accessPoint }) => {
-      if (accessPoint.type === "locker") {
+      if (accessPoint.type === AccessPointType.LOCKER) {
         return includeLockers && !onlyAuthorization;
       }
       if (onlyAuthorization) {
@@ -1613,52 +2052,341 @@ class AccessService {
     return this._getBookingAccessPointsFromBooking(tenant, booking);
   }
 
+  /**
+   * @private
+   * The access points of a booking as everything above the API boundary
+   * works on them: its doors, one entry each, and the compartments of the
+   * locker systems it books, one entry per compartment under the
+   * compartment's own id. The locker systems themselves come along, keyed
+   * by their row id, for the paths that write entries - hold, grant,
+   * revoke.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} booking The loaded booking
+   * @returns {Promise<{ booking: Object, lockers: Object[], doors: Object[],
+   *   lockerSystems: Map<string, Object> }>} The entries and the systems
+   */
   static async _getBookingAccessPointsFromBooking(tenant, booking) {
-    const lockers = this._getLockerAccessPoints(tenant, booking);
-    const doors = await this._getDoorAccessPoints(tenant, booking);
+    const sources = await this._loadAccessPointSources(tenant, booking);
+    const doors = this._resolveDoors(tenant, booking, sources);
+    const lockerSystems = this._resolveLockerSystems(tenant, booking, sources);
+    const lockers = this._compartmentEntries(booking).flatMap((entry) => {
+      const system = lockerSystems.get(String(entry.accessPointId));
+      return system
+        ? [
+            {
+              accessPoint: this._compartmentAccessPoint(system, entry),
+              bookingContext: this._compartmentContext(
+                tenant,
+                booking,
+                system,
+                entry,
+              ),
+            },
+          ]
+        : [];
+    });
 
-    return { booking, lockers, doors };
+    return { booking, lockers, doors, lockerSystems };
   }
 
   /**
    * @private
-   * Returns the access-point id exposed for a locker. For iFBS lockers this is
-   * the box number (`ifbsMetadata.nummer`); other providers keep `processId`.
+   * The `accessInfo` entries of the booking's compartments, in their stored
+   * order. Entries are written in place, so the caller mutates what it gets.
+   *
+   * @param {Object} booking The booking
+   * @returns {Object[]} The entries of type `locker`
    */
-  static _getLockerAccessPointId(lockerInfo) {
-    if (
-      lockerInfo.lockerSystem === "ifbs" &&
-      lockerInfo.ifbsMetadata?.nummer != null
-    ) {
-      return String(lockerInfo.ifbsMetadata.nummer);
-    }
-
-    return lockerInfo.processId;
+  static _compartmentEntries(booking) {
+    return (booking.accessInfo || []).filter(
+      (entry) => entry.accessPointType === AccessPointType.LOCKER,
+    );
   }
 
-  static _getLockerAccessPoints(tenant, booking) {
-    const beforeMs = 0;
-    const afterMs = 0;
+  /**
+   * @private
+   * The opaque id a compartment is operated by: the locker system's row and
+   * the grant, or `hold` before the grant.
+   *
+   * @param {Object} entry The compartment's `accessInfo` entry
+   * @returns {string} `<accessPointId>:<authorizationId>` or
+   *   `<accessPointId>:hold`
+   */
+  static _compartmentId(entry) {
+    return `${entry.accessPointId}:${entry.grant?.authorizationId ?? "hold"}`;
+  }
 
-    return (booking.lockerInfo || []).map((lockerInfo) => ({
-      accessPoint: {
-        id: this._getLockerAccessPointId(lockerInfo),
-        tenantId: tenant,
-        provider: lockerInfo.lockerSystem,
-        type: "locker",
-        mode: AccessPointMode.REMOTE,
-      },
-      bookingContext: {
-        tenant,
-        bookingId: booking.id,
-        timeBegin: booking.timeBegin,
-        timeEnd: booking.timeEnd,
-        externalBookingId: lockerInfo.processId,
-        accessBuffer: { beforeMs, afterMs },
-        accessFrom: booking.timeBegin - beforeMs,
-        accessTo: booking.timeEnd + afterMs,
-      },
-    }));
+  /**
+   * @private
+   * The compartment as an access point: the locker system's row under the
+   * compartment's own id. What a provider reads - `tenantId`, `externalId`,
+   * `provider` - is the row's; what the decision and the projection read -
+   * `id`, `type`, `mode`, `validationRules` - names the compartment.
+   */
+  static _compartmentAccessPoint(system, entry) {
+    return { ...system.accessPoint, id: this._compartmentId(entry) };
+  }
+
+  /**
+   * @private
+   * The booking context of one compartment: the booking's window with the
+   * buffer of the bookable, and the compartment's own state - the hold to
+   * consume, the grant, the compartment the provider named.
+   */
+  static _compartmentContext(tenant, booking, system, entry) {
+    const { beforeMs, afterMs } = system.bookable
+      ? this._resolveAccessBuffer(system.bookable)
+      : { beforeMs: 0, afterMs: 0 };
+
+    return {
+      tenant,
+      bookingId: booking.id,
+      timeBegin: booking.timeBegin,
+      timeEnd: booking.timeEnd,
+      accessBuffer: { beforeMs, afterMs },
+      accessFrom: booking.timeBegin - beforeMs,
+      accessTo: booking.timeEnd + afterMs,
+      booking,
+      hold: entry.hold || null,
+      compartment: entry.compartment ?? null,
+      externalBookingId: entry.grant?.authorizationId ?? null,
+      grant: entry.grant || null,
+      isProvisioned: entry.isProvisioned || false,
+      provisionedAt: entry.provisionedAt || null,
+      revokedAt: entry.revokedAt || null,
+      principalRemovedAt: entry.principalRemovedAt || null,
+      lastEvent: entry.lastEvent || null,
+    };
+  }
+
+  /**
+   * @private
+   * Makes the entries of the compartments the booking is owed: as many
+   * per locker system as the bookable's item books, minus those there
+   * already and not revoked. Where new ones are needed the revoked entries
+   * of that system make way for them - a fresh grant starts the
+   * compartments of a system over, as it does a door's entry - while a
+   * system whose compartments are all revoked and none needed keeps them
+   * as the record of the revoke.
+   *
+   * @param {Object} booking The booking, written into
+   * @param {Map<string, Object>} lockerSystems The systems and how many
+   *   compartments each is owed
+   */
+  static _ensureCompartmentEntries(booking, lockerSystems) {
+    if (!Array.isArray(booking.accessInfo)) {
+      booking.accessInfo = [];
+    }
+
+    for (const [accessPointId, system] of lockerSystems) {
+      const atSystem = (entry) =>
+        entry.accessPointType === AccessPointType.LOCKER &&
+        String(entry.accessPointId) === accessPointId;
+      const active = booking.accessInfo.filter(
+        (entry) => atSystem(entry) && !entry.revokedAt,
+      );
+      const missing = system.amount - active.length;
+
+      if (missing <= 0) {
+        continue;
+      }
+
+      booking.accessInfo = booking.accessInfo.filter(
+        (entry) => !atSystem(entry) || !entry.revokedAt,
+      );
+      for (let i = 0; i < missing; i += 1) {
+        booking.accessInfo.push({
+          accessPointId: system.accessPoint.id,
+          accessPointType: AccessPointType.LOCKER,
+          provider: system.accessPoint.provider,
+          externalId: system.accessPoint.externalId,
+          mode: system.accessPoint.mode,
+          bookableId: system.bookable?.id ?? null,
+          hold: null,
+          compartment: null,
+          externalBookingId: null,
+          isProvisioned: false,
+          provisionedAt: null,
+          revokedAt: null,
+          grant: null,
+        });
+      }
+    }
+  }
+
+  /**
+   * @private
+   * The hold as `accessInfo` stores it - the three fields of the provider's
+   * Hold, nothing else.
+   */
+  static _toStoredHold(hold) {
+    return {
+      holdId: hold.holdId ?? null,
+      expiresAt: hold.expiresAt ?? null,
+      compartment: hold.compartment ?? null,
+    };
+  }
+
+  /**
+   * @private
+   * Fails where the bookable has fewer compartments than the bookings in
+   * this booking's window take, this booking included. The occupancy is
+   * counted off the bookings' items, which is what `bookable.amount` is the
+   * capacity of.
+   *
+   * @throws {ConflictError} `compartments_unavailable`
+   */
+  static async _assertCompartmentCapacity(tenant, booking, bookable) {
+    const capacity = Number(bookable.amount);
+    if (!Number.isFinite(capacity)) {
+      return;
+    }
+
+    const others = await BookingManager.getConcurrentBookings(
+      bookable.id,
+      tenant,
+      booking.timeBegin,
+      booking.timeEnd,
+      booking.id,
+    );
+    const occupied = [...others, booking].reduce(
+      (sum, concurrent) => sum + this._itemAmount(concurrent, bookable.id),
+      0,
+    );
+
+    if (occupied > capacity) {
+      throw new ConflictError("compartments_unavailable", {
+        bookableId: bookable.id,
+        capacity,
+        occupied,
+      });
+    }
+  }
+
+  /**
+   * @private
+   * How many of a bookable a booking books, over all of its items.
+   */
+  static _itemAmount(booking, bookableId) {
+    return (booking.bookableItems || [])
+      .filter(
+        (item) => (item.bookableId || item._bookableUsed?.id) === bookableId,
+      )
+      .reduce((sum, item) => sum + (Number(item.amount) || 1), 0);
+  }
+
+  /**
+   * @private
+   * The stored access points of a booking with the bookables they are
+   * reached through, loaded once for doors and locker systems alike: the
+   * bookables of the booking with their relations, and every access point
+   * they reference - plus those the booking's compartments were made at,
+   * so that a compartment can still be revoked where the bookable dropped
+   * its locker system since.
+   */
+  static async _loadAccessPointSources(tenant, booking) {
+    const bookableRelations = await this._getBookableRelations(tenant, booking);
+    const bookables = await BookableManager.getBookablesByIds(tenant, [
+      ...bookableRelations.keys(),
+    ]);
+    const sortedBookables = this._sortBookablesByRelation(
+      bookables,
+      bookableRelations,
+    );
+    const accessPointsById = await this._getAccessPointsById(
+      tenant,
+      sortedBookables,
+      this._compartmentEntries(booking).map((entry) =>
+        String(entry.accessPointId),
+      ),
+    );
+
+    return { bookableRelations, sortedBookables, accessPointsById };
+  }
+
+  /**
+   * @private
+   * The locker systems a booking books, keyed by row id: the row as the
+   * compartments are resolved at it, the bookable that books it and how
+   * many compartments that bookable's item books. Only the bookables
+   * booked themselves count - a compartment is exclusive to its booking
+   * and nothing a parent or child bookable confers. Systems the booking
+   * holds compartments at without booking them any more come along with
+   * nothing owed, for the revoke.
+   *
+   * @returns {Map<string, { accessPoint: Object, bookable: Object|null,
+   *   amount: number }>}
+   */
+  static _resolveLockerSystems(tenant, booking, sources) {
+    const { bookableRelations, sortedBookables, accessPointsById } = sources;
+    const systems = new Map();
+
+    for (const bookable of sortedBookables) {
+      if (
+        bookable.accessPointDetails?.active !== true ||
+        (bookableRelations.get(bookable.id) || "self") !== "self"
+      ) {
+        continue;
+      }
+
+      for (const accessPointId of bookable.accessPointDetails.accessPointIds ||
+        []) {
+        const key = String(accessPointId);
+        const accessPoint = accessPointsById.get(key);
+        if (accessPoint?.type !== AccessPointType.LOCKER || systems.has(key)) {
+          continue;
+        }
+
+        systems.set(key, {
+          accessPoint: this._resolvedAccessPoint(tenant, accessPoint, bookable),
+          bookable,
+          amount: this._itemAmount(booking, bookable.id),
+        });
+      }
+    }
+
+    for (const entry of this._compartmentEntries(booking)) {
+      const key = String(entry.accessPointId);
+      const accessPoint = accessPointsById.get(key);
+      if (accessPoint?.type === AccessPointType.LOCKER && !systems.has(key)) {
+        systems.set(key, {
+          accessPoint: this._resolvedAccessPoint(tenant, accessPoint, null),
+          bookable: null,
+          amount: 0,
+        });
+      }
+    }
+
+    return systems;
+  }
+
+  /**
+   * @private
+   * The stored access point as the resolver hands it over - its rules and
+   * the scan code they are checked against included, so the evidence step
+   * judges by this one read and nothing reads the access point again. None
+   * of it reaches a client: the projection is the boundary that keeps the
+   * scan codes in. One stored without rules has none (`[]`); one stored
+   * without a type is a door.
+   */
+  static _resolvedAccessPoint(
+    tenant,
+    accessPoint,
+    bookable,
+    relation = "self",
+  ) {
+    return {
+      ...accessPoint,
+      tenantId: tenant,
+      type: accessPoint.type || AccessPointType.DOOR,
+      label: accessPoint.label || "",
+      mode: accessPoint.mode || AccessPointMode.AUTHORIZATION,
+      validationRules: accessPoint.validationRules || [],
+      bookableId: bookable?.id ?? null,
+      bookableTitle: bookable?.title ?? "",
+      relation,
+    };
   }
 
   /**
@@ -1688,15 +2416,17 @@ class AccessService {
    * bookable is then simply not a door the booking can open.
    * @param {string} tenant Tenant ID
    * @param {Bookable[]} bookables The bookables whose references to resolve
+   * @param {string[]} [extraIds=[]] Ids to load on top of the references
    * @returns {Promise<Map<string, AccessPoint>>} accessPointId -> access point
    */
-  static async _getAccessPointsById(tenant, bookables) {
+  static async _getAccessPointsById(tenant, bookables, extraIds = []) {
     const accessPointIds = [
-      ...new Set(
-        bookables.flatMap((bookable) =>
+      ...new Set([
+        ...bookables.flatMap((bookable) =>
           (bookable.accessPointDetails?.accessPointIds || []).map(String),
         ),
-      ),
+        ...extraIds,
+      ]),
     ];
     const accessPoints = await AccessPointManager.getAccessPointsByIds(
       tenant,
@@ -1708,19 +2438,25 @@ class AccessService {
     );
   }
 
+  /**
+   * @private
+   * The doors a booking confers, one entry each, with the booking context
+   * they are resolved with.
+   */
   static async _getDoorAccessPoints(tenant, booking) {
-    const bookableRelations = await this._getBookableRelations(tenant, booking);
-    const bookables = await BookableManager.getBookablesByIds(tenant, [
-      ...bookableRelations.keys(),
-    ]);
-    const sortedBookables = this._sortBookablesByRelation(
-      bookables,
-      bookableRelations,
-    );
-    const accessPointsById = await this._getAccessPointsById(
-      tenant,
-      sortedBookables,
-    );
+    const sources = await this._loadAccessPointSources(tenant, booking);
+
+    return this._resolveDoors(tenant, booking, sources);
+  }
+
+  /**
+   * @private
+   * The doors among the loaded access points: every door the booked
+   * bookables and their relations reference, once each, paired with what
+   * the booking's `accessInfo` holds for it.
+   */
+  static _resolveDoors(tenant, booking, sources) {
+    const { bookableRelations, sortedBookables, accessPointsById } = sources;
     const seenAccessPointIds = new Set();
 
     return sortedBookables.flatMap((bookable) => {
@@ -1735,7 +2471,12 @@ class AccessService {
           const accessPointKey = String(accessPointId);
           const accessPoint = accessPointsById.get(accessPointKey);
 
-          if (!accessPoint || seenAccessPointIds.has(accessPointKey)) {
+          if (
+            !accessPoint ||
+            (accessPoint.type || AccessPointType.DOOR) !==
+              AccessPointType.DOOR ||
+            seenAccessPointIds.has(accessPointKey)
+          ) {
             return [];
           }
           seenAccessPointIds.add(accessPointKey);
@@ -1743,26 +2484,15 @@ class AccessService {
           const accessInfo = (booking.accessInfo || []).find(
             (info) => String(info.accessPointId) === accessPointKey,
           );
-          // The stored door travels whole - its rules and the scan code they
-          // are checked against included - so the evidence step judges by
-          // this one read and nothing reads the door again. None of it
-          // reaches a client: the projection is the boundary that keeps the
-          // scan codes in. A door stored without rules has none (`[]`).
-          const resolvedAccessPoint = {
-            ...accessPoint,
-            tenantId: tenant,
-            type: "door",
-            label: accessPoint.label || "",
-            mode: accessPoint.mode || AccessPointMode.AUTHORIZATION,
-            validationRules: accessPoint.validationRules || [],
-            bookableId: bookable.id,
-            bookableTitle: bookable.title,
-            relation: bookableRelations.get(bookable.id) || "self",
-          };
 
           return [
             {
-              accessPoint: resolvedAccessPoint,
+              accessPoint: this._resolvedAccessPoint(
+                tenant,
+                accessPoint,
+                bookable,
+                bookableRelations.get(bookable.id) || "self",
+              ),
               bookingContext: {
                 tenant,
                 bookingId: booking.id,
@@ -1898,9 +2628,9 @@ class AccessService {
   }
 
   /**
-   * Writes the entry of an access point into the booking's `accessInfo`,
-   * merging into the one already there. The schema keeps the entries free
-   * (`[Object]`); this is their shape:
+   * Writes the entry of a door into the booking's `accessInfo`, merging into
+   * the one already there - a door has one entry, keyed by `accessPointId`.
+   * The schema keeps the entries free (`[Object]`); this is their shape:
    *
    *   accessPointId, accessPointType, provider, externalId, mode
    *   isProvisioned, provisionedAt, revokedAt
@@ -1910,6 +2640,17 @@ class AccessService {
    *     - what became of the grant's external principal after the revoke;
    *       the cleanup job works on these
    *   lastEvent - the last webhook event at this lock
+   *
+   * A compartment of a locker system (`accessPointType: locker`) has one
+   * entry per compartment at the system's `accessPointId`, told apart by
+   * `grant.authorizationId`, and is written in place rather than through
+   * here. On top of the fields above it carries:
+   *
+   *   bookableId - the bookable whose item books the compartment
+   *   hold: { holdId, expiresAt, compartment } | null
+   *     - the claim before the grant; `null` once granted or revoked
+   *   compartment - the compartment the provider named (iFBS' box number)
+   *   externalBookingId - `grant.authorizationId`, for the projection
    *
    * @param {Object} booking The booking to write into
    * @param {Object} accessPoint The access point the entry is for
@@ -1985,8 +2726,12 @@ class AccessService {
     };
   }
 
-  static async _getDoorAccessPointKey(booking, tenant) {
-    const doors = await this._getDoorAccessPoints(tenant, booking);
+  /**
+   * @private
+   * What makes the doors of a booking the same or not: which doors, at
+   * which provider, opening how.
+   */
+  static _doorKey(doors) {
     return doors
       .map(({ accessPoint }) =>
         [
@@ -1996,6 +2741,19 @@ class AccessService {
           accessPoint.mode,
         ].join(":"),
       )
+      .sort()
+      .join("|");
+  }
+
+  /**
+   * @private
+   * What makes the allocation of compartments the same or not: which locker
+   * systems, and how many compartments at each.
+   */
+  static _compartmentKey(lockerSystems) {
+    return [...(lockerSystems || new Map()).entries()]
+      .filter(([, system]) => system.amount > 0)
+      .map(([accessPointId, system]) => `${accessPointId}:${system.amount}`)
       .sort()
       .join("|");
   }

@@ -245,146 +245,220 @@ describe("AccessService bookable access point inheritance", () => {
   });
 });
 
-describe("AccessService locker access window", () => {
+describe("AccessService compartments of a booking", () => {
   let sandbox;
+
+  const BIKE_BOXES = {
+    id: "loc-7",
+    tenantId: "tenant-1",
+    type: "locker",
+    provider: "ifbs",
+    externalId: "7",
+    label: "Fahrradboxen",
+    mode: "remote",
+    validationRules: [],
+    scanCode: "code-7",
+  };
+
+  const GRANTED = {
+    accessPointId: "loc-7",
+    accessPointType: "locker",
+    provider: "ifbs",
+    externalId: "7",
+    mode: "remote",
+    bookableId: "bikebox",
+    hold: null,
+    compartment: "62100103",
+    externalBookingId: "27473",
+    isProvisioned: true,
+    provisionedAt: 900,
+    revokedAt: null,
+    grant: {
+      authorizationId: "27473",
+      externalPrincipalId: null,
+      secret: null,
+    },
+  };
+
+  const HELD = {
+    ...GRANTED,
+    hold: { holdId: "27474", expiresAt: 3000, compartment: "62100104" },
+    compartment: "62100104",
+    externalBookingId: null,
+    isProvisioned: false,
+    provisionedAt: null,
+    grant: null,
+  };
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    sandbox.stub(BookableManager, "getRelatedBookables").resolves([]);
+    sandbox.stub(BookableManager, "getAllParentBookables").resolves([]);
   });
 
   afterEach(() => {
     sandbox.restore();
   });
 
-  it("resolves accessFrom, accessTo, and accessBuffer for locker access points", () => {
-    const booking = {
+  function stubBookable(accessPointIds, accessBuffer = undefined) {
+    sandbox.stub(BookableManager, "getBookablesByIds").resolves([
+      {
+        id: "bikebox",
+        title: "Fahrradbox",
+        accessPointDetails: { active: true, accessPointIds, accessBuffer },
+      },
+    ]);
+  }
+
+  function booking(accessInfo) {
+    return new Booking({
       id: "booking-1",
       tenantId: "tenant-1",
+      isCommitted: true,
       timeBegin: 1000,
       timeEnd: 2000,
-      lockerInfo: [
-        {
-          processId: "ifbs-booking-99",
-          lockerSystem: "ifbs",
-          id: "location-1",
-        },
-      ],
-    };
-
-    const lockers = AccessService._getLockerAccessPoints("tenant-1", booking);
-
-    expect(lockers).to.have.length(1);
-    expect(lockers[0].accessPoint).to.include({
-      id: "ifbs-booking-99",
-      provider: "ifbs",
-      type: "locker",
-      mode: "remote",
-    });
-    expect(lockers[0].bookingContext).to.deep.include({
-      timeBegin: 1000,
-      timeEnd: 2000,
-      accessBuffer: { beforeMs: 0, afterMs: 0 },
-      accessFrom: 1000,
-      accessTo: 2000,
-    });
-  });
-
-  it("uses ifbsMetadata.nummer as the access point id for iFBS lockers", () => {
-    const booking = {
-      id: "booking-1",
-      tenantId: "tenant-1",
-      timeBegin: 1000,
-      timeEnd: 2000,
-      lockerInfo: [
-        {
-          processId: "27473",
-          lockerSystem: "ifbs",
-          ifbsMetadata: {
-            boxId: "239",
-            nummer: "62100103",
-            bookingId: 27473,
-          },
-        },
-      ],
-    };
-
-    const lockers = AccessService._getLockerAccessPoints("tenant-1", booking);
-
-    expect(lockers[0].accessPoint.id).to.equal("62100103");
-    expect(lockers[0].bookingContext.externalBookingId).to.equal("27473");
-  });
-
-  it("exposes locker access window fields via getByBooking", async () => {
-    stubLockerBooking();
-
-    const points = await AccessService.getByBooking("tenant-1", "booking-1");
-
-    expect(points).to.have.length(1);
-    expect(points[0]).to.deep.equal({
-      id: "ifbs-booking-99",
-      tenantId: "tenant-1",
-      type: "locker",
-      provider: "ifbs",
-      label: "",
-      mode: "remote",
-      validationRuleTypes: [],
-      capabilities: ["open"],
-      externalBookingId: "ifbs-booking-99",
-      isProvisioned: true,
-      accessBuffer: { beforeMs: 0, afterMs: 0 },
-      accessFrom: 1000,
-      accessTo: 2000,
-    });
-  });
-
-  it("keeps what only the server needs out of the listed access points", async () => {
-    stubLockerBooking();
-
-    const points = await AccessService.getByBooking("tenant-1", "booking-1");
-
-    expect(points[0]).to.not.have.any.keys(
-      "config",
-      "externalId",
-      "locationId",
-      "lastEvent",
-      "provisionedAt",
-      "grant",
-      "scanCode",
-      "previousScanCodes",
-    );
-  });
-
-  function stubLockerBooking() {
-    sandbox.stub(AccessService, "_getBookingAccessPoints").resolves({
-      booking: new Booking({
-        id: "booking-1",
-        tenantId: "tenant-1",
-        isCommitted: true,
-        timeBegin: 1000,
-        timeEnd: 2000,
-      }),
-      lockers: [
-        {
-          accessPoint: {
-            id: "ifbs-booking-99",
-            tenantId: "tenant-1",
-            provider: "ifbs",
-            type: "locker",
-            mode: "remote",
-          },
-          bookingContext: {
-            tenant: "tenant-1",
-            bookingId: "booking-1",
-            externalBookingId: "ifbs-booking-99",
-            accessBuffer: { beforeMs: 0, afterMs: 0 },
-            accessFrom: 1000,
-            accessTo: 2000,
-          },
-        },
-      ],
-      doors: [],
+      bookableItems: [{ bookableId: "bikebox", amount: 2 }],
+      accessInfo,
     });
   }
+
+  it("resolves one pair per compartment entry at the stored locker system, under the compartment's id", async () => {
+    stubBookable(["loc-7"], { before: 15 });
+    sandbox
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .resolves([BIKE_BOXES]);
+
+    const { lockers, doors, lockerSystems } =
+      await AccessService._getBookingAccessPointsFromBooking(
+        "tenant-1",
+        booking([GRANTED, HELD]),
+      );
+
+    expect(doors).to.deep.equal([]);
+    expect(lockers.map(({ accessPoint }) => accessPoint.id)).to.deep.equal([
+      "loc-7:27473",
+      "loc-7:hold",
+    ]);
+    expect(lockers[0].accessPoint).to.include({
+      type: "locker",
+      provider: "ifbs",
+      externalId: "7",
+      label: "Fahrradboxen",
+      mode: "remote",
+      scanCode: "code-7",
+      bookableId: "bikebox",
+      relation: "self",
+    });
+    expect(lockers[0].bookingContext).to.deep.include({
+      tenant: "tenant-1",
+      bookingId: "booking-1",
+      timeBegin: 1000,
+      timeEnd: 2000,
+      accessBuffer: { beforeMs: 15 * 60 * 1000, afterMs: 0 },
+      accessFrom: 1000 - 15 * 60 * 1000,
+      accessTo: 2000,
+      hold: null,
+      compartment: "62100103",
+      externalBookingId: "27473",
+      isProvisioned: true,
+      revokedAt: null,
+    });
+    expect(lockers[0].bookingContext.grant.authorizationId).to.equal("27473");
+    expect(lockers[1].bookingContext).to.deep.include({
+      hold: HELD.hold,
+      compartment: "62100104",
+      externalBookingId: null,
+      isProvisioned: false,
+      grant: null,
+    });
+    expect([...lockerSystems.keys()]).to.deep.equal(["loc-7"]);
+    expect(lockerSystems.get("loc-7").amount).to.equal(2);
+  });
+
+  it("owes a booking no compartment at a locker system it reaches through a parent or child bookable", async () => {
+    BookableManager.getAllParentBookables.resolves([
+      {
+        id: "station",
+        title: "Bahnhof",
+        accessPointDetails: { active: true, accessPointIds: ["loc-7"] },
+      },
+    ]);
+    sandbox.stub(BookableManager, "getBookablesByIds").resolves([
+      {
+        id: "bikebox",
+        title: "Fahrradbox",
+        accessPointDetails: { active: true, accessPointIds: [] },
+      },
+      {
+        id: "station",
+        title: "Bahnhof",
+        accessPointDetails: { active: true, accessPointIds: ["loc-7"] },
+      },
+    ]);
+    sandbox
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .resolves([BIKE_BOXES]);
+
+    const { lockers, lockerSystems } =
+      await AccessService._getBookingAccessPointsFromBooking(
+        "tenant-1",
+        booking([]),
+      );
+
+    expect(lockers).to.deep.equal([]);
+    expect(lockerSystems.size).to.equal(0);
+  });
+
+  it("still resolves a granted compartment at a locker system the bookable dropped, owing nothing more at it", async () => {
+    stubBookable([]);
+    const getAccessPointsByIds = sandbox
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .resolves([BIKE_BOXES]);
+
+    const { lockers, lockerSystems } =
+      await AccessService._getBookingAccessPointsFromBooking(
+        "tenant-1",
+        booking([GRANTED]),
+      );
+
+    expect(getAccessPointsByIds.firstCall.args[1]).to.deep.equal(["loc-7"]);
+    expect(lockers.map(({ accessPoint }) => accessPoint.id)).to.deep.equal([
+      "loc-7:27473",
+    ]);
+    expect(lockerSystems.get("loc-7")).to.include({
+      bookable: null,
+      amount: 0,
+    });
+  });
+
+  it("lists a compartment through getByBooking with what a client may see, and nothing else", async () => {
+    stubBookable(["loc-7"]);
+    sandbox
+      .stub(AccessPointManager, "getAccessPointsByIds")
+      .resolves([BIKE_BOXES]);
+    sandbox.stub(BookingManager, "getBooking").resolves(booking([GRANTED]));
+
+    const points = await AccessService.getByBooking("tenant-1", "booking-1");
+
+    expect(points).to.deep.equal([
+      {
+        id: "loc-7:27473",
+        tenantId: "tenant-1",
+        type: "locker",
+        provider: "ifbs",
+        label: "Fahrradboxen",
+        mode: "remote",
+        validationRuleTypes: [],
+        capabilities: ["open"],
+        accessBuffer: { beforeMs: 0, afterMs: 0 },
+        accessFrom: 1000,
+        accessTo: 2000,
+        isProvisioned: true,
+        externalBookingId: "27473",
+        compartment: "62100103",
+      },
+    ]);
+  });
 });
 
 describe("One access point shape on both ways", () => {

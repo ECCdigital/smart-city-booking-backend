@@ -54,6 +54,16 @@ function createDoorEntry({ accessBuffer, bookingContext, ...overrides } = {}) {
   };
 }
 
+/**
+ * The doors of a booking as the resolver hands them to the decision, and no
+ * compartments.
+ */
+function stubResolvedDoors(sandbox, booking, doors) {
+  sandbox
+    .stub(AccessService, "_getBookingAccessPointsFromBooking")
+    .resolves({ booking, doors, lockers: [] });
+}
+
 describe("AccessService.canOperate", () => {
   let sandbox;
 
@@ -72,7 +82,7 @@ describe("AccessService.canOperate", () => {
       timeEnd: now + 60 * MINUTE,
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
+    stubResolvedDoors(sandbox, booking, [
       {
         accessPoint: {
           id: "door-1",
@@ -105,7 +115,7 @@ describe("AccessService.canOperate", () => {
       timeEnd: now + 60 * MINUTE,
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
+    stubResolvedDoors(sandbox, booking, [
       createDoorEntry({
         mode: AccessPointMode.AUTHORIZATION,
         bookingContext: { grant: { authorizationId: "auth-1" } },
@@ -130,7 +140,7 @@ describe("AccessService.canOperate", () => {
       timeEnd: now + 60 * MINUTE,
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
+    stubResolvedDoors(sandbox, booking, [
       createDoorEntry({
         mode: AccessPointMode.AUTHORIZATION,
         bookingContext: { isProvisioned: false },
@@ -151,7 +161,7 @@ describe("AccessService.canOperate", () => {
   it("returns false when the access point is not part of the booking", async () => {
     const booking = createBooking();
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([]);
+    stubResolvedDoors(sandbox, booking, []);
 
     const allowed = await AccessService.canOperate(
       "user-1",
@@ -186,7 +196,12 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
       .stub(AccessService, "_getAccessTriggerMapsForTenants")
       .resolves(
         new Map([
-          ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
+          [
+            "tenant-1",
+            new Map([
+              ["room", new Map([["door-1", { mode: "remote", type: "door" }]])],
+            ]),
+          ],
         ]),
       );
     sandbox
@@ -224,7 +239,12 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
       .stub(AccessService, "_getAccessTriggerMapsForTenants")
       .resolves(
         new Map([
-          ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
+          [
+            "tenant-1",
+            new Map([
+              ["room", new Map([["door-1", { mode: "remote", type: "door" }]])],
+            ]),
+          ],
         ]),
       );
     sandbox
@@ -264,7 +284,12 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
       .stub(AccessService, "_getAccessTriggerMapsForTenants")
       .resolves(
         new Map([
-          ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
+          [
+            "tenant-1",
+            new Map([
+              ["room", new Map([["door-1", { mode: "remote", type: "door" }]])],
+            ]),
+          ],
         ]),
       );
     sandbox
@@ -321,7 +346,12 @@ describe("AccessService.getUserBookingsWithAccess includeAccessPoints", () => {
       .stub(AccessService, "_getAccessTriggerMapsForTenants")
       .resolves(
         new Map([
-          ["tenant-1", new Map([["room", new Map([["door-1", "remote"]])]])],
+          [
+            "tenant-1",
+            new Map([
+              ["room", new Map([["door-1", { mode: "remote", type: "door" }]])],
+            ]),
+          ],
         ]),
       );
     sandbox
