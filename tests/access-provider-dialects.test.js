@@ -168,6 +168,10 @@ describe("access provider dialects: the adapters as they answer", () => {
       provider = new NukiAccessProvider({ client: clients.nuki });
     });
 
+    afterEach(() => {
+      sinon.restore();
+    });
+
     it("answers an open as opened, with no process to poll", async () => {
       const outcome = await provider.open(NUKI_DOOR, doorContext());
 
@@ -288,15 +292,11 @@ describe("access provider dialects: the adapters as they answer", () => {
       sinon.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
       const unconfigured = new NukiAccessProvider();
 
-      try {
-        await rejectsOpen(
-          unconfigured.open(NUKI_DOOR, doorContext()),
-          "configuration",
-          "No active access application 'nuki'",
-        );
-      } finally {
-        sinon.restore();
-      }
+      await rejectsOpen(
+        unconfigured.open(NUKI_DOOR, doorContext()),
+        "configuration",
+        "nuki_application_not_found",
+      );
     });
   });
 

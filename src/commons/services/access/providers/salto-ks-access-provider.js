@@ -62,7 +62,7 @@ class SaltoKsAccessProvider extends AccessProvider {
     const lockId = String(accessPoint.externalId);
 
     try {
-      return await this._open(tenant, lockId);
+      return await this._attemptOpen(tenant, lockId);
     } catch (err) {
       if (err instanceof AccessOpenError) {
         throw err;
@@ -81,7 +81,7 @@ class SaltoKsAccessProvider extends AccessProvider {
    * @param {string} lockId The Salto id of the lock
    * @returns {Promise<import("./access-provider").OpenOutcome>}
    */
-  async _open(tenant, lockId) {
+  async _attemptOpen(tenant, lockId) {
     // A lock whose IQ is already known can be refused - backoff after
     // otp_blocked, missing activation - without any Salto call (§4/§7 of the
     // spec). When this passes, the attempt continues on live data.
@@ -233,7 +233,7 @@ class SaltoKsAccessProvider extends AccessProvider {
       return { open: true, locked: false, doorOpen: null };
     }
 
-    return { open: null, locked: null, doorOpen: null };
+    return AccessProvider.unknownLockStatus;
   }
 
   async grantAuthorization(accessPoint, bookingContext) {

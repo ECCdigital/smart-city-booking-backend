@@ -95,6 +95,16 @@
  * @property {Object} payload The event as it came in
  */
 
+const { AccessOpenError } = require("../../../../errors/AccessOpenError");
+const { NotFoundError } = require("../../../../errors/BaseError");
+
+/** A lock nobody could read: unknown on every count. */
+const UNKNOWN_LOCK_STATUS = Object.freeze({
+  open: null,
+  locked: null,
+  doorOpen: null,
+});
+
 class AccessProvider {
   /**
    * @param {Object} [options]
@@ -104,6 +114,41 @@ class AccessProvider {
    */
   constructor({ client = null } = {}) {
     this._client = client;
+  }
+
+  /**
+   * The LockStatus of a lock the provider knows nothing about.
+   *
+   * @returns {LockStatus}
+   */
+  static get unknownLockStatus() {
+    return UNKNOWN_LOCK_STATUS;
+  }
+
+  /**
+   * @protected
+   * The tenant's API client for an open attempt, whose failures are the
+   * guest's to see as a failure class: a tenant without an active
+   * application of this provider - the adapter's `_getClient` throws a
+   * `NotFoundError` for it - is a configuration failure, a tenant that
+   * cannot be read right now a temporary one.
+   *
+   * @param {string} tenant Tenant the access point belongs to
+   * @returns {Promise<Object>} The client `_getClient` builds
+   * @throws {AccessOpenError}
+   */
+  async _getClientForOpen(tenant) {
+    try {
+      return await this._getClient(tenant);
+    } catch (err) {
+      throw err instanceof NotFoundError
+        ? AccessOpenError.configuration(
+            `${this.constructor.name} is not set up for tenant '${tenant}': ${err.message}`,
+          )
+        : AccessOpenError.temporary(
+            `${this.constructor.name} could not read the application of tenant '${tenant}': ${err.message}`,
+          );
+    }
   }
 
   /**
@@ -168,10 +213,13 @@ class AccessProvider {
    * How far a pending open has come - only providers whose open answers
    * `pending` declare this.
    *
-   * @param {Object} accessPoint The access point that was opened
+   * @param {Object} accessPoint The access point that was opened; carries
+   *   `tenantId`, which is how the provider finds the tenant here - there
+   *   is no booking context on a poll
    * @param {string} openProcessId The process the open answered with
    * @returns {Promise<OpenProgress>} The progress; a failed poll is answered,
    *   not thrown, with `confirmed: null` and the provider's reason
+   * @throws {Error} Nothing of its own - a failed poll is an answer
    */
   async getOpenProgress(accessPoint, openProcessId) {
     throw new Error(
@@ -314,6 +362,8 @@ class AccessProvider {
    * @param {Object} _headers The request headers carrying the signature
    * @param {string|null} _secret The shared secret of the subscription
    * @returns {boolean} Whether the signature holds
+   * @throws {Error} Nothing of its own - a signature that does not hold is
+   *   `false`, not an error
    */
   verifyWebhookSignature(_rawPayload, _headers, _secret) {
     throw new Error(

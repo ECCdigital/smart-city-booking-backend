@@ -46,30 +46,6 @@ class NukiAccessProvider extends AccessProvider {
   }
 
   /**
-   * @private
-   * The client for an open attempt, whose failures are the guest's to see
-   * as a failure class: no active Nuki application is a configuration
-   * failure, a tenant that cannot be read right now a temporary one.
-   *
-   * @param {string} tenant Tenant the door belongs to
-   * @returns {Promise<Object>} The tenant's Nuki API client
-   * @throws {AccessOpenError}
-   */
-  async _getClientForOpen(tenant) {
-    try {
-      return await this._getClient(tenant);
-    } catch (err) {
-      throw err instanceof NotFoundError
-        ? AccessOpenError.configuration(
-            `No active access application '${PROVIDER_ID}' found for tenant '${tenant}'`,
-          )
-        : AccessOpenError.temporary(
-            `Nuki application of tenant '${tenant}' could not be read: ${err.message}`,
-          );
-    }
-  }
-
-  /**
    * Opens the access point: pulls the latch where the lock has one, releases
    * the lock where it has not. For the person at the door that is the
    * difference between "the door is open" and "it is unlocked, now push".

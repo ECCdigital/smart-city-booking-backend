@@ -9,7 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Changed
 
-- Access provider seam typed: `open`/`unlatch` answer an `OpenOutcome` (`{ state: "opened" | "pending", openProcessId }`), `getStatus` a `LockStatus` (`{ open, locked, doorOpen }`, each `true`/`false`/`null`), `close` nothing, and the new interface method `getOpenProgress(accessPoint, openProcessId)` (capability `getOpenProgress`, iFBS) an `OpenProgress`. `AccessService` no longer sniffs provider dialects and branches on `capabilities` only; the audit log stores the typed outcome instead of the raw provider answer. `open`/`unlatch` throw only `AccessOpenError` (`configuration` | `temporary`) at every provider now, so the access endpoints answer `openFailure` for NUKI and iFBS failures too instead of HTTP 500. HTTP response shapes are unchanged; a failed iFBS poll at `/open-status` now reports `open: null`, `confirmed: null` (unknown) instead of `false`. iFBS lockers no longer declare `close` - the iFBS API has no command for it and the call always failed
+- Access provider seam typed: `open`/`unlatch` answer an `OpenOutcome`, `getStatus` a `LockStatus`, `close` nothing, and the new `getOpenProgress` (capability `getOpenProgress`, iFBS) an `OpenProgress`; the audit log stores these instead of the raw provider answer. `open`/`unlatch` throw only `AccessOpenError` at every provider now, so NUKI and iFBS failures reach the client as `openFailure` instead of HTTP 500. HTTP shapes are unchanged; a failed iFBS poll at `/open-status` reports `open`/`confirmed` as `null` (unknown) instead of `false`, and iFBS lockers no longer declare `close` (the API has no command for it)
 
 ### Added
 

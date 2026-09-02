@@ -1,5 +1,6 @@
 const bunyan = require("bunyan");
 const { getAccessProvider } = require("./providers/access-provider-registry");
+const AccessProvider = require("./providers/access-provider");
 const BookingManager = require("../../data-managers/booking-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
@@ -20,13 +21,6 @@ const {
 const logger = bunyan.createLogger({
   name: "access-service.js",
   level: process.env.LOG_LEVEL,
-});
-
-/** A lock nobody could read: unknown on every count. */
-const UNKNOWN_LOCK_STATUS = Object.freeze({
-  open: null,
-  locked: null,
-  doorOpen: null,
 });
 
 class AccessService {
@@ -372,7 +366,7 @@ class AccessService {
       logger.warn(
         `Could not read access point ${accessPoint.id} after closing it: ${err.message}`,
       );
-      return this._toStatusResponse(UNKNOWN_LOCK_STATUS, null);
+      return this._toStatusResponse(AccessProvider.unknownLockStatus, null);
     }
   }
 
@@ -515,7 +509,7 @@ class AccessService {
         ? { open: true, locked: false, doorOpen: null }
         : progress.confirmed === false
           ? { open: false, locked: null, doorOpen: null }
-          : UNKNOWN_LOCK_STATUS;
+          : AccessProvider.unknownLockStatus;
 
     return {
       ...this._toStatusResponse(lockStatus, statusSource),

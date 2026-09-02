@@ -32,30 +32,6 @@ class IfbsAccessProvider extends AccessProvider {
   }
 
   /**
-   * @private
-   * The client for an open attempt, whose failures are the guest's to see
-   * as a failure class: no active iFBS application is a configuration
-   * failure, a tenant that cannot be read right now a temporary one.
-   *
-   * @param {string} tenant Tenant the locker belongs to
-   * @returns {Promise<Object>} The tenant's iFBS API client
-   * @throws {AccessOpenError}
-   */
-  async _getClientForOpen(tenant) {
-    try {
-      return await this._getClient(tenant);
-    } catch (err) {
-      throw err instanceof NotFoundError
-        ? AccessOpenError.configuration(
-            `No active locker application 'ifbs' found for tenant '${tenant}'`,
-          )
-        : AccessOpenError.temporary(
-            `iFBS application of tenant '${tenant}' could not be read: ${err.message}`,
-          );
-    }
-  }
-
-  /**
    * Hands the open command to the box. iFBS confirms the open later, so the
    * outcome is always `pending` with the `OpenBox_ID` to poll through
    * {@link IfbsAccessProvider#getOpenProgress}.
@@ -86,6 +62,12 @@ class IfbsAccessProvider extends AccessProvider {
           );
     }
 
+    if (result.OpenBox_ID == null) {
+      throw AccessOpenError.temporary(
+        `iFBS answered the open of booking '${bookingId}' without an OpenBox_ID`,
+      );
+    }
+
     return { state: "pending", openProcessId: String(result.OpenBox_ID) };
   }
 
@@ -101,7 +83,7 @@ class IfbsAccessProvider extends AccessProvider {
    * @returns {Promise<import("./access-provider").LockStatus>}
    */
   async getStatus(accessPoint, bookingContext) {
-    const unknown = { open: null, locked: null, doorOpen: null };
+    const unknown = AccessProvider.unknownLockStatus;
 
     if (!bookingContext.lastOpenBoxId) {
       return unknown;
