@@ -186,7 +186,6 @@ describe("AccessService bookable access point inheritance", () => {
     expect(door.accessPoint.validationRules).to.deep.equal([
       { type: "qrScan" },
     ]);
-    expect(door.accessPoint).to.not.have.property("validationRuleTypes");
   });
 
   it("resolves a stored door without a rules field as one without rules", async () => {

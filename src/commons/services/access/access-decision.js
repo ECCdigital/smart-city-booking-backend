@@ -135,6 +135,7 @@ function decide(
     // a revoked one locks it. A door that also opens remotely stays operable
     // meanwhile, and the missing or revoked grant is a hint at it.
     let authorizationUsable = false;
+    const takesCodeOnly = accessPoint.mode === AccessPointMode.AUTHORIZATION;
     if (!isLocker && usesAuthorization(accessPoint.mode)) {
       const isGranted =
         bookingContext.isProvisioned === true &&
@@ -146,11 +147,9 @@ function decide(
         anyAuthorizationUsable = true;
       }
     }
-    const isLocked =
-      accessPoint.mode === AccessPointMode.AUTHORIZATION &&
-      !authorizationUsable;
+    const lockedForWantOfGrant = takesCodeOnly && !authorizationUsable;
 
-    if (!isValid || !inWindow || !hasRole || isLocked) {
+    if (!isValid || !inWindow || !hasRole || lockedForWantOfGrant) {
       continue;
     }
 

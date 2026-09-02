@@ -37,7 +37,7 @@ function createBooking(overrides = {}) {
  * A door as the booking way resolves it internally: the access point itself
  * plus the booking context it was resolved with.
  */
-function createDoorEntry({ accessBuffer, ...overrides } = {}) {
+function createDoorEntry({ accessBuffer, bookingContext, ...overrides } = {}) {
   return {
     accessPoint: {
       id: "door-1",
@@ -49,6 +49,7 @@ function createDoorEntry({ accessBuffer, ...overrides } = {}) {
     bookingContext: {
       accessBuffer: accessBuffer || { beforeMs: 0, afterMs: 0 },
       isProvisioned: true,
+      ...bookingContext,
     },
   };
 }
@@ -105,15 +106,10 @@ describe("AccessService.canOperate", () => {
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
     sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
-      {
-        ...createDoorEntry({ mode: AccessPointMode.AUTHORIZATION }),
-        bookingContext: {
-          accessBuffer: { beforeMs: 0, afterMs: 0 },
-          isProvisioned: true,
-          grant: { authorizationId: "auth-1" },
-          revokedAt: null,
-        },
-      },
+      createDoorEntry({
+        mode: AccessPointMode.AUTHORIZATION,
+        bookingContext: { grant: { authorizationId: "auth-1" } },
+      }),
     ]);
     sandbox.stub(PermissionsService, "_isOwner").returns(true);
 
@@ -135,15 +131,10 @@ describe("AccessService.canOperate", () => {
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
     sandbox.stub(AccessService, "_getDoorAccessPoints").resolves([
-      {
-        ...createDoorEntry({ mode: AccessPointMode.AUTHORIZATION }),
-        bookingContext: {
-          accessBuffer: { beforeMs: 0, afterMs: 0 },
-          isProvisioned: false,
-          grant: null,
-          revokedAt: null,
-        },
-      },
+      createDoorEntry({
+        mode: AccessPointMode.AUTHORIZATION,
+        bookingContext: { isProvisioned: false },
+      }),
     ]);
     sandbox.stub(PermissionsService, "_isOwner").returns(true);
 

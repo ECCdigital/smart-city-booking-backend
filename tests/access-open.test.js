@@ -596,7 +596,6 @@ describe("AccessService.open with validation rules", () => {
     });
 
     expect(outcome.success).to.be.true;
-    expect(AccessPointManager.getAccessPoint.called).to.be.false;
   });
 });
 

@@ -9,10 +9,6 @@ const SecurityUtils = require("../../utilities/security-utils");
 const GrantCleanupService = require("./grant-cleanup-service");
 const AccessLogService = require("./access-log-service");
 const { decide, satisfy } = require("./access-decision");
-const {
-  ACCESS_BLOCKING_REASONS,
-  prioritizeBlockingReasons,
-} = require("./access-blocking-reasons");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { RolePermission } = require("../../entities/role/role");
@@ -134,23 +130,18 @@ class AccessService {
 
     // Opening through the API is the remote way in, which a door that only
     // takes a code does not have - it may still be closed and asked for its
-    // status, so that refusal is named here rather than in the decision.
-    const id = String(accessPointId);
-    if (!decision.remoteOperableAccessPointIds.includes(id)) {
-      const blockingReasons = decision.operableAccessPointIds.includes(id)
-        ? prioritizeBlockingReasons([
-            ...decision.blockingReasons,
-            ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
-          ])
-        : decision.blockingReasons;
-
+    // status. The decision was made for this one door, so its reasons already
+    // say `no_remote_access` where that is what stands in the way.
+    if (
+      !decision.remoteOperableAccessPointIds.includes(String(accessPointId))
+    ) {
       return this._denyOpen({
         action,
         tenant,
         userId,
         accessPoint,
         bookingId,
-        blockingReasons,
+        blockingReasons: decision.blockingReasons,
         channel,
         accessRole: decision.accessRole,
       });
