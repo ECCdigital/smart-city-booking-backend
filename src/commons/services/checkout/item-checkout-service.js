@@ -35,6 +35,7 @@ const {
 const { CheckoutPermissions } = require("./checkout-permissions");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
+const { BadRequestError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -57,6 +58,9 @@ class ItemCheckoutService {
    * @param {string|string[]|null} [excludeBookingIds] Booking IDs to ignore in capacity checks (e.g. the booking being edited).
    * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
    *                                Defaults to `false` (discounts are applied when configured).
+   * @param {number|null} [manualPriceEur] Explicit net price per unit entered by
+   *   the admin. Honored only under ADMIN_MANUAL, where it replaces the
+   *   category/provider price; VAT, amount and coupons apply as usual.
    * @param {string} [policy] The checkout policy (see checkout-policy.js).
    *   Under ADMIN_MANUAL no checks run and discounts are always suppressed.
    */
@@ -73,10 +77,15 @@ class ItemCheckoutService {
       checkoutId,
       excludeBookingIds,
       externalCache,
+      manualPriceEur,
     },
     policy = CheckoutPolicy.SELF_SERVICE,
   ) {
     this.policy = checkoutPolicy.assertCheckoutPolicy(policy);
+    this.manualPriceEur = ItemCheckoutService._normalizeManualPrice(
+      this.policy,
+      manualPriceEur,
+    );
     this.user = user;
     this.tenantId = tenantId;
     this.timeBegin = timeBegin;
@@ -98,6 +107,28 @@ class ItemCheckoutService {
     this.externalCache = externalCache || new Map();
     this._cache = new Map();
     this._availabilityProvider = null;
+  }
+
+  /**
+   * A manual price is only meaningful under ADMIN_MANUAL; elsewhere it is
+   * dropped. Under ADMIN_MANUAL a present value has to be a finite, non-negative
+   * number — `null`/`undefined` means "no manual price, use the categories".
+   */
+  static _normalizeManualPrice(policy, manualPriceEur) {
+    if (!checkoutPolicy.acceptsManualPrice(policy)) {
+      return null;
+    }
+    if (manualPriceEur === null || manualPriceEur === undefined) {
+      return null;
+    }
+    const value = Number(manualPriceEur);
+    if (!Number.isFinite(value) || value < 0) {
+      throw new BadRequestError("invalid_manual_price", {
+        message: "Der manuelle Preis muss eine Zahl größer oder gleich 0 sein.",
+        manualPriceEur,
+      });
+    }
+    return Math.round(value * 100) / 100;
   }
 
   _cached(key, fn) {
@@ -363,6 +394,9 @@ class ItemCheckoutService {
 
   async regularPriceEur() {
     return this._cached("regularPriceEur", async () => {
+      if (this.manualPriceEur !== null) {
+        return this.manualPriceEur;
+      }
       if (this.hasExternalPricing) {
         return await this._externalRegularPriceEur();
       }
@@ -529,6 +563,9 @@ class ItemCheckoutService {
 
   async regularGrossPriceEur() {
     return this._cached("regularGrossPriceEur", async () => {
+      if (this.manualPriceEur !== null) {
+        return await this._internalRegularGrossPriceEur();
+      }
       if (this.hasExternalPricing) {
         return await this._externalRegularGrossPriceEur();
       }

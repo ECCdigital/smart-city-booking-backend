@@ -24,6 +24,10 @@ _Avoid_: normale Buchung, Kundenbuchung
 Die Checkout-Policy, bei der die Angaben des Erfassenden autoritativ sind: keine Buchbarkeits-Prüfungen, keine automatischen Rabatte, keine automatisch ergänzten Pflicht-Addons, eingegebene Preise gelten, die Rechnungsberechtigung wird nicht geprüft. Jede Buchungs-Änderung ist eine manuelle Buchung — auch die des Eigentümers an der eigenen Buchung.
 _Avoid_: Admin-Buchung (auch Eigentümer-Updates sind manuell), Buchung ohne Prüfung
 
+**Manueller Preis (eines Buchungs-Items)**:
+Der vom Erfassenden ausdrücklich festgelegte Netto-Stückpreis eines Items einer manuellen Buchung. Ersetzt den Preis, der sich sonst aus Preiskategorien oder externen Anbietern ergäbe; Mehrwertsteuer, Stückzahl und Coupons gelten weiterhin. Bleibt am Item, bis er ausdrücklich entfernt wird — ein Verschieben der Buchung rechnet ihn nicht neu. Nur unter der Checkout-Policy _manuelle Buchung_ wirksam; in einer Selbstbuchung wird er verworfen, nie gespeichert.
+_Avoid_: Preisüberschreibung (technischer Jargon), Fixpreis (das ist die Eigenschaft einer Preiskategorie), Kategorie-Trick (der Alt-Weg über manipulierte Preiskategorien)
+
 ### Mediathek
 
 **Medium**:

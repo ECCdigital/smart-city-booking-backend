@@ -65,6 +65,15 @@ function acceptsAdminOverrides(policy) {
   return policy === CheckoutPolicy.ADMIN_MANUAL;
 }
 
+/**
+ * Whether an explicit manual price on a bookable item (`manualPriceEur`) is
+ * honored. Only the admin may fix a price; on any other policy the field is
+ * stripped from the items so it can never reach the stored booking.
+ */
+function acceptsManualPrice(policy) {
+  return policy === CheckoutPolicy.ADMIN_MANUAL;
+}
+
 module.exports = {
   CheckoutPolicy,
   assertCheckoutPolicy,
@@ -73,4 +82,5 @@ module.exports = {
   resolvesMandatoryAddons,
   requiresInvoicePermission,
   acceptsAdminOverrides,
+  acceptsManualPrice,
 };

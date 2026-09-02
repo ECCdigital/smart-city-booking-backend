@@ -119,6 +119,13 @@ class BundleCheckoutService {
       ? customFieldValues
       : [];
     this.amendedBookingId = amendedBookingId || null;
+    if (!checkoutPolicy.acceptsManualPrice(this.policy)) {
+      // Never let a client-supplied manual price reach the stored booking —
+      // a later admin update would honor it.
+      for (const item of this.bookableItems || []) {
+        delete item.manualPriceEur;
+      }
+    }
     // One cache shared by all items of the bundle, so external providers are
     // asked once per checkout instead of once per item.
     this.externalCache = new Map();
@@ -170,6 +177,7 @@ class BundleCheckoutService {
         checkoutId: this.checkoutId,
         excludeBookingIds: this.amendedBookingId ? [this.amendedBookingId] : [],
         externalCache: this.externalCache,
+        manualPriceEur: bookableItem.manualPriceEur,
       },
       this.policy,
     );
