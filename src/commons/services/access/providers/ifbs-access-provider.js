@@ -2,6 +2,8 @@ const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const { createClient } = require("../../locker/clients/locker-client-registry");
 const IfbsApiError = require("../../locker/clients/ifbs-api-error");
+const { AccessOpenError } = require("../../../../errors/AccessOpenError");
+const { NotFoundError } = require("../../../../errors/BaseError");
 
 const APP_TYPE = "locker";
 
@@ -9,6 +11,8 @@ class IfbsAccessProvider extends AccessProvider {
   /**
    * Creates an iFBS API client for the given tenant.
    * @private
+   * @throws {NotFoundError} `ifbs_application_not_found` when the tenant
+   *   has no active iFBS application
    */
   async _getClient(tenant) {
     if (this._client) {
@@ -16,136 +20,119 @@ class IfbsAccessProvider extends AccessProvider {
     }
 
     const tenantData = await TenantManager.getTenant(tenant);
-    const rawApp = tenantData.applications.find(
+    const rawApp = tenantData?.applications?.find(
       (a) => a.type === APP_TYPE && a.id === "ifbs" && a.active,
     );
 
     if (!rawApp) {
-      throw new Error(
-        `No active locker application 'ifbs' found for tenant '${tenant}'`,
-      );
+      throw new NotFoundError("ifbs_application_not_found", { tenant });
     }
 
     return createClient(rawApp);
   }
 
+  /**
+   * Hands the open command to the box. iFBS confirms the open later, so the
+   * outcome is always `pending` with the `OpenBox_ID` to poll through
+   * {@link IfbsAccessProvider#getOpenProgress}.
+   *
+   * @param {Object} accessPoint The locker to open
+   * @param {Object} bookingContext The booking, with the iFBS
+   *   `externalBookingId` the box was booked under
+   * @returns {Promise<import("./access-provider").OpenOutcome>}
+   * @throws {AccessOpenError} `configuration` without an active iFBS
+   *   application; `temporary` for everything iFBS or the network did not
+   *   manage, an iFBS error number included - the box is booked either
+   *   way, so a refusal is nothing the admin can configure away
+   */
   async open(accessPoint, bookingContext) {
-    const client = await this._getClient(bookingContext.tenant);
-    const result = await client.openBox(bookingContext.externalBookingId);
-    return {
-      processId: result.Booking_ID,
-      openProcessId: result.OpenBox_ID,
-    };
-  }
+    const client = await this._getClientForOpen(bookingContext.tenant);
+    const bookingId = bookingContext.externalBookingId;
 
-  async close(accessPoint, bookingContext) {
-    const client = await this._getClient(bookingContext.tenant);
-    const result = await client.closeBox(bookingContext.externalBookingId);
-    return {
-      success: true,
-      state: "closed",
-      providerResponse: result,
-    };
-  }
-
-  async getStatus(accessPoint, bookingContext) {
-    const client = await this._getClient(bookingContext.tenant);
-    const usage = this._resolveUsageWindowStatus(bookingContext);
-
-    if (bookingContext.lastOpenBoxId) {
-      try {
-        const result = await client.monitorOpenBox(
-          bookingContext.lastOpenBoxId,
-        );
-
-        return {
-          ...this._mapOpenBoxStatus(result, { includeReceived: true }),
-          bookingId: bookingContext.externalBookingId,
-          usageState: usage.usageState,
-        };
-      } catch (err) {
-        if (!this._isOpenBoxProcessNotFound(err)) {
-          throw err;
-        }
-      }
+    let result;
+    try {
+      result = await client.openBox(bookingId);
+    } catch (err) {
+      throw err instanceof IfbsApiError
+        ? AccessOpenError.temporary(
+            `iFBS refused to open the box of booking '${bookingId}' (${err.errNo}): ${err.errMsg}`,
+          )
+        : AccessOpenError.temporary(
+            `iFBS open of booking '${bookingId}' failed: ${err.message}`,
+          );
     }
 
-    return usage;
+    if (result.OpenBox_ID == null) {
+      throw AccessOpenError.temporary(
+        `iFBS answered the open of booking '${bookingId}' without an OpenBox_ID`,
+      );
+    }
+
+    return { state: "pending", openProcessId: String(result.OpenBox_ID) };
   }
 
-  async getOpenStatus(tenant, openBoxId) {
-    const client = await this._getClient(tenant);
+  /**
+   * What iFBS knows about the box: only whether the last open process it
+   * has for the booking was confirmed. iFBS confirms lock activation, not
+   * whether the door is physically open, and without a known process it
+   * knows nothing at all.
+   *
+   * @param {Object} accessPoint The locker to read
+   * @param {Object} bookingContext The booking, with `lastOpenBoxId` where
+   *   an open process is known
+   * @returns {Promise<import("./access-provider").LockStatus>}
+   */
+  async getStatus(accessPoint, bookingContext) {
+    const unknown = AccessProvider.unknownLockStatus;
+
+    if (!bookingContext.lastOpenBoxId) {
+      return unknown;
+    }
+
+    const client = await this._getClient(bookingContext.tenant);
 
     try {
-      const result = await client.waitForOpenBox(openBoxId, 30);
-      return this._mapOpenBoxStatus(result);
+      const result = await client.monitorOpenBox(bookingContext.lastOpenBoxId);
+
+      return result.BoxControlConfirmed === "true"
+        ? { open: true, locked: false, doorOpen: null }
+        : unknown;
+    } catch (err) {
+      if (this._isOpenBoxProcessNotFound(err)) {
+        return unknown;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Waits up to 30 seconds for the box to confirm the open. A poll that
+   * fails - the process is unknown to iFBS, the API is unreachable - is
+   * answered with `confirmed: null` and the reason, never thrown: the person
+   * at the box keeps polling, and the reason is theirs to see.
+   *
+   * @param {Object} accessPoint The locker that was opened
+   * @param {string} openProcessId The `OpenBox_ID` the open answered with
+   * @returns {Promise<import("./access-provider").OpenProgress>}
+   */
+  async getOpenProgress(accessPoint, openProcessId) {
+    try {
+      const client = await this._getClient(accessPoint.tenantId);
+      const result = await client.waitForOpenBox(openProcessId, 30);
+      return {
+        confirmed: result.BoxControlConfirmed === "true",
+        confirmedAt: result.BoxControlConfirmedDateTime || null,
+        errorCode: null,
+        errorMessage: null,
+      };
     } catch (err) {
       return {
-        ...this._mapOpenBoxStatus({
-          OpenBox_ID: openBoxId,
-          BoxControlConfirmed: "false",
-        }),
+        confirmed: null,
+        confirmedAt: null,
         errorCode: err instanceof IfbsApiError ? err.errNo : null,
         errorMessage: err instanceof IfbsApiError ? err.errMsg : err.message,
       };
     }
-  }
-
-  /**
-   * Maps iFBS monitorOpenBox / waitForOpenBox fields to access status.
-   * The API confirms lock activation only — not whether the door is physically open.
-   * @private
-   */
-  _mapOpenBoxStatus(result, { includeReceived = false } = {}) {
-    const confirmed = result.BoxControlConfirmed === "true";
-    const received = result.BoxControlReceived === "true";
-
-    const status = {
-      openProcessId: result.OpenBox_ID ?? null,
-      confirmed,
-      confirmedAt: result.BoxControlConfirmedDateTime || null,
-      open: confirmed ? true : null,
-      state: confirmed ? "open" : received ? "opening" : "pending",
-    };
-
-    if (includeReceived) {
-      status.boxControlReceived = received;
-      status.receivedAt = result.BoxControlReceivedDateTime || null;
-    }
-
-    if (result.WaitTime != null) {
-      status.waitTime = result.WaitTime;
-    }
-
-    return status;
-  }
-
-  /**
-   * Derives booking usage window state when no OpenBox process is available.
-   * @private
-   */
-  _resolveUsageWindowStatus(bookingContext) {
-    const now = Date.now();
-    const accessFrom = bookingContext.accessFrom ?? bookingContext.timeBegin;
-    const accessTo = bookingContext.accessTo ?? bookingContext.timeEnd;
-
-    let usageState = "active";
-    if (accessFrom != null && now < accessFrom) {
-      usageState = "upcoming";
-    } else if (accessTo != null && now > accessTo) {
-      usageState = "expired";
-    }
-
-    return {
-      bookingId: bookingContext.externalBookingId,
-      usageState,
-      accessFrom,
-      accessTo,
-      open: null,
-      locked: null,
-      doorOpen: null,
-      state: usageState,
-    };
   }
 
   /** @private */
@@ -154,7 +141,9 @@ class IfbsAccessProvider extends AccessProvider {
   }
 
   static get capabilities() {
-    return ["open", "close", "getStatus", "getOpenStatus"];
+    // No close: iFBS has no command to close a box - the door of a locker
+    // is shut by hand.
+    return ["open", "getStatus", "getOpenProgress"];
   }
 }
 

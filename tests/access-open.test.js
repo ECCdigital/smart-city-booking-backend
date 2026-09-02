@@ -6,6 +6,7 @@ const {
   ACCESS_BLOCKING_REASONS,
 } = require("../src/commons/services/access/access-blocking-reasons");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
+const AccessProvider = require("../src/commons/services/access/providers/access-provider");
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
@@ -22,21 +23,20 @@ const { ForbiddenError } = require("../src/errors/BaseError");
 const MINUTE = 60 * 1000;
 const TEST_PROVIDER = "test-open-provider";
 
-let providerOpen = async () => ({});
-let providerUnlatch = async () => ({ success: true, state: "open" });
+let providerOpen = async () => ({ state: "opened", openProcessId: null });
+let providerUnlatch = async () => ({ state: "opened", openProcessId: null });
 let providerStatus = async () => ({
-  state: "locked",
-  providerResponse: { raw: true },
+  open: false,
+  locked: true,
+  doorOpen: null,
 });
 
-class TestOpenProvider {
+class TestOpenProvider extends AccessProvider {
   async open(accessPoint, context) {
     return providerOpen(accessPoint, context);
   }
 
-  async close() {
-    return { success: true, state: "closed", providerResponse: { raw: true } };
-  }
+  async close() {}
 
   async unlatch(accessPoint, context) {
     return providerUnlatch(accessPoint, context);
@@ -44,6 +44,10 @@ class TestOpenProvider {
 
   async getStatus(accessPoint, context) {
     return providerStatus(accessPoint, context);
+  }
+
+  static get capabilities() {
+    return ["open", "close", "unlatch", "getStatus"];
   }
 }
 
@@ -152,7 +156,7 @@ describe("AccessService.open", () => {
     sandbox = sinon.createSandbox();
     providerOpen = sandbox
       .stub()
-      .resolves({ processId: 42, openProcessId: 99 });
+      .resolves({ state: "pending", openProcessId: "99" });
     sandbox.stub(AccessLogService, "log").resolves();
     sandbox.stub(PermissionsService, "_isOwner").returns(true);
   });
@@ -186,7 +190,7 @@ describe("AccessService.open", () => {
   it("answers an open that is already done with no process to poll", async () => {
     const booking = createBooking();
     stubResolvedDoor(sandbox, booking);
-    providerOpen.resolves({ success: true, state: "open" });
+    providerOpen.resolves({ state: "opened", openProcessId: null });
 
     const outcome = await AccessService.open(
       "tenant-1",
@@ -208,8 +212,8 @@ describe("AccessService.open", () => {
     await AccessService.open("tenant-1", "booking-1", "door-1", "user-1");
 
     expect(AccessLogService.log.firstCall.args[0].payload).to.include({
-      processId: 42,
-      openProcessId: 99,
+      state: "pending",
+      openProcessId: "99",
     });
   });
 
@@ -593,10 +597,10 @@ describe("AccessService close, unlatch and status with validation rules", () => 
     sandbox = sinon.createSandbox();
     providerUnlatch = sandbox
       .stub()
-      .resolves({ success: true, state: "open", openProcessId: "77" });
+      .resolves({ state: "pending", openProcessId: "77" });
     providerStatus = sandbox
       .stub()
-      .resolves({ state: "locked", providerResponse: { raw: true } });
+      .resolves({ open: false, locked: true, doorOpen: null });
     sandbox.stub(AccessLogService, "log").resolves();
     // Ownership is left to the data: the booking is assigned to "user-1".
     stubResolvedDoor(sandbox, createBooking(), {
@@ -641,7 +645,9 @@ describe("AccessService close, unlatch and status with validation rules", () => 
   });
 
   it("does not claim the lock turned before the lock says so", async () => {
-    providerStatus = sandbox.stub().resolves({ state: "unlocked" });
+    providerStatus = sandbox
+      .stub()
+      .resolves({ open: true, locked: false, doorOpen: null });
 
     const result = await AccessService.close(
       "tenant-1",
@@ -775,9 +781,10 @@ describe("AccessService close, unlatch and status with validation rules", () => 
   it("keeps the provider's own status answer in the audit log", async () => {
     await AccessService.getStatus("tenant-1", "booking-1", "door-1");
 
-    expect(AccessLogService.log.firstCall.args[0].payload).to.deep.include({
-      state: "locked",
-      providerResponse: { raw: true },
+    expect(AccessLogService.log.firstCall.args[0].payload).to.deep.equal({
+      open: false,
+      locked: true,
+      doorOpen: null,
     });
   });
 

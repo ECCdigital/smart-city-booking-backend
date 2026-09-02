@@ -56,7 +56,7 @@ class InMemoryAccessProvider extends AccessProvider {
       externalId: String(accessPoint.externalId),
       action: "open",
     });
-    return { success: true, state: "open", openProcessId: null };
+    return { state: "opened", openProcessId: null };
   }
 
   async unlatch(accessPoint, bookingContext) {
@@ -70,7 +70,6 @@ class InMemoryAccessProvider extends AccessProvider {
       externalId: String(accessPoint.externalId),
       action: "close",
     });
-    return { success: true, state: "closed" };
   }
 
   async getStatus(accessPoint, _bookingContext) {

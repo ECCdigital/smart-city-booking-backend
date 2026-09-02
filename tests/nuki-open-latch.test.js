@@ -82,7 +82,7 @@ describe("Nuki open pulls the latch where the lock has one", () => {
     expect(
       client.executeAction.calledOnceWithExactly("lock-1", NUKI_ACTIONS.UNLOCK),
     ).to.be.true;
-    expect(result.success).to.be.true;
+    expect(result).to.deep.equal({ state: "opened", openProcessId: null });
   });
 
   it("sends one action and never a second one after it", async () => {

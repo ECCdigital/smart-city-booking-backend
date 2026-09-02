@@ -12,7 +12,7 @@ require("./providers/register-access-providers");
  *
  * `unlatch` is deliberately absent: pulling the latch is decided behind
  * `open`, per lock, so a client never picks that action itself.
- * `getOpenStatus` likewise: a client polls exactly when the open answer
+ * `getOpenProgress` likewise: a client polls exactly when the open answer
  * carries an `openProcessId`, so that answer already says it.
  */
 const UI_CAPABILITIES = Object.freeze(["open", "close", "getStatus"]);

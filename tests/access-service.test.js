@@ -247,7 +247,7 @@ describe("AccessService locker access window", () => {
       label: "",
       mode: "remote",
       validationRuleTypes: [],
-      capabilities: ["open", "close", "getStatus"],
+      capabilities: ["open", "getStatus"],
       externalBookingId: "ifbs-booking-99",
       isProvisioned: true,
       accessBuffer: { beforeMs: 0, afterMs: 0 },

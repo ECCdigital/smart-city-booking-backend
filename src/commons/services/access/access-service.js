@@ -1,5 +1,6 @@
 const bunyan = require("bunyan");
 const { getAccessProvider } = require("./providers/access-provider-registry");
+const AccessProvider = require("./providers/access-provider");
 const BookingManager = require("../../data-managers/booking-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
@@ -161,7 +162,7 @@ class AccessService {
 
     try {
       const provider = getAccessProvider(accessPoint.provider);
-      const result = await provider[action](accessPoint, bookingContext);
+      const outcome = await provider[action](accessPoint, bookingContext);
 
       await this._log({
         tenantId: tenant,
@@ -171,16 +172,18 @@ class AccessService {
         action,
         result: "success",
         payload: {
-          ...result,
+          ...outcome,
           validatedEvidence: evidenceOutcome.validatedEvidence,
         },
         channel,
         accessRole: eligibility.accessRole,
         evidenceBypassed: evidenceOutcome.bypassed,
       });
+      // The outcome says by itself whether polling is called for: a
+      // pending open names its process, an opened door names none.
       return {
         success: true,
-        data: { openProcessId: this._toOpenProcessId(result) },
+        data: { openProcessId: outcome.openProcessId },
       };
     } catch (err) {
       await this._log({
@@ -313,7 +316,7 @@ class AccessService {
 
     try {
       const provider = getAccessProvider(accessPoint.provider);
-      const result = await provider.close(accessPoint, bookingContext);
+      await provider.close(accessPoint, bookingContext);
 
       await this._log({
         tenantId: tenant,
@@ -322,7 +325,6 @@ class AccessService {
         bookingId,
         action: "close",
         result: "success",
-        payload: result,
       });
       return this._readStatusAfterClose(provider, accessPoint, bookingContext);
     } catch (err) {
@@ -364,7 +366,7 @@ class AccessService {
       logger.warn(
         `Could not read access point ${accessPoint.id} after closing it: ${err.message}`,
       );
-      return this._toStatusResponse({}, null);
+      return this._toStatusResponse(AccessProvider.unknownLockStatus, null);
     }
   }
 
@@ -373,11 +375,16 @@ class AccessService {
    * one, the last event the door reported otherwise, and the lock's own state
    * as the last resort. `statusSource` says which of the three answered.
    *
+   * The provider is asked for the progress of a process only where it
+   * declares `getOpenProgress` - a process id at a provider that opens
+   * synchronously is nothing to poll.
+   *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId Access point ID
    * @param {string|null} openProcessId The process an open answered with
-   * @returns {Promise<Object>} The status of the open attempt
+   * @returns {Promise<Object>} The status of the open attempt, as of
+   *   {@link _toOpenStatusResponse}
    */
   static async getOpenStatus(tenant, bookingId, accessPointId, openProcessId) {
     const { accessPoint, bookingContext } = await this._resolve(
@@ -386,23 +393,37 @@ class AccessService {
       accessPointId,
     );
     const provider = getAccessProvider(accessPoint.provider);
-    let status;
+    const canReportProgress =
+      provider.constructor.capabilities.includes("getOpenProgress");
+    let payload;
+    let response;
 
-    let statusSource;
-
-    if (typeof provider.getOpenStatus === "function" && openProcessId) {
-      status = await provider.getOpenStatus(tenant, openProcessId);
-      statusSource = "open_process";
+    if (openProcessId && canReportProgress) {
+      const progress = await provider.getOpenProgress(
+        accessPoint,
+        openProcessId,
+      );
+      payload = progress;
+      response = this._toOpenStatusResponse(progress, "open_process");
     } else if (bookingContext.lastEvent) {
-      status = {
-        confirmed: bookingContext.lastEvent.success === true,
-        confirmedAt: bookingContext.lastEvent.timestamp || null,
-        event: bookingContext.lastEvent,
+      const { lastEvent } = bookingContext;
+      const progress = {
+        confirmed: lastEvent.success === true,
+        confirmedAt: lastEvent.timestamp || null,
+        errorCode: null,
+        errorMessage: null,
       };
-      statusSource = "last_event";
+      payload = { ...progress, event: lastEvent };
+      response = this._toOpenStatusResponse(progress, "last_event");
     } else {
-      status = await provider.getStatus(accessPoint, bookingContext);
-      statusSource = "provider_status";
+      const lockStatus = await provider.getStatus(accessPoint, bookingContext);
+      payload = lockStatus;
+      response = {
+        ...this._toStatusResponse(lockStatus, "provider_status"),
+        confirmed: null,
+        errorCode: null,
+        errorMessage: null,
+      };
     }
 
     await this._log({
@@ -411,11 +432,11 @@ class AccessService {
       bookingId,
       action: "status",
       result: "success",
-      payload: status,
+      payload,
       actor: { source: "system" },
     });
 
-    return this._toOpenStatusResponse(status, statusSource);
+    return response;
   }
 
   /**
@@ -434,7 +455,7 @@ class AccessService {
     );
 
     const provider = getAccessProvider(accessPoint.provider);
-    const status = await provider.getStatus(accessPoint, bookingContext);
+    const lockStatus = await provider.getStatus(accessPoint, bookingContext);
 
     await this._log({
       tenantId: tenant,
@@ -442,115 +463,60 @@ class AccessService {
       bookingId,
       action: "status",
       result: "success",
-      payload: status,
+      payload: lockStatus,
       actor: { source: "system" },
     });
 
-    return this._toStatusResponse(status, "provider_status");
+    return this._toStatusResponse(lockStatus, "provider_status");
   }
 
   /**
    * @private
-   * A provider answer as the API hands it out: the named fields and nothing
-   * else. The raw answer stays in the audit log - as long as provider keys
-   * slip through, a client can branch on them again, which is exactly what
-   * these endpoints are meant to end.
+   * A lock status as the API hands it out: the three fields of the
+   * provider's LockStatus and where the answer came from. The adapters
+   * answer in this shape already - there is nothing to read out of them.
    *
    * `null` carries meaning and is not `false`: it says the provider does not
    * report this.
    *
-   * @param {Object} [status={}] The provider's answer
-   * @param {string|null} [statusSource=null] Where the answer came from
+   * @param {import("./providers/access-provider").LockStatus} lockStatus
+   *   The provider's answer
+   * @param {string|null} statusSource Where the answer came from
    * @returns {{ open: boolean|null, locked: boolean|null,
    *   doorOpen: boolean|null, statusSource: string|null }} The status
    */
-  static _toStatusResponse(status = {}, statusSource = null) {
-    const open = this._resolveOpen(status);
-
-    return {
-      open,
-      locked: this._resolveLocked(status, open),
-      doorOpen: typeof status.doorOpen === "boolean" ? status.doorOpen : null,
-      statusSource,
-    };
+  static _toStatusResponse(lockStatus, statusSource) {
+    return { ...lockStatus, statusSource };
   }
 
   /**
    * @private
-   * The status of an open attempt: the fields of {@link _toStatusResponse}
-   * plus what only an attempt can say - whether it was confirmed, and how it
-   * failed if it did.
+   * The status of an open attempt, read off its progress: a confirmed open
+   * is an open, unlocked door; one not confirmed is not open, and whether
+   * the lock is thrown is unknown; a progress the provider could not tell
+   * is unknown on every count. The door itself is never reported by a
+   * process - only a sensor can.
    *
-   * @param {Object} [status={}] The provider's answer
-   * @param {string|null} [statusSource=null] Where the answer came from
-   * @returns {Object} The status of the open attempt
+   * @param {import("./providers/access-provider").OpenProgress} progress
+   *   How far the attempt has come
+   * @param {string|null} statusSource Where the answer came from
+   * @returns {Object} The fields of {@link _toStatusResponse} plus
+   *   `confirmed`, `errorCode` and `errorMessage`
    */
-  static _toOpenStatusResponse(status = {}, statusSource = null) {
+  static _toOpenStatusResponse(progress, statusSource) {
+    const lockStatus =
+      progress.confirmed === true
+        ? { open: true, locked: false, doorOpen: null }
+        : progress.confirmed === false
+          ? { open: false, locked: null, doorOpen: null }
+          : AccessProvider.unknownLockStatus;
+
     return {
-      ...this._toStatusResponse(status, statusSource),
-      confirmed:
-        typeof status.confirmed === "boolean" ? status.confirmed : null,
-      errorCode:
-        typeof status.errorCode === "string" ||
-        typeof status.errorCode === "number"
-          ? status.errorCode
-          : null,
-      errorMessage:
-        typeof status.errorMessage === "string" ? status.errorMessage : null,
+      ...this._toStatusResponse(lockStatus, statusSource),
+      confirmed: progress.confirmed,
+      errorCode: progress.errorCode,
+      errorMessage: progress.errorMessage,
     };
-  }
-
-  /**
-   * @private
-   * The process id an open answered with, if the provider started one. `null`
-   * means the door is already dealt with, a value means there is something to
-   * poll - so the answer says by itself whether polling is called for.
-   *
-   * @param {Object} [result={}] The provider's answer to an open
-   * @returns {string|null} The open process id
-   */
-  static _toOpenProcessId(result = {}) {
-    const openProcessId = result?.openProcessId;
-
-    return openProcessId === null || openProcessId === undefined
-      ? null
-      : String(openProcessId);
-  }
-
-  static _resolveOpen(status) {
-    if (typeof status.open === "boolean") {
-      return status.open;
-    }
-
-    if (typeof status.confirmed === "boolean") {
-      return status.confirmed;
-    }
-
-    if (status.state === "open" || status.state === "unlocked") {
-      return true;
-    }
-
-    if (status.state === "closed" || status.state === "locked") {
-      return false;
-    }
-
-    return null;
-  }
-
-  static _resolveLocked(status, open) {
-    if (typeof status.locked === "boolean") {
-      return status.locked;
-    }
-
-    if (status.state === "closed" || status.state === "locked") {
-      return true;
-    }
-
-    if (open === true) {
-      return false;
-    }
-
-    return null;
   }
 
   /**
