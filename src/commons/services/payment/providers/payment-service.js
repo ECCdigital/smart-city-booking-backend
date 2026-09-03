@@ -74,6 +74,7 @@ class PaymentService {
           tenantId,
           bookingId,
           paymentMethod,
+          trigger: "payment",
         });
       }
     }

@@ -37,6 +37,17 @@ const TRANSITION = Object.freeze({
 
 const TRANSITIONS = Object.freeze(Object.values(TRANSITION));
 
+/** Who set a transition off (glossary "Auslöser"). */
+const TRIGGER = Object.freeze({
+  CUSTOMER: "customer",
+  ADMIN: "admin",
+  PAYMENT: "payment",
+  WORKFLOW: "workflow",
+  SYSTEM: "system",
+});
+
+const TRIGGERS = Object.freeze(Object.values(TRIGGER));
+
 /** The states a booking lives in: not rejected, not cancelled. */
 const LIVE_STATUSES = Object.freeze([
   STATUS.REQUESTED,
@@ -257,6 +268,8 @@ module.exports = {
   TRANSITION,
   TRANSITIONS,
   TRANSITION_TABLE,
+  TRIGGER,
+  TRIGGERS,
   nextState,
   normalizeFlags,
   flagsFromStatus,

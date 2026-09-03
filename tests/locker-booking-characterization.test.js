@@ -24,6 +24,7 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
 const BookingService = require("../src/commons/services/checkout/booking-service");
+const lifecycleDocuments = require("../src/commons/services/booking-lifecycle/adapters/documents");
 const CheckoutController = require("../src/platform/api/v2/controllers/checkout.controller");
 const PaymentController = require("../src/platform/api/controllers/payment-controller");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
@@ -242,6 +243,19 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
       store.set(booking.id, clone(booking));
       return booking;
     });
+    sinon
+      .stub(BookingManager, "storeBookingIfStatus")
+      .callsFake(async (booking, expectStatus) => {
+        const previous = store.get(booking.id);
+        if (!previous || previous.status !== expectStatus) {
+          return null;
+        }
+        store.set(booking.id, clone(booking));
+        return previous;
+      });
+    sinon.stub(BookingManager, "replaceBooking").callsFake(async (document) => {
+      store.set(document.id, clone(document));
+    });
     sinon.stub(BookingManager, "removeBooking").callsFake(async (id) => {
       store.delete(id);
     });
@@ -290,6 +304,13 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     sinon.stub(PaymentUtils, "checkInvoicePermission").resolves(true);
     sinon.stub(AccessLogService, "log").resolves();
     sinon.stub(BookingService, "handleSingleBookingConfirmation").resolves();
+    // The payment runs the lifecycle: its receipt and its mail are not
+    // this test's business.
+    sinon.stub(lifecycleDocuments, "issue").resolves({
+      attachment: { type: "receipt" },
+      file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
+    });
+    sinon.stub(MailController, "sendBookingConfirmation").resolves();
     sinon.stub(MailController, "sendBookingRejection").resolves();
     sinon.stub(MailController, "sendBookingCancel").resolves();
   }

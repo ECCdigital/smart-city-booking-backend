@@ -94,7 +94,7 @@ class BookingStatusAction extends WorkflowAction {
         await bookingService.setBookingPayed({
           tenantId: this.tenantId,
           bookingId: this.bookingId,
-          skipWorkflow: true,
+          trigger: "workflow",
         });
       }
       if (bs === "reject") {

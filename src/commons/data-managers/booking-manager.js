@@ -214,6 +214,52 @@ class BookingManager {
   }
 
   /**
+   * The conditional write of the booking lifecycle (spec part 2, section 5):
+   * writes the booking only where the stored one is in `expectStatus`, in one
+   * atomic operation, and answers the document as it was before - the
+   * snapshot an abort restores with {@link replaceBooking}. No match answers
+   * `null`; the caller reads the state and raises the guard error.
+   *
+   * @param {Booking|Object} booking The booking to store
+   * @param {string} expectStatus The state the stored booking must be in
+   * @returns {Promise<Object|null>} The previous document, or null
+   */
+  static async storeBookingIfStatus(booking, expectStatus) {
+    const bookingEntity =
+      booking instanceof Booking ? booking : new Booking(booking);
+
+    bookingEntity.validate();
+
+    return await BookingModel.findOneAndUpdate(
+      {
+        id: bookingEntity.id,
+        tenantId: bookingEntity.tenantId,
+        status: expectStatus,
+      },
+      bookingEntity,
+      { upsert: false, new: false },
+    ).lean();
+  }
+
+  /**
+   * Puts a previous document back as a whole, as
+   * {@link storeBookingIfStatus} answered it: what the document did not
+   * carry is gone again, unlike a `$set` of it.
+   *
+   * @param {Object} document The document to put back
+   * @returns {Promise<void>}
+   */
+  static async replaceBooking(document) {
+    const fields = { ...document };
+    delete fields._id;
+    delete fields.__v;
+    await BookingModel.replaceOne(
+      { id: fields.id, tenantId: fields.tenantId },
+      fields,
+    );
+  }
+
+  /**
    * Find the bookings whose attachments reference a medium. The usage proof is
    * searched on demand (§4.7 of the media spec); a medium never carries a back
    * reference. Booking documents are not found this way — they hang on their
