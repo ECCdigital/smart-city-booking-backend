@@ -1,18 +1,15 @@
 /**
- * Characterization of who gets a notice today (glossary "Empfängerkreis"),
- * seen at the transport: the recipient rules are spread over the mail
- * adapter of the booking lifecycle, `MailController`,
- * `SupervisorNotificationService` and `MailerService`, and this pins each
- * of them where it is - the payment link that ignores the address it is
- * given, the BCC to the tenant, the tenant's gate on its own notice, the
- * supervisors without the booker, the organizers read off the bookables
- * used, the fan-out of a list of bookings, and the two silent exits of the
- * transport.
+ * Characterization of who gets a notice (glossary "Empfängerkreis"), seen
+ * at the transport: the recipient rules of the mail module - the payment
+ * link that goes to the booker whatever address the facade is given, the
+ * BCC to the tenant, the tenant's gate on its own notice, the supervisors
+ * without the booker, the organizers read off the bookables of the
+ * booking, a list of bookings without a group refused, and the two exits
+ * of the transport.
  *
  * Written for the first ticket of the mail-stack chain (Wayfinder,
- * "Mail-Stack (1): Charakterisierung ..."; spec sections 1 and 5). It
- * pins, it does not judge: where the spec changes a rule on purpose, the
- * case says so and names the ticket that turns it.
+ * "Mail-Stack (1): Charakterisierung ..."; spec sections 1 and 5) and
+ * turned with ticket 3 where the spec changes a rule on purpose (5.1, 5.7).
  */
 
 const { expect } = require("chai");
@@ -24,12 +21,15 @@ const mail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const {
   SKIPPED,
 } = require("../src/commons/services/booking-lifecycle/pipeline");
+const { BadRequestError } = require("../src/errors/BaseError");
 const {
   installInMemoryMailTransport,
 } = require("./helpers/in-memory-mail-transport");
 const {
   TENANT,
   TENANT_MAIL,
+  GROUP,
+  GROUP_MEMBER_IDS,
   CUSTOMER,
   BOOKER_USER,
   SUPERVISOR,
@@ -40,7 +40,6 @@ const {
   tenant,
   instance,
   booking,
-  ticket,
   concert,
   membership,
   installMailStackStore,
@@ -49,16 +48,25 @@ const {
 
 describe("mail recipients today: who gets which notice", function () {
   let sent;
-  let store;
   let env;
 
   function given(options = {}) {
-    store = installMailStackStore(options);
+    installMailStackStore(options);
     sent = installInMemoryMailTransport();
   }
 
-  const stored = (id) => store.bookings.find((entry) => entry.id === id);
   const recipients = () => sent.map((entry) => entry.to);
+  const single = (id, specific = {}) => ({
+    tenantId: TENANT,
+    bookingIds: [id],
+    ...specific,
+  });
+  const group = (specific = {}) => ({
+    tenantId: TENANT,
+    bookingIds: GROUP_MEMBER_IDS,
+    groupBookingId: GROUP,
+    ...specific,
+  });
 
   beforeEach(function () {
     env = process.env.FRONTEND_URL;
@@ -69,11 +77,10 @@ describe("mail recipients today: who gets which notice", function () {
   afterEach(function () {
     sinon.restore();
     process.env.FRONTEND_URL = env;
-    store = null;
   });
 
   describe("the payment link after approval", function () {
-    it("goes to the booking's own address, whatever address it is given (spec 5.1: no address at the seam after ticket 3)", async function () {
+    it("goes to the booker, whatever address the facade is given (spec 5.1)", async function () {
       given();
 
       await MailController.sendPaymentLinkAfterBookingApproval(
@@ -85,7 +92,7 @@ describe("mail recipients today: who gets which notice", function () {
       expect(recipients()).to.deep.equal([CUSTOMER]);
     });
 
-    it("of a group goes to the address it is given", async function () {
+    it("of a group goes to the booker of its first member, whatever address the facade is given (spec 5.1)", async function () {
       given();
 
       await MailController.sendPaymentLinkAfterBookingApproval(
@@ -95,7 +102,7 @@ describe("mail recipients today: who gets which notice", function () {
         true,
       );
 
-      expect(recipients()).to.deep.equal(["jemand-anderes@example.test"]);
+      expect(recipients()).to.deep.equal([CUSTOMER]);
     });
   });
 
@@ -103,9 +110,10 @@ describe("mail recipients today: who gets which notice", function () {
     it("goes with a booking confirmation that carries a document, where the tenant wants receipts copied", async function () {
       given();
 
-      await mail.sendBookingConfirmation([stored("B-1")], {
-        attachments: [issuedFile("RE-1.pdf")],
-      });
+      await mail.send(
+        "BOOKING_CONFIRMATION",
+        single("B-1", { attachments: [issuedFile("RE-1.pdf")] }),
+      );
 
       expect(sent[0].bcc).to.equal(TENANT_MAIL);
     });
@@ -113,7 +121,7 @@ describe("mail recipients today: who gets which notice", function () {
     it("goes with a booking confirmation without a document too, because the iCal of a timed booking counts as one", async function () {
       given({ bookings: [booking({ attachments: [] })] });
 
-      await mail.sendBookingConfirmation([stored("B-1")], { attachments: [] });
+      await mail.send("BOOKING_CONFIRMATION", single("B-1"));
 
       expect(sent[0].attachments.map((a) => a.filename)).to.deep.equal([
         "buchung-B-1.ics",
@@ -130,7 +138,7 @@ describe("mail recipients today: who gets which notice", function () {
         tenant: tenant({ enablePublicStatusView: false }),
       });
 
-      await mail.sendBookingConfirmation([stored("B-1")], { attachments: [] });
+      await mail.send("BOOKING_CONFIRMATION", single("B-1"));
 
       expect(sent[0].attachments.map((a) => a.filename)).to.deep.equal([
         "buchung-B-1.ics",
@@ -144,9 +152,10 @@ describe("mail recipients today: who gets which notice", function () {
     it("stays away where the tenant does not want receipts copied", async function () {
       given({ tenant: tenant({ receiptEnableBCC: false }) });
 
-      await mail.sendBookingConfirmation([stored("B-1")], {
-        attachments: [issuedFile("RE-1.pdf")],
-      });
+      await mail.send(
+        "BOOKING_CONFIRMATION",
+        single("B-1", { attachments: [issuedFile("RE-1.pdf")] }),
+      );
 
       expect(sent[0].bcc).to.equal(undefined);
     });
@@ -154,10 +163,7 @@ describe("mail recipients today: who gets which notice", function () {
     it("always goes with a cancellation", async function () {
       given({ tenant: tenant({ receiptEnableBCC: false }) });
 
-      await mail.sendBookingCancel([stored("B-cancelled")], {
-        attachments: [],
-        reason: "",
-      });
+      await mail.send("BOOKING_CANCEL", single("B-cancelled", { reason: "" }));
 
       expect(sent[0].bcc).to.equal(TENANT_MAIL);
     });
@@ -165,9 +171,10 @@ describe("mail recipients today: who gets which notice", function () {
     it("never goes with a free booking confirmation, documents or not", async function () {
       given();
 
-      await mail.sendFreeBookingConfirmation([stored("B-1")], {
-        attachments: [issuedFile("RE-1.pdf")],
-      });
+      await mail.send(
+        "FREE_BOOKING_CONFIRMATION",
+        single("B-1", { attachments: [issuedFile("RE-1.pdf")] }),
+      );
 
       expect(sent[0].bcc).to.equal(undefined);
     });
@@ -177,16 +184,16 @@ describe("mail recipients today: who gets which notice", function () {
     it("goes to the tenant's address", async function () {
       given();
 
-      const answer = await mail.sendTenantMail([stored("B-1")]);
+      const answer = await mail.send("INCOMING_BOOKING", single("B-1"));
 
-      expect(answer).to.equal(undefined);
+      expect(answer).to.not.equal(SKIPPED);
       expect(recipients()).to.deep.equal([TENANT_MAIL]);
     });
 
     it("is skipped, nothing sent, where the tenant does not want one", async function () {
       given({ tenant: tenant({ notifyOnNewBooking: false }) });
 
-      const answer = await mail.sendTenantMail([stored("B-1")]);
+      const answer = await mail.send("INCOMING_BOOKING", single("B-1"));
 
       expect(answer).to.equal(SKIPPED);
       expect(sent).to.have.length(0);
@@ -197,7 +204,7 @@ describe("mail recipients today: who gets which notice", function () {
     it("goes to every recipient of the booker's membership - by address, by account, by role - once each, and never to the booker", async function () {
       given();
 
-      await mail.sendSupervisorMail([stored("B-1")]);
+      await mail.send("SUPERVISOR_BOOKING_NOTIFICATION", single("B-1"));
 
       expect(recipients()).to.have.members([SUPERVISOR, SECRETARY]);
       expect(recipients()).to.not.include(BOOKER_USER);
@@ -210,9 +217,7 @@ describe("mail recipients today: who gets which notice", function () {
     it("of a group is one mail per recipient", async function () {
       given();
 
-      await mail.sendSupervisorMail(["G-1", "G-2", "G-3"].map(stored), {
-        aggregated: true,
-      });
+      await mail.send("SUPERVISOR_BOOKING_NOTIFICATION", group());
 
       expect(recipients()).to.have.members([SUPERVISOR, SECRETARY]);
       expect(sent[0].html).to.include("G-1");
@@ -230,38 +235,50 @@ describe("mail recipients today: who gets which notice", function () {
         }),
       });
 
-      await mail.sendSupervisorMail([stored("B-1")]);
+      await mail.send("SUPERVISOR_BOOKING_NOTIFICATION", single("B-1"));
 
       expect(recipients()).to.deep.equal([SUPERVISOR]);
     });
 
-    it("is not sent for a guest booking without an account", async function () {
+    it("is skipped for a guest booking without an account", async function () {
       given({ bookings: [booking({ assignedUserId: "" })] });
 
-      await mail.sendSupervisorMail([stored("B-1")]);
+      const answer = await mail.send(
+        "SUPERVISOR_BOOKING_NOTIFICATION",
+        single("B-1"),
+      );
 
+      expect(answer).to.equal(SKIPPED);
       expect(sent).to.have.length(0);
     });
 
-    it("is not sent where the tenant has supervisor notices off", async function () {
+    it("is skipped where the tenant has supervisor notices off", async function () {
       given({ tenant: tenant({ notifySupervisorsOnBooking: false }) });
 
-      await mail.sendSupervisorMail([stored("B-1")]);
+      const answer = await mail.send(
+        "SUPERVISOR_BOOKING_NOTIFICATION",
+        single("B-1"),
+      );
 
+      expect(answer).to.equal(SKIPPED);
       expect(sent).to.have.length(0);
     });
 
-    it("is not sent where the booker's membership names nobody", async function () {
+    it("is skipped where the booker's membership names nobody", async function () {
       given({ membership: null });
 
-      await mail.sendSupervisorMail([stored("B-1")]);
+      const answer = await mail.send(
+        "SUPERVISOR_BOOKING_NOTIFICATION",
+        single("B-1"),
+      );
 
+      expect(answer).to.equal(SKIPPED);
       expect(sent).to.have.length(0);
     });
   });
 
   describe("the organizers' notice of a new ticket booking", function () {
-    /** The ticket booking as the lifecycle carries it: bookables used. */
+    /** The ticket booking: two positions of the ticket. */
     function ticketBooking(items) {
       return booking({
         id: "T-1",
@@ -269,73 +286,69 @@ describe("mail recipients today: who gets which notice", function () {
       });
     }
 
-    it("goes to the organizer of the event of every ticket position, read off the bookable used, once per organizer", async function () {
+    it("goes to the organizer of the event of every ticket position, read off the booking's bookables, once per organizer", async function () {
       const entity = ticketBooking([
-        { bookableId: "ticket", amount: 1, _bookableUsed: ticket() },
-        { bookableId: "ticket", amount: 2, _bookableUsed: ticket() },
+        { bookableId: "ticket", amount: 1 },
+        { bookableId: "ticket", amount: 2 },
       ]);
       given({ bookings: [entity] });
 
-      await mail.sendEmailToOrganizer([entity]);
+      await mail.send("NEW_BOOKING", single("T-1"));
 
       expect(recipients()).to.deep.equal([ORGANIZER]);
     });
 
-    it("is not sent for a booking without a ticket position", async function () {
-      const entity = ticketBooking([
-        { bookableId: "room", amount: 1, _bookableUsed: { type: "room" } },
-      ]);
+    it("is skipped for a booking without a ticket position", async function () {
+      const entity = ticketBooking([{ bookableId: "room", amount: 1 }]);
       given({ bookings: [entity] });
 
-      await mail.sendEmailToOrganizer([entity]);
+      const answer = await mail.send("NEW_BOOKING", single("T-1"));
 
+      expect(answer).to.equal(SKIPPED);
       expect(sent).to.have.length(0);
     });
 
-    it("is not sent where the event names no organizer address", async function () {
-      const entity = ticketBooking([
-        { bookableId: "ticket", amount: 1, _bookableUsed: ticket() },
-      ]);
+    it("is skipped where the event names no organizer address", async function () {
+      const entity = ticketBooking([{ bookableId: "ticket", amount: 1 }]);
       given({
         bookings: [entity],
         events: [concert({ eventOrganizer: {} })],
       });
 
-      await mail.sendEmailToOrganizer([entity]);
+      const answer = await mail.send("NEW_BOOKING", single("T-1"));
 
+      expect(answer).to.equal(SKIPPED);
       expect(sent).to.have.length(0);
     });
   });
 
   describe("a list of bookings without a group", function () {
-    it("fans out: one mail per booking, each with the same documents, to the one address (spec 5.7: a programming error after ticket 3)", async function () {
+    it("is refused as a programming error, nothing sent (spec 5.7: no fan-out)", async function () {
       given();
 
-      await MailController.sendBookingConfirmation(
-        CUSTOMER,
-        ["G-1", "G-2"],
-        TENANT,
-        [{ filename: "RE-1.pdf", content: Buffer.from("%PDF") }],
-      );
-
-      expect(recipients()).to.deep.equal([CUSTOMER, CUSTOMER]);
-      expect(sent[0].html).to.include("G-1");
-      expect(sent[1].html).to.include("G-2");
-      for (const entry of sent) {
-        expect(entry.attachments[0].filename).to.equal("RE-1.pdf");
+      let error;
+      try {
+        await mail.send("BOOKING_CONFIRMATION", {
+          tenantId: TENANT,
+          bookingIds: ["G-1", "G-2"],
+          attachments: [issuedFile("RE-1.pdf")],
+        });
+      } catch (err) {
+        error = err;
       }
+
+      expect(error).to.be.instanceOf(BadRequestError);
+      expect(sent).to.have.length(0);
     });
   });
 
-  describe("the silent exits of the transport", function () {
-    it("sends nothing and answers nothing where the instance has mail disabled (spec 5.4: a skipped value after ticket 2)", async function () {
+  describe("the exits of the transport", function () {
+    it("sends nothing where the instance has mail disabled; the mail adapter answers skipped, so the effect row shows it (spec 5.4)", async function () {
       given({ instance: instance({ mailEnabled: false }) });
 
-      const answer = await mail.sendBookingConfirmation([stored("B-1")], {
-        attachments: [],
-      });
+      const answer = await mail.send("BOOKING_CONFIRMATION", single("B-1"));
 
-      expect(answer).to.equal(undefined);
+      expect(answer).to.equal(SKIPPED);
       expect(sent).to.have.length(0);
     });
 

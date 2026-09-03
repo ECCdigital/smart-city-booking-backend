@@ -217,20 +217,29 @@ function inMemoryDocuments(store, options = {}) {
   return adapter;
 }
 
-const MAIL_INTENTS = [
-  "sendRequestConfirmation",
-  "sendBookingConfirmation",
-  "sendFreeBookingConfirmation",
-  "sendBookingCancel",
-  "sendBookingRejection",
-  "sendVerifyBookingRejection",
-  "sendEmailToOrganizer",
-  "sendTenantMail",
-  "sendSupervisorMail",
-];
-
-function inMemoryMail(options) {
-  return recordingAdapter("mail", MAIL_INTENTS, options);
+/**
+ * The mail adapter at the seam: `send(type, ctx)` records
+ * `{ op: "send", args: [type, ctx] }`; `failOn` and `skipOn` name notice
+ * types (`BOOKING_CONFIRMATION`), a skipped one being a notice nobody gets.
+ */
+function inMemoryMail({ failOn = [], skipOn = [] } = {}) {
+  const adapter = {
+    name: "mail",
+    calls: [],
+    failOn: new Set(failOn),
+    skipOn: new Set(skipOn),
+    async send(type, ctx) {
+      adapter.calls.push({ op: "send", args: [type, ctx] });
+      if (adapter.failOn.has(type)) {
+        throw new Error(`mail.${type} failed (simulated)`);
+      }
+      if (adapter.skipOn.has(type)) {
+        return SKIPPED;
+      }
+      return [];
+    },
+  };
+  return adapter;
 }
 
 function inMemoryWorkflow(options) {
@@ -266,7 +275,7 @@ function inMemoryAdapters({
       failOn: failOn.payment,
       skipOn: skipOn.payment,
     }),
-    mail: inMemoryMail({ failOn: failOn.mail }),
+    mail: inMemoryMail({ failOn: failOn.mail, skipOn: skipOn.mail }),
     workflow: inMemoryWorkflow({ failOn: failOn.workflow }),
     clock: clock || (() => 1_756_800_000_000),
   };
@@ -293,6 +302,5 @@ module.exports = {
   DEFAULT_TENANT,
   recordingAdapter,
   effectTable,
-  MAIL_INTENTS,
   clone,
 };

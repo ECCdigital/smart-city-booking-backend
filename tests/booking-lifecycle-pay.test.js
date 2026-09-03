@@ -46,8 +46,8 @@ const PAY_TABLE = [
   "provision access.provision ok",
   "document documents.issue ok",
   "notify workflow.emit ok",
-  "notify mail.sendBookingConfirmation ok",
-  "notify mail.sendEmailToOrganizer skipped",
+  "notify mail.BOOKING_CONFIRMATION ok",
+  "notify mail.NEW_BOOKING skipped",
 ];
 
 describe("booking lifecycle: pay", function () {
@@ -95,12 +95,12 @@ describe("booking lifecycle: pay", function () {
       { op: "emit", args: [TENANT, "B-1", "onPay"] },
     ]);
     const [mail] = adapters.mail.calls;
-    expect(mail.op).to.equal("sendBookingConfirmation");
-    expect(mail.args[0].map((b) => b.id)).to.deep.equal(["B-1"]);
+    expect(mail.args[0]).to.equal("BOOKING_CONFIRMATION");
+    expect(mail.args[1].bookingIds).to.deep.equal(["B-1"]);
     expect(mail.args[1].attachments.map((file) => file.name)).to.deep.equal([
       "receipt-1.pdf",
     ]);
-    expect(mail.args[1].aggregated).to.equal(false);
+    expect(mail.args[1].groupBookingId).to.equal(null);
   });
 
   it("keeps the time of the payment the caller names", async function () {
@@ -128,8 +128,8 @@ describe("booking lifecycle: pay", function () {
       "provision access.provision ok",
       "document documents.issue ok",
       "notify workflow.emit skipped",
-      "notify mail.sendBookingConfirmation ok",
-      "notify mail.sendEmailToOrganizer skipped",
+      "notify mail.BOOKING_CONFIRMATION ok",
+      "notify mail.NEW_BOOKING skipped",
     ]);
     expect(adapters.workflow.calls).to.deep.equal([]);
   });
@@ -153,10 +153,8 @@ describe("booking lifecycle: pay", function () {
       trigger: TRIGGER.ADMIN,
     });
 
-    expect(effectTable(outcome).at(-1)).to.equal(
-      "notify mail.sendEmailToOrganizer ok",
-    );
-    expect(adapters.mail.calls.at(-1).args[0].map((b) => b.id)).to.deep.equal([
+    expect(effectTable(outcome).at(-1)).to.equal("notify mail.NEW_BOOKING ok");
+    expect(adapters.mail.calls.at(-1).args[1].bookingIds).to.deep.equal([
       "B-1",
     ]);
   });
@@ -273,8 +271,8 @@ describe("booking lifecycle: pay", function () {
         "provision access.provision recorded",
         "document documents.issue ok",
         "notify workflow.emit ok",
-        "notify mail.sendBookingConfirmation ok",
-        "notify mail.sendEmailToOrganizer skipped",
+        "notify mail.BOOKING_CONFIRMATION ok",
+        "notify mail.NEW_BOOKING skipped",
       ]);
       expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
     });
@@ -294,8 +292,8 @@ describe("booking lifecycle: pay", function () {
         "provision access.provision ok",
         "document documents.issue recorded",
         "notify workflow.emit ok",
-        "notify mail.sendBookingConfirmation ok",
-        "notify mail.sendEmailToOrganizer skipped",
+        "notify mail.BOOKING_CONFIRMATION ok",
+        "notify mail.NEW_BOOKING skipped",
       ]);
       expect(outcome.failure).to.equal(null);
       expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
@@ -306,7 +304,7 @@ describe("booking lifecycle: pay", function () {
     it("a mail that fails is recorded", async function () {
       const { lifecycle } = lifecycleOver({
         bookings: [booking()],
-        failOn: { mail: ["sendBookingConfirmation"] },
+        failOn: { mail: ["BOOKING_CONFIRMATION"] },
       });
 
       const outcome = await lifecycle.pay(TENANT, "B-1", {
@@ -314,7 +312,7 @@ describe("booking lifecycle: pay", function () {
       });
 
       expect(effectTable(outcome)[4]).to.equal(
-        "notify mail.sendBookingConfirmation recorded",
+        "notify mail.BOOKING_CONFIRMATION recorded",
       );
       expect(outcome.failure).to.equal(null);
     });

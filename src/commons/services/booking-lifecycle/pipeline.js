@@ -57,7 +57,7 @@ const EFFECT_STATUS = Object.freeze({
 
 /**
  * The failure policy per adapter operation (spec part 2, 4.1). Keyed
- * `adapter.op`; `mail.*` covers the nine mail intents.
+ * `adapter.op`; `mail.*` covers every notice type the mail adapter sends.
  */
 const POLICY_TABLE = Object.freeze({
   "store.save": POLICY.ABORT,
@@ -92,6 +92,21 @@ function policyOf(adapter, op) {
     );
   }
   return policy;
+}
+
+/**
+ * The notify step of a notice (glossary "Mitteilung") of the given type
+ * over the mail adapter: `mail.send(type, ctx)`, the effect row
+ * `mail.<type>`, skipped where the notice has no recipient.
+ *
+ * @param {Object} mail The mail adapter
+ * @param {string} type A key of the mail registry
+ * @param {Object} ctx The context of `compose`
+ * @param {{ when?: function(Object): boolean, bookingId?: string }} [options]
+ * @returns {Object} The step
+ */
+function noticeStep(mail, type, ctx, options) {
+  return step(PHASE.NOTIFY, "mail", type, () => mail.send(type, ctx), options);
 }
 
 class LifecycleError extends Error {
@@ -339,6 +354,7 @@ module.exports = {
   POLICY_TABLE,
   EFFECT_STATUS,
   SKIPPED,
+  noticeStep,
   policyOf,
   step,
   runPipeline,

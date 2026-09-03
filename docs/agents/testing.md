@@ -60,7 +60,7 @@ describe("BlockPeriodService", function () {
 
 Characterization tests pin rendered output (the mails under `tests/snapshots/mail/`) through `tests/helpers/snapshot.js`. A missing snapshot is recorded on the first run and committed; a mismatch fails and names the first differing line. `UPDATE_SNAPSHOTS=1 npm test` rewrites them — only for a change made on purpose, named in the changelog.
 
-Mail tests run over the in-memory transport: `installInMemoryMailTransport()` from `tests/helpers/in-memory-mail-transport.js` puts `mail-service/transports/in-memory-transport.js` behind `MailerService.send` and answers the sink of the mails sent; a no-reply host named `broken` refuses every send.
+Mail tests run over the in-memory transport: `installInMemoryMailTransport()` from `tests/helpers/in-memory-mail-transport.js` puts `mail-service/transports/in-memory-transport.js` behind `MailerService.send` and answers the sink of the mails sent; a no-reply host named `broken` refuses every send. The fixture behind the data managers is `installMailStackStore()` from `tests/helpers/mail-stack-fixtures.js`; `compose` is tested at its value (`tests/mail-compose.test.js`), the rendered bodies by the snapshots. The booking lifecycle harness runs `compose` for real and records each mail at the transport as `mail.<type> <to> [<attachments>]`.
 
 ## Running
 

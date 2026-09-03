@@ -104,8 +104,8 @@ describe("booking lifecycle: cancel", function () {
       "provision access.revoke ok",
       "document documents.issue ok",
       "notify workflow.emit ok",
-      "notify mail.sendBookingRejection skipped",
-      "notify mail.sendBookingCancel ok",
+      "notify mail.BOOKING_REJECTION skipped",
+      "notify mail.BOOKING_CANCEL ok",
     ]);
     expect(outcome).to.include({
       transition: "cancel",
@@ -156,10 +156,10 @@ describe("booking lifecycle: cancel", function () {
       { op: "emit", args: [TENANT, "B-1", "onReject"] },
     ]);
     const [mail] = adapters.mail.calls;
-    expect(mail.op).to.equal("sendBookingCancel");
-    expect(mail.args[0].map((b) => b.id)).to.deep.equal(["B-1"]);
+    expect(mail.args[0]).to.equal("BOOKING_CANCEL");
+    expect(mail.args[1].bookingIds).to.deep.equal(["B-1"]);
     expect(mail.args[1].reason).to.equal("Raum gesperrt");
-    expect(mail.args[1].aggregated).to.equal(false);
+    expect(mail.args[1].groupBookingId).to.equal(null);
     expect(mail.args[1].attachments.map((f) => f.name)).to.deep.equal([
       "cancellation-1.pdf",
     ]);
@@ -198,8 +198,8 @@ describe("booking lifecycle: cancel", function () {
       "provision access.revoke ok",
       "document documents.issue ok",
       "notify workflow.emit ok",
-      "notify mail.sendBookingRejection ok",
-      "notify mail.sendBookingCancel skipped",
+      "notify mail.BOOKING_REJECTION ok",
+      "notify mail.BOOKING_CANCEL skipped",
     ]);
     const stored = adapters.store.rows.get("B-1");
     expect(stored).to.include({
@@ -209,7 +209,7 @@ describe("booking lifecycle: cancel", function () {
     });
     expect(stored.cancellationRefund).to.not.have.property("cancelledFrom");
     const [mail] = adapters.mail.calls;
-    expect(mail.op).to.equal("sendBookingRejection");
+    expect(mail.args[0]).to.equal("BOOKING_REJECTION");
     expect(mail.args[1].attachments.map((f) => f.name)).to.deep.equal([
       "cancellation-1.pdf",
     ]);
@@ -229,8 +229,8 @@ describe("booking lifecycle: cancel", function () {
       "provision access.revoke ok",
       "document documents.issue skipped",
       "notify workflow.emit ok",
-      "notify mail.sendBookingRejection skipped",
-      "notify mail.sendBookingCancel ok",
+      "notify mail.BOOKING_REJECTION skipped",
+      "notify mail.BOOKING_CANCEL ok",
     ]);
     expect(adapters.documents.calls).to.deep.equal([]);
     expect(adapters.mail.calls[0].args[1].attachments).to.deep.equal([]);
@@ -287,8 +287,8 @@ describe("booking lifecycle: cancel", function () {
       "provision access.revoke ok",
       "document documents.issue ok",
       "notify workflow.emit ok",
-      "notify mail.sendBookingRejection skipped",
-      "notify mail.sendBookingCancel ok",
+      "notify mail.BOOKING_REJECTION skipped",
+      "notify mail.BOOKING_CANCEL ok",
     ]);
     const stored = adapters.store.rows.get("B-1");
     expect(stored.status).to.equal("rejected");
@@ -458,8 +458,8 @@ describe("booking lifecycle: cancel", function () {
         "provision access.revoke recorded",
         "document documents.issue ok",
         "notify workflow.emit ok",
-        "notify mail.sendBookingRejection skipped",
-        "notify mail.sendBookingCancel ok",
+        "notify mail.BOOKING_REJECTION skipped",
+        "notify mail.BOOKING_CANCEL ok",
       ]);
       expect(outcome.failure).to.equal(null);
     });
@@ -487,7 +487,7 @@ describe("booking lifecycle: cancel", function () {
     it("a cancel mail that fails is recorded; the booking is cancelled", async function () {
       const { adapters, lifecycle } = lifecycleOver({
         bookings: [booking()],
-        failOn: { mail: ["sendBookingCancel"] },
+        failOn: { mail: ["BOOKING_CANCEL"] },
       });
 
       const outcome = await lifecycle.cancel(TENANT, "B-1", {
@@ -495,7 +495,7 @@ describe("booking lifecycle: cancel", function () {
       });
 
       expect(effectTable(outcome).at(-1)).to.equal(
-        "notify mail.sendBookingCancel recorded",
+        "notify mail.BOOKING_CANCEL recorded",
       );
       expect(outcome.failure).to.equal(null);
       expect(adapters.store.rows.get("B-1").status).to.equal("cancelled");
@@ -545,7 +545,7 @@ describe("booking lifecycle: requestCancel", function () {
 
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
-      "notify mail.sendVerifyBookingRejection ok",
+      "notify mail.VERIFY_BOOKING_REJECTION ok",
     ]);
     expect(outcome).to.include({
       transition: "requestCancel",
@@ -569,8 +569,8 @@ describe("booking lifecycle: requestCancel", function () {
       { op: "save", args: ["B-1", "confirmed"] },
     ]);
     const [mail] = adapters.mail.calls;
-    expect(mail.op).to.equal("sendVerifyBookingRejection");
-    expect(mail.args[0].map((b) => b.id)).to.deep.equal(["B-1"]);
+    expect(mail.args[0]).to.equal("VERIFY_BOOKING_REJECTION");
+    expect(mail.args[1].bookingIds).to.deep.equal(["B-1"]);
     expect(mail.args[1]).to.include({
       hookId: stored.hooks[0].id,
       reason: "Krank",
@@ -642,7 +642,7 @@ describe("booking lifecycle: requestCancel", function () {
   it("a verification mail that fails is recorded; the hook stands", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking()],
-      failOn: { mail: ["sendVerifyBookingRejection"] },
+      failOn: { mail: ["VERIFY_BOOKING_REJECTION"] },
     });
 
     const outcome = await lifecycle.requestCancel(TENANT, "B-1", {
@@ -651,7 +651,7 @@ describe("booking lifecycle: requestCancel", function () {
 
     expect(effectTable(outcome)).to.deep.equal([
       "persist store.save ok",
-      "notify mail.sendVerifyBookingRejection recorded",
+      "notify mail.VERIFY_BOOKING_REJECTION recorded",
     ]);
     expect(outcome.failure).to.equal(null);
     expect(adapters.store.rows.get("B-1").hooks).to.have.length(1);

@@ -1,25 +1,25 @@
 /**
  * Characterization of every notice (glossary "Mitteilung") the platform
- * sends today: the 21 public methods of `MailController` - the 14 booking
- * notices over `MailSenderService.dispatch`, the two tenant notices and
- * the five instance notices that render and send directly - each run over
- * the fixture of `helpers/mail-stack-fixtures.js` and the in-memory
- * transport, and pinned as a snapshot of recipient, subject, attachment
- * names and the rendered HTML under `tests/snapshots/mail/`.
+ * sends: the 14 booking notices over `compose` + `send`, the two tenant
+ * notices and the five instance notices that `MailController` still
+ * renders and sends directly - each run over the fixture of
+ * `helpers/mail-stack-fixtures.js` and the in-memory transport, and
+ * pinned as a snapshot of recipient, subject, attachment names and the
+ * rendered HTML under `tests/snapshots/mail/`.
  *
  * The nine notices the booking lifecycle sends go in through its mail
- * adapter (`booking-lifecycle/adapters/mail.js`), the way the lifecycle
- * calls them - the adapter picks the recipient and adds the `mailAttach`
- * documents; the other twelve go in at `MailController`, the way the
- * payment providers, the access service, the workflow action and the
- * account services call them.
+ * adapter (`booking-lifecycle/adapters/mail.js`, `send(type, ctx)`), the
+ * way the lifecycle calls them; the five booking notices of the other
+ * callers go in at the `MailController` facade, the way the payment
+ * providers, the reprint and the access service still call it until the
+ * last ticket of the chain.
  *
  * Written for the first ticket of the mail-stack chain (Wayfinder,
- * "Mail-Stack (1): Charakterisierung ..."; spec section 6). It pins, it
- * does not judge: the snapshots are what goes out today, byte for byte,
- * so the compose/send split of tickets 2 to 4 can prove it changed nothing
- * it did not mean to. A change the chain makes on purpose is accepted with
- * `UPDATE_SNAPSHOTS=1 npm test` and named in the changelog.
+ * "Mail-Stack (1): Charakterisierung ..."; spec section 6) against the
+ * stack as it was, and kept byte-identical through ticket 3 (compose): the
+ * snapshots are the regression net of the split. A change the chain makes
+ * on purpose is accepted with `UPDATE_SNAPSHOTS=1 npm test` and named in
+ * the changelog.
  *
  * Dates render in Europe/Berlin where the formatters say so; the event
  * date of a ticket goes through a formatter without a zone and renders the
@@ -40,9 +40,10 @@ const {
 } = require("./helpers/in-memory-mail-transport");
 const {
   TENANT,
+  GROUP,
+  GROUP_MEMBER_IDS,
   CUSTOMER,
   SUPERVISOR,
-  ORGANIZER,
   FRONTEND_URL,
   BACKEND_URL,
   NOW,
@@ -79,8 +80,19 @@ describe("mail characterization: every notice as it goes out today", function ()
     sent = installInMemoryMailTransport();
   }
 
-  const stored = (id) => store.bookings.find((booking) => booking.id === id);
-  const group = () => ["G-1", "G-2", "G-3"].map(stored);
+  /** The context of a notice of one booking, as the lifecycle names it. */
+  const single = (id, specific = {}) => ({
+    tenantId: TENANT,
+    bookingIds: [id],
+    ...specific,
+  });
+  /** The context of the aggregated notice of the group of three. */
+  const group = (specific = {}) => ({
+    tenantId: TENANT,
+    bookingIds: GROUP_MEMBER_IDS,
+    groupBookingId: GROUP,
+    ...specific,
+  });
 
   beforeEach(function () {
     env = {
@@ -98,11 +110,11 @@ describe("mail characterization: every notice as it goes out today", function ()
     process.env.BACKEND_URL = env.BACKEND_URL;
   });
 
-  /** Runs a send and pins the one mail it produced. */
-  async function pin(name, send) {
+  /** Runs a send and pins the first of the mails it produced. */
+  async function pin(name, send, { count = 1 } = {}) {
     if (!store) given();
     await send();
-    expect(sent, `${name}: exactly one mail`).to.have.length(1);
+    expect(sent, `${name}: ${count} mail(s)`).to.have.length(count);
     expectSnapshot(`mail/${name}.txt`, snapshotOf(sent[0]));
   }
 
@@ -113,18 +125,20 @@ describe("mail characterization: every notice as it goes out today", function ()
   describe("booking notices of the lifecycle, single booking", function () {
     it("booking confirmation: receipt, then the mailAttach document, iCal, QR code, BCC to the tenant", async function () {
       await pin("booking-confirmation", () =>
-        mail.sendBookingConfirmation([stored("B-1")], {
-          attachments: [issuedFile("RE-1.pdf")],
-        }),
+        mail.send(
+          "BOOKING_CONFIRMATION",
+          single("B-1", { attachments: [issuedFile("RE-1.pdf")] }),
+        ),
       );
     });
 
     it("booking confirmation without the public status view: no QR code", async function () {
       given({ tenant: tenant({ enablePublicStatusView: false }) });
       await pin("booking-confirmation.no-status-view", () =>
-        mail.sendBookingConfirmation([stored("B-1")], {
-          attachments: [issuedFile("RE-1.pdf")],
-        }),
+        mail.send(
+          "BOOKING_CONFIRMATION",
+          single("B-1", { attachments: [issuedFile("RE-1.pdf")] }),
+        ),
       );
     });
 
@@ -138,95 +152,114 @@ describe("mail characterization: every notice as it goes out today", function ()
         }),
       });
       await pin("booking-confirmation.plain-tenant", () =>
-        mail.sendBookingConfirmation([stored("B-1")], {
-          attachments: [issuedFile("RE-1.pdf")],
-        }),
+        mail.send(
+          "BOOKING_CONFIRMATION",
+          single("B-1", { attachments: [issuedFile("RE-1.pdf")] }),
+        ),
       );
     });
 
     it("free booking confirmation: mailAttach document and iCal, no receipt, no BCC", async function () {
       await pin("free-booking-confirmation", () =>
-        mail.sendFreeBookingConfirmation([stored("B-1")], {
-          attachments: [],
-        }),
+        mail.send("FREE_BOOKING_CONFIRMATION", single("B-1")),
       );
     });
 
     it("request confirmation: mailAttach document, no iCal", async function () {
       await pin("booking-request-confirmation", () =>
-        mail.sendRequestConfirmation([stored("B-1")], { attachments: [] }),
+        mail.send("BOOKING_REQUEST_CONFIRMATION", single("B-1")),
       );
     });
 
     it("cancellation: the cancellation document, the reason, the refund of the booking, BCC to the tenant", async function () {
       await pin("booking-cancel", () =>
-        mail.sendBookingCancel([stored("B-cancelled")], {
-          attachments: [issuedFile("ST-1.pdf")],
-          reason: "Der Saal wird renoviert.",
-        }),
+        mail.send(
+          "BOOKING_CANCEL",
+          single("B-cancelled", {
+            attachments: [issuedFile("ST-1.pdf")],
+            reason: "Der Saal wird renoviert.",
+          }),
+        ),
       );
     });
 
     it("rejection: the reason, no document", async function () {
       await pin("booking-rejection", () =>
-        mail.sendBookingRejection([stored("B-1")], {
-          reason: "Keine Kapazität am gewünschten Tag.",
-        }),
+        mail.send(
+          "BOOKING_REJECTION",
+          single("B-1", { reason: "Keine Kapazität am gewünschten Tag." }),
+        ),
       );
     });
 
     it("verification of a cancellation request: the link with the hook, the reason, the refund preview", async function () {
       await pin("verify-rejection", () =>
-        mail.sendVerifyBookingRejection([stored("B-1")], {
-          hookId: "hook-reject-1",
-          reason: "Termin verschoben",
-          refundPreview: cancellationRefund(),
-        }),
+        mail.send(
+          "VERIFY_BOOKING_REJECTION",
+          single("B-1", {
+            hookId: "hook-reject-1",
+            reason: "Termin verschoben",
+            refundPreview: cancellationRefund(),
+          }),
+        ),
       );
     });
 
     it("the tenant's notice of a new booking", async function () {
-      await pin("incoming-booking", () => mail.sendTenantMail([stored("B-1")]));
+      await pin("incoming-booking", () =>
+        mail.send("INCOMING_BOOKING", single("B-1")),
+      );
+    });
+
+    it("the organizer's notice of a new ticket booking: the event in the booking details", async function () {
+      await pin("new-booking", () => mail.send("NEW_BOOKING", single("G-3")));
+    });
+
+    it("the supervisors' notice of a new booking: one mail per supervisor, the first pinned", async function () {
+      await pin(
+        "supervisor-booking-notification",
+        () => mail.send("SUPERVISOR_BOOKING_NOTIFICATION", single("B-1")),
+        { count: 2 },
+      );
     });
   });
 
   describe("booking notices of the lifecycle, group of three", function () {
     it("group booking confirmation: one mail, the members in short form, one receipt, the mailAttach documents of every member", async function () {
       await pin("booking-confirmation.group", () =>
-        mail.sendBookingConfirmation(group(), {
-          attachments: [issuedFile("RE-2.pdf")],
-          aggregated: true,
-        }),
+        mail.send(
+          "BOOKING_CONFIRMATION",
+          group({ attachments: [issuedFile("RE-2.pdf")] }),
+        ),
       );
     });
 
     it("group request confirmation", async function () {
       await pin("booking-request-confirmation.group", () =>
-        mail.sendRequestConfirmation(group(), {
-          attachments: [],
-          aggregated: true,
-        }),
+        mail.send("BOOKING_REQUEST_CONFIRMATION", group()),
       );
     });
 
     it("group cancellation: the refund is read off the first member", async function () {
       await pin("booking-cancel.group", () =>
-        mail.sendBookingCancel(group(), {
-          attachments: [issuedFile("ST-2.pdf")],
-          aggregated: true,
-          reason: "Die Veranstaltung fällt aus.",
-        }),
+        mail.send(
+          "BOOKING_CANCEL",
+          group({
+            attachments: [issuedFile("ST-2.pdf")],
+            reason: "Die Veranstaltung fällt aus.",
+          }),
+        ),
       );
     });
 
     it("the tenant's notice of a new group booking", async function () {
       await pin("incoming-booking.group", () =>
-        mail.sendTenantMail(group(), { aggregated: true }),
+        mail.send("INCOMING_BOOKING", group()),
       );
     });
   });
 
-  describe("booking notices of the other callers", function () {
+  describe("booking notices of the other callers, at the facade", function () {
     it("invoice (reprint and invoice payment): the invoice, no iCal", async function () {
       await pin("invoice", () =>
         MailController.sendInvoice(
@@ -288,22 +321,6 @@ describe("mail characterization: every notice as it goes out today", function ()
           ["G-1", "G-2", "G-3"],
           TENANT,
           true,
-        ),
-      );
-    });
-
-    it("the organizer's notice of a new ticket booking: the event in the booking details", async function () {
-      await pin("new-booking", () =>
-        MailController.sendNewBooking(ORGANIZER, "G-3", TENANT),
-      );
-    });
-
-    it("the supervisor's notice of a new booking", async function () {
-      await pin("supervisor-booking-notification", () =>
-        MailController.sendSupervisorBookingNotification(
-          SUPERVISOR,
-          ["B-1"],
-          TENANT,
         ),
       );
     });

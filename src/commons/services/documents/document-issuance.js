@@ -308,9 +308,10 @@ async function nextNumber(tenantId, type, spec, bookings) {
 }
 
 /**
- * The file of an issued document as the mail stack takes it.
+ * The file of an issued document as the mail stack takes it: a PDF unless
+ * the file says otherwise.
  *
- * @param {{ name: string, buffer: Buffer }} file
+ * @param {{ name: string, buffer: Buffer, contentType?: string }} file
  * @returns {Array<{ filename: string, content: Buffer, contentType: string }>}
  */
 function mailAttachments(file) {
@@ -318,7 +319,7 @@ function mailAttachments(file) {
     {
       filename: file.name,
       content: file.buffer,
-      contentType: "application/pdf",
+      contentType: file.contentType || "application/pdf",
     },
   ];
 }

@@ -21,7 +21,7 @@
  */
 
 const { STATUS, TRANSITION, TRIGGER, nextState } = require("./booking-state");
-const { PHASE, step, runPipeline } = require("./pipeline");
+const { PHASE, step, noticeStep, runPipeline } = require("./pipeline");
 const {
   WORKFLOW_EVENT,
   REFUND_ORIGIN,
@@ -38,10 +38,6 @@ const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
 /** Whether the group as a whole has a price. */
 function isPricedGroup(bookings) {
   return bookings.some((booking) => isPriced(booking));
-}
-
-function hasTicketMember(bookings) {
-  return bookings.some((booking) => hasTicketPosition(booking));
 }
 
 /**
@@ -164,6 +160,38 @@ function createGroupBookingLifecycle(adapters) {
     );
   }
 
+  /** The organizers' notice of every member with a ticket position. */
+  function organizerEach(bookings) {
+    return bookings.map((booking) =>
+      noticeStep(
+        mail,
+        "NEW_BOOKING",
+        {
+          tenantId: booking.tenantId,
+          bookingIds: [booking.id],
+          groupBookingId: null,
+        },
+        { bookingId: booking.id, when: () => hasTicketPosition(booking) },
+      ),
+    );
+  }
+
+  /** The aggregated notice of the group over the mail adapter. */
+  function noticeOf(tenantId, group) {
+    return (type, specific = {}, options) =>
+      noticeStep(
+        mail,
+        type,
+        {
+          tenantId,
+          bookingIds: group.bookingIds,
+          groupBookingId: group.id,
+          ...specific,
+        },
+        options,
+      );
+  }
+
   /** The workflow event of every member, unless a workflow action set it off. */
   function emitEach(bookings, event, trigger) {
     return bookings.map((booking) =>
@@ -226,6 +254,8 @@ function createGroupBookingLifecycle(adapters) {
     const priced = () => isPricedGroup(bookings);
     const files = [];
 
+    const notice = noticeOf(tenantId, group);
+
     return runPipeline(ctxOf(transition, tenantId, group, bookings), [
       ...accessEach(bookings, "hold"),
       ...accessEach(bookings, "provision", confirmed),
@@ -247,13 +277,7 @@ function createGroupBookingLifecycle(adapters) {
         { when: () => confirmed() && priced() },
       ),
       ...emitEach(bookings, WORKFLOW_EVENT.CREATE, trigger),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendRequestConfirmation",
-        () => mail.sendRequestConfirmation(bookings, { aggregated: true }),
-        { when: requested },
-      ),
+      notice("BOOKING_REQUEST_CONFIRMATION", {}, { when: requested }),
       step(
         PHASE.NOTIFY,
         "payment",
@@ -267,37 +291,19 @@ function createGroupBookingLifecycle(adapters) {
           }),
         { when: () => paymentDue() && trigger !== TRIGGER.CUSTOMER },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendBookingConfirmation",
-        () =>
-          mail.sendBookingConfirmation(bookings, {
-            attachments: files,
-            aggregated: true,
-          }),
+      notice(
+        "BOOKING_CONFIRMATION",
+        { attachments: files },
         { when: () => confirmed() && priced() },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendFreeBookingConfirmation",
-        () => mail.sendFreeBookingConfirmation(bookings, { aggregated: true }),
+      notice(
+        "FREE_BOOKING_CONFIRMATION",
+        {},
         { when: () => confirmed() && !priced() },
       ),
-      step(PHASE.NOTIFY, "mail", "sendTenantMail", () =>
-        mail.sendTenantMail(bookings, { aggregated: true }),
-      ),
-      step(PHASE.NOTIFY, "mail", "sendSupervisorMail", () =>
-        mail.sendSupervisorMail(bookings, { aggregated: true }),
-      ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendEmailToOrganizer",
-        () => mail.sendEmailToOrganizer(bookings),
-        { when: () => hasTicketMember(bookings) },
-      ),
+      notice("INCOMING_BOOKING"),
+      notice("SUPERVISOR_BOOKING_NOTIFICATION"),
+      ...organizerEach(bookings),
     ]);
   }
 
@@ -330,17 +336,13 @@ function createGroupBookingLifecycle(adapters) {
     const paymentDue = () =>
       bookings.some((booking) => booking.status === STATUS.PAYMENT_DUE);
 
+    const notice = noticeOf(tenantId, group);
+
     return runPipeline(ctxOf(transition, tenantId, group, bookings), [
       ...saveEach(bookings, from, transition),
       ...accessEach(bookings, "provision", confirmed),
       ...emitEach(bookings, WORKFLOW_EVENT.COMMIT, trigger),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendFreeBookingConfirmation",
-        () => mail.sendFreeBookingConfirmation(bookings, { aggregated: true }),
-        { when: allConfirmed },
-      ),
+      notice("FREE_BOOKING_CONFIRMATION", {}, { when: allConfirmed }),
       step(
         PHASE.NOTIFY,
         "payment",
@@ -354,13 +356,7 @@ function createGroupBookingLifecycle(adapters) {
           }),
         { when: paymentDue },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendEmailToOrganizer",
-        () => mail.sendEmailToOrganizer(bookings),
-        { when: () => hasTicketMember(bookings) },
-      ),
+      ...organizerEach(bookings),
     ]);
   }
 
@@ -400,6 +396,8 @@ function createGroupBookingLifecycle(adapters) {
     }
     const files = [];
 
+    const notice = noticeOf(tenantId, group);
+
     return runPipeline(ctxOf(transition, tenantId, group, bookings), [
       ...saveEach(bookings, from, transition),
       ...accessEach(bookings, "provision"),
@@ -421,19 +419,8 @@ function createGroupBookingLifecycle(adapters) {
         { when: () => isPricedGroup(bookings) },
       ),
       ...emitEach(bookings, WORKFLOW_EVENT.PAY, trigger),
-      step(PHASE.NOTIFY, "mail", "sendBookingConfirmation", () =>
-        mail.sendBookingConfirmation(bookings, {
-          attachments: files,
-          aggregated: true,
-        }),
-      ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendEmailToOrganizer",
-        () => mail.sendEmailToOrganizer(bookings),
-        { when: () => hasTicketMember(bookings) },
-      ),
+      notice("BOOKING_CONFIRMATION", { attachments: files }),
+      ...organizerEach(bookings),
     ]);
   }
 
@@ -492,6 +479,8 @@ function createGroupBookingLifecycle(adapters) {
     const rejection = from === STATUS.REQUESTED;
     const files = [];
 
+    const notice = noticeOf(tenantId, group);
+
     return runPipeline(ctxOf(transition, tenantId, group, bookings), [
       ...saveEach(bookings, from, transition),
       ...accessEach(bookings, "revoke"),
@@ -519,28 +508,14 @@ function createGroupBookingLifecycle(adapters) {
         { when: () => withDocument && isPricedGroup(bookings) },
       ),
       ...emitEach(bookings, WORKFLOW_EVENT.REJECT, trigger),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendBookingRejection",
-        () =>
-          mail.sendBookingRejection(bookings, {
-            attachments: files,
-            aggregated: true,
-            reason,
-          }),
+      notice(
+        "BOOKING_REJECTION",
+        { attachments: files, reason },
         { when: () => rejection },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendBookingCancel",
-        () =>
-          mail.sendBookingCancel(bookings, {
-            attachments: files,
-            aggregated: true,
-            reason,
-          }),
+      notice(
+        "BOOKING_CANCEL",
+        { attachments: files, reason },
         { when: () => !rejection },
       ),
     ]);
