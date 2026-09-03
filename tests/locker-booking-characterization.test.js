@@ -44,8 +44,8 @@ const WorkflowService = require("../src/commons/services/workflow/workflow-servi
 const MailController = require("../src/commons/mail-service/mail-controller");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const {
-  CANCELLATION_ORIGINS,
-} = require("../src/commons/services/payment/cancellation-refund-service");
+  TRIGGER,
+} = require("../src/commons/services/booking-lifecycle/booking-state");
 const { CheckoutError } = require("../src/errors/CheckoutError");
 const {
   CHECKOUT_REASONS,
@@ -361,16 +361,11 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
   }
 
   function rejectBooking(bookingId) {
-    return BookingService.rejectBooking(
-      TENANT,
-      bookingId,
-      "Kunde",
-      null,
-      false,
-      true,
-      null,
-      { origin: CANCELLATION_ORIGINS.SYSTEM },
-    );
+    return BookingService.rejectBooking(TENANT, bookingId, {
+      trigger: TRIGGER.SYSTEM,
+      reason: "Kunde",
+      withDocument: false,
+    });
   }
 
   describe("creating an unpaid booking", function () {

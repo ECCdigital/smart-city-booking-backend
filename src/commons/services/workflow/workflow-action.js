@@ -1,9 +1,6 @@
 const MailController = require("../../mail-service/mail-controller");
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
-const {
-  CANCELLATION_ORIGINS,
-} = require("../payment/cancellation-refund-service");
 const { TRIGGER } = require("../booking-lifecycle/booking-state");
 
 class WorkflowAction {
@@ -98,16 +95,9 @@ class BookingStatusAction extends WorkflowAction {
       }
       if (bs === "reject") {
         console.log("Rejecting booking as part of workflow action");
-        await bookingService.rejectBooking(
-          this.tenantId,
-          this.bookingId,
-          "",
-          null,
-          true,
-          false,
-          null,
-          { origin: CANCELLATION_ORIGINS.SYSTEM },
-        );
+        await bookingService.rejectBooking(this.tenantId, this.bookingId, {
+          trigger: TRIGGER.WORKFLOW,
+        });
       }
     }
   }

@@ -102,7 +102,10 @@ describe("rule-engine actionRegistry", () => {
       await actionRegistry.cancelBooking(doc, { reason: "inaktive" });
 
       expect(
-        fakeBookingService.rejectBooking.calledOnceWith("t1", "b1", "inaktive"),
+        fakeBookingService.rejectBooking.calledOnceWith("t1", "b1", {
+          trigger: "system",
+          reason: "inaktive",
+        }),
       ).to.be.true;
     });
   });

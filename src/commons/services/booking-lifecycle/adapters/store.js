@@ -11,6 +11,7 @@
  */
 
 const BookingManager = require("../../../data-managers/booking-manager");
+const TenantManager = require("../../../data-managers/tenant-manager");
 const {
   ConflictError,
   NotFoundError,
@@ -36,15 +37,27 @@ const store = {
   },
 
   /**
+   * The tenant a booking belongs to, for what a transition reads off it
+   * (the refund tiers of a cancellation).
+   *
+   * @param {string} tenantId
+   * @returns {Promise<Object|null>} The tenant, or null
+   */
+  async getTenant(tenantId) {
+    return await TenantManager.getTenant(tenantId);
+  },
+
+  /**
    * @param {Object} booking The booking to store
-   * @param {{ expectStatus: string, transition: string }} options The state
-   *   the stored booking must be in, and the transition for the guard error
+   * @param {{ expectStatus: string, transition: string, unset?: string[] }} options
+   *   The state the stored booking must be in, the transition for the guard
+   *   error, and fields the write removes from the document
    * @returns {Promise<Object>} The document as it was before the write
    * @throws {ConflictError} `invalid_transition` where the booking is in
    *   another state
    * @throws {NotFoundError} `booking_not_found` where the booking is gone
    */
-  async save(booking, { expectStatus, transition } = {}) {
+  async save(booking, { expectStatus, transition, unset = [] } = {}) {
     if (!expectStatus) {
       throw new Error(
         "booking-lifecycle: store.save needs expectStatus, the state the booking is written from",
@@ -53,6 +66,7 @@ const store = {
     const previous = await BookingManager.storeBookingIfStatus(
       booking,
       expectStatus,
+      { unset },
     );
     if (previous) {
       return previous;

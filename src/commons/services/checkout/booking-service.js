@@ -35,6 +35,7 @@ const {
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
+  sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const {
   BadRequestError,
@@ -653,17 +654,20 @@ class BookingService {
       }
 
       if (onUnreject) {
+        // The reinstatement keeps price, positions and coupon of before the
+        // cancellation (spec part 1, 4.2); the content write carries them
+        // and the refund audit, `reinstate` takes the audit away.
         booking.priceEur = oldBooking.priceEur;
         booking.vatIncludedEur = oldBooking.vatIncludedEur;
         booking.bookableItems = oldBooking.bookableItems;
         booking.couponCode = oldBooking.couponCode;
         booking._couponUsed = oldBooking._couponUsed;
-        booking.rejectionReason = "";
-        delete booking.cancellationRefund;
-      } else if (oldBooking.cancellationRefund) {
-        // A cancelled or rejected booking that stays so keeps its refund
-        // audit: the prepared booking would otherwise write over it with
-        // what its flags alone say about the cancellation.
+        booking.rejectionReason = oldBooking.rejectionReason || "";
+      }
+      if (oldBooking.cancellationRefund) {
+        // A cancelled or rejected booking keeps its refund audit in the
+        // content write: the prepared booking would otherwise write over it
+        // with what its flags alone say about the cancellation.
         booking.cancellationRefund = oldBooking.cancellationRefund;
       }
 
@@ -673,23 +677,32 @@ class BookingService {
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
 
-      // The confirmation and the payment are lifecycle transitions out of
-      // `requested` and `payment_due` (spec part 1, 4.1): the content write
-      // leaves the booking where the transition starts, `confirm` and `pay`
-      // move it on. Ticket 7 turns the whole PUT into the plan of
-      // `update-plan.js`.
+      // The confirmation, the payment, the cancellation and the
+      // reinstatement are lifecycle transitions (spec part 1, 4.1): the
+      // content write leaves the booking where the transition starts, the
+      // transition moves it on. Ticket 7 turns the whole PUT into the plan
+      // of `update-plan.js`.
       const requestedStatus = booking.status;
-      if (onCommit) {
+      if (onUnreject || onReject) {
+        booking.status = oldBooking.status;
+      } else if (onCommit) {
         booking.status = STATUS.REQUESTED;
       } else if (onPay) {
         booking.status = STATUS.PAYMENT_DUE;
       }
 
-      await BookingManager.storeBooking(
-        booking,
-        true,
-        onUnreject ? { unset: ["cancellationRefund"] } : undefined,
-      );
+      await BookingManager.storeBooking(booking, true);
+
+      if (onUnreject) {
+        const reinstated = await bookingLifecycle.reinstate(
+          tenantId,
+          booking.id,
+          { trigger: TRIGGER.ADMIN },
+        );
+        booking.status = reinstated.status;
+        booking.rejectionReason = "";
+        delete booking.cancellationRefund;
+      }
 
       if (onCommit) {
         const committed = await BookingService.commitBooking(
@@ -717,19 +730,21 @@ class BookingService {
       }
 
       if (onReject) {
-        await BookingService.rejectBooking(
+        // The flip cancels as the system, with a full refund, as before:
+        // the form carries no refund percentage the administration could
+        // set. Ticket 7 decides the trigger of the plan's `cancel`.
+        const outcome = await BookingService.rejectBooking(
           tenantId,
           booking.id,
-          booking.rejectionReason,
-          null,
-          false,
-          false,
-          null,
-          { origin: CANCELLATION_ORIGINS.SYSTEM },
+          { trigger: TRIGGER.SYSTEM, reason: booking.rejectionReason },
         );
+        booking.status = outcome.status;
+        booking.cancellationRefund = outcome.booking.cancellationRefund;
       }
 
-      if (booking.isCommitted && booking.isPayed && !onUnreject) {
+      if (onUnreject || onReject) {
+        // The transition granted, held or revoked the access.
+      } else if (booking.isCommitted && booking.isPayed) {
         if (!booking.isRejected) {
           await AccessService.updateForBooking(
             updatedBooking.tenantId,
@@ -737,11 +752,6 @@ class BookingService {
             booking,
           );
         }
-      } else if (onUnreject) {
-        await AccessService.provisionForBooking(
-          updatedBooking.tenantId,
-          booking.id,
-        );
       } else {
         // Not paid (any more): whatever was granted is taken back, and the
         // compartments are held for what the booking books now - unless it
@@ -1004,19 +1014,6 @@ class BookingService {
     };
   }
 
-  static toCustomerCancellationRefundPreview(calculation, bookingId) {
-    return {
-      bookingId,
-      originalAmountEur: calculation.originalAmountEur,
-      refundAmountEur: calculation.refundAmountEur,
-      cancellationFeeEur: calculation.cancellationFeeEur,
-      suggestedRefundPercentage: calculation.suggestedRefundPercentage,
-      appliedRefundPercentage: calculation.appliedRefundPercentage,
-      daysBeforeStart: calculation.daysBeforeStart,
-      appliedTierDays: calculation.appliedTierDays,
-    };
-  }
-
   static async getUserCancellationRefundPreview(tenantId, bookingId) {
     const [tenant, booking] = await Promise.all([
       TenantManager.getTenant(tenantId),
@@ -1044,7 +1041,7 @@ class BookingService {
       origin: CANCELLATION_ORIGINS.USER,
     });
 
-    return this.toCustomerCancellationRefundPreview(calculation, bookingId);
+    return CancellationRefundService.toCustomerPreview(calculation, bookingId);
   }
 
   static async getPublicCancellationRefundPreview(tenantId, bookingId, name) {
@@ -1141,116 +1138,30 @@ class BookingService {
     };
   }
 
-  static async rejectBooking(
-    tenantId,
-    bookingId,
-    reason = "",
-    hookId = null,
-    skipWorkflow = false,
-    skipCancellation = false,
-    bankDetails = null,
-    cancellationContext = {},
-  ) {
-    const [booking, tenant] = await Promise.all([
-      BookingManager.getBooking(bookingId, tenantId),
-      TenantManager.getTenant(tenantId),
-    ]);
-
-    if (!booking) {
-      throw new NotFoundError("booking_not_found", { bookingId });
-    }
-    if (!tenant) {
-      throw new NotFoundError("tenant_not_found", { tenantId });
-    }
-
-    try {
-      const cancelledFrom = cancelledFromOf(booking);
-      setStatusFromFlags(booking, { isRejected: true });
-      booking.rejectionReason = reason;
-
-      if (hookId) {
-        booking.removeHook(hookId);
-      }
-
-      const refundCalculation = CancellationRefundService.calculate({
-        tenant,
-        booking,
-        cancelledAt: cancellationContext.cancelledAt ?? Date.now(),
-        origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
-        refundPercentage: cancellationContext.refundPercentage,
-        cancelledByUserId: cancellationContext.cancelledByUserId,
-      });
-      booking.cancellationRefund = { ...refundCalculation };
-      recordCancelledFrom(booking, cancelledFrom);
-
-      let attachments;
-
-      if (booking.priceEur > 0 && !skipCancellation) {
-        const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
-        const options = {
-          alreadyPaid: booking.isPayed,
-          bankDetails: sanitizedBankDetails || undefined,
-          cancellationReason: reason,
-          refundCalculation,
-        };
-        // The issuance attaches the document to the booking and to this
-        // entity, so the state write below carries it too.
-        const { file } = await issueDocument({
-          tenantId,
-          bookingIds: [booking.id],
-          type: "cancellation",
-          bookings: [booking],
-          options,
-        });
-
-        attachments = mailAttachments(file);
-      }
-
-      await BookingManager.storeBooking(booking);
-
-      if (!skipWorkflow) {
-        await WorkflowService.handleWorkflowEvent(
-          tenantId,
-          booking.id,
-          "onReject",
-          true,
-        );
-      }
-
-      try {
-        await AccessService.revokeForBooking(booking.tenantId, booking.id);
-      } catch (err) {
-        logger.error(err);
-      }
-
-      if (isRejection(booking, hookId)) {
-        await MailController.sendBookingRejection(
-          booking.mail,
-          booking.id,
-          booking.tenantId,
-          reason,
-          attachments,
-        );
-        logger.info(
-          `${tenantId} -- booking ${booking.id} rejected and sent booking rejection to ${booking.mail}`,
-        );
-      } else {
-        await MailController.sendBookingCancel(
-          booking.mail,
-          booking.id,
-          booking.tenantId,
-          reason,
-          attachments,
-        );
-        logger.info(
-          `${tenantId} -- booking ${booking.id} canceled and sent booking rejection to ${booking.mail}`,
-        );
-      }
-    } catch (error) {
-      throw new BaseError("booking_rejection_failed", {
-        message: `Error rejecting booking: ${error.message}`,
-      });
-    }
+  /**
+   * The cancellation of a booking: the lifecycle transition `cancel` (spec
+   * part 2, section 8) over the default instance, `requested → rejected`,
+   * `payment_due | confirmed → cancelled`, with the refund audit, the
+   * revoke, the cancellation document after the state write, the workflow
+   * event and the mail. `trigger` names who set it off (glossary
+   * "Auslöser") and chooses the refund rule; `withDocument: false` leaves
+   * the cancellation document out (the `skipCancellation` of the HTTP
+   * form). A guard error (the booking is cancelled already, or two
+   * cancellations raced) and a missing booking pass through as the 409 and
+   * 404 they are, an aborted transition as the `LifecycleError` the
+   * controller maps.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string, reason?: string, hookId?: string|null, bankDetails?: Object|null, refundPercentage?: number, cancelledByUserId?: string|null, cancelledAt?: number, withDocument?: boolean }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  static async rejectBooking(tenantId, bookingId, options = {}) {
+    const outcome = await bookingLifecycle.cancel(tenantId, bookingId, options);
+    logger.info(
+      `${tenantId} -- booking ${bookingId} ${outcome.status} (${options.trigger})`,
+    );
+    return outcome;
   }
 
   static async rejectGroupBooking(
@@ -1389,60 +1300,26 @@ class BookingService {
     return { success: true };
   }
 
-  static async requestRejectBooking(tenant, bookingId, payload = {}) {
-    const booking = await BookingManager.getBooking(bookingId, tenant);
-
-    if (!booking) {
-      throw new NotFoundError("booking_not_found", { bookingId });
-    }
-
-    if (booking.cancellationPolicy?.userCancellable !== true) {
-      throw new ForbiddenError("booking_user_cancellation_disabled", {
-        bookingId,
-      });
-    }
-
-    const reason = typeof payload === "string" ? payload : payload.reason || "";
-    const sanitizedBankDetails = sanitizeBankDetails(payload?.bankDetails);
-
-    try {
-      const hookPayload = { reason };
-      if (sanitizedBankDetails) {
-        hookPayload.bankDetails = sanitizedBankDetails;
-      }
-
-      const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, hookPayload);
-
-      await BookingManager.storeBooking(booking);
-
-      const tenantEntity = await TenantManager.getTenant(tenant);
-      const refundPreview = this.toCustomerCancellationRefundPreview(
-        CancellationRefundService.calculate({
-          tenant: tenantEntity,
-          booking,
-          origin: CANCELLATION_ORIGINS.USER,
-        }),
-        booking.id,
-      );
-
-      await MailController.sendVerifyBookingRejection(
-        booking.mail,
-        booking.id,
-        booking.tenantId,
-        hook.id,
-        reason,
-        undefined,
-        refundPreview,
-      );
-
-      logger.info(
-        `${tenant} -- booking ${booking.id} rejection requested and sent booking reject verification to ${booking.mail}`,
-      );
-    } catch (error) {
-      throw new BaseError("booking_reject_request_failed", {
-        message: `Error requesting booking rejection: ${error.message}`,
-      });
-    }
+  /**
+   * The cancellation request of a customer: the lifecycle transition
+   * `requestCancel` (spec part 2, section 8; glossary "Stornoanfrage") over
+   * the default instance - the hook `REJECT` written, the verification
+   * mailed with the refund preview. A booking whose policy is not
+   * user-cancellable is the 403 of before, a cancelled one a 409.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string, reason?: string, bankDetails?: Object|null }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  static async requestRejectBooking(tenantId, bookingId, options = {}) {
+    const outcome = await bookingLifecycle.requestCancel(
+      tenantId,
+      bookingId,
+      options,
+    );
+    logger.info(`${tenantId} -- booking ${bookingId} rejection requested`);
+    return outcome;
   }
 
   static async checkBookingStatus(bookingId, name, tenantId) {
@@ -1768,30 +1645,6 @@ function recordCancelledFrom(booking, cancelledFrom) {
 
 function isNoPaymentRequired(booking) {
   return !booking.priceEur || booking.priceEur === 0 || booking.isPayed;
-}
-
-function sanitizeBankDetails(bankDetails) {
-  if (!bankDetails || typeof bankDetails !== "object") {
-    return null;
-  }
-
-  const toTrimmedString = (value) =>
-    typeof value === "string" ? value.trim() : "";
-
-  const accountHolder = toTrimmedString(bankDetails.accountHolder);
-  const bankName = toTrimmedString(bankDetails.bankName);
-  const iban = toTrimmedString(bankDetails.iban)
-    .replace(/\s+/g, "")
-    .toUpperCase();
-  const bic = toTrimmedString(bankDetails.bic)
-    .replace(/\s+/g, "")
-    .toUpperCase();
-
-  if (!accountHolder && !bankName && !iban && !bic) {
-    return null;
-  }
-
-  return { accountHolder, bankName, iban, bic };
 }
 
 function isRejection(booking, hookId) {

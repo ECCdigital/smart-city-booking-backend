@@ -61,14 +61,21 @@ function recordingAdapter(
   return adapter;
 }
 
+/** The tenant the seam answers unless a test hands one in: no refund tiers. */
+const DEFAULT_TENANT = Object.freeze({
+  id: "tenant-1",
+  cancellationRefundTiers: [],
+});
+
 /**
  * The booking store: rows keyed by id, handed out as `Booking` entities.
  * `save` is the conditional write of the spec (section 5): it only writes
  * where the stored state is `expectStatus` and answers the previous row;
  * otherwise it throws `ConflictError invalid_transition`. `restore` puts a
- * previous row back. `failOn` takes `save` or `save <bookingId>`.
+ * previous row back. `failOn` takes `save` or `save <bookingId>`. The
+ * recorded `save` call names the fields a write removes where it does.
  */
-function inMemoryStore(seed = []) {
+function inMemoryStore(seed = [], tenant = DEFAULT_TENANT) {
   const rows = new Map(seed.map((booking) => [booking.id, clone(booking)]));
   const store = {
     name: "store",
@@ -80,14 +87,23 @@ function inMemoryStore(seed = []) {
       const row = rows.get(id);
       return row && row.tenantId === tenantId ? new Booking(clone(row)) : null;
     },
+    async getTenant(tenantId) {
+      return tenant && tenant.id === tenantId ? clone(tenant) : null;
+    },
     async getMany(tenantId, ids) {
       return ids
         .map((id) => rows.get(id))
         .filter((row) => row && row.tenantId === tenantId)
         .map((row) => new Booking(clone(row)));
     },
-    async save(booking, { expectStatus, transition } = {}) {
-      store.calls.push({ op: "save", args: [booking.id, expectStatus] });
+    async save(booking, { expectStatus, transition, unset = [] } = {}) {
+      store.calls.push({
+        op: "save",
+        args:
+          unset.length > 0
+            ? [booking.id, expectStatus, unset]
+            : [booking.id, expectStatus],
+      });
       if (store.failOn.has("save") || store.failOn.has(`save ${booking.id}`)) {
         throw new Error("store.save failed (simulated)");
       }
@@ -100,7 +116,11 @@ function inMemoryStore(seed = []) {
         });
       }
       const previous = clone(row);
-      rows.set(booking.id, clone(booking));
+      const next = clone(booking);
+      for (const field of unset) {
+        delete next[field];
+      }
+      rows.set(booking.id, next);
       store.writes.push({ id: booking.id, status: booking.status });
       return previous;
     },
@@ -207,15 +227,16 @@ function inMemoryPayment(options) {
 /**
  * Every adapter at once, the way a test injects them at the one seam.
  *
- * @param {{ bookings?: Object[], failOn?: Object<string, string[]>, skipOn?: Object<string, string[]>, clock?: () => number }} [options]
+ * @param {{ bookings?: Object[], tenant?: Object, failOn?: Object<string, string[]>, skipOn?: Object<string, string[]>, clock?: () => number }} [options]
  */
 function inMemoryAdapters({
   bookings = [],
+  tenant = DEFAULT_TENANT,
   failOn = {},
   skipOn = {},
   clock,
 } = {}) {
-  const store = inMemoryStore(bookings);
+  const store = inMemoryStore(bookings, tenant);
   for (const op of failOn.store || []) {
     store.failOn.add(op);
   }
@@ -244,6 +265,7 @@ function effectTable(outcome) {
 module.exports = {
   inMemoryAdapters,
   inMemoryStore,
+  DEFAULT_TENANT,
   recordingAdapter,
   effectTable,
   MAIL_INTENTS,

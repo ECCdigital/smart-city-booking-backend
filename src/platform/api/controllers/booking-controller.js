@@ -41,7 +41,6 @@ const MailController = require("../../../commons/mail-service/mail-controller");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
   CancellationRefundService,
-  CANCELLATION_ORIGINS,
 } = require("../../../commons/services/payment/cancellation-refund-service");
 
 const logger = bunyan.createLogger({
@@ -744,6 +743,34 @@ class BookingController {
     }
   }
 
+  /**
+   * The answer to an error of a cancellation: the lifecycle's guard - the
+   * booking is cancelled already, or a second cancellation raced this one
+   * (409) - and a missing booking (404) with their status, an aborted
+   * transition as the `booking_rejection_failed` of before (spec part 1,
+   * 4.3), everything else the plain 500. `body` shapes the answer of an
+   * error under 500; the cancellation request keeps its `{ code, message }`.
+   */
+  static _answerRejectionError(
+    err,
+    response,
+    code,
+    body = (error) => error.toJSON(),
+  ) {
+    const error =
+      err instanceof LifecycleError
+        ? new BaseError(code, 500, { message: err.message })
+        : err;
+    logger.error(error);
+    if (response.headersSent) {
+      return;
+    }
+    if (error instanceof BaseError && error.statusCode < 500) {
+      return response.status(error.statusCode).send(body(error));
+    }
+    response.status(500).send("Could not reject booking");
+  }
+
   static async rejectBooking(request, response) {
     try {
       const tenantId = request.params.tenant;
@@ -763,6 +790,10 @@ class BookingController {
       }
 
       const booking = await BookingManager.getBooking(id, tenantId);
+      if (!booking) {
+        const error = new NotFoundError("booking_not_found", { bookingId: id });
+        return response.status(error.statusCode).json(error.toJSON());
+      }
 
       if (
         await PermissionsService._allowUpdate(
@@ -775,20 +806,14 @@ class BookingController {
         logger.info(
           `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
         );
-        await BookingService.rejectBooking(
-          tenantId,
-          id,
+        await BookingService.rejectBooking(tenantId, id, {
+          trigger: TRIGGER.ADMIN,
           reason,
-          null,
-          false,
-          Boolean(skipCancellation),
-          bankDetails || null,
-          {
-            origin: CANCELLATION_ORIGINS.ADMIN,
-            refundPercentage,
-            cancelledByUserId: user.id,
-          },
-        );
+          bankDetails: bankDetails || null,
+          refundPercentage,
+          cancelledByUserId: user.id,
+          withDocument: !skipCancellation,
+        });
         return response.sendStatus(200);
       } else {
         logger.warn(
@@ -797,10 +822,11 @@ class BookingController {
         return response.sendStatus(403);
       }
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not reject booking");
-      }
+      BookingController._answerRejectionError(
+        err,
+        response,
+        "booking_rejection_failed",
+      );
     }
   }
 
@@ -813,25 +839,23 @@ class BookingController {
       }
 
       const payload = request.body || {};
-      const reason = payload.reason ?? request.body?.reason ?? "";
+      const reason = payload.reason ?? "";
       const bankDetails = payload.bankDetails ?? null;
 
       await BookingService.requestRejectBooking(tenant, id, {
+        trigger: TRIGGER.CUSTOMER,
         reason,
         bankDetails,
       });
 
       response.sendStatus(201);
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        if (err && typeof err.statusCode === "number") {
-          return response
-            .status(err.statusCode)
-            .send({ code: err.code, message: err.message });
-        }
-        response.status(500).send("Could not reject booking");
-      }
+      BookingController._answerRejectionError(
+        err,
+        response,
+        "booking_reject_request_failed",
+        (error) => ({ code: error.code, message: error.message }),
+      );
     }
   }
 
@@ -846,7 +870,7 @@ class BookingController {
 
       const booking = await BookingManager.getBooking(id, tenant);
 
-      if (!booking.hooks || booking.hooks.length === 0) {
+      if (!booking || !booking.hooks || booking.hooks.length === 0) {
         return response.sendStatus(404);
       }
 
@@ -854,16 +878,12 @@ class BookingController {
       if (hook) {
         if (hook.type === BOOKING_HOOK_TYPES.REJECT) {
           const { reason, bankDetails } = hook.payload || {};
-          await BookingService.rejectBooking(
-            tenant,
-            id,
+          await BookingService.rejectBooking(tenant, id, {
+            trigger: TRIGGER.CUSTOMER,
             reason,
             hookId,
-            false,
-            false,
-            bankDetails || null,
-            { origin: CANCELLATION_ORIGINS.USER },
-          );
+            bankDetails: bankDetails || null,
+          });
         } else {
           return response.sendStatus(400);
         }
@@ -873,10 +893,11 @@ class BookingController {
 
       response.sendStatus(200);
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not reject booking");
-      }
+      BookingController._answerRejectionError(
+        err,
+        response,
+        "booking_rejection_failed",
+      );
     }
   }
 

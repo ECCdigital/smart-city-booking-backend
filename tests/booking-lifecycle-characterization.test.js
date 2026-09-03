@@ -669,7 +669,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
   // -----------------------------------------------------------------------
 
   describe("cancellation: POST /bookings/:id/reject", function () {
-    it("cancels a paid booking: the cancellation document is rendered first and rides in the state write, then revoke and the cancel mail", async function () {
+    it("cancels a paid booking: the state write with the refund audit, revoke, the cancellation document, workflow event, the cancel mail with the document", async function () {
       const id = await bookingIn("confirmed");
 
       const res = await reject(id, { reason: "Raum gesperrt" });
@@ -689,11 +689,11 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "cancellation",
       ]);
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf]",
       ]);
     });
@@ -710,8 +710,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(id).cancellationRefund).to.include({ origin: "admin" });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 cancelled [receipt]",
-        "workflow.onReject B1",
         "access.revoke B1",
+        "workflow.onReject B1",
         "mail.sendBookingCancel B1",
       ]);
     });
@@ -724,11 +724,11 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(200);
       expect(stateOf(h.stored(id))).to.equal("rejected");
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 rejected",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 rejected [cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1",
         "mail.sendBookingRejection B1 [ST-1.pdf]",
       ]);
     });
@@ -742,8 +742,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("cancelled");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 cancelled",
-        "workflow.onReject B1",
         "access.revoke B1",
+        "workflow.onReject B1",
         "mail.sendBookingCancel B1",
       ]);
     });
@@ -766,48 +766,51 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       });
     });
 
-    it("cancels a cancelled booking again and issues a second cancellation document (ticket 6: 409 invalid_transition)", async function () {
+    it("refuses to cancel a cancelled booking again: 409 invalid_transition, no second document", async function () {
       const id = await bookingIn("confirmed");
       await reject(id, { reason: "einmal" });
       h.clearEffects();
 
       const res = await reject(id, { reason: "zweimal" });
 
-      expect(res.status).to.equal(200);
+      expect(res.status).to.equal(409);
+      expect(res.body).to.include({ code: "invalid_transition" });
+      expect(res.body.params).to.include({
+        status: "cancelled",
+        transition: "cancel",
+      });
+      expect(h.stored(id).rejectionReason).to.equal("einmal");
       expect(
         h
           .stored(id)
           .attachments.filter((att) => att.type === "cancellation")
           .map((att) => [att.cancellationId, att.revision]),
-      ).to.deep.equal([
-        ["ST-1", 1],
-        ["ST-1", 2],
-      ]);
-      expect(h.takeEffects()).to.deep.equal([
-        "documents.cancellation B1",
-        "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation,cancellation]",
-        "workflow.onReject B1",
-        "access.revoke B1",
-        "mail.sendBookingCancel B1 [ST-1-r2.pdf]",
-      ]);
+      ).to.deep.equal([["ST-1", 1]]);
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("a cancel mail that fails answers 500 for a booking that is cancelled (ticket 6: recorded instead)", async function () {
+    it("answers 404 for a booking it does not know", async function () {
+      const res = await reject("no-such-booking", { reason: "" });
+
+      expect(res.status).to.equal(404);
+      expect(res.body).to.include({ code: "booking_not_found" });
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("a cancel mail that fails is recorded: the booking is cancelled, 200", async function () {
       const id = await bookingIn("confirmed");
       h.failing.add("mail.sendBookingCancel");
 
       const res = await reject(id, { reason: "" });
 
-      expect(res.status).to.equal(500);
-      expect(res.text).to.equal("Could not reject booking");
+      expect(res.status).to.equal(200);
       expect(stateOf(h.stored(id))).to.equal("cancelled");
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf] FAILED",
       ]);
     });
@@ -820,27 +823,47 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "access.revoke B1 FAILED",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1 FAILED",
         "mail.sendBookingCancel B1 [ST-1.pdf]",
       ]);
     });
 
-    it("a cancellation document that fails leaves the booking untouched, 500 (ticket 6: the document follows the write)", async function () {
+    it("a cancellation document that fails is recorded: the booking is cancelled without it, the mail goes out without attachment, 200", async function () {
       const id = await bookingIn("confirmed");
       h.failing.add("documents.cancellation");
 
       const res = await reject(id, { reason: "" });
 
+      expect(res.status).to.equal(200);
+      expect(stateOf(h.stored(id))).to.equal("cancelled");
+      expect(h.stored(id).cancellationRefund).to.include({ origin: "admin" });
+      expect(h.stored(id).attachments.map((att) => att.type)).to.deep.equal([
+        "receipt",
+      ]);
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "access.revoke B1",
+        "documents.cancellation B1 FAILED",
+        "workflow.onReject B1",
+        "mail.sendBookingCancel B1",
+      ]);
+    });
+
+    it("a state write that fails aborts before any effect, 500", async function () {
+      const id = await bookingIn("confirmed");
+      h.failing.add("store.save");
+
+      const res = await reject(id, { reason: "" });
+
       expect(res.status).to.equal(500);
+      expect(res.text).to.equal("Could not reject booking");
       expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.stored(id).cancellationRefund).to.equal(undefined);
-      expect(h.takeEffects()).to.deep.equal([
-        "documents.cancellation B1 FAILED",
-      ]);
+      expect(h.takeEffects()).to.deep.equal(["store.save B1 FAILED"]);
     });
   });
 
@@ -898,28 +921,38 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       const res = await requestReject(booking.id, { reason: "" });
 
       expect(res.status).to.equal(403);
-      expect(res.body).to.include({
+      expect(res.body).to.deep.equal({
         code: "booking_user_cancellation_disabled",
+        message: "booking_user_cancellation_disabled",
       });
       expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("a verification mail that fails answers 500 for a hook that is stored (ticket 6: recorded instead)", async function () {
+    it("a verification mail that fails is recorded: the hook stands, 201", async function () {
       const id = await bookingIn("confirmed");
       h.failing.add("mail.sendVerifyBookingRejection");
 
       const res = await requestReject(id, { reason: "" });
 
-      // The service builds its `BaseError` with the params where the status
-      // code goes, so the controller finds no numeric status and answers
-      // its plain 500; the error code never reaches the client.
-      expect(res.status).to.equal(500);
-      expect(res.text).to.equal("Could not reject booking");
+      expect(res.status).to.equal(201);
       expect(h.stored(id).hooks).to.have.length(1);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
         "mail.sendVerifyBookingRejection B1 FAILED",
       ]);
+    });
+
+    it("refuses a cancellation request for a cancelled booking: 409 invalid_transition", async function () {
+      const id = await bookingIn("confirmed");
+      await reject(id, { reason: "" });
+      h.clearEffects();
+
+      const res = await requestReject(id, { reason: "" });
+
+      expect(res.status).to.equal(409);
+      expect(res.body).to.include({ code: "invalid_transition" });
+      expect(h.stored(id).hooks).to.deep.equal([]);
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
     it("releasing the hook cancels as the customer: the hook goes, the refund is the customer's, the cancel mail goes out", async function () {
@@ -937,11 +970,11 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stored.rejectionReason).to.equal("Krank");
       expect(stored.cancellationRefund).to.include({ origin: "user" });
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf]",
       ]);
     });
@@ -957,11 +990,11 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(200);
       expect(stateOf(h.stored(id))).to.equal("rejected");
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 rejected",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 rejected [cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf]",
       ]);
     });
@@ -1088,12 +1121,12 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         appliedRefundPercentage: 100,
       });
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 confirmed [receipt]",
         "store.save B1 cancelled [receipt]",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf]",
       ]);
     });
@@ -1119,7 +1152,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("clearing isRejected reinstates: price and items of before, no refund, a new grant, no mail", async function () {
+    it("clearing isRejected reinstates: the content write, then the reinstatement with price and items of before, no refund, a new grant, no mail", async function () {
       const id = await bookingIn("confirmed");
       await reject(id, { reason: "Irrtum", refundPercentage: 50 });
       expect(h.stored(id).cancellationRefund).to.include({
@@ -1139,37 +1172,71 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "cancellation",
       ]);
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt,cancellation]",
         "store.save B1 confirmed [receipt,cancellation]",
         "access.provision B1",
       ]);
     });
 
-    it("a failed flip restores the old booking but leaves the refund behind, and the mails are out (ticket 7)", async function () {
+    it("clearing isRejected on a booking cancelled before payment: awaiting payment again, the compartments held", async function () {
+      const id = await bookingIn("payment_due");
+      await reject(id, { reason: "Irrtum" });
+      expect(h.stored(id).cancellationRefund).to.include({
+        cancelledFrom: "payment_due",
+      });
+      h.clearEffects();
+
+      const res = await update(id, { isRejected: false });
+
+      expect(res.status).to.equal(201);
+      expect(stateOf(h.stored(id))).to.equal("payment_due");
+      expect(h.stored(id).cancellationRefund).to.equal(undefined);
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [cancellation]",
+        "store.save B1 payment_due [cancellation]",
+        "access.hold B1",
+      ]);
+    });
+
+    it("clearing isRejected on a rejected request: a request again, the compartments held", async function () {
+      const id = await bookingIn("requested");
+      await reject(id, { reason: "Kein Platz" });
+      h.clearEffects();
+
+      const res = await update(id, { isRejected: false });
+
+      expect(res.status).to.equal(201);
+      expect(stateOf(h.stored(id))).to.equal("requested");
+      expect(h.stored(id)).to.include({ rejectionReason: "" });
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 rejected [cancellation]",
+        "store.save B1 requested [cancellation]",
+        "access.hold B1",
+      ]);
+    });
+
+    it("a cancel mail that fails on the flip is recorded: the booking is cancelled, 201", async function () {
       const id = await bookingIn("confirmed");
       h.failing.add("mail.sendBookingCancel");
 
       const res = await update(id, { isRejected: true });
 
-      // 500, but not the error handler's JSON: the service's `BaseError`
-      // carries its params where the status code goes, the handler fails
-      // on `res.status(...)`, and express answers its bare 500.
-      expect(res.status).to.equal(500);
-      expect(res.body).to.deep.equal({});
+      expect(res.status).to.equal(201);
       const stored = h.stored(id);
-      expect(stateOf(stored)).to.equal("confirmed");
+      expect(stateOf(stored)).to.equal("cancelled");
       expect(stored.cancellationRefund).to.include({ origin: "system" });
       expect(stored.attachments.map((att) => att.type)).to.deep.equal([
         "receipt",
+        "cancellation",
       ]);
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 confirmed [receipt]",
         "store.save B1 cancelled [receipt]",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
-        "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf] FAILED",
-        "store.save B1 confirmed [receipt]",
       ]);
     });
 
@@ -1315,10 +1382,10 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         appliedRefundPercentage: 100,
       });
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
-        "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf]",
       ]);
     });

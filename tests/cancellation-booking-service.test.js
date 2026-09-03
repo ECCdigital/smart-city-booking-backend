@@ -14,6 +14,9 @@ const {
   CANCELLATION_ORIGINS,
 } = require("../src/commons/services/payment/cancellation-refund-service");
 const {
+  TRIGGER,
+} = require("../src/commons/services/booking-lifecycle/booking-state");
+const {
   BundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
@@ -72,12 +75,26 @@ function cancellationAttachment(entry) {
   return entry.attachments.find((att) => att.type === "cancellation");
 }
 
+/**
+ * The state write of the cancellation at the manager: answers a previous
+ * document, so the lifecycle's conditional write goes through, and hands
+ * the entity it wrote out as `saved`.
+ */
 function stubCancellationSideEffects() {
+  const saved = {};
+  sinon
+    .stub(BookingManager, "storeBookingIfStatus")
+    .callsFake(async (value) => {
+      saved.booking = value;
+      return { id: value.id, tenantId: value.tenantId, status: "confirmed" };
+    });
+  // The group cancellation still writes unconditionally (ticket 8).
   sinon.stub(BookingManager, "storeBooking").callsFake(async (value) => value);
   sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
   sinon.stub(AccessService, "revokeForBooking").resolves([]);
   sinon.stub(MailController, "sendBookingCancel").resolves();
   sinon.stub(MailController, "sendBookingRejection").resolves();
+  return saved;
 }
 
 describe("BookingService cancellation refunds", function () {
@@ -86,31 +103,25 @@ describe("BookingService cancellation refunds", function () {
   });
 
   it("stores the admin refund calculation on a single cancellation", async function () {
-    const storedBooking = booking({ attachments: [INVOICE] });
-    sinon.stub(BookingManager, "getBooking").resolves(storedBooking);
+    sinon
+      .stub(BookingManager, "getBooking")
+      .resolves(new Booking(booking({ attachments: [INVOICE] })));
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
       cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
     });
     const pdf = stubIssuance().single;
-    stubCancellationSideEffects();
+    const saved = stubCancellationSideEffects();
 
-    await BookingService.rejectBooking(
-      "tenant-1",
-      "booking-1",
-      "Customer request",
-      null,
-      false,
-      false,
-      null,
-      {
-        origin: CANCELLATION_ORIGINS.ADMIN,
-        refundPercentage: 25,
-        cancelledByUserId: "admin-1",
-        cancelledAt: Date.UTC(2026, 7, 20, 8),
-      },
-    );
+    await BookingService.rejectBooking("tenant-1", "booking-1", {
+      trigger: TRIGGER.ADMIN,
+      reason: "Customer request",
+      refundPercentage: 25,
+      cancelledByUserId: "admin-1",
+      cancelledAt: Date.UTC(2026, 7, 20, 8),
+    });
 
+    const storedBooking = saved.booking;
     const attachment = cancellationAttachment(storedBooking);
     assert.strictEqual(attachment.name, "cancellation.pdf");
     assert.strictEqual(attachment.cancellationId, "2026-0012");
@@ -134,29 +145,22 @@ describe("BookingService cancellation refunds", function () {
   });
 
   it("stores cancellation refund audit on the booking when skipping the document", async function () {
-    const storedBooking = booking();
-    sinon.stub(BookingManager, "getBooking").resolves(storedBooking);
+    sinon.stub(BookingManager, "getBooking").resolves(new Booking(booking()));
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
       cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
     });
     const pdf = stubIssuance().single;
-    stubCancellationSideEffects();
+    const saved = stubCancellationSideEffects();
 
-    await BookingService.rejectBooking(
-      "tenant-1",
-      "booking-1",
-      "Customer request",
-      null,
-      false,
-      true,
-      null,
-      {
-        origin: CANCELLATION_ORIGINS.ADMIN,
-        cancelledAt: Date.UTC(2026, 7, 20, 8),
-      },
-    );
+    await BookingService.rejectBooking("tenant-1", "booking-1", {
+      trigger: TRIGGER.ADMIN,
+      reason: "Customer request",
+      withDocument: false,
+      cancelledAt: Date.UTC(2026, 7, 20, 8),
+    });
 
+    const storedBooking = saved.booking;
     assert.strictEqual(pdf.called, false);
     assert.strictEqual(IdGenerator.next.called, false);
     assert.strictEqual(storedBooking.attachments.length, 0);
@@ -381,10 +385,20 @@ describe("BookingService cancellation refunds", function () {
         { bookableId: "room-1", amount: 1, userGrossPriceEur: 97.5 },
       ],
     });
-    sinon.stub(BookingManager, "getBooking").resolves(oldBooking);
-    const storeBooking = sinon
-      .stub(BookingManager, "storeBooking")
-      .callsFake(async (value) => value);
+    // Every read answers the stored, cancelled booking: the content write
+    // keeps it cancelled, the reinstatement reads it back.
+    sinon
+      .stub(BookingManager, "getBooking")
+      .callsFake(async () => new Booking(oldBooking));
+    const written = [];
+    sinon.stub(BookingManager, "storeBooking").callsFake(async (value) => {
+      // A snapshot: the service goes on changing the entity it wrote.
+      written.push({ ...value });
+      return value;
+    });
+    const reinstate = sinon
+      .stub(BookingManager, "storeBookingIfStatus")
+      .callsFake(async () => ({ ...oldBooking, status: "cancelled" }));
     sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(BundleCheckoutService.prototype, "prepareBooking").resolves(
       new Booking({
@@ -403,14 +417,21 @@ describe("BookingService cancellation refunds", function () {
       rejectionReason: "",
     });
 
-    const storedBooking = storeBooking.firstCall.args[0];
-    assert.strictEqual(storedBooking.priceEur, 97.5);
-    assert.strictEqual(storedBooking.vatIncludedEur, 10.5);
-    assert.strictEqual(storedBooking.bookableItems.length, 1);
-    assert.strictEqual(storedBooking.isRejected, false);
-    assert.strictEqual(storedBooking.cancellationRefund, undefined);
-    assert.deepStrictEqual(storeBooking.firstCall.args[2], {
-      unset: ["cancellationRefund"],
-    });
+    // The content write keeps price, positions and the refund audit of
+    // before; the reinstatement writes the state and drops the audit.
+    const [content] = written;
+    assert.strictEqual(content.priceEur, 97.5);
+    assert.strictEqual(content.vatIncludedEur, 10.5);
+    assert.strictEqual(content.bookableItems.length, 1);
+    assert.strictEqual(content.isRejected, true);
+    assert.strictEqual(content.cancellationRefund.appliedRefundPercentage, 25);
+    const [reinstated, expectStatus, options] = reinstate.firstCall.args;
+    assert.strictEqual(expectStatus, "cancelled");
+    assert.deepStrictEqual(options, { unset: ["cancellationRefund"] });
+    assert.strictEqual(reinstated.status, "confirmed");
+    assert.strictEqual(reinstated.priceEur, 97.5);
+    assert.strictEqual(reinstated.isRejected, false);
+    assert.strictEqual(reinstated.cancellationRefund, undefined);
+    assert.strictEqual(AccessService.provisionForBooking.calledOnce, true);
   });
 });

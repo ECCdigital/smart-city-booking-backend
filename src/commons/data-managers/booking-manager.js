@@ -222,13 +222,27 @@ class BookingManager {
    *
    * @param {Booking|Object} booking The booking to store
    * @param {string} expectStatus The state the stored booking must be in
+   * @param {{ unset?: string[] }} [options] Fields to remove from the
+   *   document with the write (`reinstate` drops the refund audit)
    * @returns {Promise<Object|null>} The previous document, or null
    */
-  static async storeBookingIfStatus(booking, expectStatus) {
+  static async storeBookingIfStatus(booking, expectStatus, options = {}) {
     const bookingEntity =
       booking instanceof Booking ? booking : new Booking(booking);
 
     bookingEntity.validate();
+
+    const unsetFields = Array.isArray(options.unset) ? options.unset : [];
+    for (const field of unsetFields) {
+      delete bookingEntity[field];
+    }
+    const update =
+      unsetFields.length === 0
+        ? bookingEntity
+        : {
+            $set: bookingEntity,
+            $unset: Object.fromEntries(unsetFields.map((field) => [field, ""])),
+          };
 
     return await BookingModel.findOneAndUpdate(
       {
@@ -236,7 +250,7 @@ class BookingManager {
         tenantId: bookingEntity.tenantId,
         status: expectStatus,
       },
-      bookingEntity,
+      update,
       { upsert: false, new: false },
     ).lean();
   }
