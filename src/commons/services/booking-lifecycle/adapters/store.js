@@ -11,6 +11,7 @@
  */
 
 const BookingManager = require("../../../data-managers/booking-manager");
+const GroupBookingManager = require("../../../data-managers/group-booking-manager");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const {
   ConflictError,
@@ -45,6 +46,22 @@ const store = {
    */
   async getTenant(tenantId) {
     return await TenantManager.getTenant(tenantId);
+  },
+
+  /**
+   * The group a group transition works on, without its members: the
+   * lifecycle reads those with `getMany`.
+   *
+   * @param {string} tenantId
+   * @param {string} groupBookingId
+   * @returns {Promise<Object|null>} The group booking, or null
+   */
+  async getGroup(tenantId, groupBookingId) {
+    return await GroupBookingManager.getGroupBooking(
+      tenantId,
+      groupBookingId,
+      false,
+    );
   },
 
   /**

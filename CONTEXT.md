@@ -229,6 +229,10 @@ _Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, 
 Der Lebenszyklus-Übergang, der den Inhalt einer Buchung ändert — Zeiten, Positionen, Kontaktdaten, Preis —, ohne ihren Zustand zu wechseln: die neue Buchung wird im Zustand der gespeicherten geschrieben, und der Zugang folgt dem Inhalt (bei _bestätigt_ verschoben, bei _angefragt_ oder _Zahlung offen_ neu vorgemerkt). Der Admin-PUT ist ein Plan: erst die Änderung, dann die Übergänge, die die Flags verlangen, jeder für sich und ohne Rücknahme über Übergangsgrenzen.
 _Avoid_: Update (als Übergangsname), Bearbeiten, Flag-Kombination speichern
 
+**Gruppenzustand**:
+Der Buchungszustand, den alle Mitglieder einer Gruppenbuchung teilen; die Gruppe selbst hat keinen eigenen. Ein Lebenszyklus-Übergang der Gruppe verlangt ihn als Voraussetzung: stehen Mitglieder in verschiedenen Zuständen, findet der Übergang nicht statt und nennt die abweichenden Mitglieder. Der Übergang schreibt und versorgt jedes Mitglied für sich, stellt aber ein Buchungsdokument und eine Mitteilung für die Gruppe aus; scheitert das Schreiben bei einem Mitglied, werden die davor geschriebenen zurückgenommen.
+_Avoid_: Gruppenstatus (als gespeicherter Wert — den gibt es nicht), allCommitted/allPaid (das sind Ableitungen über die Flags), Sammelstatus
+
 **Fehlerpolitik (eines Effekts)**:
 Was ein gescheiterter Effekt mit seinem Lebenszyklus-Übergang macht: _abbrechen_ (der Übergang findet nicht statt, schon Geschriebenes wird zurückgenommen) oder _protokollieren_ (der Übergang gilt, der Fehler steht im Ergebnis und im Log). Am Effekt festgelegt, für jeden Übergang gleich, nie vom Aufrufer gewählt. Nur das Speichern und die Vormerkung brechen ab; Zugang, Dokument und Mitteilungen werden protokolliert.
 _Avoid_: onFailure (als Sprechbegriff), Verschlucken, Rollback (das ist die Handlung beim Abbrechen, nicht die Politik), Retry (gibt es nicht)

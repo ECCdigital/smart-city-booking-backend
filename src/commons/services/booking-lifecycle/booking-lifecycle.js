@@ -575,5 +575,10 @@ const bookingLifecycle = createBookingLifecycle(require("./adapters"));
 module.exports = {
   createBookingLifecycle,
   bookingLifecycle,
+  // The building blocks the group lifecycle shares (spec part 1, section 7).
+  WORKFLOW_EVENT,
+  REFUND_ORIGIN,
+  assertTrigger,
+  isPriced,
   hasTicketPosition,
 };

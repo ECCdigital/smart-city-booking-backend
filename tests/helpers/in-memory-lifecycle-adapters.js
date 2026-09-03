@@ -13,6 +13,9 @@
 const { ConflictError } = require("../../src/errors/BaseError");
 const { Booking } = require("../../src/commons/entities/booking/booking");
 const {
+  GroupBooking,
+} = require("../../src/commons/entities/groupBooking/groupBooking");
+const {
   SKIPPED,
 } = require("../../src/commons/services/booking-lifecycle/pipeline");
 
@@ -74,12 +77,16 @@ const DEFAULT_TENANT = Object.freeze({
  * otherwise it throws `ConflictError invalid_transition`. `restore` puts a
  * previous row back. `failOn` takes `save` or `save <bookingId>`. The
  * recorded `save` call names the fields a write removes where it does.
+ * `groups` are the group bookings the seam knows, by id, handed out as
+ * `GroupBooking` entities without their members.
  */
-function inMemoryStore(seed = [], tenant = DEFAULT_TENANT) {
+function inMemoryStore(seed = [], tenant = DEFAULT_TENANT, groups = []) {
   const rows = new Map(seed.map((booking) => [booking.id, clone(booking)]));
+  const groupRows = new Map(groups.map((group) => [group.id, clone(group)]));
   const store = {
     name: "store",
     rows,
+    groups: groupRows,
     writes: [],
     calls: [],
     failOn: new Set(),
@@ -89,6 +96,12 @@ function inMemoryStore(seed = [], tenant = DEFAULT_TENANT) {
     },
     async getTenant(tenantId) {
       return tenant && tenant.id === tenantId ? clone(tenant) : null;
+    },
+    async getGroup(tenantId, groupBookingId) {
+      const row = groupRows.get(groupBookingId);
+      return row && row.tenantId === tenantId
+        ? new GroupBooking(clone(row))
+        : null;
     },
     async getMany(tenantId, ids) {
       return ids
@@ -227,16 +240,17 @@ function inMemoryPayment(options) {
 /**
  * Every adapter at once, the way a test injects them at the one seam.
  *
- * @param {{ bookings?: Object[], tenant?: Object, failOn?: Object<string, string[]>, skipOn?: Object<string, string[]>, clock?: () => number }} [options]
+ * @param {{ bookings?: Object[], groups?: Object[], tenant?: Object, failOn?: Object<string, string[]>, skipOn?: Object<string, string[]>, clock?: () => number }} [options]
  */
 function inMemoryAdapters({
   bookings = [],
+  groups = [],
   tenant = DEFAULT_TENANT,
   failOn = {},
   skipOn = {},
   clock,
 } = {}) {
-  const store = inMemoryStore(bookings, tenant);
+  const store = inMemoryStore(bookings, tenant, groups);
   for (const op of failOn.store || []) {
     store.failOn.add(op);
   }
@@ -254,11 +268,18 @@ function inMemoryAdapters({
   };
 }
 
-/** The effect rows of an outcome as `phase adapter.op status` strings. */
+/**
+ * The effect rows of an outcome as `phase adapter.op status` strings; the
+ * row of one member of a group names it: `phase adapter.op bookingId status`.
+ */
 function effectTable(outcome) {
-  return outcome.effects.map(
-    (effect) =>
-      `${effect.phase} ${effect.adapter}.${effect.op} ${effect.status}`,
+  return outcome.effects.map((effect) =>
+    [
+      effect.phase,
+      `${effect.adapter}.${effect.op}`,
+      ...(effect.bookingId ? [effect.bookingId] : []),
+      effect.status,
+    ].join(" "),
   );
 }
 
