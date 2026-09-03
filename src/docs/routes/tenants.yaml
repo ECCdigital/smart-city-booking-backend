@@ -13,9 +13,9 @@
     description: |
       Writes a tenant. `legalDocuments` has no endpoint of its own — it travels
       with the tenant like every other field, and is only stored when the
-      payload carries it. Whoever saves has to own the tenant or the instance;
-      the medium behind a document is checked at the same time, so a save can
-      be refused for the reference rather than the tenant.
+      payload carries it. Whoever saves has to own the tenant named by `id`, or
+      the instance; the medium behind a document is checked after that, so a
+      save can be refused for the reference rather than the tenant.
     security:
       - bearerAuth: []
     requestBody:
@@ -47,8 +47,10 @@
                   $ref: "#/components/schemas/TenantLegalDocuments"
       "201":
         description: |
-          An unknown id created a tenant instead. The body is empty — read the
-          new tenant back with `GET /api/tenants/{id}`.
+          An unknown id created a tenant instead — for the instance owner, who
+          alone owns a tenant that does not exist yet; everyone else opens a
+          tenant with `POST /api/tenants`. The body is empty — read the new
+          tenant back with `GET /api/tenants/{id}`.
       "400":
         description: |
           The list breaks a shape rule (a known type twice, a title on a known
@@ -56,7 +58,7 @@
           `media_reference_unknown` for one that is not a medium of this tenant,
           `media_reference_not_public` for an `intern` one.
       "403":
-        description: Neither tenant owner nor instance owner, or no right to pick the medium
+        description: Neither owner of the tenant named by `id` nor instance owner, or no right to pick the medium
 
   get:
     tags:

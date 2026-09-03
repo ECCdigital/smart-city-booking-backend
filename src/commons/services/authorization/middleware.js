@@ -15,7 +15,9 @@
  * The JWT verification stays in `src/middleware/auth-middleware.js` and is
  * called from here: `authorize` runs `requireAuth`, `public` runs
  * `optionalAuth`. The principal is loaded once per request and memoised
- * on `req.principal`; the tenant is `req.params.tenant`.
+ * on `req.principal`; the tenant is `req.params.tenant`, or what the
+ * option `tenantOf(req)` names for a route that carries its tenant
+ * elsewhere (`PUT /api/tenants` names it in the body).
  *
  * Every marker carries an `authorization` descriptor on the middleware
  * function, which the route inventory reads (`tests/helpers/route-inventory.js`)
@@ -38,15 +40,29 @@ const MARKER = Object.freeze({
   TOKEN: "tokenAuthorized",
 });
 
+/** The tenant of a request as the routers name it: `/:tenant`. */
+const tenantParam = (req) => req.params?.tenant;
+
+/**
+ * Where a route names its tenant, when not in `:tenant` (`PUT /api/tenants`
+ * names it in the body). An option of `authorize` alone: a `public` route
+ * with a tenant elsewhere has not turned up.
+ *
+ * @callback TenantOf
+ * @param {import("express").Request} req
+ * @returns {string|undefined}
+ */
+
 /**
  * The principal of a request, loaded once.
  *
  * @param {import("express").Request} req
+ * @param {TenantOf} [tenantOf]
  * @returns {Promise<Object>}
  */
-async function principalOf(req) {
+async function principalOf(req, tenantOf = tenantParam) {
   if (!req.principal) {
-    req.principal = await loadPrincipal(req.user?.id, req.params?.tenant);
+    req.principal = await loadPrincipal(req.user?.id, tenantOf(req));
   }
   return req.principal;
 }
@@ -86,9 +102,12 @@ function afterAuth(auth, req, res, next, then) {
 /**
  * @param {string} resource
  * @param {string} action
+ * @param {Object} [options]
+ * @param {TenantOf} [options.tenantOf] Where the route names its tenant,
+ *   when not in `:tenant`.
  * @returns {import("express").RequestHandler}
  */
-function authorize(resource, action) {
+function authorize(resource, action, { tenantOf = tenantParam } = {}) {
   if (entryOf(resource, action).public === true) {
     throw new Error(
       `authorization: ${resource}.${action} is public, use public()`,
@@ -97,7 +116,7 @@ function authorize(resource, action) {
 
   const handler = (req, res, next) =>
     afterAuth(requireAuth, req, res, next, async () => {
-      const reach = decide(await principalOf(req), resource, action);
+      const reach = decide(await principalOf(req, tenantOf), resource, action);
       if (!reach) {
         return next(new ForbiddenError());
       }

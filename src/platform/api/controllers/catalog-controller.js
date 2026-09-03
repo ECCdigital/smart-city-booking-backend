@@ -16,21 +16,13 @@ const logger = bunyan.createLogger({
 });
 
 class CatalogController {
+  // The instance catalog: the right is the router's (`instanceCatalog.read`,
+  // `instanceCatalog.store`: the instance owner).
   static async getInstanceCatalog(request, response) {
     try {
-      const user = request.user;
+      const catalog = await CatalogService.getInstanceCatalog();
 
-      if (user && (await PermissionService._isInstanceOwner(user.id))) {
-        logger.info(
-          `Sending instance catalog to user ${user?.id} with details`,
-        );
-
-        const catalog = await CatalogService.getInstanceCatalog();
-
-        response.status(200).send(catalog);
-      } else {
-        response.sendStatus(403);
-      }
+      response.status(200).send(catalog);
     } catch (error) {
       response.status(error.code || 500).send({
         success: false,
@@ -215,28 +207,20 @@ class CatalogController {
   static async storeInstanceCatalog(request, response) {
     try {
       const catalogData = request.body;
-      const user = request.user;
 
-      if (user && (await PermissionService._isInstanceOwner(user.id))) {
-        if (catalogData._id) {
-          const updatedCatalog =
-            await CatalogService.updateInstanceCatalog(catalogData);
-          response.status(200).send({
-            success: true,
-            content: updatedCatalog,
-          });
-        } else {
-          const createdCatalog =
-            await CatalogService.createInstanceCatalog(catalogData);
-          response.status(201).send({
-            success: true,
-            content: createdCatalog,
-          });
-        }
+      if (catalogData._id) {
+        const updatedCatalog =
+          await CatalogService.updateInstanceCatalog(catalogData);
+        response.status(200).send({
+          success: true,
+          content: updatedCatalog,
+        });
       } else {
-        return response.status(403).send({
-          success: false,
-          message: "You do not have permission to store this catalog.",
+        const createdCatalog =
+          await CatalogService.createInstanceCatalog(catalogData);
+        response.status(201).send({
+          success: true,
+          content: createdCatalog,
         });
       }
     } catch (error) {

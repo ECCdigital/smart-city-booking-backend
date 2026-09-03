@@ -5,10 +5,7 @@ const {
   TenantController,
 } = require("../src/platform/api/controllers/tenant-controller");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
-const PermissionService = require("../src/commons/services/permission-service");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
-const UserManager = require("../src/commons/data-managers/user-manager");
-const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const Tenant = require("../src/commons/entities/tenant/tenant");
 const { BadRequestError, ForbiddenError } = require("../src/errors/BaseError");
@@ -48,10 +45,10 @@ describe("TenantController legal documents", function () {
     sandbox.restore();
   });
 
+  // The right is the router's (`tenant.update`, `tenant.create`): the
+  // controller checks nothing but, at the obsolete PUT, the creation.
   describe("updateTenant", function () {
     beforeEach(function () {
-      sandbox.stub(PermissionService, "_isTenantOwner").resolves(true);
-      sandbox.stub(PermissionService, "_isInstanceOwner").resolves(false);
       sandbox.stub(TenantManager, "getTenant").resolves(tenantFixture([]));
     });
 
@@ -239,36 +236,12 @@ describe("TenantController legal documents", function () {
       ]);
       expect(sent.legalDocuments[4].title).to.equal("Hausordnung");
     });
-
-    it("answers 403 for a user who owns neither tenant nor instance", async function () {
-      PermissionService._isTenantOwner.resolves(false);
-      const storeStub = sandbox.stub(TenantManager, "storeTenant");
-      const guardStub = sandbox.stub(
-        MediaReferenceGuard,
-        "assertTenantStorable",
-      );
-
-      req.body.legalDocuments = [
-        { type: "dataProtection", title: "", reference: mediaReference() },
-      ];
-
-      await TenantController.updateTenant(req, res);
-
-      expect(res.sendStatus.calledWith(403)).to.be.true;
-      expect(storeStub.called).to.be.false;
-      expect(guardStub.called).to.be.false;
-    });
   });
 
   describe("createTenant", function () {
     beforeEach(function () {
       sandbox.stub(TenantManager, "checkTenantCount").resolves(true);
       sandbox.stub(MembershipManager, "addMembership").resolves();
-      sandbox.stub(InstanceManager, "getInstance").resolves({
-        allowAllUsersToCreateTenant: true,
-        allowedUsersToCreateTenant: [],
-        ownerUserIds: [],
-      });
     });
 
     it("answers 400 when the list breaks a shape rule", async function () {
@@ -301,32 +274,28 @@ describe("TenantController legal documents", function () {
       expect(storeStub.called).to.be.false;
     });
 
-    it("answers 403 before saying anything about the media of a user who may not create tenants", async function () {
-      InstanceManager.getInstance.resolves({
-        allowAllUsersToCreateTenant: false,
-        allowedUsersToCreateTenant: [],
-        ownerUserIds: [],
-      });
+    it("refuses the creation over PUT before saying anything about the media of a user who may not open a tenant", async function () {
+      sandbox.stub(TenantManager, "getTenant").resolves(null);
       const guardStub = sandbox.stub(
         MediaReferenceGuard,
         "assertTenantStorable",
       );
+      const next = sandbox.stub();
 
+      req.principal = { userId: USER, mayCreateTenant: false };
       req.body.legalDocuments = [
         { type: "dataProtection", title: "", reference: mediaReference() },
       ];
 
-      await TenantController.createTenant(req, res);
+      await TenantController.storeTenant(req, res, next);
 
-      expect(res.sendStatus.calledWith(403)).to.be.true;
+      expect(next.firstCall.args[0]).to.be.instanceOf(ForbiddenError);
       expect(guardStub.called).to.be.false;
     });
   });
 
   describe("reading", function () {
     it("sends a single tenant with the resolved document URL", async function () {
-      sandbox.stub(PermissionService, "_isTenantOwner").resolves(true);
-      sandbox.stub(PermissionService, "_isInstanceOwner").resolves(false);
       sandbox
         .stub(TenantManager, "getTenant")
         .resolves(
@@ -335,7 +304,7 @@ describe("TenantController legal documents", function () {
           ]),
         );
 
-      req.params.id = TENANT;
+      req.params.tenant = TENANT;
 
       await TenantController.getTenant(req, res);
 
@@ -346,9 +315,6 @@ describe("TenantController legal documents", function () {
     });
 
     it("sends the tenant list with resolved document URLs", async function () {
-      sandbox.stub(PermissionService, "_isTenantOwner").resolves(true);
-      sandbox.stub(PermissionService, "_isInstanceOwner").resolves(false);
-      sandbox.stub(UserManager, "getUserPermissions").resolves({ tenants: [] });
       sandbox
         .stub(TenantManager, "getTenants")
         .resolves([

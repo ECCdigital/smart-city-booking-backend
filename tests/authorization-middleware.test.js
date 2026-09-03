@@ -27,14 +27,17 @@ const as = (userId) => ({
   Authorization: `Bearer ${jwt.sign({ sub: userId }, "irrelevant")}`,
 });
 
-/** The permissions of the two users: a booking manager and a customer. */
+/**
+ * The permissions of the three users: a booking manager, a customer and
+ * the owner of the tenant `t1`.
+ */
 function permissionsOf(userId) {
   const manager = userId === "manager";
   return {
     tenants: [
       {
         tenantId: "t1",
-        isOwner: false,
+        isOwner: userId === "owner",
         manageBookings: manager ? { readAny: true, updateAny: true } : {},
       },
     ],
@@ -123,6 +126,33 @@ describe("authorization middleware: the three markers", function () {
       ]);
       await request(twice).get("/api/t1/bookings").set(as("manager"));
       expect(UserManager.getUserPermissions.callCount).to.equal(1);
+    });
+
+    it("takes the tenant from tenantOf where the route carries no :tenant", async function () {
+      // `PUT /api/tenants` names its tenant in the body, not in the path.
+      const server = express();
+      const router = express.Router();
+      router.get(
+        "/tenants",
+        authorize("tenant", "update", { tenantOf: (req) => req.query.id }),
+        answer,
+      );
+      server.use("/api", router);
+      server.use(errorHandler);
+
+      const own = await request(server)
+        .get("/api/tenants?id=t1")
+        .set(as("owner"));
+      expect(own.status).to.equal(200);
+      expect(own.body).to.deep.equal({ reach: "any", user: "owner" });
+
+      const foreign = await request(server)
+        .get("/api/tenants?id=t2")
+        .set(as("owner"));
+      expect(foreign.status).to.equal(403);
+
+      const none = await request(server).get("/api/tenants").set(as("owner"));
+      expect(none.status).to.equal(403);
     });
 
     it("refuses an unknown entry and a public one when the router is built", function () {

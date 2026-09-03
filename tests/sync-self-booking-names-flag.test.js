@@ -4,7 +4,6 @@ const sinon = require("sinon");
 const UserController = require("../src/platform/api/controllers/user-controller");
 const UserService = require("../src/commons/services/user-service");
 const UserManager = require("../src/commons/data-managers/user-manager");
-const PermissionService = require("../src/commons/services/permission-service");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 
 describe("syncSelfBookingNames flag", () => {
@@ -90,7 +89,6 @@ describe("syncSelfBookingNames flag", () => {
     }
 
     beforeEach(() => {
-      sandbox.stub(PermissionService, "_isInstanceOwner").resolves(true);
       sandbox.stub(UserManager, "getUser").resolves({ ...existingUser });
       sandbox.stub(UserManager, "updateUser").resolves();
     });

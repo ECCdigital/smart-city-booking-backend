@@ -7,6 +7,8 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const { BookableManager } = require("./bookable-manager");
+const MembershipManager = require("./membership-manager");
+const { ownCondition } = require("../services/authorization/reach");
 const {
   normalizeCancellationRefundTiers,
 } = require("../utilities/cancellation-refund-tiers");
@@ -23,12 +25,42 @@ const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
  */
 class TenantManager {
   /**
-   * Get all tenants
+   * The tenants within a reach (authorize spec §4.1): all of them under
+   * `any` or for a caller without a reach, under `own` those of the user's
+   * active memberships - `owned` narrows them to the ones the user owns.
+   *
+   * @param {{reach?: string, userId?: string|null}} [scope]
+   * @param {Object} [options]
+   * @param {boolean} [options.owned=false] Only the tenants the user owns.
    * @returns {Promise<Tenant[]>} List of tenants
    */
-  static async getTenants() {
-    const rawTenants = await TenantModel.find();
+  static async getTenants(scope = {}, { owned = false } = {}) {
+    const rawTenants = await TenantModel.find(
+      await TenantManager._reachCondition(scope, owned),
+    );
     return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * The query condition of a reach: a tenant has no owner key of its own,
+   * "own" is the user's membership in it.
+   *
+   * @param {{reach?: string, userId?: string|null}} scope
+   * @param {boolean} owned
+   * @returns {Promise<Object>}
+   */
+  static async _reachCondition(scope, owned) {
+    // `ownCondition` holds the reach's rules (`public`, or `own` without a
+    // user, is a programming error) and names the user under `own` only.
+    const { userId } = ownCondition("userId", scope);
+    if (!userId) {
+      return {};
+    }
+    const memberships = await MembershipManager.getMembershipsByUserID(userId);
+    const ids = memberships
+      .filter((m) => m.status === "active" && (!owned || m.owner === true))
+      .map((m) => m.tenantId);
+    return { id: { $in: ids } };
   }
 
   /**

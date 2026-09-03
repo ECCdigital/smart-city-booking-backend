@@ -19,6 +19,7 @@ const {
 } = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
 const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -141,10 +142,10 @@ class GroupBookingController {
 
   /** Answers the 404 of a group that is not there for this request. */
   static _notFound(res, groupBookingId) {
-    const error = new NotFoundError("group_booking_not_found", {
-      groupBookingId,
-    });
-    res.status(error.statusCode).json(error.toJSON());
+    ApiResponse.fail(
+      res,
+      new NotFoundError("group_booking_not_found", { groupBookingId }),
+    );
     return null;
   }
 

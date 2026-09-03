@@ -2,24 +2,20 @@ const MembershipService = require("../../../commons/services/membership/membersh
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 
 const bunyan = require("bunyan");
-const PermissionService = require("../../../commons/services/permission-service");
 
 const logger = bunyan.createLogger({
   name: "membership-controller.js",
   level: process.env.LOG_LEVEL,
 });
 
+/**
+ * Web Controller for the memberships. The right is the router's
+ * (`membership.read`: the instance owner; `membership.readMine`: the
+ * signed-in user's own).
+ */
 class MembershipController {
   static async getMemberships(request, response) {
     try {
-      const user = request.user;
-
-      const hasPermission = await PermissionService._isInstanceOwner(user.id);
-
-      if (!hasPermission) {
-        return response.sendStatus(403);
-      }
-
       const memberships = await MembershipManager.getMemberships();
 
       response.status(200).send(memberships);
