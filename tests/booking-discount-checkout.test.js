@@ -158,14 +158,14 @@ describe("ItemCheckoutService booking discount pricing", function () {
   });
 });
 
-describe("BookingService.createBooking — manual create ignores booking discounts", function () {
+describe("BookingCheckout.createBooking — manual create ignores booking discounts", function () {
   const ADMIN_ID = "admin@stadt.de";
   const CUSTOMER_MAIL = "kunde@example.com";
   const LIST_PRICE = 100;
   const TIME_BEGIN = Date.UTC(2026, 5, 20, 10, 0, 0);
   const TIME_END = Date.UTC(2026, 5, 20, 11, 0, 0);
 
-  let BookingService;
+  let BookingCheckout;
   let BookingManager;
   let BookableManager;
   let TenantManager;
@@ -175,7 +175,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
   let WorkflowService;
 
   before(function () {
-    BookingService = require("../src/commons/services/checkout/booking-service");
+    BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
     BookingManager = require("../src/commons/data-managers/booking-manager");
     ({
       BookableManager,
@@ -235,7 +235,7 @@ describe("BookingService.createBooking — manual create ignores booking discoun
     sinon.stub(CouponService, "incrementCouponUsage").resolves();
     sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
 
-    await BookingService.createBooking({
+    await BookingCheckout.createBooking({
       tenantId: TENANT_ID,
       user: { id: ADMIN_ID },
       simulate: false,

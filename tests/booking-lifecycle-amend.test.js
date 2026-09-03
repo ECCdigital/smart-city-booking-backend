@@ -374,3 +374,20 @@ describe("booking lifecycle: amend", function () {
     expect(err.message).to.match(/amend needs a trigger/);
   });
 });
+
+describe("booking lifecycle: amend keeps an open cancellation request", function () {
+  it("carries the hooks of the stored booking, whatever the form says: the cancellation request belongs to the lifecycle", async function () {
+    const hook = { id: "H-1", type: "REJECT", payload: { reason: "Krank" } };
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [booking({ hooks: [hook] })],
+    });
+
+    await lifecycle.amend(TENANT, amended({ hooks: [] }), {
+      trigger: TRIGGER.ADMIN,
+    });
+
+    const stored = adapters.store.rows.get("B-1");
+    expect(stored.comment).to.equal("Bitte Beamer");
+    expect(stored.hooks.map((h) => h.id)).to.deep.equal(["H-1"]);
+  });
+});

@@ -12,7 +12,9 @@ const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaModel = require("../src/commons/data-managers/models/mediaModel");
 const MediaService = require("../src/commons/services/media/media-service");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
-const BookingService = require("../src/commons/services/checkout/booking-service");
+const {
+  bookingDeletion,
+} = require("../src/commons/services/booking-lifecycle");
 const AccessService = require("../src/commons/services/access/access-service");
 const {
   BookableManager,
@@ -331,7 +333,7 @@ describe("media deletion", function () {
         .resolves(true);
       sandbox.stub(AccessService, "revokeForBooking").resolves([]);
 
-      await BookingService.cancelBooking(TENANT, BOOKING);
+      await bookingDeletion.remove(TENANT, BOOKING);
 
       assert.ok(getDocuments.calledWith(TENANT, BOOKING));
       assert.ok(removeMedia.calledBefore(removeBooking));

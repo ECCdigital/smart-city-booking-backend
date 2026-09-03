@@ -6,6 +6,13 @@ const BookingManager = require("../../data-managers/booking-manager");
 const CouponManager = require("../../data-managers/coupon-manager");
 const { COUPON_TYPE } = require("../../entities/coupon/coupon");
 const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
+const {
+  STATUS,
+  normalizeFlags,
+  statusFromFlags,
+  isImpossibleFlagCombination,
+} = require("../booking-lifecycle/booking-state");
+const { BadRequestError } = require("../../../errors/BaseError");
 
 /**
  * Class representing a bundle checkout service.
@@ -47,7 +54,9 @@ class BundleCheckoutService {
    *   admin-authoritative values. Passing this under SELF_SERVICE is an error.
    * @param {string} [adminOverrides.internalComments]
    * @param {string} [adminOverrides.rejectionReason]
-   * @param {boolean} [adminOverrides.isCommitted]
+   * @param {boolean} [adminOverrides.isCommitted] - With `isPayed` and
+   *   `isRejected` the flags the administration's form speaks in; the
+   *   checkout reads the initial state off them (`initialStatus`).
    * @param {boolean} [adminOverrides.isPayed]
    * @param {boolean} [adminOverrides.isRejected]
    * @param {string} [adminOverrides.paymentMethod]
@@ -341,17 +350,35 @@ class BundleCheckoutService {
     return Math.round(vat * 100) / 100;
   }
 
-  async isPaymentComplete() {
-    if (typeof this.adminOverrides.isPayed === "boolean") {
-      return this.adminOverrides.isPayed;
+  /**
+   * The state a booking starts its life in (spec part 1, 5.1; glossary
+   * "Aufnahme"): a self-service booking is a request, or - where every
+   * bookable confirms at once - awaits payment with a price and is
+   * confirmed without one; a manual booking starts where the flags of the
+   * administration say. Flags no state stands for - paid but never
+   * confirmed, or born cancelled - are refused before the booking exists.
+   *
+   * @returns {Promise<string>} One of the booking states
+   * @throws {BadRequestError} `invalid_status`
+   */
+  async initialStatus() {
+    const priceEur = await this.userGrossPriceEur();
+
+    if (checkoutPolicy.acceptsAdminOverrides(this.policy)) {
+      const flags = normalizeFlags(this.adminOverrides);
+      if (flags.isRejected || isImpossibleFlagCombination(flags, priceEur)) {
+        throw new BadRequestError("invalid_status", flags);
+      }
+      return statusFromFlags(flags, priceEur);
     }
-    return (await this.userPriceEur()) === 0;
+
+    if (!(await this.isAutoCommit())) {
+      return STATUS.REQUESTED;
+    }
+    return priceEur > 0 ? STATUS.PAYMENT_DUE : STATUS.CONFIRMED;
   }
 
   async isAutoCommit() {
-    if (typeof this.adminOverrides.isCommitted === "boolean") {
-      return this.adminOverrides.isCommitted;
-    }
     for (const bookableItem of this.bookableItems) {
       const bookable = await BookableManager.getBookable(
         bookableItem.bookableId,
@@ -361,13 +388,6 @@ class BundleCheckoutService {
       if (!bookable.autoCommitBooking) return false;
     }
     return true;
-  }
-
-  performRejected() {
-    if (typeof this.adminOverrides.isRejected === "boolean") {
-      return this.adminOverrides.isRejected;
-    }
-    return false;
   }
 
   setPaymentMethod() {
@@ -522,9 +542,7 @@ class BundleCheckoutService {
       attachments: mergedAttachments,
       priceEur: await this.userGrossPriceEur(),
       vatIncludedEur: await this.vatIncludedEur(),
-      isCommitted: await this.isAutoCommit(),
-      isPayed: await this.isPaymentComplete(),
-      isRejected: this.performRejected(),
+      status: await this.initialStatus(),
       paymentProvider: this.paymentProvider,
       paymentMethod: this.setPaymentMethod(),
       customFieldValues: this.customFieldValues,

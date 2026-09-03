@@ -1,8 +1,8 @@
-const BookingService = require("../commons/services/checkout/booking-service");
 const MailerService = require("../commons/mail-service/mail-service");
 const {
+  bookingLifecycle,
   TRIGGER,
-} = require("../commons/services/booking-lifecycle/booking-state");
+} = require("../commons/services/booking-lifecycle");
 
 module.exports = {
   test(doc, params) {
@@ -14,7 +14,7 @@ module.exports = {
     const tenantId = doc.tenantId;
     const reason = params.reason || "";
 
-    await BookingService.rejectBooking(tenantId, bookingId, {
+    await bookingLifecycle.cancel(tenantId, bookingId, {
       trigger: TRIGGER.SYSTEM,
       reason,
     });

@@ -2,7 +2,7 @@ const {
   ItemCheckoutService,
   CheckoutPermissions,
 } = require("../../../../commons/services/checkout/item-checkout-service");
-const BookingService = require("../../../../commons/services/checkout/booking-service");
+const BookingCheckout = require("../../../../commons/services/checkout/booking-checkout");
 const {
   BookableManager,
 } = require("../../../../commons/data-managers/bookable-manager");
@@ -200,7 +200,7 @@ class CheckoutControllerV2 {
         tenantId,
       );
 
-      const booking = await BookingService.createSingleBooking({
+      const booking = await BookingCheckout.createSingleBooking({
         tenantId,
         user,
         bookingAttempt: req.body,
@@ -442,7 +442,7 @@ class CheckoutControllerV2 {
         comment,
       };
 
-      const groupBooking = await BookingService.createGroupBooking({
+      const groupBooking = await BookingCheckout.createGroupBooking({
         tenantId,
         user,
         contactData,

@@ -7,7 +7,7 @@
  * the flags ask for, each one atomic for itself. Flags no sequence of
  * transitions reaches are a `BadRequestError invalid_status_change`.
  *
- * Pure. `BookingService.updateBooking` runs the plan.
+ * Pure. `booking-checkout.js` (`updateBooking`) runs the plan.
  */
 
 const { BadRequestError, ConflictError } = require("../../../errors/BaseError");

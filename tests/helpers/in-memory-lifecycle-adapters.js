@@ -75,7 +75,7 @@ const DEFAULT_TENANT = Object.freeze({
  * `save` is the conditional write of the spec (section 5): it only writes
  * where the stored state is `expectStatus` and answers the previous row;
  * otherwise it throws `ConflictError invalid_transition`. `restore` puts a
- * previous row back. `failOn` takes `save` or `save <bookingId>`. The
+ * previous row back, `remove` takes a row out. `failOn` takes `save` or `save <bookingId>`. The
  * recorded `save` call names the fields a write removes where it does.
  * `groups` are the group bookings the seam knows, by id, handed out as
  * `GroupBooking` entities without their members.
@@ -136,6 +136,10 @@ function inMemoryStore(seed = [], tenant = DEFAULT_TENANT, groups = []) {
       rows.set(booking.id, next);
       store.writes.push({ id: booking.id, status: booking.status });
       return previous;
+    },
+    async remove(tenantId, id) {
+      store.calls.push({ op: "remove", args: [tenantId, id] });
+      rows.delete(id);
     },
     async restore(previous) {
       store.calls.push({ op: "restore", args: [previous.id] });

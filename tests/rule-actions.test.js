@@ -6,19 +6,19 @@ describe("rule-engine actionRegistry", () => {
   let sandbox;
   let actionRegistry;
   let fakeMailerService;
-  let fakeBookingService;
+  let fakeLifecycle;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
 
     fakeMailerService = { send: sandbox.stub().resolves() };
-    fakeBookingService = { rejectBooking: sandbox.stub().resolves() };
+    fakeLifecycle = {
+      bookingLifecycle: { cancel: sandbox.stub().resolves() },
+      TRIGGER: { SYSTEM: "system" },
+    };
 
     mock("../src/commons/mail-service/mail-service", fakeMailerService);
-    mock(
-      "../src/commons/services/checkout/booking-service",
-      fakeBookingService,
-    );
+    mock("../src/commons/services/booking-lifecycle", fakeLifecycle);
 
     actionRegistry = mock.reRequire("../src/rule-engine/actionRegistry");
   });
@@ -102,7 +102,7 @@ describe("rule-engine actionRegistry", () => {
       await actionRegistry.cancelBooking(doc, { reason: "inaktive" });
 
       expect(
-        fakeBookingService.rejectBooking.calledOnceWith("t1", "b1", {
+        fakeLifecycle.bookingLifecycle.cancel.calledOnceWith("t1", "b1", {
           trigger: "system",
           reason: "inaktive",
         }),

@@ -1,15 +1,16 @@
 /**
- * The checkout on the access seam: where `BookingService` and the two
+ * The checkout on the access seam: where the checkout, the lifecycle and the two
  * payment entry points call `AccessService` for the compartments of a
  * booking, and what happens when a call fails. Table tests with the seam
  * stubbed - the outcomes at the providers are the characterization test's
  * business (`locker-booking-characterization.test.js`).
  *
- * The policy: a hold that fails in the checkout rolls the booking back
- * (deleted, coupon given back, error rethrown); a grant that fails after
- * the payment leaves the booking as it is - the failure stands in the audit
- * log for the administration. A hold lost before the payment starts is
- * answered as the compartment being unavailable, 409.
+ * The policy: a hold that fails at the admission rolls the booking back
+ * (deleted, coupon given back, the hold's error rethrown); a grant that
+ * fails - at the admission of a booking paid at once as after the payment
+ * - leaves the booking as it is, the failure standing in the audit log for
+ * the administration. A hold lost before the payment starts is answered as
+ * the compartment being unavailable, 409.
  */
 
 const assert = require("assert");
@@ -19,7 +20,13 @@ const sinon = require("sinon");
 process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
-const BookingService = require("../src/commons/services/checkout/booking-service");
+const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
+const {
+  bookingLifecycle,
+  groupBookingLifecycle,
+} = require("../src/commons/services/booking-lifecycle");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const SupervisorNotificationService = require("../src/commons/services/supervisor-notification-service");
 const CheckoutController = require("../src/platform/api/v2/controllers/checkout.controller");
 const PaymentController = require("../src/platform/api/controllers/payment-controller");
 const AccessService = require("../src/commons/services/access/access-service");
@@ -86,7 +93,9 @@ describe("checkout on the access seam", function () {
       sinon.stub(BookingManager, "removeBooking").callsFake(async (id) => {
         store.delete(id);
       });
-      sinon.stub(BookingManager, "getBooking").resolves(null);
+      sinon
+        .stub(BookingManager, "getBooking")
+        .callsFake(async (id) => store.get(id) || null);
       sinon.stub(BookableManager, "getCustomFieldDefinitions").resolves({
         instanceFields: [],
         tenantFields: [],
@@ -95,6 +104,20 @@ describe("checkout on the access seam", function () {
       sinon.stub(CouponService, "incrementCouponUsage").resolves();
       sinon.stub(CouponService, "decrementCouponUsage").resolves();
       sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
+      // The mails of the admission are not this test's business.
+      sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT });
+      sinon
+        .stub(
+          SupervisorNotificationService,
+          "notifySupervisorsOnBookingCreated",
+        )
+        .resolves();
+      sinon.stub(MailController, "sendBookingConfirmation").resolves();
+      sinon.stub(PaymentUtils, "getPaymentService").resolves(null);
+      sinon.stub(lifecycleDocuments, "issue").resolves({
+        attachment: { type: "receipt" },
+        file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
+      });
       seam = {
         hold: sinon.stub(AccessService, "holdForBooking").resolves([]),
         provision: sinon
@@ -107,7 +130,7 @@ describe("checkout on the access seam", function () {
       sinon
         .stub(BundleCheckoutService.prototype, "prepareBooking")
         .resolves(prepared);
-      return BookingService.createBooking({
+      return BookingCheckout.createSingleBooking({
         tenantId: TENANT,
         user: { id: "erika@example.test" },
         simulate: false,
@@ -154,10 +177,10 @@ describe("checkout on the access seam", function () {
         calls: ["hold"],
       },
       {
-        name: "a grant that fails at the creation rolls the booking back - it never existed for the customer",
+        name: "a grant that fails at the admission of a booking paid at once is recorded: the booking stands, the failure is the audit log's",
         prepared: booking({ isPayed: true }),
         fails: "provision",
-        kept: false,
+        kept: true,
         calls: ["hold", "provision"],
       },
     ];
@@ -169,7 +192,7 @@ describe("checkout on the access seam", function () {
           seam[fails].rejects(failure);
         }
 
-        if (fails) {
+        if (!kept) {
           await assert.rejects(create(prepared), failure);
         } else {
           await create(prepared);
@@ -180,9 +203,6 @@ describe("checkout on the access seam", function () {
         expect(
           ["hold", "provision"].filter((call) => seam[call].called),
         ).to.deep.equal(calls);
-        if (calls.length === 2) {
-          expect(seam.hold.calledBefore(seam.provision)).to.equal(true);
-        }
       });
     }
   });
@@ -199,7 +219,7 @@ describe("checkout on the access seam", function () {
       sinon
         .stub(BundleCheckoutService.prototype, "prepareBooking")
         .resolves(new Booking({ ...stored, ...changes }));
-      return BookingService.updateBooking(TENANT, { ...stored, ...changes });
+      return BookingCheckout.updateBooking(TENANT, { ...stored, ...changes });
     }
 
     it("holds the compartments for what it books now, then takes the grants back", async function () {
@@ -244,13 +264,11 @@ describe("checkout on the access seam", function () {
         .stub(MailController, "sendBookingConfirmation")
         .resolves();
 
-      const result = await BookingService.setBookingPayed({
-        tenantId: TENANT,
-        bookingId: paid.id,
+      const outcome = await bookingLifecycle.pay(TENANT, paid.id, {
         trigger: "admin",
       });
 
-      expect(result).to.deep.equal({ success: true });
+      expect(outcome.status).to.equal("confirmed");
       expect(stored.firstCall.args[0].isPayed).to.equal(true);
       expect(stored.firstCall.args[1]).to.equal("payment_due");
       expect(issue.calledOnce).to.equal(true);
@@ -279,13 +297,11 @@ describe("checkout on the access seam", function () {
       });
       sinon.stub(MailController, "sendBookingConfirmation").resolves();
 
-      const result = await BookingService.setAggregatedBookingPayed({
-        tenantId: TENANT,
-        bookingIds: ["B-1", "B-2"],
-        groupBookingId: "G-1",
+      const outcome = await groupBookingLifecycle.pay(TENANT, "G-1", {
+        trigger: "payment",
       });
 
-      expect(result).to.deep.equal({ success: true });
+      expect(outcome.status).to.equal("confirmed");
       expect(provision.callCount).to.equal(2);
       expect(first.isPayed).to.equal(true);
       expect(second.isPayed).to.equal(true);

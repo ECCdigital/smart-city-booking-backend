@@ -300,3 +300,42 @@ describe("booking lifecycle adapters", function () {
     });
   });
 });
+
+describe("booking lifecycle payment adapter", function () {
+  const PaymentUtils = require("../src/commons/utilities/payment-utils");
+  const payment = require("../src/commons/services/booking-lifecycle/adapters/payment");
+  const {
+    SKIPPED,
+  } = require("../src/commons/services/booking-lifecycle/pipeline");
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("answers skipped for a booking without a payment provider, without asking the payment seam", async function () {
+    const getPaymentService = sinon.stub(PaymentUtils, "getPaymentService");
+
+    const answer = await payment.requestPayment({
+      tenantId: TENANT,
+      bookingIds: ["B-1"],
+      paymentProvider: undefined,
+      groupBookingId: null,
+    });
+
+    expect(answer).to.equal(SKIPPED);
+    expect(getPaymentService.called).to.equal(false);
+  });
+
+  it("answers skipped where the tenant has no payment service for the provider", async function () {
+    sinon.stub(PaymentUtils, "getPaymentService").resolves(null);
+
+    const answer = await payment.requestPayment({
+      tenantId: TENANT,
+      bookingIds: ["B-1"],
+      paymentProvider: "unknown",
+      groupBookingId: null,
+    });
+
+    expect(answer).to.equal(SKIPPED);
+  });
+});

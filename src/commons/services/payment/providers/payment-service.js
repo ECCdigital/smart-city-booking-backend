@@ -59,22 +59,36 @@ class PaymentService {
     throw new Error("paymentRequest not implemented");
   }
 
+  /**
+   * A successful payment is the transition `pay` of the lifecycle, set off
+   * by the payment (glossary "Auslöser"): of the group the webhook names
+   * or the first booking belongs to where the payment was aggregated, of
+   * every booking named otherwise. The lifecycle's guard - a booking paid
+   * already, a group whose members differ in state - and a missing
+   * booking or group throw as the 409 and 404 they are.
+   */
   async handleSuccessfulPayment({ bookingIds, tenantId, paymentMethod }) {
-    const BookingService = require("../../checkout/booking-service");
+    const {
+      bookingLifecycle,
+      groupBookingLifecycle,
+      TRIGGER,
+    } = require("../../booking-lifecycle");
     if (this.aggregated) {
-      await BookingService.setAggregatedBookingPayed({
+      const { groupBookingIdOf } = require("../../documents/document-issuance");
+      const groupBookingId = await groupBookingIdOf({
         tenantId,
         bookingIds,
-        paymentMethod,
         groupBookingId: this.groupBookingId,
+      });
+      await groupBookingLifecycle.pay(tenantId, groupBookingId, {
+        trigger: TRIGGER.PAYMENT,
+        paymentMethod,
       });
     } else {
       for (const bookingId of bookingIds) {
-        await BookingService.setBookingPayed({
-          tenantId,
-          bookingId,
+        await bookingLifecycle.pay(tenantId, bookingId, {
+          trigger: TRIGGER.PAYMENT,
           paymentMethod,
-          trigger: "payment",
         });
       }
     }

@@ -886,7 +886,7 @@ describe("group booking lifecycle: cancel", function () {
 });
 
 describe("group booking lifecycle: admit", function () {
-  it("admits a group of requests: one request confirmation, the tenant's and the supervisors' notice", async function () {
+  it("admits a group of requests: the hold and the workflow event per member, one request confirmation, the tenant's and the supervisors' notice", async function () {
     const { adapters, lifecycle } = groupOf("requested");
 
     const outcome = await lifecycle.admit(TENANT, GROUP, {
@@ -894,11 +894,20 @@ describe("group booking lifecycle: admit", function () {
     });
 
     expect(effectTable(outcome)).to.deep.equal([
+      "provision access.hold B-1 ok",
+      "provision access.hold B-2 ok",
+      "provision access.provision B-1 skipped",
+      "provision access.provision B-2 skipped",
       "document documents.issue skipped",
+      "notify workflow.emit B-1 ok",
+      "notify workflow.emit B-2 ok",
       "notify mail.sendRequestConfirmation ok",
+      "notify payment.requestPayment skipped",
       "notify mail.sendBookingConfirmation skipped",
+      "notify mail.sendFreeBookingConfirmation skipped",
       "notify mail.sendTenantMail ok",
       "notify mail.sendSupervisorMail ok",
+      "notify mail.sendEmailToOrganizer skipped",
     ]);
     expect(outcome).to.include({
       transition: "admit",
@@ -906,6 +915,14 @@ describe("group booking lifecycle: admit", function () {
       failure: null,
     });
     expect(adapters.store.calls).to.deep.equal([]);
+    expect(adapters.access.calls).to.deep.equal([
+      { op: "hold", args: [TENANT, "B-1"] },
+      { op: "hold", args: [TENANT, "B-2"] },
+    ]);
+    expect(adapters.workflow.calls).to.deep.equal([
+      { op: "emit", args: [TENANT, "B-1", "onCreate"] },
+      { op: "emit", args: [TENANT, "B-2", "onCreate"] },
+    ]);
     expect(adapters.mail.calls.map((call) => call.op)).to.deep.equal([
       "sendRequestConfirmation",
       "sendTenantMail",
@@ -917,24 +934,54 @@ describe("group booking lifecycle: admit", function () {
     }
   });
 
-  it("admits a group confirmed at once but unpaid: the confirmation without a receipt (as before; ticket 9 aligns it with the table)", async function () {
+  it("admits a manual group awaiting payment: the holds, then one payment request for the group, no mail", async function () {
+    const { adapters, lifecycle } = groupOf("payment_due");
+
+    const outcome = await lifecycle.admit(TENANT, GROUP, {
+      trigger: TRIGGER.ADMIN,
+    });
+
+    expect(effectTable(outcome)).to.include.members([
+      "provision access.hold B-1 ok",
+      "provision access.hold B-2 ok",
+      "document documents.issue skipped",
+      "notify mail.sendRequestConfirmation skipped",
+      "notify payment.requestPayment ok",
+      "notify mail.sendBookingConfirmation skipped",
+    ]);
+    expect(adapters.payment.calls).to.deep.equal([
+      {
+        op: "requestPayment",
+        args: [
+          {
+            tenantId: TENANT,
+            bookingIds: ["B-1", "B-2"],
+            paymentProvider: "giroCockpit",
+            groupBookingId: GROUP,
+          },
+        ],
+      },
+    ]);
+    expect(adapters.mail.calls.map((call) => call.op)).to.deep.equal([
+      "sendTenantMail",
+      "sendSupervisorMail",
+    ]);
+  });
+
+  it("leaves the payment request out for a customer's group awaiting payment: the checkout asks for the payment itself", async function () {
     const { adapters, lifecycle } = groupOf("payment_due");
 
     const outcome = await lifecycle.admit(TENANT, GROUP, {
       trigger: TRIGGER.CUSTOMER,
     });
 
-    expect(effectTable(outcome)).to.deep.equal([
-      "document documents.issue skipped",
-      "notify mail.sendRequestConfirmation skipped",
-      "notify mail.sendBookingConfirmation ok",
-      "notify mail.sendTenantMail ok",
-      "notify mail.sendSupervisorMail ok",
-    ]);
-    expect(adapters.mail.calls[0].args[1].attachments).to.deep.equal([]);
+    expect(effectTable(outcome)).to.include(
+      "notify payment.requestPayment skipped",
+    );
+    expect(adapters.payment.calls).to.deep.equal([]);
   });
 
-  it("admits a group confirmed and paid at once: one aggregated receipt at every member, the confirmation with it", async function () {
+  it("admits a group confirmed and paid at once: the hold and the grant per member, one aggregated receipt at every member, the confirmation with it", async function () {
     const { adapters, lifecycle } = groupOf("confirmed");
 
     const outcome = await lifecycle.admit(TENANT, GROUP, {
@@ -942,11 +989,20 @@ describe("group booking lifecycle: admit", function () {
     });
 
     expect(effectTable(outcome)).to.deep.equal([
+      "provision access.hold B-1 ok",
+      "provision access.hold B-2 ok",
+      "provision access.provision B-1 ok",
+      "provision access.provision B-2 ok",
       "document documents.issue ok",
+      "notify workflow.emit B-1 ok",
+      "notify workflow.emit B-2 ok",
       "notify mail.sendRequestConfirmation skipped",
+      "notify payment.requestPayment skipped",
       "notify mail.sendBookingConfirmation ok",
+      "notify mail.sendFreeBookingConfirmation skipped",
       "notify mail.sendTenantMail ok",
       "notify mail.sendSupervisorMail ok",
+      "notify mail.sendEmailToOrganizer skipped",
     ]);
     for (const id of ["B-1", "B-2"]) {
       expect(
@@ -958,7 +1014,7 @@ describe("group booking lifecycle: admit", function () {
     ).to.deep.equal(["receipt-1.pdf"]);
   });
 
-  it("admits a free group confirmed at once without a receipt", async function () {
+  it("admits a free group confirmed at once: granted, one free booking confirmation, no receipt", async function () {
     const { adapters, lifecycle } = groupOf("confirmed", {
       members: { priceEur: 0 },
     });
@@ -967,10 +1023,95 @@ describe("group booking lifecycle: admit", function () {
       trigger: TRIGGER.CUSTOMER,
     });
 
-    expect(effectTable(outcome)[0]).to.equal(
+    expect(effectTable(outcome)).to.include.members([
+      "provision access.provision B-1 ok",
+      "provision access.provision B-2 ok",
       "document documents.issue skipped",
-    );
+      "notify mail.sendBookingConfirmation skipped",
+      "notify mail.sendFreeBookingConfirmation ok",
+    ]);
     expect(adapters.documents.calls).to.deep.equal([]);
+  });
+
+  it("tells the organizer once for a group with a ticket member and leaves the workflow events out for a workflow action", async function () {
+    const { adapters, lifecycle } = groupOf("requested", {
+      members: {
+        bookableItems: [
+          {
+            bookableId: "ticket",
+            amount: 1,
+            _bookableUsed: { type: "ticket", eventId: "E1" },
+          },
+        ],
+      },
+    });
+
+    const outcome = await lifecycle.admit(TENANT, GROUP, {
+      trigger: TRIGGER.WORKFLOW,
+    });
+
+    expect(effectTable(outcome)).to.include.members([
+      "notify workflow.emit B-1 skipped",
+      "notify workflow.emit B-2 skipped",
+      "notify mail.sendEmailToOrganizer ok",
+    ]);
+    expect(adapters.workflow.calls).to.deep.equal([]);
+    expect(
+      adapters.mail.calls.filter((call) => call.op === "sendEmailToOrganizer"),
+    ).to.have.length(1);
+  });
+
+  it("a hold that fails at member 2 aborts before any other effect: nothing was written, nothing is restored, the first member's hold stands", async function () {
+    const { adapters, lifecycle } = groupOf("requested");
+    adapters.access.hold = async (tenantId, bookingId) => {
+      adapters.access.calls.push({ op: "hold", args: [tenantId, bookingId] });
+      if (bookingId === "B-2") {
+        throw new Error("no compartment left");
+      }
+      return [];
+    };
+
+    const error = await failing(
+      lifecycle.admit(TENANT, GROUP, { trigger: TRIGGER.CUSTOMER }),
+    );
+
+    expect(error).to.be.instanceOf(LifecycleError);
+    expect(error.transition).to.equal("admit");
+    expect(effectTable(error.outcome)).to.deep.equal([
+      "provision access.hold B-1 ok",
+      "provision access.hold B-2 failed",
+    ]);
+    expect(error.outcome.failure.compensated).to.deep.equal([]);
+    expect(adapters.store.calls).to.deep.equal([]);
+    expect(adapters.workflow.calls).to.deep.equal([]);
+    expect(adapters.mail.calls).to.deep.equal([]);
+    expect(states(adapters)).to.deep.equal(["requested", "requested"]);
+  });
+
+  it("a grant that fails at one member of a paid group is a recorded row of that member; receipt and mails follow", async function () {
+    const { adapters, lifecycle } = groupOf("confirmed");
+    adapters.access.provision = async (tenantId, bookingId) => {
+      adapters.access.calls.push({
+        op: "provision",
+        args: [tenantId, bookingId],
+      });
+      if (bookingId === "B-1") {
+        throw new Error("refused");
+      }
+      return [];
+    };
+
+    const outcome = await lifecycle.admit(TENANT, GROUP, {
+      trigger: TRIGGER.ADMIN,
+    });
+
+    expect(effectTable(outcome)).to.include.members([
+      "provision access.provision B-1 recorded",
+      "provision access.provision B-2 ok",
+      "document documents.issue ok",
+      "notify mail.sendBookingConfirmation ok",
+    ]);
+    expect(outcome.failure).to.equal(null);
   });
 
   it("a tenant that wants no notice leaves that mail skipped; a mail that fails is recorded, the rest goes out", async function () {
@@ -983,10 +1124,8 @@ describe("group booking lifecycle: admit", function () {
       trigger: TRIGGER.CUSTOMER,
     });
 
-    expect(effectTable(outcome)).to.deep.equal([
-      "document documents.issue skipped",
+    expect(effectTable(outcome)).to.include.members([
       "notify mail.sendRequestConfirmation recorded",
-      "notify mail.sendBookingConfirmation skipped",
       "notify mail.sendTenantMail skipped",
       "notify mail.sendSupervisorMail ok",
     ]);

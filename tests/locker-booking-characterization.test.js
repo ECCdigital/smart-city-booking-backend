@@ -23,7 +23,12 @@ const sinon = require("sinon");
 process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
-const BookingService = require("../src/commons/services/checkout/booking-service");
+const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
+const {
+  bookingLifecycle,
+  bookingDeletion,
+} = require("../src/commons/services/booking-lifecycle");
+const SupervisorNotificationService = require("../src/commons/services/supervisor-notification-service");
 const lifecycleDocuments = require("../src/commons/services/booking-lifecycle/adapters/documents");
 const CheckoutController = require("../src/platform/api/v2/controllers/checkout.controller");
 const PaymentController = require("../src/platform/api/controllers/payment-controller");
@@ -303,9 +308,14 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
     sinon.stub(PaymentUtils, "checkInvoicePermission").resolves(true);
     sinon.stub(AccessLogService, "log").resolves();
-    sinon.stub(BookingService, "handleSingleBookingConfirmation").resolves();
-    // The payment runs the lifecycle: its receipt and its mail are not
-    // this test's business.
+    // The admission and the payment run the lifecycle: their mails and
+    // the receipt are not this test's business.
+    sinon.stub(MailController, "sendBookingRequestConfirmation").resolves();
+    sinon.stub(MailController, "sendFreeBookingConfirmation").resolves();
+    sinon.stub(MailController, "sendIncomingBooking").resolves();
+    sinon
+      .stub(SupervisorNotificationService, "notifySupervisorsOnBookingCreated")
+      .resolves();
     sinon.stub(lifecycleDocuments, "issue").resolves({
       attachment: { type: "receipt" },
       file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
@@ -323,7 +333,7 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
 
   /** A customer's checkout of `amount` of the bookable, unpaid. */
   async function createUnpaidBooking(bookableId, amount = 1) {
-    return BookingService.createBooking({
+    return BookingCheckout.createSingleBooking({
       tenantId: TENANT,
       user: { id: CUSTOMER },
       simulate: false,
@@ -342,16 +352,13 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
   /** A customer's checkout, paid right away. */
   async function createPaidBooking(bookableId, amount = 1) {
     const booking = await createUnpaidBooking(bookableId, amount);
-    await BookingService.setBookingPayed({
-      tenantId: TENANT,
-      bookingId: booking.id,
-    });
+    await bookingLifecycle.pay(TENANT, booking.id, { trigger: TRIGGER.ADMIN });
     return stored(booking.id);
   }
 
   /** The stored booking, changed by an admin: same customer, new fields. */
   async function updateBooking(booking, changes) {
-    return BookingService.updateBooking(TENANT, {
+    return BookingCheckout.updateBooking(TENANT, {
       ...booking,
       isCommitted: true,
       isPayed: true,
@@ -361,7 +368,7 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
   }
 
   function rejectBooking(bookingId) {
-    return BookingService.rejectBooking(TENANT, bookingId, {
+    return bookingLifecycle.cancel(TENANT, bookingId, {
       trigger: TRIGGER.SYSTEM,
       reason: "Kunde",
       withDocument: false,
@@ -448,9 +455,8 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     it("confirms the held box with iFBS and marks it confirmed at the booking", async function () {
       const booking = await createUnpaidBooking("bikebox");
 
-      await BookingService.setBookingPayed({
-        tenantId: TENANT,
-        bookingId: booking.id,
+      await bookingLifecycle.pay(TENANT, booking.id, {
+        trigger: TRIGGER.ADMIN,
       });
 
       const [info] = stored(booking.id).lockerInfo;
@@ -477,9 +483,8 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
       const booking = await createUnpaidBooking("bikebox");
       clock.tick(HOLD_TTL_MS + 1);
 
-      await BookingService.setBookingPayed({
-        tenantId: TENANT,
-        bookingId: booking.id,
+      await bookingLifecycle.pay(TENANT, booking.id, {
+        trigger: TRIGGER.ADMIN,
       });
 
       const [info] = stored(booking.id).lockerInfo;
@@ -491,9 +496,8 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     it("starts one Pareva rental per compartment, addressed to the customer from the tenant", async function () {
       const booking = await createUnpaidBooking("locker-s", 2);
 
-      await BookingService.setBookingPayed({
-        tenantId: TENANT,
-        bookingId: booking.id,
+      await bookingLifecycle.pay(TENANT, booking.id, {
+        trigger: TRIGGER.ADMIN,
       });
 
       const rentals = pareva.rentalsInState("open");
@@ -693,7 +697,7 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     it("removing a booking gives its iFBS box back first", async function () {
       const booking = await createPaidBooking("bikebox");
 
-      await BookingService.cancelBooking(TENANT, booking.id);
+      await bookingDeletion.remove(TENANT, booking.id);
 
       expect(store.has(booking.id)).to.equal(false);
       expect(ifbs.bookings.get("100").state).to.equal("cancelled");
