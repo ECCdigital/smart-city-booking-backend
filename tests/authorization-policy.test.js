@@ -15,6 +15,7 @@ const {
   decide,
   entryOf,
   REACH,
+  LEVEL_KEYWORDS,
 } = require("../src/commons/services/authorization/policy");
 const {
   TABLE,
@@ -198,13 +199,6 @@ describe("authorization policy: hand cases", function () {
 });
 
 describe("authorization policy: invariants of the table", function () {
-  const VALID_LEVELS = new Set([
-    "signedIn",
-    "tenantOwner",
-    "instanceOwner",
-    "mayCreateTenant",
-  ]);
-
   it("names only known levels in known slots", function () {
     for (const { resource, action, entry } of entries()) {
       const where = `${resource}.${action}`;
@@ -220,7 +214,7 @@ describe("authorization policy: invariants of the table", function () {
           expect(ROLE_GROUPS, `${where}: ${level}`).to.include(match[1]);
           expect(ROLE_LEVELS, `${where}: ${level}`).to.include(match[2]);
         } else {
-          expect(VALID_LEVELS.has(level), `${where}: ${level}`).to.equal(true);
+          expect(LEVEL_KEYWORDS, `${where}: ${level}`).to.include(level);
         }
       }
       expect(

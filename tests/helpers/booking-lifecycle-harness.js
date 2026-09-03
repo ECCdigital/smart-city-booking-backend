@@ -83,6 +83,10 @@ const PaymentService = require("../../src/commons/services/payment/providers/pay
 const { Bookable } = require("../../src/commons/entities/bookable/bookable");
 const { Role } = require("../../src/commons/entities/role/role");
 const Instance = require("../../src/commons/entities/instance/instance");
+const {
+  ROLE_GROUPS,
+  ROLE_LEVELS,
+} = require("../../src/commons/services/authorization/table");
 const { Booking } = require("../../src/commons/entities/booking/booking");
 const {
   GroupBooking,
@@ -307,24 +311,9 @@ function roleAll() {
     tenantId: TENANT,
     adminInterfaces: [],
     ...Object.fromEntries(
-      [
-        "manageUsers",
-        "manageBookables",
-        "manageBookings",
-        "manageCoupons",
-        "manageMedia",
-        "manageRoles",
-      ].map((group) => [
+      ROLE_GROUPS.map((group) => [
         group,
-        {
-          create: true,
-          readAny: true,
-          readOwn: true,
-          updateAny: true,
-          updateOwn: true,
-          deleteAny: true,
-          deleteOwn: true,
-        },
+        Object.fromEntries(ROLE_LEVELS.map((level) => [level, true])),
       ]),
     ),
   });
@@ -364,8 +353,9 @@ function instance() {
 
 /**
  * Installs every stub, starts the app on the IPv4 loopback and returns the
- * handles the tests use. Call from `beforeEach`; `sinon.restore()` and
- * `close()` in `afterEach` take it all down.
+ * handles the tests use. Call from `beforeEach` (or `before`, for a suite
+ * that reads only); `sinon.restore()` and `close()` in the matching
+ * `afterEach`/`after` take it all down.
  *
  * The server is the harness' own, bound to `127.0.0.1`: supertest's
  * server-per-request listens on `::` and connects to `127.0.0.1`, which on

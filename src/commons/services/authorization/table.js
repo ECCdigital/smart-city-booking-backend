@@ -149,7 +149,12 @@ const TABLE = {
     create: { any: "manageMedia.create" },
     update: { own: "manageMedia.updateOwn", any: "manageMedia.updateAny" },
     delete: { own: "manageMedia.deleteOwn", any: "manageMedia.deleteAny" },
+    // Reading and replacing a booking document (`media-access.js`, §5).
     bookingDocument: { own: "signedIn", any: "manageBookings.readAny" },
+    updateBookingDocument: {
+      own: "signedIn",
+      any: "manageBookings.updateAny",
+    },
   },
 
   accessPoint: {

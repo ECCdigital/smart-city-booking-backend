@@ -17,7 +17,37 @@ const REACH = Object.freeze({ ANY: "any", OWN: "own", PUBLIC: "public" });
 /** The reaches, widest first: the order `decide` tries them in. */
 const REACHES = Object.freeze([REACH.ANY, REACH.OWN, REACH.PUBLIC]);
 
+/** The levels that are not a role level. */
+const LEVEL_KEYWORDS = Object.freeze([
+  "signedIn",
+  "tenantOwner",
+  "instanceOwner",
+  "mayCreateTenant",
+]);
+
 const ROLE_LEVEL = /^([a-zA-Z]+)\.([a-zA-Z]+)$/;
+
+/**
+ * A level of the table, read: a keyword, or a role level with its group
+ * and step. Unknown levels are a programming error.
+ *
+ * @param {string} level
+ * @returns {{kind: "keyword", level: string}|{kind: "role", group: string, step: string}}
+ */
+function parseLevel(level) {
+  if (LEVEL_KEYWORDS.includes(level)) {
+    return { kind: "keyword", level };
+  }
+  const match = level.match(ROLE_LEVEL);
+  if (
+    match &&
+    ROLE_GROUPS.includes(match[1]) &&
+    ROLE_LEVELS.includes(match[2])
+  ) {
+    return { kind: "role", group: match[1], step: match[2] };
+  }
+  throw new Error(`authorization: unknown level ${level}`);
+}
 
 /**
  * The entry of the table for an action on a resource.
@@ -52,26 +82,22 @@ function satisfies(principal, level) {
   if (principal.isInstanceOwner) {
     return true;
   }
-  switch (level) {
+  const parsed = parseLevel(level);
+  if (parsed.kind === "role") {
+    return (
+      principal.isTenantOwner === true ||
+      principal.grants?.[parsed.group]?.[parsed.step] === true
+    );
+  }
+  switch (parsed.level) {
     case "instanceOwner":
       return false;
     case "mayCreateTenant":
       return principal.mayCreateTenant === true;
     case "tenantOwner":
       return principal.isTenantOwner === true;
-    case "signedIn":
+    default:
       return principal.userId != null;
-    default: {
-      const match = level.match(ROLE_LEVEL);
-      if (!match) {
-        throw new Error(`authorization: unknown level ${level}`);
-      }
-      if (principal.isTenantOwner) {
-        return true;
-      }
-      const [, group, step] = match;
-      return principal.grants?.[group]?.[step] === true;
-    }
   }
 }
 
@@ -111,17 +137,10 @@ function assertTable() {
         }
       }
       for (const level of [entry.own, entry.any].filter(Boolean)) {
-        const match = level.match(ROLE_LEVEL);
-        const known = match
-          ? ROLE_GROUPS.includes(match[1]) && ROLE_LEVELS.includes(match[2])
-          : [
-              "signedIn",
-              "tenantOwner",
-              "instanceOwner",
-              "mayCreateTenant",
-            ].includes(level);
-        if (!known) {
-          throw new Error(`authorization: unknown level ${level} in ${where}`);
+        try {
+          parseLevel(level);
+        } catch (err) {
+          throw new Error(`${err.message} in ${where}`);
         }
       }
     }
@@ -130,4 +149,12 @@ function assertTable() {
 
 assertTable();
 
-module.exports = { decide, entryOf, satisfies, REACH, REACHES };
+module.exports = {
+  decide,
+  entryOf,
+  satisfies,
+  parseLevel,
+  REACH,
+  REACHES,
+  LEVEL_KEYWORDS,
+};

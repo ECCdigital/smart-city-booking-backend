@@ -21,6 +21,8 @@ const { expect } = require("chai");
 
 const { createApp } = require("./helpers/booking-lifecycle-harness");
 const { routesOf } = require("./helpers/route-inventory");
+const { entryOf } = require("../src/commons/services/authorization/policy");
+const { MARKER } = require("../src/commons/services/authorization/middleware");
 const JwtHelper = require("../src/commons/utilities/jwt-helper");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const AccessController = require("../src/platform/api/controllers/access-controller");
@@ -34,14 +36,29 @@ describe("authorization invariants: every route carries one marker", function ()
 
     expect(overMarked, "routes with more than one marker").to.deep.equal([]);
 
-    // eslint-disable-next-line no-console
     console.log(
       `      authorization markers: ${routes.length - unmarked.length} of ${routes.length} routes marked, ${unmarked.length} unmarked`,
     );
     if (process.env.LIST_UNMARKED_ROUTES === "1") {
       for (const route of unmarked) {
-        // eslint-disable-next-line no-console
         console.log(`        ${route.method} ${route.path}`);
+      }
+    }
+  });
+
+  it("puts a public entry only behind public(), and authorize() only on the rest", function () {
+    for (const route of routesOf(createApp())) {
+      for (const marker of route.markers) {
+        if (marker.resource === null) {
+          continue;
+        }
+        const entry = entryOf(marker.resource, marker.action);
+        const where = `${route.method} ${route.path}`;
+        if (marker.marker === MARKER.PUBLIC) {
+          expect(entry.public, where).to.equal(true);
+        } else {
+          expect(entry.public, where).to.not.equal(true);
+        }
       }
     }
   });

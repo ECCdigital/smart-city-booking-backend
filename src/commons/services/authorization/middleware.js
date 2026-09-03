@@ -51,6 +51,13 @@ async function principalOf(req) {
   return req.principal;
 }
 
+/**
+ * Puts the marker descriptor on a middleware function.
+ *
+ * @param {import("express").RequestHandler} handler
+ * @param {{marker: string, resource: string|null, action: string|null}} descriptor
+ * @returns {import("express").RequestHandler} The same function, marked.
+ */
 function mark(handler, descriptor) {
   handler.authorization = Object.freeze(descriptor);
   return handler;
@@ -59,6 +66,13 @@ function mark(handler, descriptor) {
 /**
  * Runs an auth middleware and continues with `then` when it lets the
  * request through; a response it sent itself (401, 403) ends the chain.
+ *
+ * @param {import("express").RequestHandler} auth - `requireAuth` or `optionalAuth`
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ * @param {() => Promise<void>} then - What runs once the request is through.
+ * @returns {void}
  */
 function afterAuth(auth, req, res, next, then) {
   auth(req, res, (err) => {
@@ -75,7 +89,11 @@ function afterAuth(auth, req, res, next, then) {
  * @returns {import("express").RequestHandler}
  */
 function authorize(resource, action) {
-  entryOf(resource, action);
+  if (entryOf(resource, action).public === true) {
+    throw new Error(
+      `authorization: ${resource}.${action} is public, use public()`,
+    );
+  }
 
   const handler = (req, res, next) =>
     afterAuth(requireAuth, req, res, next, async () => {
@@ -91,6 +109,10 @@ function authorize(resource, action) {
 }
 
 /**
+ * Exported as `public` (the spec's name) and as `publicRoute`: `public` is
+ * a reserved word in strict mode, so a destructuring caller needs the
+ * second name.
+ *
  * @param {string} [resource]
  * @param {string} [action]
  * @returns {import("express").RequestHandler}

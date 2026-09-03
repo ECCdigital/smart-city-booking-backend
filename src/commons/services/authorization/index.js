@@ -5,20 +5,26 @@
  * "Rechte" in `CONTEXT.md`.
  */
 
-const { loadPrincipal, anonymous } = require("./principal");
-const { decide, entryOf, REACH, REACHES } = require("./policy");
+const { loadPrincipal } = require("./principal");
+const { decide, REACH } = require("./policy");
 const { TABLE, ROLE_GROUPS, ROLE_LEVELS } = require("./table");
-const middleware = require("./middleware");
+const {
+  authorize,
+  publicRoute,
+  tokenAuthorized,
+  MARKER,
+} = require("./middleware");
 
 module.exports = {
   loadPrincipal,
-  anonymous,
   decide,
-  entryOf,
   REACH,
-  REACHES,
   TABLE,
   ROLE_GROUPS,
   ROLE_LEVELS,
-  ...middleware,
+  authorize,
+  public: publicRoute,
+  publicRoute,
+  tokenAuthorized,
+  MARKER,
 };
