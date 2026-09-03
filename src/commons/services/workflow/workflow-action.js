@@ -83,10 +83,8 @@ class BookingStatusAction extends WorkflowAction {
         console.log("Committing booking as part of workflow action");
         await bookingService.commitBooking(
           this.tenantId,
-          {
-            id: this.bookingId,
-          },
-          true,
+          { id: this.bookingId },
+          { trigger: "workflow" },
         );
       }
       if (bs === "paid") {

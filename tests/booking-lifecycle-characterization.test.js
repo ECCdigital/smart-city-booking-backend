@@ -306,7 +306,12 @@ describe("booking lifecycle today: what each state change does at the seam", fun
   // -----------------------------------------------------------------------
 
   describe("confirmation: GET /bookings/:id/commit", function () {
-    it("confirms a priced request, asks the payment provider for its payment request, and fires the workflow before the write", async function () {
+    // Since ticket 5 the confirmation is the lifecycle transition
+    // `confirm` (spec part 2, section 8): the state write first, the
+    // workflow event after it, then the payment request (glossary
+    // "Zahlungsaufforderung") or, for a free booking, grant and the free
+    // booking confirmation.
+    it("confirms a priced request: state write to payment due, then the workflow event and the payment request", async function () {
       const id = await bookingIn("requested");
 
       const res = await commit(id);
@@ -315,8 +320,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.body).to.deep.equal({ success: true, data: null, errors: [] });
       expect(stateOf(h.stored(id))).to.equal("payment_due");
       expect(h.takeEffects()).to.deep.equal([
-        "workflow.onCommit B1",
         "store.save B1 payment_due",
+        "workflow.onCommit B1",
         "payment.paymentRequest B1",
       ]);
     });
@@ -334,29 +339,29 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(200);
       expect(stateOf(h.stored(booking.id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
-        "workflow.onCommit B1",
         "store.save B1 confirmed",
         "access.provision B1",
+        "workflow.onCommit B1",
         "mail.sendFreeBookingConfirmation B1",
       ]);
     });
 
-    it("answers 500 for a confirmed booking when the tenant has no payment service: commitBooking returns undefined (ticket 5)", async function () {
+    it("confirms a priced request of a tenant without a payment service: the payment request is skipped, 200 (was a 500 from an undefined return)", async function () {
       const id = await bookingIn("requested");
       h.payment.available = false;
 
       const res = await commit(id);
 
-      expect(res.status).to.equal(500);
-      expect(res.text).to.equal("Could not commit booking");
+      expect(res.status).to.equal(200);
+      expect(res.body).to.deep.equal({ success: true, data: null, errors: [] });
       expect(stateOf(h.stored(id))).to.equal("payment_due");
       expect(h.takeEffects()).to.deep.equal([
-        "workflow.onCommit B1",
         "store.save B1 payment_due",
+        "workflow.onCommit B1",
       ]);
     });
 
-    it("never mails the organizer of a ticket booking on confirmation - the block reads `type` off the item, not off `_bookableUsed` (ticket 5)", async function () {
+    it("mails the organizer of a ticket booking on confirmation, reading the ticket off the bookable used (the block was dead before)", async function () {
       const booking = await h.manualBooking("ticket");
       expect(booking.bookableItems[0]._bookableUsed.type).to.equal("ticket");
       h.clearEffects();
@@ -365,59 +370,95 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
-        "workflow.onCommit B1",
         "store.save B1 payment_due",
+        "workflow.onCommit B1",
         "payment.paymentRequest B1",
+        "mail.sendNewBooking B1",
       ]);
 
-      // The payment path reads `_bookableUsed` and does mail the organizer.
+      // The payment tells the organizer once more, as before.
       await pay(booking.id);
       expect(h.takeEffects()).to.include("mail.sendNewBooking B1");
     });
 
-    it("a grant that fails on a free confirmation restores the snapshot and answers 500 (ticket 5: recorded instead)", async function () {
+    it("a grant that fails on a free confirmation is recorded: the booking is confirmed, the mail goes out, 200 (was a 500 with the snapshot restored)", async function () {
       const { booking } = (await checkout("free-request-room")).data;
       h.clearEffects();
       h.failing.add("access.provision");
 
       const res = await commit(booking.id);
 
-      expect(res.status).to.equal(500);
-      expect(stateOf(h.stored(booking.id))).to.equal("requested");
+      expect(res.status).to.equal(200);
+      expect(stateOf(h.stored(booking.id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
-        "workflow.onCommit B1",
         "store.save B1 confirmed",
         "access.provision B1 FAILED",
-        "store.save B1 requested",
+        "workflow.onCommit B1",
+        "mail.sendFreeBookingConfirmation B1",
       ]);
     });
 
-    it("a payment request that fails answers 500 for a booking that is confirmed (ticket 5: recorded instead)", async function () {
+    it("a payment request that fails is recorded: the booking awaits payment, 200 (was a 500)", async function () {
       const id = await bookingIn("requested");
       h.failing.add("payment.paymentRequest");
 
       const res = await commit(id);
 
-      expect(res.status).to.equal(500);
+      expect(res.status).to.equal(200);
       expect(stateOf(h.stored(id))).to.equal("payment_due");
       expect(h.takeEffects()).to.deep.equal([
-        "workflow.onCommit B1",
         "store.save B1 payment_due",
+        "workflow.onCommit B1",
         "payment.paymentRequest B1 FAILED",
       ]);
     });
 
-    it("confirms a confirmed booking again, with a second payment request (ticket 5: 409 invalid_transition)", async function () {
+    it("refuses to confirm a booking awaiting payment again: 409 invalid_transition, no second payment request (was a 200 with one)", async function () {
       const id = await bookingIn("payment_due");
 
       const res = await commit(id);
 
-      expect(res.status).to.equal(200);
-      expect(h.takeEffects()).to.deep.equal([
-        "workflow.onCommit B1",
-        "store.save B1 payment_due",
-        "payment.paymentRequest B1",
-      ]);
+      expect(res.status).to.equal(409);
+      expect(res.body).to.include({ code: "invalid_transition" });
+      expect(res.body.params).to.deep.equal({
+        bookingId: id,
+        status: "payment_due",
+        transition: "confirm",
+      });
+      expect(stateOf(h.stored(id))).to.equal("payment_due");
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("refuses to confirm a confirmed booking: 409 invalid_transition without effect", async function () {
+      const id = await bookingIn("confirmed");
+
+      const res = await commit(id);
+
+      expect(res.status).to.equal(409);
+      expect(res.body.params).to.include({
+        status: "confirmed",
+        transition: "confirm",
+      });
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("answers 404 for a booking it does not know", async function () {
+      const res = await commit("no-such-booking");
+
+      expect(res.status).to.equal(404);
+      expect(res.body).to.include({ code: "booking_not_found" });
+    });
+
+    it("a state write that fails aborts the confirmation: 500, nothing else runs, the booking stays a request", async function () {
+      const id = await bookingIn("requested");
+      h.failing.add("store.save");
+
+      const res = await commit(id);
+
+      expect(res.status).to.equal(500);
+      expect(res.text).to.equal("Could not commit booking");
+      expect(stateOf(h.stored(id))).to.equal("requested");
+      expect(h.takeEffects()).to.deep.equal(["store.save B1 FAILED"]);
     });
   });
 
@@ -985,7 +1026,11 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(id).hooks).to.deep.equal([]);
     });
 
-    it("flipping isCommitted confirms after the content write, then holds anew", async function () {
+    // Since ticket 5 the content write leaves a booking to be confirmed at
+    // `requested` and `confirm` moves it on (the lifecycle's guard), the
+    // plan `[amend, confirm]` of spec part 1, section 6. Ticket 7 runs the
+    // plan as such.
+    it("flipping isCommitted writes the content as a request, confirms with the payment request, then holds anew", async function () {
       const id = await bookingIn("requested");
 
       const res = await update(id, { isCommitted: true });
@@ -993,20 +1038,18 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(201);
       expect(stateOf(h.stored(id))).to.equal("payment_due");
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 requested",
         "store.save B1 payment_due",
         "workflow.onCommit B1",
-        "store.save B1 payment_due",
         "payment.paymentRequest B1",
         "access.revoke B1",
         "access.hold B1",
       ]);
     });
 
-    // Since ticket 4 the content write leaves a booking to be paid at
-    // `payment_due` and `pay` moves it on (the lifecycle's guard): the
-    // confirmation therefore runs as one of a priced booking, with the
-    // payment request, before the payment - the plan `[amend, confirm,
-    // pay]` of spec part 1, section 6. Ticket 7 runs the plan as such.
+    // The plan `[amend, confirm, pay]` of spec part 1, section 6: the
+    // content write as a request, the confirmation of a priced booking with
+    // its payment request, then the payment.
     it("flipping isCommitted and isPayed at once confirms with the payment request, then pays: grant, receipt and the receipt mail", async function () {
       const id = await bookingIn("requested");
 
@@ -1015,9 +1058,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(201);
       expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 requested",
         "store.save B1 payment_due",
         "workflow.onCommit B1",
-        "store.save B1 payment_due",
         "payment.paymentRequest B1",
         "store.save B1 confirmed",
         "access.provision B1",

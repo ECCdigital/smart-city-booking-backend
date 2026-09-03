@@ -12,6 +12,9 @@
 
 const { ConflictError } = require("../../src/errors/BaseError");
 const { Booking } = require("../../src/commons/entities/booking/booking");
+const {
+  SKIPPED,
+} = require("../../src/commons/services/booking-lifecycle/pipeline");
 
 const DOCUMENT_ID_FIELD = {
   receipt: "receiptId",
@@ -24,20 +27,33 @@ function clone(value) {
 }
 
 /**
- * An adapter of async methods that records every call and throws for the
- * operations named in `failOn`.
+ * An adapter of async methods that records every call, throws for the
+ * operations named in `failOn` and answers `SKIPPED` for those named in
+ * `skipOn` (a tenant without a payment service, say).
  *
  * @param {string} name The adapter's name, for the error message
  * @param {string[]} ops The method names to expose
- * @param {{ failOn?: string[], returns?: Object<string, Function> }} [options]
+ * @param {{ failOn?: string[], skipOn?: string[], returns?: Object<string, Function> }} [options]
  */
-function recordingAdapter(name, ops, { failOn = [], returns = {} } = {}) {
-  const adapter = { name, calls: [], failOn: new Set(failOn) };
+function recordingAdapter(
+  name,
+  ops,
+  { failOn = [], skipOn = [], returns = {} } = {},
+) {
+  const adapter = {
+    name,
+    calls: [],
+    failOn: new Set(failOn),
+    skipOn: new Set(skipOn),
+  };
   for (const op of ops) {
     adapter[op] = async (...args) => {
       adapter.calls.push({ op, args });
       if (adapter.failOn.has(op)) {
         throw new Error(`${name}.${op} failed (simulated)`);
+      }
+      if (adapter.skipOn.has(op)) {
+        return SKIPPED;
       }
       return returns[op] ? returns[op](...args) : undefined;
     };
@@ -191,9 +207,14 @@ function inMemoryPayment(options) {
 /**
  * Every adapter at once, the way a test injects them at the one seam.
  *
- * @param {{ bookings?: Object[], failOn?: Object<string, string[]>, clock?: () => number }} [options]
+ * @param {{ bookings?: Object[], failOn?: Object<string, string[]>, skipOn?: Object<string, string[]>, clock?: () => number }} [options]
  */
-function inMemoryAdapters({ bookings = [], failOn = {}, clock } = {}) {
+function inMemoryAdapters({
+  bookings = [],
+  failOn = {},
+  skipOn = {},
+  clock,
+} = {}) {
   const store = inMemoryStore(bookings);
   for (const op of failOn.store || []) {
     store.failOn.add(op);
@@ -202,7 +223,10 @@ function inMemoryAdapters({ bookings = [], failOn = {}, clock } = {}) {
     store,
     access: inMemoryAccess({ failOn: failOn.access }),
     documents: inMemoryDocuments(store, { failOn: failOn.documents }),
-    payment: inMemoryPayment({ failOn: failOn.payment }),
+    payment: inMemoryPayment({
+      failOn: failOn.payment,
+      skipOn: skipOn.payment,
+    }),
     mail: inMemoryMail({ failOn: failOn.mail }),
     workflow: inMemoryWorkflow({ failOn: failOn.workflow }),
     clock: clock || (() => 1_756_800_000_000),
