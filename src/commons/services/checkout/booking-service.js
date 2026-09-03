@@ -33,6 +33,11 @@ const {
 } = require("../booking-consitency-service");
 const CancellationService = require("../payment/cancellation-service");
 const {
+  STATUS,
+  CANCELLED_FROM_STATUSES,
+  statusFromFlags,
+} = require("../booking-lifecycle/booking-state");
+const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
 } = require("../payment/cancellation-refund-service");
@@ -656,6 +661,11 @@ class BookingService {
         booking._couponUsed = oldBooking._couponUsed;
         booking.rejectionReason = "";
         delete booking.cancellationRefund;
+      } else if (oldBooking.cancellationRefund) {
+        // A cancelled or rejected booking that stays so keeps its refund
+        // audit: the prepared booking would otherwise write over it with
+        // what its flags alone say about the cancellation.
+        booking.cancellationRefund = oldBooking.cancellationRefund;
       }
 
       booking.validate();
@@ -752,8 +762,10 @@ class BookingService {
         return { success: false, errors };
       }
 
-      originBooking.isCommitted = true;
-      originBooking.isRejected = false;
+      setStatusFromFlags(originBooking, {
+        isCommitted: true,
+        isRejected: false,
+      });
 
       if (!skipWorkflow) {
         await WorkflowService.handleWorkflowEvent(
@@ -853,8 +865,7 @@ class BookingService {
     }
 
     for (const booking of bookings) {
-      booking.isCommitted = true;
-      booking.isRejected = false;
+      setStatusFromFlags(booking, { isCommitted: true, isRejected: false });
       await BookingManager.storeBooking(booking);
 
       if (!skipWorkflow) {
@@ -931,7 +942,7 @@ class BookingService {
   }) {
     try {
       const booking = await BookingManager.getBooking(bookingId, tenantId);
-      booking.isPayed = true;
+      setStatusFromFlags(booking, { isPayed: true });
 
       if (timePaid && typeof timePaid === "number") {
         booking.timePaid = timePaid;
@@ -979,7 +990,7 @@ class BookingService {
     try {
       const bookings = await BookingManager.getBookings(tenantId, bookingIds);
       for (const booking of bookings) {
-        booking.isPayed = true;
+        setStatusFromFlags(booking, { isPayed: true });
         if (timePaid && typeof timePaid === "number") {
           booking.timePaid = timePaid;
         } else {
@@ -1192,7 +1203,8 @@ class BookingService {
     }
 
     try {
-      booking.isRejected = true;
+      const cancelledFrom = cancelledFromOf(booking);
+      setStatusFromFlags(booking, { isRejected: true });
       booking.rejectionReason = reason;
 
       if (hookId) {
@@ -1208,6 +1220,7 @@ class BookingService {
         cancelledByUserId: cancellationContext.cancelledByUserId,
       });
       booking.cancellationRefund = { ...refundCalculation };
+      recordCancelledFrom(booking, cancelledFrom);
 
       let attachments;
 
@@ -1386,7 +1399,8 @@ class BookingService {
     }
 
     for (const booking of bookings) {
-      booking.isRejected = true;
+      const cancelledFrom = cancelledFromOf(booking);
+      setStatusFromFlags(booking, { isRejected: true });
       booking.rejectionReason = reason;
 
       const refundCalculation = refundCalculations.find(
@@ -1397,6 +1411,7 @@ class BookingService {
         delete refundAudit.bookingId;
         booking.cancellationRefund = refundAudit;
       }
+      recordCancelledFrom(booking, cancelledFrom);
 
       if (cancellationDocument && refundCalculation) {
         const refundAudit = { ...refundCalculation };
@@ -1917,6 +1932,49 @@ async function generateBookingReference(
   }
 
   return text;
+}
+
+/**
+ * Moves the booking to the state today's flag flip stood for: the flags are
+ * derived from `status` now, so the flip is expressed as the state the
+ * changed flags read as. The lifecycle transitions of tickets 4 to 6 take
+ * this over with their guards.
+ */
+function setStatusFromFlags(booking, changedFlags) {
+  booking.status = statusFromFlags(
+    {
+      isCommitted: booking.isCommitted,
+      isPayed: booking.isPayed,
+      isRejected: booking.isRejected,
+      ...changedFlags,
+    },
+    booking.priceEur,
+  );
+}
+
+/**
+ * The state a booking about to be cancelled is cancelled from: its state
+ * where that is a live one, else what an earlier cancellation recorded (the
+ * admin PUT stores the flip before `rejectBooking` runs, a second rejection
+ * finds the booking cancelled already).
+ */
+function cancelledFromOf(booking) {
+  return CANCELLED_FROM_STATUSES.includes(booking.status)
+    ? booking.status
+    : booking.cancellationRefund?.cancelledFrom;
+}
+
+/**
+ * A cancelled booking keeps the state it was cancelled from: `reinstate`
+ * returns to it and `isPayed` is read from it.
+ */
+function recordCancelledFrom(booking, cancelledFrom) {
+  if (booking.status === STATUS.CANCELLED) {
+    booking.cancellationRefund = {
+      ...booking.cancellationRefund,
+      cancelledFrom,
+    };
+  }
 }
 
 function isNoPaymentRequired(booking) {

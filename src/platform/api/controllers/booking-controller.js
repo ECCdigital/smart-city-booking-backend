@@ -37,6 +37,17 @@ const logger = bunyan.createLogger({
 });
 
 /**
+ * A booking as the request describes it. The HTTP form speaks in the three
+ * flags; a `status` the client sends back from a GET is not an input and
+ * would otherwise outrank the flags it edited.
+ */
+function bookingFromRequest(body = {}) {
+  const fields = { ...body };
+  delete fields.status;
+  return new Booking(fields);
+}
+
+/**
  * Web Controller for Bookings.
  */
 class BookingController {
@@ -374,7 +385,7 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async storeBooking(request, response, next) {
-    const booking = new Booking(request.body);
+    const booking = bookingFromRequest(request.body);
 
     let isUpdate =
       !!(await BookingManager.getBooking(booking.id, booking.tenantId)) &&
@@ -389,7 +400,7 @@ class BookingController {
 
   static async createBooking(request, response, next) {
     const user = request.user;
-    const booking = new Booking(request.body);
+    const booking = bookingFromRequest(request.body);
     const tenantId = request.params.tenant;
 
     if (
@@ -431,7 +442,7 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const booking = new Booking(request.body);
+      const booking = bookingFromRequest(request.body);
 
       if (
         await PermissionsService._allowUpdate(

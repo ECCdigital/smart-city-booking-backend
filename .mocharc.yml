@@ -1,0 +1,3 @@
+# Loaded before the spec files: marks the process as a test run, so a write
+# to a derived booking flag throws instead of being logged (booking.js).
+require: tests/helpers/test-env.js

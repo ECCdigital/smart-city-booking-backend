@@ -415,21 +415,6 @@ class BookingManager {
   }
 
   /**
-   * Update payment status of a booking
-   * @param {Booking} booking Booking with updated payment info
-   * @returns {Promise<void>}
-   */
-  static async setBookingPayedStatus(booking) {
-    await BookingModel.updateOne(
-      { id: booking.id, tenantId: booking.tenantId },
-      {
-        isPayed: booking.isPayed,
-        paymentMethod: booking.paymentMethod,
-      },
-    );
-  }
-
-  /**
    * Get bookings for an event
    * @param {string} tenantId Tenant ID
    * @param {string} eventId Event ID

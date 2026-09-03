@@ -254,15 +254,18 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("a manual booking paid but unconfirmed is stored as such and treated as a request (ticket 9: 400 invalid_status)", async function () {
+    it("a manual booking paid but unconfirmed is stored as confirmed, the payment being the stronger statement (ticket 9: 400 invalid_status)", async function () {
       const booking = await h.manualBooking("room", { isPayed: true });
 
-      expect(stateOf(h.stored(booking.id))).to.equal("paid_unconfirmed");
+      expect(stateOf(h.stored(booking.id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 paid_unconfirmed",
+        "store.save B1 confirmed",
         "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1",
-        "mail.sendBookingRequestConfirmation B1",
+        "access.provision B1",
+        "documents.receipt B1",
+        "store.save B1 confirmed [receipt]",
+        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
       ]);
@@ -470,17 +473,20 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("pays a request that was never confirmed: the flag is set, nothing is mailed (ticket 4: 409 invalid_transition)", async function () {
+    it("pays a request that was never confirmed: it reads as confirmed and is confirmed with its receipt (ticket 4: 409 invalid_transition)", async function () {
       const id = await bookingIn("requested");
 
       const res = await pay(id);
 
       expect(res.status).to.equal(200);
-      expect(stateOf(h.stored(id))).to.equal("paid_unconfirmed");
+      expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 paid_unconfirmed",
+        "store.save B1 confirmed",
         "workflow.onPay B1",
         "access.provision B1",
+        "documents.receipt B1",
+        "store.save B1 confirmed [receipt]",
+        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
 
@@ -1008,6 +1014,27 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
+    it("amending a cancelled booking without a flip keeps its refund audit", async function () {
+      const id = await bookingIn("confirmed");
+      await reject(id, { reason: "Irrtum", refundPercentage: 50 });
+      h.clearEffects();
+
+      const res = await update(id, { comment: "moved" });
+
+      expect(res.status).to.equal(201);
+      const stored = h.stored(id);
+      expect(stateOf(stored)).to.equal("cancelled");
+      expect(stored).to.include({ comment: "moved", isPayed: true });
+      expect(stored.cancellationRefund).to.include({
+        appliedRefundPercentage: 50,
+        origin: "admin",
+        cancelledFrom: "confirmed",
+      });
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt,cancellation]",
+      ]);
+    });
+
     it("clearing isRejected reinstates: price and items of before, no refund, a new grant, no mail", async function () {
       const id = await bookingIn("confirmed");
       await reject(id, { reason: "Irrtum", refundPercentage: 50 });
@@ -1061,17 +1088,16 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("stores any flag combination: paid without confirmed is written as sent (ticket 7: 400 invalid_status_change)", async function () {
+    it("stores any flag combination: paid without confirmed reads as confirmed (ticket 7: 400 invalid_status_change)", async function () {
       const id = await bookingIn("confirmed");
 
       const res = await update(id, { isCommitted: false, isPayed: true });
 
       expect(res.status).to.equal(201);
-      expect(stateOf(h.stored(id))).to.equal("paid_unconfirmed");
+      expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 paid_unconfirmed [receipt]",
-        "access.revoke B1",
-        "access.hold B1",
+        "store.save B1 confirmed [receipt]",
+        "access.update B1",
       ]);
     });
   });

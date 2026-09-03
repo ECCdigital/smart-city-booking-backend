@@ -89,11 +89,11 @@ const ROUTER = "../../src/platform/api/api-router-tenant-related";
 const ROUTER_V2 = "../../src/platform/api/v2/routes";
 
 /**
- * The state a booking is in today, read off its three flags the way the
- * spec's table (part 1, 3.2) reads them. `paid_unconfirmed` is the
- * combination the spec abolishes; it is named so it shows in the table.
- * A free booking carries `isPayed` from the checkout on, whatever its
- * state, so the flag only counts where there is a price.
+ * The state a booking is in, read off its three flags the way the spec's
+ * table (part 1, 3.2) reads them. `paid_unconfirmed` is the combination
+ * the spec abolishes; since ticket 2 the entity reads it as confirmed, so
+ * it can no longer show in the table. A free booking carries `isPayed`
+ * whatever its state, so the flag only counts where there is a price.
  */
 function stateOf(booking) {
   if (booking.isRejected) {
