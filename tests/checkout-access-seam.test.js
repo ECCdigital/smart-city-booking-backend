@@ -192,6 +192,9 @@ describe("checkout on the access seam", function () {
     function update(stored, changes) {
       sinon.stub(BookingManager, "getBooking").resolves(stored);
       sinon.stub(BookingManager, "storeBooking").callsFake(async (v) => v);
+      sinon
+        .stub(BookingManager, "storeBookingIfStatus")
+        .callsFake(async (v) => v);
       sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
       sinon
         .stub(BundleCheckoutService.prototype, "prepareBooking")
@@ -199,7 +202,7 @@ describe("checkout on the access seam", function () {
       return BookingService.updateBooking(TENANT, { ...stored, ...changes });
     }
 
-    it("takes the grants back and holds the compartments for what it books now", async function () {
+    it("holds the compartments for what it books now, then takes the grants back", async function () {
       const revoke = sinon.stub(AccessService, "revokeForBooking").resolves([]);
       const hold = sinon.stub(AccessService, "holdForBooking").resolves([]);
 
@@ -209,7 +212,7 @@ describe("checkout on the access seam", function () {
 
       expect(revoke.calledOnceWith(TENANT, "B-1")).to.equal(true);
       expect(hold.calledOnceWith(TENANT, "B-1")).to.equal(true);
-      expect(revoke.calledBefore(hold)).to.equal(true);
+      expect(hold.calledBefore(revoke)).to.equal(true);
     });
 
     it("holds nothing for a booking that is rejected", async function () {

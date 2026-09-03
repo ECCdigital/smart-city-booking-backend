@@ -1035,7 +1035,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("changes a request: the hold is taken back and made anew", async function () {
+    it("changes a request: the compartments are held anew, then what is granted taken back", async function () {
       const id = await bookingIn("requested");
 
       const res = await update(id, { comment: "Bitte Beamer" });
@@ -1044,8 +1044,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(id).comment).to.equal("Bitte Beamer");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "access.revoke B1",
         "access.hold B1",
+        "access.revoke B1",
       ]);
     });
 
@@ -1059,11 +1059,11 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(id).hooks).to.deep.equal([]);
     });
 
-    // Since ticket 5 the content write leaves a booking to be confirmed at
-    // `requested` and `confirm` moves it on (the lifecycle's guard), the
-    // plan `[amend, confirm]` of spec part 1, section 6. Ticket 7 runs the
-    // plan as such.
-    it("flipping isCommitted writes the content as a request, confirms with the payment request, then holds anew", async function () {
+    // The PUT is the plan of spec part 1, section 6 (`update-plan.js`):
+    // `amend` first, the content write in the state the booking is in with
+    // the access following the content, then the transitions the flags ask
+    // for, each atomic for itself.
+    it("flipping isCommitted is the plan [amend, confirm]: the content write as a request with the hold anew, then the confirmation with the payment request", async function () {
       const id = await bookingIn("requested");
 
       const res = await update(id, { isCommitted: true });
@@ -1072,18 +1072,15 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("payment_due");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
+        "access.hold B1",
+        "access.revoke B1",
         "store.save B1 payment_due",
         "workflow.onCommit B1",
         "payment.paymentRequest B1",
-        "access.revoke B1",
-        "access.hold B1",
       ]);
     });
 
-    // The plan `[amend, confirm, pay]` of spec part 1, section 6: the
-    // content write as a request, the confirmation of a priced booking with
-    // its payment request, then the payment.
-    it("flipping isCommitted and isPayed at once confirms with the payment request, then pays: grant, receipt and the receipt mail", async function () {
+    it("flipping isCommitted and isPayed at once is the plan [amend, confirm, pay]: the confirmation with the payment request, then the payment with grant, receipt and the receipt mail", async function () {
       const id = await bookingIn("requested");
 
       const res = await update(id, { isCommitted: true, isPayed: true });
@@ -1092,6 +1089,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
+        "access.hold B1",
+        "access.revoke B1",
         "store.save B1 payment_due",
         "workflow.onCommit B1",
         "payment.paymentRequest B1",
@@ -1101,11 +1100,36 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.attach B1 receipt",
         "workflow.onPay B1",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
-        "access.update B1",
       ]);
     });
 
-    it("flipping isRejected cancels as the system, with a full refund", async function () {
+    it("a transition that fails leaves the ones before it standing: a reinstatement whose hold fails answers 500, the content is written and the booking stays cancelled", async function () {
+      const id = await bookingIn("payment_due");
+      await reject(id, { reason: "Irrtum" });
+      h.clearEffects();
+      h.failing.add("access.hold");
+
+      const res = await update(id, {
+        isRejected: false,
+        comment: "wieder da",
+      });
+
+      expect(res.status).to.equal(500);
+      const stored = h.stored(id);
+      expect(stateOf(stored)).to.equal("cancelled");
+      expect(stored.comment).to.equal("wieder da");
+      expect(stored.cancellationRefund).to.include({
+        cancelledFrom: "payment_due",
+      });
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [cancellation]",
+        "store.save B1 payment_due [cancellation]",
+        "access.hold B1 FAILED",
+        "store.restore B1 cancelled",
+      ]);
+    });
+
+    it("flipping isRejected is the plan [amend, cancel]: cancelled by the administration with a full refund", async function () {
       const id = await bookingIn("confirmed");
 
       const res = await update(id, {
@@ -1117,11 +1141,13 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       const stored = h.stored(id);
       expect(stateOf(stored)).to.equal("cancelled");
       expect(stored.cancellationRefund).to.include({
-        origin: "system",
+        origin: "admin",
         appliedRefundPercentage: 100,
+        cancelledByUserId: ADMIN,
       });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
+        "access.update B1",
         "store.save B1 cancelled [receipt]",
         "access.revoke B1",
         "documents.cancellation B1",
@@ -1224,13 +1250,14 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(201);
       const stored = h.stored(id);
       expect(stateOf(stored)).to.equal("cancelled");
-      expect(stored.cancellationRefund).to.include({ origin: "system" });
+      expect(stored.cancellationRefund).to.include({ origin: "admin" });
       expect(stored.attachments.map((att) => att.type)).to.deep.equal([
         "receipt",
         "cancellation",
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
+        "access.update B1",
         "store.save B1 cancelled [receipt]",
         "access.revoke B1",
         "documents.cancellation B1",
@@ -1240,17 +1267,30 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("stores any flag combination: paid without confirmed reads as confirmed (ticket 7: 400 invalid_status_change)", async function () {
+    it("flags no sequence of transitions reaches are refused with 400 invalid_status_change before anything is written: paid without confirmed", async function () {
       const id = await bookingIn("confirmed");
 
       const res = await update(id, { isCommitted: false, isPayed: true });
 
-      expect(res.status).to.equal(201);
+      expect(res.status).to.equal(400);
+      expect(res.body.code).to.equal("invalid_status_change");
+      expect(res.body.params).to.deep.equal({
+        status: "confirmed",
+        requested: { isCommitted: false, isPayed: true, isRejected: false },
+      });
       expect(stateOf(h.stored(id))).to.equal("confirmed");
-      expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed [receipt]",
-        "access.update B1",
-      ]);
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("flags no sequence of transitions reaches are refused with 400: a confirmed booking cannot become a request again", async function () {
+      const id = await bookingIn("confirmed");
+
+      const res = await update(id, { isCommitted: false, isPayed: false });
+
+      expect(res.status).to.equal(400);
+      expect(res.body.code).to.equal("invalid_status_change");
+      expect(stateOf(h.stored(id))).to.equal("confirmed");
+      expect(h.takeEffects()).to.deep.equal([]);
     });
   });
 

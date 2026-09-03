@@ -244,8 +244,9 @@ describe("BookingService.updateBooking with a manual price", function () {
     });
 
     sinon.stub(BookingManager, "getBooking").resolves(oldBooking);
+    sinon.stub(BookingManager, "storeBooking").callsFake(async (b) => b);
     const storeBooking = sinon
-      .stub(BookingManager, "storeBooking")
+      .stub(BookingManager, "storeBookingIfStatus")
       .callsFake(async (b) => b);
     sinon.stub(BookableManager, "getBookable").resolves(stored);
     sinon.stub(BookableManager, "getCustomFieldDefinitions").resolves({

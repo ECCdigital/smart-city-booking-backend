@@ -391,14 +391,14 @@ describe("BookingService cancellation refunds", function () {
       .stub(BookingManager, "getBooking")
       .callsFake(async () => new Booking(oldBooking));
     const written = [];
-    sinon.stub(BookingManager, "storeBooking").callsFake(async (value) => {
-      // A snapshot: the service goes on changing the entity it wrote.
-      written.push({ ...value });
-      return value;
-    });
-    const reinstate = sinon
+    // Both writes of the plan `[amend, reinstate]` are conditional writes;
+    // a snapshot of each, the service goes on changing the entity it wrote.
+    const writes = sinon
       .stub(BookingManager, "storeBookingIfStatus")
-      .callsFake(async () => ({ ...oldBooking, status: "cancelled" }));
+      .callsFake(async (value) => {
+        written.push({ ...value });
+        return { ...oldBooking, status: "cancelled" };
+      });
     sinon.stub(AccessService, "provisionForBooking").resolves([]);
     sinon.stub(BundleCheckoutService.prototype, "prepareBooking").resolves(
       new Booking({
@@ -420,12 +420,13 @@ describe("BookingService cancellation refunds", function () {
     // The content write keeps price, positions and the refund audit of
     // before; the reinstatement writes the state and drops the audit.
     const [content] = written;
+    assert.strictEqual(writes.firstCall.args[1], "cancelled");
     assert.strictEqual(content.priceEur, 97.5);
     assert.strictEqual(content.vatIncludedEur, 10.5);
     assert.strictEqual(content.bookableItems.length, 1);
     assert.strictEqual(content.isRejected, true);
     assert.strictEqual(content.cancellationRefund.appliedRefundPercentage, 25);
-    const [reinstated, expectStatus, options] = reinstate.firstCall.args;
+    const [reinstated, expectStatus, options] = writes.secondCall.args;
     assert.strictEqual(expectStatus, "cancelled");
     assert.deepStrictEqual(options, { unset: ["cancellationRefund"] });
     assert.strictEqual(reinstated.status, "confirmed");

@@ -28,10 +28,13 @@ const {
 } = require("../booking-consitency-service");
 const {
   STATUS,
+  TRANSITION,
   TRIGGER,
   CANCELLED_FROM_STATUSES,
   statusFromFlags,
+  normalizeFlags,
 } = require("../booking-lifecycle/booking-state");
+const { planUpdate } = require("../booking-lifecycle/update-plan");
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
@@ -572,15 +575,41 @@ class BookingService {
     await BookingManager.removeBooking(booking.id, booking.tenantId);
   }
 
-  static async updateBooking(tenantId, updatedBooking, { requestBody } = {}) {
+  /**
+   * The admin PUT as the plan of spec part 1, section 6: the checkout
+   * prepares the booking as it is to be (a manual booking, see CONTEXT.md),
+   * `planUpdate` reads the three flags of the form against the state the
+   * booking is in and answers the transitions the update needs - `amend`
+   * first, the content change, then what the flags ask for - and each runs
+   * for itself, atomic, in order. There is no rollback across transitions:
+   * where transition k fails, 1..k-1 stand and the error of k is the
+   * answer. Flags no sequence of transitions reaches are refused with
+   * `BadRequestError invalid_status_change` before anything is written.
+   *
+   * The plan runs here, next to the preparation, because it reads the
+   * price the booking has after the update, which the checkout decides.
+   *
+   * @param {string} tenantId
+   * @param {Object} updatedBooking The booking as the form sends it
+   * @param {{ requestBody?: Object, userId?: string|null }} [options] The
+   *   form as it was sent, whose three flags the plan reads (the entity
+   *   derives its flags from the state it read off them, so "paid but not
+   *   confirmed" is not visible on it any more), and the user updating,
+   *   named at the cancellation the plan runs
+   * @returns {Promise<Booking>} The booking as it is stored afterwards
+   * @throws {NotFoundError} `booking_not_found`
+   * @throws {BadRequestError} `invalid_status_change`, or the code of a
+   *   consistency check that refused a confirmation
+   */
+  static async updateBooking(
+    tenantId,
+    updatedBooking,
+    { requestBody = updatedBooking, userId = null } = {},
+  ) {
     const oldBooking = await BookingManager.getBooking(
       updatedBooking.id,
       tenantId,
     );
-
-    const isCommit = Boolean(updatedBooking.isCommitted);
-    const isPayed = Boolean(updatedBooking.isPayed);
-    const isRejected = Boolean(updatedBooking.isRejected);
 
     if (!oldBooking) {
       throw new NotFoundError("booking_not_found", {
@@ -588,7 +617,8 @@ class BookingService {
       });
     }
 
-    const onUnreject = oldBooking.isRejected && !isRejected;
+    const flags = normalizeFlags(requestBody);
+    const onUnreject = oldBooking.isRejected && !flags.isRejected;
 
     const { checkoutId } = await resolveCheckoutId(
       undefined,
@@ -596,182 +626,140 @@ class BookingService {
       tenantId,
     );
 
-    try {
-      // Every booking update is a manual booking (see CONTEXT.md,
-      // "Manuelle Buchung"): the entered values are authoritative, no checks
-      // run and no automatic discounts apply.
-      const bundleCheckoutService = new BundleCheckoutService(
-        {
-          user: updatedBooking.assignedUserId,
-          tenant: tenantId,
-          timeBegin: updatedBooking.timeBegin,
-          timeEnd: updatedBooking.timeEnd,
-          timeCreated: oldBooking.timeCreated,
-          timePaid: updatedBooking.timePaid
-            ? updatedBooking.timePaid
-            : oldBooking.timePaid,
-          bookableItems: updatedBooking.bookableItems,
-          couponCode: updatedBooking.couponCode,
-          name: updatedBooking.name,
-          company: updatedBooking.company,
-          street: updatedBooking.street,
-          zipCode: updatedBooking.zipCode,
-          location: updatedBooking.location,
-          email: updatedBooking.mail,
-          phone: updatedBooking.phone,
-          comment: updatedBooking.comment,
-          attachmentStatus: updatedBooking.attachmentStatus,
-          paymentProvider: updatedBooking.paymentProvider,
-          attachments: oldBooking.attachments,
-          checkoutId,
-          customFieldValues: updatedBooking.customFieldValues,
-          amendedBookingId: oldBooking.id,
-        },
-        CheckoutPolicy.ADMIN_MANUAL,
-        {
-          internalComments:
-            updatedBooking.internalComments ||
-            oldBooking.internalComments ||
-            "",
-          rejectionReason:
-            updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
-          isCommitted: isCommit,
-          isPayed: isPayed,
-          isRejected: isRejected,
-          paymentMethod: updatedBooking.paymentMethod,
-          accessInfo: oldBooking.accessInfo,
-          cancellationPolicy: updatedBooking.cancellationPolicy,
-        },
-      );
+    // Every booking update is a manual booking (see CONTEXT.md,
+    // "Manuelle Buchung"): the entered values are authoritative, no checks
+    // run and no automatic discounts apply.
+    const bundleCheckoutService = new BundleCheckoutService(
+      {
+        user: updatedBooking.assignedUserId,
+        tenant: tenantId,
+        timeBegin: updatedBooking.timeBegin,
+        timeEnd: updatedBooking.timeEnd,
+        timeCreated: oldBooking.timeCreated,
+        timePaid: updatedBooking.timePaid
+          ? updatedBooking.timePaid
+          : oldBooking.timePaid,
+        bookableItems: updatedBooking.bookableItems,
+        couponCode: updatedBooking.couponCode,
+        name: updatedBooking.name,
+        company: updatedBooking.company,
+        street: updatedBooking.street,
+        zipCode: updatedBooking.zipCode,
+        location: updatedBooking.location,
+        email: updatedBooking.mail,
+        phone: updatedBooking.phone,
+        comment: updatedBooking.comment,
+        attachmentStatus: updatedBooking.attachmentStatus,
+        paymentProvider: updatedBooking.paymentProvider,
+        attachments: oldBooking.attachments,
+        checkoutId,
+        customFieldValues: updatedBooking.customFieldValues,
+        amendedBookingId: oldBooking.id,
+      },
+      CheckoutPolicy.ADMIN_MANUAL,
+      {
+        internalComments:
+          updatedBooking.internalComments || oldBooking.internalComments || "",
+        rejectionReason:
+          updatedBooking.rejectionReason || oldBooking.rejectionReason || "",
+        ...flags,
+        paymentMethod: updatedBooking.paymentMethod,
+        accessInfo: oldBooking.accessInfo,
+        cancellationPolicy: updatedBooking.cancellationPolicy,
+      },
+    );
 
-      let booking = await bundleCheckoutService.prepareBooking({
-        keepExistingId: true,
-        existingId: oldBooking.id,
+    let booking = await bundleCheckoutService.prepareBooking({
+      keepExistingId: true,
+      existingId: oldBooking.id,
+    });
+
+    if (!(booking instanceof Booking)) {
+      booking = new Booking(booking);
+    }
+
+    if (onUnreject) {
+      // The reinstatement keeps price, positions and coupon of before the
+      // cancellation (spec part 1, 4.2): the content write carries them,
+      // `reinstate` clears the reason and takes the refund audit away.
+      booking.priceEur = oldBooking.priceEur;
+      booking.vatIncludedEur = oldBooking.vatIncludedEur;
+      booking.bookableItems = oldBooking.bookableItems;
+      booking.couponCode = oldBooking.couponCode;
+      booking._couponUsed = oldBooking._couponUsed;
+      booking.rejectionReason = oldBooking.rejectionReason || "";
+    }
+
+    booking.validate();
+
+    const plan = planUpdate(oldBooking.status, flags, booking.priceEur, {
+      cancelledFrom: oldBooking.cancellationRefund?.cancelledFrom,
+    });
+
+    for (const transition of plan) {
+      await BookingService._runUpdateTransition(tenantId, transition, {
+        booking,
+        userId,
       });
+    }
 
-      if (!(booking instanceof Booking)) {
-        booking = new Booking(booking);
-      }
+    return plan.length === 1
+      ? booking
+      : await BookingManager.getBooking(booking.id, tenantId);
+  }
 
-      if (onUnreject) {
-        // The reinstatement keeps price, positions and coupon of before the
-        // cancellation (spec part 1, 4.2); the content write carries them
-        // and the refund audit, `reinstate` takes the audit away.
-        booking.priceEur = oldBooking.priceEur;
-        booking.vatIncludedEur = oldBooking.vatIncludedEur;
-        booking.bookableItems = oldBooking.bookableItems;
-        booking.couponCode = oldBooking.couponCode;
-        booking._couponUsed = oldBooking._couponUsed;
-        booking.rejectionReason = oldBooking.rejectionReason || "";
-      }
-      if (oldBooking.cancellationRefund) {
-        // A cancelled or rejected booking keeps its refund audit in the
-        // content write: the prepared booking would otherwise write over it
-        // with what its flags alone say about the cancellation.
-        booking.cancellationRefund = oldBooking.cancellationRefund;
-      }
-
-      booking.validate();
-
-      const onCommit = !oldBooking.isCommitted && isCommit;
-      const onPay = !oldBooking.isPayed && isPayed;
-      const onReject = !oldBooking.isRejected && isRejected;
-
-      // The confirmation, the payment, the cancellation and the
-      // reinstatement are lifecycle transitions (spec part 1, 4.1): the
-      // content write leaves the booking where the transition starts, the
-      // transition moves it on. Ticket 7 turns the whole PUT into the plan
-      // of `update-plan.js`.
-      const requestedStatus = booking.status;
-      if (onUnreject || onReject) {
-        booking.status = oldBooking.status;
-      } else if (onCommit) {
-        booking.status = STATUS.REQUESTED;
-      } else if (onPay) {
-        booking.status = STATUS.PAYMENT_DUE;
-      }
-
-      await BookingManager.storeBooking(booking, true);
-
-      if (onUnreject) {
-        const reinstated = await bookingLifecycle.reinstate(
-          tenantId,
-          booking.id,
-          { trigger: TRIGGER.ADMIN },
-        );
-        booking.status = reinstated.status;
-        booking.rejectionReason = "";
-        delete booking.cancellationRefund;
-      }
-
-      if (onCommit) {
+  /**
+   * One transition of an update plan, as the administration (glossary
+   * "Auslöser"). The confirmation keeps its consistency check in front
+   * (`commitBooking`), whose refusal is the 400 of before; the cancellation
+   * of a flipped flag refunds in full, the form carrying no percentage, and
+   * names the user who flipped it.
+   *
+   * @param {string} tenantId
+   * @param {string} transition One of TRANSITION
+   * @param {{ booking: Booking, userId: string|null }} context The booking
+   *   as the content write leaves it, and the user updating
+   * @returns {Promise<void>}
+   */
+  static async _runUpdateTransition(tenantId, transition, { booking, userId }) {
+    const trigger = TRIGGER.ADMIN;
+    switch (transition) {
+      case TRANSITION.AMEND:
+        await bookingLifecycle.amend(tenantId, booking, { trigger });
+        return;
+      case TRANSITION.CONFIRM: {
         const committed = await BookingService.commitBooking(
           tenantId,
           booking,
-          { trigger: TRIGGER.ADMIN },
+          { trigger },
         );
         if (!committed.success) {
-          // The consistency check refused: the content write left the
-          // booking a request, so the answer must not say otherwise.
           throw new BadRequestError(committed.errors[0].code, {
             errors: committed.errors,
           });
         }
-        booking.status = requestedStatus;
+        return;
       }
-
-      if (onPay) {
-        await BookingService.setBookingPayed({
-          tenantId,
-          bookingId: booking.id,
-          trigger: TRIGGER.ADMIN,
+      case TRANSITION.PAY:
+        await bookingLifecycle.pay(tenantId, booking.id, {
+          trigger,
+          paymentMethod: booking.paymentMethod,
+          timePaid: booking.timePaid,
         });
-        booking.status = requestedStatus;
-      }
-
-      if (onReject) {
-        // The flip cancels as the system, with a full refund, as before:
-        // the form carries no refund percentage the administration could
-        // set. Ticket 7 decides the trigger of the plan's `cancel`.
-        const outcome = await BookingService.rejectBooking(
-          tenantId,
-          booking.id,
-          { trigger: TRIGGER.SYSTEM, reason: booking.rejectionReason },
-        );
-        booking.status = outcome.status;
-        booking.cancellationRefund = outcome.booking.cancellationRefund;
-      }
-
-      if (onUnreject || onReject) {
-        // The transition granted, held or revoked the access.
-      } else if (booking.isCommitted && booking.isPayed) {
-        if (!booking.isRejected) {
-          await AccessService.updateForBooking(
-            updatedBooking.tenantId,
-            oldBooking,
-            booking,
-          );
-        }
-      } else {
-        // Not paid (any more): whatever was granted is taken back, and the
-        // compartments are held for what the booking books now - unless it
-        // is rejected, which claims nothing.
-        await AccessService.revokeForBooking(
-          updatedBooking.tenantId,
-          booking.id,
-        );
-        if (!booking.isRejected) {
-          await AccessService.holdForBooking(
-            updatedBooking.tenantId,
-            booking.id,
-          );
-        }
-      }
-
-      return booking;
-    } catch (error) {
-      await BookingManager.storeBooking(oldBooking);
-      throw error;
+        return;
+      case TRANSITION.CANCEL:
+        await bookingLifecycle.cancel(tenantId, booking.id, {
+          trigger,
+          reason: booking.rejectionReason,
+          refundPercentage: 100,
+          cancelledByUserId: userId,
+        });
+        return;
+      case TRANSITION.REINSTATE:
+        await bookingLifecycle.reinstate(tenantId, booking.id, { trigger });
+        return;
+      default:
+        throw new Error(`updateBooking: no way to run ${transition}`);
     }
   }
 

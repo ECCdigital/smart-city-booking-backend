@@ -467,7 +467,7 @@ class BookingController {
         const savedBooking = await BookingService.updateBooking(
           tenant,
           booking,
-          { requestBody: request.body },
+          { requestBody: request.body, userId: user.id },
         );
 
         await WorkflowService.updateTask(
