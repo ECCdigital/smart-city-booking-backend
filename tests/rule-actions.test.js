@@ -2,22 +2,30 @@ const mock = require("mock-require");
 const { expect } = require("chai");
 const sinon = require("sinon");
 
+const MailerService = require("../src/commons/mail-service/mail-service");
+
+/**
+ * The rule engine builds the mail value itself - the body of the rule
+ * rendered against the matched document - and hands it to `send`; the
+ * transport is stubbed at that seam, the rendering is real.
+ */
 describe("rule-engine actionRegistry", () => {
   let sandbox;
   let actionRegistry;
-  let fakeMailerService;
+  let send;
   let fakeLifecycle;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
 
-    fakeMailerService = { send: sandbox.stub().resolves() };
+    send = sandbox
+      .stub(MailerService, "send")
+      .resolves({ status: "sent", transport: "instance" });
     fakeLifecycle = {
       bookingLifecycle: { cancel: sandbox.stub().resolves() },
       TRIGGER: { SYSTEM: "system" },
     };
 
-    mock("../src/commons/mail-service/mail-service", fakeMailerService);
     mock("../src/commons/services/booking-lifecycle", fakeLifecycle);
 
     actionRegistry = mock.reRequire("../src/rule-engine/actionRegistry");
@@ -29,7 +37,7 @@ describe("rule-engine actionRegistry", () => {
   });
 
   describe("sendEmail", () => {
-    it("sends a custom email using doc mail and rule-defined content", async () => {
+    it("sends the mail value to the doc's mail: the rule's subject as is, the body rendered against the doc, over the tenant's transport", async () => {
       const doc = { id: "b1", tenantId: "t1", mail: "guest@example.com" };
 
       await actionRegistry.sendEmail(doc, {
@@ -37,13 +45,25 @@ describe("rule-engine actionRegistry", () => {
         body: "<p>Hi {{mail}}</p>",
       });
 
-      expect(fakeMailerService.send.calledOnce).to.be.true;
-      const args = fakeMailerService.send.firstCall.args[0];
-      expect(args.tenantId).to.equal("t1");
-      expect(args.address).to.equal("guest@example.com");
-      expect(args.subject).to.equal("Hallo {{name}}");
-      expect(args.mailTemplate).to.equal("<p>Hi {{mail}}</p>");
-      expect(args.model.mail).to.equal("guest@example.com");
+      expect(send.calledOnce).to.be.true;
+      const mailValue = send.firstCall.args[0];
+      expect(mailValue.type).to.equal("rule-email");
+      expect(mailValue.tenantId).to.equal("t1");
+      expect(mailValue.to).to.equal("guest@example.com");
+      expect(mailValue.subject).to.equal("Hallo {{name}}");
+      expect(mailValue.html).to.equal("<p>Hi guest@example.com</p>");
+    });
+
+    it("sends as the instance where the rule says useInstanceMail", async () => {
+      const doc = { id: "b1", tenantId: "t1", mail: "guest@example.com" };
+
+      await actionRegistry.sendEmail(doc, {
+        subject: "s",
+        body: "b",
+        useInstanceMail: true,
+      });
+
+      expect(send.firstCall.args[0].tenantId).to.equal(null);
     });
 
     it("prefers an explicit recipient from params", async () => {
@@ -55,9 +75,7 @@ describe("rule-engine actionRegistry", () => {
         body: "Body",
       });
 
-      expect(fakeMailerService.send.firstCall.args[0].address).to.equal(
-        "admin@example.com",
-      );
+      expect(send.firstCall.args[0].to).to.equal("admin@example.com");
     });
 
     it("throws when no recipient is available", async () => {
@@ -71,7 +89,7 @@ describe("rule-engine actionRegistry", () => {
       }
 
       expect(error).to.be.an("error");
-      expect(fakeMailerService.send.called).to.be.false;
+      expect(send.called).to.be.false;
     });
 
     it("requires subject and body", async () => {
@@ -114,16 +132,17 @@ describe("rule-engine actionRegistry", () => {
 describe("rule-engine aggregateActionRegistry", () => {
   let sandbox;
   let aggregateActionRegistry;
-  let fakeMailerService;
+  let send;
   let fakeTenantManager;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    fakeMailerService = { send: sandbox.stub().resolves() };
+    send = sandbox
+      .stub(MailerService, "send")
+      .resolves({ status: "sent", transport: "instance" });
     fakeTenantManager = {
       getTenant: sandbox.stub().resolves({ id: "t1", name: "Test Tenant" }),
     };
-    mock("../src/commons/mail-service/mail-service", fakeMailerService);
     mock("../src/commons/data-managers/tenant-manager", fakeTenantManager);
     aggregateActionRegistry = mock.reRequire(
       "../src/rule-engine/aggregateActionRegistry",
@@ -135,7 +154,7 @@ describe("rule-engine aggregateActionRegistry", () => {
     mock.stopAll();
   });
 
-  it("sends one email per tenant group with the docs in the model", async () => {
+  it("sends one mail value per tenant group: the body rendered over the docs as bookings, their count and the tenant's name", async () => {
     const docs = [
       { id: "b1", tenantId: "t1" },
       { id: "b2", tenantId: "t1" },
@@ -143,16 +162,20 @@ describe("rule-engine aggregateActionRegistry", () => {
 
     await aggregateActionRegistry.sendAggregatedEmail(
       docs,
-      { subject: "Offene Buchungen", body: "{{count}}" },
+      {
+        subject: "Offene Buchungen",
+        body: "{{count}} bei {{tenant}}: {{#each bookings}}{{id}} {{/each}}",
+      },
       { tenantId: "t1", tenantMail: "admin@example.com" },
     );
 
-    expect(fakeMailerService.send.calledOnce).to.be.true;
-    const args = fakeMailerService.send.firstCall.args[0];
-    expect(args.tenantId).to.equal("t1");
-    expect(args.address).to.equal("admin@example.com");
-    expect(args.model.bookings).to.have.lengthOf(2);
-    expect(args.model.count).to.equal(2);
+    expect(send.calledOnce).to.be.true;
+    const mailValue = send.firstCall.args[0];
+    expect(mailValue.type).to.equal("rule-aggregated-email");
+    expect(mailValue.tenantId).to.equal("t1");
+    expect(mailValue.to).to.equal("admin@example.com");
+    expect(mailValue.subject).to.equal("Offene Buchungen");
+    expect(mailValue.html).to.equal("2 bei Test Tenant: b1 b2 ");
   });
 
   it("prefers params.to over the context tenant mail", async () => {
@@ -162,9 +185,7 @@ describe("rule-engine aggregateActionRegistry", () => {
       { tenantId: "t1", tenantMail: "admin@example.com" },
     );
 
-    expect(fakeMailerService.send.firstCall.args[0].address).to.equal(
-      "override@example.com",
-    );
+    expect(send.firstCall.args[0].to).to.equal("override@example.com");
   });
 
   it("does nothing for an empty doc set", async () => {
@@ -173,7 +194,7 @@ describe("rule-engine aggregateActionRegistry", () => {
       { subject: "s", body: "b" },
       {},
     );
-    expect(fakeMailerService.send.called).to.be.false;
+    expect(send.called).to.be.false;
   });
 
   it("throws when no recipient is available", async () => {

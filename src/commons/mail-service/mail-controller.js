@@ -339,13 +339,14 @@ class MailController {
     });
 
     await MailerService.send({
-      address,
+      type: "verification-request",
+      tenantId: null,
+      to: address,
       subject: "Bestätigen Sie Ihre E-Mail-Adresse",
-      mailTemplate: instance.mailTemplate,
-      model: {
-        title: "Bestätigen Sie Ihre E-Mail-Adresse",
-        content,
-      },
+      html: await MailerService.renderHtml({
+        mailTemplate: instance.mailTemplate,
+        model: { title: "Bestätigen Sie Ihre E-Mail-Adresse", content },
+      }),
     });
   }
 
@@ -356,13 +357,17 @@ class MailController {
     const content = renderSnippet("password-reset", { resetUrl });
 
     await MailerService.send({
-      address,
+      type: "password-reset",
+      tenantId: null,
+      to: address,
       subject: "Bestätigen Sie die Änderung Ihres Kennworts",
-      mailTemplate: instance.mailTemplate,
-      model: {
-        title: "Bestätigen Sie die Änderung Ihres Kennworts",
-        content,
-      },
+      html: await MailerService.renderHtml({
+        mailTemplate: instance.mailTemplate,
+        model: {
+          title: "Bestätigen Sie die Änderung Ihres Kennworts",
+          content,
+        },
+      }),
     });
   }
 
@@ -382,13 +387,14 @@ class MailController {
     });
 
     await MailerService.send({
-      address,
+      type: "forgot-password-request",
+      tenantId: null,
+      to: address,
       subject: "Kennwort zurücksetzen",
-      mailTemplate: instance.mailTemplate,
-      model: {
-        title: "Kennwort zurücksetzen",
-        content,
-      },
+      html: await MailerService.renderHtml({
+        mailTemplate: instance.mailTemplate,
+        model: { title: "Kennwort zurücksetzen", content },
+      }),
     });
   }
 
@@ -405,13 +411,14 @@ class MailController {
     });
 
     await MailerService.send({
-      address: instance.mailAddress,
+      type: "user-created",
+      tenantId: null,
+      to: instance.mailAddress,
       subject: "Ein neuer Benutzer wurde erstellt",
-      mailTemplate: instance.mailTemplate,
-      model: {
-        title: "Ein neuer Benutzer wurde erstellt",
-        content,
-      },
+      html: await MailerService.renderHtml({
+        mailTemplate: instance.mailTemplate,
+        model: { title: "Ein neuer Benutzer wurde erstellt", content },
+      }),
     });
   }
 
@@ -431,15 +438,21 @@ class MailController {
       newStatus,
     });
 
+    // Sent as the instance, as it always was: the tenant's shell template,
+    // the instance's account. Ticket 4 of the mail-stack chain makes it a
+    // tenant notice.
     await MailerService.send({
-      address: sendTo,
+      type: "workflow-notification",
+      tenantId: null,
+      to: sendTo,
       subject: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
-      mailTemplate: tenant.genericMailTemplate,
-      model: {
-        title: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
-        content,
-      },
-      useInstanceMail: tenant.useInstanceMail,
+      html: await MailerService.renderHtml({
+        mailTemplate: tenant.genericMailTemplate,
+        model: {
+          title: `Änderung bei der Buchung Nr. ${bookingId} - Neuer Status`,
+          content,
+        },
+      }),
     });
   }
 
@@ -453,15 +466,21 @@ class MailController {
       supportEmail: tenant.mail,
     });
 
+    // Sent as the instance, as it always was: the tenant's shell template,
+    // the instance's account. Ticket 4 of the mail-stack chain makes it a
+    // tenant notice.
     await MailerService.send({
-      address: sendTo,
+      type: "invitation",
+      tenantId: null,
+      to: sendTo,
       subject: `Biletado - Einladung zum ${tenant.name} Mandanten`,
-      mailTemplate: tenant.genericMailTemplate,
-      model: {
-        title: `Biletado - Einladung zum ${tenant.name} Mandanten`,
-        content,
-      },
-      useInstanceMail: tenant.useInstanceMail,
+      html: await MailerService.renderHtml({
+        mailTemplate: tenant.genericMailTemplate,
+        model: {
+          title: `Biletado - Einladung zum ${tenant.name} Mandanten`,
+          content,
+        },
+      }),
     });
   }
 
@@ -486,13 +505,14 @@ class MailController {
     });
 
     await MailerService.send({
-      address,
+      type: "card-link-request",
+      tenantId: null,
+      to: address,
       subject: "Karte mit Ihrem Account verknüpfen",
-      mailTemplate: instance.mailTemplate,
-      model: {
-        title: "Karte mit Ihrem Account verknüpfen",
-        content,
-      },
+      html: await MailerService.renderHtml({
+        mailTemplate: instance.mailTemplate,
+        model: { title: "Karte mit Ihrem Account verknüpfen", content },
+      }),
     });
   }
 }

@@ -1,23 +1,23 @@
 /**
  * The contract every mail transport (glossary "Versandweg") has to keep at
- * the seam `MailerService.send` talks through. One suite, run against
+ * the seam `MailerService.send(mail)` talks through. One suite, run against
  * every transport - SMTP over nodemailer's `streamTransport`, Microsoft
  * Graph over a fake HTTP client, and the in-memory transport the tests use
  * as the third implementation.
  *
- * Written for the first ticket of the mail-stack chain (Wayfinder,
- * "Mail-Stack (1): Charakterisierung ..."; spec section 3). The cases that
- * run pin the transport as it is today: the choice between the instance's
- * and the tenant's account, the silent fallback, the silent exit when
- * mail is disabled, three attempts and the throw. The cases under
- * `it.skip` are the target form of ticket 2 - `send(mail)` answering
- * `{ status: "sent" | "skipped" }`, the fallback warned once per tenant
- * configuration, the pool hash with the Graph secret in it - and turn
- * green with it.
+ * Written for the first ticket of the mail-stack chain and brought to the
+ * target form with the second (Wayfinder, "Mail-Stack (2): Versandweg
+ * send(mail) ..."; spec section 3): `send` takes the mail value - type,
+ * tenant or null, recipient, copy, subject, html, attachments - chooses
+ * between the instance's and the tenant's account, warns once per tenant
+ * configuration when it falls back, answers `{ status: "sent" }` with the
+ * transport it took or `{ status: "skipped" }` where mail is disabled,
+ * tries three times and throws the transport's error.
  */
 
 const assert = require("assert");
 const sinon = require("sinon");
+const bunyan = require("bunyan");
 const nodemailer = require("nodemailer");
 
 const MailerService = require("../src/commons/mail-service/mail-service");
@@ -235,18 +235,32 @@ for (const implementation of IMPLEMENTATIONS) {
       sinon.stub(TenantManager, "getTenant").resolves(tenant);
     }
 
+    /** The mail value, ready to go: the tenant's, unless said otherwise. */
     const send = (overrides = {}) =>
       MailerService.send({
+        type: "contract-test",
         tenantId: TENANT,
-        address: TO,
-        subject: SUBJECT,
-        mailTemplate: "{{{content}}}",
-        model: { content: HTML },
-        attachments: [ATTACHMENT],
+        to: TO,
         bcc: BCC,
-        useInstanceMail: tenant.useInstanceMail,
+        subject: SUBJECT,
+        html: HTML,
+        attachments: [ATTACHMENT],
         ...overrides,
       });
+
+    /** How often the fallback was warned about since the stub was set. */
+    const fallbackWarnings = (warn) =>
+      warn
+        .getCalls()
+        .filter((call) =>
+          call.args.some(
+            (arg) =>
+              typeof arg === "string" &&
+              /tenant mail config incomplete, falling back to instance/.test(
+                arg,
+              ),
+          ),
+        ).length;
 
     beforeEach(function () {
       transport = implementation.create();
@@ -256,10 +270,10 @@ for (const implementation of IMPLEMENTATIONS) {
       sinon.restore();
     });
 
-    it("delivers to, bcc, subject, body and the attachments by name, from the instance's no-reply account", async function () {
+    it("delivers to, bcc, subject, body and the attachments by name, from the instance's no-reply account, and answers sent", async function () {
       given();
 
-      await send();
+      const outcome = await send();
 
       const [delivered] = transport.delivered();
       assert.strictEqual(transport.delivered().length, 1);
@@ -269,60 +283,88 @@ for (const implementation of IMPLEMENTATIONS) {
       assert.strictEqual(delivered.subject, SUBJECT);
       assert.ok(delivered.body.includes(HTML));
       assert.deepStrictEqual(delivered.attachmentNames, [ATTACHMENT.filename]);
+      assert.strictEqual(outcome.status, "sent");
+      assert.strictEqual(outcome.transport, "instance");
     });
 
-    it("delivers an instance mail - no tenant - from the instance's account", async function () {
-      given();
+    it("delivers an instance mail - tenantId null - from the instance's account without reading a tenant", async function () {
+      given({ tenantOverrides: transport.tenant });
 
-      await send({ tenantId: null, useInstanceMail: false });
+      const outcome = await send({ tenantId: null });
 
       assert.strictEqual(
         transport.delivered()[0].from,
         INSTANCE_SMTP.noreplyMail,
       );
+      assert.strictEqual(outcome.transport, "instance");
+      assert.strictEqual(TenantManager.getTenant.called, false);
     });
 
     it("sends from the tenant's account where the tenant does not use the instance mail and its configuration is complete", async function () {
       given({ tenantOverrides: transport.tenant });
 
-      await send();
+      const outcome = await send();
 
       assert.strictEqual(
         transport.delivered()[0].from,
         transport.tenant.noreplyMail,
       );
+      assert.strictEqual(outcome.transport, "tenant");
     });
 
-    it("falls back to the instance's account, silently, where the tenant's configuration is incomplete (spec 5.3: a warning after ticket 2)", async function () {
+    it("falls back to the instance's account where the tenant's configuration is incomplete, and warns once per tenant configuration", async function () {
       given({ tenantOverrides: transport.incompleteTenant });
+      const warn = sinon.stub(bunyan.prototype, "warn");
 
-      await send();
+      const first = await send();
+      const second = await send();
 
-      assert.strictEqual(
-        transport.delivered()[0].from,
-        INSTANCE_SMTP.noreplyMail,
-      );
+      assert.strictEqual(transport.delivered().length, 2);
+      for (const delivered of transport.delivered()) {
+        assert.strictEqual(delivered.from, INSTANCE_SMTP.noreplyMail);
+      }
+      assert.strictEqual(first.transport, "instance");
+      assert.strictEqual(second.transport, "instance");
+      assert.strictEqual(fallbackWarnings(warn), 1);
     });
 
-    it("sends from the instance's account where the tenant uses the instance mail, whatever the tenant configured", async function () {
+    it("sends from the instance's account where the tenant uses the instance mail, whatever the tenant configured, without a warning", async function () {
       given({
         tenantOverrides: { ...transport.tenant, useInstanceMail: true },
       });
+      const warn = sinon.stub(bunyan.prototype, "warn");
 
-      await send();
+      const outcome = await send();
 
       assert.strictEqual(
         transport.delivered()[0].from,
         INSTANCE_SMTP.noreplyMail,
       );
+      assert.strictEqual(outcome.transport, "instance");
+      assert.strictEqual(fallbackWarnings(warn), 0);
     });
 
-    it("sends nothing and answers nothing where the instance has mail disabled (spec 5.4: a skipped value after ticket 2)", async function () {
+    it("sends nothing and answers skipped where the instance has mail disabled", async function () {
       given({ instanceOverrides: { mailEnabled: false } });
 
-      const answer = await send();
+      const outcome = await send();
 
-      assert.strictEqual(answer, undefined);
+      assert.deepStrictEqual(outcome, {
+        status: "skipped",
+        reason: "mail_disabled",
+      });
+      assert.strictEqual(transport.delivered().length, 0);
+    });
+
+    it("sends nothing and answers skipped where the mail names no recipient", async function () {
+      given();
+
+      const outcome = await send({ to: "" });
+
+      assert.deepStrictEqual(outcome, {
+        status: "skipped",
+        reason: "no_recipient",
+      });
       assert.strictEqual(transport.delivered().length, 0);
     });
 
@@ -344,52 +386,10 @@ for (const implementation of IMPLEMENTATIONS) {
       assert.strictEqual(transport.attempts(), 3);
       assert.strictEqual(transport.delivered().length, 0);
     });
-
-    // --- the target form of ticket 2 ------------------------------------
-
-    it.skip("answers { status: 'sent', transport: 'instance' | 'tenant', messageId } (ticket 2)", async function () {
-      given();
-
-      const outcome = await send();
-
-      assert.strictEqual(outcome.status, "sent");
-      assert.strictEqual(outcome.transport, "instance");
-    });
-
-    it.skip("answers { status: 'skipped', reason: 'mail_disabled' } where the instance has mail disabled (ticket 2)", async function () {
-      given({ instanceOverrides: { mailEnabled: false } });
-
-      const outcome = await send();
-
-      assert.deepStrictEqual(outcome, {
-        status: "skipped",
-        reason: "mail_disabled",
-      });
-    });
-
-    it.skip("warns once per tenant configuration when it falls back to the instance (ticket 2)", async function () {
-      given({ tenantOverrides: transport.incompleteTenant });
-
-      await send();
-      await send();
-
-      // One warn log "tenant mail config incomplete, falling back to
-      // instance" for the configuration hash, not one per mail.
-    });
   });
 }
 
 describe("mail transport pool: the configuration hash", function () {
-  it("ignores the Graph client secret today, so a rotated secret keeps the old transporter (spec 5.5: in the hash after ticket 2)", function () {
-    const before = MailerService.getConfigHash(INSTANCE_GRAPH);
-    const rotated = MailerService.getConfigHash({
-      ...INSTANCE_GRAPH,
-      noreplyGraphClientSecret: "rotiert",
-    });
-
-    assert.strictEqual(rotated, before);
-  });
-
   it("tells SMTP accounts apart by host, port, user, password and STARTTLS", function () {
     const base = MailerService.getConfigHash(INSTANCE_SMTP);
     for (const field of [
@@ -407,7 +407,7 @@ describe("mail transport pool: the configuration hash", function () {
     }
   });
 
-  it.skip("tells two Graph accounts apart by their client secret (ticket 2)", function () {
+  it("tells two Graph accounts apart by their client secret, so a rotated secret gets a new transporter", function () {
     const before = MailerService.getConfigHash(INSTANCE_GRAPH);
     const rotated = MailerService.getConfigHash({
       ...INSTANCE_GRAPH,

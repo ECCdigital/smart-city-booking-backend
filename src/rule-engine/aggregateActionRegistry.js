@@ -43,13 +43,10 @@ module.exports = {
       throw new Error("sendAggregatedEmail: body is required");
     }
 
-    await MailerService.send({
-      tenantId,
-      address,
-      subject: params.subject,
-      // The body is a Handlebars template. The matched documents are available
-      // as `bookings` (and `items`), so the template can iterate them:
-      //   {{#each bookings}} ... {{/each}}
+    // The body is a Handlebars template. The matched documents are available
+    // as `bookings` (and `items`), so the template can iterate them:
+    //   {{#each bookings}} ... {{/each}}
+    const html = await MailerService.renderHtml({
       mailTemplate: params.body,
       model: {
         bookings: docs,
@@ -58,7 +55,15 @@ module.exports = {
         now: new Date(),
         tenant: tenantName,
       },
-      useInstanceMail: params.useInstanceMail === true,
+      tenantId,
+    });
+    await MailerService.send({
+      type: "rule-aggregated-email",
+      // A rule that says useInstanceMail sends as the instance.
+      tenantId: params.useInstanceMail === true ? null : tenantId,
+      to: address,
+      subject: params.subject,
+      html,
     });
   },
 };
