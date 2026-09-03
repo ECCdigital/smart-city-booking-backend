@@ -28,7 +28,6 @@ const {
   bookingLifecycle,
   bookingDeletion,
 } = require("../src/commons/services/booking-lifecycle");
-const SupervisorNotificationService = require("../src/commons/services/supervisor-notification-service");
 const lifecycleDocuments = require("../src/commons/services/booking-lifecycle/adapters/documents");
 const CheckoutController = require("../src/platform/api/v2/controllers/checkout.controller");
 const PaymentController = require("../src/platform/api/controllers/payment-controller");
@@ -46,7 +45,7 @@ const OpeningHoursManager = require("../src/commons/utilities/opening-hours-mana
 const PaymentUtils = require("../src/commons/utilities/payment-utils");
 const CouponService = require("../src/commons/services/coupon-service");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
-const MailController = require("../src/commons/mail-service/mail-controller");
+const lifecycleMail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const {
   TRIGGER,
@@ -310,19 +309,11 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
     sinon.stub(AccessLogService, "log").resolves();
     // The admission and the payment run the lifecycle: their mails and
     // the receipt are not this test's business.
-    sinon.stub(MailController, "sendBookingRequestConfirmation").resolves();
-    sinon.stub(MailController, "sendFreeBookingConfirmation").resolves();
-    sinon.stub(MailController, "sendIncomingBooking").resolves();
-    sinon
-      .stub(SupervisorNotificationService, "notifySupervisorsOnBookingCreated")
-      .resolves();
+    sinon.stub(lifecycleMail, "send").resolves([]);
     sinon.stub(lifecycleDocuments, "issue").resolves({
       attachment: { type: "receipt" },
       file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
     });
-    sinon.stub(MailController, "sendBookingConfirmation").resolves();
-    sinon.stub(MailController, "sendBookingRejection").resolves();
-    sinon.stub(MailController, "sendBookingCancel").resolves();
   }
 
   function clone(value) {

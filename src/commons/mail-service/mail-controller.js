@@ -1,162 +1,58 @@
-const MailSenderService = require("./mail-sender.service");
 const MailerService = require("./mail-service");
 const TenantManager = require("../data-managers/tenant-manager");
-const BookingManager = require("../data-managers/booking-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const UserManager = require("../data-managers/user-manager");
-const { MailType } = require("./mail-types");
 const { renderSnippet } = require("./templates/template-loader");
-const ICalService = require("../services/ical-service");
-const {
-  CancellationRefundService,
-} = require("../services/payment/cancellation-refund-service");
+const { compose, send } = require("./index");
+const { groupBookingIdOf } = require("../services/documents/document-issuance");
 
+/** Sends every mail of a composed notice. */
+async function sendComposed(type, ctx) {
+  for (const mail of await compose(type, ctx)) {
+    await send(mail);
+  }
+}
+
+/**
+ * The context of a booking notice as the facade's callers name it: the
+ * booking id or ids, and whether they mean the group. The facade does not
+ * know the group's id; it looks it up the way the issuance does.
+ */
+async function contextOf(tenantId, bookingIds, aggregated, specific = {}) {
+  const ids = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
+  return {
+    tenantId,
+    bookingIds: ids,
+    groupBookingId: aggregated
+      ? await groupBookingIdOf({
+          tenantId,
+          bookingIds: ids,
+          groupBookingId: null,
+        })
+      : null,
+    ...specific,
+  };
+}
+
+/** The attachments the callers hand in (nodemailer form) as issued files. */
+function issuedOf(attachments = []) {
+  return attachments.map((att) => ({
+    name: att.filename,
+    buffer: att.content,
+    contentType: att.contentType,
+  }));
+}
+
+/**
+ * The facade of the mail module for the callers the last ticket of the
+ * mail-stack chain moves to `compose` + `send`: the payment providers, the
+ * reprint, the access service, the workflow action and the account
+ * services. The five booking notices they send go over `compose`; the
+ * `address` the callers pass is ignored, the recipients are the type's
+ * (spec 5.1). The seven tenant and instance notices still render here.
+ * The nine notices of the booking lifecycle go through its mail adapter.
+ */
 class MailController {
-  static async _attachICalFiles(bookingIds, tenantId, attachments = []) {
-    try {
-      if (typeof bookingIds === "string") {
-        bookingIds = [bookingIds];
-      }
-
-      if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
-        return attachments;
-      }
-
-      const isSingle = bookingIds.length === 1;
-      const cal = isSingle
-        ? await ICalService.getBookingCal(bookingIds[0], tenantId)
-        : await ICalService.getMultiBookingCal(bookingIds, tenantId);
-
-      if (!cal) return attachments;
-
-      return [
-        ...attachments,
-        {
-          filename: isSingle ? `buchung-${bookingIds[0]}.ics` : "buchungen.ics",
-          content: Buffer.from(cal.toString(), "utf-8"),
-          contentType: "text/calendar; charset=UTF-8; method=PUBLISH",
-        },
-      ];
-    } catch (err) {
-      console.warn(err.message);
-      return attachments;
-    }
-  }
-
-  static async sendBookingConfirmation(
-    address,
-    bookingIds,
-    tenantId,
-    attachments,
-    aggregated = false,
-  ) {
-    attachments = await this._attachICalFiles(
-      bookingIds,
-      tenantId,
-      attachments,
-    );
-
-    await MailSenderService.dispatch({
-      mailType: MailType.BOOKING_CONFIRMATION,
-      address,
-      bookingIds,
-      tenantId,
-      attachments,
-      aggregated,
-    });
-  }
-
-  static async sendFreeBookingConfirmation(
-    address,
-    bookingIds,
-    tenantId,
-    attachments,
-    aggregated = false,
-  ) {
-    attachments = await this._attachICalFiles(
-      bookingIds,
-      tenantId,
-      attachments,
-    );
-
-    await MailSenderService.dispatch({
-      mailType: MailType.FREE_BOOKING_CONFIRMATION,
-      address,
-      bookingIds,
-      tenantId,
-      attachments,
-      aggregated,
-    });
-  }
-
-  static async sendBookingRejection(
-    address,
-    bookingIds,
-    tenantId,
-    reason,
-    attachments,
-    aggregated = false,
-  ) {
-    await MailSenderService.dispatch({
-      mailType: MailType.BOOKING_REJECTION,
-      address,
-      bookingIds,
-      tenantId,
-      templateData: { rejectionReason: reason },
-      attachments,
-      aggregated,
-    });
-  }
-
-  static async sendBookingCancel(
-    address,
-    bookingIds,
-    tenantId,
-    reason,
-    attachments,
-    aggregated = false,
-  ) {
-    const ids = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const primaryBookingId = ids[0];
-    let refundTemplateData = {};
-    if (primaryBookingId) {
-      const booking = await BookingManager.getBooking(
-        primaryBookingId,
-        tenantId,
-      );
-      refundTemplateData = CancellationRefundService.toMailTemplateData(
-        booking?.cancellationRefund,
-      );
-    }
-
-    await MailSenderService.dispatch({
-      mailType: MailType.BOOKING_CANCEL,
-      address,
-      bookingIds,
-      tenantId,
-      templateData: { cancelReason: reason, ...refundTemplateData },
-      attachments,
-      aggregated,
-    });
-  }
-
-  static async sendBookingRequestConfirmation(
-    address,
-    bookingIds,
-    tenantId,
-    aggregated = false,
-    attachments = [],
-  ) {
-    await MailSenderService.dispatch({
-      mailType: MailType.BOOKING_REQUEST_CONFIRMATION,
-      address,
-      bookingIds,
-      tenantId,
-      attachments,
-      aggregated,
-    });
-  }
-
   static async sendInvoice(
     address,
     bookingIds,
@@ -164,14 +60,12 @@ class MailController {
     attachments,
     aggregated = false,
   ) {
-    await MailSenderService.dispatch({
-      mailType: MailType.INVOICE,
-      address,
-      bookingIds,
-      tenantId,
-      attachments,
-      aggregated,
-    });
+    await sendComposed(
+      "INVOICE",
+      await contextOf(tenantId, bookingIds, aggregated, {
+        attachments: issuedOf(attachments),
+      }),
+    );
   }
 
   static async sendBookingConfirmedInvoicePending(
@@ -180,16 +74,10 @@ class MailController {
     tenantId,
     aggregated = false,
   ) {
-    const attachments = await this._attachICalFiles(bookingIds, tenantId);
-
-    await MailSenderService.dispatch({
-      mailType: MailType.BOOKING_CONFIRMED_INVOICE_PENDING,
-      address,
-      bookingIds,
-      tenantId,
-      attachments,
-      aggregated,
-    });
+    await sendComposed(
+      "BOOKING_CONFIRMED_INVOICE_PENDING",
+      await contextOf(tenantId, bookingIds, aggregated),
+    );
   }
 
   static async sendInvoiceAfterBookingApproval(
@@ -199,53 +87,12 @@ class MailController {
     attachments,
     aggregated = false,
   ) {
-    await MailSenderService.dispatch({
-      mailType: MailType.INVOICE_AFTER_APPROVAL,
-      address,
-      bookingIds,
-      tenantId,
-      attachments,
-      aggregated,
-    });
-  }
-
-  static async sendIncomingBooking(
-    address,
-    bookingIds,
-    tenantId,
-    aggregated = false,
-  ) {
-    await MailSenderService.dispatch({
-      mailType: MailType.INCOMING_BOOKING,
-      address,
-      bookingIds,
-      tenantId,
-      aggregated,
-    });
-  }
-
-  static async sendSupervisorBookingNotification(
-    address,
-    bookingIds,
-    tenantId,
-    aggregated = false,
-  ) {
-    await MailSenderService.dispatch({
-      mailType: MailType.SUPERVISOR_BOOKING_NOTIFICATION,
-      address,
-      bookingIds,
-      tenantId,
-      aggregated,
-    });
-  }
-
-  static async sendNewBooking(address, bookingId, tenantId) {
-    await MailSenderService.dispatch({
-      mailType: MailType.NEW_BOOKING,
-      address,
-      bookingIds: [bookingId],
-      tenantId,
-    });
+    await sendComposed(
+      "INVOICE_AFTER_APPROVAL",
+      await contextOf(tenantId, bookingIds, aggregated, {
+        attachments: issuedOf(attachments),
+      }),
+    );
   }
 
   static async sendPaymentLinkAfterBookingApproval(
@@ -254,57 +101,10 @@ class MailController {
     tenantId,
     aggregated = false,
   ) {
-    bookingIds = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-
-    if (aggregated) {
-      const paymentUrl = `${process.env.FRONTEND_URL}/payment/redirection?ids=${bookingIds.join(",")}&tenant=${tenantId}&aggregated=true`;
-      await MailSenderService.dispatch({
-        mailType: MailType.PAYMENT_LINK_AFTER_APPROVAL,
-        address,
-        bookingIds,
-        tenantId,
-        templateData: { paymentUrl },
-        aggregated: true,
-      });
-    } else {
-      for (const booking of bookings) {
-        const paymentUrl = `${process.env.FRONTEND_URL}/payment/redirection?ids=${booking.id}&tenant=${tenantId}&aggregated=false`;
-        await MailSenderService.dispatch({
-          mailType: MailType.PAYMENT_LINK_AFTER_APPROVAL,
-          address: booking.mail,
-          bookingIds: [booking.id],
-          tenantId,
-          templateData: { paymentUrl },
-        });
-      }
-    }
-  }
-
-  static async sendVerifyBookingRejection(
-    address,
-    bookingId,
-    tenantId,
-    hookId,
-    reason,
-    attachments,
-    refundPreview = null,
-  ) {
-    const verifyRejectionUrl = `${process.env.FRONTEND_URL}/booking/verify-reject/${tenantId}?id=${bookingId}&hookId=${hookId}`;
-    const refundTemplateData =
-      CancellationRefundService.toMailTemplateData(refundPreview);
-
-    await MailSenderService.dispatch({
-      mailType: MailType.VERIFY_BOOKING_REJECTION,
-      address,
-      bookingIds: [bookingId],
-      tenantId,
-      templateData: {
-        cancelReason: reason,
-        verifyRejectionUrl,
-        ...refundTemplateData,
-      },
-      attachments,
+    const ctx = await contextOf(tenantId, bookingIds, aggregated);
+    await sendComposed("PAYMENT_LINK_AFTER_APPROVAL", {
+      ...ctx,
+      paymentUrl: `${process.env.FRONTEND_URL}/payment/redirection?ids=${ctx.bookingIds.join(",")}&tenant=${tenantId}&aggregated=${aggregated ? "true" : "false"}`,
     });
   }
 
@@ -314,13 +114,10 @@ class MailController {
     tenantId,
     accessPoints,
   ) {
-    await MailSenderService.dispatch({
-      mailType: MailType.ACCESS_PROVISIONED,
-      address,
-      bookingIds: [bookingId],
-      tenantId,
-      templateData: { accessPoints },
-    });
+    await sendComposed(
+      "ACCESS_PROVISIONED",
+      await contextOf(tenantId, bookingId, false, { accessPoints }),
+    );
   }
 
   static async sendVerificationRequest(address, hookId, verifyUrl) {

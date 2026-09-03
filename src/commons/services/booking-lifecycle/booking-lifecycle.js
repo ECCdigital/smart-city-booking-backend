@@ -27,7 +27,7 @@ const {
   TRIGGERS,
   nextState,
 } = require("./booking-state");
-const { PHASE, step, runPipeline } = require("./pipeline");
+const { PHASE, step, noticeStep, runPipeline } = require("./pipeline");
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
@@ -96,6 +96,22 @@ function createBookingLifecycle(adapters) {
     clock = Date.now,
   } = adapters;
 
+  /** The notices of one booking over the mail adapter. */
+  function noticeOf(tenantId, bookingId) {
+    return (type, specific = {}, options) =>
+      noticeStep(
+        mail,
+        type,
+        {
+          tenantId,
+          bookingIds: [bookingId],
+          groupBookingId: null,
+          ...specific,
+        },
+        options,
+      );
+  }
+
   async function load(tenantId, bookingId) {
     const booking = await store.get(tenantId, bookingId);
     if (!booking) {
@@ -147,6 +163,8 @@ function createBookingLifecycle(adapters) {
     const confirmed = () => status === STATUS.CONFIRMED;
     const files = [];
 
+    const notice = noticeOf(tenantId, bookingId);
+
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
       step(PHASE.PROVISION, "access", "hold", () =>
         access.hold(tenantId, bookingId),
@@ -181,13 +199,7 @@ function createBookingLifecycle(adapters) {
         () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.CREATE),
         { when: () => trigger !== TRIGGER.WORKFLOW },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendRequestConfirmation",
-        () => mail.sendRequestConfirmation([booking], { aggregated: false }),
-        { when: requested },
-      ),
+      notice("BOOKING_REQUEST_CONFIRMATION", {}, { when: requested }),
       step(
         PHASE.NOTIFY,
         "payment",
@@ -201,38 +213,19 @@ function createBookingLifecycle(adapters) {
           }),
         { when: () => paymentDue() && trigger !== TRIGGER.CUSTOMER },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendBookingConfirmation",
-        () =>
-          mail.sendBookingConfirmation([booking], {
-            attachments: files,
-            aggregated: false,
-          }),
+      notice(
+        "BOOKING_CONFIRMATION",
+        { attachments: files },
         { when: () => confirmed() && isPriced(booking) },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendFreeBookingConfirmation",
-        () =>
-          mail.sendFreeBookingConfirmation([booking], { aggregated: false }),
+      notice(
+        "FREE_BOOKING_CONFIRMATION",
+        {},
         { when: () => confirmed() && !isPriced(booking) },
       ),
-      step(PHASE.NOTIFY, "mail", "sendTenantMail", () =>
-        mail.sendTenantMail([booking], { aggregated: false }),
-      ),
-      step(PHASE.NOTIFY, "mail", "sendSupervisorMail", () =>
-        mail.sendSupervisorMail([booking], { aggregated: false }),
-      ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendEmailToOrganizer",
-        () => mail.sendEmailToOrganizer([booking]),
-        { when: () => hasTicketPosition(booking) },
-      ),
+      notice("INCOMING_BOOKING"),
+      notice("SUPERVISOR_BOOKING_NOTIFICATION"),
+      notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
     ]);
   }
 
@@ -259,6 +252,8 @@ function createBookingLifecycle(adapters) {
     const confirmed = () => booking.status === STATUS.CONFIRMED;
     const paymentDue = () => booking.status === STATUS.PAYMENT_DUE;
 
+    const notice = noticeOf(tenantId, bookingId);
+
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
       step(PHASE.PERSIST, "store", "save", () =>
         store.save(booking, { expectStatus: from, transition }),
@@ -277,14 +272,7 @@ function createBookingLifecycle(adapters) {
         () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.COMMIT),
         { when: () => trigger !== TRIGGER.WORKFLOW },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendFreeBookingConfirmation",
-        () =>
-          mail.sendFreeBookingConfirmation([booking], { aggregated: false }),
-        { when: confirmed },
-      ),
+      notice("FREE_BOOKING_CONFIRMATION", {}, { when: confirmed }),
       step(
         PHASE.NOTIFY,
         "payment",
@@ -298,13 +286,7 @@ function createBookingLifecycle(adapters) {
           }),
         { when: paymentDue },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendEmailToOrganizer",
-        () => mail.sendEmailToOrganizer([booking]),
-        { when: () => hasTicketPosition(booking) },
-      ),
+      notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
     ]);
   }
 
@@ -334,6 +316,8 @@ function createBookingLifecycle(adapters) {
     }
 
     const files = [];
+
+    const notice = noticeOf(tenantId, bookingId);
 
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
       step(PHASE.PERSIST, "store", "save", () =>
@@ -365,19 +349,8 @@ function createBookingLifecycle(adapters) {
         () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.PAY),
         { when: () => trigger !== TRIGGER.WORKFLOW },
       ),
-      step(PHASE.NOTIFY, "mail", "sendBookingConfirmation", () =>
-        mail.sendBookingConfirmation([booking], {
-          attachments: files,
-          aggregated: false,
-        }),
-      ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendEmailToOrganizer",
-        () => mail.sendEmailToOrganizer([booking]),
-        { when: () => hasTicketPosition(booking) },
-      ),
+      notice("BOOKING_CONFIRMATION", { attachments: files }),
+      notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
     ]);
   }
 
@@ -441,6 +414,8 @@ function createBookingLifecycle(adapters) {
     const rejection = booking.status === STATUS.REJECTED && !hookId;
     const files = [];
 
+    const notice = noticeOf(tenantId, bookingId);
+
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
       step(PHASE.PERSIST, "store", "save", () =>
         store.save(booking, { expectStatus: from, transition }),
@@ -477,28 +452,14 @@ function createBookingLifecycle(adapters) {
         () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.REJECT),
         { when: () => trigger !== TRIGGER.WORKFLOW },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendBookingRejection",
-        () =>
-          mail.sendBookingRejection([booking], {
-            attachments: files,
-            aggregated: false,
-            reason,
-          }),
+      notice(
+        "BOOKING_REJECTION",
+        { attachments: files, reason },
         { when: () => rejection },
       ),
-      step(
-        PHASE.NOTIFY,
-        "mail",
-        "sendBookingCancel",
-        () =>
-          mail.sendBookingCancel([booking], {
-            attachments: files,
-            aggregated: false,
-            reason,
-          }),
+      notice(
+        "BOOKING_CANCEL",
+        { attachments: files, reason },
         { when: () => !rejection },
       ),
     ]);
@@ -555,17 +516,17 @@ function createBookingLifecycle(adapters) {
       bookingId,
     );
 
+    const notice = noticeOf(tenantId, bookingId);
+
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
       step(PHASE.PERSIST, "store", "save", () =>
         store.save(booking, { expectStatus: status, transition }),
       ),
-      step(PHASE.NOTIFY, "mail", "sendVerifyBookingRejection", () =>
-        mail.sendVerifyBookingRejection([booking], {
-          hookId: hook.id,
-          reason,
-          refundPreview,
-        }),
-      ),
+      notice("VERIFY_BOOKING_REJECTION", {
+        hookId: hook.id,
+        reason,
+        refundPreview,
+      }),
     ]);
   }
 

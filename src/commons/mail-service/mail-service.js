@@ -139,8 +139,9 @@ function isCompleteTenantMailConfig(tenant) {
  * The transport (glossary "Versandweg") of the mail stack: `send(mail)`
  * takes a mail value, chooses between the instance's and the tenant's
  * no-reply account and delivers over a pooled transporter with three
- * attempts. Rendering a shell template into the value's html is
- * `renderHtml`, until compose takes it over.
+ * attempts. `renderHtml` renders a shell template into a finished body
+ * for the notices that do not go through `compose` yet - the rule engine
+ * and the seven tenant and instance notices of `MailController`.
  */
 class MailerService {
   static getConfigHash(config) {

@@ -61,9 +61,9 @@ describe("booking lifecycle: confirm", function () {
       "persist store.save ok",
       "provision access.provision skipped",
       "notify workflow.emit ok",
-      "notify mail.sendFreeBookingConfirmation skipped",
+      "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
-      "notify mail.sendEmailToOrganizer skipped",
+      "notify mail.NEW_BOOKING skipped",
     ]);
     expect(outcome).to.include({
       transition: "confirm",
@@ -112,9 +112,9 @@ describe("booking lifecycle: confirm", function () {
       "persist store.save ok",
       "provision access.provision ok",
       "notify workflow.emit ok",
-      "notify mail.sendFreeBookingConfirmation ok",
+      "notify mail.FREE_BOOKING_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
-      "notify mail.sendEmailToOrganizer skipped",
+      "notify mail.NEW_BOOKING skipped",
     ]);
     expect(outcome).to.include({ status: "confirmed", failure: null });
     expect(adapters.store.rows.get("B-1")).to.include({
@@ -127,9 +127,13 @@ describe("booking lifecycle: confirm", function () {
     ]);
     expect(adapters.payment.calls).to.deep.equal([]);
     const [mail] = adapters.mail.calls;
-    expect(mail.op).to.equal("sendFreeBookingConfirmation");
-    expect(mail.args[0].map((b) => b.id)).to.deep.equal(["B-1"]);
-    expect(mail.args[1]).to.deep.equal({ aggregated: false });
+    expect(mail.args[0]).to.equal("FREE_BOOKING_CONFIRMATION");
+    expect(mail.args[1].bookingIds).to.deep.equal(["B-1"]);
+    expect(mail.args[1]).to.deep.equal({
+      tenantId: TENANT,
+      bookingIds: ["B-1"],
+      groupBookingId: null,
+    });
   });
 
   it("confirms a priced request of a tenant without a payment service: the payment request is skipped, the booking awaits payment", async function () {
@@ -146,9 +150,9 @@ describe("booking lifecycle: confirm", function () {
       "persist store.save ok",
       "provision access.provision skipped",
       "notify workflow.emit ok",
-      "notify mail.sendFreeBookingConfirmation skipped",
+      "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment skipped",
-      "notify mail.sendEmailToOrganizer skipped",
+      "notify mail.NEW_BOOKING skipped",
     ]);
     expect(outcome).to.include({ status: "payment_due", failure: null });
     expect(adapters.store.rows.get("B-1").status).to.equal("payment_due");
@@ -165,9 +169,9 @@ describe("booking lifecycle: confirm", function () {
       "persist store.save ok",
       "provision access.provision skipped",
       "notify workflow.emit skipped",
-      "notify mail.sendFreeBookingConfirmation skipped",
+      "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
-      "notify mail.sendEmailToOrganizer skipped",
+      "notify mail.NEW_BOOKING skipped",
     ]);
     expect(adapters.workflow.calls).to.deep.equal([]);
   });
@@ -191,10 +195,8 @@ describe("booking lifecycle: confirm", function () {
       trigger: TRIGGER.ADMIN,
     });
 
-    expect(effectTable(outcome).at(-1)).to.equal(
-      "notify mail.sendEmailToOrganizer ok",
-    );
-    expect(adapters.mail.calls.at(-1).args[0].map((b) => b.id)).to.deep.equal([
+    expect(effectTable(outcome).at(-1)).to.equal("notify mail.NEW_BOOKING ok");
+    expect(adapters.mail.calls.at(-1).args[1].bookingIds).to.deep.equal([
       "B-1",
     ]);
   });
@@ -223,9 +225,9 @@ describe("booking lifecycle: confirm", function () {
       "persist store.save ok",
       "provision access.provision ok",
       "notify workflow.emit ok",
-      "notify mail.sendFreeBookingConfirmation ok",
+      "notify mail.FREE_BOOKING_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
-      "notify mail.sendEmailToOrganizer ok",
+      "notify mail.NEW_BOOKING ok",
     ]);
     expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
     expect(adapters.payment.calls).to.deep.equal([]);
@@ -325,9 +327,9 @@ describe("booking lifecycle: confirm", function () {
         "persist store.save ok",
         "provision access.provision recorded",
         "notify workflow.emit ok",
-        "notify mail.sendFreeBookingConfirmation ok",
+        "notify mail.FREE_BOOKING_CONFIRMATION ok",
         "notify payment.requestPayment skipped",
-        "notify mail.sendEmailToOrganizer skipped",
+        "notify mail.NEW_BOOKING skipped",
       ]);
       expect(outcome.failure).to.equal(null);
       expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
@@ -366,7 +368,7 @@ describe("booking lifecycle: confirm", function () {
             ],
           }),
         ],
-        failOn: { mail: ["sendEmailToOrganizer"] },
+        failOn: { mail: ["NEW_BOOKING"] },
       });
 
       const outcome = await lifecycle.confirm(TENANT, "B-1", {
@@ -374,7 +376,7 @@ describe("booking lifecycle: confirm", function () {
       });
 
       expect(effectTable(outcome).at(-1)).to.equal(
-        "notify mail.sendEmailToOrganizer recorded",
+        "notify mail.NEW_BOOKING recorded",
       );
       expect(outcome.failure).to.equal(null);
     });

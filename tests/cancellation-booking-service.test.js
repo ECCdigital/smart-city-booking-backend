@@ -9,7 +9,7 @@ const MediaService = require("../src/commons/services/media/media-service");
 const IdGenerator = require("../src/commons/utilities/id-generator");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
 const AccessService = require("../src/commons/services/access/access-service");
-const MailController = require("../src/commons/mail-service/mail-controller");
+const lifecycleMail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const {
   CANCELLATION_ORIGINS,
 } = require("../src/commons/services/payment/cancellation-refund-service");
@@ -95,8 +95,7 @@ function stubCancellationSideEffects() {
     });
   sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
   sinon.stub(AccessService, "revokeForBooking").resolves([]);
-  sinon.stub(MailController, "sendBookingCancel").resolves();
-  sinon.stub(MailController, "sendBookingRejection").resolves();
+  sinon.stub(lifecycleMail, "send").resolves([]);
   return saved;
 }
 

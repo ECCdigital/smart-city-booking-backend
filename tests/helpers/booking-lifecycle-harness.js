@@ -12,11 +12,15 @@
  * What is a fake: the booking and group booking stores (in memory, with
  * the `$set` semantics of `updateOne`, so a restore leaves behind what the
  * old document did not carry, and the `$push` of an attachment), and the
- * effect seams - access, the document renderers and number draw, mail,
- * workflow, payment provider, supervisor mail - which record a row and,
- * when told to, fail. The issuance itself (`document-issuance.js`: number,
+ * effect seams - access, the document renderers and number draw, the mail
+ * transport, workflow, payment provider - which record a row and, when
+ * told to, fail. The issuance itself (`document-issuance.js`: number,
  * revision, storage, push) runs for real; the numbers are the harness'
- * (`RE-1`, `RG-2`, `ST-1`, ...), not the tenant's.
+ * (`RE-1`, `RG-2`, `ST-1`, ...), not the tenant's. The mail module runs
+ * for real too - `compose` loads, resolves the recipients and renders over
+ * the stubbed managers - and the transport (`MailerService.send`) records
+ * the finished mail: its type, its recipient and the names of its
+ * attachments.
  *
  * The rows are the effect table of a transition (spec part 1, 4.3):
  *
@@ -24,7 +28,8 @@
  *   store.attach B1 receipt                 a document pushed to a booking
  *   access.provision B1                     an access seam call
  *   documents.receipt B1                    a document rendered
- *   mail.sendBookingConfirmation B1 [RE-1.pdf]   a mail with its attachments
+ *   mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]
+ *                                           a mail sent, with its attachments
  *   workflow.onPay B1                       a workflow event
  *   payment.paymentRequest B1               the payment provider asked
  *
@@ -33,7 +38,9 @@
  */
 
 const express = require("express");
+const fs = require("fs");
 const http = require("http");
+const path = require("path");
 const jwt = require("jsonwebtoken");
 const sinon = require("sinon");
 const request = require("supertest");
@@ -61,7 +68,7 @@ const PaymentUtils = require("../../src/commons/utilities/payment-utils");
 const PermissionsService = require("../../src/commons/services/permission-service");
 const CouponService = require("../../src/commons/services/coupon-service");
 const WorkflowService = require("../../src/commons/services/workflow/workflow-service");
-const MailController = require("../../src/commons/mail-service/mail-controller");
+const MailerService = require("../../src/commons/mail-service/mail-service");
 const AccessService = require("../../src/commons/services/access/access-service");
 const AccessLogService = require("../../src/commons/services/access/access-log-service");
 const ReceiptService = require("../../src/commons/services/payment/receipt-service");
@@ -69,7 +76,6 @@ const CancellationService = require("../../src/commons/services/payment/cancella
 const InvoiceService = require("../../src/commons/services/payment/invoice-service");
 const MediaService = require("../../src/commons/services/media/media-service");
 const IdGenerator = require("../../src/commons/utilities/id-generator");
-const SupervisorNotificationService = require("../../src/commons/services/supervisor-notification-service");
 const PaymentService = require("../../src/commons/services/payment/providers/payment-service");
 const { Bookable } = require("../../src/commons/entities/bookable/bookable");
 const { Booking } = require("../../src/commons/entities/booking/booking");
@@ -82,7 +88,18 @@ const TENANT_MAIL = "stadt@example.test";
 const ADMIN = "admin@example.test";
 const CUSTOMER = "erika@example.test";
 const ORGANIZER = "orga@example.test";
+/** The one supervisor named at the customer's membership. */
+const SUPERVISOR = "chef@example.test";
 const CUSTOMER_DB_ID = "64f1";
+
+/** The tenant's shell template: the platform's default. */
+const GENERIC_MAIL_TEMPLATE = fs.readFileSync(
+  path.join(
+    __dirname,
+    "../../src/commons/mail-service/templates/default-generic-mail-template.temp.html",
+  ),
+  "utf8",
+);
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -216,8 +233,11 @@ function defaultBookables() {
 function tenant(overrides = {}) {
   return {
     id: TENANT,
+    name: "Stadt Musterhausen",
     mail: TENANT_MAIL,
+    genericMailTemplate: GENERIC_MAIL_TEMPLATE,
     notifyOnNewBooking: true,
+    notifySupervisorsOnBooking: true,
     cancellationRefundTiers: [],
     applications: [
       { type: "payment", id: "giroCockpit", active: true },
@@ -468,12 +488,29 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     .stub(PermissionsService, "_isInstanceOwner")
     .callsFake(async (userId) => userId === ADMIN);
   sinon.stub(PermissionsService, "_isTenantOwner").resolves(false);
+  // The customer's membership names one supervisor; nobody else's does.
   sinon
     .stub(MembershipManager, "getMembershipByTenantAndUserID")
-    .callsFake(async (tenantId, userId) => ({ userId, roles: [] }));
+    .callsFake(async (tenantId, userId) => ({
+      userId,
+      roles: [],
+      bookingNotificationRecipients:
+        userId === CUSTOMER
+          ? [{ type: "email", value: SUPERVISOR, label: "" }]
+          : [],
+    }));
   sinon.stub(MembershipManager, "getMembershipsByTenantAndRoles").resolves([]);
+  // The event of the ticket, with what the organizer's notice prints.
   sinon.stub(EventManager, "getEvent").resolves({
     id: "E1",
+    information: {
+      name: "Sommerkonzert",
+      startDate: "2027-06-21",
+      startTime: "19:00",
+      endDate: "2027-06-21",
+      endTime: "22:00",
+    },
+    eventLocation: { name: "Stadthalle" },
     eventOrganizer: { contactPersonEmailAddress: ORGANIZER },
   });
   sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
@@ -537,32 +574,26 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
       return true;
     });
 
-  // Every `send*` of the mail controller takes the booking id(s) second
-  // and, where it sends files, one array of nodemailer attachments; the
-  // row is read off the arguments by that shape.
-  for (const name of Object.getOwnPropertyNames(MailController)) {
-    if (
-      typeof MailController[name] !== "function" ||
-      !name.startsWith("send")
-    ) {
-      continue;
-    }
-    sinon.stub(MailController, name).callsFake(async (...args) => {
-      const ids = args[1];
-      const attachments = args.find(
-        (arg) => Array.isArray(arg) && arg.length > 0 && arg[0]?.filename,
-      );
-      const files = attachments
-        ? ` [${attachments.map((att) => att.filename).join(",")}]`
-        : "";
-      record(`mail.${name}`, `${labelsOf(ids)}${files}`);
-    });
-  }
-  sinon
-    .stub(SupervisorNotificationService, "notifySupervisorsOnBookingCreated")
-    .callsFake(async ({ bookingIds }) => {
-      record("supervisor.notify", labelsOf(bookingIds));
-    });
+  /**
+   * The transport: records the finished mail as `mail.<type> <to>
+   * [<attachments>]`. A booking id inside an attachment name (the
+   * calendar file `buchung-<id>.ics`) is written as the booking's label.
+   */
+  const labelledName = (filename) =>
+    [...labels.keys()].reduce(
+      (name, id) => name.split(id).join(labels.get(id)),
+      filename,
+    );
+  sinon.stub(MailerService, "send").callsFake(async (mail) => {
+    const files = (mail.attachments || []).map((att) =>
+      labelledName(att.filename),
+    );
+    record(
+      `mail.${mail.type}`,
+      `${mail.to}${files.length ? ` [${files.join(",")}]` : ""}`,
+    );
+    return { status: "sent", transport: "instance" };
+  });
 
   const pdf = (name) => ({ name, buffer: Buffer.from(`%PDF-${name}`) });
   /** The number draw: `RE-1`, `RG-2`, `ST-1`, ... per type. */
@@ -743,8 +774,11 @@ module.exports = {
   stateOf,
   request,
   TENANT,
+  TENANT_MAIL,
   ADMIN,
   CUSTOMER,
+  ORGANIZER,
+  SUPERVISOR,
   TIME_BEGIN,
   TIME_END,
   DAY,

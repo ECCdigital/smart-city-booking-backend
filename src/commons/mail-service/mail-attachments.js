@@ -1,18 +1,20 @@
 /**
- * The `mailAttach` documents of a booking as the mail stack takes them: a
- * helper of the notify steps of the booking lifecycle (spec part 2, section
- * 10), which add them to the documents a transition issued. Media
- * references are read through the media service, everything else over
- * HTTP; an attachment that cannot be read or fails the safety check is
- * left out and logged. Lived in `BookingService` until ticket 4.
+ * The `mailAttach` documents of a booking as the mail stack takes them
+ * (mail-stack spec, section 2.6): `compose` adds them to the documents a
+ * transition issued, for the three confirmations. Media references are
+ * read through the media service, everything else over HTTP; an
+ * attachment that cannot be read or fails the safety check is left out
+ * and logged as a warning, never aborts the notice. Lived in
+ * `BookingService`, then in `booking-lifecycle/`, until the mail-stack
+ * chain.
  */
 
 const axios = require("axios");
 const mime = require("mime-types");
 const bunyan = require("bunyan");
-const MediaManager = require("../../data-managers/media-manager");
-const MediaService = require("../media/media-service");
-const { toMediaReference } = require("../media/media-reference");
+const MediaManager = require("../data-managers/media-manager");
+const MediaService = require("../services/media/media-service");
+const { toMediaReference } = require("../services/media/media-reference");
 
 const logger = bunyan.createLogger({
   name: "mail-attachments.js",
@@ -34,7 +36,7 @@ async function loadMediaMailAttachment(att, tenantId) {
   const media = await MediaManager.getMedia(mediaId, tenantId);
 
   if (!media) {
-    logger.error(`Attachment medium ${mediaId} not found in ${tenantId}`);
+    logger.warn(`Attachment medium ${mediaId} not found in ${tenantId}`);
     return null;
   }
 
@@ -139,7 +141,7 @@ async function prepareMailAttachments(attachments, tenantId) {
 
         return attachment;
       } catch (err) {
-        logger.error(
+        logger.warn(
           `Failed to prepare attachment ${reference.mediaId || reference.url}: ${err.message}`,
         );
         return null;

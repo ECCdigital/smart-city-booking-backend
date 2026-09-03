@@ -1,8 +1,8 @@
 /**
  * The production adapters of the booking lifecycle seam where they do more
  * than pass a call on: the store's conditional write against the database
- * (spec part 2, section 5) and the mail adapter joining the `mailAttach`
- * documents of a booking to the issued documents (section 10).
+ * (spec part 2, section 5) and the mail adapter sending every mail of a
+ * composed notice (section 10; mail-stack spec, section 4).
  */
 
 const { expect } = require("chai");
@@ -10,12 +10,14 @@ const sinon = require("sinon");
 
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const BookingModel = require("../src/commons/data-managers/models/bookingModel");
-const MailController = require("../src/commons/mail-service/mail-controller");
+const mailModule = require("../src/commons/mail-service");
+const {
+  SKIPPED,
+} = require("../src/commons/services/booking-lifecycle/pipeline");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const { ConflictError, NotFoundError } = require("../src/errors/BaseError");
 const store = require("../src/commons/services/booking-lifecycle/adapters/store");
 const mail = require("../src/commons/services/booking-lifecycle/adapters/mail");
-const mailAttachments = require("../src/commons/services/booking-lifecycle/mail-attachments");
 
 const TENANT = "tenant-1";
 
@@ -238,65 +240,99 @@ describe("booking lifecycle adapters", function () {
   });
 
   describe("the mail adapter", function () {
-    it("sends the booking confirmation with the issued documents first, then the mailAttach documents of the booking", async function () {
-      const send = sinon
-        .stub(MailController, "sendBookingConfirmation")
-        .resolves();
-      sinon.stub(mailAttachments, "prepareMailAttachments").resolves([
-        {
-          filename: "Hausordnung.pdf",
-          content: Buffer.from("house"),
-          contentType: "application/pdf",
-        },
-      ]);
-      const entity = booking({
-        attachments: [
-          {
-            id: "att-1",
-            title: "Hausordnung",
-            type: "file",
-            reference: { source: "media", mediaId: "M1" },
-            mailAttach: true,
-          },
-        ],
-      });
-
-      await mail.sendBookingConfirmation([entity], {
-        attachments: [{ name: "RE-1.pdf", buffer: Buffer.from("%PDF") }],
-      });
-
-      const [address, bookingId, tenantId, attachments, aggregated] =
-        send.firstCall.args;
-      expect(address).to.equal("erika@example.test");
-      expect(bookingId).to.equal("B-1");
-      expect(tenantId).to.equal(TENANT);
-      expect(attachments.map((att) => att.filename)).to.deep.equal([
-        "RE-1.pdf",
-        "Hausordnung.pdf",
-      ]);
-      expect(aggregated).to.equal(false);
-      expect(
-        mailAttachments.prepareMailAttachments.calledOnceWith(
-          entity.attachments,
-          TENANT,
-        ),
-      ).to.equal(true);
+    const value = (to) => ({
+      type: "BOOKING_CONFIRMATION",
+      tenantId: TENANT,
+      to,
+      subject: "s",
+      html: "<p/>",
+      attachments: [],
     });
 
-    it("names the bookings of an aggregated confirmation as a list", async function () {
+    it("sends every mail the notice composes and answers the outcomes", async function () {
+      sinon
+        .stub(mailModule, "compose")
+        .resolves([value("a@example.test"), value("b@example.test")]);
       const send = sinon
-        .stub(MailController, "sendBookingConfirmation")
-        .resolves();
-      sinon.stub(mailAttachments, "prepareMailAttachments").resolves([]);
+        .stub(mailModule, "send")
+        .resolves({ status: "sent", transport: "instance" });
 
-      await mail.sendBookingConfirmation(
-        [booking({ id: "B-1" }), booking({ id: "B-2" })],
-        { attachments: [], aggregated: true },
-      );
+      const answer = await mail.send("BOOKING_CONFIRMATION", {
+        tenantId: TENANT,
+        bookingIds: ["B-1"],
+      });
 
-      const [, bookingIds, , , aggregated] = send.firstCall.args;
-      expect(bookingIds).to.deep.equal(["B-1", "B-2"]);
-      expect(aggregated).to.equal(true);
+      expect(send.args.map(([sent]) => sent.to)).to.deep.equal([
+        "a@example.test",
+        "b@example.test",
+      ]);
+      expect(answer).to.deep.equal([
+        { status: "sent", transport: "instance" },
+        { status: "sent", transport: "instance" },
+      ]);
+    });
+
+    it("answers skipped where the notice has no recipient", async function () {
+      sinon.stub(mailModule, "compose").resolves([]);
+      const send = sinon.stub(mailModule, "send");
+
+      const answer = await mail.send("INCOMING_BOOKING", {
+        tenantId: TENANT,
+        bookingIds: ["B-1"],
+      });
+
+      expect(answer).to.equal(SKIPPED);
+      expect(send.called).to.equal(false);
+    });
+
+    it("answers skipped where the transport skipped every mail, the outcomes where it sent one", async function () {
+      sinon
+        .stub(mailModule, "compose")
+        .resolves([value("a@example.test"), value("b@example.test")]);
+      const send = sinon.stub(mailModule, "send");
+      send.resolves({ status: "skipped", reason: "mail_disabled" });
+
+      expect(
+        await mail.send("BOOKING_CONFIRMATION", {
+          tenantId: TENANT,
+          bookingIds: ["B-1"],
+        }),
+      ).to.equal(SKIPPED);
+
+      send
+        .withArgs(sinon.match({ to: "b@example.test" }))
+        .resolves({ status: "sent", transport: "instance" });
+      expect(
+        await mail.send("BOOKING_CONFIRMATION", {
+          tenantId: TENANT,
+          bookingIds: ["B-1"],
+        }),
+      ).to.deep.equal([
+        { status: "skipped", reason: "mail_disabled" },
+        { status: "sent", transport: "instance" },
+      ]);
+    });
+
+    it("still sends the remaining mails when one fails, then throws that failure", async function () {
+      sinon
+        .stub(mailModule, "compose")
+        .resolves([value("a@example.test"), value("b@example.test")]);
+      const send = sinon.stub(mailModule, "send");
+      send.onFirstCall().rejects(new Error("smtp down"));
+      send.onSecondCall().resolves({ status: "sent", transport: "instance" });
+
+      let error;
+      try {
+        await mail.send("BOOKING_CONFIRMATION", {
+          tenantId: TENANT,
+          bookingIds: ["B-1"],
+        });
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error.message).to.equal("smtp down");
+      expect(send.callCount).to.equal(2);
     });
   });
 });

@@ -23,6 +23,7 @@ const {
   BookableManager,
 } = require("../../src/commons/data-managers/bookable-manager");
 const EventManager = require("../../src/commons/data-managers/event-manager");
+const GroupBookingManager = require("../../src/commons/data-managers/group-booking-manager");
 const UserManager = require("../../src/commons/data-managers/user-manager");
 const MembershipManager = require("../../src/commons/data-managers/membership-manager");
 const MediaManager = require("../../src/commons/data-managers/media-manager");
@@ -41,6 +42,8 @@ const SUPERVISOR = "chef@stadthalle.example.test";
 const SECRETARY = "sekretariat@stadthalle.example.test";
 const ORGANIZER = "veranstalter@konzerte.example.test";
 const FRONTEND_URL = "https://buchung.example.test";
+const GROUP = "G-stadthalle";
+const GROUP_MEMBER_IDS = ["G-1", "G-2", "G-3"];
 const BACKEND_URL = "https://api.example.test";
 
 /** 2026-10-05 10:00 to 12:00 Europe/Berlin, as the store holds the times. */
@@ -388,8 +391,21 @@ function installMailStackStore(options = {}) {
     );
   sinon.stub(BookableManager, "getBookables").resolves(store.bookables);
   sinon
+    .stub(BookableManager, "getBookablesByIds")
+    .callsFake(async (tenantId, ids) =>
+      store.bookables.filter((entry) => ids.includes(entry.id)),
+    );
+  sinon
     .stub(BookableManager, "getBookable")
     .callsFake(async (id) => byId(store.bookables, id));
+  // The group the three members belong to, looked up by any member.
+  sinon
+    .stub(GroupBookingManager, "getGroupBookingByBookingId")
+    .callsFake(async (tenantId, bookingId) =>
+      GROUP_MEMBER_IDS.includes(bookingId)
+        ? { id: GROUP, tenantId: TENANT, bookingIds: GROUP_MEMBER_IDS }
+        : null,
+    );
   sinon
     .stub(EventManager, "getEvent")
     .callsFake(async (id) => byId(store.events, id));
@@ -428,6 +444,8 @@ function issuedFile(name) {
 
 module.exports = {
   TENANT,
+  GROUP,
+  GROUP_MEMBER_IDS,
   TENANT_NAME,
   TENANT_MAIL,
   INSTANCE_MAIL,

@@ -111,17 +111,46 @@ class ICalService {
       throw new Error(`Booking with ID ${bookingID} not found`);
     }
 
-    const cal = ical({
-      name: tenant?.name ? `${tenant.name} – Buchung` : "Buchung",
+    const cal = ICalService._bookingsCalendar(tenant, true);
+    await ICalService._addBooking(cal, booking, tenantID);
+
+    return cal;
+  }
+
+  /**
+   * The calendar of bookings a caller already loaded, with their
+   * bookables and events - no read of its own. What the mail module
+   * attaches to a confirmation.
+   *
+   * @param {Object} loaded
+   * @param {Object} loaded.tenant
+   * @param {Object[]} loaded.bookings
+   * @param {Object[]} loaded.bookables The bookables of every position
+   * @param {Map<string, Object>} loaded.events The events of the tickets, by id
+   * @returns {Promise<Object>} The calendar
+   */
+  static async bookingsCal({ tenant, bookings, bookables, events }) {
+    const lookups = {
+      bookable: async (id) => bookables.find((b) => b.id === id) ?? null,
+      event: async (id) => events.get(id) ?? null,
+    };
+    const cal = ICalService._bookingsCalendar(tenant, bookings.length === 1);
+    for (const booking of bookings) {
+      await ICalService._addBooking(cal, booking, tenant.id, lookups);
+    }
+    return cal;
+  }
+
+  /** The empty calendar of a tenant's booking or bookings. */
+  static _bookingsCalendar(tenant, single) {
+    const what = single ? "Buchung" : "Buchungen";
+    return ical({
+      name: tenant?.name ? `${tenant.name} – ${what}` : what,
       prodId: {
         company: tenant?.name || "Buchungsplattform",
         product: "Booking",
       },
     });
-
-    await ICalService._addBooking(cal, booking, tenantID);
-
-    return cal;
   }
 
   static async getMultiBookingCal(
@@ -137,13 +166,7 @@ class ICalService {
 
     const tenant = await TenantManager.getTenant(tenantID);
 
-    const cal = ical({
-      name: tenant?.name ? `${tenant.name} – Buchungen` : "Buchungen",
-      prodId: {
-        company: tenant?.name || "Buchungsplattform",
-        product: "Booking",
-      },
-    });
+    const cal = ICalService._bookingsCalendar(tenant, false);
 
     const fromDate = from ? new Date(Number(from)) : null;
     const toDate = to ? new Date(Number(to)) : null;
@@ -171,7 +194,16 @@ class ICalService {
    * @private
    */
 
-  static async _resolveBookingTimes(booking, tenantID) {
+  /** The reads of the bookables and events of a booking, unless given. */
+  static _lookups(tenantID, lookups) {
+    return {
+      bookable: (id) => BookableManager.getBookable(id, tenantID),
+      event: (id) => EventManager.getEvent(id, tenantID),
+      ...lookups,
+    };
+  }
+
+  static async _resolveBookingTimes(booking, tenantID, lookups) {
     const EVENT_TZ = process.env.TZ || "Europe/Berlin";
     const hasOwnTimes = booking.timeBegin && booking.timeEnd;
 
@@ -182,13 +214,13 @@ class ICalService {
       };
     }
 
+    const read = ICalService._lookups(tenantID, lookups);
     for (const item of booking.bookableItems || []) {
       const bookable =
-        item._bookableUsed ||
-        (await BookableManager.getBookable(item.bookableId, tenantID));
+        item._bookableUsed || (await read.bookable(item.bookableId));
 
       if (bookable?.type === "ticket" && bookable.eventId) {
-        const event = await EventManager.getEvent(bookable.eventId, tenantID);
+        const event = await read.event(bookable.eventId);
 
         if (event?.information) {
           const info = event.information;
@@ -218,10 +250,11 @@ class ICalService {
   /**
    * @private
    */
-  static async _addBooking(cal, booking, tenantID) {
+  static async _addBooking(cal, booking, tenantID, lookups) {
     const { start, end } = await ICalService._resolveBookingTimes(
       booking,
       tenantID,
+      lookups,
     );
 
     if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
@@ -231,10 +264,10 @@ class ICalService {
     const bookableNames = [];
     let location = null;
 
+    const read = ICalService._lookups(tenantID, lookups);
     for (const item of booking.bookableItems || []) {
       const bookable =
-        item._bookableUsed ||
-        (await BookableManager.getBookable(item.bookableId, tenantID));
+        item._bookableUsed || (await read.bookable(item.bookableId));
       if (bookable?.title) {
         bookableNames.push(bookable.title);
       }

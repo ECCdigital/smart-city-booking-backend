@@ -26,7 +26,6 @@ const {
   groupBookingLifecycle,
 } = require("../src/commons/services/booking-lifecycle");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
-const SupervisorNotificationService = require("../src/commons/services/supervisor-notification-service");
 const CheckoutController = require("../src/platform/api/v2/controllers/checkout.controller");
 const PaymentController = require("../src/platform/api/controllers/payment-controller");
 const AccessService = require("../src/commons/services/access/access-service");
@@ -49,7 +48,7 @@ const {
 } = require("../src/commons/services/checkout/checkout-reasons");
 const { CheckoutError } = require("../src/errors/CheckoutError");
 const { Booking } = require("../src/commons/entities/booking/booking");
-const MailController = require("../src/commons/mail-service/mail-controller");
+const lifecycleMail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const lifecycleDocuments = require("../src/commons/services/booking-lifecycle/adapters/documents");
 
 const TENANT = "tenant-1";
@@ -106,13 +105,7 @@ describe("checkout on the access seam", function () {
       sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
       // The mails of the admission are not this test's business.
       sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT });
-      sinon
-        .stub(
-          SupervisorNotificationService,
-          "notifySupervisorsOnBookingCreated",
-        )
-        .resolves();
-      sinon.stub(MailController, "sendBookingConfirmation").resolves();
+      sinon.stub(lifecycleMail, "send").resolves([]);
       sinon.stub(PaymentUtils, "getPaymentService").resolves(null);
       sinon.stub(lifecycleDocuments, "issue").resolves({
         attachment: { type: "receipt" },
@@ -260,9 +253,7 @@ describe("checkout on the access seam", function () {
         attachment: { type: "receipt" },
         file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
       });
-      const confirmation = sinon
-        .stub(MailController, "sendBookingConfirmation")
-        .resolves();
+      const send = sinon.stub(lifecycleMail, "send").resolves([]);
 
       const outcome = await bookingLifecycle.pay(TENANT, paid.id, {
         trigger: "admin",
@@ -272,7 +263,8 @@ describe("checkout on the access seam", function () {
       expect(stored.firstCall.args[0].isPayed).to.equal(true);
       expect(stored.firstCall.args[1]).to.equal("payment_due");
       expect(issue.calledOnce).to.equal(true);
-      expect(confirmation.calledOnce).to.equal(true);
+      expect(send.calledOnce).to.equal(true);
+      expect(send.firstCall.args[0]).to.equal("BOOKING_CONFIRMATION");
     });
 
     it("leaves every booking of an aggregated payment paid when one grant fails", async function () {
@@ -295,7 +287,7 @@ describe("checkout on the access seam", function () {
         attachment: { type: "receipt" },
         file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
       });
-      sinon.stub(MailController, "sendBookingConfirmation").resolves();
+      sinon.stub(lifecycleMail, "send").resolves([]);
 
       const outcome = await groupBookingLifecycle.pay(TENANT, "G-1", {
         trigger: "payment",

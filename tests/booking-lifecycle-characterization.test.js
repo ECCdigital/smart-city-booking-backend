@@ -133,9 +133,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 requested",
         "access.hold B1",
         "workflow.onCreate B1",
-        "mail.sendBookingRequestConfirmation B1",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.BOOKING_REQUEST_CONFIRMATION erika@example.test",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -154,8 +154,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "workflow.onCreate B1",
         // The customer at the storefront is asked to pay by the checkout's
         // answer, the payment page; no payment request goes out by mail.
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
         "access.refreshHolds B1",
         "payment.createPayment B1",
       ]);
@@ -173,9 +173,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.hold B1",
         "access.provision B1",
         "workflow.onCreate B1",
-        "mail.sendFreeBookingConfirmation B1",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.FREE_BOOKING_CONFIRMATION erika@example.test [buchung-B1.ics]",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -192,9 +192,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 requested",
         "access.hold B1",
         "workflow.onCreate B1",
-        "mail.sendBookingRequestConfirmation B1",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.BOOKING_REQUEST_CONFIRMATION erika@example.test",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -220,9 +220,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.receipt B1",
         "store.attach B1 receipt",
         "workflow.onCreate B1",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -235,8 +235,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.hold B1",
         "workflow.onCreate B1",
         "payment.paymentRequest B1",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -248,9 +248,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 requested",
         "access.hold B1",
         "workflow.onCreate B1",
-        "mail.sendBookingRequestConfirmation B1",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.BOOKING_REQUEST_CONFIRMATION erika@example.test",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -281,7 +281,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
     });
 
     it("a mail that fails at admission is logged; the booking stands and the other mails go out", async function () {
-      h.failing.add("mail.sendBookingRequestConfirmation");
+      h.failing.add("mail.BOOKING_REQUEST_CONFIRMATION");
 
       const body = await checkout("room");
 
@@ -290,9 +290,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 requested",
         "access.hold B1",
         "workflow.onCreate B1",
-        "mail.sendBookingRequestConfirmation B1 FAILED",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
+        "mail.BOOKING_REQUEST_CONFIRMATION erika@example.test FAILED",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
   });
@@ -336,7 +336,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 confirmed",
         "access.provision B1",
         "workflow.onCommit B1",
-        "mail.sendFreeBookingConfirmation B1",
+        "mail.FREE_BOOKING_CONFIRMATION erika@example.test [buchung-B1.ics]",
       ]);
     });
 
@@ -367,12 +367,12 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 payment_due",
         "workflow.onCommit B1",
         "payment.paymentRequest B1",
-        "mail.sendNewBooking B1",
+        "mail.NEW_BOOKING orga@example.test",
       ]);
 
       // The payment tells the organizer once more, as before.
       await pay(booking.id);
-      expect(h.takeEffects()).to.include("mail.sendNewBooking B1");
+      expect(h.takeEffects()).to.include("mail.NEW_BOOKING orga@example.test");
     });
 
     it("a grant that fails on a free confirmation is recorded: the booking is confirmed, the mail goes out, 200 (was a 500 with the snapshot restored)", async function () {
@@ -388,7 +388,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 confirmed",
         "access.provision B1 FAILED",
         "workflow.onCommit B1",
-        "mail.sendFreeBookingConfirmation B1",
+        "mail.FREE_BOOKING_CONFIRMATION erika@example.test [buchung-B1.ics]",
       ]);
     });
 
@@ -486,7 +486,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.receipt B1",
         "store.attach B1 receipt",
         "workflow.onPay B1",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
       ]);
     });
 
@@ -507,7 +507,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.receipt B1",
         "store.attach B1 receipt",
         "workflow.onPay B1",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
       ]);
     });
 
@@ -575,7 +575,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.receipt B1",
         "store.attach B1 receipt",
         "workflow.onPay B1",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
       ]);
     });
 
@@ -593,7 +593,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.provision B1",
         "documents.receipt B1 FAILED",
         "workflow.onPay B1",
-        "mail.sendBookingConfirmation B1",
+        "mail.BOOKING_CONFIRMATION erika@example.test [buchung-B1.ics]",
       ]);
     });
 
@@ -611,7 +611,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
     it("a mail that fails after the receipt is logged; the answer is 200", async function () {
       const id = await bookingIn("payment_due");
-      h.failing.add("mail.sendBookingConfirmation");
+      h.failing.add("mail.BOOKING_CONFIRMATION");
 
       const res = await pay(id);
 
@@ -622,7 +622,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.receipt B1",
         "store.attach B1 receipt",
         "workflow.onPay B1",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf] FAILED",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics] FAILED",
       ]);
     });
 
@@ -641,7 +641,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       // payment page is the answer.
       const unpaid = await checkout("room-with-doc");
       expect(
-        h.takeEffects().filter((row) => row.startsWith("mail.sendBooking")),
+        h.takeEffects().filter((row) => row.startsWith("mail.BOOKING_")),
       ).to.deep.equal([]);
 
       // Paid at once, the receipt goes out with the document of the room.
@@ -650,13 +650,13 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         isPayed: true,
       });
       expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B2 [RE-1.pdf,Hausordnung.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,Hausordnung.pdf,buchung-B2.ics]",
       );
 
       // And the payment of the unpaid one carries the receipt and the document.
       await pay(unpaid.data.booking.id);
       expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B1 [RE-2.pdf,Hausordnung.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-2.pdf,Hausordnung.pdf,buchung-B1.ics]",
       );
     });
   });
@@ -689,7 +689,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -707,7 +707,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 cancelled [receipt]",
         "access.revoke B1",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1",
+        "mail.BOOKING_CANCEL erika@example.test",
       ]);
     });
 
@@ -724,7 +724,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingRejection B1 [ST-1.pdf]",
+        "mail.BOOKING_REJECTION erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -739,7 +739,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 cancelled",
         "access.revoke B1",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1",
+        "mail.BOOKING_CANCEL erika@example.test",
       ]);
     });
 
@@ -794,7 +794,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
     it("a cancel mail that fails is recorded: the booking is cancelled, 200", async function () {
       const id = await bookingIn("confirmed");
-      h.failing.add("mail.sendBookingCancel");
+      h.failing.add("mail.BOOKING_CANCEL");
 
       const res = await reject(id, { reason: "" });
 
@@ -806,7 +806,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1 [ST-1.pdf] FAILED",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf] FAILED",
       ]);
     });
 
@@ -823,7 +823,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -844,7 +844,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.revoke B1",
         "documents.cancellation B1 FAILED",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1",
+        "mail.BOOKING_CANCEL erika@example.test",
       ]);
     });
 
@@ -878,7 +878,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stored.hooks[0].payload).to.deep.equal({ reason: "Krank" });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
-        "mail.sendVerifyBookingRejection B1",
+        "mail.VERIFY_BOOKING_REJECTION erika@example.test",
       ]);
     });
 
@@ -925,7 +925,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
     it("a verification mail that fails is recorded: the hook stands, 201", async function () {
       const id = await bookingIn("confirmed");
-      h.failing.add("mail.sendVerifyBookingRejection");
+      h.failing.add("mail.VERIFY_BOOKING_REJECTION");
 
       const res = await requestReject(id, { reason: "" });
 
@@ -933,7 +933,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(id).hooks).to.have.length(1);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
-        "mail.sendVerifyBookingRejection B1 FAILED",
+        "mail.VERIFY_BOOKING_REJECTION erika@example.test FAILED",
       ]);
     });
 
@@ -970,7 +970,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -990,7 +990,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -1097,7 +1097,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.receipt B1",
         "store.attach B1 receipt",
         "workflow.onPay B1",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
       ]);
     });
 
@@ -1151,7 +1151,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -1241,7 +1241,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
     it("a cancel mail that fails on the flip is recorded: the booking is cancelled, 201", async function () {
       const id = await bookingIn("confirmed");
-      h.failing.add("mail.sendBookingCancel");
+      h.failing.add("mail.BOOKING_CANCEL");
 
       const res = await update(id, { isRejected: true });
 
@@ -1261,7 +1261,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "documents.cancellation B1",
         "store.attach B1 cancellation",
         "workflow.onReject B1",
-        "mail.sendBookingCancel B1 [ST-1.pdf] FAILED",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf] FAILED",
       ]);
     });
 
@@ -1359,7 +1359,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.takeEffects()).to.deep.equal([
         "documents.invoice B1",
         "store.attach B1 invoice",
-        "mail.sendInvoice B1 [RG-1-r2.pdf]",
+        "mail.INVOICE erika@example.test [RG-1-r2.pdf]",
       ]);
     });
 
@@ -1405,7 +1405,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.provision B1",
         "documents.receipt B1",
         "store.attach B1 receipt",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
       ]);
     });
 
@@ -1424,7 +1424,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.revoke B1",
         "documents.cancellation B1",
         "store.attach B1 cancellation",
-        "mail.sendBookingCancel B1 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
   });

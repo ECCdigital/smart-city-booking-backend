@@ -48,8 +48,8 @@ describe("booking lifecycle pipeline", function () {
       ["access", "refreshHolds", "record"],
       ["documents", "issue", "record"],
       ["payment", "requestPayment", "record"],
-      ["mail", "sendBookingConfirmation", "record"],
-      ["mail", "sendEmailToOrganizer", "record"],
+      ["mail", "BOOKING_CONFIRMATION", "record"],
+      ["mail", "NEW_BOOKING", "record"],
       ["workflow", "emit", "record"],
     ];
 
@@ -155,8 +155,12 @@ describe("booking lifecycle pipeline", function () {
           { when: () => false },
         ),
         step("notify", "payment", "requestPayment", () => SKIPPED),
-        step("notify", "mail", "sendBookingConfirmation", () =>
-          adapters.mail.sendBookingConfirmation([entity], { attachments: [] }),
+        step("notify", "mail", "BOOKING_CONFIRMATION", () =>
+          adapters.mail.send("BOOKING_CONFIRMATION", {
+            tenantId: TENANT,
+            bookingIds: ["B-1"],
+            attachments: [],
+          }),
         ),
       ]);
 
@@ -165,7 +169,7 @@ describe("booking lifecycle pipeline", function () {
         "provision access.provision recorded",
         "document documents.issue skipped",
         "notify payment.requestPayment skipped",
-        "notify mail.sendBookingConfirmation ok",
+        "notify mail.BOOKING_CONFIRMATION ok",
       ]);
       expect(outcome).to.include({
         transition: "pay",
@@ -340,7 +344,7 @@ describe("booking lifecycle pipeline", function () {
     it("records a failing step with record policy and carries on: nothing is restored", async function () {
       const adapters = inMemoryAdapters({
         bookings: [booking()],
-        failOn: { documents: ["issue"], mail: ["sendBookingConfirmation"] },
+        failOn: { documents: ["issue"], mail: ["BOOKING_CONFIRMATION"] },
       });
       const entity = await adapters.store.get(TENANT, "B-1");
       entity.status = "confirmed";
@@ -366,8 +370,8 @@ describe("booking lifecycle pipeline", function () {
             type: "receipt",
           }),
         ),
-        step("notify", "mail", "sendBookingConfirmation", () =>
-          adapters.mail.sendBookingConfirmation([entity], {}),
+        step("notify", "mail", "BOOKING_CONFIRMATION", () =>
+          adapters.mail.BOOKING_CONFIRMATION([entity], {}),
         ),
         step("notify", "workflow", "emit", () =>
           adapters.workflow.emit(TENANT, "B-1", "onPay"),
@@ -377,7 +381,7 @@ describe("booking lifecycle pipeline", function () {
       expect(effectTable(outcome)).to.deep.equal([
         "persist store.save ok",
         "document documents.issue recorded",
-        "notify mail.sendBookingConfirmation recorded",
+        "notify mail.BOOKING_CONFIRMATION recorded",
         "notify workflow.emit ok",
       ]);
       expect(outcome.failure).to.equal(null);

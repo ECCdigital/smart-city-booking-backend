@@ -129,9 +129,9 @@ describe("group booking lifecycle today: what each state change does at the seam
         "access.hold B2",
         "workflow.onCreate B1",
         "workflow.onCreate B2",
-        "mail.sendBookingRequestConfirmation B1,B2",
-        "mail.sendIncomingBooking B1,B2",
-        "supervisor.notify B1,B2",
+        "mail.BOOKING_REQUEST_CONFIRMATION erika@example.test",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -155,8 +155,8 @@ describe("group booking lifecycle today: what each state change does at the seam
         "workflow.onCreate B1",
         "workflow.onCreate B2",
         // The customer is handed the payment page; no request by mail.
-        "mail.sendIncomingBooking B1,B2",
-        "supervisor.notify B1,B2",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
         "access.refreshHolds B1,B2",
         "payment.createPayment B1,B2 aggregated",
       ]);
@@ -177,9 +177,9 @@ describe("group booking lifecycle today: what each state change does at the seam
         "access.provision B2",
         "workflow.onCreate B1",
         "workflow.onCreate B2",
-        "mail.sendFreeBookingConfirmation B1,B2",
-        "mail.sendIncomingBooking B1,B2",
-        "supervisor.notify B1,B2",
+        "mail.FREE_BOOKING_CONFIRMATION erika@example.test [buchungen.ics]",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -215,9 +215,9 @@ describe("group booking lifecycle today: what each state change does at the seam
         "access.hold B2",
         "workflow.onCreate B1",
         "workflow.onCreate B2",
-        "mail.sendBookingRequestConfirmation B1,B2",
-        "mail.sendIncomingBooking B1,B2",
-        "supervisor.notify B1,B2",
+        "mail.BOOKING_REQUEST_CONFIRMATION erika@example.test",
+        "mail.INCOMING_BOOKING stadt@example.test",
+        "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
     });
 
@@ -302,7 +302,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "access.provision B2",
         "workflow.onCommit B1",
         "workflow.onCommit B2",
-        "mail.sendFreeBookingConfirmation B1,B2",
+        "mail.FREE_BOOKING_CONFIRMATION erika@example.test [buchungen.ics]",
       ]);
     });
 
@@ -337,8 +337,8 @@ describe("group booking lifecycle today: what each state change does at the seam
         "workflow.onCommit B1",
         "workflow.onCommit B2",
         "payment.paymentRequest B1,B2 aggregated",
-        "mail.sendNewBooking B1",
-        "mail.sendNewBooking B2",
+        "mail.NEW_BOOKING orga@example.test",
+        "mail.NEW_BOOKING orga@example.test",
       ]);
 
       // Paid already, the group is not a request: the guard refuses it
@@ -447,7 +447,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.attach B2 receipt",
         "workflow.onPay B1",
         "workflow.onPay B2",
-        "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchungen.ics]",
       ]);
     });
 
@@ -475,7 +475,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.attach B2 receipt",
         "workflow.onPay B1",
         "workflow.onPay B2",
-        "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchungen.ics]",
       ]);
 
       const other = await groupIn("payment_due");
@@ -484,7 +484,7 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(byGroup.status).to.equal(200);
       expect(states(other)).to.deep.equal(["confirmed", "confirmed"]);
       expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B3,B4 [RE-2.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-2.pdf,buchungen.ics]",
       );
     });
 
@@ -504,7 +504,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "documents.aggregatedReceipt B1,B2 FAILED",
         "workflow.onPay B1",
         "workflow.onPay B2",
-        "mail.sendBookingConfirmation B1,B2",
+        "mail.BOOKING_CONFIRMATION erika@example.test [buchungen.ics]",
       ]);
     });
 
@@ -559,7 +559,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.attach B2 receipt",
         "workflow.onPay B1",
         "workflow.onPay B2",
-        "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchungen.ics]",
       ]);
     });
 
@@ -568,13 +568,13 @@ describe("group booking lifecycle today: what each state change does at the seam
       // payment page is the answer.
       const { groupBooking } = (await groupCheckout("room-with-doc")).data;
       expect(
-        h.takeEffects().filter((row) => row.startsWith("mail.sendBooking")),
+        h.takeEffects().filter((row) => row.startsWith("mail.BOOKING_")),
       ).to.deep.equal([]);
 
       await pay(groupBooking.id);
 
       expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B1,B2 [RE-1.pdf,Hausordnung.pdf]",
+        "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,Hausordnung.pdf,buchungen.ics]",
       );
     });
   });
@@ -612,7 +612,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.attach B2 cancellation",
         "workflow.onReject B1",
         "workflow.onReject B2",
-        "mail.sendBookingCancel B1,B2 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -629,7 +629,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "access.revoke B2",
         "workflow.onReject B1",
         "workflow.onReject B2",
-        "mail.sendBookingCancel B1,B2",
+        "mail.BOOKING_CANCEL erika@example.test",
       ]);
     });
 
@@ -650,7 +650,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.attach B2 cancellation",
         "workflow.onReject B1",
         "workflow.onReject B2",
-        "mail.sendBookingRejection B1,B2 [ST-1.pdf]",
+        "mail.BOOKING_REJECTION erika@example.test [ST-1.pdf]",
       ]);
     });
 
@@ -671,14 +671,14 @@ describe("group booking lifecycle today: what each state change does at the seam
 
     it("a cancel mail that fails is recorded: the group is cancelled, 200 (was a 500)", async function () {
       const id = await groupIn("confirmed");
-      h.failing.add("mail.sendBookingCancel");
+      h.failing.add("mail.BOOKING_CANCEL");
 
       const res = await reject(id, { reason: "" });
 
       expect(res.status).to.equal(200);
       expect(states(id)).to.deep.equal(["cancelled", "cancelled"]);
       expect(h.takeEffects().at(-1)).to.equal(
-        "mail.sendBookingCancel B1,B2 [ST-1.pdf] FAILED",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf] FAILED",
       );
     });
 
@@ -693,7 +693,7 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(h.takeEffects().slice(-3)).to.deep.equal([
         "workflow.onReject B1",
         "workflow.onReject B2",
-        "mail.sendBookingCancel B1,B2",
+        "mail.BOOKING_CANCEL erika@example.test",
       ]);
     });
 
@@ -746,7 +746,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.attach B2 cancellation",
         "workflow.onReject B1",
         "workflow.onReject B2",
-        "mail.sendBookingCancel B1,B2 [ST-1.pdf]",
+        "mail.BOOKING_CANCEL erika@example.test [ST-1.pdf]",
       ]);
     });
   });
@@ -826,7 +826,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "documents.aggregatedInvoice B1,B2",
         "store.attach B1 invoice",
         "store.attach B2 invoice",
-        "mail.sendInvoice B1,B2 [RG-1-r2.pdf]",
+        "mail.INVOICE erika@example.test [RG-1-r2.pdf]",
       ]);
     });
 

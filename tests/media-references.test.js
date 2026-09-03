@@ -8,7 +8,7 @@ const MediaReferenceGuard = require("../src/commons/services/media/media-referen
 const PermissionService = require("../src/commons/services/permission-service");
 const {
   prepareMailAttachments,
-} = require("../src/commons/services/booking-lifecycle/mail-attachments");
+} = require("../src/commons/mail-service/mail-attachments");
 const HtmlEngine = require("../src/platform/html-engine/html-engine");
 const {
   embedMediaImages,

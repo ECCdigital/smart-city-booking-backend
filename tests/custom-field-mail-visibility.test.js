@@ -1,16 +1,8 @@
 const assert = require("assert");
-const sinon = require("sinon");
 const {
   CustomFieldService,
 } = require("../src/commons/services/custom-field/custom-field-service");
-const BookingManager = require("../src/commons/data-managers/booking-manager");
-const {
-  BookableManager,
-} = require("../src/commons/data-managers/bookable-manager");
-const TenantManager = require("../src/commons/data-managers/tenant-manager");
-const MailDataService = require("../src/commons/mail-service/mail-data.service");
-// Registers the Handlebars helpers/partials the booking-details snippet uses.
-require("../src/commons/mail-service/mail-service");
+const { renderBookingDetails } = require("../src/commons/mail-service/render");
 const {
   renderSnippet,
 } = require("../src/commons/mail-service/templates/template-loader");
@@ -159,27 +151,26 @@ describe("CustomFieldService.formatValueForDisplay", () => {
   });
 });
 
-describe("MailDataService.generateBookingDetails (mailCustomFields)", () => {
-  afterEach(() => {
-    sinon.restore();
-  });
-
-  function stubBooking(customFields) {
-    sinon.stub(BookingManager, "getBooking").resolves({
-      id: "B-1",
-      priceEur: 10,
-      comment: "",
-      bookableItems: [],
-      timeBegin: null,
-      timeEnd: null,
-      customFields,
+describe("renderBookingDetails (mailCustomFields)", () => {
+  /** The details of a booking with the given custom fields, no positions. */
+  function details(customFields) {
+    return renderBookingDetails({
+      booking: {
+        id: "B-1",
+        priceEur: 10,
+        comment: "",
+        bookableItems: [],
+        timeBegin: null,
+        timeEnd: null,
+        customFields,
+      },
+      tenant: {},
+      bookables: [],
     });
-    sinon.stub(TenantManager, "getTenant").resolves({});
-    sinon.stub(BookableManager, "getBookables").resolves([]);
   }
 
-  it("renders only fields flagged with showInMail", async () => {
-    stubBooking([
+  it("renders only fields flagged with showInMail", () => {
+    const html = details([
       {
         ...checkoutField({ id: "field-a", caption: "Anzahl Personen" }),
         value: "4 Erwachsene",
@@ -196,16 +187,14 @@ describe("MailDataService.generateBookingDetails (mailCustomFields)", () => {
       },
     ]);
 
-    const html = await MailDataService.generateBookingDetails("B-1", "tenant");
-
     assert.ok(html.includes("<strong>Anzahl Personen:</strong>"));
     assert.ok(html.includes("4 Erwachsene"));
     assert.ok(!html.includes("Internes Feld"));
     assert.ok(!html.includes("geheim"));
   });
 
-  it("renders boolean and select values human-readable", async () => {
-    stubBooking([
+  it("renders boolean and select values human-readable", () => {
+    const html = details([
       {
         ...checkoutField({
           id: "field-bool",
@@ -227,27 +216,23 @@ describe("MailDataService.generateBookingDetails (mailCustomFields)", () => {
       },
     ]);
 
-    const html = await MailDataService.generateBookingDetails("B-1", "tenant");
-
     assert.ok(html.includes("<strong>Barrierefrei:</strong>"));
     assert.ok(html.includes("Nein"));
     assert.ok(html.includes("Großer Saal"));
     assert.ok(!html.includes("nicht angegeben"));
   });
 
-  it("renders flagged fields without a value as nicht angegeben", async () => {
-    stubBooking([{ ...checkoutField(), value: null, hasValue: false }]);
-
-    const html = await MailDataService.generateBookingDetails("B-1", "tenant");
+  it("renders flagged fields without a value as nicht angegeben", () => {
+    const html = details([
+      { ...checkoutField(), value: null, hasValue: false },
+    ]);
 
     assert.ok(html.includes("<strong>Anzahl Personen:</strong>"));
     assert.ok(html.includes("<em>nicht angegeben</em>"));
   });
 
-  it("renders unchanged when the booking has no custom fields", async () => {
-    stubBooking(undefined);
-
-    const html = await MailDataService.generateBookingDetails("B-1", "tenant");
+  it("renders unchanged when the booking has no custom fields", () => {
+    const html = details(undefined);
 
     assert.ok(!html.includes("nicht angegeben"));
     assert.ok(!html.includes("<strong>Anzahl Personen:</strong>"));
