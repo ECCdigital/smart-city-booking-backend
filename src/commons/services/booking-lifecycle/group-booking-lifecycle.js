@@ -191,8 +191,9 @@ function createGroupBookingLifecycle(adapters) {
    * The admission of a group (spec part 1, 5.2 and 7; part 2, sections 8
    * and 9; glossary "Aufnahme"): the checkout stored the members in the
    * state it chose, the lifecycle runs the effects of that state - per
-   * member the hold at `requested | payment_due` or the grant at
-   * `confirmed`, one aggregated receipt for a group confirmed and paid at
+   * member the hold (in every state: the hold checks the capacity and
+   * aborts) and, at `confirmed`, the grant, one aggregated receipt for a
+   * group confirmed and paid at
    * once, the workflow event `onCreate` per member, then one mail for the
    * group - the receipt of a request, the payment request of a group
    * awaiting payment (for every trigger but `customer`, whose checkout
@@ -226,7 +227,7 @@ function createGroupBookingLifecycle(adapters) {
     const files = [];
 
     return runPipeline(ctxOf(transition, tenantId, group, bookings), [
-      ...accessEach(bookings, "hold", () => !confirmed()),
+      ...accessEach(bookings, "hold"),
       ...accessEach(bookings, "provision", confirmed),
       step(
         PHASE.DOCUMENT,

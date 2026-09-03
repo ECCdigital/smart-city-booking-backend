@@ -981,7 +981,7 @@ describe("group booking lifecycle: admit", function () {
     expect(adapters.payment.calls).to.deep.equal([]);
   });
 
-  it("admits a group confirmed and paid at once: the grant per member, one aggregated receipt at every member, the confirmation with it", async function () {
+  it("admits a group confirmed and paid at once: the hold and the grant per member, one aggregated receipt at every member, the confirmation with it", async function () {
     const { adapters, lifecycle } = groupOf("confirmed");
 
     const outcome = await lifecycle.admit(TENANT, GROUP, {
@@ -989,8 +989,8 @@ describe("group booking lifecycle: admit", function () {
     });
 
     expect(effectTable(outcome)).to.deep.equal([
-      "provision access.hold B-1 skipped",
-      "provision access.hold B-2 skipped",
+      "provision access.hold B-1 ok",
+      "provision access.hold B-2 ok",
       "provision access.provision B-1 ok",
       "provision access.provision B-2 ok",
       "document documents.issue ok",

@@ -171,6 +171,8 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
         "store.save B2 confirmed",
+        "access.hold B1",
+        "access.hold B2",
         "access.provision B1",
         "access.provision B2",
         "workflow.onCreate B1",
@@ -216,6 +218,28 @@ describe("group booking lifecycle today: what each state change does at the seam
         "mail.sendBookingRequestConfirmation B1,B2",
         "mail.sendIncomingBooking B1,B2",
         "supervisor.notify B1,B2",
+      ]);
+    });
+
+    it("a group whose members would start in different states is refused by the guard, 409, and never exists: every member and the group are rolled back", async function () {
+      const body = await groupCheckout("weekend-free-room", {
+        bookingAttempts: [
+          { timeBegin: TIME_BEGIN, timeEnd: TIME_END },
+          { timeBegin: TIME_BEGIN + 5 * DAY, timeEnd: TIME_END + 5 * DAY },
+        ],
+      });
+
+      // The guard's ConflictError reaches the v2 controller, which answers
+      // every BaseError without a reason of its own as `checkout.unknown`
+      // (as it did the hold's error before); the legacy checkout answers 409.
+      expect(body.success).to.equal(false);
+      expect(h.store.size).to.equal(0);
+      expect(h.groups.size).to.equal(0);
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 payment_due",
+        "store.save B2 confirmed",
+        "store.remove B1",
+        "store.remove B2",
       ]);
     });
 

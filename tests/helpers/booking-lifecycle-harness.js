@@ -174,6 +174,27 @@ function defaultBookables() {
       eventId: "E1",
       isScheduleRelated: false,
     }),
+    // A room confirmed at once, priced on weekdays and free at the weekend:
+    // a group over both starts in two states.
+    "weekend-free-room": bookable({
+      id: "weekend-free-room",
+      title: "Raum (Wochenende frei)",
+      autoCommitBooking: true,
+      priceCategories: [
+        {
+          priceEur: 40,
+          interval: { start: null, end: null },
+          weekdays: [1, 2, 3, 4, 5],
+          holidays: [],
+        },
+        {
+          priceEur: 0,
+          interval: { start: null, end: null },
+          weekdays: [6, 0],
+          holidays: [],
+        },
+      ],
+    }),
     // A room with a document the mail path attaches (`mailAttach`).
     "room-with-doc": bookable({
       id: "room-with-doc",

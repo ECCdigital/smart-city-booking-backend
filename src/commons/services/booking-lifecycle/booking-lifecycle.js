@@ -116,9 +116,11 @@ function createBookingLifecycle(adapters) {
    * The admission (spec part 1, 5.2; part 2, section 8, `admit`; glossary
    * "Aufnahme"): the checkout stored the booking in the state it chose,
    * the lifecycle runs the effects of that state. Nothing is written: the
-   * compartments are held at `requested | payment_due` and the access
-   * granted at `confirmed`, a booking confirmed and paid at once gets its
-   * receipt; then the workflow is told (`onCreate`), the customer gets
+   * compartments are held - in every state, the hold being the one step
+   * that checks their capacity and aborts, so a booking that finds none
+   * never exists - and the access granted at `confirmed`, consuming the
+   * hold; a booking confirmed and paid at once gets its receipt; then the
+   * workflow is told (`onCreate`), the customer gets
    * exactly one mail - the receipt of a request, the payment request
    * (glossary "Zahlungsaufforderung") of a booking awaiting payment, the
    * confirmation with the receipt of a paid one, the free booking
@@ -146,12 +148,8 @@ function createBookingLifecycle(adapters) {
     const files = [];
 
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
-      step(
-        PHASE.PROVISION,
-        "access",
-        "hold",
-        () => access.hold(tenantId, bookingId),
-        { when: () => !confirmed() },
+      step(PHASE.PROVISION, "access", "hold", () =>
+        access.hold(tenantId, bookingId),
       ),
       step(
         PHASE.PROVISION,

@@ -170,6 +170,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(booking.id)).to.include({ priceEur: 0, isPayed: true });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
+        "access.hold B1",
         "access.provision B1",
         "workflow.onCreate B1",
         "mail.sendFreeBookingConfirmation B1",
@@ -214,6 +215,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
+        "access.hold B1",
         "access.provision B1",
         "documents.receipt B1",
         "store.attach B1 receipt",

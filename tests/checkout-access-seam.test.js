@@ -156,11 +156,11 @@ describe("checkout on the access seam", function () {
         calls: ["hold"],
       },
       {
-        name: "a booking paid at once is granted, nothing held",
+        name: "a booking paid at once is held, then granted",
         prepared: booking({ isPayed: true }),
         fails: null,
         kept: true,
-        calls: ["provision"],
+        calls: ["hold", "provision"],
       },
       {
         name: "a hold that fails rolls the unpaid booking back",
@@ -170,11 +170,18 @@ describe("checkout on the access seam", function () {
         calls: ["hold"],
       },
       {
+        name: "a hold that fails rolls the booking paid at once back, before any grant",
+        prepared: booking({ isPayed: true }),
+        fails: "hold",
+        kept: false,
+        calls: ["hold"],
+      },
+      {
         name: "a grant that fails at the admission of a booking paid at once is recorded: the booking stands, the failure is the audit log's",
         prepared: booking({ isPayed: true }),
         fails: "provision",
         kept: true,
-        calls: ["provision"],
+        calls: ["hold", "provision"],
       },
     ];
 

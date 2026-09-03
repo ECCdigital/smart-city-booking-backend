@@ -170,7 +170,7 @@ describe("booking lifecycle: admit", function () {
     ]);
   });
 
-  it("admits a booking confirmed and paid at once: the grant, the receipt, the confirmation with it", async function () {
+  it("admits a booking confirmed and paid at once: the hold, the grant, the receipt, the confirmation with it", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking({ status: "confirmed" })],
     });
@@ -180,7 +180,7 @@ describe("booking lifecycle: admit", function () {
     });
 
     expect(effectTable(outcome)).to.deep.equal([
-      "provision access.hold skipped",
+      "provision access.hold ok",
       "provision access.provision ok",
       "document documents.issue ok",
       "notify workflow.emit ok",
@@ -194,6 +194,7 @@ describe("booking lifecycle: admit", function () {
     ]);
     expect(outcome.status).to.equal("confirmed");
     expect(adapters.access.calls).to.deep.equal([
+      { op: "hold", args: [TENANT, "B-1"] },
       { op: "provision", args: [TENANT, "B-1"] },
     ]);
     expect(adapters.documents.calls[0].args[0]).to.include({
@@ -210,7 +211,7 @@ describe("booking lifecycle: admit", function () {
     ]);
   });
 
-  it("admits a free booking confirmed at once: the grant and the free booking confirmation, no receipt", async function () {
+  it("admits a free booking confirmed at once: the hold, the grant and the free booking confirmation, no receipt", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking({ status: "confirmed", priceEur: 0 })],
     });
@@ -220,7 +221,7 @@ describe("booking lifecycle: admit", function () {
     });
 
     expect(effectTable(outcome)).to.deep.equal([
-      "provision access.hold skipped",
+      "provision access.hold ok",
       "provision access.provision ok",
       "document documents.issue skipped",
       "notify workflow.emit ok",
@@ -274,7 +275,25 @@ describe("booking lifecycle: admit", function () {
     expect(adapters.workflow.calls).to.deep.equal([]);
   });
 
-  it("a hold that fails aborts before any other effect: nothing was written, nothing is restored", async function () {
+  it("a hold that fails aborts before any other effect, in every state: nothing was written, nothing is restored", async function () {
+    for (const status of ["requested", "payment_due", "confirmed"]) {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking({ status })],
+        failOn: { access: ["hold"] },
+      });
+
+      const error = await failing(
+        lifecycle.admit(TENANT, "B-1", { trigger: TRIGGER.ADMIN }),
+      );
+
+      expect(error).to.be.instanceOf(LifecycleError);
+      expect(effectTable(error.outcome)).to.deep.equal([
+        "provision access.hold failed",
+      ]);
+      expect(adapters.documents.calls).to.deep.equal([]);
+      expect(adapters.mail.calls).to.deep.equal([]);
+    }
+
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking()],
       failOn: { access: ["hold"] },
