@@ -78,6 +78,7 @@ class MailSenderService {
    * Handles single bookings, loops, and aggregated mails.
    */
   static async sendBookingMail({
+    type,
     address,
     bookingId,
     tenantId,
@@ -136,18 +137,22 @@ class MailSenderService {
     });
 
     await MailerService.send({
+      type,
       tenantId,
-      address,
-      subject,
-      mailTemplate: tenant.genericMailTemplate,
-      model: { content: snippetHtml },
-      attachments,
+      to: address,
       bcc: sendBCC ? tenant.mail : undefined,
-      useInstanceMail: tenant.useInstanceMail,
+      subject,
+      html: await MailerService.renderHtml({
+        mailTemplate: tenant.genericMailTemplate,
+        model: { content: snippetHtml },
+        tenantId,
+      }),
+      attachments,
     });
   }
 
   static async sendAggregatedBookingMail({
+    type,
     address,
     bookingIds,
     tenantId,
@@ -182,14 +187,17 @@ class MailSenderService {
     });
 
     await MailerService.send({
+      type,
       tenantId,
-      address,
-      subject,
-      mailTemplate: tenant.genericMailTemplate,
-      model: { content: snippetHtml },
-      attachments,
+      to: address,
       bcc: sendBCC ? tenant.mail : undefined,
-      useInstanceMail: tenant.useInstanceMail,
+      subject,
+      html: await MailerService.renderHtml({
+        mailTemplate: tenant.genericMailTemplate,
+        model: { content: snippetHtml },
+        tenantId,
+      }),
+      attachments,
     });
   }
 
@@ -303,6 +311,7 @@ class MailSenderService {
         renderForBooking(primaryBooking);
 
       await this.sendAggregatedBookingMail({
+        type: mailType.templateName,
         address,
         bookingIds,
         tenantId,
@@ -324,6 +333,7 @@ class MailSenderService {
         const { message, messageAfter, subject } = renderForBooking(booking);
 
         await this.sendBookingMail({
+          type: mailType.templateName,
           address,
           bookingId,
           tenantId,

@@ -148,7 +148,7 @@ describe("mail recipients today: who gets which notice", function () {
         attachments: [issuedFile("RE-1.pdf")],
       });
 
-      expect(sent[0].bcc).to.equal(null);
+      expect(sent[0].bcc).to.equal(undefined);
     });
 
     it("always goes with a cancellation", async function () {
@@ -169,7 +169,7 @@ describe("mail recipients today: who gets which notice", function () {
         attachments: [issuedFile("RE-1.pdf")],
       });
 
-      expect(sent[0].bcc).to.equal(null);
+      expect(sent[0].bcc).to.equal(undefined);
     });
   });
 
@@ -201,7 +201,10 @@ describe("mail recipients today: who gets which notice", function () {
 
       expect(recipients()).to.have.members([SUPERVISOR, SECRETARY]);
       expect(recipients()).to.not.include(BOOKER_USER);
-      expect(sent.map((entry) => entry.bcc)).to.deep.equal([null, null]);
+      expect(sent.map((entry) => entry.bcc)).to.deep.equal([
+        undefined,
+        undefined,
+      ]);
     });
 
     it("of a group is one mail per recipient", async function () {
@@ -336,18 +339,21 @@ describe("mail recipients today: who gets which notice", function () {
       expect(sent).to.have.length(0);
     });
 
-    it("sends nothing and answers nothing where there is no recipient", async function () {
+    it("sends nothing and answers skipped where there is no recipient", async function () {
       given();
 
       const answer = await MailerService.send({
+        type: "test",
         tenantId: TENANT,
-        address: "",
+        to: "",
         subject: "Ohne Empfänger",
-        mailTemplate: "{{{content}}}",
-        model: { content: "<p>x</p>" },
+        html: "<p>x</p>",
       });
 
-      expect(answer).to.equal(undefined);
+      expect(answer).to.deep.equal({
+        status: "skipped",
+        reason: "no_recipient",
+      });
       expect(sent).to.have.length(0);
     });
   });

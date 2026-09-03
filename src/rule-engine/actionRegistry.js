@@ -35,15 +35,20 @@ module.exports = {
     if (!params.body) {
       throw new Error("sendEmail: body is required");
     }
-    await MailerService.send({
-      tenantId,
-      address,
-      subject: params.subject,
-      // The body acts as a Handlebars template; placeholders like {{name}}
-      // are resolved against the matched document.
+    // The body acts as a Handlebars template; placeholders like {{name}}
+    // are resolved against the matched document.
+    const html = await MailerService.renderHtml({
       mailTemplate: params.body,
       model: { ...doc, now: new Date() },
-      useInstanceMail: params.useInstanceMail === true,
+      tenantId,
+    });
+    await MailerService.send({
+      type: "rule-email",
+      // A rule that says useInstanceMail sends as the instance.
+      tenantId: params.useInstanceMail === true ? null : tenantId,
+      to: address,
+      subject: params.subject,
+      html,
     });
   },
 };
