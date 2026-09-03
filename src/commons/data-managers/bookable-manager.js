@@ -8,6 +8,7 @@ const {
 } = require("../services/custom-field/custom-field-service");
 const InstanceModel = require("./models/instanceModel");
 const TenantModel = require("./models/tenantModel");
+const { ownCondition } = require("../services/authorization/reach");
 
 /**
  * Data Manager for Bookable objects.
@@ -72,11 +73,13 @@ class BookableManager {
   /**
    * Get all bookables for a tenant
    * @param {string} tenantId Tenant ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Bookable[]>} List of bookables
    */
-  static async getBookables(tenantId) {
+  static async getBookables(tenantId, scope) {
     const [rawBookables, defs] = await Promise.all([
-      BookableModel.find({ tenantId }),
+      BookableModel.find({ tenantId, ...ownCondition("ownerUserId", scope) }),
       this.getCustomFieldDefinitions(tenantId),
     ]);
     return this._toEntitiesWithCustomFields(rawBookables, defs);
@@ -86,11 +89,17 @@ class BookableManager {
    * Get a specific bookable
    * @param {string} id Bookable ID
    * @param {string} tenantId Tenant ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Bookable|null>} Bookable or null
    */
-  static async getBookable(id, tenantId) {
+  static async getBookable(id, tenantId, scope) {
     const [rawBookable, defs] = await Promise.all([
-      BookableModel.findOne({ id, tenantId }),
+      BookableModel.findOne({
+        id,
+        tenantId,
+        ...ownCondition("ownerUserId", scope),
+      }),
       this.getCustomFieldDefinitions(tenantId),
     ]);
     return this._toEntityWithCustomFields(rawBookable, defs);

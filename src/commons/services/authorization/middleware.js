@@ -152,6 +152,17 @@ function tokenAuthorized() {
 }
 
 /**
+ * The reach of a request as the managers take it (spec §4.1, §4.3): what a
+ * handler hands on, never reads.
+ *
+ * @param {import("express").Request} req
+ * @returns {{reach: string|undefined, userId: string|null}}
+ */
+function scopeOf(req) {
+  return { reach: req.reach, userId: req.principal?.userId ?? null };
+}
+
+/**
  * The marker a middleware carries, if any.
  *
  * @param {Function} handler
@@ -168,5 +179,6 @@ module.exports = {
   tokenAuthorized,
   markerOf,
   principalOf,
+  scopeOf,
   MARKER,
 };

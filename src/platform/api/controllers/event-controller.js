@@ -1,13 +1,15 @@
 const EventManager = require("../../../commons/data-managers/event-manager");
 const { Event } = require("../../../commons/entities/event/event");
-const { RolePermission } = require("../../../commons/entities/role/role");
 const bunyan = require("bunyan");
 const EventService = require("../../../commons/services/event-service");
-const PermissionService = require("../../../commons/services/permission-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
-const UserManager = require("../../../commons/data-managers/user-manager");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
-const { BaseError } = require("../../../errors/BaseError");
+const {
+  BaseError,
+  ForbiddenError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
+const { decide, scopeOf } = require("../../../commons/services/authorization");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -56,43 +58,27 @@ class EventController {
     }
   }
 
+  /**
+   * The booked seats of an event: all under reach `any`, under `own` the
+   * seats of the user's own tickets.
+   */
   static async getBookedSeatsCount(request, response) {
     try {
       const tenant = request.params.tenant;
       const id = request.params.id;
-      const user = request.user;
 
-      if (
-        await PermissionService._allowReadAny(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-        )
-      ) {
-        if (id) {
-          const count = await BookingService.getBookedSeatsCount(tenant, id);
-          response.status(200).send({ bookedSeats: count });
-        } else {
-          logger.warn(`Could not get booked seats count. Missing ID.`);
-          response.sendStatus(400);
-        }
-      } else if (
-        await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-          "readOwn",
-        )
-      ) {
-        const count = await BookingService.getBookedSeatsCount(tenant, id, {
-          onlyOwn: true,
-          userId: user.id,
-        });
-
-        response.status(200).send({ bookedSeats: count });
-      } else {
-        response.sendStatus(403);
+      if (!id) {
+        logger.warn(`Could not get booked seats count. Missing ID.`);
+        return response.sendStatus(400);
       }
+
+      const { reach, userId } = scopeOf(request);
+      const count = await BookingService.getBookedSeatsCount(
+        tenant,
+        id,
+        reach === "own" ? { onlyOwn: true, userId } : {},
+      );
+      response.status(200).send({ bookedSeats: count });
     } catch (err) {
       logger.warn(err);
       response.status(500).send("could not get booked seats count");
@@ -128,6 +114,13 @@ class EventController {
 
       const withTicketsBoolean = withTickets === "true";
 
+      // The obsolete PUT carries the update marker; the creation is the
+      // adapter's second decision (authorize spec §5, §11).
+      if (decide(request.principal, "event", "create") !== "any") {
+        logger.warn(`User ${user?.id} not allowed to create event`);
+        throw new ForbiddenError();
+      }
+
       if (
         (await EventManager.checkPublicEventCount(tenant)) === false &&
         event.isPublic
@@ -135,25 +128,11 @@ class EventController {
         throw new Error(`Maximum number of  public  events reached.`);
       }
 
-      if (
-        await PermissionService._allowCreate(
-          event,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-        )
-      ) {
-        await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
-        await EventService.createEvent(tenant, event, user, withTicketsBoolean);
+      await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
+      await EventService.createEvent(tenant, event, user, withTicketsBoolean);
 
-        logger.info(
-          `${tenant} -- created event ${event.id} by user ${user?.id}`,
-        );
-        response.sendStatus(201);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to create event`);
-        response.sendStatus(403);
-      }
+      logger.info(`${tenant} -- created event ${event.id} by user ${user?.id}`);
+      response.sendStatus(201);
     } catch (err) {
       if (err instanceof BaseError) {
         logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
@@ -170,32 +149,26 @@ class EventController {
       const user = request.user;
       const event = new Event(request.body);
 
-      const existingEvents = await EventManager.getEvent(event.id, tenant);
+      // The event within the reach of the request; none there is a 404.
+      const existingEvent = await EventManager.getEvent(
+        event.id,
+        tenant,
+        scopeOf(request),
+      );
+      if (!existingEvent) {
+        throw new NotFoundError("event_not_found", { eventId: event.id });
+      }
 
-      if (!existingEvents?.isPublic && event.isPublic) {
+      if (!existingEvent.isPublic && event.isPublic) {
         if ((await EventManager.checkPublicEventCount(tenant)) === false) {
           throw new Error(`Maximum number of public events reached.`);
         }
       }
 
-      if (
-        await PermissionService._allowUpdate(
-          event,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-        )
-      ) {
-        await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
-        await EventManager.storeEvent(event);
-        logger.info(
-          `${tenant} -- updated event ${event.id} by user ${user?.id}`,
-        );
-        response.sendStatus(201);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to update event`);
-        response.sendStatus(403);
-      }
+      await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
+      await EventManager.storeEvent(event);
+      logger.info(`${tenant} -- updated event ${event.id} by user ${user?.id}`);
+      response.sendStatus(201);
     } catch (err) {
       if (err instanceof BaseError) {
         logger.warn({ err: err.toJSON() }, `${err.name}: ${err.code}`);
@@ -213,23 +186,14 @@ class EventController {
 
       const id = request.params.id;
       if (id) {
-        const event = await EventManager.getEvent(id, tenant);
-
-        if (
-          await PermissionService._allowDelete(
-            event,
-            user.id,
-            tenant,
-            RolePermission.MANAGE_BOOKABLES,
-          )
-        ) {
-          await EventManager.removeEvent(id, tenant);
-          logger.info(`${tenant} -- removed event ${id} by user ${user?.id}`);
-          response.sendStatus(200);
-        } else {
-          logger.warn(`User ${user?.id} not allowed to remove event`);
-          response.sendStatus(403);
+        const event = await EventManager.getEvent(id, tenant, scopeOf(request));
+        if (!event) {
+          return response.sendStatus(404);
         }
+
+        await EventManager.removeEvent(id, tenant);
+        logger.info(`${tenant} -- removed event ${id} by user ${user?.id}`);
+        response.sendStatus(200);
       } else {
         response.sendStatus(400);
       }

@@ -128,7 +128,7 @@ describe("cancellation reprint: POST .../cancellation-receipt", function () {
       ]);
     });
 
-    it("lets the owner reprint their own cancellation, not a stranger", async function () {
+    it("lets the owner reprint their own cancellation; for a stranger the booking does not exist (404)", async function () {
       const id = await cancelledBooking();
 
       const own = await api()
@@ -139,7 +139,8 @@ describe("cancellation reprint: POST .../cancellation-receipt", function () {
       const stranger = await api()
         .post(`/api/${TENANT}/bookings/${id}/cancellation-receipt`)
         .set(h.as("fremd@example.test"));
-      expect(stranger.status).to.equal(403);
+      // Outside the reach `own` the booking is not there (authorize spec §4.2).
+      expect(stranger.status).to.equal(404);
       expect(cancellations(h.stored(id))).to.have.length(2);
     });
 
@@ -247,14 +248,15 @@ describe("cancellation reprint: POST .../cancellation-receipt", function () {
       expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("refuses a user without the booking management right, 403", async function () {
+    it("answers a user who is neither the group's customer nor its administration 404", async function () {
       const id = await cancelledGroup();
 
       const res = await api()
         .post(`/api/${TENANT}/group-bookings/${id}/cancellation-receipt`)
         .set(h.as("fremd@example.test"));
 
-      expect(res.status).to.equal(403);
+      // Outside the reach `own` the group is not there (authorize spec §4.2).
+      expect(res.status).to.equal(404);
       expect(h.takeEffects()).to.deep.equal([]);
     });
   });

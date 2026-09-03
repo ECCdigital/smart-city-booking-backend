@@ -1,7 +1,6 @@
 const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 const bunyan = require("bunyan");
-const PermissionsService = require("../../../commons/services/permission-service");
-const { RolePermission } = require("../../../commons/entities/role/role");
+const { scopeOf } = require("../../../commons/services/authorization");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
@@ -32,8 +31,12 @@ class GroupBookingController {
       const tenantId = req.params.tenant;
       const user = req.user;
 
-      const groupBookings =
-        await GroupBookingManager.getGroupBookings(tenantId);
+      // The groups within the reach of the request (authorize spec §4.1,
+      // §7.1): a customer's own, the administration's all.
+      const groupBookings = await GroupBookingManager.getGroupBookings(
+        tenantId,
+        scopeOf(req),
+      );
 
       logger.info(
         { tenantId: tenantId, user: user.id },
@@ -54,35 +57,22 @@ class GroupBookingController {
 
       const populate = req.query.populate === "true";
 
+      // The group within the reach of the request; none there is a 404.
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
         populate,
+        scopeOf(req),
       );
-
-      if (
-        user &&
-        (await PermissionsService._allowRead(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        logger.info(
-          { tenantId: tenantId, user: user.id },
-          "Group booking retrieved successfully",
-        );
-        res.status(200).send(groupBooking);
-      } else {
-        logger.error(
-          { tenantId: tenantId, user: user.id },
-          "User not allowed to read group booking",
-        );
-        res.status(403).send({
-          message: "User not allowed to read group booking",
-        });
+      if (!groupBooking) {
+        return GroupBookingController._notFound(res, groupBookingId);
       }
+
+      logger.info(
+        { tenantId: tenantId, user: user.id },
+        "Group booking retrieved successfully",
+      );
+      res.status(200).send(groupBooking);
     } catch (error) {
       res.status(500).send({ message: error.message });
     }
@@ -95,35 +85,22 @@ class GroupBookingController {
       const bookingId = req.params.bookingId;
       const populate = req.query.populate === "true";
 
+      // The group within the reach of the request; none there is a 404.
       const groupBooking = await GroupBookingManager.getGroupBookingByBookingId(
         tenantId,
         bookingId,
         populate,
+        scopeOf(req),
       );
-
-      if (
-        user &&
-        (await PermissionsService._allowRead(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        logger.info(
-          { tenantId: tenantId, user: user.id },
-          "Group booking retrieved successfully",
-        );
-        res.status(200).send(groupBooking);
-      } else {
-        logger.error(
-          { tenantId: tenantId, user: user.id },
-          "User not allowed to read group booking",
-        );
-        res.status(403).send({
-          message: "User not allowed to read group booking",
-        });
+      if (!groupBooking) {
+        return GroupBookingController._notFound(res, bookingId);
       }
+
+      logger.info(
+        { tenantId: tenantId, user: user.id },
+        "Group booking retrieved successfully",
+      );
+      res.status(200).send(groupBooking);
     } catch (error) {
       res.status(500).send({ message: error.message });
     }
@@ -131,7 +108,6 @@ class GroupBookingController {
 
   static async updateGroupBooking(req, res) {
     const tenantId = req.params.tenant;
-    const user = req.user;
 
     try {
       const groupBookingId = req.params.id;
@@ -141,33 +117,17 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
       );
-
-      if (
-        user &&
-        (await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        const updatedGroupBooking =
-          await GroupBookingManager.updateGroupBooking(
-            tenantId,
-            groupBookingId,
-            updateData,
-          );
-
-        return res.status(200).send(updatedGroupBooking);
-      } else {
-        logger.error(
-          { tenantId: tenantId, user: user.id },
-          "User not allowed to update group booking",
-        );
-        res.status(403).send({
-          message: "User not allowed to update group booking",
-        });
+      if (!groupBooking) {
+        return GroupBookingController._notFound(res, groupBookingId);
       }
+
+      const updatedGroupBooking = await GroupBookingManager.updateGroupBooking(
+        tenantId,
+        groupBookingId,
+        updateData,
+      );
+
+      return res.status(200).send(updatedGroupBooking);
     } catch (error) {
       logger.error(
         { tenantId: tenantId, error: error.message },
@@ -175,6 +135,15 @@ class GroupBookingController {
       );
       res.status(500).send({ message: error.message });
     }
+  }
+
+  /** Answers the 404 of a group that is not there for this request. */
+  static _notFound(res, groupBookingId) {
+    const error = new NotFoundError("group_booking_not_found", {
+      groupBookingId,
+    });
+    res.status(error.statusCode).json(error.toJSON());
+    return null;
   }
 
   /**
@@ -187,25 +156,9 @@ class GroupBookingController {
       true,
     );
     if (!groupBooking) {
-      const error = new NotFoundError("group_booking_not_found", {
-        groupBookingId: req.params.id,
-      });
-      res.status(error.statusCode).json(error.toJSON());
-      return null;
+      return GroupBookingController._notFound(res, req.params.id);
     }
     return groupBooking;
-  }
-
-  static async _allowed(groupBooking, user, tenantId) {
-    return (
-      user &&
-      (await PermissionsService._allowUpdate(
-        groupBooking,
-        user.id,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-      ))
-    );
   }
 
   /**
@@ -215,7 +168,6 @@ class GroupBookingController {
    */
   static async commitGroupBooking(req, res) {
     const tenantId = req.params.tenant;
-    const user = req.user;
 
     try {
       const groupBookingId = req.params.id;
@@ -224,46 +176,36 @@ class GroupBookingController {
         return;
       }
 
-      if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
-        const errors = BookingService.transitionErrors(
-          TRANSITION.CONFIRM,
-          groupBooking.bookings,
-        );
-        if (errors.length > 0) {
-          logger.error(
-            `${tenantId} -- group-booking ${groupBookingId} cannot be committed: ${JSON.stringify(errors)}`,
-          );
-          return res.status(200).json({
-            success: false,
-            data: null,
-            errors,
-          });
-        }
-
-        await groupBookingLifecycle.confirm(tenantId, groupBookingId, {
-          trigger: TRIGGER.ADMIN,
-        });
-
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
-          tenantId,
-          groupBookingId,
-          true,
-        );
-
-        return res.status(200).json({
-          success: true,
-          data: updatedGroupBooking,
-          errors: [],
-        });
-      } else {
+      const errors = BookingService.transitionErrors(
+        TRANSITION.CONFIRM,
+        groupBooking.bookings,
+      );
+      if (errors.length > 0) {
         logger.error(
-          { tenantId: tenantId, user: user?.id },
-          "User not allowed to commit group booking",
+          `${tenantId} -- group-booking ${groupBookingId} cannot be committed: ${JSON.stringify(errors)}`,
         );
-        res.status(403).send({
-          message: "User not allowed to commit group booking",
+        return res.status(200).json({
+          success: false,
+          data: null,
+          errors,
         });
       }
+
+      await groupBookingLifecycle.confirm(tenantId, groupBookingId, {
+        trigger: TRIGGER.ADMIN,
+      });
+
+      const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: updatedGroupBooking,
+        errors: [],
+      });
     } catch (error) {
       answerTransitionError(error, res, {
         code: "booking_commit_failed",
@@ -279,7 +221,6 @@ class GroupBookingController {
   static async payGroupBooking(req, res) {
     const tenantId = req.params.tenant;
     try {
-      const user = req.user;
       const groupBookingId = req.params.id;
       const { paymentMethod, timePaid } = req.body;
 
@@ -288,33 +229,23 @@ class GroupBookingController {
         return;
       }
 
-      if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
-        await groupBookingLifecycle.pay(tenantId, groupBookingId, {
-          trigger: TRIGGER.ADMIN,
-          paymentMethod,
-          timePaid,
-        });
+      await groupBookingLifecycle.pay(tenantId, groupBookingId, {
+        trigger: TRIGGER.ADMIN,
+        paymentMethod,
+        timePaid,
+      });
 
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
-          tenantId,
-          groupBookingId,
-          true,
-        );
+      const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+      );
 
-        return res.status(200).json({
-          success: true,
-          data: updatedGroupBooking,
-          errors: [],
-        });
-      } else {
-        logger.error(
-          { tenantId: tenantId, user: user?.id },
-          "User not allowed to pay group booking",
-        );
-        res.status(403).send({
-          message: "User not allowed to pay group booking",
-        });
-      }
+      return res.status(200).json({
+        success: true,
+        data: updatedGroupBooking,
+        errors: [],
+      });
     } catch (error) {
       answerTransitionError(error, res, {
         code: "set_aggregated_booking_payed_failed",
@@ -327,7 +258,6 @@ class GroupBookingController {
     try {
       const tenantId = req.params.tenant;
       const groupBookingId = req.params.id;
-      const user = req.user;
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
@@ -335,16 +265,6 @@ class GroupBookingController {
 
       if (!groupBooking) {
         return res.sendStatus(404);
-      }
-
-      const hasPermission = await PermissionsService._allowUpdate(
-        groupBooking,
-        user.id,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-      );
-      if (!hasPermission) {
-        return res.sendStatus(403);
       }
 
       const preview = await BookingService.getGroupCancellationRefundPreview(
@@ -387,51 +307,41 @@ class GroupBookingController {
         return;
       }
 
-      if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
-        const errors = BookingService.transitionErrors(
-          TRANSITION.CANCEL,
-          groupBooking.bookings,
-        );
-        if (errors.length > 0) {
-          logger.error(
-            `${tenantId} -- group-booking ${groupBookingId} cannot be rejected: ${JSON.stringify(errors)}`,
-          );
-          return res.status(200).json({
-            success: false,
-            data: null,
-            errors,
-          });
-        }
-
-        await groupBookingLifecycle.cancel(tenantId, groupBookingId, {
-          trigger: TRIGGER.ADMIN,
-          reason,
-          bankDetails: bankDetails || null,
-          refundPercentage,
-          cancelledByUserId: user.id,
-          withDocument: !skipCancellation,
-        });
-
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
-          tenantId,
-          groupBookingId,
-          true,
-        );
-
-        return res.status(200).json({
-          success: true,
-          data: updatedGroupBooking,
-          errors: [],
-        });
-      } else {
+      const errors = BookingService.transitionErrors(
+        TRANSITION.CANCEL,
+        groupBooking.bookings,
+      );
+      if (errors.length > 0) {
         logger.error(
-          { tenantId: tenantId, user: user?.id },
-          "User not allowed to reject group booking",
+          `${tenantId} -- group-booking ${groupBookingId} cannot be rejected: ${JSON.stringify(errors)}`,
         );
-        res.status(403).send({
-          message: "User not allowed to reject group booking",
+        return res.status(200).json({
+          success: false,
+          data: null,
+          errors,
         });
       }
+
+      await groupBookingLifecycle.cancel(tenantId, groupBookingId, {
+        trigger: TRIGGER.ADMIN,
+        reason,
+        bankDetails: bankDetails || null,
+        refundPercentage,
+        cancelledByUserId: user.id,
+        withDocument: !skipCancellation,
+      });
+
+      const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: updatedGroupBooking,
+        errors: [],
+      });
     } catch (error) {
       answerTransitionError(error, res, {
         code: "booking_rejection_failed",
@@ -443,64 +353,50 @@ class GroupBookingController {
   static async createGroupBookingReceipt(req, res) {
     try {
       const tenantId = req.params.tenant;
-      const user = req.user;
       const groupBookingId = req.params.id;
 
+      // The group within the reach of the request; none there is a 404.
       const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+        scopeOf(req),
+      );
+      if (!groupBooking) {
+        return GroupBookingController._notFound(res, groupBookingId);
+      }
+
+      const errors = BookingService.reprintErrors(
+        "receipt",
+        groupBooking.bookings,
+      );
+      if (errors.length > 0) {
+        logger.error(
+          `${tenantId} -- group-booking ${groupBookingId} cannot get a receipt: ${JSON.stringify(errors)}`,
+        );
+        return res.status(200).json({ success: false, data: null, errors });
+      }
+
+      // A reprint is a further revision of the one aggregated receipt,
+      // attached to every member; nothing is mailed.
+      await issueDocument({
+        tenantId,
+        bookingIds: groupBooking.bookingIds,
+        type: "receipt",
+        groupBookingId,
+      });
+
+      const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
         true,
       );
 
-      if (
-        user &&
-        (await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        const errors = BookingService.reprintErrors(
-          "receipt",
-          groupBooking.bookings,
-        );
-        if (errors.length > 0) {
-          logger.error(
-            `${tenantId} -- group-booking ${groupBookingId} cannot get a receipt: ${JSON.stringify(errors)}`,
-          );
-          return res.status(200).json({ success: false, data: null, errors });
-        }
-
-        // A reprint is a further revision of the one aggregated receipt,
-        // attached to every member; nothing is mailed.
-        await issueDocument({
-          tenantId,
-          bookingIds: groupBooking.bookingIds,
-          type: "receipt",
-          groupBookingId,
-        });
-
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
-          tenantId,
-          groupBookingId,
-          true,
-        );
-
-        return res.status(200).json({
-          success: true,
-          data: updatedGroupBooking,
-          errors: [],
-        });
-      } else {
-        logger.error(
-          { tenantId: tenantId, user: user.id },
-          "User not allowed to create group booking receipt",
-        );
-        res.status(403).send({
-          message: "User not allowed to create group booking receipt",
-        });
-      }
+      return res.status(200).json({
+        success: true,
+        data: updatedGroupBooking,
+        errors: [],
+      });
     } catch (error) {
       res.status(500).send({ message: error.message });
     }
@@ -509,7 +405,6 @@ class GroupBookingController {
   static async createGroupBookingInvoice(req, res) {
     try {
       const tenantId = req.params.tenant;
-      const user = req.user;
       const groupBookingId = req.params.id;
       const shouldSendEmail = req.query.sendEmail !== "false";
 
@@ -518,81 +413,63 @@ class GroupBookingController {
         groupBookingId,
         true,
       );
+      if (!groupBooking) {
+        return GroupBookingController._notFound(res, groupBookingId);
+      }
 
-      if (
-        user &&
-        (await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        const invoiceApp = await TenantManager.getTenantApp(
-          tenantId,
-          "invoice",
-        );
-        if (!invoiceApp || !invoiceApp.active) {
-          return res.status(400).send({
-            message: "Invoice app not found or inactive.",
-          });
-        }
-
-        const errors = BookingService.reprintErrors(
-          "invoice",
-          groupBooking.bookings,
-        );
-        if (errors.length > 0) {
-          logger.error(
-            `${tenantId} -- group-booking ${groupBookingId} cannot get an invoice: ${JSON.stringify(errors)}`,
-          );
-          return res.status(200).json({ success: false, data: null, errors });
-        }
-
-        const { file } = await issueDocument({
-          tenantId,
-          bookingIds: groupBooking.bookingIds,
-          type: "invoice",
-          groupBookingId,
-        });
-
-        if (shouldSendEmail) {
-          try {
-            await mailService.notify("INVOICE", {
-              tenantId,
-              bookingIds: groupBooking.bookingIds,
-              groupBookingId,
-              attachments: [file],
-            });
-          } catch (err) {
-            logger.error(
-              "Error while sending aggregated invoice:",
-              groupBookingId,
-              err,
-            );
-          }
-        }
-
-        const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
-          tenantId,
-          groupBookingId,
-          true,
-        );
-
-        return res.status(200).json({
-          success: true,
-          data: updatedGroupBooking,
-          errors: [],
-        });
-      } else {
-        logger.error(
-          { tenantId: tenantId, user: user.id },
-          "User not allowed to create group booking invoice",
-        );
-        res.status(403).send({
-          message: "User not allowed to create group booking invoice",
+      const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
+      if (!invoiceApp || !invoiceApp.active) {
+        return res.status(400).send({
+          message: "Invoice app not found or inactive.",
         });
       }
+
+      const errors = BookingService.reprintErrors(
+        "invoice",
+        groupBooking.bookings,
+      );
+      if (errors.length > 0) {
+        logger.error(
+          `${tenantId} -- group-booking ${groupBookingId} cannot get an invoice: ${JSON.stringify(errors)}`,
+        );
+        return res.status(200).json({ success: false, data: null, errors });
+      }
+
+      const { file } = await issueDocument({
+        tenantId,
+        bookingIds: groupBooking.bookingIds,
+        type: "invoice",
+        groupBookingId,
+      });
+
+      if (shouldSendEmail) {
+        try {
+          await mailService.notify("INVOICE", {
+            tenantId,
+            bookingIds: groupBooking.bookingIds,
+            groupBookingId,
+            attachments: [file],
+          });
+        } catch (err) {
+          logger.error(
+            "Error while sending aggregated invoice:",
+            groupBookingId,
+            err,
+          );
+        }
+      }
+
+      const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: updatedGroupBooking,
+        errors: [],
+      });
     } catch (error) {
       res.status(500).send({ message: error.message });
     }
@@ -607,35 +484,17 @@ class GroupBookingController {
   static async createGroupBookingCancellationReceipt(req, res) {
     try {
       const tenantId = req.params.tenant;
-      const user = req.user;
       const groupBookingId = req.params.id;
 
+      // The group within the reach of the request; none there is a 404.
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
       if (!groupBooking) {
-        return res.status(404).send({ message: "Group booking not found." });
-      }
-
-      if (
-        !user ||
-        !(await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        logger.error(
-          { tenantId: tenantId, user: user?.id },
-          "User not allowed to create group booking cancellation receipt",
-        );
-        return res.status(403).send({
-          message:
-            "User not allowed to create group booking cancellation receipt",
-        });
+        return GroupBookingController._notFound(res, groupBookingId);
       }
 
       const bookings = groupBooking.bookings;
@@ -688,37 +547,21 @@ class GroupBookingController {
   static async removeGroupBooking(req, res) {
     try {
       const tenantId = req.params.tenant;
-      const user = req.user;
       const groupBookingId = req.params.id;
 
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
       );
-      if (
-        user &&
-        (await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        for (const bookingId of groupBooking.bookingIds) {
-          await bookingDeletion.remove(tenantId, bookingId);
-          await WorkflowService.removeTask(tenantId, bookingId);
-        }
-        await GroupBookingManager.deleteGroupBooking(tenantId, groupBookingId);
-        res.status(200).send(groupBooking);
-      } else {
-        logger.error(
-          { tenantId: tenantId, user: user.id },
-          "User not allowed to remove group booking",
-        );
-        res.status(403).send({
-          message: "User not allowed to remove group booking",
-        });
+      if (!groupBooking) {
+        return GroupBookingController._notFound(res, groupBookingId);
       }
+      for (const bookingId of groupBooking.bookingIds) {
+        await bookingDeletion.remove(tenantId, bookingId);
+        await WorkflowService.removeTask(tenantId, bookingId);
+      }
+      await GroupBookingManager.deleteGroupBooking(tenantId, groupBookingId);
+      res.status(200).send(groupBooking);
     } catch (error) {
       res.status(500).send({ message: error.message });
     }

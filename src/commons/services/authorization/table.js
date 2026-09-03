@@ -63,9 +63,18 @@ function crud(group, { publicRead = false } = {}) {
 const TABLE = {
   // --- tenant level (`/api/:tenant`, `/api/v2/:tenant`, `routes/*`) -----
 
+  // An entry that is public *and* has own/any belongs only to a route with
+  // a public projection (`GET /bookings?public=true`, the bookings of an
+  // event or a bookable); a read route without one has its own entry
+  // without `public`, else the handler would have to turn the anonymous
+  // away itself (§11, ticket 2).
   bookable: {
-    ...crud("manageBookables", { publicRead: true }),
+    ...crud("manageBookables"),
+    // `/bookables/public*`, `openingHours`, `occupancy`, `prices`
+    readPublic: { public: true },
     template: { any: "manageBookables.create" },
+    // `_meta/tags`, `count/check`: signed in, nothing further (as today).
+    meta: { own: "signedIn" },
     // `GET /bookables/:id/bookings`
     relatedBookings: {
       public: true,
@@ -90,13 +99,23 @@ const TABLE = {
       own: "manageBookables.readOwn",
       any: "manageBookables.readAny",
     },
+    // `_meta/tags`, `count/check`: signed in, nothing further (as today).
+    meta: { own: "signedIn" },
   },
 
   booking: {
-    // `/status/public` and `/:ids/status` are the public part.
-    read: { public: true, own: "signedIn", any: "manageBookings.readAny" },
+    // `GET /bookings/:id`, `/bookings/assigned`
+    read: { own: "signedIn", any: "manageBookings.readAny" },
+    // `GET /bookings` (`?public=true` is the anonymized projection) and
+    // `GET /events/:id/bookings`.
+    list: { public: true, own: "signedIn", any: "manageBookings.readAny" },
+    // The customer's lookups by id and name: `/:ids/status`,
+    // `/:id/status/public`, `/:id/cancellation-refund-preview/public`.
+    lookup: { public: true },
     // Receipt, invoice, cancellation receipt, reprint.
     document: { own: "signedIn", any: "manageBookings.readAny" },
+    // The administration's manual invoice.
+    invoice: { any: "manageBookings.updateAny" },
     // The admin PUT.
     create: { any: "manageBookings.create" },
     update: { any: "manageBookings.updateAny" },
@@ -104,8 +123,8 @@ const TABLE = {
     pay: { any: "manageBookings.updateAny" },
     reject: { any: "manageBookings.updateAny" },
     delete: { any: "manageBookings.deleteAny" },
-    // Refund preview and the customer's cancellation; `/public` is public.
-    cancel: { public: true, own: "signedIn", any: "manageBookings.updateAny" },
+    // The refund preview of the customer's cancellation.
+    cancel: { own: "signedIn", any: "manageBookings.updateAny" },
     // Access: open, unlatch, close, status, access points, eligibility.
     operate: { own: "signedIn", any: "manageBookings.updateAny" },
   },
@@ -118,7 +137,10 @@ const TABLE = {
     pay: { any: "manageBookings.updateAny" },
     reject: { any: "manageBookings.updateAny" },
     delete: { any: "manageBookings.deleteAny" },
+    // Receipt and cancellation receipt reprint.
     document: { own: "signedIn", any: "manageBookings.updateAny" },
+    // The administration's manual invoice.
+    invoice: { any: "manageBookings.updateAny" },
   },
 
   coupon: {
@@ -129,6 +151,9 @@ const TABLE = {
 
   role: {
     read: { any: "manageRoles.readAny" },
+    // `GET /roles`: the roles under any; under own, the public projection
+    // (`?public=true`) or none - a role has no owner (§4.1).
+    list: { own: "signedIn", any: "manageRoles.readAny" },
     create: { any: "manageRoles.create" },
     update: { any: "manageRoles.updateAny" },
     delete: { any: "manageRoles.deleteAny" },
@@ -197,6 +222,9 @@ const TABLE = {
     manage: { any: "manageUsers.updateAny" },
     // `/invitations/my`
     readMine: { own: "signedIn" },
+    // `/:token/verify`, `/accept`, `/reject`: the invitee's own token; the
+    // service checks the intended user.
+    respond: { own: "signedIn" },
   },
 
   tenantUser: {

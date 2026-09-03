@@ -7,7 +7,6 @@ const {
 } = require("../src/commons/data-managers/bookable-manager");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
-const PermissionService = require("../src/commons/services/permission-service");
 const { ValidationError } = require("../src/errors/ValidationError");
 
 function knownAccessPoint(id) {
@@ -31,8 +30,6 @@ describe("BookableController access point references", () => {
       tenantId: "tenant-1",
       isPublic: false,
     });
-    sandbox.stub(PermissionService, "_allowCreate").resolves(true);
-    sandbox.stub(PermissionService, "_allowUpdate").resolves(true);
 
     request = {
       params: { tenant: "tenant-1" },
@@ -44,6 +41,9 @@ describe("BookableController access point references", () => {
         accessPointDetails: { active: true, accessPointIds: [] },
       },
       user: { id: "user-1" },
+      // The tenant owner: reach any, and the right to create.
+      reach: "any",
+      principal: { userId: "user-1", isTenantOwner: true, grants: {} },
     };
     response = {
       status: sandbox.stub().returnsThis(),

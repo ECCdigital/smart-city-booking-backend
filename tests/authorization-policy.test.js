@@ -158,7 +158,8 @@ describe("authorization policy: hand cases", function () {
   it("a principal without a tenant has no grants and is no tenant owner", function () {
     const noTenant = principal({ tenantId: null });
     expect(decide(noTenant, "coupon", "read")).to.equal(null);
-    expect(decide(noTenant, "bookable", "read")).to.equal(REACH.PUBLIC);
+    expect(decide(noTenant, "bookable", "read")).to.equal(null);
+    expect(decide(noTenant, "bookable", "readPublic")).to.equal(REACH.PUBLIC);
     expect(decide(noTenant, "booking", "read")).to.equal(REACH.OWN);
     expect(decide(noTenant, "user", "readSelf")).to.equal(REACH.OWN);
   });
@@ -173,7 +174,8 @@ describe("authorization policy: hand cases", function () {
 
   it("an anonymous principal reaches public entries only", function () {
     expect(decide(anonymous(), "event", "read")).to.equal(REACH.PUBLIC);
-    expect(decide(anonymous(), "booking", "read")).to.equal(REACH.PUBLIC);
+    expect(decide(anonymous(), "booking", "read")).to.equal(null);
+    expect(decide(anonymous(), "booking", "list")).to.equal(REACH.PUBLIC);
     expect(decide(anonymous(), "booking", "document")).to.equal(null);
     expect(decide(anonymous(), "checkout", "all")).to.equal(REACH.PUBLIC);
   });
@@ -182,7 +184,8 @@ describe("authorization policy: hand cases", function () {
     expect(decide(signedIn(), "booking", "read")).to.equal(REACH.OWN);
     expect(decide(signedIn(), "booking", "operate")).to.equal(REACH.OWN);
     expect(decide(signedIn(), "booking", "update")).to.equal(null);
-    expect(decide(signedIn(), "bookable", "read")).to.equal(REACH.PUBLIC);
+    expect(decide(signedIn(), "bookable", "read")).to.equal(null);
+    expect(decide(signedIn(), "bookable", "readPublic")).to.equal(REACH.PUBLIC);
   });
 
   it("a tenant owner reaches any of the tenant, but not the instance", function () {

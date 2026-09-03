@@ -4,11 +4,10 @@ const {
 const EventManager = require("../../../commons/data-managers/event-manager");
 const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
-const { RolePermission } = require("../../../commons/entities/role/role");
-const PermissionService = require("../../../commons/services/permission-service");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
-const { BaseError } = require("../../../errors/BaseError");
+const { BaseError, ForbiddenError } = require("../../../errors/BaseError");
+const { decide, scopeOf } = require("../../../commons/services/authorization");
 const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
@@ -66,9 +65,9 @@ class BookableController {
   /**
    * This method is used to get all bookable objects for a specific tenant.
    * It first fetches all bookables from the database.
+   * The reach of the request is the query's condition (authorize spec §4.1).
    * If the 'populate' query parameter is set to 'true', it populates each bookable with related data.
-   * Then it filters out the bookables that the user is not allowed to read.
-   * Finally, it sends the allowed bookables back with a 200 status code.
+   * Finally, it sends the bookables back with a 200 status code.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
@@ -79,22 +78,10 @@ class BookableController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const bookables = await BookableManager.getBookables(tenant);
-
-      const allowedBookables = [];
-
-      for (const b of bookables) {
-        if (
-          await PermissionService._allowRead(
-            b,
-            user.id,
-            tenant,
-            RolePermission.MANAGE_BOOKABLES,
-          )
-        ) {
-          allowedBookables.push(b);
-        }
-      }
+      const allowedBookables = await BookableManager.getBookables(
+        tenant,
+        scopeOf(request),
+      );
 
       if (request.query.populate === "true") {
         for (const bookable of allowedBookables) {
@@ -170,11 +157,9 @@ class BookableController {
    * This method is used to get a specific bookable object.
    * It first checks if the bookable id is provided in the request.
    * If not, it sends a 400 status code with an error message.
-   * If the id is provided, it tries to fetch the bookable from the database.
-   * If the bookable is not found, it sends a 404 status code with an error message.
-   * If the bookable is found, it checks if the user is allowed to read the bookable.
-   * If the user is not allowed, it sends a 403 status code.
-   * If the user is allowed, it populates the bookable with related data if requested,
+   * If the id is provided, it tries to fetch the bookable within the reach of the request.
+   * If the bookable is not found there, it sends a 404 status code with an error message.
+   * If the bookable is found, it populates the bookable with related data if requested,
    * and sends the bookable back with a 200 status code.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
@@ -192,24 +177,14 @@ class BookableController {
         return response.status(400).send(`${tenant} -- No id provided`);
       }
 
-      const bookable = await BookableManager.getBookable(id, tenant);
+      const bookable = await BookableManager.getBookable(
+        id,
+        tenant,
+        scopeOf(request),
+      );
       if (!bookable) {
         logger.warn(`${tenant} -- Bookable with id ${id} not found.`);
         return response.status(404).send(`Bookable with id ${id} not found`);
-      }
-
-      if (
-        !(await PermissionService._allowRead(
-          bookable,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-        ))
-      ) {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to read bookable ${id}`,
-        );
-        return response.sendStatus(403);
       }
 
       if (request.query.populate === "true") {
@@ -258,10 +233,12 @@ class BookableController {
    * It first creates a new bookable object from the request body and assigns a unique id and the user id to it.
    * Then it checks if the maximum number of public bookables has been reached, if the bookable is public.
    * If the maximum number has been reached, it throws an error.
-   * If the maximum number has not been reached, it checks if the user is allowed to create the bookable.
-   * If the user is allowed, it stores the bookable in the database and sends a 201 status code.
-   * If the user is not allowed, it sends a 403 status code.
+   * If the maximum number has not been reached, it stores the bookable in the database and sends a 201 status code.
    * If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
+   *
+   * The route carries the update marker (the obsolete PUT stores both ways);
+   * the creation is the adapter's second decision (authorize spec §5, §11)
+   * and answers 403 without it.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
@@ -271,6 +248,13 @@ class BookableController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
+
+      if (decide(request.principal, "bookable", "create") !== "any") {
+        logger.warn(
+          `${tenant} -- User ${user?.id} is not allowed to create bookable`,
+        );
+        return next(new ForbiddenError());
+      }
 
       const bookable = new Bookable(request.body);
       bookable.id = uuidv4();
@@ -284,28 +268,14 @@ class BookableController {
         throw new Error(`Maximum number of public bookables reached.`);
       }
 
-      if (
-        await PermissionService._allowCreate(
-          bookable,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-        )
-      ) {
-        await BookableController._validateAccessPointIds(bookable, tenant);
-        BookableController._validateAccessBuffers(bookable);
-        await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
-        await BookableManager.storeBookable(bookable);
-        logger.info(
-          `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
-        );
-        response.status(201).send(bookable);
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to create bookable`,
-        );
-        response.sendStatus(403);
-      }
+      await BookableController._validateAccessPointIds(bookable, tenant);
+      BookableController._validateAccessBuffers(bookable);
+      await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
+      await BookableManager.storeBookable(bookable);
+      logger.info(
+        `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
+      );
+      response.status(201).send(bookable);
     } catch (err) {
       logger.error(err);
       if (err instanceof BaseError) {
@@ -320,12 +290,10 @@ class BookableController {
 
   /**
    * This method is used to update an existing bookable object.
-   * It first fetches the existing bookable from the database.
+   * It first fetches the existing bookable within the reach of the request; none there is a 404.
    * If the existing bookable is private and the updated bookable is public, it checks if the maximum number of public bookables has been reached.
    * If the maximum number has been reached, it throws an error.
-   * If the maximum number has not been reached, it checks if the user is allowed to update the bookable.
-   * If the user is allowed, it updates the bookable in the database and sends a 201 status code.
-   * If the user is not allowed, it sends a 403 status code.
+   * If the maximum number has not been reached, it updates the bookable in the database and sends a 201 status code.
    * If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
@@ -342,9 +310,16 @@ class BookableController {
       const existingBookable = await BookableManager.getBookable(
         bookable.id,
         tenant,
+        scopeOf(request),
       );
+      if (!existingBookable) {
+        logger.warn(`${tenant} -- Bookable with id ${bookable.id} not found.`);
+        return response
+          .status(404)
+          .send(`Bookable with id ${bookable.id} not found`);
+      }
 
-      if (!existingBookable?.isPublic && bookable.isPublic) {
+      if (!existingBookable.isPublic && bookable.isPublic) {
         if (
           (await BookableManager.checkPublicBookableCount(
             bookable.tenantId,
@@ -354,28 +329,14 @@ class BookableController {
         }
       }
 
-      if (
-        await PermissionService._allowUpdate(
-          existingBookable,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-        )
-      ) {
-        await BookableController._validateAccessPointIds(bookable, tenant);
-        BookableController._validateAccessBuffers(bookable);
-        await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
-        await BookableManager.storeBookable(bookable);
-        logger.info(
-          `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
-        );
-        response.status(201).send(bookable);
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to update bookable`,
-        );
-        response.sendStatus(403);
-      }
+      await BookableController._validateAccessPointIds(bookable, tenant);
+      BookableController._validateAccessBuffers(bookable);
+      await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
+      await BookableManager.storeBookable(bookable);
+      logger.info(
+        `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
+      );
+      response.status(201).send(bookable);
     } catch (err) {
       logger.error(err);
       if (err instanceof BaseError) {
@@ -474,13 +435,8 @@ class BookableController {
   }
 
   /**
-   * This method is used to update an existing bookable object.
-   * It first fetches the existing bookable from the database.
-   * If the existing bookable is private and the updated bookable is public, it checks if the maximum number of public bookables has been reached.
-   * If the maximum number has been reached, it throws an error.
-   * If the maximum number has not been reached, it checks if the user is allowed to update the bookable.
-   * If the user is allowed, it updates the bookable in the database and sends a 201 status code.
-   * If the user is not allowed, it sends a 403 status code.
+   * This method removes a bookable. It fetches the bookable within the reach of the request;
+   * none there is a 404. Then it removes the bookable and sends a 200 status code.
    * If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
@@ -494,27 +450,19 @@ class BookableController {
       const id = request.params.id;
 
       if (id) {
-        const bookable = await BookableManager.getBookable(id, tenant);
-
-        if (
-          await PermissionService._allowDelete(
-            bookable,
-            user.id,
-            tenant,
-            RolePermission.MANAGE_BOOKABLES,
-          )
-        ) {
-          await BookableManager.removeBookable(id, tenant);
-          logger.info(
-            `${tenant} -- Bookable ${id} removed by user ${user?.id}`,
-          );
-          response.sendStatus(200);
-        } else {
-          logger.warn(
-            `${tenant} -- User ${user?.id} is not allowed to remove bookable`,
-          );
-          response.sendStatus(403);
+        const bookable = await BookableManager.getBookable(
+          id,
+          tenant,
+          scopeOf(request),
+        );
+        if (!bookable) {
+          logger.warn(`${tenant} -- Bookable with id ${id} not found.`);
+          return response.status(404).send(`Bookable with id ${id} not found`);
         }
+
+        await BookableManager.removeBookable(id, tenant);
+        logger.info(`${tenant} -- Bookable ${id} removed by user ${user?.id}`);
+        response.sendStatus(200);
       } else {
         logger.warn(`${tenant} -- Could not remove bookable. No id provided.`);
         response.sendStatus(400);
@@ -674,17 +622,6 @@ class BookableController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-
-      if (
-        !(await PermissionService._allowCreate(
-          { tenantId: tenant },
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKABLES,
-        ))
-      ) {
-        return response.sendStatus(403);
-      }
 
       const defs = await BookableManager.getCustomFieldDefinitions(tenant);
 
