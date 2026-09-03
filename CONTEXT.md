@@ -252,3 +252,29 @@ _Avoid_: paymentRequest (als Sprechbegriff), Rechnungsversand (das ist nur eine 
 **Löschung (einer Buchung)**:
 Das harte Entfernen einer Buchung durch die Verwaltung — kein Lebenszyklus-Übergang, denn eine gelöschte Buchung hat keinen Zustand mehr. Läuft über dieselbe Naht wie die Übergänge: der Zugang wird zurückgenommen, die Buchungsdokumente werden entfernt (ein Dokument, das seine Buchung überlebt, könnte niemand mehr erreichen), dann die Buchung. Nicht zu verwechseln mit dem Storno, das die Buchung im Zustand „storniert" behält.
 _Avoid_: Delete (als Sprechbegriff), Storno (das ist der Übergang), Entfernen (unqualifiziert)
+
+### Mitteilungen
+
+**Mitteilung**:
+Eine Mail, die die Plattform aus einem Anlass versendet — mit einer Mitteilungsart, einem Empfängerkreis und einem Inhalt aus Betreff, Text und Anhängen. Sie entsteht als Ganzes und wird danach über einen Versandweg zugestellt; ihr Entstehen liest nichts zweimal, ihr Versand baut nichts nach.
+_Avoid_: Mail (unqualifiziert), E-Mail-Benachrichtigung, Notification, Sendung
+
+**Mitteilungsart**:
+Der Anlass einer Mitteilung — Buchungsbestätigung, Stornierung, Zahlungsaufforderung, Einladung, Passwort-Reset und so fort. Sie legt fest, wer sie bekommt, welche Mail-Vorlage sie trägt und was ihr beiliegt; Aufrufer nennen die Art, nie einen Empfänger oder ein Template.
+_Avoid_: MailType (als Sprechbegriff), Template-Name, Mail-Typ
+
+**Empfängerkreis (einer Mitteilungsart)**:
+Wer eine Mitteilung dieser Art bekommt: der _Buchende_, der _Mandant_, die _Aufsicht_ (die am Mandanten hinterlegten Benachrichtigungsempfänger), die _Veranstalter_ (die Eigner der gebuchten Ressourcen), die _Instanz_ oder eine _genannte Adresse_. Ein Kreis kann leer sein — dann gibt es keine Mitteilung, keinen Fehler.
+_Avoid_: address (als Parameter), Adressat, Recipient-Liste, BCC (das ist eine Kopie, kein Kreis)
+
+**Sammelmitteilung**:
+Eine Mitteilung, die einer Gruppenbuchung als Ganzem gilt — eine Mail mit den Mitgliedern in Kurzform, einem Buchungsdokument und einem Zahlungslink für die Gruppe. Eine Gruppe bekommt je Anlass genau eine, nie eine je Mitglied.
+_Avoid_: aggregated (als Sprechbegriff), Aggregat-Mail, Sammelmail, Gruppen-Mail
+
+**Mail-Vorlage (einer Mitteilungsart)**:
+Die vom Mandanten änderbaren Teile einer Mitteilungsart: Textkörper, Nachtext und Betreff. Was nicht dazugehört — Buchungsdetails, Anhänge, Rahmen — bestimmt die Plattform. Nicht jede Mitteilungsart hat eine.
+_Avoid_: Snippet (das ist die Speicherform), Template (unqualifiziert), Override
+
+**Versandweg**:
+Der Weg, über den eine Mitteilung zugestellt wird: der _Mandanten-Versand_ über die vollständige Mail-Konfiguration des Mandanten oder der _Instanz-Versand_ über die der Plattform. Ein Mandant ohne vollständige Konfiguration versendet über die Instanz; die Wahl trifft der Versand, nie die Mitteilung.
+_Avoid_: Transport (als Sprechbegriff), useInstanceMail (das ist das Feld), Mailer, SMTP (das ist nur eine Form)

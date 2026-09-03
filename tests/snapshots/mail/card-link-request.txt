@@ -1,0 +1,87 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: erika@example.test
+Bcc: 
+Subject: Karte mit Ihrem Account verknüpfen
+Attachments: 
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    <p>Hallo Erika,</p>
+
+<p>
+  es wurde soeben versucht, eine Karte
+  (<strong>Bibliothekskarte</strong>)
+  mit Ihrem Account <strong>erika@example.test</strong> zu verknüpfen.
+</p>
+
+<p>
+  Wenn <strong>Sie</strong> das waren, bestätigen Sie die Verknüpfung bitte
+  über den folgenden Link. Nach der Bestätigung können Sie sich zukünftig
+  direkt mit Ihrer Karte anmelden – ohne Passwort.
+</p>
+
+<p style="text-align: center; margin: 30px 0">
+  <a
+    href="https://buchung.example.test/auth/card/link?token&#x3D;hook-card-1&amp;id&#x3D;erika%40example.test"
+    style="background-color: #1976d2; color: white; padding: 12px 24px;
+           text-decoration: none; border-radius: 4px; display: inline-block"
+  >
+    Karte jetzt verknüpfen
+  </a>
+</p>
+
+<p style="font-size: 0.9em; color: #555">
+  Falls der Button nicht funktioniert, kopieren Sie diesen Link in Ihren
+  Browser:<br />
+  <a href="https://buchung.example.test/auth/card/link?token&#x3D;hook-card-1&amp;id&#x3D;erika%40example.test">https://buchung.example.test/auth/card/link?token&#x3D;hook-card-1&amp;id&#x3D;erika%40example.test</a>
+</p>
+
+<p style="font-size: 0.9em; color: #555">
+  Dieser Link ist 24 Stunden gültig.
+</p>
+
+<hr />
+
+<p style="font-size: 0.9em; color: #c62828">
+  <strong>Waren Sie das nicht?</strong> Ignorieren Sie diese Email einfach.
+  Ohne Ihre Bestätigung wird keine Karte verknüpft und Ihr Account bleibt
+  unverändert.
+</p>
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>
