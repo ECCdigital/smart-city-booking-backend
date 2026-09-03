@@ -7,8 +7,6 @@ const GroupBookingManager = require("../../data-managers/group-booking-manager")
 const MailController = require("../../mail-service/mail-controller");
 const { v4: uuidV4 } = require("uuid");
 const { BundleCheckoutService } = require("./bundle-checkout-service");
-const ReceiptService = require("../payment/receipt-service");
-const InvoiceService = require("../payment/invoice-service");
 const AccessService = require("../access/access-service");
 const EventManager = require("../../data-managers/event-manager");
 const { isEmail } = require("validator");
@@ -27,11 +25,8 @@ const {
   checkSameContactDetails,
   checkSameStatus,
   checkSamePaymentProvider,
-  checkInvoicePaymentProvider,
-  checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
-const CancellationService = require("../payment/cancellation-service");
 const {
   STATUS,
   CANCELLED_FROM_STATUSES,
@@ -49,7 +44,11 @@ const {
   ForbiddenError,
   UnauthorizedError,
 } = require("../../../errors/BaseError");
-const { deleteBookingDocuments } = require("../media/booking-documents");
+const {
+  issue: issueDocument,
+  remove: removeDocuments,
+  groupBookingIdOf,
+} = require("../documents/document-issuance");
 const MediaManager = require("../../data-managers/media-manager");
 const MediaService = require("../media/media-service");
 const { toMediaReference } = require("../media/media-reference");
@@ -527,6 +526,7 @@ class BookingService {
           tenantId,
           newGroupBooking.bookingIds,
           mailAttachments,
+          newGroupBooking.id,
         );
 
         const tenant = await TenantManager.getTenant(newGroupBooking.tenantId);
@@ -564,10 +564,7 @@ class BookingService {
 
     // Documents go first: a booking document that outlived its booking would
     // be unreachable and undeletable — nobody could ever grant access to it.
-    await deleteBookingDocuments({
-      tenantId: booking.tenantId,
-      bookingId: booking.id,
-    });
+    await removeDocuments({ tenantId: booking.tenantId, booking });
 
     await BookingManager.removeBooking(booking.id, booking.tenantId);
   }
@@ -902,7 +899,7 @@ class BookingService {
         tenantId,
         groupBooking.bookingIds,
         groupBooking.bookings[0].paymentProvider,
-        { aggregated: true },
+        { aggregated: true, groupBookingId: groupBooking.id },
       );
 
       if (!paymentService) return { success: true };
@@ -986,6 +983,7 @@ class BookingService {
     bookingIds,
     paymentMethod,
     timePaid,
+    groupBookingId = null,
   }) {
     try {
       const bookings = await BookingManager.getBookings(tenantId, bookingIds);
@@ -1011,6 +1009,8 @@ class BookingService {
       await BookingService.handleAggregatedBookingConfirmation(
         tenantId,
         bookingIds,
+        [],
+        groupBookingId,
       );
       return { success: true };
     } catch (error) {
@@ -1232,43 +1232,23 @@ class BookingService {
           cancellationReason: reason,
           refundCalculation,
         };
-        const {
-          cancellation,
-          name,
-          cancellationId,
-          revision,
-          timeCreated,
-          originalInvoiceNumber,
-          originalInvoiceDate,
-        } = await CancellationService.createSingleCancellation({
+        // The issuance attaches the document to the booking and to this
+        // entity, so the state write below carries it too.
+        const { file } = await issueDocument({
           tenantId,
-          bookingId,
+          bookingIds: [booking.id],
+          type: "cancellation",
+          bookings: [booking],
           options,
         });
 
         attachments = [
           {
-            filename: cancellation.name,
-            content: cancellation.buffer,
+            filename: file.name,
+            content: file.buffer,
             contentType: "application/pdf",
           },
         ];
-
-        booking.attachments.push({
-          type: "cancellation",
-          title: name,
-          name,
-          cancellationId: cancellationId,
-          revision: revision,
-          timeCreated,
-          cancellation: {
-            ...refundCalculation,
-            originalDocumentRef: {
-              number: originalInvoiceNumber,
-              timeCreated: originalInvoiceDate,
-            },
-          },
-        });
       }
 
       await BookingManager.storeBooking(booking);
@@ -1357,7 +1337,6 @@ class BookingService {
     }
 
     let attachments;
-    let cancellationDocument;
     const cancelledAt = cancellationContext.cancelledAt ?? Date.now();
     const refundCalculations = bookings.map((booking) => ({
       bookingId: booking.id,
@@ -1380,19 +1359,21 @@ class BookingService {
         bankDetails: sanitizedBankDetails || undefined,
       };
 
-      cancellationDocument =
-        await CancellationService.createAggregatedCancellation({
-          tenantId,
-          bookingIds: groupBooking.bookingIds,
-          groupBookingId: groupBooking.id,
-          options,
-        });
-      const { cancellation } = cancellationDocument;
+      // The issuance attaches the one document to every member and to
+      // these entities, so the state writes below carry it too.
+      const { file } = await issueDocument({
+        tenantId,
+        bookingIds: groupBooking.bookingIds,
+        type: "cancellation",
+        groupBookingId: groupBooking.id,
+        bookings,
+        options,
+      });
 
       attachments = [
         {
-          filename: cancellation.name,
-          content: cancellation.buffer,
+          filename: file.name,
+          content: file.buffer,
           contentType: "application/pdf",
         },
       ];
@@ -1412,26 +1393,6 @@ class BookingService {
         booking.cancellationRefund = refundAudit;
       }
       recordCancelledFrom(booking, cancelledFrom);
-
-      if (cancellationDocument && refundCalculation) {
-        const refundAudit = { ...refundCalculation };
-        delete refundAudit.bookingId;
-        booking.attachments.push({
-          type: "cancellation",
-          title: cancellationDocument.name,
-          name: cancellationDocument.name,
-          cancellationId: cancellationDocument.cancellationId,
-          revision: cancellationDocument.revision,
-          timeCreated: cancellationDocument.timeCreated,
-          cancellation: {
-            ...refundAudit,
-            originalDocumentRef: {
-              number: cancellationDocument.originalInvoiceNumber,
-              timeCreated: cancellationDocument.originalInvoiceDate,
-            },
-          },
-        });
-      }
       await BookingManager.storeBooking(booking);
 
       try {
@@ -1599,136 +1560,6 @@ class BookingService {
     return booking.name.toLowerCase() === name.toLowerCase();
   }
 
-  static async createReceipt(tenantId, bookingId) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
-
-    const validator = new BookingConsistencyService([checkPayedStatus]);
-    const errors = validator.validate([booking]);
-
-    if (errors.length > 0) {
-      logger.error(
-        `${tenantId} -- booking ${booking.id} cannot be rejected: ${JSON.stringify(
-          errors,
-        )}`,
-      );
-      return { success: false, errors };
-    }
-
-    const { name, receiptId, revision, timeCreated } =
-      await ReceiptService.createSingleReceipt(tenantId, booking.id);
-
-    booking.attachments.push({
-      type: "receipt",
-      title: name,
-      receiptId: receiptId,
-      revision: revision,
-      timeCreated,
-    });
-
-    await BookingManager.storeBooking(booking);
-
-    return { success: true };
-  }
-
-  static async createAggregatedReceipt(tenantId, bookingIds) {
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-
-    const validator = new BookingConsistencyService([
-      checkSameContactDetails,
-      checkSameStatus,
-      checkPayedStatus,
-    ]);
-
-    const errors = validator.validate(bookings);
-    if (errors.length > 0) {
-      logger.error(
-        `${tenantId} -- bookings ${bookingIds} cannot create receipt: ${JSON.stringify(
-          errors,
-        )}`,
-      );
-      return { success: false, errors };
-    }
-
-    const { name, receiptId, revision, timeCreated } =
-      await ReceiptService.createAggregatedReceipt(
-        tenantId,
-        bookings.map((b) => b.id),
-      );
-
-    for (const booking of bookings) {
-      booking.attachments.push({
-        type: "receipt",
-        title: name,
-        receiptId: receiptId,
-        revision: revision,
-        timeCreated,
-      });
-      await BookingManager.storeBooking(booking);
-    }
-
-    return { success: true };
-  }
-
-  /**
-   * Creates an aggregated invoice for a group booking and attaches it to all bookings.
-   * @param {string} tenantId
-   * @param {string[]} bookingIds
-   * @param {string|null} groupBookingId
-   * @param {{ validate?: boolean }} [options]
-   * @returns {Promise<{ success: boolean, errors?: object[], invoice?: object, name?: string, invoiceId?: string, revision?: number, mail?: string, bookingIds?: string[] }>}
-   */
-  static async createAggregatedInvoice(
-    tenantId,
-    bookingIds,
-    groupBookingId = null,
-    { validate = true } = {},
-  ) {
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-
-    if (validate) {
-      const validator = new BookingConsistencyService([
-        checkSameContactDetails,
-        checkSameStatus,
-        checkSamePaymentProvider,
-        checkInvoicePaymentProvider,
-      ]);
-
-      const errors = validator.validate(bookings);
-      if (errors.length > 0) {
-        logger.error(
-          `${tenantId} -- bookings ${bookingIds} cannot create invoice: ${JSON.stringify(
-            errors,
-          )}`,
-        );
-        return { success: false, errors };
-      }
-    }
-
-    const {
-      invoice,
-      name,
-      invoiceId,
-      revision,
-      mail,
-      bookingIds: updatedBookingIds,
-    } = await InvoiceService.issueAggregatedInvoice(
-      tenantId,
-      bookings.map((b) => b.id),
-      groupBookingId,
-      bookings,
-    );
-
-    return {
-      success: true,
-      invoice,
-      name,
-      invoiceId,
-      revision,
-      mail,
-      bookingIds: updatedBookingIds,
-    };
-  }
-
   static async handleSingleBookingRequestConfirmation(
     tenantId,
     bookingId,
@@ -1760,23 +1591,17 @@ class BookingService {
     if (booking && booking.isCommitted) {
       let attachments = [...additionalAttachments];
       if (booking.priceEur > 0 && booking.isPayed) {
-        const { receipt, name, receiptId, revision, timeCreated } =
-          await ReceiptService.createSingleReceipt(tenantId, booking.id);
-
-        booking.attachments.push({
+        const { file } = await issueDocument({
+          tenantId,
+          bookingIds: [booking.id],
           type: "receipt",
-          title: name,
-          receiptId: receiptId,
-          revision: revision,
-          timeCreated,
+          bookings: [booking],
         });
-
-        await BookingManager.storeBooking(booking);
 
         attachments = [
           {
-            filename: name,
-            content: receipt.buffer,
+            filename: file.name,
+            content: file.buffer,
             contentType: "application/pdf",
           },
         ];
@@ -1811,10 +1636,17 @@ class BookingService {
     return booking;
   }
 
+  /**
+   * The confirmation of a group: one aggregated receipt where the group is
+   * paid, then one mail. `groupBookingId` names the group the receipt is
+   * issued for; a caller that does not know it (the payment webhook) leaves
+   * it out and the group is looked up by its first booking.
+   */
   static async handleAggregatedBookingConfirmation(
     tenantId,
     bookingIds,
     additionalAttachments = [],
+    groupBookingId = null,
   ) {
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
@@ -1825,27 +1657,22 @@ class BookingService {
       const totalPrice = bookings.reduce((acc, b) => acc + b.priceEur, 0);
 
       if (totalPrice > 0 && allPayed) {
-        const { receipt, name, receiptId, revision, timeCreated } =
-          await ReceiptService.createAggregatedReceipt(
+        const { file } = await issueDocument({
+          tenantId,
+          bookingIds: bookings.map((b) => b.id),
+          type: "receipt",
+          groupBookingId: await groupBookingIdOf({
             tenantId,
-            bookings.map((b) => b.id),
-          );
-
-        for (const booking of bookings) {
-          booking.attachments.push({
-            type: "receipt",
-            title: name,
-            receiptId: receiptId,
-            revision: revision,
-            timeCreated,
-          });
-          await BookingManager.storeBooking(booking);
-        }
+            bookingIds,
+            groupBookingId,
+          }),
+          bookings,
+        });
 
         attachments = [
           {
-            filename: name,
-            content: receipt.buffer,
+            filename: file.name,
+            content: file.buffer,
             contentType: "application/pdf",
           },
         ];

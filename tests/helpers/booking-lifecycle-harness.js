@@ -11,13 +11,17 @@
  *
  * What is a fake: the booking and group booking stores (in memory, with
  * the `$set` semantics of `updateOne`, so a restore leaves behind what the
- * old document did not carry), and the effect seams - access, documents,
- * mail, workflow, payment provider, supervisor mail - which record a row
- * and, when told to, fail.
+ * old document did not carry, and the `$push` of an attachment), and the
+ * effect seams - access, the document renderers and number draw, mail,
+ * workflow, payment provider, supervisor mail - which record a row and,
+ * when told to, fail. The issuance itself (`document-issuance.js`: number,
+ * revision, storage, push) runs for real; the numbers are the harness'
+ * (`RE-1`, `RG-2`, `ST-1`, ...), not the tenant's.
  *
  * The rows are the effect table of a transition (spec part 1, 4.3):
  *
  *   store.save B1 payment_due [receipt]     a store write, state and documents
+ *   store.attach B1 receipt                 a document pushed to a booking
  *   access.provision B1                     an access seam call
  *   documents.receipt B1                    a document rendered
  *   mail.sendBookingConfirmation B1 [RE-1.pdf]   a mail with its attachments
@@ -64,6 +68,7 @@ const ReceiptService = require("../../src/commons/services/payment/receipt-servi
 const CancellationService = require("../../src/commons/services/payment/cancellation-service");
 const InvoiceService = require("../../src/commons/services/payment/invoice-service");
 const MediaService = require("../../src/commons/services/media/media-service");
+const IdGenerator = require("../../src/commons/utilities/id-generator");
 const SupervisorNotificationService = require("../../src/commons/services/supervisor-notification-service");
 const PaymentService = require("../../src/commons/services/payment/providers/payment-service");
 const { Bookable } = require("../../src/commons/entities/bookable/bookable");
@@ -305,6 +310,15 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
       );
       return entity;
     });
+  sinon
+    .stub(BookingManager, "addAttachment")
+    .callsFake(async (tenantId, id, attachment) => {
+      const doc = store.get(id);
+      if (!doc) throw new Error(`no booking ${id}`);
+      doc.attachments = [...(doc.attachments || []), clone(attachment)];
+      record("store.attach", `${label(id)} ${attachment.type}`);
+      return attachment;
+    });
   sinon.stub(BookingManager, "removeBooking").callsFake(async (id) => {
     store.delete(id);
     record("store.remove", label(id));
@@ -410,6 +424,7 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     storage: { provider: "local", key: "m1" },
   });
   sinon.stub(MediaService, "getBuffer").resolves(Buffer.from("%PDF-house"));
+  sinon.stub(MediaService, "createBookingDocument").resolves({ id: "doc" });
   sinon.stub(WorkflowManager, "getWorkflow").resolves(null);
   sinon.stub(CouponService, "incrementCouponUsage").resolves();
   sinon.stub(CouponService, "decrementCouponUsage").resolves();
@@ -487,60 +502,44 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     });
 
   const pdf = (name) => ({ name, buffer: Buffer.from(`%PDF-${name}`) });
+  /** The number draw: `RE-1`, `RG-2`, `ST-1`, ... per type. */
+  const PREFIX = { receipt: "RE", invoice: "RG", cancellation: "ST" };
+  sinon
+    .stub(IdGenerator, "next")
+    .callsFake(
+      async (tenantId, width, type) => `${PREFIX[type]}-${++counters[type]}`,
+    );
   /**
-   * A renderer of receipts or invoices, single or aggregated: numbers the
-   * document (`RE-1`, `RG-2`, ...) and records the row. The numbers are
-   * the harness', not the tenant's.
+   * A renderer of receipts, invoices or cancellations, single or
+   * aggregated: names the file after the document id (`RE-1.pdf`, and
+   * `RE-1-r2.pdf` for a revision) and records the row.
    */
-  const renderer = (row, kind, prefix) => async (tenantId, bookingIds) => {
-    record(row, labelsOf(bookingIds));
-    const id = `${prefix}-${++counters[kind]}`;
-    return {
-      [kind]: pdf(`${id}.pdf`),
-      name: `${id}.pdf`,
-      [`${kind}Id`]: id,
-      revision: 1,
-      timeCreated: Date.now(),
+  const renderer =
+    (row) =>
+    async ({ bookingIds, documentId, revision, groupBookingId }) => {
+      record(
+        groupBookingId
+          ? `documents.aggregated${row}`
+          : `documents.${row.toLowerCase()}`,
+        labelsOf(bookingIds),
+      );
+      const name = `${documentId}${revision > 1 ? `-r${revision}` : ""}.pdf`;
+      return pdf(name);
     };
-  };
-  sinon
-    .stub(ReceiptService, "createSingleReceipt")
-    .callsFake(renderer("documents.receipt", "receipt", "RE"));
-  sinon
-    .stub(ReceiptService, "createAggregatedReceipt")
-    .callsFake(renderer("documents.aggregatedReceipt", "receipt", "RE"));
-  sinon
-    .stub(InvoiceService, "createSingleInvoice")
-    .callsFake(renderer("documents.invoice", "invoice", "RG"));
-  // The renderer only: `issueAggregatedInvoice` attaches for real.
-  sinon
-    .stub(InvoiceService, "createAggregatedInvoice")
-    .callsFake(renderer("documents.aggregatedInvoice", "invoice", "RG"));
-  const cancellation = (cancellationId, options) => ({
-    cancellation: pdf(`${cancellationId}.pdf`),
-    name: `${cancellationId}.pdf`,
-    cancellationId,
-    cancellationNumber: cancellationId,
-    originalInvoiceNumber: "",
-    originalInvoiceDate: null,
-    revision: 1,
-    timeCreated:
+  sinon.stub(ReceiptService, "render").callsFake(renderer("Receipt"));
+  sinon.stub(InvoiceService, "render").callsFake(renderer("Invoice"));
+  sinon.stub(CancellationService, "render").callsFake(async (input) => {
+    const rendered = await renderer("Cancellation")(input);
+    const { options = {} } = input;
+    const cancelledAt =
       options.refundCalculation?.cancelledAt ??
-      options.refundCalculations?.[0]?.cancelledAt ??
-      Date.now(),
+      options.refundCalculations?.[0]?.cancelledAt;
+    return {
+      ...rendered,
+      attachmentFields:
+        cancelledAt !== undefined ? { timeCreated: cancelledAt } : {},
+    };
   });
-  sinon
-    .stub(CancellationService, "createSingleCancellation")
-    .callsFake(async ({ bookingId, options = {} }) => {
-      record("documents.cancellation", label(bookingId));
-      return cancellation(`ST-${++counters.cancellation}`, options);
-    });
-  sinon
-    .stub(CancellationService, "createAggregatedCancellation")
-    .callsFake(async ({ bookingIds, options = {} }) => {
-      record("documents.aggregatedCancellation", labelsOf(bookingIds));
-      return cancellation(`ST-${++counters.cancellation}`, options);
-    });
   /**
    * The payment provider at its seam: records the payment request and the
    * payment link. A webhook counts as a successful payment and goes the
