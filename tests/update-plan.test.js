@@ -2,8 +2,8 @@
  * `planUpdate` turns the flags an admin PUT carries into the list of
  * lifecycle transitions the update needs (BookingLifecycle spec, part 1,
  * section 6): always `amend` first, then the state changes the flags ask
- * for; flags without a way are a 400 `invalid_status_change`. Pure; it is
- * not wired into the PUT yet (ticket 7).
+ * for; flags without a way are a 400 `invalid_status_change`. Pure; the
+ * PUT runs the plan it answers.
  */
 
 const { expect } = require("chai");

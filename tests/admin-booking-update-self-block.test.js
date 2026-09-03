@@ -14,6 +14,7 @@ const UserManager = require("../src/commons/data-managers/user-manager");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
 const AccessService = require("../src/commons/services/access/access-service");
 const BookingService = require("../src/commons/services/checkout/booking-service");
+const { Booking } = require("../src/commons/entities/booking/booking");
 
 const TENANT_ID = "tenant-1";
 const BOOKING_ID = "EDIT-ME";
@@ -126,12 +127,18 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
 
     sinon.stub(BookingManager, "getBooking").callsFake(async (id) => {
       if (id === BOOKING_ID) {
-        return concurrent.find((b) => b.id === BOOKING_ID) || bookingRecord();
+        return new Booking(
+          concurrent.find((b) => b.id === BOOKING_ID) || bookingRecord(),
+        );
       }
       return { id: null };
     });
-    storeBooking = sinon
+    sinon
       .stub(BookingManager, "storeBooking")
+      .callsFake(async (value) => value);
+    // The content write of an update is the lifecycle's conditional write.
+    storeBooking = sinon
+      .stub(BookingManager, "storeBookingIfStatus")
       .callsFake(async (value) => value);
     sinon
       .stub(BookingManager, "getConcurrentBookings")

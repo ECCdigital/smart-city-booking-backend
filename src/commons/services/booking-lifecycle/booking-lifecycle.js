@@ -9,11 +9,12 @@
  * `adapters/`, tests build theirs over the in-memory ones. During the
  * migration `BookingService` delegates to the default instance transition
  * by transition; so far: `confirm`, `pay`, `cancel`, `requestCancel`,
- * `reinstate`.
+ * `reinstate`, `amend`.
  *
- * A transition takes `(tenantId, bookingId, options)`, `trigger` being
- * mandatory (glossary "Auslöser"): `workflow` says a workflow action set
- * it off and the workflow event is left out. It answers an `Outcome` or
+ * A transition takes `(tenantId, bookingId, options)` - `amend` the new
+ * booking instead of the id - `trigger` being mandatory (glossary
+ * "Auslöser"): `workflow` says a workflow action set it off and the
+ * workflow event is left out. It answers an `Outcome` or
  * throws: `NotFoundError booking_not_found` and the guard's `ConflictError
  * invalid_transition` before any effect, `LifecycleError` when an effect
  * with abort policy failed (persist writes restored).
@@ -494,7 +495,78 @@ function createBookingLifecycle(adapters) {
     ]);
   }
 
-  return { confirm, pay, cancel, requestCancel, reinstate };
+  /**
+   * The amendment (spec part 1, section 6; part 2, section 8, `amend`;
+   * glossary "Änderung"): the content of a booking changes, its state
+   * does not. The new booking carries the state the caller knows the
+   * booking to be in, and is written on the condition that the stored one
+   * still is (spec part 2, section 5): a booking that moved in between - a
+   * payment webhook, say - is the guard's `ConflictError`, and the plan
+   * the caller made no longer applies. The refund audit is the stored
+   * one's, whatever the form says; it belongs to the lifecycle. Then the
+   * access follows the content: moved along at `confirmed`, the
+   * compartments held anew at `requested | payment_due` (`holdForBooking`
+   * never holds one twice and drops the held ones beyond what is booked
+   * now, so the hold comes first and a hold that fails aborts before
+   * anything is revoked: the booking is its old self again, its old holds
+   * standing), then whatever an unpaid booking still holds granted is
+   * taken back. Nothing at `rejected | cancelled`. No document, no
+   * workflow event, no mail.
+   *
+   * @param {string} tenantId
+   * @param {Object} booking The booking as it is to be, prepared by the
+   *   checkout under `CheckoutPolicy.ADMIN_MANUAL`, with `status` the state
+   *   the caller knows it to be in
+   * @param {{ trigger: string }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function amend(tenantId, booking, { trigger } = {}) {
+    const transition = TRANSITION.AMEND;
+    assertTrigger(transition, trigger);
+
+    const current = await load(tenantId, booking.id);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+    if (current.cancellationRefund) {
+      booking.cancellationRefund = current.cancellationRefund;
+    } else {
+      delete booking.cancellationRefund;
+    }
+    const bookingId = booking.id;
+    const confirmed = () => booking.status === STATUS.CONFIRMED;
+    const unpaid = () =>
+      booking.status === STATUS.REQUESTED ||
+      booking.status === STATUS.PAYMENT_DUE;
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "update",
+        () => access.update(tenantId, current, booking),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "hold",
+        () => access.hold(tenantId, bookingId),
+        { when: unpaid },
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "revoke",
+        () => access.revoke(tenantId, bookingId),
+        { when: unpaid },
+      ),
+    ]);
+  }
+
+  return { confirm, pay, cancel, requestCancel, reinstate, amend };
 }
 
 /** The lifecycle over the production adapters. */
