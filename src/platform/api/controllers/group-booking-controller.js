@@ -10,6 +10,11 @@ const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
 } = require("../../../commons/services/payment/cancellation-refund-service");
+const {
+  issue: issueDocument,
+  mailAttachments,
+} = require("../../../commons/services/documents/document-issuance");
+const { ConflictError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -256,6 +261,7 @@ class GroupBookingController {
           bookingIds: groupBooking.bookingIds,
           paymentMethod,
           timePaid,
+          groupBookingId,
         });
 
         if (!result.success) {
@@ -415,6 +421,7 @@ class GroupBookingController {
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
+        true,
       );
 
       if (
@@ -426,18 +433,25 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        const result = await BookingService.createAggregatedReceipt(
-          tenantId,
-          groupBooking.bookingIds,
+        const errors = BookingService.reprintErrors(
+          "receipt",
+          groupBooking.bookings,
         );
-
-        if (!result.success) {
-          return res.status(200).json({
-            success: false,
-            data: null,
-            errors: result.errors,
-          });
+        if (errors.length > 0) {
+          logger.error(
+            `${tenantId} -- group-booking ${groupBookingId} cannot get a receipt: ${JSON.stringify(errors)}`,
+          );
+          return res.status(200).json({ success: false, data: null, errors });
         }
+
+        // A reprint is a further revision of the one aggregated receipt,
+        // attached to every member; nothing is mailed.
+        await issueDocument({
+          tenantId,
+          bookingIds: groupBooking.bookingIds,
+          type: "receipt",
+          groupBookingId,
+        });
 
         const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
           tenantId,
@@ -474,6 +488,7 @@ class GroupBookingController {
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
+        true,
       );
 
       if (
@@ -495,35 +510,31 @@ class GroupBookingController {
           });
         }
 
-        const result = await BookingService.createAggregatedInvoice(
-          tenantId,
-          groupBooking.bookingIds,
-          groupBookingId,
+        const errors = BookingService.reprintErrors(
+          "invoice",
+          groupBooking.bookings,
         );
-
-        if (!result.success) {
-          return res.status(200).json({
-            success: false,
-            data: null,
-            errors: result.errors,
-          });
+        if (errors.length > 0) {
+          logger.error(
+            `${tenantId} -- group-booking ${groupBookingId} cannot get an invoice: ${JSON.stringify(errors)}`,
+          );
+          return res.status(200).json({ success: false, data: null, errors });
         }
 
-        if (shouldSendEmail) {
-          const attachments = [
-            {
-              filename: result.name,
-              content: result.invoice.buffer,
-              contentType: "application/pdf",
-            },
-          ];
+        const { file } = await issueDocument({
+          tenantId,
+          bookingIds: groupBooking.bookingIds,
+          type: "invoice",
+          groupBookingId,
+        });
 
+        if (shouldSendEmail) {
           try {
             await MailController.sendInvoice(
-              result.mail,
-              result.bookingIds,
+              groupBooking.bookings[0].mail,
+              groupBooking.bookingIds,
               tenantId,
-              attachments,
+              mailAttachments(file),
               true,
             );
           } catch (err) {
@@ -556,6 +567,93 @@ class GroupBookingController {
         });
       }
     } catch (error) {
+      res.status(500).send({ message: error.message });
+    }
+  }
+
+  /**
+   * Reprints the aggregated cancellation document of a cancelled group as a
+   * further revision, from the refund audits the cancellation left at the
+   * members. Same right as the receipt reprint; a group with a member that
+   * has no cancellation answers 409 `not_cancelled`. Nothing is mailed.
+   */
+  static async createGroupBookingCancellationReceipt(req, res) {
+    try {
+      const tenantId = req.params.tenant;
+      const user = req.user;
+      const groupBookingId = req.params.id;
+
+      const groupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+      );
+      if (!groupBooking) {
+        return res.status(404).send({ message: "Group booking not found." });
+      }
+
+      if (
+        !user ||
+        !(await PermissionsService._allowUpdate(
+          groupBooking,
+          user.id,
+          tenantId,
+          RolePermission.MANAGE_BOOKINGS,
+        ))
+      ) {
+        logger.error(
+          { tenantId: tenantId, user: user?.id },
+          "User not allowed to create group booking cancellation receipt",
+        );
+        return res.status(403).send({
+          message:
+            "User not allowed to create group booking cancellation receipt",
+        });
+      }
+
+      const bookings = groupBooking.bookings;
+      const notCancelled = bookings.find(
+        (booking) => !booking.cancellationRefund,
+      );
+      if (notCancelled) {
+        const error = new ConflictError("not_cancelled", {
+          groupBookingId,
+          bookingId: notCancelled.id,
+        });
+        return res.status(error.statusCode).json(error.toJSON());
+      }
+
+      await issueDocument({
+        tenantId,
+        bookingIds: groupBooking.bookingIds,
+        type: "cancellation",
+        groupBookingId,
+        options: {
+          alreadyPaid: groupBooking.areSomeBookingsPaid(),
+          cancellationReason: bookings[0].rejectionReason,
+          refundCalculations: bookings.map((booking) => ({
+            bookingId: booking.id,
+            ...booking.cancellationRefund,
+          })),
+        },
+      });
+
+      const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        true,
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: updatedGroupBooking,
+        errors: [],
+      });
+    } catch (error) {
+      logger.error(
+        { error: error.message },
+        "Error creating group booking cancellation receipt",
+      );
       res.status(500).send({ message: error.message });
     }
   }

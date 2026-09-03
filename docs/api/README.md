@@ -204,6 +204,14 @@ Cancels or rejects a group booking. Without an override, each booking uses its p
 
 Customer self-cancellations always use the current tenant policy when the verification link is released. Expected refund amounts are exposed via the public/hook preview endpoints and included in verify-rejection and booking-cancel mails. Rule-engine and workflow cancellations retain a full refund. Refunds are documented for manual processing; payment providers are not called automatically.
 
+### POST /api/:tenant/bookings/:id/cancellation-receipt
+
+Reprints the cancellation document of a cancelled booking as a further revision under the same number, from the stored refund audit. Same right as `POST /bookings/:id/receipt` (booking management `updateAny` or the owner); `409 not_cancelled` without a cancellation. Nothing is mailed.
+
+### POST /api/:tenant/group-bookings/:id/cancellation-receipt
+
+Reprints the one aggregated cancellation document of a cancelled group booking as a further revision, attached to every member. Same right as `POST /group-bookings/:id/receipt`; `409 not_cancelled` if a member is not cancelled.
+
 ## Other categories
 
 Endpoints for events, users, bookings, coupons, checkout, payments, calendars, catalog, workflows, access points, rules, and files follow the same pattern: mostly tenant-scoped paths under `/api/:tenant/...` with permission checks via roles and memberships.

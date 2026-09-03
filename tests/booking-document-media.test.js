@@ -12,6 +12,9 @@ const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const IdGenerator = require("../src/commons/utilities/id-generator");
 const {
+  issue,
+} = require("../src/commons/services/documents/document-issuance");
+const {
   NextcloudManager,
 } = require("../src/commons/data-managers/file-manager");
 const { Media } = require("../src/commons/entities/media/media");
@@ -215,7 +218,7 @@ describe("booking documents in the media library", function () {
     });
   });
 
-  describe("the document services", function () {
+  describe("the issuance", function () {
     let createBookingDocument;
 
     beforeEach(function () {
@@ -229,12 +232,19 @@ describe("booking documents in the media library", function () {
         invoiceNumberPrefix: "I",
         cancellationNumberPrefix: "C",
       });
-      sandbox.stub(BookingManager, "getBooking").resolves({
-        id: BOOKING,
-        tenantId: TENANT,
-        attachments: [],
-        timeCreated: 0,
-      });
+      sandbox
+        .stub(BookingManager, "getBookings")
+        .callsFake(async (tenantId, ids) =>
+          ids.map((id) => ({
+            id,
+            tenantId: TENANT,
+            attachments: [],
+            timeCreated: 0,
+          })),
+        );
+      sandbox
+        .stub(BookingManager, "addAttachment")
+        .callsFake(async (tenantId, bookingId, attachment) => attachment);
       sandbox.stub(IdGenerator, "next").resolves("0001");
     });
 
@@ -243,9 +253,13 @@ describe("booking documents in the media library", function () {
         .stub(PdfService, "generateSingleReceipt")
         .resolves({ buffer: Buffer.from("pdf"), name: "receipt-1.pdf" });
 
-      const result = await ReceiptService.createSingleReceipt(TENANT, BOOKING);
+      const { attachment } = await issue({
+        tenantId: TENANT,
+        bookingIds: [BOOKING],
+        type: "receipt",
+      });
 
-      assert.strictEqual(result.name, "receipt-1.pdf");
+      assert.strictEqual(attachment.name, "receipt-1.pdf");
       assert.strictEqual(NextcloudManager.createFile.called, false);
       const args = createBookingDocument.firstCall.args[0];
       assert.strictEqual(args.tenantId, TENANT);
@@ -259,7 +273,7 @@ describe("booking documents in the media library", function () {
         .stub(PdfService, "generateSingleInvoice")
         .resolves({ buffer: Buffer.from("pdf"), name: "invoice-1.pdf" });
 
-      await InvoiceService.createSingleInvoice(TENANT, BOOKING);
+      await issue({ tenantId: TENANT, bookingIds: [BOOKING], type: "invoice" });
 
       assert.strictEqual(NextcloudManager.createFile.called, false);
       assert.deepStrictEqual(createBookingDocument.firstCall.args[0].tags, [
@@ -272,9 +286,10 @@ describe("booking documents in the media library", function () {
         .stub(PdfService, "generateSingleCancellationReceipt")
         .resolves({ buffer: Buffer.from("pdf"), name: "cancellation-1.pdf" });
 
-      await CancellationService.createSingleCancellation({
+      await issue({
         tenantId: TENANT,
-        bookingId: BOOKING,
+        bookingIds: [BOOKING],
+        type: "cancellation",
       });
 
       assert.strictEqual(NextcloudManager.createFile.called, false);
@@ -286,26 +301,23 @@ describe("booking documents in the media library", function () {
     it("stores an aggregated document once, referencing every booking of the group", async function () {
       // The aggregated receipt is one medium with one byte copy; every booking
       // of the group reaches it through its own reference (§4.7).
-      sandbox.stub(BookingManager, "getBookings").resolves([
-        { id: "booking-1", tenantId: TENANT, attachments: [] },
-        { id: "booking-2", tenantId: TENANT, attachments: [] },
-        { id: "booking-3", tenantId: TENANT, attachments: [] },
-      ]);
       sandbox
         .stub(PdfService, "generateAggregatedReceipt")
         .resolves({ buffer: Buffer.from("pdf"), name: "receipt-group.pdf" });
 
-      await ReceiptService.createAggregatedReceipt(TENANT, [
-        "booking-1",
-        "booking-2",
-        "booking-3",
-      ]);
+      await issue({
+        tenantId: TENANT,
+        bookingIds: ["booking-1", "booking-2", "booking-3"],
+        type: "receipt",
+        groupBookingId: "group-1",
+      });
 
       assert.strictEqual(createBookingDocument.callCount, 1);
       assert.deepStrictEqual(
         createBookingDocument.firstCall.args[0].bookingIds,
         ["booking-1", "booking-2", "booking-3"],
       );
+      assert.strictEqual(BookingManager.addAttachment.callCount, 3);
     });
   });
 

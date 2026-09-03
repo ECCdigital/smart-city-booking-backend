@@ -1,0 +1,156 @@
+# Reprints of booking documents (spec: BookingLifecycle part 2, section 6).
+# A reprint issues the document anew as a further revision under the same
+# number; the earlier revisions stay attached. Nothing is mailed here.
+
+/api/{tenant}/bookings/{bookingId}/cancellation-receipt:
+  post:
+    tags:
+      - Bookings
+    summary: Reprint the cancellation document of a booking
+    description: |
+      Issues the cancellation document of a cancelled booking anew as a
+      further revision under the same cancellation number, from the refund
+      audit the cancellation left behind. Same right as the receipt reprint
+      (`POST /bookings/{bookingId}/receipt`): booking management `updateAny`,
+      or the owner of the booking. No mail is sent.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - $ref: "#/components/parameters/CancellationBookingIdParam"
+    responses:
+      "200":
+        description: The booking with the new cancellation attachment
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingDocumentReprintResponse"
+      "400":
+        description: Missing required parameters
+      "401":
+        description: Not authenticated
+      "403":
+        description: Neither booking management nor the owner
+      "404":
+        description: Booking not found
+      "409":
+        description: The booking is not cancelled (`code` `not_cancelled`)
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotCancelledError"
+
+/api/{tenant}/group-bookings/{groupBookingId}/cancellation-receipt:
+  post:
+    tags:
+      - Group Bookings
+    summary: Reprint the aggregated cancellation document of a group booking
+    description: |
+      Issues the one aggregated cancellation document of a cancelled group
+      booking anew as a further revision under the same number, attached to
+      every booking of the group, from the refund audits the cancellation
+      left at the members. Same right as the group receipt reprint
+      (`POST /group-bookings/{groupBookingId}/receipt`). No mail is sent.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/CancellationTenantParam"
+      - name: groupBookingId
+        in: path
+        required: true
+        description: Group booking identifier
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The populated group booking with the new attachment at every member
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupBookingDocumentReprintResponse"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Group booking not found
+      "409":
+        description: A member of the group is not cancelled (`code` `not_cancelled`)
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotCancelledError"
+
+components:
+  schemas:
+    BookingDocumentAttachment:
+      type: object
+      description: |
+        A booking document at a booking. `revision` counts the issues of the
+        document under its number; a reprint adds a further revision.
+      properties:
+        type:
+          type: string
+          enum: [receipt, invoice, cancellation]
+        name:
+          type: string
+          description: File name, the key of the download routes
+        title:
+          type: string
+          description: Same as `name`
+        receiptId:
+          type: string
+          description: Document number (receipts)
+        invoiceId:
+          type: string
+          description: Document number (invoices)
+        cancellationId:
+          type: string
+          description: Document number (cancellations)
+        revision:
+          type: integer
+          minimum: 1
+        timeCreated:
+          type: number
+          description: Unix time in milliseconds
+        cancellation:
+          type: object
+          description: The refund audit of a cancellation document, with `originalDocumentRef`
+    BookingDocumentReprintResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          description: The booking, `attachments` including the new revision
+        errors:
+          type: array
+          items:
+            type: object
+    GroupBookingDocumentReprintResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          description: The populated group booking; every member carries the new revision
+        errors:
+          type: array
+          items:
+            type: object
+    NotCancelledError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: ConflictError
+        code:
+          type: string
+          example: not_cancelled
+        statusCode:
+          type: integer
+          example: 409
+        params:
+          type: object

@@ -219,7 +219,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.hold B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
@@ -264,7 +264,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.hold B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
@@ -447,7 +447,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
@@ -468,7 +468,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
@@ -485,27 +485,30 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
 
-    it("pays a paid booking again and issues a second receipt (ticket 4: 409 invalid_transition)", async function () {
+    it("pays a paid booking again and issues the receipt anew as a revision under the same number (ticket 4: 409 invalid_transition)", async function () {
       const id = await bookingIn("confirmed");
 
       const res = await pay(id);
 
       expect(res.status).to.equal(200);
       expect(
-        h.stored(id).attachments.map((att) => att.receiptId),
-      ).to.deep.equal(["RE-1", "RE-2"]);
+        h.stored(id).attachments.map((att) => [att.receiptId, att.revision]),
+      ).to.deep.equal([
+        ["RE-1", 1],
+        ["RE-1", 2],
+      ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed [receipt]",
         "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt,receipt]",
-        "mail.sendBookingConfirmation B1 [RE-2.pdf]",
+        "store.attach B1 receipt",
+        "mail.sendBookingConfirmation B1 [RE-1-r2.pdf]",
       ]);
     });
 
@@ -522,7 +525,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "workflow.onPay B1",
         "access.provision B1 FAILED",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
@@ -557,7 +560,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf] FAILED",
       ]);
     });
@@ -624,6 +627,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
@@ -658,6 +662,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("rejected");
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 rejected [cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
@@ -707,14 +712,21 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
       expect(res.status).to.equal(200);
       expect(
-        h.stored(id).attachments.filter((att) => att.type === "cancellation"),
-      ).to.have.length(2);
+        h
+          .stored(id)
+          .attachments.filter((att) => att.type === "cancellation")
+          .map((att) => [att.cancellationId, att.revision]),
+      ).to.deep.equal([
+        ["ST-1", 1],
+        ["ST-1", 2],
+      ]);
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation,cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
-        "mail.sendBookingCancel B1 [ST-2.pdf]",
+        "mail.sendBookingCancel B1 [ST-1-r2.pdf]",
       ]);
     });
 
@@ -729,6 +741,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("cancelled");
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
@@ -745,6 +758,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
         "access.revoke B1 FAILED",
@@ -861,6 +875,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stored.cancellationRefund).to.include({ origin: "user" });
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
@@ -880,6 +895,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("rejected");
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 rejected [cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
@@ -983,7 +999,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
         "access.update B1",
       ]);
@@ -1007,6 +1023,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 cancelled [receipt]",
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
@@ -1080,6 +1097,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 cancelled [receipt]",
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "workflow.onReject B1",
         "access.revoke B1",
@@ -1105,7 +1123,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
   // -----------------------------------------------------------------------
 
   describe("reprint: POST /bookings/:id/receipt and /invoice", function () {
-    it("reprints the receipt of a paid booking as a further attachment and answers the booking", async function () {
+    it("reprints the receipt of a paid booking as a revision under the same number and answers the booking", async function () {
       const id = await bookingIn("confirmed");
 
       const res = await api()
@@ -1115,11 +1133,14 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(200);
       expect(res.body.success).to.equal(true);
       expect(
-        res.body.data.attachments.map((att) => att.receiptId),
-      ).to.deep.equal(["RE-1", "RE-2"]);
+        res.body.data.attachments.map((att) => [att.receiptId, att.revision]),
+      ).to.deep.equal([
+        ["RE-1", 1],
+        ["RE-1", 2],
+      ]);
       expect(h.takeEffects()).to.deep.equal([
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt,receipt]",
+        "store.attach B1 receipt",
       ]);
     });
 
@@ -1154,7 +1175,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       });
       expect(h.takeEffects()).to.deep.equal([
         "documents.invoice B1",
-        "store.save B1 payment_due [invoice]",
+        "store.attach B1 invoice",
       ]);
 
       const mailed = await api()
@@ -1165,8 +1186,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(mailed.body).to.include({ emailSent: true });
       expect(h.takeEffects()).to.deep.equal([
         "documents.invoice B1",
-        "store.save B1 payment_due [invoice,invoice]",
-        "mail.sendInvoice B1 [RG-2.pdf]",
+        "store.attach B1 invoice",
+        "mail.sendInvoice B1 [RG-1-r2.pdf]",
       ]);
     });
 
@@ -1211,7 +1232,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 confirmed",
         "access.provision B1",
         "documents.receipt B1",
-        "store.save B1 confirmed [receipt]",
+        "store.attach B1 receipt",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
@@ -1228,6 +1249,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       });
       expect(h.takeEffects()).to.deep.equal([
         "documents.cancellation B1",
+        "store.attach B1 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "access.revoke B1",
         "mail.sendBookingCancel B1 [ST-1.pdf]",

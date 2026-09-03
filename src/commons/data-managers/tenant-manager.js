@@ -12,6 +12,13 @@ const {
 } = require("../utilities/cancellation-refund-tiers");
 
 /**
+ * The per-year document counters at the tenant. They belong to the number
+ * draw (`incrementDocumentCounter`) alone: a whole-tenant write never
+ * carries them, so a stale copy of the tenant cannot roll a counter back.
+ */
+const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
+
+/**
  * Data Manager for Tenant objects.
  */
 class TenantManager {
@@ -63,7 +70,13 @@ class TenantManager {
       tenantEntity.cancellationRefundTiers || [],
     );
     tenantEntity.validate();
-    await TenantModel.updateOne({ id: tenantEntity.id }, tenantEntity, {
+    const update = { ...tenantEntity };
+    if (existingTenant) {
+      for (const counter of DOCUMENT_COUNTERS) {
+        delete update[counter];
+      }
+    }
+    await TenantModel.updateOne({ id: tenantEntity.id }, update, {
       upsert: upsert,
       setDefaultsOnInsert: true,
     });
@@ -81,6 +94,32 @@ class TenantManager {
     CustomFieldCache.invalidateTenant(tenantEntity.id);
 
     return tenantEntity;
+  }
+
+  /**
+   * Draws the next value of a document counter for a year in one atomic
+   * increment at the tenant row, so two draws at the same moment can never
+   * answer the same value.
+   *
+   * @param {string} tenantId The tenant
+   * @param {"receiptCount"|"invoiceCount"|"cancellationCount"} counter
+   * @param {number} year The year the counter is kept for
+   * @returns {Promise<number|null>} The new value, or null without the tenant
+   */
+  static async incrementDocumentCounter(tenantId, counter, year) {
+    if (!DOCUMENT_COUNTERS.includes(counter)) {
+      throw new Error(`Unknown document counter: ${counter}`);
+    }
+
+    const tenant = await TenantModel.findOneAndUpdate(
+      { id: tenantId },
+      { $inc: { [`${counter}.${year}`]: 1 } },
+      { new: true },
+    )
+      .select(counter)
+      .lean();
+
+    return tenant ? tenant[counter][year] : null;
   }
 
   /**

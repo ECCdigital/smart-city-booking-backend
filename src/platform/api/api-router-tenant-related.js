@@ -241,6 +241,12 @@ router.post(
   BookingController.createInvoice,
 );
 
+router.post(
+  "/bookings/:id/cancellation-receipt",
+  AuthenticationController.isSignedIn,
+  BookingController.createCancellationReceipt,
+);
+
 router.get(
   "/bookings/:id/cancellation-receipt/:cancellationReceiptId",
   AuthenticationController.isSignedIn,
@@ -311,6 +317,11 @@ router.post(
   "/group-bookings/:id/invoice",
   AuthenticationController.isSignedIn,
   GroupBookingController.createGroupBookingInvoice,
+);
+router.post(
+  "/group-bookings/:id/cancellation-receipt",
+  AuthenticationController.isSignedIn,
+  GroupBookingController.createGroupBookingCancellationReceipt,
 );
 
 // CHECKOUT

@@ -4,7 +4,9 @@ const BookingService = require("../src/commons/services/checkout/booking-service
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
-const CancellationService = require("../src/commons/services/payment/cancellation-service");
+const PdfService = require("../src/commons/pdf-service/pdf-service");
+const MediaService = require("../src/commons/services/media/media-service");
+const IdGenerator = require("../src/commons/utilities/id-generator");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
 const AccessService = require("../src/commons/services/access/access-service");
 const MailController = require("../src/commons/mail-service/mail-controller");
@@ -37,6 +39,39 @@ function booking(overrides = {}) {
   };
 }
 
+/**
+ * The issuance below the cancellation, at its seams: the number draw, the
+ * media store and the attachment push are stubbed, the PDF renderer answers
+ * a file. What runs for real is the renderer's reading of the cancelled
+ * document and the attachment the issuance builds.
+ */
+function stubIssuance() {
+  sinon.stub(IdGenerator, "next").resolves("2026-0012");
+  sinon.stub(MediaService, "createBookingDocument").resolves({ id: "doc" });
+  sinon
+    .stub(BookingManager, "addAttachment")
+    .callsFake(async (tenantId, bookingId, attachment) => attachment);
+  return {
+    single: sinon
+      .stub(PdfService, "generateSingleCancellationReceipt")
+      .resolves({ name: "cancellation.pdf", buffer: Buffer.from("pdf") }),
+    aggregated: sinon
+      .stub(PdfService, "generateAggregatedCancellationReceipt")
+      .resolves({ name: "group-cancellation.pdf", buffer: Buffer.from("pdf") }),
+  };
+}
+
+const INVOICE = {
+  type: "invoice",
+  invoiceId: "INV-1",
+  revision: 1,
+  timeCreated: Date.UTC(2026, 6, 1, 8),
+};
+
+function cancellationAttachment(entry) {
+  return entry.attachments.find((att) => att.type === "cancellation");
+}
+
 function stubCancellationSideEffects() {
   sinon.stub(BookingManager, "storeBooking").callsFake(async (value) => value);
   sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
@@ -51,23 +86,13 @@ describe("BookingService cancellation refunds", function () {
   });
 
   it("stores the admin refund calculation on a single cancellation", async function () {
-    const storedBooking = booking();
+    const storedBooking = booking({ attachments: [INVOICE] });
     sinon.stub(BookingManager, "getBooking").resolves(storedBooking);
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
       cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
     });
-    const createCancellation = sinon
-      .stub(CancellationService, "createSingleCancellation")
-      .resolves({
-        cancellation: { name: "cancellation.pdf", buffer: Buffer.from("pdf") },
-        name: "cancellation.pdf",
-        cancellationId: "12",
-        revision: 1,
-        timeCreated: Date.UTC(2026, 7, 20, 8),
-        originalInvoiceNumber: "INV-1-1",
-        originalInvoiceDate: Date.UTC(2026, 6, 1, 8),
-      });
+    const pdf = stubIssuance().single;
     stubCancellationSideEffects();
 
     await BookingService.rejectBooking(
@@ -86,8 +111,11 @@ describe("BookingService cancellation refunds", function () {
       },
     );
 
-    const attachment = storedBooking.attachments[0];
+    const attachment = cancellationAttachment(storedBooking);
     assert.strictEqual(attachment.name, "cancellation.pdf");
+    assert.strictEqual(attachment.cancellationId, "2026-0012");
+    assert.strictEqual(attachment.revision, 1);
+    assert.strictEqual(attachment.timeCreated, Date.UTC(2026, 7, 20, 8));
     assert.strictEqual(attachment.cancellation.refundAmountEur, 25);
     assert.strictEqual(attachment.cancellation.cancellationFeeEur, 75);
     assert.strictEqual(attachment.cancellation.adminOverride, true);
@@ -97,8 +125,10 @@ describe("BookingService cancellation refunds", function () {
       attachment.cancellation.originalDocumentRef.number,
       "INV-1-1",
     );
+    assert.strictEqual(pdf.firstCall.args[2], "2026-0012-1");
+    assert.strictEqual(pdf.firstCall.args[3], "INV-1-1");
     assert.strictEqual(
-      createCancellation.firstCall.args[0].options.cancellationReason,
+      pdf.firstCall.args[4].cancellationReason,
       "Customer request",
     );
   });
@@ -110,10 +140,7 @@ describe("BookingService cancellation refunds", function () {
       id: "tenant-1",
       cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 50 }],
     });
-    const createCancellation = sinon.stub(
-      CancellationService,
-      "createSingleCancellation",
-    );
+    const pdf = stubIssuance().single;
     stubCancellationSideEffects();
 
     await BookingService.rejectBooking(
@@ -130,7 +157,8 @@ describe("BookingService cancellation refunds", function () {
       },
     );
 
-    assert.strictEqual(createCancellation.called, false);
+    assert.strictEqual(pdf.called, false);
+    assert.strictEqual(IdGenerator.next.called, false);
     assert.strictEqual(storedBooking.attachments.length, 0);
     assert.strictEqual(storedBooking.cancellationRefund.refundAmountEur, 50);
     assert.strictEqual(storedBooking.cancellationRefund.originalAmountEur, 100);
@@ -215,18 +243,8 @@ describe("BookingService cancellation refunds", function () {
       getTotalPrice: () => 200,
       areSomeBookingsPaid: () => true,
     });
-    sinon.stub(CancellationService, "createAggregatedCancellation").resolves({
-      cancellation: {
-        name: "group-cancellation.pdf",
-        buffer: Buffer.from("pdf"),
-      },
-      name: "group-cancellation.pdf",
-      cancellationId: "13",
-      revision: 1,
-      timeCreated: cancelledAt,
-      originalInvoiceNumber: "INV-GROUP-1",
-      originalInvoiceDate: Date.UTC(2026, 6, 1, 8),
-    });
+    bookings[0].attachments = [{ ...INVOICE, invoiceId: "INV-GROUP" }];
+    stubIssuance();
     stubCancellationSideEffects();
 
     const result = await BookingService.rejectGroupBooking(
@@ -248,15 +266,23 @@ describe("BookingService cancellation refunds", function () {
     assert.strictEqual(result.success, true);
     assert.deepStrictEqual(
       bookings.map(
-        (entry) => entry.attachments[0].cancellation.appliedRefundPercentage,
+        (entry) =>
+          cancellationAttachment(entry).cancellation.appliedRefundPercentage,
       ),
       [25, 25],
     );
     assert.deepStrictEqual(
       bookings.map(
-        (entry) => entry.attachments[0].cancellation.suggestedRefundPercentage,
+        (entry) =>
+          cancellationAttachment(entry).cancellation.suggestedRefundPercentage,
       ),
       [100, 50],
+    );
+    assert.deepStrictEqual(
+      bookings.map(
+        (entry) => cancellationAttachment(entry).cancellation.bookingId,
+      ),
+      [undefined, undefined],
     );
     assert.deepStrictEqual(
       bookings.map((entry) => entry.cancellationRefund.appliedRefundPercentage),
@@ -269,7 +295,8 @@ describe("BookingService cancellation refunds", function () {
       [100, 50],
     );
     assert.strictEqual(
-      bookings[0].attachments[0].cancellation.originalDocumentRef.number,
+      cancellationAttachment(bookings[0]).cancellation.originalDocumentRef
+        .number,
       "INV-GROUP-1",
     );
   });
@@ -297,20 +324,7 @@ describe("BookingService cancellation refunds", function () {
       getTotalPrice: () => 200,
       areSomeBookingsPaid: () => true,
     });
-    const createAggregatedCancellation = sinon
-      .stub(CancellationService, "createAggregatedCancellation")
-      .resolves({
-        cancellation: {
-          name: "group-cancellation.pdf",
-          buffer: Buffer.from("pdf"),
-        },
-        name: "group-cancellation.pdf",
-        cancellationId: "13",
-        revision: 1,
-        timeCreated: cancelledAt,
-        originalInvoiceNumber: "INV-GROUP-1",
-        originalInvoiceDate: Date.UTC(2026, 6, 1, 8),
-      });
+    const pdf = stubIssuance().aggregated;
     stubCancellationSideEffects();
 
     const result = await BookingService.rejectGroupBooking(
@@ -335,15 +349,12 @@ describe("BookingService cancellation refunds", function () {
     );
 
     assert.strictEqual(result.success, true);
-    assert.deepStrictEqual(
-      createAggregatedCancellation.firstCall.args[0].options.bankDetails,
-      {
-        accountHolder: "Max Mustermann",
-        bankName: "Musterbank",
-        iban: "DE89370400440532013000",
-        bic: "COBADEFFXXX",
-      },
-    );
+    assert.deepStrictEqual(pdf.firstCall.args[4].bankDetails, {
+      accountHolder: "Max Mustermann",
+      bankName: "Musterbank",
+      iban: "DE89370400440532013000",
+      bic: "COBADEFFXXX",
+    });
   });
 
   it("preserves price and bookable items when unrejecting a booking", async function () {

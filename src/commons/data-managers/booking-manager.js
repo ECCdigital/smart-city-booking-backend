@@ -7,6 +7,7 @@ const { Booking } = require("../entities/booking/booking");
 const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
 const { BookableManager } = require("./bookable-manager");
+const { NotFoundError } = require("../../errors/BaseError");
 
 /**
  * Data Manager for Booking objects.
@@ -278,6 +279,31 @@ class BookingManager {
     });
 
     return BookingManager._toEntities(rawBookings);
+  }
+
+  /**
+   * Appends a document attachment to a booking with one atomic push. The
+   * attachment never travels in a whole-document write: that could lose it
+   * to the state write of a transition running next to it, or overwrite a
+   * parallel amendment.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {Object} attachment The attachment, in the shape of the schema
+   * @returns {Promise<Object>} The attachment
+   * @throws {NotFoundError} If the booking does not exist
+   */
+  static async addAttachment(tenantId, bookingId, attachment) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      { $push: { attachments: attachment } },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
+    return attachment;
   }
 
   /**

@@ -408,8 +408,8 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.save B2 confirmed",
         "access.provision B2",
         "documents.aggregatedReceipt B1,B2",
-        "store.save B1 confirmed [receipt]",
-        "store.save B2 confirmed [receipt]",
+        "store.attach B1 receipt",
+        "store.attach B2 receipt",
         "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
       ]);
     });
@@ -434,8 +434,8 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.save B2 confirmed",
         "access.provision B2",
         "documents.aggregatedReceipt B1,B2",
-        "store.save B1 confirmed [receipt]",
-        "store.save B2 confirmed [receipt]",
+        "store.attach B1 receipt",
+        "store.attach B2 receipt",
         "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
       ]);
 
@@ -484,8 +484,8 @@ describe("group booking lifecycle today: what each state change does at the seam
         "store.save B2 confirmed",
         "access.provision B2",
         "documents.aggregatedReceipt B1,B2",
-        "store.save B1 confirmed [receipt]",
-        "store.save B2 confirmed [receipt]",
+        "store.attach B1 receipt",
+        "store.attach B2 receipt",
         "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
       ]);
     });
@@ -529,6 +529,8 @@ describe("group booking lifecycle today: what each state change does at the seam
       }
       expect(h.takeEffects()).to.deep.equal([
         "documents.aggregatedCancellation B1,B2",
+        "store.attach B1 cancellation",
+        "store.attach B2 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "access.revoke B1",
         "workflow.onReject B1",
@@ -565,6 +567,8 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(states(id)).to.deep.equal(["rejected", "rejected"]);
       expect(h.takeEffects()).to.deep.equal([
         "documents.aggregatedCancellation B1,B2",
+        "store.attach B1 cancellation",
+        "store.attach B2 cancellation",
         "store.save B1 rejected [cancellation]",
         "access.revoke B1",
         "workflow.onReject B1",
@@ -612,6 +616,8 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
         "documents.aggregatedCancellation B1,B2",
+        "store.attach B1 cancellation",
+        "store.attach B2 cancellation",
         "store.save B1 cancelled [receipt,cancellation]",
         "access.revoke B1",
         "workflow.onReject B1",
@@ -626,7 +632,7 @@ describe("group booking lifecycle today: what each state change does at the seam
   // -----------------------------------------------------------------------
 
   describe("reprint: POST /group-bookings/:id/receipt and /invoice", function () {
-    it("reprints one aggregated receipt attached to every member and answers the group", async function () {
+    it("reprints one aggregated receipt as a revision under the same number, attached to every member, and answers the group", async function () {
       const id = await groupIn("confirmed");
 
       const res = await api()
@@ -636,15 +642,17 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(res.status).to.equal(200);
       expect(res.body.success).to.equal(true);
       for (const member of res.body.data.bookings) {
-        expect(member.attachments.map((att) => att.receiptId)).to.deep.equal([
-          "RE-1",
-          "RE-2",
+        expect(
+          member.attachments.map((att) => [att.receiptId, att.revision]),
+        ).to.deep.equal([
+          ["RE-1", 1],
+          ["RE-1", 2],
         ]);
       }
       expect(h.takeEffects()).to.deep.equal([
         "documents.aggregatedReceipt B1,B2",
-        "store.save B1 confirmed [receipt,receipt]",
-        "store.save B2 confirmed [receipt,receipt]",
+        "store.attach B1 receipt",
+        "store.attach B2 receipt",
       ]);
     });
 
@@ -683,8 +691,8 @@ describe("group booking lifecycle today: what each state change does at the seam
       }
       expect(h.takeEffects()).to.deep.equal([
         "documents.aggregatedInvoice B1,B2",
-        "store.save B1 payment_due [invoice]",
-        "store.save B2 payment_due [invoice]",
+        "store.attach B1 invoice",
+        "store.attach B2 invoice",
       ]);
 
       const mailed = await api()
@@ -694,9 +702,9 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(mailed.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
         "documents.aggregatedInvoice B1,B2",
-        "store.save B1 payment_due [invoice,invoice]",
-        "store.save B2 payment_due [invoice,invoice]",
-        "mail.sendInvoice B1,B2 [RG-2.pdf]",
+        "store.attach B1 invoice",
+        "store.attach B2 invoice",
+        "mail.sendInvoice B1,B2 [RG-1-r2.pdf]",
       ]);
     });
 

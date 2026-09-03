@@ -1,8 +1,12 @@
 const PaymentService = require("./payment-service");
 const BookingManager = require("../../../data-managers/booking-manager");
 const TenantManager = require("../../../data-managers/tenant-manager");
-const InvoiceService = require("../invoice-service");
 const MailController = require("../../../mail-service/mail-controller");
+const {
+  issue: issueDocument,
+  groupBookingIdOf,
+  mailAttachments,
+} = require("../../documents/document-issuance");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -10,6 +14,12 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+/**
+ * Payment by invoice: the payment request is an issued invoice, mailed to
+ * the customer, or the announcement of an invoice the administration
+ * creates later (`manualCreation`). The invoices themselves come from the
+ * issuance (`document-issuance.js`); this service only mails them.
+ */
 class InvoicePaymentService extends PaymentService {
   constructor(tenantId, bookingIds, options = {}) {
     super(tenantId, bookingIds, options);
@@ -75,34 +85,15 @@ class InvoicePaymentService extends PaymentService {
   async createSeparateInvoices() {
     const createdInvoices = [];
     for (const bookingId of this.bookingIds) {
-      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
-
-      const { invoice, name, invoiceId, revision, timeCreated } =
-        await InvoiceService.createSingleInvoice(this.tenantId, bookingId);
-
-      booking.attachments.push({
-        type: "invoice",
-        name,
-        invoiceId,
-        revision,
-        timeCreated,
-      });
-      await BookingManager.storeBooking(booking);
-
-      const attachments = [
-        {
-          filename: name,
-          content: invoice.buffer,
-          contentType: "application/pdf",
-        },
-      ];
+      const { booking, attachment, mailAttachments } =
+        await this._issueSingleInvoice(bookingId);
 
       try {
         await MailController.sendInvoice(
           booking.mail,
           bookingId,
           this.tenantId,
-          attachments,
+          mailAttachments,
         );
       } catch (err) {
         logger.error("Error while sending invoice:", bookingId, err);
@@ -110,9 +101,9 @@ class InvoicePaymentService extends PaymentService {
 
       createdInvoices.push({
         bookingId,
-        name,
-        invoiceId,
-        revision,
+        name: attachment.name,
+        invoiceId: attachment.invoiceId,
+        revision: attachment.revision,
       });
     }
 
@@ -120,26 +111,15 @@ class InvoicePaymentService extends PaymentService {
   }
 
   async createAggregatedInvoice() {
-    const result = await InvoiceService.issueAggregatedInvoice(
-      this.tenantId,
-      this.bookingIds,
-      this.groupBookingId,
-    );
-
-    const attachments = [
-      {
-        filename: result.name,
-        content: result.invoice.buffer,
-        contentType: "application/pdf",
-      },
-    ];
+    const { booking, attachment, mailAttachments } =
+      await this._issueAggregatedInvoice();
 
     try {
       await MailController.sendInvoice(
-        result.mail,
+        booking.mail,
         this.bookingIds,
         this.tenantId,
-        attachments,
+        mailAttachments,
         true,
       );
     } catch (err) {
@@ -148,9 +128,9 @@ class InvoicePaymentService extends PaymentService {
 
     return {
       bookingIds: this.bookingIds,
-      name: result.name,
-      invoiceId: result.invoiceId,
-      revision: result.revision,
+      name: attachment.name,
+      invoiceId: attachment.invoiceId,
+      revision: attachment.revision,
     };
   }
 
@@ -179,66 +159,64 @@ class InvoicePaymentService extends PaymentService {
   }
 
   async separatePaymentRequest() {
-    try {
-      for (const bookingId of this.bookingIds) {
-        const booking = await BookingManager.getBooking(
-          bookingId,
-          this.tenantId,
-        );
+    for (const bookingId of this.bookingIds) {
+      const { booking, mailAttachments } =
+        await this._issueSingleInvoice(bookingId);
 
-        const { invoice, name, invoiceId, revision, timeCreated } =
-          await InvoiceService.createSingleInvoice(this.tenantId, bookingId);
-
-        booking.attachments.push({
-          type: "invoice",
-          name,
-          invoiceId,
-          revision,
-          timeCreated,
-        });
-        await BookingManager.storeBooking(booking);
-
-        const attachments = [
-          {
-            filename: name,
-            content: invoice.buffer,
-            contentType: "application/pdf",
-          },
-        ];
-        await MailController.sendInvoiceAfterBookingApproval(
-          booking.mail,
-          bookingId,
-          this.tenantId,
-          attachments,
-          false,
-        );
-      }
-    } catch (error) {
-      throw error;
+      await MailController.sendInvoiceAfterBookingApproval(
+        booking.mail,
+        bookingId,
+        this.tenantId,
+        mailAttachments,
+        false,
+      );
     }
   }
 
   async aggregatedPaymentRequest() {
-    const result = await InvoiceService.issueAggregatedInvoice(
-      this.tenantId,
-      this.bookingIds,
-      this.groupBookingId,
-    );
+    const { booking, mailAttachments } = await this._issueAggregatedInvoice();
 
-    const attachments = [
-      {
-        filename: result.name,
-        content: result.invoice.buffer,
-        contentType: "application/pdf",
-      },
-    ];
     await MailController.sendInvoiceAfterBookingApproval(
-      result.mail,
-      result.bookingIds,
+      booking.mail,
+      this.bookingIds,
       this.tenantId,
-      attachments,
+      mailAttachments,
       true,
     );
+  }
+
+  async _issueSingleInvoice(bookingId) {
+    const booking = await BookingManager.getBooking(bookingId, this.tenantId);
+    const { attachment, file } = await issueDocument({
+      tenantId: this.tenantId,
+      bookingIds: [bookingId],
+      type: "invoice",
+      bookings: [booking],
+    });
+    return { booking, attachment, mailAttachments: mailAttachments(file) };
+  }
+
+  async _issueAggregatedInvoice() {
+    const bookings = await BookingManager.getBookings(
+      this.tenantId,
+      this.bookingIds,
+    );
+    const { attachment, file } = await issueDocument({
+      tenantId: this.tenantId,
+      bookingIds: this.bookingIds,
+      type: "invoice",
+      groupBookingId: await groupBookingIdOf({
+        tenantId: this.tenantId,
+        bookingIds: this.bookingIds,
+        groupBookingId: this.groupBookingId,
+      }),
+      bookings,
+    });
+    return {
+      booking: bookings[0],
+      attachment,
+      mailAttachments: mailAttachments(file),
+    };
   }
 }
 

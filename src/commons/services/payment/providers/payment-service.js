@@ -66,6 +66,7 @@ class PaymentService {
         tenantId,
         bookingIds,
         paymentMethod,
+        groupBookingId: this.groupBookingId,
       });
     } else {
       for (const bookingId of bookingIds) {
