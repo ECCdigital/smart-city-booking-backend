@@ -4,3 +4,7 @@
  * only here; in production it logs and keeps the state.
  */
 process.env.NODE_ENV = "test";
+
+// No test may reach the database: a query on a model without a connection
+// fails at once instead of buffering for ten seconds.
+require("mongoose").set("bufferCommands", false);
