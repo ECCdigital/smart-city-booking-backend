@@ -56,11 +56,16 @@ describe("BlockPeriodService", function () {
 - Third-party library internals
 - Full end-to-end flows requiring live MongoDB (unless integration test infra exists)
 
+## Snapshots
+
+Characterization tests pin rendered output (the mails under `tests/snapshots/mail/`) through `tests/helpers/snapshot.js`. A missing snapshot is recorded on the first run and committed; a mismatch fails and names the first differing line. `UPDATE_SNAPSHOTS=1 npm test` rewrites them — only for a change made on purpose, named in the changelog.
+
 ## Running
 
 ```bash
 npm test                              # all tests
 npx mocha tests/block-period-api.test.js  # single file
+UPDATE_SNAPSHOTS=1 npm test           # accept changed snapshots
 ```
 
 Add tests for new business logic. Don't add tests that only assert mocks were called unless that IS the behavior under test.

@@ -1,0 +1,101 @@
+From: Buchungsplattform <noreply@plattform.example.test>
+To: veranstalter@konzerte.example.test
+Bcc: 
+Subject: Eine neue Buchung liegt vor
+Attachments: 
+
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <style>
+      .content {
+        text-align: left;
+        background-color: white;
+        border: 1px solid grey;
+        padding: 10px 40px;
+        border-radius: 2px;
+        margin: auto;
+        max-width: 750px;
+      }
+
+      body {
+        align-content: center;
+      }
+
+      .layer {
+        text-align: center;
+      }
+    </style>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <div class="layer">
+      <div class="content">
+        <p>
+  <div style="font-family: inherit;">
+    
+  <div style="">
+    <p>Es liegt eine neue Buchung vor.</p><br />
+    
+  </div>
+<br />
+
+
+
+
+  <div style="">
+    <strong>Buchungsnummer:</strong> G-3<br>
+<strong>Gesamtbetrag:</strong> 40,50 €<br><br>
+
+
+    <strong>Firma:</strong> Musterfirma GmbH<br>
+    <strong>Name:</strong> Erika Musterfrau<br>
+    <strong>Adresse:</strong> 
+      Musterstraße 1,
+      12345
+      Musterstadt<br>
+    <strong>Telefon:</strong> +49 30 1234567<br>
+    <strong>E-Mail:</strong> erika@example.test
+
+ 
+
+<br>
+<h2>Bestellübersicht</h2>
+
+  <div style="border-bottom: solid 1px grey; margin-bottom: 10px; padding-bottom: 10px">
+    <strong>Konzertkarte, Anzahl: 2</strong>
+      <div style="color: grey">
+        Ticket für die Veranstaltung Herbstkonzert<br>
+        vom 05.10.2026 19:30
+        bis 05.10.2026 22:00<br>
+        Ort: Großer Saal, Rathausplatz, 1 12345 Musterstadt
+      </div>
+
+  </div>
+
+
+    
+  </div>
+
+
+
+
+
+
+      
+        <hr />
+        <p style="font-size: 0.9em; color: #555;">
+          Falls Sie Fragen haben, können Sie uns gerne 
+          <a href="mailto:buchung@stadthalle.example.test">kontaktieren</a>.
+        </p>
+    
+  </div>
+</p>
+      </div>
+    </div>
+  </body>
+  <footer class="footer"></footer>
+</html>
