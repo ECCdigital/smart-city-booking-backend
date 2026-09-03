@@ -6,6 +6,7 @@
 - **Assertions:** Node `assert` or Chai
 - **Mocking:** Sinon (`sinon.stub`, `sinon.spy`)
 - **HTTP tests:** supertest against the real routers on a bare express app (see `tests/helpers/booking-lifecycle-harness.js`); chai-http is still installed but unused
+- **Environment:** `.mocharc.yml` loads `tests/helpers/test-env.js` first, which sets `NODE_ENV=test`; code may throw on a programming error there where production only logs (e.g. a write to a derived booking flag)
 
 ## Location
 

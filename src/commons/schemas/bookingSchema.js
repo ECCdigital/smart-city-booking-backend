@@ -1,6 +1,10 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
 const { mediaReferenceSchema } = require("./mediaSchema");
+const {
+  STATUSES,
+  CANCELLED_FROM_STATUSES,
+} = require("../services/booking-lifecycle/booking-state");
 
 const bookingHookSchemaDefinition = {
   id: { type: String, required: true },
@@ -52,6 +56,13 @@ const cancellationAuditSchema = new Schema(
     },
     adminOverride: { type: Boolean, required: true },
     cancelledByUserId: { type: String, default: null },
+    // The state the booking was cancelled from; `reinstate` returns to it
+    // and the entity derives `isPayed` of a cancelled booking from it.
+    cancelledFrom: {
+      type: String,
+      enum: CANCELLED_FROM_STATUSES,
+      default: undefined,
+    },
     originalDocumentRef: {
       type: originalCancellationDocumentSchema,
       default: undefined,
@@ -102,6 +113,10 @@ const bookingSchemaDefinition = {
   rejectionReason: { type: String, default: "" },
   company: { type: String, default: "" },
   couponCode: { type: String, default: "" },
+  // The booking state, the one source of truth (booking-state.js). The
+  // three flags below are derived from it by the entity on every write and
+  // stay for the readers that query them.
+  status: { type: String, enum: STATUSES, required: true },
   isCommitted: { type: Boolean, default: false },
   isPayed: { type: Boolean, default: false },
   isRejected: { type: Boolean, default: false },

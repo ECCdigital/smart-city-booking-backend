@@ -311,12 +311,13 @@ describe("group booking lifecycle today: what each state change does at the seam
       const res = await commit(paid);
 
       expect(res.status).to.equal(200);
-      // Paid already, the group takes the free-booking way, where the
-      // ticket block is reachable - and still finds no ticket.
+      // Paid already (and, since ticket 2, confirmed with a receipt at
+      // creation), the group takes the free-booking way, where the ticket
+      // block is reachable - and still finds no ticket.
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed",
+        "store.save B1 confirmed [receipt]",
         "workflow.onCommit B1",
-        "store.save B2 confirmed",
+        "store.save B2 confirmed [receipt]",
         "workflow.onCommit B2",
         "access.provision B1",
         "access.provision B2",
