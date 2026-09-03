@@ -172,6 +172,16 @@ _Response:_
 - **booked** — Number of booked units
 - **remaining** — Number of remaining units
 
+## Bookings
+
+### PUT /api/:tenant/bookings
+
+Creates a booking on behalf of a customer (a manual booking) or updates one. On a create the three flags of the form decide the state the booking starts in: none - a request; `isCommitted` - awaiting payment (confirmed for a free booking); `isCommitted` and `isPayed` - confirmed and paid. `isPayed` without `isCommitted` on a priced booking, or `isRejected`, is `400 invalid_status`: no state stands for it, nothing is written. The stored booking is then admitted to the lifecycle: the compartments held or the access granted, the receipt of a paid booking issued, the customer, the tenant and the supervisors mailed; where the hold fails, the booking is deleted again and the hold's error answered. On an update the flags are the plan of transitions (`400 invalid_status_change` for flags no transition reaches).
+
+### DELETE /api/:tenant/bookings/:id
+
+Removes a booking for good: its access is taken back, its documents removed, then the booking. Not a cancellation - `POST /bookings/:id/reject` keeps the booking in the state "cancelled".
+
 ## Cancellation refunds
 
 Tenant owners configure `cancellationRefundTiers` through the existing tenant create/update API. An empty array means a full refund.

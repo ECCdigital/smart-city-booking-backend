@@ -17,7 +17,13 @@ const {
 } = require("../../../commons/services/documents/document-issuance");
 const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
 const BookingService = require("../../../commons/services/checkout/booking-service");
-const { TRIGGER } = require("../../../commons/services/booking-lifecycle");
+const BookingCheckout = require("../../../commons/services/checkout/booking-checkout");
+const {
+  bookingLifecycle,
+  bookingDeletion,
+  TRANSITION,
+  TRIGGER,
+} = require("../../../commons/services/booking-lifecycle");
 const { answerTransitionError } = require("./transition-error-answer");
 const {
   CheckoutPolicy,
@@ -430,7 +436,7 @@ class BookingController {
     );
 
     try {
-      const newBooking = await BookingService.createSingleBooking({
+      const newBooking = await BookingCheckout.createSingleBooking({
         tenantId,
         user,
         simulate: false,
@@ -458,7 +464,7 @@ class BookingController {
           RolePermission.MANAGE_BOOKINGS,
         )
       ) {
-        const savedBooking = await BookingService.updateBooking(
+        const savedBooking = await BookingCheckout.updateBooking(
           tenant,
           booking,
           { requestBody: request.body, userId: user.id },
@@ -502,7 +508,7 @@ class BookingController {
             RolePermission.MANAGE_BOOKINGS,
           )
         ) {
-          await BookingService.cancelBooking(tenant, id);
+          await bookingDeletion.remove(tenant, id);
           await WorkflowService.removeTask(tenant, id);
           logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
           response.sendStatus(200);
@@ -550,19 +556,25 @@ class BookingController {
         logger.info(
           `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
         );
-        const result = await BookingService.commitBooking(tenant, booking, {
-          trigger: TRIGGER.ADMIN,
-        });
-
         // The consistency check in front of the transition keeps its
         // answer; the transition itself throws or succeeds.
-        if (!result.success) {
+        const errors = BookingService.transitionErrors(TRANSITION.CONFIRM, [
+          booking,
+        ]);
+        if (errors.length > 0) {
+          logger.error(
+            `${tenant} -- booking ${booking.id} cannot be committed: ${JSON.stringify(errors)}`,
+          );
           return response.status(200).json({
             success: false,
             data: null,
-            errors: result.errors,
+            errors,
           });
         }
+
+        await bookingLifecycle.confirm(tenant, booking.id, {
+          trigger: TRIGGER.ADMIN,
+        });
 
         return response.status(200).json({
           success: true,
@@ -609,9 +621,7 @@ class BookingController {
         logger.info(
           `${tenant} -- setting booking ${booking.id} as paid by user ${user?.id}`,
         );
-        await BookingService.setBookingPayed({
-          tenantId: tenant,
-          bookingId: id,
+        await bookingLifecycle.pay(tenant, id, {
           trigger: TRIGGER.ADMIN,
           paymentMethod,
           timePaid,
@@ -752,7 +762,7 @@ class BookingController {
         logger.info(
           `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
         );
-        await BookingService.rejectBooking(tenantId, id, {
+        await bookingLifecycle.cancel(tenantId, id, {
           trigger: TRIGGER.ADMIN,
           reason,
           bankDetails: bankDetails || null,
@@ -787,7 +797,7 @@ class BookingController {
       const reason = payload.reason ?? "";
       const bankDetails = payload.bankDetails ?? null;
 
-      await BookingService.requestRejectBooking(tenant, id, {
+      await bookingLifecycle.requestCancel(tenant, id, {
         trigger: TRIGGER.CUSTOMER,
         reason,
         bankDetails,
@@ -822,7 +832,7 @@ class BookingController {
       if (hook) {
         if (hook.type === BOOKING_HOOK_TYPES.REJECT) {
           const { reason, bankDetails } = hook.payload || {};
-          await BookingService.rejectBooking(tenant, id, {
+          await bookingLifecycle.cancel(tenant, id, {
             trigger: TRIGGER.CUSTOMER,
             reason,
             hookId,

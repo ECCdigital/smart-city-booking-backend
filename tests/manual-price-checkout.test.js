@@ -218,11 +218,11 @@ describe("a manual price never reaches a self-service booking", function () {
   });
 });
 
-describe("BookingService.updateBooking with a manual price", function () {
-  let BookingService;
+describe("BookingCheckout.updateBooking with a manual price", function () {
+  let BookingCheckout;
 
   before(function () {
-    BookingService = require("../src/commons/services/checkout/booking-service");
+    BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
   });
 
   afterEach(function () {
@@ -284,7 +284,7 @@ describe("BookingService.updateBooking with a manual price", function () {
       isRejected: false,
     });
 
-    await BookingService.updateBooking(TENANT_ID, updated, {
+    await BookingCheckout.updateBooking(TENANT_ID, updated, {
       requestBody: updated,
     });
 

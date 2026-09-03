@@ -246,5 +246,9 @@ Eine erneute Ausstellung eines Buchungsdokuments unter derselben Dokumentnummer,
 _Avoid_: Nachdruck (als Modellbegriff — das ist die Handlung), Reprint, Belegkopie, Duplikat
 
 **Zahlungsaufforderung**:
-Die eine Mitteilung, mit der der Mandant den Buchenden zur Zahlung einer Buchung in „Zahlung offen" auffordert. Ihre Form bestimmt der Zahlungsanbieter des Mandanten: ein Zahlungslink, eine ausgestellte Rechnung oder die Ankündigung einer später erstellten Rechnung. Eine Mitteilung, kein Zustand: scheitert sie, bleibt die Buchung in „Zahlung offen".
+Die eine Mitteilung, mit der der Mandant den Buchenden zur Zahlung einer Buchung in „Zahlung offen" auffordert. Ihre Form bestimmt der Zahlungsanbieter des Mandanten: ein Zahlungslink, eine ausgestellte Rechnung oder die Ankündigung einer später erstellten Rechnung. Eine Mitteilung, kein Zustand: scheitert sie, bleibt die Buchung in „Zahlung offen". Bucht der Buchende selbst, ist die Antwort des Checkouts – die Zahlungsseite, auf die er weitergeleitet wird – seine Zahlungsaufforderung; die Aufnahme sendet dann keine zweite.
 _Avoid_: paymentRequest (als Sprechbegriff), Rechnungsversand (das ist nur eine der drei Formen), Zahlungserinnerung (das gibt es nicht)
+
+**Löschung (einer Buchung)**:
+Das harte Entfernen einer Buchung durch die Verwaltung — kein Lebenszyklus-Übergang, denn eine gelöschte Buchung hat keinen Zustand mehr. Läuft über dieselbe Naht wie die Übergänge: der Zugang wird zurückgenommen, die Buchungsdokumente werden entfernt (ein Dokument, das seine Buchung überlebt, könnte niemand mehr erreichen), dann die Buchung. Nicht zu verwechseln mit dem Storno, das die Buchung im Zustand „storniert" behält.
+_Avoid_: Delete (als Sprechbegriff), Storno (das ist der Übergang), Entfernen (unqualifiziert)

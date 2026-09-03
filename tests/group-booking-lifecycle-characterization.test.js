@@ -113,7 +113,7 @@ describe("group booking lifecycle today: what each state change does at the seam
 
   // -----------------------------------------------------------------------
 
-  describe("admission: the group checkout stores the members one by one and mails once", function () {
+  describe("admission: the group checkout stores the members one by one, then the group is admitted and mails once", function () {
     it("a group of a room to be confirmed arrives requested, one request confirmation for the group", async function () {
       const body = await groupCheckout("room");
 
@@ -124,11 +124,11 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(states(groupBooking.id)).to.deep.equal(["requested", "requested"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
         "store.save B2 requested",
-        "workflow.onCreate B2 without skipBookingStatus",
+        "access.hold B1",
         "access.hold B2",
+        "workflow.onCreate B1",
+        "workflow.onCreate B2",
         "mail.sendBookingRequestConfirmation B1,B2",
         "mail.sendIncomingBooking B1,B2",
         "supervisor.notify B1,B2",
@@ -149,12 +149,12 @@ describe("group booking lifecycle today: what each state change does at the seam
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 payment_due",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
         "store.save B2 payment_due",
-        "workflow.onCreate B2 without skipBookingStatus",
+        "access.hold B1",
         "access.hold B2",
-        "mail.sendBookingConfirmation B1,B2",
+        "workflow.onCreate B1",
+        "workflow.onCreate B2",
+        // The customer is handed the payment page; no request by mail.
         "mail.sendIncomingBooking B1,B2",
         "supervisor.notify B1,B2",
         "access.refreshHolds B1,B2",
@@ -170,14 +170,12 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(states(groupBooking.id)).to.deep.equal(["confirmed", "confirmed"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
-        "access.provision B1",
         "store.save B2 confirmed",
-        "workflow.onCreate B2 without skipBookingStatus",
-        "access.hold B2",
+        "access.provision B1",
         "access.provision B2",
-        "mail.sendBookingConfirmation B1,B2",
+        "workflow.onCreate B1",
+        "workflow.onCreate B2",
+        "mail.sendFreeBookingConfirmation B1,B2",
         "mail.sendIncomingBooking B1,B2",
         "supervisor.notify B1,B2",
       ]);
@@ -210,32 +208,31 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(states(res.body.id)).to.deep.equal(["requested", "requested"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
         "store.save B2 requested",
-        "workflow.onCreate B2 without skipBookingStatus",
+        "access.hold B1",
         "access.hold B2",
+        "workflow.onCreate B1",
+        "workflow.onCreate B2",
         "mail.sendBookingRequestConfirmation B1,B2",
         "mail.sendIncomingBooking B1,B2",
         "supervisor.notify B1,B2",
       ]);
     });
 
-    it("a hold that fails at the second member rolls that member back and leaves the first without a group (ticket 9)", async function () {
+    it("a hold that fails at the second member rolls every member and the group back: the group never existed", async function () {
       h.failing.add("access.hold B2");
 
       const body = await groupCheckout("room");
 
       expect(body.success).to.equal(false);
-      expect(h.store.size).to.equal(1);
+      expect(h.store.size).to.equal(0);
       expect(h.groups.size).to.equal(0);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
         "store.save B2 requested",
-        "workflow.onCreate B2 without skipBookingStatus",
+        "access.hold B1",
         "access.hold B2 FAILED",
+        "store.remove B1",
         "store.remove B2",
       ]);
     });
@@ -320,11 +317,16 @@ describe("group booking lifecycle today: what each state change does at the seam
         "mail.sendNewBooking B2",
       ]);
 
-      // Paid already (and, since ticket 2, confirmed with a receipt at
-      // creation), the group is not a request: the guard refuses it
+      // Paid already, the group is not a request: the guard refuses it
       // (before, it was confirmed a second time as a free group).
-      const third = await h.manualBooking("ticket", { isPayed: true });
-      const fourth = await h.manualBooking("ticket", { isPayed: true });
+      const third = await h.manualBooking("ticket", {
+        isCommitted: true,
+        isPayed: true,
+      });
+      const fourth = await h.manualBooking("ticket", {
+        isCommitted: true,
+        isPayed: true,
+      });
       await GroupBookingManager.storeGroupBooking({
         id: "G-SEED-PAID",
         tenantId: TENANT,
@@ -538,11 +540,12 @@ describe("group booking lifecycle today: what each state change does at the seam
     });
 
     it("the confirmation of the payment carries the aggregated receipt and the `mailAttach` documents of the members (the receipt replaced them before)", async function () {
-      // Unpaid, the document of the room goes out once for the group.
+      // Awaiting payment, the customer gets no mail at the checkout: the
+      // payment page is the answer.
       const { groupBooking } = (await groupCheckout("room-with-doc")).data;
-      expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B1,B2 [Hausordnung.pdf]",
-      );
+      expect(
+        h.takeEffects().filter((row) => row.startsWith("mail.sendBooking")),
+      ).to.deep.equal([]);
 
       await pay(groupBooking.id);
 

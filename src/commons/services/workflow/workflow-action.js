@@ -74,30 +74,21 @@ class BookingStatusAction extends WorkflowAction {
 
     if (!booking) return;
 
-    const bookingService = require("../../services/checkout/booking-service");
+    // The transitions a workflow action sets off run without their own
+    // workflow event (glossary "Auslöser": `workflow`), so a state change
+    // never loops back into the workflow.
+    const { bookingLifecycle } = require("../booking-lifecycle");
+    const options = { trigger: TRIGGER.WORKFLOW };
 
     for (const bs of this._action.bookingStatus) {
       if (bs === "commit") {
-        console.log("Committing booking as part of workflow action");
-        await bookingService.commitBooking(
-          this.tenantId,
-          { id: this.bookingId },
-          { trigger: TRIGGER.WORKFLOW },
-        );
+        await bookingLifecycle.confirm(this.tenantId, this.bookingId, options);
       }
       if (bs === "paid") {
-        console.log("Setting booking as paid as part of workflow action");
-        await bookingService.setBookingPayed({
-          tenantId: this.tenantId,
-          bookingId: this.bookingId,
-          trigger: TRIGGER.WORKFLOW,
-        });
+        await bookingLifecycle.pay(this.tenantId, this.bookingId, options);
       }
       if (bs === "reject") {
-        console.log("Rejecting booking as part of workflow action");
-        await bookingService.rejectBooking(this.tenantId, this.bookingId, {
-          trigger: TRIGGER.WORKFLOW,
-        });
+        await bookingLifecycle.cancel(this.tenantId, this.bookingId, options);
       }
     }
   }

@@ -5,6 +5,9 @@ const PaymentUtils = require("../../../commons/utilities/payment-utils");
 const AccessService = require("../../../commons/services/access/access-service");
 const PermissionService = require("../../../commons/services/permission-service");
 const { BaseError } = require("../../../errors/BaseError");
+const {
+  LifecycleError,
+} = require("../../../commons/services/booking-lifecycle");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -36,6 +39,24 @@ class PaymentController {
     }
 
     return resolvedIds;
+  }
+
+  /**
+   * The error a payment notification answers: an aborted transition `pay`
+   * as `set_booking_payed_failed` or `set_aggregated_booking_payed_failed`
+   * (500), any other error of the lifecycle as itself.
+   */
+  static _paymentError(err, aggregated) {
+    if (err instanceof LifecycleError) {
+      return new BaseError(
+        aggregated
+          ? "set_aggregated_booking_payed_failed"
+          : "set_booking_payed_failed",
+        500,
+        { message: err.message },
+      );
+    }
+    return err;
   }
 
   static async createPayment(request, response) {
@@ -206,10 +227,12 @@ class PaymentController {
       response.sendStatus(200);
     } catch (err) {
       // The lifecycle's guard, e.g. a second notification for a booking
-      // paid already: 409 invalid_transition, nothing changed.
-      if (err instanceof BaseError) {
-        logger.warn({ err: err.toJSON() }, `${tenantId} -- ${err.code}`);
-        return response.status(err.statusCode).json(err.toJSON());
+      // paid already: 409 invalid_transition, nothing changed. An aborted
+      // payment answers the error code of before, a 500.
+      if (err instanceof LifecycleError || err instanceof BaseError) {
+        const error = PaymentController._paymentError(err, isAggregated);
+        logger.warn({ err: error.toJSON() }, `${tenantId} -- ${error.code}`);
+        return response.status(error.statusCode).json(error.toJSON());
       }
       logger.warn(
         `${tenantId} -- could not get payment result for bookings ${aggregatedBookingIds}.`,
@@ -289,10 +312,12 @@ class PaymentController {
       response.sendStatus(200);
     } catch (err) {
       // The lifecycle's guard, e.g. a second notification for a booking
-      // paid already: 409 invalid_transition, nothing changed.
-      if (err instanceof BaseError) {
-        logger.warn({ err: err.toJSON() }, `${tenantId} -- ${err.code}`);
-        return response.status(err.statusCode).json(err.toJSON());
+      // paid already: 409 invalid_transition, nothing changed. An aborted
+      // payment answers the error code of before, a 500.
+      if (err instanceof LifecycleError || err instanceof BaseError) {
+        const error = PaymentController._paymentError(err, isAggregated);
+        logger.warn({ err: error.toJSON() }, `${tenantId} -- ${error.code}`);
+        return response.status(error.statusCode).json(error.toJSON());
       }
       logger.warn(
         `${tenantId} -- could not get payment result for booking ${aggregatedBookingIds}.`,

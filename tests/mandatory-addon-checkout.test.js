@@ -36,8 +36,8 @@ function plainBookable(overrides = {}) {
   });
 }
 
-describe("BookingService.createBooking — mandatory addons are never priced twice", function () {
-  let BookingService;
+describe("BookingCheckout.createBooking — mandatory addons are never priced twice", function () {
+  let BookingCheckout;
   let BookingManager;
   let BookableManager;
   let TenantManager;
@@ -47,7 +47,7 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
   let WorkflowService;
 
   before(function () {
-    BookingService = require("../src/commons/services/checkout/booking-service");
+    BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
     BookingManager = require("../src/commons/data-managers/booking-manager");
     ({
       BookableManager,
@@ -125,7 +125,7 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
       { bookableId: addon.id, amount: 1 },
     ];
 
-    await BookingService.createBooking({
+    await BookingCheckout.createBooking({
       tenantId: TENANT_ID,
       user: { id: CUSTOMER_ID },
       simulate: false,
@@ -174,7 +174,7 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
       [addon.id]: addon,
     });
 
-    await BookingService.createBooking({
+    await BookingCheckout.createBooking({
       tenantId: TENANT_ID,
       user: { id: CUSTOMER_ID },
       simulate: false,
@@ -229,7 +229,7 @@ describe("BookingService.createBooking — mandatory addons are never priced twi
 
     const validatedItems = await resolveCheckoutItems(cart(), TENANT_ID);
 
-    await BookingService.createBooking({
+    await BookingCheckout.createBooking({
       tenantId: TENANT_ID,
       user: { id: CUSTOMER_ID },
       simulate: false,

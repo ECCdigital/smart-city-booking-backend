@@ -15,6 +15,7 @@ const {
 } = require("../../../commons/services/documents/document-issuance");
 const {
   groupBookingLifecycle,
+  bookingDeletion,
   TRANSITION,
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
@@ -225,7 +226,7 @@ class GroupBookingController {
       }
 
       if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
-        const errors = BookingService.groupTransitionErrors(
+        const errors = BookingService.transitionErrors(
           TRANSITION.CONFIRM,
           groupBooking.bookings,
         );
@@ -388,7 +389,7 @@ class GroupBookingController {
       }
 
       if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
-        const errors = BookingService.groupTransitionErrors(
+        const errors = BookingService.transitionErrors(
           TRANSITION.CANCEL,
           groupBooking.bookings,
         );
@@ -706,7 +707,7 @@ class GroupBookingController {
         ))
       ) {
         for (const bookingId of groupBooking.bookingIds) {
-          await BookingService.cancelBooking(tenantId, bookingId);
+          await bookingDeletion.remove(tenantId, bookingId);
           await WorkflowService.removeTask(tenantId, bookingId);
         }
         await GroupBookingManager.deleteGroupBooking(tenantId, groupBookingId);

@@ -188,13 +188,19 @@ function createGroupBookingLifecycle(adapters) {
   }
 
   /**
-   * The admission of a group (spec part 1, 5.2 and 7; glossary
-   * "Aufnahme"): the members are stored by the checkout in the state it
-   * chose, held and told to the workflow there too, until ticket 9 moves
-   * that here; the group's own effects are one receipt for a group
-   * confirmed and paid at once, and one mail - the receipt of a request, or
-   * the confirmation of a confirmed group - then the tenant's and the
-   * supervisors' notice.
+   * The admission of a group (spec part 1, 5.2 and 7; part 2, sections 8
+   * and 9; glossary "Aufnahme"): the checkout stored the members in the
+   * state it chose, the lifecycle runs the effects of that state - per
+   * member the hold at `requested | payment_due` or the grant at
+   * `confirmed`, one aggregated receipt for a group confirmed and paid at
+   * once, the workflow event `onCreate` per member, then one mail for the
+   * group - the receipt of a request, the payment request of a group
+   * awaiting payment (for every trigger but `customer`, whose checkout
+   * asks for the payment itself), the confirmation with the receipt of a
+   * paid one, the free booking confirmation of a free one - and the
+   * tenant's, the supervisors' and the organizer's notice. Nothing is
+   * written; a hold that fails aborts with nothing to restore, the checkout
+   * deletes the members and the group.
    *
    * @param {string} tenantId
    * @param {string} groupBookingId
@@ -214,10 +220,14 @@ function createGroupBookingLifecycle(adapters) {
       nextStateOf(group, from, transition, booking);
     }
     const requested = () => from === STATUS.REQUESTED;
+    const paymentDue = () => from === STATUS.PAYMENT_DUE;
     const confirmed = () => from === STATUS.CONFIRMED;
+    const priced = () => isPricedGroup(bookings);
     const files = [];
 
     return runPipeline(ctxOf(transition, tenantId, group, bookings), [
+      ...accessEach(bookings, "hold", () => !confirmed()),
+      ...accessEach(bookings, "provision", confirmed),
       step(
         PHASE.DOCUMENT,
         "documents",
@@ -233,14 +243,28 @@ function createGroupBookingLifecycle(adapters) {
           files.push(issued.file);
           return issued;
         },
-        { when: () => confirmed() && isPricedGroup(bookings) },
+        { when: () => confirmed() && priced() },
       ),
+      ...emitEach(bookings, WORKFLOW_EVENT.CREATE, trigger),
       step(
         PHASE.NOTIFY,
         "mail",
         "sendRequestConfirmation",
         () => mail.sendRequestConfirmation(bookings, { aggregated: true }),
         { when: requested },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "payment",
+        "requestPayment",
+        () =>
+          payment.requestPayment({
+            tenantId,
+            bookingIds: group.bookingIds,
+            paymentProvider: bookings[0].paymentProvider,
+            groupBookingId: group.id,
+          }),
+        { when: () => paymentDue() && trigger !== TRIGGER.CUSTOMER },
       ),
       step(
         PHASE.NOTIFY,
@@ -251,13 +275,27 @@ function createGroupBookingLifecycle(adapters) {
             attachments: files,
             aggregated: true,
           }),
-        { when: () => !requested() },
+        { when: () => confirmed() && priced() },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendFreeBookingConfirmation",
+        () => mail.sendFreeBookingConfirmation(bookings, { aggregated: true }),
+        { when: () => confirmed() && !priced() },
       ),
       step(PHASE.NOTIFY, "mail", "sendTenantMail", () =>
         mail.sendTenantMail(bookings, { aggregated: true }),
       ),
       step(PHASE.NOTIFY, "mail", "sendSupervisorMail", () =>
         mail.sendSupervisorMail(bookings, { aggregated: true }),
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendEmailToOrganizer",
+        () => mail.sendEmailToOrganizer(bookings),
+        { when: () => hasTicketMember(bookings) },
       ),
     ]);
   }

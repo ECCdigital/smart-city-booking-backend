@@ -6,7 +6,9 @@ const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaService = require("../src/commons/services/media/media-service");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
 const PermissionService = require("../src/commons/services/permission-service");
-const BookingService = require("../src/commons/services/checkout/booking-service");
+const {
+  prepareMailAttachments,
+} = require("../src/commons/services/booking-lifecycle/mail-attachments");
 const HtmlEngine = require("../src/platform/html-engine/html-engine");
 const {
   embedMediaImages,
@@ -547,7 +549,7 @@ describe("media references at bookables and events", function () {
       sandbox.stub(MediaService, "getBuffer").resolves(Buffer.from("bytes"));
       const get = sandbox.stub(axios, "get");
 
-      const prepared = await BookingService.prepareMailAttachments(
+      const prepared = await prepareMailAttachments(
         [
           {
             title: "House rules",
@@ -574,7 +576,7 @@ describe("media references at bookables and events", function () {
         headers: { "content-type": "application/pdf" },
       });
 
-      const prepared = await BookingService.prepareMailAttachments(
+      const prepared = await prepareMailAttachments(
         [
           {
             title: "Terms",
@@ -607,7 +609,7 @@ describe("media references at bookables and events", function () {
         reference: mediaReference("media-1"),
       };
 
-      const prepared = await BookingService.prepareMailAttachments(
+      const prepared = await prepareMailAttachments(
         [attachment, { ...attachment }],
         TENANT,
       );
@@ -619,7 +621,7 @@ describe("media references at bookables and events", function () {
     it("skips attachments that are not flagged for the mail", async function () {
       const getMedia = sandbox.stub(MediaManager, "getMedia");
 
-      const prepared = await BookingService.prepareMailAttachments(
+      const prepared = await prepareMailAttachments(
         [{ title: "House rules", reference: mediaReference("media-1") }],
         TENANT,
       );

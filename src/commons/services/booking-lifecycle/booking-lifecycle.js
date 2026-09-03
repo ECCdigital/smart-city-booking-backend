@@ -6,10 +6,10 @@
  *
  * `createBookingLifecycle(adapters)` builds an instance over any adapters;
  * the default instance below runs over the production adapters in
- * `adapters/`, tests build theirs over the in-memory ones. During the
- * migration `BookingService` delegates to the default instance transition
- * by transition; so far: `confirm`, `pay`, `cancel`, `requestCancel`,
- * `reinstate`, `amend`.
+ * `adapters/`, tests build theirs over the in-memory ones. The callers -
+ * the controllers, the checkout (`checkout/booking-checkout.js`), the
+ * payment webhook, the workflow action and the rule engine - call the
+ * default instance.
  *
  * A transition takes `(tenantId, bookingId, options)` - `amend` the new
  * booking instead of the id - `trigger` being mandatory (glossary
@@ -37,6 +37,7 @@ const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
 const { NotFoundError, ForbiddenError } = require("../../../errors/BaseError");
 
 const WORKFLOW_EVENT = Object.freeze({
+  CREATE: "onCreate",
   COMMIT: "onCommit",
   PAY: "onPay",
   REJECT: "onReject",
@@ -109,6 +110,132 @@ function createBookingLifecycle(adapters) {
       throw new NotFoundError("tenant_not_found", { tenantId });
     }
     return tenant;
+  }
+
+  /**
+   * The admission (spec part 1, 5.2; part 2, section 8, `admit`; glossary
+   * "Aufnahme"): the checkout stored the booking in the state it chose,
+   * the lifecycle runs the effects of that state. Nothing is written: the
+   * compartments are held at `requested | payment_due` and the access
+   * granted at `confirmed`, a booking confirmed and paid at once gets its
+   * receipt; then the workflow is told (`onCreate`), the customer gets
+   * exactly one mail - the receipt of a request, the payment request
+   * (glossary "Zahlungsaufforderung") of a booking awaiting payment, the
+   * confirmation with the receipt of a paid one, the free booking
+   * confirmation of a free one - and the tenant, the supervisors and the
+   * organizer of a ticket their notice. A customer at the storefront is
+   * asked to pay by the checkout's own answer, the payment page it hands
+   * the customer on to; the payment request would ask twice, so it goes
+   * out for every trigger but `customer`. A hold that fails aborts with
+   * nothing to restore: the checkout deletes the booking.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function admit(tenantId, bookingId, { trigger } = {}) {
+    const transition = TRANSITION.ADMIT;
+    assertTrigger(transition, trigger);
+
+    const booking = await load(tenantId, bookingId);
+    const status = nextState(booking.status, transition, booking);
+    const requested = () => status === STATUS.REQUESTED;
+    const paymentDue = () => status === STATUS.PAYMENT_DUE;
+    const confirmed = () => status === STATUS.CONFIRMED;
+    const files = [];
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(
+        PHASE.PROVISION,
+        "access",
+        "hold",
+        () => access.hold(tenantId, bookingId),
+        { when: () => !confirmed() },
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "provision",
+        () => access.provision(tenantId, bookingId),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.DOCUMENT,
+        "documents",
+        "issue",
+        async () => {
+          const issued = await documents.issue({
+            tenantId,
+            bookingIds: [bookingId],
+            type: "receipt",
+            bookings: [booking],
+          });
+          files.push(issued.file);
+          return issued;
+        },
+        { when: () => confirmed() && isPriced(booking) },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.CREATE),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendRequestConfirmation",
+        () => mail.sendRequestConfirmation([booking], { aggregated: false }),
+        { when: requested },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "payment",
+        "requestPayment",
+        () =>
+          payment.requestPayment({
+            tenantId,
+            bookingIds: [bookingId],
+            paymentProvider: booking.paymentProvider,
+            groupBookingId: null,
+          }),
+        { when: () => paymentDue() && trigger !== TRIGGER.CUSTOMER },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendBookingConfirmation",
+        () =>
+          mail.sendBookingConfirmation([booking], {
+            attachments: files,
+            aggregated: false,
+          }),
+        { when: () => confirmed() && isPriced(booking) },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendFreeBookingConfirmation",
+        () =>
+          mail.sendFreeBookingConfirmation([booking], { aggregated: false }),
+        { when: () => confirmed() && !isPriced(booking) },
+      ),
+      step(PHASE.NOTIFY, "mail", "sendTenantMail", () =>
+        mail.sendTenantMail([booking], { aggregated: false }),
+      ),
+      step(PHASE.NOTIFY, "mail", "sendSupervisorMail", () =>
+        mail.sendSupervisorMail([booking], { aggregated: false }),
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendEmailToOrganizer",
+        () => mail.sendEmailToOrganizer([booking]),
+        { when: () => hasTicketPosition(booking) },
+      ),
+    ]);
   }
 
   /**
@@ -502,8 +629,9 @@ function createBookingLifecycle(adapters) {
    * booking to be in, and is written on the condition that the stored one
    * still is (spec part 2, section 5): a booking that moved in between - a
    * payment webhook, say - is the guard's `ConflictError`, and the plan
-   * the caller made no longer applies. The refund audit is the stored
-   * one's, whatever the form says; it belongs to the lifecycle. Then the
+   * the caller made no longer applies. The refund audit and the hooks - an
+   * open cancellation request (glossary "Stornoanfrage") - are the stored
+   * booking's, whatever the form says; they belong to the lifecycle. Then the
    * access follows the content: moved along at `confirmed`, the
    * compartments held anew at `requested | payment_due` (`holdForBooking`
    * never holds one twice and drops the held ones beyond what is booked
@@ -532,6 +660,7 @@ function createBookingLifecycle(adapters) {
     } else {
       delete booking.cancellationRefund;
     }
+    booking.hooks = current.hooks || [];
     const bookingId = booking.id;
     const confirmed = () => booking.status === STATUS.CONFIRMED;
     const unpaid = () =>
@@ -566,7 +695,7 @@ function createBookingLifecycle(adapters) {
     ]);
   }
 
-  return { confirm, pay, cancel, requestCancel, reinstate, amend };
+  return { admit, confirm, pay, cancel, requestCancel, reinstate, amend };
 }
 
 /** The lifecycle over the production adapters. */

@@ -17,7 +17,7 @@
  * says so.
  *
  * The harness (`helpers/booking-lifecycle-harness.js`) runs the real
- * routers, controllers, `BookingService` and checkout over an in-memory
+ * routers, controllers, the checkout and the lifecycle over an in-memory
  * store; the seams record and, when told to, fail.
  */
 
@@ -131,9 +131,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        // Ticket 9: `onCreate` is the one event without `skipBookingStatus`.
-        "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1",
+        "workflow.onCreate B1",
         "mail.sendBookingRequestConfirmation B1",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
@@ -151,11 +150,10 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(booking.id))).to.equal("payment_due");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 payment_due",
-        "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1",
-        // Today a booking confirmation without receipt goes out here; the
-        // spec's payment request (part 2 §8 `admit`) is ticket 9.
-        "mail.sendBookingConfirmation B1",
+        "workflow.onCreate B1",
+        // The customer at the storefront is asked to pay by the checkout's
+        // answer, the payment page; no payment request goes out by mail.
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
         "access.refreshHolds B1",
@@ -172,10 +170,9 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.stored(booking.id)).to.include({ priceEur: 0, isPayed: true });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
         "access.provision B1",
-        "mail.sendBookingConfirmation B1",
+        "workflow.onCreate B1",
+        "mail.sendFreeBookingConfirmation B1",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
       ]);
@@ -192,21 +189,23 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(res.body.id))).to.equal("requested");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1",
+        "workflow.onCreate B1",
         "mail.sendBookingRequestConfirmation B1",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
       ]);
     });
 
-    it("a manual booking, confirmed and paid, is granted, receipted and confirmed by mail; the answer is the booking before the receipt", async function () {
+    it("a manual booking, confirmed and paid, is granted, receipted and confirmed by mail; the answer carries the receipt", async function () {
       const booking = await h.manualBooking("room", {
         isCommitted: true,
         isPayed: true,
       });
 
-      expect(booking.attachments).to.deep.equal([]);
+      expect(booking.attachments.map((att) => att.type)).to.deep.equal([
+        "receipt",
+      ]);
       expect(booking.assignedUserId).to.equal(CUSTOMER);
       const stored = h.stored(booking.id);
       expect(stateOf(stored)).to.equal("confirmed");
@@ -215,26 +214,25 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
         "access.provision B1",
         "documents.receipt B1",
         "store.attach B1 receipt",
+        "workflow.onCreate B1",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
       ]);
     });
 
-    it("a manual booking, confirmed but unpaid, is held and confirmed by mail without a payment request", async function () {
+    it("a manual booking, confirmed but unpaid, is held and asked to pay: nobody is at the screen to be handed the payment page", async function () {
       const booking = await h.manualBooking("room", { isCommitted: true });
 
       expect(stateOf(h.stored(booking.id))).to.equal("payment_due");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 payment_due",
-        "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1",
-        "mail.sendBookingConfirmation B1",
+        "workflow.onCreate B1",
+        "payment.paymentRequest B1",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
       ]);
@@ -246,32 +244,27 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(booking.id))).to.equal("requested");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1",
+        "workflow.onCreate B1",
         "mail.sendBookingRequestConfirmation B1",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
       ]);
     });
 
-    it("a manual booking paid but unconfirmed is stored as confirmed, the payment being the stronger statement (ticket 9: 400 invalid_status)", async function () {
-      const booking = await h.manualBooking("room", { isPayed: true });
+    it("a manual booking paid but unconfirmed is refused with 400 invalid_status before anything is written: no state stands for it", async function () {
+      const res = await api()
+        .put(`/api/${TENANT}/bookings`)
+        .set(h.as(ADMIN))
+        .send({ tenantId: TENANT, ...checkoutBody("room"), isPayed: true });
 
-      expect(stateOf(h.stored(booking.id))).to.equal("confirmed");
-      expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed",
-        "workflow.onCreate B1 without skipBookingStatus",
-        "access.hold B1",
-        "access.provision B1",
-        "documents.receipt B1",
-        "store.attach B1 receipt",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
-        "mail.sendIncomingBooking B1",
-        "supervisor.notify B1",
-      ]);
+      expect(res.status).to.equal(400);
+      expect(res.body.code).to.equal("invalid_status");
+      expect(h.store.size).to.equal(0);
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("a hold that fails rolls the booking back: it never existed", async function () {
+    it("a hold that fails rolls the booking back: it never existed, and the checkout answers what the hold threw", async function () {
       h.failing.add("access.hold");
 
       const body = await checkout("room");
@@ -280,7 +273,6 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.store.size).to.equal(0);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1 FAILED",
         "store.remove B1",
       ]);
@@ -294,8 +286,8 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(body.data.booking.id))).to.equal("requested");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 requested",
-        "workflow.onCreate B1 without skipBookingStatus",
         "access.hold B1",
+        "workflow.onCreate B1",
         "mail.sendBookingRequestConfirmation B1 FAILED",
         "mail.sendIncomingBooking B1",
         "supervisor.notify B1",
@@ -642,20 +634,21 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("the receipt joins the `mailAttach` documents on payment; the admission of a paid manual booking still replaces them (ticket 9)", async function () {
-      // Unpaid, the document of the room goes out with the confirmation.
+    it("the receipt joins the `mailAttach` documents, at the admission of a paid manual booking as on payment", async function () {
+      // Awaiting payment, the customer gets no mail at the checkout: the
+      // payment page is the answer.
       const unpaid = await checkout("room-with-doc");
-      expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B1 [Hausordnung.pdf]",
-      );
+      expect(
+        h.takeEffects().filter((row) => row.startsWith("mail.sendBooking")),
+      ).to.deep.equal([]);
 
-      // Paid at once, the receipt is all that goes out.
+      // Paid at once, the receipt goes out with the document of the room.
       await h.manualBooking("room-with-doc", {
         isCommitted: true,
         isPayed: true,
       });
       expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B2 [RE-1.pdf]",
+        "mail.sendBookingConfirmation B2 [RE-1.pdf,Hausordnung.pdf]",
       );
 
       // And the payment of the unpaid one carries the receipt and the document.
@@ -1049,14 +1042,17 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("drops an open cancellation request: the form does not carry the hooks, the write does not keep them", async function () {
+    it("keeps an open cancellation request: the form does not carry the hooks, the content write carries the stored ones (the request was lost before)", async function () {
       const id = await bookingIn("confirmed");
       await requestReject(id, { reason: "" });
-      expect(h.stored(id).hooks).to.have.length(1);
+      const [hook] = h.stored(id).hooks;
 
       await update(id, { comment: "geändert" });
 
-      expect(h.stored(id).hooks).to.deep.equal([]);
+      expect(h.stored(id).comment).to.equal("geändert");
+      expect(h.stored(id).hooks.map((stored) => stored.id)).to.deep.equal([
+        hook.id,
+      ]);
     });
 
     // The PUT is the plan of spec part 1, section 6 (`update-plan.js`):

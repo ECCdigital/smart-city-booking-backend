@@ -13,7 +13,7 @@ const EventManager = require("../src/commons/data-managers/event-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
 const AccessService = require("../src/commons/services/access/access-service");
-const BookingService = require("../src/commons/services/checkout/booking-service");
+const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
 const { Booking } = require("../src/commons/entities/booking/booking");
 
 const TENANT_ID = "tenant-1";
@@ -113,7 +113,7 @@ function bookingRecord({
   };
 }
 
-describe("BookingService.updateBooking — admin edit self-block & prices", () => {
+describe("BookingCheckout.updateBooking — admin edit self-block & prices", () => {
   /** @type {ReturnType<typeof bookingRecord>[]} */
   let concurrent;
   /** @type {sinon.SinonStub} */
@@ -203,7 +203,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
   it("allows updating an existing booking that would otherwise conflict with itself", async () => {
     const updated = bookingRecord();
 
-    const result = await BookingService.updateBooking(TENANT_ID, updated);
+    const result = await BookingCheckout.updateBooking(TENANT_ID, updated);
 
     assert.strictEqual(result.id, BOOKING_ID);
     assert.strictEqual(lastPreparedStore().id, BOOKING_ID);
@@ -222,7 +222,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       timeEnd: NEW_TIME_END,
     });
 
-    const result = await BookingService.updateBooking(TENANT_ID, updated);
+    const result = await BookingCheckout.updateBooking(TENANT_ID, updated);
 
     assert.strictEqual(result.id, BOOKING_ID);
     assert.strictEqual(result.timeBegin, NEW_TIME_BEGIN);
@@ -238,7 +238,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       }),
     ];
 
-    const result = await BookingService.updateBooking(
+    const result = await BookingCheckout.updateBooking(
       TENANT_ID,
       bookingRecord(),
     );
@@ -254,7 +254,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     concurrent = [bookingRecord({ snapshot })];
 
     const updated = bookingRecord({ snapshot });
-    const result = await BookingService.updateBooking(TENANT_ID, updated);
+    const result = await BookingCheckout.updateBooking(TENANT_ID, updated);
 
     assert.strictEqual(result.id, BOOKING_ID);
   });
@@ -282,7 +282,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       itemGross: 11.9,
     });
 
-    await BookingService.updateBooking(TENANT_ID, updated);
+    await BookingCheckout.updateBooking(TENANT_ID, updated);
     const stored = lastPreparedStore();
 
     assert.strictEqual(stored.bookableItems[0].userPriceEur, 0);
@@ -315,7 +315,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       itemGross: 11.9,
     });
 
-    await BookingService.updateBooking(TENANT_ID, updated);
+    await BookingCheckout.updateBooking(TENANT_ID, updated);
     const stored = lastPreparedStore();
 
     assert.strictEqual(stored.bookableItems[0].userPriceEur, 20);
@@ -358,7 +358,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
     });
     updated.assignedUserId = assigneeId;
 
-    await BookingService.updateBooking(TENANT_ID, updated);
+    await BookingCheckout.updateBooking(TENANT_ID, updated);
     const stored = lastPreparedStore();
 
     // Admin entered list price via priceCategories must win over bookingDiscounts
@@ -379,7 +379,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
       }),
     ];
 
-    const result = await BookingService.updateBooking(
+    const result = await BookingCheckout.updateBooking(
       TENANT_ID,
       bookingRecord(),
     );
@@ -388,7 +388,7 @@ describe("BookingService.updateBooking — admin edit self-block & prices", () =
   });
 });
 
-describe("BookingService.createBooking — admin create never hard-fails checks", () => {
+describe("BookingCheckout.createBooking — admin create never hard-fails checks", () => {
   let clock;
 
   beforeEach(() => {
@@ -444,7 +444,7 @@ describe("BookingService.createBooking — admin create never hard-fails checks"
       preparationLeadTimeMinutes: 120,
     });
 
-    const result = await BookingService.createBooking({
+    const result = await BookingCheckout.createBooking({
       tenantId: TENANT_ID,
       user: { id: "admin@example.com" },
       simulate: true,

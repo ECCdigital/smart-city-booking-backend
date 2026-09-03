@@ -104,6 +104,17 @@ const store = {
   },
 
   /**
+   * Removes a booking for good (`booking-deletion.js`).
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @returns {Promise<void>}
+   */
+  async remove(tenantId, bookingId) {
+    await BookingManager.removeBooking(bookingId, tenantId);
+  },
+
+  /**
    * Puts a previous document back as a whole.
    *
    * @param {Object} previous What `save` answered

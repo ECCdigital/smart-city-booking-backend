@@ -17,8 +17,10 @@ const {
   TRIGGER,
 } = require("../src/commons/services/booking-lifecycle/booking-state");
 const {
+  bookingLifecycle,
   groupBookingLifecycle,
 } = require("../src/commons/services/booking-lifecycle");
+const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
 const {
   BundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
@@ -114,7 +116,7 @@ describe("BookingService cancellation refunds", function () {
     const pdf = stubIssuance().single;
     const saved = stubCancellationSideEffects();
 
-    await BookingService.rejectBooking("tenant-1", "booking-1", {
+    await bookingLifecycle.cancel("tenant-1", "booking-1", {
       trigger: TRIGGER.ADMIN,
       reason: "Customer request",
       refundPercentage: 25,
@@ -154,7 +156,7 @@ describe("BookingService cancellation refunds", function () {
     const pdf = stubIssuance().single;
     const saved = stubCancellationSideEffects();
 
-    await BookingService.rejectBooking("tenant-1", "booking-1", {
+    await bookingLifecycle.cancel("tenant-1", "booking-1", {
       trigger: TRIGGER.ADMIN,
       reason: "Customer request",
       withDocument: false,
@@ -407,7 +409,7 @@ describe("BookingService cancellation refunds", function () {
       }),
     );
 
-    await BookingService.updateBooking("tenant-1", {
+    await BookingCheckout.updateBooking("tenant-1", {
       ...oldBooking,
       isRejected: false,
       rejectionReason: "",
