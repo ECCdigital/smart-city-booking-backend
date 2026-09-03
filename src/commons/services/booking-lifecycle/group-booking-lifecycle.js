@@ -47,7 +47,8 @@ function hasTicketMember(bookings) {
 /**
  * The guard of the group (spec part 1, section 7): all members in the same
  * state, else `ConflictError invalid_transition` naming the members that
- * deviate from the first.
+ * deviate from the first. A shared state the transition does not allow is
+ * the same error over every member (`nextStateOf`).
  */
 function sharedStatusOf(transition, groupBookingId, bookings) {
   const status = bookings[0].status;
@@ -63,6 +64,26 @@ function sharedStatusOf(transition, groupBookingId, bookings) {
     });
   }
   return status;
+}
+
+/**
+ * The state a member lands on, or the guard's error in the group's form:
+ * the transition table refuses the shared state for every member alike.
+ */
+function nextStateOf(group, from, transition, booking) {
+  try {
+    return nextState(from, transition, booking);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      throw new ConflictError("invalid_transition", {
+        groupBookingId: group.id,
+        status: from,
+        transition,
+        bookingIds: group.bookingIds,
+      });
+    }
+    throw err;
+  }
 }
 
 /**
@@ -190,7 +211,7 @@ function createGroupBookingLifecycle(adapters) {
       transition,
     );
     for (const booking of bookings) {
-      nextState(from, transition, booking);
+      nextStateOf(group, from, transition, booking);
     }
     const requested = () => from === STATUS.REQUESTED;
     const confirmed = () => from === STATUS.CONFIRMED;
@@ -263,7 +284,7 @@ function createGroupBookingLifecycle(adapters) {
       transition,
     );
     for (const booking of bookings) {
-      booking.status = nextState(from, transition, booking);
+      booking.status = nextStateOf(group, from, transition, booking);
     }
     const confirmed = (booking) => booking.status === STATUS.CONFIRMED;
     const allConfirmed = () => bookings.every(confirmed);
@@ -332,7 +353,7 @@ function createGroupBookingLifecycle(adapters) {
     const paidAt =
       typeof timePaid === "number" && timePaid > 0 ? timePaid : clock();
     for (const booking of bookings) {
-      booking.status = nextState(from, transition, booking);
+      booking.status = nextStateOf(group, from, transition, booking);
       booking.timePaid = paidAt;
       if (paymentMethod) {
         booking.paymentMethod = paymentMethod;
@@ -413,7 +434,7 @@ function createGroupBookingLifecycle(adapters) {
     ]);
     const at = cancelledAt ?? clock();
     const refunds = bookings.map((booking) => {
-      booking.status = nextState(from, transition, booking);
+      booking.status = nextStateOf(group, from, transition, booking);
       booking.rejectionReason = reason;
       const refund = CancellationRefundService.calculate({
         tenant,

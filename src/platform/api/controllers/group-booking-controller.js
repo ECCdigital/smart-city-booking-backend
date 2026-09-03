@@ -15,15 +15,11 @@ const {
 } = require("../../../commons/services/documents/document-issuance");
 const {
   groupBookingLifecycle,
-  LifecycleError,
   TRANSITION,
   TRIGGER,
 } = require("../../../commons/services/booking-lifecycle");
-const {
-  BaseError,
-  ConflictError,
-  NotFoundError,
-} = require("../../../errors/BaseError");
+const { answerTransitionError } = require("./transition-error-answer");
+const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -182,28 +178,6 @@ class GroupBookingController {
   }
 
   /**
-   * The answer to an error of a group transition: the lifecycle's guard -
-   * the members are not in the state the transition needs, differ in
-   * state, or a second transition raced this one (409) - and a missing
-   * group or member (404) with their status; an aborted transition as the
-   * code of before (spec part 1, 4.3); everything else the plain 500.
-   */
-  static _answerTransitionError(err, res, code, tenantId) {
-    const error =
-      err instanceof LifecycleError
-        ? new BaseError(code, 500, { message: err.message })
-        : err;
-    logger.error({ tenantId, error: error.message }, code);
-    if (res.headersSent) {
-      return;
-    }
-    if (error instanceof BaseError && error.statusCode < 500) {
-      return res.status(error.statusCode).json(error.toJSON());
-    }
-    res.status(500).send({ message: error.message });
-  }
-
-  /**
    * The group and its members, populated, or the 404 answered.
    */
   static async _loadGroup(req, res) {
@@ -291,12 +265,10 @@ class GroupBookingController {
         });
       }
     } catch (error) {
-      GroupBookingController._answerTransitionError(
-        error,
-        res,
-        "booking_commit_failed",
-        tenantId,
-      );
+      answerTransitionError(error, res, {
+        code: "booking_commit_failed",
+        fallback: (mapped) => ({ message: mapped.message }),
+      });
     }
   }
 
@@ -344,12 +316,10 @@ class GroupBookingController {
         });
       }
     } catch (error) {
-      GroupBookingController._answerTransitionError(
-        error,
-        res,
-        "set_aggregated_booking_payed_failed",
-        tenantId,
-      );
+      answerTransitionError(error, res, {
+        code: "set_aggregated_booking_payed_failed",
+        fallback: (mapped) => ({ message: mapped.message }),
+      });
     }
   }
 
@@ -463,12 +433,10 @@ class GroupBookingController {
         });
       }
     } catch (error) {
-      GroupBookingController._answerTransitionError(
-        error,
-        res,
-        "booking_rejection_failed",
-        tenantId,
-      );
+      answerTransitionError(error, res, {
+        code: "booking_rejection_failed",
+        fallback: (mapped) => ({ message: mapped.message }),
+      });
     }
   }
 

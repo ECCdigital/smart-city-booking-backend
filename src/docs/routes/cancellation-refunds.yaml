@@ -162,6 +162,12 @@
       optional `refundPercentage` applies uniformly to every booking in the group.
       Consistency validation failures return HTTP 200 with `success: false`
       (same envelope as other group-booking mutation endpoints).
+
+      The members are cancelled one by one; a state write that fails restores
+      the members written before it. The aggregated cancellation document is
+      issued after the state change; where it fails, the group is cancelled
+      without it (200) and `POST /group-bookings/{groupBookingId}/cancellation-receipt`
+      issues it later.
     security:
       - bearerAuth: []
     parameters:
@@ -184,7 +190,12 @@
       "403":
         description: Missing booking management permission
       "404":
-        description: Group booking not found
+        description: Group booking not found, or a member of it
+      "409":
+        description: >-
+          `invalid_transition` - the group is cancelled or rejected already, or
+          its members differ in state (params carry `groupBookingId`, `status`,
+          `transition` and the `bookingIds` concerned)
 
 components:
   parameters:

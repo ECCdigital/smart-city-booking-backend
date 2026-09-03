@@ -1,0 +1,97 @@
+/api/{tenant}/group-bookings/{groupBookingId}/commit:
+  post:
+    tags:
+      - Group bookings
+    summary: Confirm a group booking
+    description: |
+      Confirms every member of a requested group: a priced member awaits
+      payment and the group is asked to pay once, a free member is confirmed
+      and granted. Consistency validation failures return HTTP 200 with
+      `success: false` (same envelope as the other group-booking mutation
+      endpoints). A state write that fails at one member restores the members
+      written before it.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/GroupBookingTenantParam"
+      - $ref: "#/components/parameters/GroupBookingIdParam"
+    responses:
+      "200":
+        description: |
+          Group booking confirmed (`success: true`, `data` the group with its
+          members) or consistency validation failed (`success: false` with
+          `errors`).
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Group booking not found, or a member of it
+      "409":
+        description: >-
+          `invalid_transition` - the group is not a request any more, or its
+          members differ in state (params carry `groupBookingId`, `status`,
+          `transition` and the `bookingIds` concerned)
+      "500":
+        description: "`booking_commit_failed` - the confirmation aborted"
+
+/api/{tenant}/group-bookings/{groupBookingId}/pay:
+  post:
+    tags:
+      - Group bookings
+    summary: Mark a group booking as paid
+    description: |
+      Pays every member of a group awaiting payment: the members are
+      confirmed and granted one by one, one aggregated receipt is attached to
+      each and the confirmation is mailed once. A state write that fails at
+      one member restores the members written before it.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/GroupBookingTenantParam"
+      - $ref: "#/components/parameters/GroupBookingIdParam"
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              paymentMethod:
+                type: string
+                description: The payment method recorded at every member
+              timePaid:
+                type: integer
+                description: The moment of the payment as a Unix timestamp in milliseconds; now if omitted
+    responses:
+      "200":
+        description: Group booking paid (`success: true`, `data` the group with its members)
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Group booking not found, or a member of it
+      "409":
+        description: >-
+          `invalid_transition` - the group is not awaiting payment, or its
+          members differ in state (params carry `groupBookingId`, `status`,
+          `transition` and the `bookingIds` concerned)
+      "500":
+        description: "`set_aggregated_booking_payed_failed` - the payment aborted"
+
+components:
+  parameters:
+    GroupBookingTenantParam:
+      name: tenant
+      in: path
+      required: true
+      description: Tenant identifier
+      schema:
+        type: string
+    GroupBookingIdParam:
+      name: groupBookingId
+      in: path
+      required: true
+      description: Group booking identifier
+      schema:
+        type: string

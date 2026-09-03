@@ -325,6 +325,60 @@ describe("group booking lifecycle: confirm, the other cases", function () {
   });
 });
 
+describe("group booking lifecycle: the compensation of a larger group", function () {
+  it("a write that fails at member 2 of 3 restores member 1, leaves member 3 untouched and aborts", async function () {
+    const adapters = inMemoryAdapters({
+      bookings: ["B-1", "B-2", "B-3"].map((id) => member(id)),
+      groups: [group(["B-1", "B-2", "B-3"])],
+      failOn: { store: ["save B-2"] },
+    });
+    const lifecycle = createGroupBookingLifecycle(adapters);
+
+    const error = await failing(
+      lifecycle.confirm(TENANT, GROUP, { trigger: TRIGGER.ADMIN }),
+    );
+
+    expect(error).to.be.instanceOf(LifecycleError);
+    expect(effectTable(error.outcome)).to.deep.equal([
+      "persist store.save B-1 ok",
+      "persist store.save B-2 failed",
+    ]);
+    expect(error.outcome.failure.compensated).to.deep.equal(["B-1"]);
+    expect(error.outcome.bookingIds).to.deep.equal(["B-1", "B-2", "B-3"]);
+    expect(
+      ["B-1", "B-2", "B-3"].map((id) => adapters.store.rows.get(id).status),
+    ).to.deep.equal(["requested", "requested", "requested"]);
+    expect(adapters.store.calls).to.deep.equal([
+      { op: "save", args: ["B-1", "requested"] },
+      { op: "save", args: ["B-2", "requested"] },
+      { op: "restore", args: ["B-1"] },
+    ]);
+    expect(adapters.workflow.calls).to.deep.equal([]);
+  });
+
+  it("a write that fails at member 3 of 3 restores members 2 and 1 in reverse order", async function () {
+    const adapters = inMemoryAdapters({
+      bookings: ["B-1", "B-2", "B-3"].map((id) =>
+        member(id, { status: "payment_due" }),
+      ),
+      groups: [group(["B-1", "B-2", "B-3"])],
+      failOn: { store: ["save B-3"] },
+    });
+    const lifecycle = createGroupBookingLifecycle(adapters);
+
+    const error = await failing(
+      lifecycle.pay(TENANT, GROUP, { trigger: TRIGGER.PAYMENT }),
+    );
+
+    expect(error).to.be.instanceOf(LifecycleError);
+    expect(error.outcome.failure.compensated).to.deep.equal(["B-2", "B-1"]);
+    expect(
+      ["B-1", "B-2", "B-3"].map((id) => adapters.store.rows.get(id).status),
+    ).to.deep.equal(["payment_due", "payment_due", "payment_due"]);
+    expect(adapters.documents.calls).to.deep.equal([]);
+  });
+});
+
 describe("group booking lifecycle: the guards", function () {
   it("refuses a group whose members differ in state: 409 invalid_transition naming the members that deviate from the first, before any effect", async function () {
     const { adapters, lifecycle } = groupOf("requested");
@@ -368,6 +422,12 @@ describe("group booking lifecycle: the guards", function () {
 
       expect(error).to.be.instanceOf(ConflictError);
       expect(error.code).to.equal("invalid_transition");
+      expect(error.params).to.deep.equal({
+        groupBookingId: GROUP,
+        status,
+        transition,
+        bookingIds: ["B-1", "B-2"],
+      });
       expect(adapters.store.calls).to.deep.equal([]);
       expect(adapters.documents.calls).to.deep.equal([]);
       expect(adapters.mail.calls).to.deep.equal([]);
