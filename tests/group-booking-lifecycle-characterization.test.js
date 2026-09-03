@@ -287,7 +287,7 @@ describe("group booking lifecycle today: what each state change does at the seam
       ]);
     });
 
-    it("answers success without a payment service - unlike the single commit (ticket 5)", async function () {
+    it("answers success without a payment service, the payment request left out", async function () {
       const id = await groupIn("requested");
       h.payment.available = false;
 

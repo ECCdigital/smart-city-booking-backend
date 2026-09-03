@@ -18,11 +18,18 @@
  * with abort policy failed (persist writes restored).
  */
 
-const { TRANSITION, TRIGGER, TRIGGERS, nextState } = require("./booking-state");
+const {
+  STATUS,
+  TRANSITION,
+  TRIGGER,
+  TRIGGERS,
+  nextState,
+} = require("./booking-state");
 const { PHASE, step, runPipeline } = require("./pipeline");
 const { NotFoundError } = require("../../../errors/BaseError");
 
 const WORKFLOW_EVENT = Object.freeze({
+  COMMIT: "onCommit",
   PAY: "onPay",
 });
 
@@ -60,6 +67,7 @@ function createBookingLifecycle(adapters) {
     store,
     access,
     documents,
+    payment,
     mail,
     workflow,
     clock = Date.now,
@@ -71,6 +79,78 @@ function createBookingLifecycle(adapters) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
     return booking;
+  }
+
+  /**
+   * The confirmation (spec part 2, section 8, `confirm`): `requested →
+   * payment_due` for a priced booking, which is then asked to pay
+   * (glossary "Zahlungsaufforderung"), `requested → confirmed` for a free
+   * one, which is granted and told so. A tenant without a payment service
+   * leaves the payment request skipped: the booking awaits payment all the
+   * same.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function confirm(tenantId, bookingId, { trigger } = {}) {
+    const transition = TRANSITION.CONFIRM;
+    assertTrigger(transition, trigger);
+
+    const booking = await load(tenantId, bookingId);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+    const confirmed = () => booking.status === STATUS.CONFIRMED;
+    const paymentDue = () => booking.status === STATUS.PAYMENT_DUE;
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "provision",
+        () => access.provision(tenantId, bookingId),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.COMMIT),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendFreeBookingConfirmation",
+        () =>
+          mail.sendFreeBookingConfirmation([booking], { aggregated: false }),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "payment",
+        "requestPayment",
+        () =>
+          payment.requestPayment({
+            tenantId,
+            bookingIds: [bookingId],
+            paymentProvider: booking.paymentProvider,
+            groupBookingId: null,
+          }),
+        { when: paymentDue },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "mail",
+        "sendEmailToOrganizer",
+        () => mail.sendEmailToOrganizer([booking]),
+        { when: () => hasTicketPosition(booking) },
+      ),
+    ]);
   }
 
   /**
@@ -146,7 +226,7 @@ function createBookingLifecycle(adapters) {
     ]);
   }
 
-  return { pay };
+  return { confirm, pay };
 }
 
 /** The lifecycle over the production adapters. */

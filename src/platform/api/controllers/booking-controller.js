@@ -21,7 +21,10 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const BookingService = require("../../../commons/services/checkout/booking-service");
-const { TRIGGER } = require("../../../commons/services/booking-lifecycle");
+const {
+  TRIGGER,
+  LifecycleError,
+} = require("../../../commons/services/booking-lifecycle");
 const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
@@ -538,6 +541,10 @@ class BookingController {
       }
 
       const booking = await BookingManager.getBooking(id, tenant);
+      if (!booking) {
+        const error = new NotFoundError("booking_not_found", { bookingId: id });
+        return response.status(error.statusCode).json(error.toJSON());
+      }
 
       if (
         await PermissionsService._allowUpdate(
@@ -550,8 +557,12 @@ class BookingController {
         logger.info(
           `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
         );
-        const result = await BookingService.commitBooking(tenant, booking);
+        const result = await BookingService.commitBooking(tenant, booking, {
+          trigger: TRIGGER.ADMIN,
+        });
 
+        // The consistency check in front of the transition keeps its
+        // answer; the transition itself throws or succeeds.
         if (!result.success) {
           return response.status(200).json({
             success: false,
@@ -572,10 +583,24 @@ class BookingController {
         return response.sendStatus(403);
       }
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not commit booking");
+      // An aborted transition is the `booking_commit_failed` of before
+      // (spec part 1, 4.3): the code derived from the transition.
+      const error =
+        err instanceof LifecycleError
+          ? new BaseError("booking_commit_failed", {
+              message: `Error committing booking: ${err.message}`,
+            })
+          : err;
+      logger.error(error);
+      if (response.headersSent) {
+        return;
       }
+      // The lifecycle's guard: not a request any more, or a second
+      // confirmation that raced this one (409), or no such booking (404).
+      if (error instanceof BaseError && error.statusCode < 500) {
+        return response.status(error.statusCode).json(error.toJSON());
+      }
+      response.status(500).send("Could not commit booking");
     }
   }
 

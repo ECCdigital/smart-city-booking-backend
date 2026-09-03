@@ -673,12 +673,15 @@ class BookingService {
       const onPay = !oldBooking.isPayed && isPayed;
       const onReject = !oldBooking.isRejected && isRejected;
 
-      // The payment is a lifecycle transition out of `payment_due` (spec
-      // part 1, 4.1): the content write leaves the booking there, `pay`
-      // moves it on. Ticket 7 turns the whole PUT into the plan of
+      // The confirmation and the payment are lifecycle transitions out of
+      // `requested` and `payment_due` (spec part 1, 4.1): the content write
+      // leaves the booking where the transition starts, `confirm` and `pay`
+      // move it on. Ticket 7 turns the whole PUT into the plan of
       // `update-plan.js`.
       const requestedStatus = booking.status;
-      if (onPay) {
+      if (onCommit) {
+        booking.status = STATUS.REQUESTED;
+      } else if (onPay) {
         booking.status = STATUS.PAYMENT_DUE;
       }
 
@@ -689,7 +692,19 @@ class BookingService {
       );
 
       if (onCommit) {
-        await BookingService.commitBooking(tenantId, booking);
+        const committed = await BookingService.commitBooking(
+          tenantId,
+          booking,
+          { trigger: TRIGGER.ADMIN },
+        );
+        if (!committed.success) {
+          // The consistency check refused: the content write left the
+          // booking a request, so the answer must not say otherwise.
+          throw new BadRequestError(committed.errors[0].code, {
+            errors: committed.errors,
+          });
+        }
+        booking.status = requestedStatus;
       }
 
       if (onPay) {
@@ -750,100 +765,46 @@ class BookingService {
     }
   }
 
-  static async commitBooking(tenantId, booking, skipWorkflow = false) {
-    try {
-      const originBooking = await BookingManager.getBooking(
-        booking.id,
-        tenantId,
+  /**
+   * The confirmation of a booking: the lifecycle transition `confirm`
+   * (spec part 2, section 8) over the default instance, `requested →
+   * payment_due` with the payment request for a priced booking, `requested
+   * → confirmed` with the grant and the free booking confirmation for a
+   * free one. `trigger` names who set it off (glossary "Auslöser"). The
+   * consistency check of before stays in front of the transition and keeps
+   * its answer, `{ success: false, errors }`; a guard error (the booking is
+   * not a request) and a missing booking pass through as the 409 and 404
+   * they are, an aborted transition as the `LifecycleError` the controller
+   * maps.
+   *
+   * @param {string} tenantId
+   * @param {{ id: string }} booking The booking to confirm; what it carries
+   *   beyond the id is checked for consistency, the transition reads the
+   *   stored booking
+   * @param {{ trigger: string }} options
+   * @returns {Promise<{ success: boolean, errors?: Object[] }>}
+   */
+  static async commitBooking(tenantId, booking, { trigger } = {}) {
+    const validator = new BookingConsistencyService([
+      validatePaymentProviderRequirement,
+    ]);
+    const errors = validator.validate([booking]);
+    if (errors.length > 0) {
+      logger.error(
+        `${tenantId} -- booking ${booking.id} cannot be committed: ${JSON.stringify(
+          errors,
+        )}`,
       );
-
-      const snapshotBooking = { ...originBooking };
-
-      const validator = new BookingConsistencyService([
-        validatePaymentProviderRequirement,
-      ]);
-      const errors = validator.validate([booking]);
-      if (errors.length > 0) {
-        logger.error(
-          `${tenantId} -- booking ${booking.id} cannot be committed: ${JSON.stringify(
-            errors,
-          )}`,
-        );
-        return { success: false, errors };
-      }
-
-      setStatusFromFlags(originBooking, {
-        isCommitted: true,
-        isRejected: false,
-      });
-
-      if (!skipWorkflow) {
-        await WorkflowService.handleWorkflowEvent(
-          tenantId,
-          booking.id,
-          "onCommit",
-          true,
-        );
-      }
-
-      await BookingManager.storeBooking(originBooking);
-
-      if (isNoPaymentRequired(originBooking)) {
-        try {
-          await AccessService.provisionForBooking(
-            originBooking.tenantId,
-            originBooking.id,
-          );
-        } catch (err) {
-          await BookingManager.storeBooking(snapshotBooking);
-          throw new BaseError("booking_commit_failed", {
-            message: `Error during access setup: ${err.message}`,
-          });
-        }
-
-        await MailController.sendFreeBookingConfirmation(
-          originBooking.mail,
-          originBooking.id,
-          originBooking.tenantId,
-          undefined,
-        );
-        logger.info(
-          `${tenantId} -- booking ${originBooking.id} committed and sent free booking confirmation to ${originBooking.mail}`,
-        );
-      } else {
-        const paymentService = await PaymentUtils.getPaymentService(
-          tenantId,
-          booking.id,
-          originBooking.paymentProvider,
-          { aggregated: false },
-        );
-
-        if (!paymentService) return;
-
-        await paymentService.paymentRequest();
-
-        logger.info(
-          `${tenantId} -- booking ${originBooking.id} committed and sent payment request to ${originBooking.mail}`,
-        );
-      }
-      const bookableItems = originBooking.bookableItems;
-      const isTicketBooking = bookableItems.some(isTicket);
-
-      if (isTicketBooking) {
-        const eventIds = bookableItems
-          .map(getEventForTicket)
-          .filter((id) => id !== null && id !== undefined);
-        if (eventIds.length > 0) {
-          await sendEmailToOrganizer(eventIds, tenantId, originBooking);
-        }
-      }
-
-      return { success: true };
-    } catch (error) {
-      throw new BaseError("booking_commit_failed", {
-        message: `Error committing booking: ${error.message}`,
-      });
+      return { success: false, errors };
     }
+
+    const outcome = await bookingLifecycle.confirm(tenantId, booking.id, {
+      trigger,
+    });
+    logger.info(
+      `${tenantId} -- booking ${booking.id} committed, now ${outcome.status}`,
+    );
+    return { success: true };
   }
 
   static async commitGroupBooking(

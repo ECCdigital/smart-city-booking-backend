@@ -4,6 +4,7 @@ const MembershipManager = require("../../data-managers/membership-manager");
 const {
   CANCELLATION_ORIGINS,
 } = require("../payment/cancellation-refund-service");
+const { TRIGGER } = require("../booking-lifecycle/booking-state");
 
 class WorkflowAction {
   constructor(action) {
@@ -83,10 +84,8 @@ class BookingStatusAction extends WorkflowAction {
         console.log("Committing booking as part of workflow action");
         await bookingService.commitBooking(
           this.tenantId,
-          {
-            id: this.bookingId,
-          },
-          true,
+          { id: this.bookingId },
+          { trigger: TRIGGER.WORKFLOW },
         );
       }
       if (bs === "paid") {
@@ -94,7 +93,7 @@ class BookingStatusAction extends WorkflowAction {
         await bookingService.setBookingPayed({
           tenantId: this.tenantId,
           bookingId: this.bookingId,
-          trigger: "workflow",
+          trigger: TRIGGER.WORKFLOW,
         });
       }
       if (bs === "reject") {
