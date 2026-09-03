@@ -81,6 +81,13 @@ describe("authorization on the tenant router: the reach of a booking", function 
     expect(other.body.code).to.equal("booking_not_found");
   });
 
+  it("lists a customer the own bookings only, the administration all", async function () {
+    const ids = (res) => res.body.map((booking) => booking.id);
+    expect(ids(await get("/bookings", CUSTOMER))).to.deep.equal(["B-erika"]);
+    expect(ids(await get("/bookings", OTHER_CUSTOMER))).to.deep.equal([]);
+    expect(ids(await get("/bookings", ROLE_HOLDER))).to.include("B-erika");
+  });
+
   it("answers 401 to the anonymous on a route that is not public", async function () {
     expect((await get("/bookings/B-erika")).status).to.equal(401);
   });

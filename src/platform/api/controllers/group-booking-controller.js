@@ -116,6 +116,8 @@ class GroupBookingController {
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
+        false,
+        scopeOf(req),
       );
       if (!groupBooking) {
         return GroupBookingController._notFound(res, groupBookingId);
@@ -147,13 +149,15 @@ class GroupBookingController {
   }
 
   /**
-   * The group and its members, populated, or the 404 answered.
+   * The group and its members, populated, within the reach of the request,
+   * or the 404 answered.
    */
   static async _loadGroup(req, res) {
     const groupBooking = await GroupBookingManager.getGroupBooking(
       req.params.tenant,
       req.params.id,
       true,
+      scopeOf(req),
     );
     if (!groupBooking) {
       return GroupBookingController._notFound(res, req.params.id);
@@ -412,6 +416,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
       if (!groupBooking) {
         return GroupBookingController._notFound(res, groupBookingId);
@@ -552,6 +557,8 @@ class GroupBookingController {
       const groupBooking = await GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
+        false,
+        scopeOf(req),
       );
       if (!groupBooking) {
         return GroupBookingController._notFound(res, groupBookingId);

@@ -29,7 +29,7 @@ class BookingController {
 
 1. Router matches URL → controller method
 2. The route's marker from `src/commons/services/authorization/` runs: `authorize(resource, action)` verifies the JWT and decides the reach (`any | own`) over the rights table (`table.js`), `public(resource?, action?)` decides for the anonymous too, `tokenAuthorized()` marks a route authorized by a secret the handler checks. The handler gets `req.reach` and `req.principal`.
-3. Controller hands `scopeOf(req)` to the managers, which translate `own` into their query condition; a handler never branches over rights. (Routers not converted yet still check via `PermissionsService` / `RolePermission`; that goes with the last step of the authorize chain.)
+3. Controller hands `scopeOf(req)` to the managers, which translate `own` into their query condition; a handler never branches over rights. Two adapter-level exceptions (authorize spec §5, §12): the obsolete PUT store routes decide the creation with `decide(req.principal, resource, "create")`, and the booking lists with an anonymized `?public=true` projection answer the reach `public` themselves. (Routers not converted yet still check via `PermissionsService` / `RolePermission`; that goes with the last step of the authorize chain.)
 4. Business logic in services (`src/commons/services/`)
 5. Response via `api-response.js` helpers
 

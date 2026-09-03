@@ -506,6 +506,13 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     store.delete(id);
     record("store.remove", label(id));
   });
+  sinon
+    .stub(BookingManager, "getTenantBookings")
+    .callsFake(async (tenantId, scope) =>
+      [...store.values()]
+        .filter((doc) => doc.tenantId === tenantId && withinReach(doc, scope))
+        .map((doc) => new Booking(clone(doc))),
+    );
   sinon.stub(BookingManager, "getConcurrentBookings").resolves([]);
   sinon.stub(BookingManager, "getRelatedBookings").resolves([]);
   sinon.stub(BookingManager, "getEventBookings").resolves([]);

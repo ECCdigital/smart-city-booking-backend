@@ -22,6 +22,11 @@
  * setting alone). Actions beyond create, read, update and delete (`qr`,
  * `operate`, `document`, `challenge`, ...) are named entries here, never
  * new role steps: the role steps stay the seven of the role schema.
+ * `own: "signedIn"` at an entry whose handler has no owner key
+ * (`exporter.export`, `bookable.meta`, `event.meta`, `role.list`,
+ * `invitation.respond`) means "any signed-in user, for themselves": the
+ * reach `own` is then the handler's to read as "self", not a query
+ * condition (§11, §12).
  *
  * Transcribed from the authorize spec §3, behaviour-equal to today except
  * the changes of §7; ticket 2 to 5 of the chain put the routers on it.
@@ -75,7 +80,9 @@ const TABLE = {
     template: { any: "manageBookables.create" },
     // `_meta/tags`, `count/check`: signed in, nothing further (as today).
     meta: { own: "signedIn" },
-    // `GET /bookables/:id/bookings`
+    // `GET /bookables/:id/bookings`: the anonymized projection (`?public`)
+    // for anyone; without it, the public has nothing and the handler
+    // answers 403 (§12).
     relatedBookings: {
       public: true,
       own: "signedIn",
@@ -106,14 +113,18 @@ const TABLE = {
   booking: {
     // `GET /bookings/:id`, `/bookings/assigned`
     read: { own: "signedIn", any: "manageBookings.readAny" },
-    // `GET /bookings` (`?public=true` is the anonymized projection) and
-    // `GET /events/:id/bookings`.
+    // `GET /bookings` (`?public=true` is the anonymized projection; without
+    // it the public has nothing and the handler answers 403) and
+    // `GET /events/:id/bookings` (the public gets an empty list, as today).
     list: { public: true, own: "signedIn", any: "manageBookings.readAny" },
     // The customer's lookups by id and name: `/:ids/status`,
     // `/:id/status/public`, `/:id/cancellation-refund-preview/public`.
     lookup: { public: true },
-    // Receipt, invoice, cancellation receipt, reprint.
+    // Reading a receipt, invoice or cancellation receipt.
     document: { own: "signedIn", any: "manageBookings.readAny" },
+    // Reprinting the receipt or the cancellation receipt (as today: the
+    // owner, or `updateAny`; §12).
+    reprint: { own: "signedIn", any: "manageBookings.updateAny" },
     // The administration's manual invoice.
     invoice: { any: "manageBookings.updateAny" },
     // The admin PUT.

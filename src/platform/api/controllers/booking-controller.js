@@ -106,6 +106,12 @@ class BookingController {
     }
   }
 
+  /** Answers the 404 of a booking that is not there for this request. */
+  static _notFound(response, bookingId) {
+    const error = new NotFoundError("booking_not_found", { bookingId });
+    return response.status(error.statusCode).json(error.toJSON());
+  }
+
   static anonymizeBooking(booking) {
     return {
       id: booking.id,
@@ -310,10 +316,7 @@ class BookingController {
           scopeOf(request),
         );
         if (!booking) {
-          const error = new NotFoundError("booking_not_found", {
-            bookingId: id,
-          });
-          return response.status(error.statusCode).json(error.toJSON());
+          return BookingController._notFound(response, id);
         }
 
         await BookingController._populate([booking]);
@@ -455,12 +458,13 @@ class BookingController {
 
       const id = request.params.id;
       if (id) {
-        const booking = await BookingManager.getBooking(id, tenant);
+        const booking = await BookingManager.getBooking(
+          id,
+          tenant,
+          scopeOf(request),
+        );
         if (!booking) {
-          const error = new NotFoundError("booking_not_found", {
-            bookingId: id,
-          });
-          return response.status(error.statusCode).json(error.toJSON());
+          return BookingController._notFound(response, id);
         }
 
         await bookingDeletion.remove(tenant, id);
@@ -801,8 +805,7 @@ class BookingController {
         scopeOf(request),
       );
       if (!booking) {
-        const error = new NotFoundError("booking_not_found", { bookingId });
-        return response.status(error.statusCode).json(error.toJSON());
+        return BookingController._notFound(response, bookingId);
       }
 
       const receipt = await ReceiptService.getReceipt(
@@ -964,8 +967,7 @@ class BookingController {
         scopeOf(request),
       );
       if (!booking) {
-        const error = new NotFoundError("booking_not_found", { bookingId });
-        return response.status(error.statusCode).json(error.toJSON());
+        return BookingController._notFound(response, bookingId);
       }
 
       const invoice = await InvoiceService.getInvoice(
@@ -1077,8 +1079,7 @@ class BookingController {
         scopeOf(request),
       );
       if (!booking) {
-        const error = new NotFoundError("booking_not_found", { bookingId });
-        return response.status(error.statusCode).json(error.toJSON());
+        return BookingController._notFound(response, bookingId);
       }
 
       const cancellationReceipt =

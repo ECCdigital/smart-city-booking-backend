@@ -26,7 +26,7 @@ const {
 } = require("./controllers/group-booking-controller");
 const {
   authorize,
-  publicRoute: public_,
+  publicRoute,
   tokenAuthorized,
 } = require("../../commons/services/authorization");
 
@@ -38,52 +38,52 @@ const router = express.Router({ mergeParams: true });
 // Public
 router.get(
   "/bookables/public",
-  public_("bookable", "readPublic"),
+  publicRoute("bookable", "readPublic"),
   BookableController.getPublicBookables,
 );
 router.get(
   "/bookables/public/:id",
-  public_("bookable", "readPublic"),
+  publicRoute("bookable", "readPublic"),
   BookableController.getPublicBookable,
 );
 router.get(
   "/bookables/:id/bookings",
-  public_("bookable", "relatedBookings"),
+  publicRoute("bookable", "relatedBookings"),
   BookingController.getRelatedBookings,
 );
 router.get(
   "/bookables/:id/openingHours",
-  public_("bookable", "readPublic"),
+  publicRoute("bookable", "readPublic"),
   BookableController.getOpeningHours,
 );
 router.get(
   "/bookables/:id/availability/v1",
-  public_(),
+  publicRoute(),
   CalendarController.getBookableAvailabilityV1,
 );
 router.get(
   "/bookables/:id/availability/v2",
-  public_(),
+  publicRoute(),
   CalendarController.getBookableAvailabilityV2,
 );
 router.get(
   "/bookables/:id/availability",
-  public_(),
+  publicRoute(),
   CalendarController.getBookableAvailability,
 );
 router.get(
   "/bookables/:id/block-periods",
-  public_(),
+  publicRoute(),
   CalendarController.getBookableBlockPeriods,
 );
 router.get(
   "/bookables/:id/occupancy",
-  public_("bookable", "readPublic"),
+  publicRoute("bookable", "readPublic"),
   BookableController.getBookableOccupancy,
 );
 router.get(
   "/bookables/:id/prices",
-  public_("bookable", "readPublic"),
+  publicRoute("bookable", "readPublic"),
   BookableController.getBookablePriceCategories,
 );
 
@@ -129,11 +129,15 @@ router.get(
 // ======
 
 // Public
-router.get("/events", public_("event", "read"), EventController.getEvents);
-router.get("/events/:id", public_("event", "read"), EventController.getEvent);
+router.get("/events", publicRoute("event", "read"), EventController.getEvents);
+router.get(
+  "/events/:id",
+  publicRoute("event", "read"),
+  EventController.getEvent,
+);
 router.get(
   "/events/:id/bookings",
-  public_("booking", "list"),
+  publicRoute("booking", "list"),
   BookingController.getEventBookings,
 );
 
@@ -165,7 +169,7 @@ router.get(
 
 router.get(
   "/bookings",
-  public_("booking", "list"),
+  publicRoute("booking", "list"),
   BookingController.getBookings,
 );
 router.put(
@@ -190,12 +194,12 @@ router.delete(
 );
 router.get(
   "/bookings/:ids/status",
-  public_("booking", "lookup"),
+  publicRoute("booking", "lookup"),
   BookingController.getBookingStatus,
 );
 router.get(
   "/bookings/:id/status/public",
-  public_("booking", "lookup"),
+  publicRoute("booking", "lookup"),
   BookingController.getPublicBookingStatus,
 );
 router.get(
@@ -215,7 +219,7 @@ router.get(
 );
 router.get(
   "/bookings/:id/cancellation-refund-preview/public",
-  public_("booking", "lookup"),
+  publicRoute("booking", "lookup"),
   BookingController.getPublicCancellationRefundPreview,
 );
 router.post(
@@ -245,7 +249,7 @@ router.get(
 );
 router.post(
   "/bookings/:id/receipt",
-  authorize("booking", "document"),
+  authorize("booking", "reprint"),
   BookingController.createReceipt,
 );
 router.get(
@@ -265,7 +269,7 @@ router.post(
 );
 router.post(
   "/bookings/:id/cancellation-receipt",
-  authorize("booking", "document"),
+  authorize("booking", "reprint"),
   BookingController.createCancellationReceipt,
 );
 router.get(
@@ -309,6 +313,7 @@ router.post(
   authorize("groupBooking", "pay"),
   GroupBookingController.payGroupBooking,
 );
+// The preview belongs to the administration's cancellation of the group.
 router.get(
   "/group-bookings/:id/cancellation-refund-preview",
   authorize("groupBooking", "reject"),
@@ -347,16 +352,16 @@ router.post(
 
 // CHECKOUT
 // ========
-router.post("/checkout", public_(), CheckoutController.checkout);
-router.post("/checkout/group", public_(), CheckoutController.groupCheckout);
+router.post("/checkout", publicRoute(), CheckoutController.checkout);
+router.post("/checkout/group", publicRoute(), CheckoutController.groupCheckout);
 router.post(
   "/checkout/validateItem",
-  public_(),
+  publicRoute(),
   CheckoutController.validateItem,
 );
 router.get(
   "/checkout/permissions/:id",
-  public_(),
+  publicRoute(),
   CheckoutController.checkoutPermissions,
 );
 
@@ -364,7 +369,7 @@ router.get(
 // ========
 
 // Public
-router.post("/payments", public_(), PaymentController.createPayment);
+router.post("/payments", publicRoute(), PaymentController.createPayment);
 // The provider's webhooks and return pages authorize over the payment's
 // own reference; the handler checks it as today.
 router.get(
@@ -395,7 +400,11 @@ router.get(
 
 // CALENDAR
 // ========
-router.get("/calendar/occupancy", public_(), CalendarController.getOccupancies);
+router.get(
+  "/calendar/occupancy",
+  publicRoute(),
+  CalendarController.getOccupancies,
+);
 
 // COUPONS
 // =======
@@ -406,7 +415,7 @@ router.get(
 );
 router.get(
   "/coupons/:id",
-  public_("coupon", "lookup"),
+  publicRoute("coupon", "lookup"),
   CouponController.getCoupon,
 );
 // The obsolete store: an update, or a creation the handler decides (§11).
@@ -427,7 +436,7 @@ router.delete(
 // picks and uploads media (§4.10). `GET /files/get` stays for good as the
 // resolver of stored legacy addresses; the medium's visibility is the media
 // module's (authorize spec §5), decided in the handler.
-router.get("/files/get", public_(), FileController.getTenantFile);
+router.get("/files/get", publicRoute(), FileController.getTenantFile);
 
 // WORKFLOW
 // ========
