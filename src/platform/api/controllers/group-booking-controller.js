@@ -8,13 +8,18 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const MailController = require("../../../commons/mail-service/mail-controller");
 const {
   CancellationRefundService,
-  CANCELLATION_ORIGINS,
 } = require("../../../commons/services/payment/cancellation-refund-service");
 const {
   issue: issueDocument,
   mailAttachments,
 } = require("../../../commons/services/documents/document-issuance");
-const { ConflictError } = require("../../../errors/BaseError");
+const {
+  groupBookingLifecycle,
+  TRANSITION,
+  TRIGGER,
+} = require("../../../commons/services/booking-lifecycle");
+const { answerTransitionError } = require("./transition-error-answer");
+const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "group-booking-controller.js",
@@ -172,39 +177,72 @@ class GroupBookingController {
     }
   }
 
+  /**
+   * The group and its members, populated, or the 404 answered.
+   */
+  static async _loadGroup(req, res) {
+    const groupBooking = await GroupBookingManager.getGroupBooking(
+      req.params.tenant,
+      req.params.id,
+      true,
+    );
+    if (!groupBooking) {
+      const error = new NotFoundError("group_booking_not_found", {
+        groupBookingId: req.params.id,
+      });
+      res.status(error.statusCode).json(error.toJSON());
+      return null;
+    }
+    return groupBooking;
+  }
+
+  static async _allowed(groupBooking, user, tenantId) {
+    return (
+      user &&
+      (await PermissionsService._allowUpdate(
+        groupBooking,
+        user.id,
+        tenantId,
+        RolePermission.MANAGE_BOOKINGS,
+      ))
+    );
+  }
+
+  /**
+   * The confirmation of a group: the consistency checks of before with
+   * their `{ success: false, errors }` answer, then the transition
+   * `confirm` of the group lifecycle as the administration.
+   */
   static async commitGroupBooking(req, res) {
     const tenantId = req.params.tenant;
     const user = req.user;
 
     try {
       const groupBookingId = req.params.id;
+      const groupBooking = await GroupBookingController._loadGroup(req, res);
+      if (!groupBooking) {
+        return;
+      }
 
-      const groupBooking = await GroupBookingManager.getGroupBooking(
-        tenantId,
-        groupBookingId,
-      );
-
-      if (
-        user &&
-        (await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        const result = await BookingService.commitGroupBooking(
-          tenantId,
-          groupBookingId,
+      if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
+        const errors = BookingService.groupTransitionErrors(
+          TRANSITION.CONFIRM,
+          groupBooking.bookings,
         );
-
-        if (!result.success) {
+        if (errors.length > 0) {
+          logger.error(
+            `${tenantId} -- group-booking ${groupBookingId} cannot be committed: ${JSON.stringify(errors)}`,
+          );
           return res.status(200).json({
             success: false,
             data: null,
-            errors: result.errors,
+            errors,
           });
         }
+
+        await groupBookingLifecycle.confirm(tenantId, groupBookingId, {
+          trigger: TRIGGER.ADMIN,
+        });
 
         const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
           tenantId,
@@ -219,7 +257,7 @@ class GroupBookingController {
         });
       } else {
         logger.error(
-          { tenantId: tenantId, user: user.id },
+          { tenantId: tenantId, user: user?.id },
           "User not allowed to commit group booking",
         );
         res.status(403).send({
@@ -227,50 +265,35 @@ class GroupBookingController {
         });
       }
     } catch (error) {
-      logger.error(
-        { tenantId: tenantId, error: error.message },
-        "Error committing group booking",
-      );
-      res.status(500).send({ message: error.message });
+      answerTransitionError(error, res, {
+        code: "booking_commit_failed",
+        fallback: (mapped) => ({ message: mapped.message }),
+      });
     }
   }
 
+  /**
+   * The payment of a group: the transition `pay` of the group lifecycle as
+   * the administration.
+   */
   static async payGroupBooking(req, res) {
+    const tenantId = req.params.tenant;
     try {
-      const tenantId = req.params.tenant;
       const user = req.user;
       const groupBookingId = req.params.id;
       const { paymentMethod, timePaid } = req.body;
 
-      const groupBooking = await GroupBookingManager.getGroupBooking(
-        tenantId,
-        groupBookingId,
-      );
+      const groupBooking = await GroupBookingController._loadGroup(req, res);
+      if (!groupBooking) {
+        return;
+      }
 
-      if (
-        user &&
-        (await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        const result = await BookingService.setAggregatedBookingPayed({
-          tenantId,
-          bookingIds: groupBooking.bookingIds,
+      if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
+        await groupBookingLifecycle.pay(tenantId, groupBookingId, {
+          trigger: TRIGGER.ADMIN,
           paymentMethod,
           timePaid,
-          groupBookingId,
         });
-
-        if (!result.success) {
-          return res.status(200).json({
-            success: false,
-            data: null,
-            errors: result.errors,
-          });
-        }
 
         const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
           tenantId,
@@ -285,7 +308,7 @@ class GroupBookingController {
         });
       } else {
         logger.error(
-          { tenantId: tenantId, user: user.id },
+          { tenantId: tenantId, user: user?.id },
           "User not allowed to pay group booking",
         );
         res.status(403).send({
@@ -293,8 +316,10 @@ class GroupBookingController {
         });
       }
     } catch (error) {
-      logger.error({ error: error.message }, "Error paying group booking");
-      res.status(500).send({ message: error.message });
+      answerTransitionError(error, res, {
+        code: "set_aggregated_booking_payed_failed",
+        fallback: (mapped) => ({ message: mapped.message }),
+      });
     }
   }
 
@@ -335,9 +360,16 @@ class GroupBookingController {
     }
   }
 
+  /**
+   * The cancellation of a group: the consistency checks of before with
+   * their `{ success: false, errors }` answer, then the transition `cancel`
+   * of the group lifecycle as the administration, with the refund
+   * percentage and the bank details of the form; `skipCancellation` is
+   * the form's word for a cancellation without its document.
+   */
   static async rejectGroupBooking(req, res) {
+    const tenantId = req.params.tenant;
     try {
-      const tenantId = req.params.tenant;
       const user = req.user;
       const groupBookingId = req.params.id;
       const { reason, skipCancellation, bankDetails, refundPercentage } =
@@ -350,42 +382,35 @@ class GroupBookingController {
         }
       }
 
-      const groupBooking = await GroupBookingManager.getGroupBooking(
-        tenantId,
-        groupBookingId,
-      );
+      const groupBooking = await GroupBookingController._loadGroup(req, res);
+      if (!groupBooking) {
+        return;
+      }
 
-      if (
-        user &&
-        (await PermissionsService._allowUpdate(
-          groupBooking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ))
-      ) {
-        const result = await BookingService.rejectGroupBooking(
-          tenantId,
-          groupBookingId,
-          reason,
-          null,
-          false,
-          Boolean(skipCancellation),
-          bankDetails || null,
-          {
-            origin: CANCELLATION_ORIGINS.ADMIN,
-            refundPercentage,
-            cancelledByUserId: user.id,
-          },
+      if (await GroupBookingController._allowed(groupBooking, user, tenantId)) {
+        const errors = BookingService.groupTransitionErrors(
+          TRANSITION.CANCEL,
+          groupBooking.bookings,
         );
-
-        if (!result.success) {
+        if (errors.length > 0) {
+          logger.error(
+            `${tenantId} -- group-booking ${groupBookingId} cannot be rejected: ${JSON.stringify(errors)}`,
+          );
           return res.status(200).json({
             success: false,
             data: null,
-            errors: result.errors,
+            errors,
           });
         }
+
+        await groupBookingLifecycle.cancel(tenantId, groupBookingId, {
+          trigger: TRIGGER.ADMIN,
+          reason,
+          bankDetails: bankDetails || null,
+          refundPercentage,
+          cancelledByUserId: user.id,
+          withDocument: !skipCancellation,
+        });
 
         const updatedGroupBooking = await GroupBookingManager.getGroupBooking(
           tenantId,
@@ -400,7 +425,7 @@ class GroupBookingController {
         });
       } else {
         logger.error(
-          { tenantId: tenantId, user: user.id },
+          { tenantId: tenantId, user: user?.id },
           "User not allowed to reject group booking",
         );
         res.status(403).send({
@@ -408,7 +433,10 @@ class GroupBookingController {
         });
       }
     } catch (error) {
-      res.status(500).send({ message: error.message });
+      answerTransitionError(error, res, {
+        code: "booking_rejection_failed",
+        fallback: (mapped) => ({ message: mapped.message }),
+      });
     }
   }
 

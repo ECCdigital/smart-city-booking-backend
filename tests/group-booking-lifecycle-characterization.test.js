@@ -1,16 +1,14 @@
 /**
- * Characterization of the group booking lifecycle as it is today, seen
- * through the HTTP form: admission by the group checkout, confirmation,
- * payment (administration and aggregated webhook), cancellation and the
- * two reprint endpoints of a group. Companion of
- * `booking-lifecycle-characterization.test.js`, written for the same
- * ticket: the group variants and the known defects that belong to them
- * (turned by ticket 8 of the chain).
- *
- * The group runs its transitions member by member without rollback, then
- * issues one document and one mail for the group. Each case lists the
- * effects at the seam in the order they happen today; the member labels
- * B1, B2 follow the order of the first write.
+ * Characterization of the group booking lifecycle, seen through the HTTP
+ * form: admission by the group checkout, confirmation, payment
+ * (administration and aggregated webhook), cancellation and the reprint
+ * endpoints of a group. Companion of
+ * `booking-lifecycle-characterization.test.js`. Since ticket 8 of the
+ * chain the group runs its transitions through the group lifecycle:
+ * written and provisioned member by member, then one document and one
+ * mail for the group; a write that fails at member k restores the members
+ * before it. Each case lists the effects at the seam in the order they
+ * happen; the member labels B1, B2 follow the order of the first write.
  */
 
 const { expect } = require("chai");
@@ -223,7 +221,7 @@ describe("group booking lifecycle today: what each state change does at the seam
       ]);
     });
 
-    it("a hold that fails at the second member rolls that member back and leaves the first without a group (ticket 8)", async function () {
+    it("a hold that fails at the second member rolls that member back and leaves the first without a group (ticket 9)", async function () {
       h.failing.add("access.hold B2");
 
       const body = await groupCheckout("room");
@@ -246,7 +244,7 @@ describe("group booking lifecycle today: what each state change does at the seam
   // -----------------------------------------------------------------------
 
   describe("confirmation: POST /group-bookings/:id/commit", function () {
-    it("confirms member by member, workflow after each write, then one aggregated payment request", async function () {
+    it("confirms member by member, the workflow events after the writes, then one aggregated payment request", async function () {
       const id = await groupIn("requested");
 
       const res = await commit(id);
@@ -260,8 +258,8 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(states(id)).to.deep.equal(["payment_due", "payment_due"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 payment_due",
-        "workflow.onCommit B1",
         "store.save B2 payment_due",
+        "workflow.onCommit B1",
         "workflow.onCommit B2",
         "payment.paymentRequest B1,B2 aggregated",
       ]);
@@ -278,11 +276,11 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(states(groupBooking.id)).to.deep.equal(["confirmed", "confirmed"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onCommit B1",
         "store.save B2 confirmed",
-        "workflow.onCommit B2",
         "access.provision B1",
         "access.provision B2",
+        "workflow.onCommit B1",
+        "workflow.onCommit B2",
         "mail.sendFreeBookingConfirmation B1,B2",
       ]);
     });
@@ -297,39 +295,38 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(res.body.success).to.equal(true);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 payment_due",
-        "workflow.onCommit B1",
         "store.save B2 payment_due",
+        "workflow.onCommit B1",
         "workflow.onCommit B2",
       ]);
     });
 
-    it("never mails the organizer of a ticket group: the block reads `type` off the item and, for a priced group, sits after the return (tickets 5, 8)", async function () {
-      const first = await h.manualBooking("ticket", { isPayed: true });
-      const second = await h.manualBooking("ticket", { isPayed: true });
-      const paid = await seedGroup([first.id, second.id]);
+    it("mails the organizer of a ticket group on confirmation, once for the group (the block was dead before), and refuses a confirmed group with 409", async function () {
+      const first = await h.manualBooking("ticket");
+      const second = await h.manualBooking("ticket");
+      const requested = await seedGroup([first.id, second.id]);
 
-      const res = await commit(paid);
+      const res = await commit(requested);
 
       expect(res.status).to.equal(200);
-      // Paid already (and, since ticket 2, confirmed with a receipt at
-      // creation), the group takes the free-booking way, where the ticket
-      // block is reachable - and still finds no ticket.
+      expect(states(requested)).to.deep.equal(["payment_due", "payment_due"]);
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed [receipt]",
+        "store.save B1 payment_due",
+        "store.save B2 payment_due",
         "workflow.onCommit B1",
-        "store.save B2 confirmed [receipt]",
         "workflow.onCommit B2",
-        "access.provision B1",
-        "access.provision B2",
-        "mail.sendFreeBookingConfirmation B1,B2",
+        "payment.paymentRequest B1,B2 aggregated",
+        "mail.sendNewBooking B1",
+        "mail.sendNewBooking B2",
       ]);
 
-      // Priced, the commit returns with the payment request, before the
-      // ticket block.
-      const third = await h.manualBooking("ticket");
-      const fourth = await h.manualBooking("ticket");
+      // Paid already (and, since ticket 2, confirmed with a receipt at
+      // creation), the group is not a request: the guard refuses it
+      // (before, it was confirmed a second time as a free group).
+      const third = await h.manualBooking("ticket", { isPayed: true });
+      const fourth = await h.manualBooking("ticket", { isPayed: true });
       await GroupBookingManager.storeGroupBooking({
-        id: "G-SEED-PRICED",
+        id: "G-SEED-PAID",
         tenantId: TENANT,
         bookingIds: [third.id, fourth.id],
         assignedUserId: CUSTOMER,
@@ -337,32 +334,44 @@ describe("group booking lifecycle today: what each state change does at the seam
       });
       h.clearEffects();
 
-      const priced = await commit("G-SEED-PRICED");
+      const paid = await commit("G-SEED-PAID");
 
-      expect(priced.status).to.equal(200);
-      expect(h.takeEffects()).to.deep.equal([
-        "store.save B3 payment_due",
-        "workflow.onCommit B3",
-        "store.save B4 payment_due",
-        "workflow.onCommit B4",
-        "payment.paymentRequest B3,B4 aggregated",
-      ]);
+      expect(paid.status).to.equal(409);
+      expect(paid.body.code).to.equal("invalid_transition");
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("a write that fails at the second member leaves the first confirmed, 500 (ticket 8: restored)", async function () {
+    it("a write that fails at the second member restores the first: nothing else runs, the group is still requested, 500 (the first member stayed confirmed before)", async function () {
       const id = await groupIn("requested");
       h.failing.add("store.save B2");
 
       const res = await commit(id);
 
       expect(res.status).to.equal(500);
-      expect(res.body).to.deep.equal({ message: "store.save failed" });
-      expect(states(id)).to.deep.equal(["payment_due", "requested"]);
+      expect(res.body).to.deep.equal({ message: "booking_commit_failed" });
+      expect(states(id)).to.deep.equal(["requested", "requested"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 payment_due",
-        "workflow.onCommit B1",
         "store.save B2 FAILED",
+        "store.restore B1 requested",
       ]);
+    });
+
+    it("refuses a group that is not a request: 409 invalid_transition, no second payment request (was a 200 with one)", async function () {
+      const id = await groupIn("payment_due");
+
+      const res = await commit(id);
+
+      expect(res.status).to.equal(409);
+      expect(res.body.code).to.equal("invalid_transition");
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("answers 404 for a group it does not know", async function () {
+      const res = await commit("G-UNKNOWN");
+
+      expect(res.status).to.equal(404);
+      expect(res.body.code).to.equal("group_booking_not_found");
     });
 
     it("refuses a group whose members differ in state, 200 with the consistency error, without effect", async function () {
@@ -384,7 +393,7 @@ describe("group booking lifecycle today: what each state change does at the seam
   // -----------------------------------------------------------------------
 
   describe("payment: POST /group-bookings/:id/pay and the aggregated webhook", function () {
-    it("pays member by member, then one aggregated receipt attached to each, one confirmation - and no workflow event (ticket 8)", async function () {
+    it("pays member by member, grants each, then one aggregated receipt attached to each, the workflow event per member (it never fired before), one confirmation", async function () {
       const id = await groupIn("payment_due");
 
       const res = await pay(id, { paymentMethod: "CASH" });
@@ -404,12 +413,14 @@ describe("group booking lifecycle today: what each state change does at the seam
       }
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "access.provision B1",
         "store.save B2 confirmed",
+        "access.provision B1",
         "access.provision B2",
         "documents.aggregatedReceipt B1,B2",
         "store.attach B1 receipt",
         "store.attach B2 receipt",
+        "workflow.onPay B1",
+        "workflow.onPay B2",
         "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
       ]);
     });
@@ -430,12 +441,14 @@ describe("group booking lifecycle today: what each state change does at the seam
       ]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "access.provision B1",
         "store.save B2 confirmed",
+        "access.provision B1",
         "access.provision B2",
         "documents.aggregatedReceipt B1,B2",
         "store.attach B1 receipt",
         "store.attach B2 receipt",
+        "workflow.onPay B1",
+        "workflow.onPay B2",
         "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
       ]);
 
@@ -449,26 +462,58 @@ describe("group booking lifecycle today: what each state change does at the seam
       );
     });
 
-    it("a receipt that fails answers 500 for a group that is paid (ticket 8: recorded instead)", async function () {
+    it("a receipt that fails is recorded: the group is paid without it, the confirmation goes out without it, 200 (was a 500)", async function () {
       const id = await groupIn("payment_due");
       h.failing.add("documents.aggregatedReceipt");
 
       const res = await pay(id);
 
-      expect(res.status).to.equal(500);
-      // The service's `BaseError` carries its message as the code; the
-      // cause stays in the log.
-      expect(res.body).to.deep.equal({
-        message: "set_aggregated_booking_payed_failed",
-      });
+      expect(res.status).to.equal(200);
       expect(states(id)).to.deep.equal(["confirmed", "confirmed"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "access.provision B1",
         "store.save B2 confirmed",
+        "access.provision B1",
         "access.provision B2",
         "documents.aggregatedReceipt B1,B2 FAILED",
+        "workflow.onPay B1",
+        "workflow.onPay B2",
+        "mail.sendBookingConfirmation B1,B2",
       ]);
+    });
+
+    it("a write that fails at the second member restores the first: the group still awaits payment, 500", async function () {
+      const id = await groupIn("payment_due");
+      h.failing.add("store.save B2");
+
+      const res = await pay(id);
+
+      expect(res.status).to.equal(500);
+      expect(res.body).to.deep.equal({
+        message: "set_aggregated_booking_payed_failed",
+      });
+      expect(states(id)).to.deep.equal(["payment_due", "payment_due"]);
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 confirmed",
+        "store.save B2 FAILED",
+        "store.restore B1 payment_due",
+      ]);
+    });
+
+    it("refuses to pay a group that is not awaiting payment: 409 invalid_transition, no second receipt (was a 200 with one)", async function () {
+      const id = await groupIn("confirmed");
+
+      const res = await pay(id);
+
+      expect(res.status).to.equal(409);
+      expect(res.body.code).to.equal("invalid_transition");
+      expect(h.takeEffects()).to.deep.equal([]);
+
+      const [first, second] = h.groups.get(id).bookingIds;
+      const webhook = await h.webhook(`ids=${first},${second}&aggregated=true`);
+
+      expect(webhook.status).to.equal(409);
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
     it("a grant that fails at one member is logged; the group is paid and mailed", async function () {
@@ -480,17 +525,19 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "access.provision B1 FAILED",
         "store.save B2 confirmed",
+        "access.provision B1 FAILED",
         "access.provision B2",
         "documents.aggregatedReceipt B1,B2",
         "store.attach B1 receipt",
         "store.attach B2 receipt",
+        "workflow.onPay B1",
+        "workflow.onPay B2",
         "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
       ]);
     });
 
-    it("the aggregated receipt replaces the `mailAttach` documents in the confirmation instead of joining them (ticket 8)", async function () {
+    it("the confirmation of the payment carries the aggregated receipt and the `mailAttach` documents of the members (the receipt replaced them before)", async function () {
       // Unpaid, the document of the room goes out once for the group.
       const { groupBooking } = (await groupCheckout("room-with-doc")).data;
       expect(h.takeEffects()).to.include(
@@ -500,7 +547,7 @@ describe("group booking lifecycle today: what each state change does at the seam
       await pay(groupBooking.id);
 
       expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B1,B2 [RE-1.pdf]",
+        "mail.sendBookingConfirmation B1,B2 [RE-1.pdf,Hausordnung.pdf]",
       );
     });
   });
@@ -508,7 +555,7 @@ describe("group booking lifecycle today: what each state change does at the seam
   // -----------------------------------------------------------------------
 
   describe("cancellation: POST /group-bookings/:id/reject", function () {
-    it("renders one cancellation document first, cancels member by member with revoke and workflow, then one cancel mail", async function () {
+    it("cancels member by member with the refund audit, revokes each, issues one cancellation document after the writes, the workflow event per member, then one cancel mail", async function () {
       const id = await groupIn("confirmed");
 
       const res = await reject(id, { reason: "Halle gesperrt" });
@@ -526,16 +573,17 @@ describe("group booking lifecycle today: what each state change does at the seam
           "receipt",
           "cancellation",
         ]);
+        expect(member.cancellationRefund.cancelledFrom).to.equal("confirmed");
       }
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "store.save B2 cancelled [receipt]",
+        "access.revoke B1",
+        "access.revoke B2",
         "documents.aggregatedCancellation B1,B2",
         "store.attach B1 cancellation",
         "store.attach B2 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
-        "access.revoke B1",
         "workflow.onReject B1",
-        "store.save B2 cancelled [receipt,cancellation]",
-        "access.revoke B2",
         "workflow.onReject B2",
         "mail.sendBookingCancel B1,B2 [ST-1.pdf]",
       ]);
@@ -549,10 +597,10 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 cancelled [receipt]",
-        "access.revoke B1",
-        "workflow.onReject B1",
         "store.save B2 cancelled [receipt]",
+        "access.revoke B1",
         "access.revoke B2",
+        "workflow.onReject B1",
         "workflow.onReject B2",
         "mail.sendBookingCancel B1,B2",
       ]);
@@ -566,14 +614,14 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(res.status).to.equal(200);
       expect(states(id)).to.deep.equal(["rejected", "rejected"]);
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 rejected",
+        "store.save B2 rejected",
+        "access.revoke B1",
+        "access.revoke B2",
         "documents.aggregatedCancellation B1,B2",
         "store.attach B1 cancellation",
         "store.attach B2 cancellation",
-        "store.save B1 rejected [cancellation]",
-        "access.revoke B1",
         "workflow.onReject B1",
-        "store.save B2 rejected [cancellation]",
-        "access.revoke B2",
         "workflow.onReject B2",
         "mail.sendBookingRejection B1,B2 [ST-1.pdf]",
       ]);
@@ -594,17 +642,64 @@ describe("group booking lifecycle today: what each state change does at the seam
       expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("a cancel mail that fails answers 500 for a group that is cancelled (ticket 8: recorded instead)", async function () {
+    it("a cancel mail that fails is recorded: the group is cancelled, 200 (was a 500)", async function () {
       const id = await groupIn("confirmed");
       h.failing.add("mail.sendBookingCancel");
 
       const res = await reject(id, { reason: "" });
 
-      expect(res.status).to.equal(500);
+      expect(res.status).to.equal(200);
       expect(states(id)).to.deep.equal(["cancelled", "cancelled"]);
       expect(h.takeEffects().at(-1)).to.equal(
         "mail.sendBookingCancel B1,B2 [ST-1.pdf] FAILED",
       );
+    });
+
+    it("a cancellation document that fails is recorded: the group is cancelled without it, the mail goes out without attachment", async function () {
+      const id = await groupIn("confirmed");
+      h.failing.add("documents.aggregatedCancellation");
+
+      const res = await reject(id, { reason: "" });
+
+      expect(res.status).to.equal(200);
+      expect(states(id)).to.deep.equal(["cancelled", "cancelled"]);
+      expect(h.takeEffects().slice(-3)).to.deep.equal([
+        "workflow.onReject B1",
+        "workflow.onReject B2",
+        "mail.sendBookingCancel B1,B2",
+      ]);
+    });
+
+    it("a write that fails at the second member restores the first: the group stands, no document, no mail, 500", async function () {
+      const id = await groupIn("confirmed");
+      h.failing.add("store.save B2");
+
+      const res = await reject(id, { reason: "" });
+
+      expect(res.status).to.equal(500);
+      expect(res.body).to.deep.equal({ message: "booking_rejection_failed" });
+      expect(states(id)).to.deep.equal(["confirmed", "confirmed"]);
+      expect(h.members(id).map((m) => m.cancellationRefund)).to.deep.equal([
+        undefined,
+        undefined,
+      ]);
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "store.save B2 FAILED",
+        "store.restore B1 confirmed",
+      ]);
+    });
+
+    it("refuses to cancel a group that is cancelled: 409 invalid_transition, no second document (was a 200 with one)", async function () {
+      const id = await groupIn("confirmed");
+      await reject(id, { reason: "" });
+      h.clearEffects();
+
+      const res = await reject(id, { reason: "again" });
+
+      expect(res.status).to.equal(409);
+      expect(res.body.code).to.equal("invalid_transition");
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
     it("a revoke that fails at one member is logged; the group is cancelled and mailed", async function () {
@@ -615,14 +710,14 @@ describe("group booking lifecycle today: what each state change does at the seam
 
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt]",
+        "store.save B2 cancelled [receipt]",
+        "access.revoke B1",
+        "access.revoke B2 FAILED",
         "documents.aggregatedCancellation B1,B2",
         "store.attach B1 cancellation",
         "store.attach B2 cancellation",
-        "store.save B1 cancelled [receipt,cancellation]",
-        "access.revoke B1",
         "workflow.onReject B1",
-        "store.save B2 cancelled [receipt,cancellation]",
-        "access.revoke B2 FAILED",
         "workflow.onReject B2",
         "mail.sendBookingCancel B1,B2 [ST-1.pdf]",
       ]);

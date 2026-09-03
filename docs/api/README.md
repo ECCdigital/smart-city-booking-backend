@@ -200,7 +200,7 @@ Returns per-booking calculations and aggregate amounts for a group booking. **Re
 
 ### POST /api/:tenant/group-bookings/:id/reject
 
-Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated.
+Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated. A group that is cancelled already, or whose members differ in state, answers `409 invalid_transition`; an unknown group `404`. The same applies to `POST /group-bookings/:id/commit` and `/pay`.
 
 Customer self-cancellations always use the current tenant policy when the verification link is released. Expected refund amounts are exposed via the public/hook preview endpoints and included in verify-rejection and booking-cancel mails. Rule-engine and workflow cancellations retain a full refund. Refunds are documented for manual processing; payment providers are not called automatically.
 

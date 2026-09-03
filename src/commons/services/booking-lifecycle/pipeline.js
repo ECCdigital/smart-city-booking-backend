@@ -121,12 +121,14 @@ class LifecycleError extends Error {
  * @param {string} op The adapter operation, for the effect row and the policy
  * @param {function(Object): Promise<*>} run Runs the effect; answers
  *   `SKIPPED` to say it did not apply (no payment service configured)
- * @param {{ when?: function(Object): boolean }} [options] The condition
- *   under which the step runs; a step whose condition is false is `skipped`
+ * @param {{ when?: function(Object): boolean, bookingId?: string }} [options]
+ *   The condition under which the step runs - a step whose condition is
+ *   false is `skipped` - and, for a step of one member of a group, the
+ *   member's id, which the effect row carries
  * @returns {Object} The step
  * @throws {Error} For an unknown phase or an operation without a policy
  */
-function step(phase, adapter, op, run, { when } = {}) {
+function step(phase, adapter, op, run, { when, bookingId } = {}) {
   if (!PHASES.includes(phase)) {
     throw new Error(`booking-lifecycle: unknown phase ${phase}`);
   }
@@ -137,6 +139,7 @@ function step(phase, adapter, op, run, { when } = {}) {
     policy: policyOf(adapter, op),
     run,
     when: when || (() => true),
+    ...(bookingId ? { bookingId } : {}),
   };
 }
 
@@ -163,6 +166,7 @@ function isSnapshotStep(s) {
  * @property {string} adapter
  * @property {string} op
  * @property {string} policy
+ * @property {string} [bookingId] The member of a group the effect is of
  * @property {string} status One of EFFECT_STATUS
  * @property {Error} [error] Set where the status is `recorded` or `failed`
  */
@@ -172,8 +176,10 @@ function isSnapshotStep(s) {
  * @property {string} transition
  * @property {string} [bookingId]
  * @property {string[]} [bookingIds] For a group transition
- * @property {string|null} status The booking's state afterwards
+ * @property {string|null} status The booking's state afterwards; for a
+ *   group the state its members share, null where they differ
  * @property {Object|null} booking The booking as the store holds it afterwards
+ * @property {Object[]} [bookings] For a group transition, the members
  * @property {Effect[]} effects In execution order
  * @property {null|{ effect: Effect, compensated: string[] }} failure The
  *   effect the transition aborted at and the ids of the bookings restored
@@ -189,8 +195,9 @@ function isSnapshotStep(s) {
  * @param {string[]} [ctx.bookingIds]
  * @param {Object} [ctx.booking] The booking the transition works on; the
  *   outcome carries it and its state afterwards
- * @param {{ get: Function, restore: Function }} ctx.store The store adapter,
- *   for the restore of an abort
+ * @param {Object[]} [ctx.bookings] The members a group transition works on
+ * @param {{ get: Function, getMany: Function, restore: Function }} ctx.store
+ *   The store adapter, for the restore of an abort
  * @param {Object[]} steps The declared steps
  * @returns {Promise<Outcome>}
  * @throws {LifecycleError} When a step with abort policy fails
@@ -217,6 +224,7 @@ async function runPipeline(ctx, steps) {
       adapter: s.adapter,
       op: s.op,
       policy: s.policy,
+      ...(s.bookingId ? { bookingId: s.bookingId } : {}),
     };
 
     if (!s.when(ctx)) {
@@ -255,7 +263,12 @@ async function runPipeline(ctx, steps) {
         compensated: await restoreSnapshots(ctx, snapshots),
       };
       outcome.booking = await currentBooking(ctx);
-      outcome.status = outcome.booking?.status ?? null;
+      if (bookingIds) {
+        outcome.bookings = await currentBookings(ctx);
+        outcome.status = sharedStatus(outcome.bookings);
+      } else {
+        outcome.status = outcome.booking?.status ?? null;
+      }
 
       if (err instanceof ConflictError) {
         throw err;
@@ -269,8 +282,19 @@ async function runPipeline(ctx, steps) {
   }
 
   outcome.booking = ctx.booking ?? null;
-  outcome.status = ctx.booking?.status ?? null;
+  if (bookingIds) {
+    outcome.bookings = ctx.bookings ?? [];
+    outcome.status = sharedStatus(outcome.bookings);
+  } else {
+    outcome.status = ctx.booking?.status ?? null;
+  }
   return outcome;
+}
+
+/** The state every member is in, or null where they differ. */
+function sharedStatus(bookings) {
+  const statuses = new Set(bookings.map((booking) => booking.status));
+  return statuses.size === 1 ? [...statuses][0] : null;
 }
 
 async function restoreSnapshots({ store, tenantId, transition }, snapshots) {
@@ -297,6 +321,14 @@ async function currentBooking({ store, tenantId, bookingId }) {
     return await store.get(tenantId, bookingId);
   } catch {
     return null;
+  }
+}
+
+async function currentBookings({ store, tenantId, bookingIds }) {
+  try {
+    return await store.getMany(tenantId, bookingIds);
+  } catch {
+    return [];
   }
 }
 

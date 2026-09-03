@@ -258,20 +258,31 @@ describe("checkout on the access seam", function () {
     });
 
     it("leaves every booking of an aggregated payment paid when one grant fails", async function () {
-      const first = booking({ id: "B-1" });
-      const second = booking({ id: "B-2" });
+      const first = booking({ id: "B-1", status: "payment_due" });
+      const second = booking({ id: "B-2", status: "payment_due" });
+      sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
+        id: "G-1",
+        tenantId: TENANT,
+        bookingIds: ["B-1", "B-2"],
+      });
       sinon.stub(BookingManager, "getBookings").resolves([first, second]);
-      sinon.stub(BookingManager, "storeBooking").callsFake(async (v) => v);
+      sinon
+        .stub(BookingManager, "storeBookingIfStatus")
+        .callsFake(async (value) => ({ ...value }));
+      sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
       const provision = sinon.stub(AccessService, "provisionForBooking");
       provision.withArgs(TENANT, "B-1").rejects(new Error("refused"));
       provision.withArgs(TENANT, "B-2").resolves([]);
-      sinon
-        .stub(BookingService, "handleAggregatedBookingConfirmation")
-        .resolves();
+      sinon.stub(lifecycleDocuments, "issue").resolves({
+        attachment: { type: "receipt" },
+        file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
+      });
+      sinon.stub(MailController, "sendBookingConfirmation").resolves();
 
       const result = await BookingService.setAggregatedBookingPayed({
         tenantId: TENANT,
         bookingIds: ["B-1", "B-2"],
+        groupBookingId: "G-1",
       });
 
       expect(result).to.deep.equal({ success: true });

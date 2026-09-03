@@ -15,16 +15,10 @@ const {
   issue: issueDocument,
   mailAttachments,
 } = require("../../../commons/services/documents/document-issuance");
-const {
-  BaseError,
-  ConflictError,
-  NotFoundError,
-} = require("../../../errors/BaseError");
+const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
 const BookingService = require("../../../commons/services/checkout/booking-service");
-const {
-  TRIGGER,
-  LifecycleError,
-} = require("../../../commons/services/booking-lifecycle");
+const { TRIGGER } = require("../../../commons/services/booking-lifecycle");
+const { answerTransitionError } = require("./transition-error-answer");
 const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
@@ -582,24 +576,10 @@ class BookingController {
         return response.sendStatus(403);
       }
     } catch (err) {
-      // An aborted transition is the `booking_commit_failed` of before
-      // (spec part 1, 4.3): the code derived from the transition.
-      const error =
-        err instanceof LifecycleError
-          ? new BaseError("booking_commit_failed", {
-              message: `Error committing booking: ${err.message}`,
-            })
-          : err;
-      logger.error(error);
-      if (response.headersSent) {
-        return;
-      }
-      // The lifecycle's guard: not a request any more, or a second
-      // confirmation that raced this one (409), or no such booking (404).
-      if (error instanceof BaseError && error.statusCode < 500) {
-        return response.status(error.statusCode).json(error.toJSON());
-      }
-      response.status(500).send("Could not commit booking");
+      answerTransitionError(err, response, {
+        code: "booking_commit_failed",
+        fallback: "Could not commit booking",
+      });
     }
   }
 
@@ -648,16 +628,10 @@ class BookingController {
         return response.sendStatus(403);
       }
     } catch (err) {
-      logger.error(err);
-      if (response.headersSent) {
-        return;
-      }
-      // The lifecycle's guard: not awaiting payment, or a second payment
-      // that raced this one (409), or no such booking (404).
-      if (err instanceof BaseError && err.statusCode < 500) {
-        return response.status(err.statusCode).json(err.toJSON());
-      }
-      response.status(500).send("Could not set booking as paid");
+      answerTransitionError(err, response, {
+        code: "set_booking_payed_failed",
+        fallback: "Could not set booking as paid",
+      });
     }
   }
 
@@ -743,34 +717,6 @@ class BookingController {
     }
   }
 
-  /**
-   * The answer to an error of a cancellation: the lifecycle's guard - the
-   * booking is cancelled already, or a second cancellation raced this one
-   * (409) - and a missing booking (404) with their status, an aborted
-   * transition as the `booking_rejection_failed` of before (spec part 1,
-   * 4.3), everything else the plain 500. `body` shapes the answer of an
-   * error under 500; the cancellation request keeps its `{ code, message }`.
-   */
-  static _answerRejectionError(
-    err,
-    response,
-    code,
-    body = (error) => error.toJSON(),
-  ) {
-    const error =
-      err instanceof LifecycleError
-        ? new BaseError(code, 500, { message: err.message })
-        : err;
-    logger.error(error);
-    if (response.headersSent) {
-      return;
-    }
-    if (error instanceof BaseError && error.statusCode < 500) {
-      return response.status(error.statusCode).send(body(error));
-    }
-    response.status(500).send("Could not reject booking");
-  }
-
   static async rejectBooking(request, response) {
     try {
       const tenantId = request.params.tenant;
@@ -822,11 +768,10 @@ class BookingController {
         return response.sendStatus(403);
       }
     } catch (err) {
-      BookingController._answerRejectionError(
-        err,
-        response,
-        "booking_rejection_failed",
-      );
+      answerTransitionError(err, response, {
+        code: "booking_rejection_failed",
+        fallback: "Could not reject booking",
+      });
     }
   }
 
@@ -850,12 +795,11 @@ class BookingController {
 
       response.sendStatus(201);
     } catch (err) {
-      BookingController._answerRejectionError(
-        err,
-        response,
-        "booking_reject_request_failed",
-        (error) => ({ code: error.code, message: error.message }),
-      );
+      answerTransitionError(err, response, {
+        code: "booking_reject_request_failed",
+        fallback: "Could not reject booking",
+        body: (error) => ({ code: error.code, message: error.message }),
+      });
     }
   }
 
@@ -893,11 +837,10 @@ class BookingController {
 
       response.sendStatus(200);
     } catch (err) {
-      BookingController._answerRejectionError(
-        err,
-        response,
-        "booking_rejection_failed",
-      );
+      answerTransitionError(err, response, {
+        code: "booking_rejection_failed",
+        fallback: "Could not reject booking",
+      });
     }
   }
 

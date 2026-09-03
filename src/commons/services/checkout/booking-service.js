@@ -27,18 +27,14 @@ const {
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
 const {
-  STATUS,
   TRANSITION,
   TRIGGER,
-  CANCELLED_FROM_STATUSES,
-  statusFromFlags,
   normalizeFlags,
 } = require("../booking-lifecycle/booking-state");
 const { planUpdate } = require("../booking-lifecycle/update-plan");
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
-  sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const {
   BadRequestError,
@@ -57,7 +53,11 @@ const {
 const {
   prepareMailAttachments,
 } = require("../booking-lifecycle/mail-attachments");
-const { bookingLifecycle, LifecycleError } = require("../booking-lifecycle");
+const {
+  bookingLifecycle,
+  groupBookingLifecycle,
+  LifecycleError,
+} = require("../booking-lifecycle");
 const {
   resolveCheckoutId,
   resolveCheckoutItems,
@@ -493,69 +493,31 @@ class BookingService {
     });
 
     await GroupBookingManager.storeGroupBooking(groupBooking);
+
+    // The admission of the group (glossary "Aufnahme"): its members are
+    // stored, held and told to the workflow above; the group's own effects
+    // - the receipt, the one mail, the notices - are the lifecycle's. It
+    // records what fails: the group exists, its mails are notifications.
+    if (!simulate) {
+      try {
+        await groupBookingLifecycle.admit(tenantId, uniqueId, {
+          trigger: checkoutPolicy.acceptsAdminOverrides(policy)
+            ? TRIGGER.ADMIN
+            : TRIGGER.CUSTOMER,
+        });
+      } catch (err) {
+        logger.error(
+          { err, tenantId, groupBookingId: uniqueId },
+          `${tenantId} -- admission of group booking ${uniqueId} failed: ${err.message}`,
+        );
+      }
+    }
+
     const newGroupBooking = await GroupBookingManager.getGroupBooking(
       tenantId,
       uniqueId,
       true,
     );
-
-    if (!simulate) {
-      try {
-        const allBookingAttachments = newGroupBooking.bookings.flatMap(
-          (booking) => booking.attachments,
-        );
-
-        const mailAttachments = await prepareMailAttachments(
-          allBookingAttachments,
-          tenantId,
-        );
-
-        logger.info(
-          `${tenantId} -- Prepared ${mailAttachments.length} mail attachments for group booking ${newGroupBooking.id}`,
-        );
-
-        const allCommitted = newGroupBooking.bookings.every(
-          (booking) => booking.isCommitted,
-        );
-
-        if (!allCommitted) {
-          await MailController.sendBookingRequestConfirmation(
-            newGroupBooking.mail,
-            newGroupBooking.bookingIds,
-            newGroupBooking.tenantId,
-            true,
-            mailAttachments,
-          );
-        }
-
-        await BookingService.handleAggregatedBookingConfirmation(
-          tenantId,
-          newGroupBooking.bookingIds,
-          mailAttachments,
-          newGroupBooking.id,
-        );
-
-        const tenant = await TenantManager.getTenant(newGroupBooking.tenantId);
-
-        if (tenant.notifyOnNewBooking) {
-          await MailController.sendIncomingBooking(
-            tenant.mail,
-            newGroupBooking.bookingIds,
-            newGroupBooking.tenantId,
-            true,
-          );
-        }
-
-        await SupervisorNotificationService.notifySupervisorsOnBookingCreated({
-          tenantId: newGroupBooking.tenantId,
-          userId: newGroupBooking.assignedUserId,
-          bookingIds: newGroupBooking.bookingIds,
-          aggregated: true,
-        });
-      } catch (err) {
-        logger.error(`Error while sending email: ${err}`);
-      }
-    }
 
     return newGroupBooking;
   }
@@ -812,101 +774,27 @@ class BookingService {
     return { success: true };
   }
 
-  static async commitGroupBooking(
-    tenantId,
-    groupBookingId,
-    skipWorkflow = false,
-  ) {
-    const groupBooking = await GroupBookingManager.getGroupBooking(
-      tenantId,
-      groupBookingId,
-      true,
-    );
-    const bookings = groupBooking.bookings;
-
-    const validator = new BookingConsistencyService([
-      checkSameContactDetails,
-      checkSameStatus,
-      checkSamePaymentProvider,
-      validatePaymentProviderRequirement,
-    ]);
-    const errors = validator.validate(bookings);
-    if (errors.length > 0) {
-      logger.error(
-        `${tenantId} -- group-booking ${groupBooking.id} cannot be committed: ${JSON.stringify(
-          errors,
-        )}`,
-      );
-      return { success: false, errors };
-    }
-
-    for (const booking of bookings) {
-      setStatusFromFlags(booking, { isCommitted: true, isRejected: false });
-      await BookingManager.storeBooking(booking);
-
-      if (!skipWorkflow) {
-        await WorkflowService.handleWorkflowEvent(
-          tenantId,
-          booking.id,
-          "onCommit",
-          true,
-        );
-      }
-    }
-
-    if (bookings.every((booking) => isNoPaymentRequired(booking))) {
-      for (const booking of bookings) {
-        try {
-          await AccessService.provisionForBooking(booking.tenantId, booking.id);
-        } catch (err) {
-          logger.error(err);
-        }
-      }
-
-      await MailController.sendFreeBookingConfirmation(
-        groupBooking.mail,
-        groupBooking.bookingIds,
-        groupBooking.tenantId,
-        undefined,
-        true,
-      );
-      logger.info(
-        `${groupBooking.tenantId} -- group-booking ${groupBooking.id} committed and sent free booking confirmation to ${groupBooking.mail}`,
-      );
-    } else {
-      const paymentService = await PaymentUtils.getPaymentService(
-        tenantId,
-        groupBooking.bookingIds,
-        groupBooking.bookings[0].paymentProvider,
-        { aggregated: true, groupBookingId: groupBooking.id },
-      );
-
-      if (!paymentService) return { success: true };
-
-      await paymentService.paymentRequest();
-
-      return { success: true };
-    }
-
-    const hasTicketBooking = groupBooking.bookings.some((booking) =>
-      booking.bookableItems.some(isTicket),
-    );
-
-    if (hasTicketBooking) {
-      const bookingsWithTickets = groupBooking.bookings.filter((booking) =>
-        booking.bookableItems.some(isTicket),
-      );
-
-      for (const booking of bookingsWithTickets) {
-        const eventIds = booking.bookableItems.map(getEventForTicket);
-
-        await sendEmailToOrganizer(eventIds, tenantId, booking);
-      }
-    }
-    logger.info(
-      `${tenantId} -- group-booking ${groupBooking.id} committed and sent payment request to ${groupBooking.mail}`,
-    );
-    return { success: true };
+  /**
+   * The consistency checks a group transition runs in front of the
+   * lifecycle's guard (spec part 2, section 9 and the note on ticket 5):
+   * the answer keeps its `{ success: false, errors }` form, the state guard
+   * of the lifecycle closes the race behind it.
+   *
+   * @param {string} transition `confirm` or `cancel`
+   * @param {Object[]} bookings The members of the group
+   * @returns {Object[]} The consistency errors, empty where the group is fit
+   */
+  static groupTransitionErrors(transition, bookings) {
+    const checks =
+      transition === TRANSITION.CONFIRM
+        ? [
+            checkSameContactDetails,
+            checkSameStatus,
+            checkSamePaymentProvider,
+            validatePaymentProviderRequirement,
+          ]
+        : [checkSameContactDetails, checkSameStatus];
+    return new BookingConsistencyService(checks).validate(bookings);
   }
 
   /**
@@ -944,45 +832,41 @@ class BookingService {
     }
   }
 
+  /**
+   * The aggregated payment of a group is the transition `pay` of the group
+   * lifecycle. The webhook names the members and, where it knows it, the
+   * group; a group it does not name is looked up by the first member. The
+   * error mapping is `setBookingPayed`'s: guard and missing group pass
+   * through as 409/404, an aborted transition is the
+   * `set_aggregated_booking_payed_failed` of before.
+   *
+   * @param {{ tenantId: string, bookingIds: string[], paymentMethod?: string, timePaid?: number, groupBookingId?: string|null, trigger?: string }} params
+   * @returns {Promise<{ success: true }>}
+   */
   static async setAggregatedBookingPayed({
     tenantId,
     bookingIds,
     paymentMethod,
     timePaid,
     groupBookingId = null,
+    trigger = TRIGGER.PAYMENT,
   }) {
+    const id = await groupBookingIdOf({ tenantId, bookingIds, groupBookingId });
     try {
-      const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-      for (const booking of bookings) {
-        setStatusFromFlags(booking, { isPayed: true });
-        if (timePaid && typeof timePaid === "number") {
-          booking.timePaid = timePaid;
-        } else {
-          booking.timePaid = Date.now();
-        }
-        if (paymentMethod) {
-          booking.paymentMethod = paymentMethod;
-        }
-        await BookingManager.storeBooking(booking);
-        logger.info(`${tenantId} -- booking ${booking.id} set to payed`);
-
-        try {
-          await AccessService.provisionForBooking(booking.tenantId, booking.id);
-        } catch (err) {
-          logger.error(err);
-        }
-      }
-      await BookingService.handleAggregatedBookingConfirmation(
-        tenantId,
-        bookingIds,
-        [],
-        groupBookingId,
-      );
+      await groupBookingLifecycle.pay(tenantId, id, {
+        trigger,
+        paymentMethod,
+        timePaid,
+      });
+      logger.info(`${tenantId} -- group booking ${id} set to payed`);
       return { success: true };
     } catch (error) {
-      throw new BaseError("set_aggregated_booking_payed_failed", {
-        message: `Error setting aggregated booking to payed: ${error.message}`,
-      });
+      if (error instanceof LifecycleError) {
+        throw new BaseError("set_aggregated_booking_payed_failed", {
+          message: `Error setting aggregated booking to payed: ${error.message}`,
+        });
+      }
+      throw error;
     }
   }
 
@@ -1157,142 +1041,6 @@ class BookingService {
       `${tenantId} -- booking ${bookingId} ${outcome.status} (${options.trigger})`,
     );
     return outcome;
-  }
-
-  static async rejectGroupBooking(
-    tenantId,
-    groupBookingId,
-    reason = "",
-    hookId = null,
-    skipWorkflow = false,
-    skipCancellation = false,
-    bankDetails = null,
-    cancellationContext = {},
-  ) {
-    const [groupBooking, tenant] = await Promise.all([
-      GroupBookingManager.getGroupBooking(tenantId, groupBookingId, true),
-      TenantManager.getTenant(tenantId),
-    ]);
-
-    if (!groupBooking) {
-      throw new NotFoundError("group_booking_not_found", { groupBookingId });
-    }
-    if (!tenant) {
-      throw new NotFoundError("tenant_not_found", { tenantId });
-    }
-
-    const bookings = groupBooking.bookings;
-
-    const validator = new BookingConsistencyService([
-      checkSameContactDetails,
-      checkSameStatus,
-    ]);
-    const errors = validator.validate(bookings);
-    if (errors.length > 0) {
-      logger.error(
-        `${tenantId} -- group-booking ${groupBooking.id} cannot be rejected: ${JSON.stringify(
-          errors,
-        )}`,
-      );
-      return { success: false, errors };
-    }
-
-    let attachments;
-    const cancelledAt = cancellationContext.cancelledAt ?? Date.now();
-    const refundCalculations = bookings.map((booking) => ({
-      bookingId: booking.id,
-      ...CancellationRefundService.calculate({
-        tenant,
-        booking,
-        cancelledAt,
-        origin: cancellationContext.origin || CANCELLATION_ORIGINS.SYSTEM,
-        refundPercentage: cancellationContext.refundPercentage,
-        cancelledByUserId: cancellationContext.cancelledByUserId,
-      }),
-    }));
-
-    if (groupBooking.getTotalPrice() > 0 && !skipCancellation) {
-      const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
-      const options = {
-        alreadyPaid: groupBooking.areSomeBookingsPaid(),
-        cancellationReason: reason,
-        refundCalculations,
-        bankDetails: sanitizedBankDetails || undefined,
-      };
-
-      // The issuance attaches the one document to every member and to
-      // these entities, so the state writes below carry it too.
-      const { file } = await issueDocument({
-        tenantId,
-        bookingIds: groupBooking.bookingIds,
-        type: "cancellation",
-        groupBookingId: groupBooking.id,
-        bookings,
-        options,
-      });
-
-      attachments = mailAttachments(file);
-    }
-
-    for (const booking of bookings) {
-      const cancelledFrom = cancelledFromOf(booking);
-      setStatusFromFlags(booking, { isRejected: true });
-      booking.rejectionReason = reason;
-
-      const refundCalculation = refundCalculations.find(
-        (calculation) => calculation.bookingId === booking.id,
-      );
-      if (refundCalculation) {
-        const refundAudit = { ...refundCalculation };
-        delete refundAudit.bookingId;
-        booking.cancellationRefund = refundAudit;
-      }
-      recordCancelledFrom(booking, cancelledFrom);
-      await BookingManager.storeBooking(booking);
-
-      try {
-        await AccessService.revokeForBooking(booking.tenantId, booking.id);
-      } catch (err) {
-        logger.error(err);
-      }
-
-      if (!skipWorkflow) {
-        await WorkflowService.handleWorkflowEvent(
-          tenantId,
-          booking.id,
-          "onReject",
-          true,
-        );
-      }
-    }
-
-    if (groupBooking.bookings.some((booking) => isRejection(booking, hookId))) {
-      await MailController.sendBookingRejection(
-        groupBooking.bookings[0].mail,
-        groupBooking.bookingIds,
-        tenantId,
-        reason,
-        attachments,
-        true,
-      );
-      logger.info(
-        `${tenantId} -- bookings ${groupBooking.bookingIds} rejected and sent booking rejection to ${groupBooking.bookings[0].mail}`,
-      );
-    } else {
-      await MailController.sendBookingCancel(
-        groupBooking.bookings[0].mail,
-        groupBooking.bookingIds,
-        tenantId,
-        reason,
-        attachments,
-        true,
-      );
-      logger.info(
-        `${tenantId} -- bookings ${groupBooking.bookingIds} canceled and sent booking rejection to ${groupBooking.bookings[0].mail}`,
-      );
-    }
-
-    return { success: true };
   }
 
   /**
@@ -1476,61 +1224,6 @@ class BookingService {
     return booking;
   }
 
-  /**
-   * The confirmation of a group: one aggregated receipt where the group is
-   * paid, then one mail. `groupBookingId` names the group the receipt is
-   * issued for; a caller that does not know it (the payment webhook) leaves
-   * it out and the group is looked up by its first booking.
-   */
-  static async handleAggregatedBookingConfirmation(
-    tenantId,
-    bookingIds,
-    additionalAttachments = [],
-    groupBookingId = null,
-  ) {
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-
-    if (bookings.every((b) => b.isCommitted)) {
-      let attachments = [...additionalAttachments];
-
-      const allPayed = bookings.every((b) => b.isPayed);
-      const totalPrice = bookings.reduce((acc, b) => acc + b.priceEur, 0);
-
-      if (totalPrice > 0 && allPayed) {
-        const { file } = await issueDocument({
-          tenantId,
-          bookingIds: bookings.map((b) => b.id),
-          type: "receipt",
-          groupBookingId: await groupBookingIdOf({
-            tenantId,
-            bookingIds,
-            groupBookingId,
-          }),
-          bookings,
-        });
-
-        attachments = mailAttachments(file);
-      }
-
-      try {
-        await MailController.sendBookingConfirmation(
-          bookings[0].mail,
-          bookings.map((b) => b.id),
-          tenantId,
-          attachments,
-          true,
-        );
-        logger.info(
-          `${tenantId} -- bookings ${bookingIds} confirmation sent to ${bookings[0].mail}`,
-        );
-      } catch (err) {
-        logger.error(err);
-      }
-    }
-
-    return bookings;
-  }
-
   static async getBookingStatus(tenantId, bookingId) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
     if (!booking) {
@@ -1593,57 +1286,6 @@ async function generateBookingReference(
   }
 
   return text;
-}
-
-/**
- * Moves the booking to the state today's flag flip stood for: the flags are
- * derived from `status` now, so the flip is expressed as the state the
- * changed flags read as. The lifecycle transitions of tickets 4 to 6 take
- * this over with their guards.
- */
-function setStatusFromFlags(booking, changedFlags) {
-  booking.status = statusFromFlags(
-    {
-      isCommitted: booking.isCommitted,
-      isPayed: booking.isPayed,
-      isRejected: booking.isRejected,
-      ...changedFlags,
-    },
-    booking.priceEur,
-  );
-}
-
-/**
- * The state a booking about to be cancelled is cancelled from: its state
- * where that is a live one, else what an earlier cancellation recorded (the
- * admin PUT stores the flip before `rejectBooking` runs, a second rejection
- * finds the booking cancelled already).
- */
-function cancelledFromOf(booking) {
-  return CANCELLED_FROM_STATUSES.includes(booking.status)
-    ? booking.status
-    : booking.cancellationRefund?.cancelledFrom;
-}
-
-/**
- * A cancelled booking keeps the state it was cancelled from: `reinstate`
- * returns to it and `isPayed` is read from it.
- */
-function recordCancelledFrom(booking, cancelledFrom) {
-  if (booking.status === STATUS.CANCELLED) {
-    booking.cancellationRefund = {
-      ...booking.cancellationRefund,
-      cancelledFrom,
-    };
-  }
-}
-
-function isNoPaymentRequired(booking) {
-  return !booking.priceEur || booking.priceEur === 0 || booking.isPayed;
-}
-
-function isRejection(booking, hookId) {
-  return !booking.isCommitted && !hookId;
 }
 
 function isTicket(bookableItem) {

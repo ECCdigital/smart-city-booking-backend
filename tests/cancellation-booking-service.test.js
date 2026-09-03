@@ -17,6 +17,9 @@ const {
   TRIGGER,
 } = require("../src/commons/services/booking-lifecycle/booking-state");
 const {
+  groupBookingLifecycle,
+} = require("../src/commons/services/booking-lifecycle");
+const {
   BundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
@@ -88,8 +91,6 @@ function stubCancellationSideEffects() {
       saved.booking = value;
       return { id: value.id, tenantId: value.tenantId, status: "confirmed" };
     });
-  // The group cancellation still writes unconditionally (ticket 8).
-  sinon.stub(BookingManager, "storeBooking").callsFake(async (value) => value);
   sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
   sinon.stub(AccessService, "revokeForBooking").resolves([]);
   sinon.stub(MailController, "sendBookingCancel").resolves();
@@ -224,14 +225,19 @@ describe("BookingService cancellation refunds", function () {
   it("stores per-booking audit data for a group cancellation", async function () {
     const cancelledAt = Date.UTC(2026, 7, 1, 8);
     const bookings = [
-      booking({
-        id: "booking-1",
-        timeBegin: cancelledAt + 30 * 86400000,
-      }),
-      booking({
-        id: "booking-2",
-        timeBegin: cancelledAt + 5 * 86400000,
-      }),
+      new Booking(
+        booking({
+          id: "booking-1",
+          timeBegin: cancelledAt + 30 * 86400000,
+          attachments: [{ ...INVOICE, invoiceId: "INV-GROUP" }],
+        }),
+      ),
+      new Booking(
+        booking({
+          id: "booking-2",
+          timeBegin: cancelledAt + 5 * 86400000,
+        }),
+      ),
     ];
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
@@ -242,32 +248,22 @@ describe("BookingService cancellation refunds", function () {
     });
     sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
       id: "group-1",
+      tenantId: "tenant-1",
       bookingIds: bookings.map((entry) => entry.id),
-      bookings,
-      getTotalPrice: () => 200,
-      areSomeBookingsPaid: () => true,
     });
-    bookings[0].attachments = [{ ...INVOICE, invoiceId: "INV-GROUP" }];
+    sinon.stub(BookingManager, "getBookings").resolves(bookings);
     stubIssuance();
     stubCancellationSideEffects();
 
-    const result = await BookingService.rejectGroupBooking(
-      "tenant-1",
-      "group-1",
-      "Group cancellation",
-      null,
-      false,
-      false,
-      null,
-      {
-        origin: CANCELLATION_ORIGINS.ADMIN,
-        refundPercentage: 25,
-        cancelledByUserId: "admin-1",
-        cancelledAt,
-      },
-    );
+    const outcome = await groupBookingLifecycle.cancel("tenant-1", "group-1", {
+      trigger: TRIGGER.ADMIN,
+      reason: "Group cancellation",
+      refundPercentage: 25,
+      cancelledByUserId: "admin-1",
+      cancelledAt,
+    });
 
-    assert.strictEqual(result.success, true);
+    assert.strictEqual(outcome.status, "cancelled");
     assert.deepStrictEqual(
       bookings.map(
         (entry) =>
@@ -298,6 +294,10 @@ describe("BookingService cancellation refunds", function () {
       ),
       [100, 50],
     );
+    assert.deepStrictEqual(
+      bookings.map((entry) => entry.cancellationRefund.cancelledFrom),
+      ["confirmed", "confirmed"],
+    );
     assert.strictEqual(
       cancellationAttachment(bookings[0]).cancellation.originalDocumentRef
         .number,
@@ -308,14 +308,18 @@ describe("BookingService cancellation refunds", function () {
   it("forwards bank details to aggregated group cancellation documents", async function () {
     const cancelledAt = Date.UTC(2026, 7, 1, 8);
     const bookings = [
-      booking({
-        id: "booking-1",
-        timeBegin: cancelledAt + 30 * 86400000,
-      }),
-      booking({
-        id: "booking-2",
-        timeBegin: cancelledAt + 5 * 86400000,
-      }),
+      new Booking(
+        booking({
+          id: "booking-1",
+          timeBegin: cancelledAt + 30 * 86400000,
+        }),
+      ),
+      new Booking(
+        booking({
+          id: "booking-2",
+          timeBegin: cancelledAt + 5 * 86400000,
+        }),
+      ),
     ];
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
@@ -323,36 +327,28 @@ describe("BookingService cancellation refunds", function () {
     });
     sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
       id: "group-1",
+      tenantId: "tenant-1",
       bookingIds: bookings.map((entry) => entry.id),
-      bookings,
-      getTotalPrice: () => 200,
-      areSomeBookingsPaid: () => true,
     });
+    sinon.stub(BookingManager, "getBookings").resolves(bookings);
     const pdf = stubIssuance().aggregated;
     stubCancellationSideEffects();
 
-    const result = await BookingService.rejectGroupBooking(
-      "tenant-1",
-      "group-1",
-      "Group cancellation",
-      null,
-      false,
-      false,
-      {
+    const outcome = await groupBookingLifecycle.cancel("tenant-1", "group-1", {
+      trigger: TRIGGER.ADMIN,
+      reason: "Group cancellation",
+      bankDetails: {
         accountHolder: " Max Mustermann ",
         bankName: " Musterbank ",
         iban: "de89 3704 0044 0532 0130 00",
         bic: " coba deff xxx ",
       },
-      {
-        origin: CANCELLATION_ORIGINS.ADMIN,
-        refundPercentage: 100,
-        cancelledByUserId: "admin-1",
-        cancelledAt,
-      },
-    );
+      refundPercentage: 100,
+      cancelledByUserId: "admin-1",
+      cancelledAt,
+    });
 
-    assert.strictEqual(result.success, true);
+    assert.strictEqual(outcome.failure, null);
     assert.deepStrictEqual(pdf.firstCall.args[4].bankDetails, {
       accountHolder: "Max Mustermann",
       bankName: "Musterbank",
