@@ -4,6 +4,7 @@ const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
 const AccessService = require("../../../commons/services/access/access-service");
 const PermissionService = require("../../../commons/services/permission-service");
+const { BaseError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "payment-controller.js",
@@ -203,7 +204,13 @@ class PaymentController {
         );
       }
       response.sendStatus(200);
-    } catch {
+    } catch (err) {
+      // The lifecycle's guard, e.g. a second notification for a booking
+      // paid already: 409 invalid_transition, nothing changed.
+      if (err instanceof BaseError) {
+        logger.warn({ err: err.toJSON() }, `${tenantId} -- ${err.code}`);
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.warn(
         `${tenantId} -- could not get payment result for bookings ${aggregatedBookingIds}.`,
       );
@@ -280,7 +287,13 @@ class PaymentController {
         );
       }
       response.sendStatus(200);
-    } catch {
+    } catch (err) {
+      // The lifecycle's guard, e.g. a second notification for a booking
+      // paid already: 409 invalid_transition, nothing changed.
+      if (err instanceof BaseError) {
+        logger.warn({ err: err.toJSON() }, `${tenantId} -- ${err.code}`);
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.warn(
         `${tenantId} -- could not get payment result for booking ${aggregatedBookingIds}.`,
       );

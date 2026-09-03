@@ -15,8 +15,13 @@ const {
   issue: issueDocument,
   mailAttachments,
 } = require("../../../commons/services/documents/document-issuance");
-const { ConflictError } = require("../../../errors/BaseError");
+const {
+  BaseError,
+  ConflictError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
 const BookingService = require("../../../commons/services/checkout/booking-service");
+const { TRIGGER } = require("../../../commons/services/booking-lifecycle");
 const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
@@ -584,6 +589,10 @@ class BookingController {
       }
 
       const booking = await BookingManager.getBooking(id, tenant);
+      if (!booking) {
+        const error = new NotFoundError("booking_not_found", { bookingId: id });
+        return response.status(error.statusCode).json(error.toJSON());
+      }
 
       if (
         await PermissionsService._allowUpdate(
@@ -599,7 +608,7 @@ class BookingController {
         await BookingService.setBookingPayed({
           tenantId: tenant,
           bookingId: id,
-          skipWorkflow: false,
+          trigger: TRIGGER.ADMIN,
           paymentMethod,
           timePaid,
         });
@@ -616,9 +625,15 @@ class BookingController {
       }
     } catch (err) {
       logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not set booking as paid");
+      if (response.headersSent) {
+        return;
       }
+      // The lifecycle's guard: not awaiting payment, or a second payment
+      // that raced this one (409), or no such booking (404).
+      if (err instanceof BaseError && err.statusCode < 500) {
+        return response.status(err.statusCode).json(err.toJSON());
+      }
+      response.status(500).send("Could not set booking as paid");
     }
   }
 

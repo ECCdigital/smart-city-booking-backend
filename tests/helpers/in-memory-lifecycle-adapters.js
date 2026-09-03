@@ -1,0 +1,227 @@
+/**
+ * In-memory adapters for the booking lifecycle seam (spec part 2, section
+ * 10): every adapter records its calls and fails on demand, the store keeps
+ * a write log and answers the conditional write the way the database does.
+ * Modelled on `.scratch/architecture/booking-lifecycle/prototype/in-memory-adapters.js`.
+ *
+ * A test builds its own lifecycle instance over these:
+ *
+ *   const adapters = inMemoryAdapters({ bookings: [booking], failOn: { access: ["provision"] } });
+ *   const lifecycle = createBookingLifecycle(adapters);
+ */
+
+const { ConflictError } = require("../../src/errors/BaseError");
+const { Booking } = require("../../src/commons/entities/booking/booking");
+
+const DOCUMENT_ID_FIELD = {
+  receipt: "receiptId",
+  invoice: "invoiceId",
+  cancellation: "cancellationId",
+};
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+/**
+ * An adapter of async methods that records every call and throws for the
+ * operations named in `failOn`.
+ *
+ * @param {string} name The adapter's name, for the error message
+ * @param {string[]} ops The method names to expose
+ * @param {{ failOn?: string[], returns?: Object<string, Function> }} [options]
+ */
+function recordingAdapter(name, ops, { failOn = [], returns = {} } = {}) {
+  const adapter = { name, calls: [], failOn: new Set(failOn) };
+  for (const op of ops) {
+    adapter[op] = async (...args) => {
+      adapter.calls.push({ op, args });
+      if (adapter.failOn.has(op)) {
+        throw new Error(`${name}.${op} failed (simulated)`);
+      }
+      return returns[op] ? returns[op](...args) : undefined;
+    };
+  }
+  return adapter;
+}
+
+/**
+ * The booking store: rows keyed by id, handed out as `Booking` entities.
+ * `save` is the conditional write of the spec (section 5): it only writes
+ * where the stored state is `expectStatus` and answers the previous row;
+ * otherwise it throws `ConflictError invalid_transition`. `restore` puts a
+ * previous row back. `failOn` takes `save` or `save <bookingId>`.
+ */
+function inMemoryStore(seed = []) {
+  const rows = new Map(seed.map((booking) => [booking.id, clone(booking)]));
+  const store = {
+    name: "store",
+    rows,
+    writes: [],
+    calls: [],
+    failOn: new Set(),
+    async get(tenantId, id) {
+      const row = rows.get(id);
+      return row && row.tenantId === tenantId ? new Booking(clone(row)) : null;
+    },
+    async getMany(tenantId, ids) {
+      return ids
+        .map((id) => rows.get(id))
+        .filter((row) => row && row.tenantId === tenantId)
+        .map((row) => new Booking(clone(row)));
+    },
+    async save(booking, { expectStatus, transition } = {}) {
+      store.calls.push({ op: "save", args: [booking.id, expectStatus] });
+      if (store.failOn.has("save") || store.failOn.has(`save ${booking.id}`)) {
+        throw new Error("store.save failed (simulated)");
+      }
+      const row = rows.get(booking.id);
+      if (!row || row.status !== expectStatus) {
+        throw new ConflictError("invalid_transition", {
+          bookingId: booking.id,
+          status: row?.status,
+          transition,
+        });
+      }
+      const previous = clone(row);
+      rows.set(booking.id, clone(booking));
+      store.writes.push({ id: booking.id, status: booking.status });
+      return previous;
+    },
+    async restore(previous) {
+      store.calls.push({ op: "restore", args: [previous.id] });
+      rows.set(previous.id, clone(previous));
+      store.writes.push({
+        id: previous.id,
+        status: previous.status,
+        restored: true,
+      });
+    },
+    /** The `$push` of an issued document, as the issuance does it. */
+    attach(id, attachment) {
+      const row = rows.get(id);
+      row.attachments = [...(row.attachments || []), clone(attachment)];
+    },
+  };
+  return store;
+}
+
+function inMemoryAccess(options) {
+  return recordingAdapter(
+    "access",
+    ["hold", "provision", "update", "revoke", "refreshHolds"],
+    {
+      ...options,
+      returns: {
+        hold: () => [],
+        provision: () => [],
+        update: () => [],
+        revoke: () => [],
+        refreshHolds: () => [],
+      },
+    },
+  );
+}
+
+/**
+ * The issuance at the seam: numbers `receipt-1`, `receipt-2`, ... per type,
+ * a second issue of a type at a booking a revision under the same number;
+ * the attachment goes to the store rows and to the entities handed in.
+ */
+function inMemoryDocuments(store, options = {}) {
+  const counters = {};
+  const adapter = recordingAdapter("documents", ["issue", "remove"], options);
+  const issue = adapter.issue;
+  adapter.issue = async (params) => {
+    await issue(params);
+    const { bookingIds, type, bookings = [] } = params;
+    const idField = DOCUMENT_ID_FIELD[type];
+    const existing = bookingIds
+      .flatMap((id) => store.rows.get(id)?.attachments || [])
+      .filter((att) => att.type === type);
+    const number =
+      existing[0]?.[idField] ||
+      `${type}-${(counters[type] = (counters[type] || 0) + 1)}`;
+    const revision =
+      existing.reduce((max, att) => Math.max(max, att.revision || 1), 0) + 1;
+    const name = `${number}${revision > 1 ? `-r${revision}` : ""}.pdf`;
+    const attachment = {
+      type,
+      name,
+      title: name,
+      [idField]: number,
+      revision,
+      timeCreated: Date.now(),
+    };
+    for (const id of bookingIds) {
+      store.attach(id, attachment);
+    }
+    for (const booking of bookings) {
+      booking.attachments = [...(booking.attachments || []), { ...attachment }];
+    }
+    return { attachment, file: { name, buffer: Buffer.from(`%PDF-${name}`) } };
+  };
+  return adapter;
+}
+
+const MAIL_INTENTS = [
+  "sendRequestConfirmation",
+  "sendBookingConfirmation",
+  "sendFreeBookingConfirmation",
+  "sendBookingCancel",
+  "sendBookingRejection",
+  "sendVerifyBookingRejection",
+  "sendEmailToOrganizer",
+  "sendTenantMail",
+  "sendSupervisorMail",
+];
+
+function inMemoryMail(options) {
+  return recordingAdapter("mail", MAIL_INTENTS, options);
+}
+
+function inMemoryWorkflow(options) {
+  return recordingAdapter("workflow", ["emit"], options);
+}
+
+function inMemoryPayment(options) {
+  return recordingAdapter("payment", ["requestPayment"], options);
+}
+
+/**
+ * Every adapter at once, the way a test injects them at the one seam.
+ *
+ * @param {{ bookings?: Object[], failOn?: Object<string, string[]>, clock?: () => number }} [options]
+ */
+function inMemoryAdapters({ bookings = [], failOn = {}, clock } = {}) {
+  const store = inMemoryStore(bookings);
+  for (const op of failOn.store || []) {
+    store.failOn.add(op);
+  }
+  return {
+    store,
+    access: inMemoryAccess({ failOn: failOn.access }),
+    documents: inMemoryDocuments(store, { failOn: failOn.documents }),
+    payment: inMemoryPayment({ failOn: failOn.payment }),
+    mail: inMemoryMail({ failOn: failOn.mail }),
+    workflow: inMemoryWorkflow({ failOn: failOn.workflow }),
+    clock: clock || (() => 1_756_800_000_000),
+  };
+}
+
+/** The effect rows of an outcome as `phase adapter.op status` strings. */
+function effectTable(outcome) {
+  return outcome.effects.map(
+    (effect) =>
+      `${effect.phase} ${effect.adapter}.${effect.op} ${effect.status}`,
+  );
+}
+
+module.exports = {
+  inMemoryAdapters,
+  inMemoryStore,
+  recordingAdapter,
+  effectTable,
+  MAIL_INTENTS,
+  clone,
+};

@@ -42,6 +42,8 @@ const {
 } = require("../src/commons/services/checkout/checkout-reasons");
 const { CheckoutError } = require("../src/errors/CheckoutError");
 const { Booking } = require("../src/commons/entities/booking/booking");
+const MailController = require("../src/commons/mail-service/mail-controller");
+const lifecycleDocuments = require("../src/commons/services/booking-lifecycle/adapters/documents");
 
 const TENANT = "tenant-1";
 const COUPON = "SAVE10";
@@ -225,24 +227,31 @@ describe("checkout on the access seam", function () {
       const paid = booking();
       sinon.stub(BookingManager, "getBooking").resolves(paid);
       const stored = sinon
-        .stub(BookingManager, "storeBooking")
-        .callsFake(async (value) => value);
+        .stub(BookingManager, "storeBookingIfStatus")
+        .callsFake(async (value) => ({ ...value }));
       sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
       sinon
         .stub(AccessService, "provisionForBooking")
         .rejects(new Error("iFBS refused the box"));
-      sinon.stub(BookingService, "handleSingleBookingConfirmation").resolves();
+      const issue = sinon.stub(lifecycleDocuments, "issue").resolves({
+        attachment: { type: "receipt" },
+        file: { name: "RE-1.pdf", buffer: Buffer.from("%PDF") },
+      });
+      const confirmation = sinon
+        .stub(MailController, "sendBookingConfirmation")
+        .resolves();
 
       const result = await BookingService.setBookingPayed({
         tenantId: TENANT,
         bookingId: paid.id,
+        trigger: "admin",
       });
 
       expect(result).to.deep.equal({ success: true });
       expect(stored.firstCall.args[0].isPayed).to.equal(true);
-      expect(
-        BookingService.handleSingleBookingConfirmation.calledOnce,
-      ).to.equal(true);
+      expect(stored.firstCall.args[1]).to.equal("payment_due");
+      expect(issue.calledOnce).to.equal(true);
+      expect(confirmation.calledOnce).to.equal(true);
     });
 
     it("leaves every booking of an aggregated payment paid when one grant fails", async function () {

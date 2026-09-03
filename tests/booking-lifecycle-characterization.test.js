@@ -424,7 +424,10 @@ describe("booking lifecycle today: what each state change does at the seam", fun
   // -----------------------------------------------------------------------
 
   describe("payment: POST /bookings/:id/pay and the payment webhook", function () {
-    it("the administration marks a booking paid: state write, grant, receipt as a second write, confirmation with the receipt", async function () {
+    // Since ticket 4 the payment is the lifecycle transition `pay` (spec
+    // part 2, section 8): persist, provision, document, then notify - the
+    // workflow event is the first notify step, after the receipt.
+    it("the administration marks a booking paid: state write, grant, receipt as a second write, workflow event, confirmation with the receipt", async function () {
       const id = await bookingIn("payment_due");
 
       const res = await pay(id, {
@@ -444,10 +447,10 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ).to.deep.equal(["RE-1"]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
         "store.attach B1 receipt",
+        "workflow.onPay B1",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
@@ -465,51 +468,62 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       });
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
         "store.attach B1 receipt",
+        "workflow.onPay B1",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
 
-    it("pays a request that was never confirmed: it reads as confirmed and is confirmed with its receipt (ticket 4: 409 invalid_transition)", async function () {
+    it("a second webhook for a paid booking is a 409 invalid_transition without effect", async function () {
+      const id = await bookingIn("confirmed");
+
+      const res = await h.webhook(`id=${id}`);
+
+      expect(res.status).to.equal(409);
+      expect(res.body).to.include({ code: "invalid_transition" });
+      expect(h.stored(id).attachments).to.have.length(1);
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("refuses to pay a request that was never confirmed: 409 invalid_transition, the guard fires before any effect", async function () {
       const id = await bookingIn("requested");
 
       const res = await pay(id);
 
-      expect(res.status).to.equal(200);
-      expect(stateOf(h.stored(id))).to.equal("confirmed");
-      expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed",
-        "workflow.onPay B1",
-        "access.provision B1",
-        "documents.receipt B1",
-        "store.attach B1 receipt",
-        "mail.sendBookingConfirmation B1 [RE-1.pdf]",
-      ]);
+      expect(res.status).to.equal(409);
+      expect(res.body).to.include({ code: "invalid_transition" });
+      expect(res.body.params).to.deep.equal({
+        bookingId: id,
+        status: "requested",
+        transition: "pay",
+      });
+      expect(stateOf(h.stored(id))).to.equal("requested");
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("pays a paid booking again and issues the receipt anew as a revision under the same number (ticket 4: 409 invalid_transition)", async function () {
+    it("answers 404 for a booking it does not know", async function () {
+      const res = await pay("no-such-booking");
+
+      expect(res.status).to.equal(404);
+      expect(res.body).to.include({ code: "booking_not_found" });
+    });
+
+    it("refuses to pay a paid booking again: 409 invalid_transition, no second receipt", async function () {
       const id = await bookingIn("confirmed");
 
       const res = await pay(id);
 
-      expect(res.status).to.equal(200);
+      expect(res.status).to.equal(409);
+      expect(res.body.params).to.include({
+        status: "confirmed",
+        transition: "pay",
+      });
       expect(
         h.stored(id).attachments.map((att) => [att.receiptId, att.revision]),
-      ).to.deep.equal([
-        ["RE-1", 1],
-        ["RE-1", 2],
-      ]);
-      expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed [receipt]",
-        "workflow.onPay B1",
-        "access.provision B1",
-        "documents.receipt B1",
-        "store.attach B1 receipt",
-        "mail.sendBookingConfirmation B1 [RE-1-r2.pdf]",
-      ]);
+      ).to.deep.equal([["RE-1", 1]]);
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
     it("a grant that fails leaves the booking paid; receipt and mail follow", async function () {
@@ -522,30 +536,42 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onPay B1",
         "access.provision B1 FAILED",
         "documents.receipt B1",
         "store.attach B1 receipt",
+        "workflow.onPay B1",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
       ]);
     });
 
-    it("a receipt that fails answers 500 for a booking that is paid, without receipt or mail (ticket 4: recorded instead)", async function () {
+    it("a receipt that fails is recorded: the booking is paid without a receipt, the mail goes out without it, 200", async function () {
       const id = await bookingIn("payment_due");
       h.failing.add("documents.receipt");
 
       const res = await pay(id);
 
-      expect(res.status).to.equal(500);
-      expect(res.text).to.equal("Could not set booking as paid");
+      expect(res.status).to.equal(200);
       expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.stored(id).attachments).to.deep.equal([]);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1 FAILED",
+        "workflow.onPay B1",
+        "mail.sendBookingConfirmation B1",
       ]);
+    });
+
+    it("a state write that fails aborts the payment: 500, nothing else runs, the booking awaits payment", async function () {
+      const id = await bookingIn("payment_due");
+      h.failing.add("store.save");
+
+      const res = await pay(id);
+
+      expect(res.status).to.equal(500);
+      expect(res.text).to.equal("Could not set booking as paid");
+      expect(stateOf(h.stored(id))).to.equal("payment_due");
+      expect(h.takeEffects()).to.deep.equal(["store.save B1 FAILED"]);
     });
 
     it("a mail that fails after the receipt is logged; the answer is 200", async function () {
@@ -557,29 +583,25 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(200);
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 confirmed",
-        "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
         "store.attach B1 receipt",
+        "workflow.onPay B1",
         "mail.sendBookingConfirmation B1 [RE-1.pdf] FAILED",
       ]);
     });
 
-    it("paying a free booking issues no receipt", async function () {
+    it("refuses to pay a free booking: it is confirmed already, 409", async function () {
       const id = await bookingIn("confirmed_free");
 
       const res = await pay(id);
 
-      expect(res.status).to.equal(200);
-      expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed",
-        "workflow.onPay B1",
-        "access.provision B1",
-        "mail.sendBookingConfirmation B1",
-      ]);
+      expect(res.status).to.equal(409);
+      expect(res.body.params).to.include({ status: "confirmed" });
+      expect(h.takeEffects()).to.deep.equal([]);
     });
 
-    it("the receipt replaces the `mailAttach` documents in the confirmation instead of joining them (tickets 4, 8)", async function () {
+    it("the receipt joins the `mailAttach` documents on payment; the admission of a paid manual booking still replaces them (ticket 9)", async function () {
       // Unpaid, the document of the room goes out with the confirmation.
       const unpaid = await checkout("room-with-doc");
       expect(h.takeEffects()).to.include(
@@ -595,10 +617,10 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "mail.sendBookingConfirmation B2 [RE-1.pdf]",
       );
 
-      // And the payment of the unpaid one carries the receipt alone.
+      // And the payment of the unpaid one carries the receipt and the document.
       await pay(unpaid.data.booking.id);
       expect(h.takeEffects()).to.include(
-        "mail.sendBookingConfirmation B1 [RE-2.pdf]",
+        "mail.sendBookingConfirmation B1 [RE-2.pdf,Hausordnung.pdf]",
       );
     });
   });
@@ -980,7 +1002,12 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
-    it("flipping isCommitted and isPayed at once confirms as if free, then pays: two grants, a free-booking mail and the receipt mail", async function () {
+    // Since ticket 4 the content write leaves a booking to be paid at
+    // `payment_due` and `pay` moves it on (the lifecycle's guard): the
+    // confirmation therefore runs as one of a priced booking, with the
+    // payment request, before the payment - the plan `[amend, confirm,
+    // pay]` of spec part 1, section 6. Ticket 7 runs the plan as such.
+    it("flipping isCommitted and isPayed at once confirms with the payment request, then pays: grant, receipt and the receipt mail", async function () {
       const id = await bookingIn("requested");
 
       const res = await update(id, { isCommitted: true, isPayed: true });
@@ -988,18 +1015,15 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.status).to.equal(201);
       expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([
-        "store.save B1 confirmed",
+        "store.save B1 payment_due",
         "workflow.onCommit B1",
+        "store.save B1 payment_due",
+        "payment.paymentRequest B1",
         "store.save B1 confirmed",
-        "access.provision B1",
-        // The booking is paid when `commitBooking` reads it, so it goes the
-        // "no payment required" way of a free booking.
-        "mail.sendFreeBookingConfirmation B1",
-        "store.save B1 confirmed",
-        "workflow.onPay B1",
         "access.provision B1",
         "documents.receipt B1",
         "store.attach B1 receipt",
+        "workflow.onPay B1",
         "mail.sendBookingConfirmation B1 [RE-1.pdf]",
         "access.update B1",
       ]);

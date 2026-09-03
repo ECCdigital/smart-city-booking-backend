@@ -310,6 +310,41 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
       );
       return entity;
     });
+  /**
+   * The conditional write of the lifecycle (spec part 2, section 5): writes
+   * only where the stored state is the expected one and answers the row as
+   * it was; no match answers null, and the store adapter raises the guard.
+   */
+  sinon
+    .stub(BookingManager, "storeBookingIfStatus")
+    .callsFake(async (booking, expectStatus) => {
+      const entity =
+        booking instanceof Booking ? booking : new Booking(booking);
+      entity.validate();
+      const previous = store.get(entity.id);
+      if (!previous || previous.status !== expectStatus) {
+        return null;
+      }
+      if (shouldFail("store.save", label(entity.id))) {
+        record("store.save", label(entity.id));
+      }
+      const merged = { ...previous, ...clone(entity) };
+      store.set(entity.id, merged);
+      const docs = merged.attachments
+        .filter((att) =>
+          ["receipt", "invoice", "cancellation"].includes(att.type),
+        )
+        .map((att) => att.type);
+      record(
+        "store.save",
+        `${label(entity.id)} ${stateOf(merged)}${docs.length ? ` [${docs.join(",")}]` : ""}`,
+      );
+      return clone(previous);
+    });
+  sinon.stub(BookingManager, "replaceBooking").callsFake(async (document) => {
+    store.set(document.id, clone(document));
+    record("store.restore", `${label(document.id)} ${stateOf(document)}`);
+  });
   sinon
     .stub(BookingManager, "addAttachment")
     .callsFake(async (tenantId, id, attachment) => {
