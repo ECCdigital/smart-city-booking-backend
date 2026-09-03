@@ -7,7 +7,7 @@ const {
 const PermissionService = require("../src/commons/services/permission-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
-const SupervisorNotificationService = require("../src/commons/services/supervisor-notification-service");
+const MembershipService = require("../src/commons/services/membership/membership-service");
 
 describe("TenantController.updateUserBookingNotificationRecipients", () => {
   let sandbox, req, res;
@@ -42,7 +42,7 @@ describe("TenantController.updateUserBookingNotificationRecipients", () => {
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ userId: "mitarbeiter@stadt.de", tenantId: "tenant-1" });
     const prepareStub = sandbox
-      .stub(SupervisorNotificationService, "prepareRecipientsForWrite")
+      .stub(MembershipService, "prepareBookingNotificationRecipients")
       .resolves([{ type: "email", value: "chef@stadt.de", label: "" }]);
     const updateStub = sandbox
       .stub(MembershipManager, "updateMembership")
@@ -95,7 +95,7 @@ describe("TenantController.updateUserBookingNotificationRecipients", () => {
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ userId: "mitarbeiter@stadt.de", tenantId: "tenant-1" });
     sandbox
-      .stub(SupervisorNotificationService, "prepareRecipientsForWrite")
+      .stub(MembershipService, "prepareBookingNotificationRecipients")
       .rejects(new Error("invalid_booking_notification_recipient"));
     const updateStub = sandbox.stub(MembershipManager, "updateMembership");
 

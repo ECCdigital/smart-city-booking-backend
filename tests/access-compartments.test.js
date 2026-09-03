@@ -28,7 +28,7 @@ const UserManager = require("../src/commons/data-managers/user-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const PermissionsService = require("../src/commons/services/permission-service");
-const MailController = require("../src/commons/mail-service/mail-controller");
+const mailModule = require("../src/commons/mail-service");
 const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
@@ -197,7 +197,7 @@ describe("Compartments on the access seam", function () {
     sinon.stub(TenantManager, "getTenant").resolves(tenant());
     sinon.stub(UserManager, "getRawUser").resolves({ _id: "64f1" });
     sinon.stub(AccessLogService, "log").resolves();
-    sinon.stub(MailController, "sendAccessProvisioned").resolves();
+    sinon.stub(mailModule, "notify").resolves([]);
     sinon.stub(PermissionsService, "_isOwner").returns(true);
   }
 
@@ -506,7 +506,7 @@ describe("Compartments on the access seam", function () {
       expect(entries.every((entry) => entry.isProvisioned)).to.equal(true);
       expect(entries.every((entry) => entry.hold === null)).to.equal(true);
       expect(pareva.rentalsInState("open")).to.have.length(2);
-      expect(MailController.sendAccessProvisioned.called).to.equal(false);
+      expect(mailModule.notify.called).to.equal(false);
     });
 
     it("grants nothing twice", async function () {

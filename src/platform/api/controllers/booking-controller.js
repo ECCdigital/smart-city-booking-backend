@@ -13,7 +13,6 @@ const ReceiptService = require("../../../commons/services/payment/receipt-servic
 const InvoiceService = require("../../../commons/services/payment/invoice-service");
 const {
   issue: issueDocument,
-  mailAttachments,
 } = require("../../../commons/services/documents/document-issuance");
 const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
 const BookingService = require("../../../commons/services/checkout/booking-service");
@@ -37,7 +36,7 @@ const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
-const MailController = require("../../../commons/mail-service/mail-controller");
+const mailService = require("../../../commons/mail-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
   CancellationRefundService,
@@ -1204,12 +1203,11 @@ class BookingController {
 
       if (shouldSendEmail) {
         try {
-          await MailController.sendInvoice(
-            booking.mail,
-            bookingId,
+          await mailService.notify("INVOICE", {
             tenantId,
-            mailAttachments(file),
-          );
+            bookingIds: [booking.id],
+            attachments: [file],
+          });
         } catch (err) {
           logger.error("Error while sending invoice:", bookingId, err);
         }

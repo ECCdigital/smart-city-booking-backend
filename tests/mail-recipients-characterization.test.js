@@ -1,11 +1,11 @@
 /**
  * Characterization of who gets a notice (glossary "Empfängerkreis"), seen
  * at the transport: the recipient rules of the mail module - the payment
- * link that goes to the booker whatever address the facade is given, the
- * BCC to the tenant, the tenant's gate on its own notice, the supervisors
- * without the booker, the organizers read off the bookables of the
- * booking, a list of bookings without a group refused, and the two exits
- * of the transport.
+ * link that goes to the booker, there being no address at the interface,
+ * the BCC to the tenant, the tenant's gate on its own notice, the
+ * supervisors without the booker, the organizers read off the bookables
+ * of the booking, a list of bookings without a group refused, and the two
+ * exits of the transport.
  *
  * Written for the first ticket of the mail-stack chain (Wayfinder,
  * "Mail-Stack (1): Charakterisierung ..."; spec sections 1 and 5) and
@@ -15,7 +15,6 @@
 const { expect } = require("chai");
 const sinon = require("sinon");
 
-const MailController = require("../src/commons/mail-service/mail-controller");
 const MailerService = require("../src/commons/mail-service/mail-service");
 const mail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const {
@@ -80,27 +79,24 @@ describe("mail recipients today: who gets which notice", function () {
   });
 
   describe("the payment link after approval", function () {
-    it("goes to the booker, whatever address the facade is given (spec 5.1)", async function () {
+    const paymentUrl = "https://pay.example.test/x";
+
+    it("goes to the booker: there is no address at the interface (spec 5.1)", async function () {
       given();
 
-      await MailController.sendPaymentLinkAfterBookingApproval(
-        "jemand-anderes@example.test",
-        "B-1",
-        TENANT,
+      await mail.send(
+        "PAYMENT_LINK_AFTER_APPROVAL",
+        single("B-1", { paymentUrl }),
       );
 
       expect(recipients()).to.deep.equal([CUSTOMER]);
+      expect(sent[0].html).to.include(paymentUrl);
     });
 
-    it("of a group goes to the booker of its first member, whatever address the facade is given (spec 5.1)", async function () {
+    it("of a group goes to the booker of its first member (spec 5.1)", async function () {
       given();
 
-      await MailController.sendPaymentLinkAfterBookingApproval(
-        "jemand-anderes@example.test",
-        ["G-1", "G-2", "G-3"],
-        TENANT,
-        true,
-      );
+      await mail.send("PAYMENT_LINK_AFTER_APPROVAL", group({ paymentUrl }));
 
       expect(recipients()).to.deep.equal([CUSTOMER]);
     });

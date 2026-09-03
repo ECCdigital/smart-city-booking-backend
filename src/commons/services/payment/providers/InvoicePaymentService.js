@@ -1,12 +1,8 @@
 const PaymentService = require("./payment-service");
 const BookingManager = require("../../../data-managers/booking-manager");
 const TenantManager = require("../../../data-managers/tenant-manager");
-const MailController = require("../../../mail-service/mail-controller");
-const {
-  issue: issueDocument,
-  groupBookingIdOf,
-  mailAttachments,
-} = require("../../documents/document-issuance");
+const issuance = require("../../documents/document-issuance");
+const mailService = require("../../../mail-service");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -15,16 +11,15 @@ const logger = bunyan.createLogger({
 });
 
 /**
- * Payment by invoice: the payment request is an issued invoice, mailed to
- * the customer, or the announcement of an invoice the administration
- * creates later (`manualCreation`). The invoices themselves come from the
- * issuance (`document-issuance.js`); this service only mails them.
+ * Payment by invoice. The payment request (glossary "Zahlungsaufforderung")
+ * is the invoice this service issues, answered as a file for the booking
+ * lifecycle to send, or - where the administration creates the invoice by
+ * hand (`manualCreation`) - the announcement of one to follow. The
+ * checkout's own invoice payment (`createPayment`) issues and mails the
+ * invoice itself, outside the lifecycle. The invoices come from the
+ * issuance (`document-issuance.js`).
  */
 class InvoicePaymentService extends PaymentService {
-  constructor(tenantId, bookingIds, options = {}) {
-    super(tenantId, bookingIds, options);
-  }
-
   /**
    * Checks if the invoice app has manualCreation enabled.
    * @returns {Promise<boolean>}
@@ -37,68 +32,57 @@ class InvoicePaymentService extends PaymentService {
     return invoiceApp?.manualCreation === true;
   }
 
-  async createPayment() {
-    const isManual = await this._isManualCreation();
-
-    if (isManual) {
-      return this._sendInvoicePendingNotification();
+  /** The payment request as a value (mail-stack spec, section 4). */
+  async paymentRequest() {
+    if (await this._isManualCreation()) {
+      return { form: "pending" };
     }
-
-    if (this.aggregated) {
-      return this.createAggregatedInvoice();
-    } else {
-      return this.createSeparateInvoices();
-    }
+    const { file } = await this._issueInvoice(
+      this.bookingIds,
+      await this._groupBookingId(),
+    );
+    return { form: "invoice", files: [file] };
   }
 
   /**
-   * Sends an email to the user that the booking is confirmed and
-   * the invoice will follow separately (manualCreation mode).
+   * The checkout's invoice payment: one invoice per booking, or one
+   * aggregated invoice for the group, issued and mailed; the announcement
+   * of an invoice to follow where the administration creates it. Answers
+   * what the payment endpoint hands the storefront.
    */
-  async _sendInvoicePendingNotification() {
-    const bookings = [];
-    for (const bookingId of this.bookingIds) {
-      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
-      bookings.push(booking);
+  async createPayment() {
+    if (await this._isManualCreation()) {
+      await this._notify(
+        "BOOKING_CONFIRMED_INVOICE_PENDING",
+        this.bookingIds,
+        await this._groupBookingId(),
+      );
+      return { manualCreation: true, bookingIds: this.bookingIds };
     }
 
-    const address = bookings[0].mail;
-
-    try {
-      await MailController.sendBookingConfirmedInvoicePending(
-        address,
+    if (this.aggregated) {
+      const groupBookingId = await this._groupBookingId();
+      const { attachment, file } = await this._issueInvoice(
         this.bookingIds,
-        this.tenantId,
-        this.aggregated,
+        groupBookingId,
       );
-    } catch (err) {
-      logger.error(
-        "Error while sending invoice-pending notification:",
-        this.bookingIds,
-        err,
-      );
+      await this._notify("INVOICE", this.bookingIds, groupBookingId, {
+        attachments: [file],
+      });
+      return {
+        bookingIds: this.bookingIds,
+        name: attachment.name,
+        invoiceId: attachment.invoiceId,
+        revision: attachment.revision,
+      };
     }
 
-    return { manualCreation: true, bookingIds: this.bookingIds };
-  }
-
-  async createSeparateInvoices() {
     const createdInvoices = [];
     for (const bookingId of this.bookingIds) {
-      const { booking, attachment, mailAttachments } =
-        await this._issueSingleInvoice(bookingId);
-
-      try {
-        await MailController.sendInvoice(
-          booking.mail,
-          bookingId,
-          this.tenantId,
-          mailAttachments,
-        );
-      } catch (err) {
-        logger.error("Error while sending invoice:", bookingId, err);
-      }
-
+      const { attachment, file } = await this._issueInvoice([bookingId], null);
+      await this._notify("INVOICE", [bookingId], null, {
+        attachments: [file],
+      });
       createdInvoices.push({
         bookingId,
         name: attachment.name,
@@ -106,32 +90,7 @@ class InvoicePaymentService extends PaymentService {
         revision: attachment.revision,
       });
     }
-
     return createdInvoices;
-  }
-
-  async createAggregatedInvoice() {
-    const { booking, attachment, mailAttachments } =
-      await this._issueAggregatedInvoice();
-
-    try {
-      await MailController.sendInvoice(
-        booking.mail,
-        this.bookingIds,
-        this.tenantId,
-        mailAttachments,
-        true,
-      );
-    } catch (err) {
-      logger.error("Fehler beim Versenden der Sammelrechnung:", err);
-    }
-
-    return {
-      bookingIds: this.bookingIds,
-      name: attachment.name,
-      invoiceId: attachment.invoiceId,
-      revision: attachment.revision,
-    };
   }
 
   /**
@@ -144,79 +103,49 @@ class InvoicePaymentService extends PaymentService {
     );
   }
 
-  async paymentRequest() {
-    const isManual = await this._isManualCreation();
-
-    if (isManual) {
-      return this._sendInvoicePendingNotification();
+  /** The group of an aggregated payment, looked up where it was not named. */
+  async _groupBookingId() {
+    if (!this.aggregated) {
+      return null;
     }
-
-    if (this.aggregated) {
-      return this.aggregatedPaymentRequest();
-    } else {
-      return this.separatePaymentRequest();
-    }
-  }
-
-  async separatePaymentRequest() {
-    for (const bookingId of this.bookingIds) {
-      const { booking, mailAttachments } =
-        await this._issueSingleInvoice(bookingId);
-
-      await MailController.sendInvoiceAfterBookingApproval(
-        booking.mail,
-        bookingId,
-        this.tenantId,
-        mailAttachments,
-        false,
-      );
-    }
-  }
-
-  async aggregatedPaymentRequest() {
-    const { booking, mailAttachments } = await this._issueAggregatedInvoice();
-
-    await MailController.sendInvoiceAfterBookingApproval(
-      booking.mail,
-      this.bookingIds,
-      this.tenantId,
-      mailAttachments,
-      true,
-    );
-  }
-
-  async _issueSingleInvoice(bookingId) {
-    const booking = await BookingManager.getBooking(bookingId, this.tenantId);
-    const { attachment, file } = await issueDocument({
-      tenantId: this.tenantId,
-      bookingIds: [bookingId],
-      type: "invoice",
-      bookings: [booking],
-    });
-    return { booking, attachment, mailAttachments: mailAttachments(file) };
-  }
-
-  async _issueAggregatedInvoice() {
-    const bookings = await BookingManager.getBookings(
-      this.tenantId,
-      this.bookingIds,
-    );
-    const { attachment, file } = await issueDocument({
+    return issuance.groupBookingIdOf({
       tenantId: this.tenantId,
       bookingIds: this.bookingIds,
+      groupBookingId: this.groupBookingId,
+    });
+  }
+
+  async _issueInvoice(bookingIds, groupBookingId) {
+    const bookings = await BookingManager.getBookings(
+      this.tenantId,
+      bookingIds,
+    );
+    return issuance.issue({
+      tenantId: this.tenantId,
+      bookingIds,
       type: "invoice",
-      groupBookingId: await groupBookingIdOf({
-        tenantId: this.tenantId,
-        bookingIds: this.bookingIds,
-        groupBookingId: this.groupBookingId,
-      }),
+      groupBookingId,
       bookings,
     });
-    return {
-      booking: bookings[0],
-      attachment,
-      mailAttachments: mailAttachments(file),
-    };
+  }
+
+  /**
+   * Sends a notice of the checkout's invoice payment; a mail that fails is
+   * logged, the invoice stands.
+   */
+  async _notify(type, bookingIds, groupBookingId, specific = {}) {
+    try {
+      await mailService.notify(type, {
+        tenantId: this.tenantId,
+        bookingIds,
+        groupBookingId,
+        ...specific,
+      });
+    } catch (err) {
+      logger.error(
+        `${this.tenantId} -- ${type} for ${bookingIds.join(", ")} failed: ${err.message}`,
+      );
+    }
   }
 }
 

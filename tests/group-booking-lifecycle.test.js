@@ -108,6 +108,9 @@ describe("group booking lifecycle: confirm", function () {
       "notify workflow.emit B-2 ok",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
     ]);
@@ -164,6 +167,9 @@ describe("group booking lifecycle: confirm, the other cases", function () {
       "notify workflow.emit B-2 ok",
       "notify mail.FREE_BOOKING_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
     ]);
@@ -196,6 +202,9 @@ describe("group booking lifecycle: confirm, the other cases", function () {
       "notify workflow.emit B-2 ok",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
     ]);
@@ -256,6 +265,9 @@ describe("group booking lifecycle: confirm, the other cases", function () {
 
     expect(effectTable(outcome)).to.include(
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
     );
     expect(states(adapters)).to.deep.equal(["payment_due", "payment_due"]);
   });
@@ -288,6 +300,9 @@ describe("group booking lifecycle: confirm, the other cases", function () {
       "notify workflow.emit B-2 ok",
       "notify mail.FREE_BOOKING_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
     ]);
@@ -913,6 +928,9 @@ describe("group booking lifecycle: admit", function () {
       "notify workflow.emit B-2 ok",
       "notify mail.BOOKING_REQUEST_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.BOOKING_CONFIRMATION skipped",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify mail.INCOMING_BOOKING ok",
@@ -958,6 +976,9 @@ describe("group booking lifecycle: admit", function () {
       "document documents.issue skipped",
       "notify mail.BOOKING_REQUEST_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.BOOKING_CONFIRMATION skipped",
     ]);
     expect(adapters.payment.calls).to.deep.equal([
@@ -988,6 +1009,9 @@ describe("group booking lifecycle: admit", function () {
 
     expect(effectTable(outcome)).to.include(
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
     );
     expect(adapters.payment.calls).to.deep.equal([]);
   });
@@ -1009,6 +1033,9 @@ describe("group booking lifecycle: admit", function () {
       "notify workflow.emit B-2 ok",
       "notify mail.BOOKING_REQUEST_CONFIRMATION skipped",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.BOOKING_CONFIRMATION ok",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify mail.INCOMING_BOOKING ok",

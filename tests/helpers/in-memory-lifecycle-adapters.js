@@ -246,14 +246,27 @@ function inMemoryWorkflow(options) {
   return recordingAdapter("workflow", ["emit"], options);
 }
 
-function inMemoryPayment(options) {
-  return recordingAdapter("payment", ["requestPayment"], options);
+/**
+ * The payment adapter at the seam: `requestPayment` answers what the
+ * provider answers - `paymentRequest`, the value of the payment request
+ * (`{ form: "link" | "invoice" | "pending", paymentUrl?, files? }`), or
+ * nothing where a test does not care what the provider says.
+ */
+function inMemoryPayment({ failOn, skipOn, paymentRequest } = {}) {
+  return recordingAdapter("payment", ["requestPayment"], {
+    failOn,
+    skipOn,
+    returns:
+      paymentRequest === undefined
+        ? {}
+        : { requestPayment: () => paymentRequest },
+  });
 }
 
 /**
  * Every adapter at once, the way a test injects them at the one seam.
  *
- * @param {{ bookings?: Object[], groups?: Object[], tenant?: Object, failOn?: Object<string, string[]>, skipOn?: Object<string, string[]>, clock?: () => number }} [options]
+ * @param {{ bookings?: Object[], groups?: Object[], tenant?: Object, failOn?: Object<string, string[]>, skipOn?: Object<string, string[]>, paymentRequest?: Object, clock?: () => number }} [options]
  */
 function inMemoryAdapters({
   bookings = [],
@@ -261,6 +274,7 @@ function inMemoryAdapters({
   tenant = DEFAULT_TENANT,
   failOn = {},
   skipOn = {},
+  paymentRequest,
   clock,
 } = {}) {
   const store = inMemoryStore(bookings, tenant, groups);
@@ -274,6 +288,7 @@ function inMemoryAdapters({
     payment: inMemoryPayment({
       failOn: failOn.payment,
       skipOn: skipOn.payment,
+      paymentRequest,
     }),
     mail: inMemoryMail({ failOn: failOn.mail, skipOn: skipOn.mail }),
     workflow: inMemoryWorkflow({ failOn: failOn.workflow }),

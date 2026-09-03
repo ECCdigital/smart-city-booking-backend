@@ -235,6 +235,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.hold B1",
         "workflow.onCreate B1",
         "payment.paymentRequest B1",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
         "mail.INCOMING_BOOKING stadt@example.test",
         "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
       ]);
@@ -317,6 +318,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 payment_due",
         "workflow.onCommit B1",
         "payment.paymentRequest B1",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
       ]);
     });
 
@@ -367,6 +369,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 payment_due",
         "workflow.onCommit B1",
         "payment.paymentRequest B1",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
         "mail.NEW_BOOKING orga@example.test",
       ]);
 
@@ -1075,6 +1078,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 payment_due",
         "workflow.onCommit B1",
         "payment.paymentRequest B1",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
       ]);
     });
 
@@ -1092,6 +1096,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.save B1 payment_due",
         "workflow.onCommit B1",
         "payment.paymentRequest B1",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
         "store.save B1 confirmed",
         "access.provision B1",
         "documents.receipt B1",
@@ -1391,6 +1396,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(h.takeEffects()).to.deep.equal([
         "store.save B1 payment_due",
         "payment.paymentRequest B1",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
       ]);
     });
 

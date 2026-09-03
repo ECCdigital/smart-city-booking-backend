@@ -31,7 +31,9 @@
  *   mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]
  *                                           a mail sent, with its attachments
  *   workflow.onPay B1                       a workflow event
- *   payment.paymentRequest B1               the payment provider asked
+ *   payment.paymentRequest B1               the payment provider asked; it
+ *                                           answers a link, which the next
+ *                                           row mails to the customer
  *
  * Booking ids are random; the table names bookings B1, B2, ... in the
  * order their first write happened.
@@ -635,10 +637,11 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     };
   });
   /**
-   * The payment provider at its seam: records the payment request and the
-   * payment link. A webhook counts as a successful payment and goes the
-   * base class' way from there - `handleSuccessfulPayment` is the one
-   * thing of `PaymentService` that runs for real.
+   * The payment provider at its seam: records the payment request, which
+   * it answers as a link (the lifecycle mails it), and the payment page.
+   * A webhook counts as a successful payment and goes the base class' way
+   * from there - `handleSuccessfulPayment` is the one thing of
+   * `PaymentService` that runs for real.
    */
   class FakePaymentProvider extends PaymentService {
     async paymentRequest() {
@@ -646,6 +649,7 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
         "payment.paymentRequest",
         `${labelsOf(this.bookingIds)}${this.aggregated ? " aggregated" : ""}`,
       );
+      return { form: "link", paymentUrl: "https://pay.example.test" };
     }
 
     async createPayment() {

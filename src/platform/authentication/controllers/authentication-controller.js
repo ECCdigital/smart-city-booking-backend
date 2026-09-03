@@ -335,7 +335,7 @@ class AuthenticationController {
       UserManager.getUser(id, true)
         .then((user) => {
           if (user) {
-            UserManager.resetPassword(user, password)
+            UserService.resetPassword(user, password)
               .then(() => {
                 logger.info(`Password reset for user ${user.id}.`);
                 response.sendStatus(200);

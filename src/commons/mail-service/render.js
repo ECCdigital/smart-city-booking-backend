@@ -1,11 +1,14 @@
 /**
- * The pure rendering of a booking notice (mail-stack spec, section 2.4):
- * from what the loader read to the mail values, without a store - the
- * snippet with the tenant's override and after-text, the subject with its
- * override, the booking details with their mail visibility, the QR code,
- * the cancellation link, the wrapper of a single or an aggregated notice
- * (glossary "Sammelmitteilung") and the tenant's shell template. Media
- * images are embedded by `compose` afterwards, on the finished body.
+ * The pure rendering of a notice (mail-stack spec, section 2.4): from
+ * what the loader read to the mail values, without a store. A booking
+ * notice (`render`): the snippet with the tenant's override and
+ * after-text, the subject with its override, the booking details with
+ * their mail visibility, the QR code, the cancellation link, the wrapper
+ * of a single or an aggregated notice (glossary "Sammelmitteilung") and
+ * the tenant's shell template. A tenant or instance notice
+ * (`renderShellNotice`): the snippet with the type's template data in the
+ * shell template of the tenant or the instance. Media images are embedded
+ * by `compose` afterwards, on the finished body.
  *
  * An internal seam of the mail module, not part of its interface.
  */
@@ -359,4 +362,47 @@ async function render(
   }));
 }
 
-module.exports = { render, renderBookingDetails };
+/**
+ * Renders a tenant or instance notice - verification, password, user
+ * created, card link, invitation, workflow - into its mail values, one per
+ * recipient: the
+ * snippet with the type's template data, in the shell template of the
+ * tenant (`genericMailTemplate`) or the instance (`mailTemplate`), the
+ * subject as its title. No override, no booking details, no attachments.
+ *
+ * @param {string} type The registry key
+ * @param {Object} loaded What `compose` loaded and resolved
+ * @param {Object} loaded.mailType The registry entry
+ * @param {string|null} loaded.tenantId Null for an instance notice
+ * @param {Object|null} loaded.tenant
+ * @param {Object|null} loaded.instance
+ * @param {string[]} loaded.recipients
+ * @param {Object} [loaded.templateData] The type's own template variables
+ * @returns {Promise<Object[]>} The mail values (spec 2.1), html without media embedded
+ */
+async function renderShellNotice(
+  type,
+  { mailType, tenantId, tenant, instance, recipients, templateData = {} },
+) {
+  const subject = resolve(mailType.subject, { tenant, ...templateData });
+  const content = renderSnippet(mailType.templateName, templateData);
+  const shellTemplate =
+    mailType.family === "tenant"
+      ? tenant.genericMailTemplate
+      : instance.mailTemplate;
+  const html = await MailerService.processTemplate(shellTemplate, {
+    title: subject,
+    content,
+  });
+
+  return recipients.map((to) => ({
+    type,
+    tenantId,
+    to,
+    subject,
+    html,
+    attachments: [],
+  }));
+}
+
+module.exports = { render, renderShellNotice, renderBookingDetails };

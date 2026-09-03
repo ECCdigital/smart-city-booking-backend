@@ -1,4 +1,4 @@
-const MailController = require("../../mail-service/mail-controller");
+const mailService = require("../../mail-service");
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
 const { TRIGGER } = require("../booking-lifecycle/booking-state");
@@ -45,11 +45,13 @@ class EmailAction extends WorkflowAction {
       }
     }
 
+    // The workflow notification is a tenant notice to the addresses the
+    // action names (`audience: named`), one per receiver.
     for (const receiver of receivers) {
-      await MailController.sendWorkflowNotification({
-        sendTo: receiver,
+      await mailService.notify("WORKFLOW_NOTIFICATION", {
         tenantId: this.tenantId,
-        bookingId: this.taskId,
+        bookingIds: [this.taskId],
+        to: receiver,
         oldStatus: this.sourceStatus,
         newStatus: this.destinationStatus,
       });

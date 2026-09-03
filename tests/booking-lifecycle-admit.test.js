@@ -78,6 +78,9 @@ describe("booking lifecycle: admit", function () {
       "notify workflow.emit ok",
       "notify mail.BOOKING_REQUEST_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.BOOKING_CONFIRMATION skipped",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify mail.INCOMING_BOOKING ok",
@@ -125,6 +128,9 @@ describe("booking lifecycle: admit", function () {
       "notify workflow.emit ok",
       "notify mail.BOOKING_REQUEST_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.BOOKING_CONFIRMATION skipped",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify mail.INCOMING_BOOKING ok",
@@ -162,6 +168,9 @@ describe("booking lifecycle: admit", function () {
 
     expect(effectTable(outcome)).to.include(
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
     );
     expect(adapters.payment.calls).to.deep.equal([]);
     expect(adapters.mail.calls.map((call) => call.args[0])).to.deep.equal([
@@ -186,6 +195,9 @@ describe("booking lifecycle: admit", function () {
       "notify workflow.emit ok",
       "notify mail.BOOKING_REQUEST_CONFIRMATION skipped",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.BOOKING_CONFIRMATION ok",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify mail.INCOMING_BOOKING ok",
@@ -227,6 +239,9 @@ describe("booking lifecycle: admit", function () {
       "notify workflow.emit ok",
       "notify mail.BOOKING_REQUEST_CONFIRMATION skipped",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.BOOKING_CONFIRMATION skipped",
       "notify mail.FREE_BOOKING_CONFIRMATION ok",
       "notify mail.INCOMING_BOOKING ok",

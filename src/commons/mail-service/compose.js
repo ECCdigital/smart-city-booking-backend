@@ -2,10 +2,10 @@
  * `compose(type, ctx)` of the mail module (mail-stack spec, section 2):
  * loads once, resolves the recipients, gathers the attachments, renders,
  * and answers the mail values (glossary "Mitteilung") - none to many. The
- * caller names the type and the bookings, never a recipient, a template
- * or an attachment order.
+ * caller names the type and what the notice is about, never a recipient,
+ * a template or an attachment order.
  *
- * The context has the form of the issuance's `issue`:
+ * The context of a booking notice has the form of the issuance's `issue`:
  *
  *   compose(type, { tenantId, bookingIds, groupBookingId = null, ...specific })
  *
@@ -18,10 +18,17 @@
  * Attachments go in the order issued files → `mailAttach` documents (only
  * `mergeMailAttach`) → iCal (only `attachICal`) → QR code (only
  * `includeQRCode`), section 2.6.
+ *
+ * A tenant notice names the tenant and the address (`{ tenantId, to,
+ * ... }`), an instance notice the address or the user (`{ to, ... }`,
+ * `{ userId }`); both go out in the shell template of the tenant or the
+ * instance, without attachments.
  */
 
 const bunyan = require("bunyan");
 const TenantManager = require("../data-managers/tenant-manager");
+const InstanceManager = require("../data-managers/instance-manager");
+const UserManager = require("../data-managers/user-manager");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
@@ -34,7 +41,7 @@ const { BadRequestError, NotFoundError } = require("../../errors/BaseError");
 const { MailType } = require("./mail-types");
 const { resolveRecipients } = require("./recipients");
 const { prepareMailAttachments } = require("./mail-attachments");
-const { render } = require("./render");
+const { render, renderShellNotice } = require("./render");
 
 const logger = bunyan.createLogger({
   name: "mail-compose.js",
@@ -45,15 +52,20 @@ function unique(values) {
   return [...new Set(values.filter((value) => value != null))];
 }
 
+async function loadTenant(tenantId) {
+  const tenant = await TenantManager.getTenant(tenantId);
+  if (!tenant) {
+    throw new NotFoundError("tenant_not_found", { tenantId });
+  }
+  return tenant;
+}
+
 /**
  * The tenant, the bookings in the order of their ids, the bookables of
  * every position and the events of the tickets - each read once.
  */
 async function load({ tenantId, bookingIds }) {
-  const tenant = await TenantManager.getTenant(tenantId);
-  if (!tenant) {
-    throw new NotFoundError("tenant_not_found", { tenantId });
-  }
+  const tenant = await loadTenant(tenantId);
 
   const found = await BookingManager.getBookings(tenantId, bookingIds);
   const bookings = bookingIds.map((id) =>
@@ -114,29 +126,71 @@ async function icalAttachment(loaded) {
 }
 
 /**
+ * What a tenant or instance notice is rendered over: the tenant, or the
+ * instance and the user the context names - each read once.
+ */
+async function loadShell(family, ctx) {
+  if (family === "tenant") {
+    const tenant = await loadTenant(ctx.tenantId);
+    return { tenantId: ctx.tenantId, tenant, instance: null, user: null };
+  }
+  const instance = await InstanceManager.getInstance(false);
+  const user = ctx.userId ? await UserManager.getUser(ctx.userId) : null;
+  if (ctx.userId && !user) {
+    throw new NotFoundError("user_not_found", { userId: ctx.userId });
+  }
+  return { tenantId: null, tenant: null, instance, user };
+}
+
+/**
  * Composes a notice.
  *
  * @param {string} type A key of the registry (`mail-types.js`)
- * @param {Object} ctx
- * @param {string} ctx.tenantId
- * @param {string[]} ctx.bookingIds
- * @param {string|null} [ctx.groupBookingId] The group of an aggregated notice
- * @param {Array<{ name: string, buffer: Buffer }>} [ctx.attachments] Issued files
+ * @param {Object} ctx Of a booking notice: `tenantId`, `bookingIds`,
+ *   `groupBookingId` (the group of an aggregated notice), `attachments`
+ *   (issued files `{ name, buffer }`) and the type's own fields. Of a
+ *   tenant notice: `tenantId`, `to` and the type's own fields. Of an
+ *   instance notice: `to` or `userId` and the type's own fields.
  * @returns {Promise<Object[]>} The mail values (spec 2.1), one per recipient;
  *   none where the circle is empty
  * @throws {BadRequestError} For several bookings without a group
- * @throws {NotFoundError} For a tenant or a booking the store does not know
+ * @throws {NotFoundError} For a tenant, a booking or a user the store does
+ *   not know
  */
 async function compose(type, ctx) {
   const mailType = MailType[type];
   if (!mailType) {
     throw new Error(`mail-service: unknown notice type ${type}`);
   }
-  if (mailType.family !== "booking") {
-    throw new Error(
-      `mail-service: no loader for the ${mailType.family} family of ${type} yet`,
+  return mailType.family === "booking"
+    ? composeBookingNotice(type, mailType, ctx)
+    : composeShellNotice(type, mailType, ctx);
+}
+
+async function composeShellNotice(type, mailType, ctx) {
+  const loaded = await loadShell(mailType.family, ctx);
+  const recipients = await resolveRecipients(mailType, { ...loaded, ctx });
+  if (recipients.length === 0) {
+    logger.info(
+      `${loaded.tenantId ?? "instance"} -- ${type}: nobody to tell, no mail`,
     );
+    return [];
   }
+
+  const mails = await renderShellNotice(type, {
+    mailType,
+    ...loaded,
+    recipients,
+    templateData: mailType.templateData
+      ? mailType.templateData(ctx, loaded)
+      : {},
+  });
+
+  const html = await embedMediaImages(mails[0].html, loaded.tenantId);
+  return mails.map((mail) => ({ ...mail, html }));
+}
+
+async function composeBookingNotice(type, mailType, ctx) {
   const {
     tenantId,
     bookingIds,

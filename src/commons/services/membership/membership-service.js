@@ -2,6 +2,14 @@ const MembershipManager = require("../../data-managers/membership-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const InvitationManager = require("../../data-managers/invitation-manager");
 const ChallengeManager = require("../../data-managers/challenge-manager");
+const UserManager = require("../../data-managers/user-manager");
+const { RoleManager } = require("../../data-managers/role-manager");
+const {
+  MAX_BOOKING_NOTIFICATION_RECIPIENTS,
+  isValidBookingNotificationRecipient,
+  sanitizeBookingNotificationRecipients,
+} = require("../../utilities/booking-notification-utils");
+const { BadRequestError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -10,6 +18,69 @@ const logger = bunyan.createLogger({
 });
 
 class MembershipService {
+  /**
+   * The write side of the supervisors (glossary "Aufsicht"): validates and
+   * normalizes the `bookingNotificationRecipients` of a membership before
+   * they are stored - the structure and the count of the entries, the
+   * user or the role in the tenant an entry refers to - and drops
+   * duplicates. Resolving them into addresses is the mail module's
+   * (`mail-service/recipients.js`).
+   *
+   * @param {string} tenantId
+   * @param {Array} recipients - Raw recipient entries from the request
+   * @returns {Promise<Array>} Sanitized and deduplicated recipient entries
+   * @throws {BadRequestError} When any entry is invalid
+   */
+  static async prepareBookingNotificationRecipients(tenantId, recipients) {
+    if (!Array.isArray(recipients)) {
+      throw new BadRequestError("invalid_booking_notification_recipients");
+    }
+
+    if (recipients.length > MAX_BOOKING_NOTIFICATION_RECIPIENTS) {
+      throw new BadRequestError("too_many_booking_notification_recipients", {
+        max: MAX_BOOKING_NOTIFICATION_RECIPIENTS,
+      });
+    }
+
+    for (const entry of recipients) {
+      if (!isValidBookingNotificationRecipient(entry)) {
+        throw new BadRequestError("invalid_booking_notification_recipient", {
+          entry,
+        });
+      }
+    }
+
+    const sanitized = sanitizeBookingNotificationRecipients(recipients);
+
+    for (const entry of sanitized) {
+      if (entry.type === "user") {
+        const existingUser = await UserManager.getUser(entry.value);
+        if (!existingUser) {
+          throw new BadRequestError(
+            "booking_notification_recipient_user_not_found",
+            { value: entry.value },
+          );
+        }
+      } else if (entry.type === "role") {
+        const role = await RoleManager.getRole(entry.value, tenantId);
+        if (!role) {
+          throw new BadRequestError(
+            "booking_notification_recipient_role_not_found",
+            { value: entry.value },
+          );
+        }
+      }
+    }
+
+    const seen = new Set();
+    return sanitized.filter((entry) => {
+      const key = `${entry.type}:${entry.value}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   static async getPendingMembershipByUserId(userId) {
     const memberships = await MembershipManager.getMembershipsByUserID(userId);
     return (memberships || []).filter((m) => m?.status === "pending");

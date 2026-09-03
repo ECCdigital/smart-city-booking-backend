@@ -1,12 +1,20 @@
 const { expect } = require("chai");
 const sinon = require("sinon");
 
-const SupervisorNotificationService = require("../src/commons/services/supervisor-notification-service");
+const MembershipService = require("../src/commons/services/membership/membership-service");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const { RoleManager } = require("../src/commons/data-managers/role-manager");
 const { BadRequestError } = require("../src/errors/BaseError");
 
-describe("SupervisorNotificationService", () => {
+/**
+ * The write side of the supervisors (glossary "Aufsicht"):
+ * `MembershipService.prepareBookingNotificationRecipients` validates the
+ * recipient entries of a membership before they are stored. Moved here from
+ * `supervisor-notification-service.test.js` with the mail-stack chain; the
+ * resolution into addresses is `mail-recipients.test.js`.
+ */
+
+describe("MembershipService.prepareBookingNotificationRecipients", () => {
   let sandbox;
 
   beforeEach(() => {
@@ -17,11 +25,11 @@ describe("SupervisorNotificationService", () => {
     sandbox.restore();
   });
 
-  describe("prepareRecipientsForWrite", () => {
+  describe("prepareBookingNotificationRecipients", () => {
     it("rejects non-array payloads", async () => {
       let error;
       try {
-        await SupervisorNotificationService.prepareRecipientsForWrite(
+        await MembershipService.prepareBookingNotificationRecipients(
           "t1",
           "invalid",
         );
@@ -39,7 +47,7 @@ describe("SupervisorNotificationService", () => {
 
       let error;
       try {
-        await SupervisorNotificationService.prepareRecipientsForWrite(
+        await MembershipService.prepareBookingNotificationRecipients(
           "t1",
           tooMany,
         );
@@ -53,7 +61,7 @@ describe("SupervisorNotificationService", () => {
     it("rejects structurally invalid entries", async () => {
       let error;
       try {
-        await SupervisorNotificationService.prepareRecipientsForWrite("t1", [
+        await MembershipService.prepareBookingNotificationRecipients("t1", [
           { type: "email", value: "not-an-email" },
         ]);
       } catch (err) {
@@ -68,7 +76,7 @@ describe("SupervisorNotificationService", () => {
 
       let error;
       try {
-        await SupervisorNotificationService.prepareRecipientsForWrite("t1", [
+        await MembershipService.prepareBookingNotificationRecipients("t1", [
           { type: "user", value: "ghost@stadt.de" },
         ]);
       } catch (err) {
@@ -85,7 +93,7 @@ describe("SupervisorNotificationService", () => {
 
       let error;
       try {
-        await SupervisorNotificationService.prepareRecipientsForWrite("t1", [
+        await MembershipService.prepareBookingNotificationRecipients("t1", [
           { type: "role", value: "unknown-role" },
         ]);
       } catch (err) {
@@ -102,7 +110,7 @@ describe("SupervisorNotificationService", () => {
       sandbox.stub(RoleManager, "getRole").resolves({ id: "leitung" });
 
       const result =
-        await SupervisorNotificationService.prepareRecipientsForWrite("t1", [
+        await MembershipService.prepareBookingNotificationRecipients("t1", [
           { type: "user", value: " Chef@Stadt.DE " },
           { type: "user", value: "chef@stadt.de" },
           { type: "role", value: "leitung", label: " Leitung " },
