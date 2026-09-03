@@ -155,148 +155,99 @@
   },
   "GET /api/instances": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "PUT /api/instances": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/rules/meta": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/rules/executions": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/rules": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "POST /api/rules": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 400
   },
   "GET /api/rules/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "PUT /api/rules/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 400
   },
   "PUT /api/rules/:id/enabled": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "DELETE /api/rules/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 204
   },
   "POST /api/rules/:id/run": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 409
   },
   "POST /api/rules/:id/dry-run": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 500
   },
   "GET /api/rules/:id/executions": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/tenants/public": {
     "anonymous": 200,
     "signedIn": 200,
     "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
-  "GET /api/tenants/:id": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
-  "GET /api/tenants/:id/payment-apps": {
-    "anonymous": 200,
-    "signedIn": 200,
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
-  "GET /api/tenants/:id/mail/templates/default": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
-  "GET /api/tenants": {
-    "anonymous": 401,
-    "signedIn": 200,
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
-  "PUT /api/tenants": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
-  "POST /api/tenants": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 403,
-    "instanceOwner": 201
-  },
-  "DELETE /api/tenants/:id": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
@@ -307,109 +258,158 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
-  "POST /api/tenants/:id/pdf-preview": {
+  "GET /api/tenants": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 400,
-    "instanceOwner": 400
-  },
-  "POST /api/tenants/:id/add-user": {
-    "anonymous": 401,
-    "signedIn": 400,
-    "roleHolder": 400,
-    "tenantOwner": 400,
-    "instanceOwner": 400
-  },
-  "POST /api/tenants/:id/remove-user": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
+    "signedIn": 200,
+    "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
-  "POST /api/tenants/:id/edit-user-roles": {
+  "POST /api/tenants": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 500,
-    "instanceOwner": 500
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 201
   },
-  "POST /api/tenants/:id/add-owner": {
-    "anonymous": 401,
-    "signedIn": 400,
-    "roleHolder": 400,
-    "tenantOwner": 400,
-    "instanceOwner": 400
-  },
-  "POST /api/tenants/:id/remove-owner": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 400,
-    "instanceOwner": 400
-  },
-  "POST /api/tenants/:id/remove-user-role": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
-  "GET /api/tenants/:id/users": {
+  "PUT /api/tenants": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
-  "POST /api/tenants/:id/update-user-status": {
+  "GET /api/tenants/:tenant": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 200,
     "instanceOwner": 200
   },
-  "POST /api/tenants/:id/update-user-booking-notification-recipients": {
+  "DELETE /api/tenants/:tenant": {
     "anonymous": 401,
-    "signedIn": 400,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/:tenant/payment-apps": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/:tenant/mail/templates/default": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:tenant/pdf-preview": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/tenants/:tenant/users": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:tenant/add-user": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/tenants/:tenant/remove-user": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:tenant/edit-user-roles": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "POST /api/tenants/:tenant/remove-user-role": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:tenant/update-user-status": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:tenant/update-user-booking-notification-recipients": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/tenants/:tenant/add-owner": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/tenants/:tenant/remove-owner": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 400,
     "instanceOwner": 400
   },
   "GET /api/users": {
     "anonymous": 401,
-    "signedIn": 200,
-    "roleHolder": 200,
-    "tenantOwner": 200,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/users/ids": {
     "anonymous": 401,
-    "signedIn": 200,
-    "roleHolder": 200,
-    "tenantOwner": 200,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/users/:id": {
     "anonymous": 401,
-    "signedIn": 200,
-    "roleHolder": 200,
-    "tenantOwner": 200,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "POST /api/users/:id/change-id": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 400
   },
   "PUT /api/users": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "PUT /api/user": {
@@ -421,9 +421,9 @@
   },
   "DELETE /api/users/:id": {
     "anonymous": 401,
-    "signedIn": 500,
-    "roleHolder": 500,
-    "tenantOwner": 500,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 500
   },
   "GET /api/roles": {
@@ -449,9 +449,9 @@
   },
   "GET /api/memberships": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/memberships/my/pending": {
@@ -470,9 +470,9 @@
   },
   "GET /api/catalog": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/catalog/public": {
@@ -498,9 +498,9 @@
   },
   "PUT /api/catalog": {
     "anonymous": 401,
-    "signedIn": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
-    "roleHolder": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
-    "tenantOwner": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 500
   },
   "GET /api/catalog/themes/:slug": {
@@ -575,16 +575,16 @@
   },
   "GET /api/instances/": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "PUT /api/instances/": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"Permission denied\"}",
-    "roleHolder": "403 {\"message\":\"Permission denied\"}",
-    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "POST /api/v2/instance/media/": {

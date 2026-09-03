@@ -24,9 +24,9 @@
  * new role steps: the role steps stay the seven of the role schema.
  * `own: "signedIn"` at an entry whose handler has no owner key
  * (`exporter.export`, `bookable.meta`, `event.meta`, `role.list`,
- * `invitation.respond`) means "any signed-in user, for themselves": the
- * reach `own` is then the handler's to read as "self", not a query
- * condition (§11, §12).
+ * `invitation.respond`, `tenant.countCheck`) means "any signed-in user,
+ * for themselves": the reach `own` is then the handler's to read as
+ * "self", not a query condition (§11, §12).
  *
  * Transcribed from the authorize spec §3, behaviour-equal to today except
  * the changes of §7; ticket 2 to 5 of the chain put the routers on it.
@@ -239,27 +239,37 @@ const TABLE = {
   },
 
   tenantUser: {
-    // `GET /tenants/:id/users`, `GET /:tenant/users`
+    // `GET /tenants/:tenant/users`, `GET /:tenant/users`
     read: { any: "manageUsers.readAny" },
-    // add, remove, roles, status, owner, notification recipients
+    // add, remove, roles, status, notification recipients
     manage: { any: "manageUsers.updateAny" },
+    // `add-owner`, `remove-owner`: the owners name the owners (as today;
+    // §10 read this as `manageUsers.updateAny`, the code never did).
+    owner: { any: "tenantOwner" },
   },
 
   tenant: {
     read: { any: "tenantOwner" },
     paymentApps: { public: true },
+    // `PUT /tenants` (the tenant in the body), `DELETE /tenants/:tenant`
     update: { any: "tenantOwner" },
     delete: { any: "tenantOwner" },
     // read, create, update, delete of challenges (§7.5)
     challenge: { any: "tenantOwner" },
     paymentTest: { any: "tenantOwner" },
     mailTemplates: { any: "tenantOwner" },
+    // `POST /tenants/:tenant/pdf-preview`
+    pdfPreview: { any: "tenantOwner" },
     // The tenant catalog, read and store.
     catalog: { any: "tenantOwner" },
-    // --- instance level: `GET /tenants` filters to own memberships.
+    // --- instance level: `GET /tenants` lists the user's own memberships
+    // (the owned tenants in full, the joined ones as the public projection).
     list: { own: "signedIn", any: "instanceOwner" },
     listPublic: { public: true },
     create: { any: "mayCreateTenant" },
+    // `GET /tenants/count/check`: whether the instance has room for one
+    // more; signed in, nothing further (as today).
+    countCheck: { own: "signedIn" },
   },
 
   ical: {
@@ -297,6 +307,9 @@ const TABLE = {
     updateSelf: { own: "signedIn" },
     // `GET /users`, `/ids`, `/:id`
     read: { any: "instanceOwner" },
+    // The obsolete `PUT /users` carries `update`; the creation is the
+    // adapter's second decision (§12).
+    create: { any: "instanceOwner" },
     update: { any: "instanceOwner" },
     delete: { any: "instanceOwner" },
     changeId: { any: "instanceOwner" },
@@ -320,8 +333,11 @@ const TABLE = {
   },
 
   instanceCatalog: {
-    // `/catalog` for the owner; `/public`, `/:slug`, `/bundle` for anyone.
-    read: { public: true, any: "instanceOwner" },
+    // `GET /catalog`: the owner's view, no public projection (§12).
+    read: { any: "instanceOwner" },
+    // `/catalog/public`, `/:slug`, `/bundle`: the catalog decides its own
+    // visibility (`private` needs a session), in addition.
+    readPublic: { public: true },
     store: { any: "instanceOwner" },
     mode: { public: true },
     themes: { public: true },

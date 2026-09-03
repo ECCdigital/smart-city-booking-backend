@@ -4,7 +4,6 @@ const sinon = require("sinon");
 const {
   TenantController,
 } = require("../src/platform/api/controllers/tenant-controller");
-const PermissionService = require("../src/commons/services/permission-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const MembershipService = require("../src/commons/services/membership/membership-service");
@@ -17,7 +16,7 @@ describe("TenantController.updateUserBookingNotificationRecipients", () => {
 
     req = {
       user: { id: "admin@stadt.de" },
-      params: { id: "tenant-1" },
+      params: { tenant: "tenant-1" },
       body: {
         userId: "mitarbeiter@stadt.de",
         bookingNotificationRecipients: [
@@ -36,8 +35,9 @@ describe("TenantController.updateUserBookingNotificationRecipients", () => {
     sandbox.restore();
   });
 
-  it("updates recipients when the user has manageUsers.updateAny", async () => {
-    sandbox.stub(PermissionService, "_allowUpdateAny").resolves(true);
+  // The right is the router's (`tenantUser.manage`): the controller checks
+  // nothing.
+  it("updates the recipients", async () => {
     sandbox
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ userId: "mitarbeiter@stadt.de", tenantId: "tenant-1" });
@@ -68,18 +68,7 @@ describe("TenantController.updateUserBookingNotificationRecipients", () => {
     expect(res.status.calledWith(200)).to.be.true;
   });
 
-  it("returns 403 when the user lacks permission", async () => {
-    sandbox.stub(PermissionService, "_allowUpdateAny").resolves(false);
-    const updateStub = sandbox.stub(MembershipManager, "updateMembership");
-
-    await TenantController.updateUserBookingNotificationRecipients(req, res);
-
-    expect(res.sendStatus.calledWith(403)).to.be.true;
-    expect(updateStub.called).to.be.false;
-  });
-
   it("returns 404 when the membership does not exist", async () => {
-    sandbox.stub(PermissionService, "_allowUpdateAny").resolves(true);
     sandbox
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves(null);
@@ -90,7 +79,6 @@ describe("TenantController.updateUserBookingNotificationRecipients", () => {
   });
 
   it("returns 400 for invalid recipient payloads", async () => {
-    sandbox.stub(PermissionService, "_allowUpdateAny").resolves(true);
     sandbox
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ userId: "mitarbeiter@stadt.de", tenantId: "tenant-1" });

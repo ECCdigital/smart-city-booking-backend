@@ -4,7 +4,6 @@ const {
   TenantController,
 } = require("../src/platform/api/controllers/tenant-controller");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
-const PermissionService = require("../src/commons/services/permission-service");
 
 function response(sandbox) {
   return {
@@ -19,7 +18,6 @@ describe("TenantController cancellation refund tiers", function () {
 
   beforeEach(function () {
     sandbox = sinon.createSandbox();
-    sandbox.stub(PermissionService, "_isTenantOwner").resolves(true);
   });
 
   afterEach(function () {

@@ -21,6 +21,9 @@ const BookingManager = require("../src/commons/data-managers/booking-manager");
 const BookingModel = require("../src/commons/data-managers/models/bookingModel");
 const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
 const GroupBookingModel = require("../src/commons/data-managers/models/groupBookingModel");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const TenantModel = require("../src/commons/data-managers/models/tenantModel");
+const MembershipManager = require("../src/commons/data-managers/membership-manager");
 
 const OWN = { reach: "own", userId: "u1" };
 const ANY = { reach: "any", userId: "u1" };
@@ -186,6 +189,38 @@ describe("authorization: the managers' own condition", function () {
         bookingIds: "b1",
         assignedUserId: "u1",
       });
+    });
+  });
+
+  describe("TenantManager (the user's memberships)", function () {
+    beforeEach(function () {
+      sinon.stub(MembershipManager, "getMembershipsByUserID").resolves([
+        { tenantId: "t1", status: "active", owner: true },
+        { tenantId: "t2", status: "active", owner: false },
+        { tenantId: "t3", status: "pending", owner: true },
+      ]);
+    });
+
+    it("lists the tenants of the active memberships under own, all under any", async function () {
+      const find = sinon.stub(TenantModel, "find").resolves([]);
+      await TenantManager.getTenants(OWN);
+      await TenantManager.getTenants(ANY);
+      await TenantManager.getTenants();
+      expect(find.args.map(([filter]) => filter)).to.deep.equal([
+        { id: { $in: ["t1", "t2"] } },
+        {},
+        {},
+      ]);
+    });
+
+    it("narrows to the owned tenants when asked", async function () {
+      const find = sinon.stub(TenantModel, "find").resolves([]);
+      await TenantManager.getTenants(OWN, { owned: true });
+      await TenantManager.getTenants(ANY, { owned: true });
+      expect(find.args.map(([filter]) => filter)).to.deep.equal([
+        { id: { $in: ["t1"] } },
+        {},
+      ]);
     });
   });
 });

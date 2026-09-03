@@ -1,18 +1,15 @@
 const InstanceManger = require("../../../commons/data-managers/instance-manager");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
-const PermissionService = require("../../../commons/services/permission-service");
 const { BaseError } = require("../../../errors/BaseError");
 
+/**
+ * Web Controller for the instance. The right is the router's
+ * (`instance.read`, `instance.update`: the instance owner).
+ */
 class InstanceController {
   static async getInstance(request, response) {
-    const user = request.user;
     try {
       const instance = await InstanceManger.getInstance();
-
-      const hasPermission = await PermissionService._isInstanceOwner(user.id);
-      if (!hasPermission) {
-        return response.status(403).send({ message: "Permission denied" });
-      }
       response.status(200).send(instance?.exportWithMedia() ?? instance);
     } catch (error) {
       response.status(500).send({ message: error.message });
@@ -32,11 +29,6 @@ class InstanceController {
   static async storeInstance(request, response) {
     try {
       const { user, body } = request;
-      const hasPermission = await PermissionService._isInstanceOwner(user.id);
-
-      if (!hasPermission) {
-        return response.status(403).send({ message: "Permission denied" });
-      }
 
       await MediaReferenceGuard.assertInstanceStorable(body, user.id);
 

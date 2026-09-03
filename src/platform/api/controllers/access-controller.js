@@ -1,6 +1,7 @@
 const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
 const { RolePermission } = require("../../../commons/entities/role/role");
+const { scopeOf } = require("../../../commons/services/authorization");
 const AccessService = require("../../../commons/services/access/access-service");
 const AccessScanService = require("../../../commons/services/access/access-scan-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
@@ -301,16 +302,16 @@ class AccessController {
    * that grant an access authorization, optionally filtered by
    * state/capability/lockers.
    */
-  static async getAccessBookings(request, response) {
+  static async getAccessBookings(request, response, next) {
     try {
       const options = AccessController._parseAccessBookingQuery(request.query);
       if (options.error) {
         return ApiResponse.badRequest(response, options.error);
       }
 
-      const targetUserId = await AccessController._resolveTargetUser(request);
+      const targetUserId = AccessController._targetUserOf(request);
       if (!targetUserId) {
-        return response.sendStatus(403);
+        return next(new ForbiddenError());
       }
 
       const bookings = await AccessService.getUserBookingsWithAccess(
@@ -330,7 +331,7 @@ class AccessController {
    * Tenant-independent: returns all bookings of a person (across all tenants)
    * that grant an access authorization for a specific access point.
    */
-  static async getAccessPointBookings(request, response) {
+  static async getAccessPointBookings(request, response, next) {
     try {
       const { accessPointId } = request.params;
 
@@ -339,9 +340,9 @@ class AccessController {
         return ApiResponse.badRequest(response, options.error);
       }
 
-      const targetUserId = await AccessController._resolveTargetUser(request);
+      const targetUserId = AccessController._targetUserOf(request);
       if (!targetUserId) {
-        return response.sendStatus(403);
+        return next(new ForbiddenError());
       }
 
       const bookings = await AccessService.getUserBookingsForAccessPoint(
@@ -393,23 +394,24 @@ class AccessController {
 
   /**
    * @private
-   * Resolves the user whose bookings should be returned. Defaults to the
-   * authenticated user. Because the lookup is tenant-independent, querying
-   * another user via `?userId=` requires instance ownership. Returns null when
-   * not allowed.
+   * The user whose bookings are asked for: the principal's own, or under the
+   * reach `any` (`accessBookings.read`: the instance owner) whoever
+   * `?userId=` names. Another user's under `own` is nobody's - the caller
+   * asked for what the reach does not cover.
+   *
+   * @param {Object} request Express request
+   * @returns {string|null} The user, or null where the reach does not cover
+   *   the one asked for.
    */
-  static async _resolveTargetUser(request) {
+  static _targetUserOf(request) {
+    const { reach, userId } = scopeOf(request);
     const requestedUserId = request.query.userId;
-    const currentUserId = request.user.id;
 
-    if (!requestedUserId || requestedUserId === currentUserId) {
-      return currentUserId;
+    if (!requestedUserId || requestedUserId === userId) {
+      return userId;
     }
 
-    const isInstanceOwner =
-      await PermissionService._isInstanceOwner(currentUserId);
-
-    return isInstanceOwner ? requestedUserId : null;
+    return reach === "any" ? requestedUserId : null;
   }
 
   /**
