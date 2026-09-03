@@ -661,6 +661,11 @@ class BookingService {
         booking._couponUsed = oldBooking._couponUsed;
         booking.rejectionReason = "";
         delete booking.cancellationRefund;
+      } else if (oldBooking.cancellationRefund) {
+        // A cancelled or rejected booking that stays so keeps its refund
+        // audit: the prepared booking would otherwise write over it with
+        // what its flags alone say about the cancellation.
+        booking.cancellationRefund = oldBooking.cancellationRefund;
       }
 
       booking.validate();

@@ -10,11 +10,12 @@
  * Pure. Ticket 7 wires it into the PUT.
  */
 
-const { BadRequestError } = require("../../../errors/BaseError");
+const { BadRequestError, ConflictError } = require("../../../errors/BaseError");
 const {
   STATUS,
   TRANSITION,
   nextState,
+  normalizeFlags,
   flagsFromStatus,
   isImpossibleFlagCombination,
 } = require("./booking-state");
@@ -41,14 +42,6 @@ const CANDIDATE_PATHS = Object.freeze({
   [STATUS.REJECTED]: [[TRANSITION.REINSTATE]],
   [STATUS.CANCELLED]: [[TRANSITION.REINSTATE]],
 });
-
-function normalizeFlags(flags = {}) {
-  return {
-    isCommitted: Boolean(flags.isCommitted),
-    isPayed: Boolean(flags.isPayed),
-    isRejected: Boolean(flags.isRejected),
-  };
-}
 
 /**
  * Whether two flag sets ask for the same state. A free booking carries
@@ -77,8 +70,11 @@ function flagsAfter(path, currentStatus, priceEur, cancelledFrom) {
     let next;
     try {
       next = nextState(status, transition, booking);
-    } catch {
-      return null;
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        return null;
+      }
+      throw error;
     }
     if (transition === TRANSITION.CANCEL) {
       from = status;

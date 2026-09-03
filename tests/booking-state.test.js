@@ -22,11 +22,16 @@ const { ConflictError } = require("../src/errors/BaseError");
 const INVALID = "invalid_transition";
 
 function paid(overrides = {}) {
-  return { id: "B1", priceEur: 40, ...overrides };
+  return {
+    id: "B1",
+    priceEur: 40,
+    cancellationPolicy: { userCancellable: true },
+    ...overrides,
+  };
 }
 
 function free(overrides = {}) {
-  return { id: "B1", priceEur: 0, ...overrides };
+  return paid({ priceEur: 0, ...overrides });
 }
 
 function cancelledFrom(status, overrides = {}) {
@@ -64,7 +69,7 @@ describe("booking-state", function () {
     ]);
   });
 
-  describe("nextState: every state × every transition, priced booking cancelled from confirmed", function () {
+  describe("nextState: every state × every transition, priced, user-cancellable, cancelled from confirmed", function () {
     // Rows are states, columns are transitions in TRANSITIONS order.
     const TABLE = {
       requested: [
@@ -170,17 +175,20 @@ describe("booking-state", function () {
     });
 
     it("requestCancel needs a cancellation policy that lets the customer cancel", function () {
-      const notCancellable = paid({
-        cancellationPolicy: { userCancellable: false },
-      });
-      for (const status of [
-        STATUS.REQUESTED,
-        STATUS.PAYMENT_DUE,
-        STATUS.CONFIRMED,
+      for (const booking of [
+        paid({ cancellationPolicy: { userCancellable: false } }),
+        paid({ cancellationPolicy: {} }),
+        paid({ cancellationPolicy: undefined }),
       ]) {
-        expect(
-          outcome(status, TRANSITION.REQUEST_CANCEL, notCancellable),
-        ).to.equal(INVALID);
+        for (const status of [
+          STATUS.REQUESTED,
+          STATUS.PAYMENT_DUE,
+          STATUS.CONFIRMED,
+        ]) {
+          expect(outcome(status, TRANSITION.REQUEST_CANCEL, booking)).to.equal(
+            INVALID,
+          );
+        }
       }
       expect(
         nextState(

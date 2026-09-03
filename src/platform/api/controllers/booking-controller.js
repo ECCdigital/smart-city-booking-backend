@@ -37,9 +37,6 @@ const logger = bunyan.createLogger({
 });
 
 /**
- * Web Controller for Bookings.
- */
-/**
  * A booking as the request describes it. The HTTP form speaks in the three
  * flags; a `status` the client sends back from a GET is not an input and
  * would otherwise outrank the flags it edited.
@@ -50,6 +47,9 @@ function bookingFromRequest(body = {}) {
   return new Booking(fields);
 }
 
+/**
+ * Web Controller for Bookings.
+ */
 class BookingController {
   static _resolvePrimaryBookableId(booking) {
     if (booking.bookableId) {

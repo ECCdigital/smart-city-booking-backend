@@ -22,6 +22,7 @@
 
 const {
   STATUS,
+  normalizeFlags,
   statusFromFlags,
   cancelledFromFlags,
   isImpossibleFlagCombination,
@@ -29,14 +30,6 @@ const {
 
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
-}
-
-function flagsOf(booking) {
-  return {
-    isCommitted: Boolean(booking.isCommitted),
-    isPayed: Boolean(booking.isPayed),
-    isRejected: Boolean(booking.isRejected),
-  };
 }
 
 module.exports = {
@@ -49,7 +42,7 @@ module.exports = {
     let impossible = 0;
 
     for (const booking of bookings) {
-      const flags = flagsOf(booking);
+      const flags = normalizeFlags(booking);
       const priceEur = Number(booking.priceEur) || 0;
       const status = statusFromFlags(flags, priceEur);
 

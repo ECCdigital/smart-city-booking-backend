@@ -1014,6 +1014,27 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       ]);
     });
 
+    it("amending a cancelled booking without a flip keeps its refund audit", async function () {
+      const id = await bookingIn("confirmed");
+      await reject(id, { reason: "Irrtum", refundPercentage: 50 });
+      h.clearEffects();
+
+      const res = await update(id, { comment: "moved" });
+
+      expect(res.status).to.equal(201);
+      const stored = h.stored(id);
+      expect(stateOf(stored)).to.equal("cancelled");
+      expect(stored).to.include({ comment: "moved", isPayed: true });
+      expect(stored.cancellationRefund).to.include({
+        appliedRefundPercentage: 50,
+        origin: "admin",
+        cancelledFrom: "confirmed",
+      });
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 cancelled [receipt,cancellation]",
+      ]);
+    });
+
     it("clearing isRejected reinstates: price and items of before, no refund, a new grant, no mail", async function () {
       const id = await bookingIn("confirmed");
       await reject(id, { reason: "Irrtum", refundPercentage: 50 });

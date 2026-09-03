@@ -112,7 +112,7 @@ const TRANSITION_TABLE = Object.freeze({
   [TRANSITION.REQUEST_CANCEL]: {
     from: LIVE_STATUSES,
     target: (status, booking) =>
-      booking.cancellationPolicy?.userCancellable === false ? null : status,
+      booking.cancellationPolicy?.userCancellable === true ? status : null,
   },
 });
 
@@ -140,6 +140,20 @@ function nextState(status, transition, booking = {}) {
     throw invalidTransition(status, transition, booking);
   }
   return target;
+}
+
+/**
+ * The three flags as booleans, missing ones read as false.
+ *
+ * @param {{ isCommitted?: boolean, isPayed?: boolean, isRejected?: boolean }} [flags]
+ * @returns {{ isCommitted: boolean, isPayed: boolean, isRejected: boolean }}
+ */
+function normalizeFlags(flags = {}) {
+  return {
+    isCommitted: Boolean(flags.isCommitted),
+    isPayed: Boolean(flags.isPayed),
+    isRejected: Boolean(flags.isRejected),
+  };
 }
 
 /**
@@ -193,14 +207,6 @@ function cancelledFromFlags(flags, priceEur) {
     : STATUS.PAYMENT_DUE;
 }
 
-function normalizeFlags(flags = {}) {
-  return {
-    isCommitted: Boolean(flags.isCommitted),
-    isPayed: Boolean(flags.isPayed),
-    isRejected: Boolean(flags.isRejected),
-  };
-}
-
 /**
  * Whether the flags say "paid, but never confirmed" of a priced booking: a
  * combination the state model does not have. A free booking carries
@@ -252,6 +258,7 @@ module.exports = {
   TRANSITIONS,
   TRANSITION_TABLE,
   nextState,
+  normalizeFlags,
   flagsFromStatus,
   cancelledFromFlags,
   statusFromFlags,
