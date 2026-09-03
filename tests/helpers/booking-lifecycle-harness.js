@@ -317,10 +317,14 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
    */
   sinon
     .stub(BookingManager, "storeBookingIfStatus")
-    .callsFake(async (booking, expectStatus) => {
+    .callsFake(async (booking, expectStatus, options = {}) => {
       const entity =
         booking instanceof Booking ? booking : new Booking(booking);
       entity.validate();
+      const unset = Array.isArray(options.unset) ? options.unset : [];
+      for (const field of unset) {
+        delete entity[field];
+      }
       const previous = store.get(entity.id);
       if (!previous || previous.status !== expectStatus) {
         return null;
@@ -329,6 +333,9 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
         record("store.save", label(entity.id));
       }
       const merged = { ...previous, ...clone(entity) };
+      for (const field of unset) {
+        delete merged[field];
+      }
       store.set(entity.id, merged);
       const docs = merged.attachments
         .filter((att) =>

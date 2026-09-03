@@ -71,6 +71,26 @@ describe("booking lifecycle adapters", function () {
       expect(options).to.include({ upsert: false, new: false });
     });
 
+    it("removes the fields it is told to with the write, as a $set and a $unset", async function () {
+      const lean = sinon.stub().resolves({ id: "B-1" });
+      const findOneAndUpdate = sinon
+        .stub(BookingModel, "findOneAndUpdate")
+        .returns({ lean });
+      const entity = booking({
+        status: "confirmed",
+        cancellationRefund: { cancelledFrom: "confirmed" },
+      });
+
+      await BookingManager.storeBookingIfStatus(entity, "cancelled", {
+        unset: ["cancellationRefund"],
+      });
+
+      const [, update] = findOneAndUpdate.firstCall.args;
+      expect(update.$set).to.equal(entity);
+      expect(update.$set).to.not.have.property("cancellationRefund");
+      expect(update.$unset).to.deep.equal({ cancellationRefund: "" });
+    });
+
     it("answers null where no booking is in the expected state", async function () {
       sinon
         .stub(BookingModel, "findOneAndUpdate")
@@ -126,6 +146,29 @@ describe("booking lifecycle adapters", function () {
           "payment_due",
         ),
       ).to.equal(true);
+    });
+
+    it("save passes the fields to remove on to the conditional write", async function () {
+      const storeBookingIfStatus = sinon
+        .stub(BookingManager, "storeBookingIfStatus")
+        .resolves({ id: "B-1" });
+
+      await store.save(booking({ status: "confirmed" }), {
+        expectStatus: "cancelled",
+        transition: "reinstate",
+        unset: ["cancellationRefund"],
+      });
+
+      expect(storeBookingIfStatus.firstCall.args[2]).to.deep.equal({
+        unset: ["cancellationRefund"],
+      });
+    });
+
+    it("getTenant answers the tenant of the manager", async function () {
+      const TenantManager = require("../src/commons/data-managers/tenant-manager");
+      sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT });
+
+      expect(await store.getTenant(TENANT)).to.deep.equal({ id: TENANT });
     });
 
     it("save throws the guard's ConflictError with the state it read where the write found no match", async function () {

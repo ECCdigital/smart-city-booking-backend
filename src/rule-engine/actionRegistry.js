@@ -1,8 +1,8 @@
 const BookingService = require("../commons/services/checkout/booking-service");
 const MailerService = require("../commons/mail-service/mail-service");
 const {
-  CANCELLATION_ORIGINS,
-} = require("../commons/services/payment/cancellation-refund-service");
+  TRIGGER,
+} = require("../commons/services/booking-lifecycle/booking-state");
 
 module.exports = {
   test(doc, params) {
@@ -14,16 +14,10 @@ module.exports = {
     const tenantId = doc.tenantId;
     const reason = params.reason || "";
 
-    await BookingService.rejectBooking(
-      tenantId,
-      bookingId,
+    await BookingService.rejectBooking(tenantId, bookingId, {
+      trigger: TRIGGER.SYSTEM,
       reason,
-      null,
-      false,
-      false,
-      null,
-      { origin: CANCELLATION_ORIGINS.SYSTEM },
-    );
+    });
   },
 
   async sendEmail(doc, params = {}) {

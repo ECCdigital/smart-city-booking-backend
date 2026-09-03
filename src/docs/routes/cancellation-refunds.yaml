@@ -96,6 +96,11 @@
       Administrators may accept the current tenant-policy refund or override it
       with an integer percentage from 0 through 100. Omitting
       `refundPercentage` applies the current policy proposal.
+
+      A request is rejected, a confirmed booking or one awaiting payment is
+      cancelled. The cancellation document is issued after the state change;
+      where it fails, the booking is cancelled without it (200) and
+      `POST /bookings/{bookingId}/cancellation-receipt` issues it later.
     security:
       - bearerAuth: []
     parameters:
@@ -117,6 +122,10 @@
         description: Missing booking management permission
       "404":
         description: Booking not found
+      "409":
+        description: >-
+          `invalid_transition` - the booking is cancelled or rejected already
+          (params carry `status` and `transition`)
 
 /api/{tenant}/group-bookings/{groupBookingId}/cancellation-refund-preview:
   get:

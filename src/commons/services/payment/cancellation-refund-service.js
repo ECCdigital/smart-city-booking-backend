@@ -134,6 +134,28 @@ class CancellationRefundService {
   }
 
   /**
+   * The refund calculation as the customer sees it (the preview endpoints,
+   * the verification mail of a cancellation request): the amounts and the
+   * percentages, none of the audit fields.
+   *
+   * @param {Object} calculation What `calculate` answered
+   * @param {string} bookingId
+   * @returns {Object} The customer's preview
+   */
+  static toCustomerPreview(calculation, bookingId) {
+    return {
+      bookingId,
+      originalAmountEur: calculation.originalAmountEur,
+      refundAmountEur: calculation.refundAmountEur,
+      cancellationFeeEur: calculation.cancellationFeeEur,
+      suggestedRefundPercentage: calculation.suggestedRefundPercentage,
+      appliedRefundPercentage: calculation.appliedRefundPercentage,
+      daysBeforeStart: calculation.daysBeforeStart,
+      appliedTierDays: calculation.appliedTierDays,
+    };
+  }
+
+  /**
    * Build Handlebars-friendly refund fields for cancellation mails.
    * Accepts a full calculation or a customer preview object.
    */
@@ -176,8 +198,41 @@ class CancellationRefundService {
   }
 }
 
+/**
+ * The bank details of a refund as they are stored and printed: trimmed,
+ * IBAN and BIC without spaces and upper-cased; `null` where nothing is
+ * given.
+ *
+ * @param {Object} [bankDetails]
+ * @returns {{ accountHolder: string, bankName: string, iban: string, bic: string }|null}
+ */
+function sanitizeBankDetails(bankDetails) {
+  if (!bankDetails || typeof bankDetails !== "object") {
+    return null;
+  }
+
+  const toTrimmedString = (value) =>
+    typeof value === "string" ? value.trim() : "";
+
+  const accountHolder = toTrimmedString(bankDetails.accountHolder);
+  const bankName = toTrimmedString(bankDetails.bankName);
+  const iban = toTrimmedString(bankDetails.iban)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const bic = toTrimmedString(bankDetails.bic)
+    .replace(/\s+/g, "")
+    .toUpperCase();
+
+  if (!accountHolder && !bankName && !iban && !bic) {
+    return null;
+  }
+
+  return { accountHolder, bankName, iban, bic };
+}
+
 module.exports = {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
   CANCELLATION_TIME_ZONE,
+  sanitizeBankDetails,
 };
