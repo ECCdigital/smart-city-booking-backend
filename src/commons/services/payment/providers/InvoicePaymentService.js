@@ -5,6 +5,7 @@ const MailController = require("../../../mail-service/mail-controller");
 const {
   issue: issueDocument,
   groupBookingIdOf,
+  mailAttachments,
 } = require("../../documents/document-issuance");
 const bunyan = require("bunyan");
 
@@ -190,14 +191,15 @@ class InvoicePaymentService extends PaymentService {
       tenantId: this.tenantId,
       bookingIds: [bookingId],
       type: "invoice",
+      bookings: [booking],
     });
-    return { booking, attachment, mailAttachments: toMailAttachments(file) };
+    return { booking, attachment, mailAttachments: mailAttachments(file) };
   }
 
   async _issueAggregatedInvoice() {
-    const booking = await BookingManager.getBooking(
-      this.bookingIds[0],
+    const bookings = await BookingManager.getBookings(
       this.tenantId,
+      this.bookingIds,
     );
     const { attachment, file } = await issueDocument({
       tenantId: this.tenantId,
@@ -208,19 +210,14 @@ class InvoicePaymentService extends PaymentService {
         bookingIds: this.bookingIds,
         groupBookingId: this.groupBookingId,
       }),
+      bookings,
     });
-    return { booking, attachment, mailAttachments: toMailAttachments(file) };
+    return {
+      booking: bookings[0],
+      attachment,
+      mailAttachments: mailAttachments(file),
+    };
   }
-}
-
-function toMailAttachments(file) {
-  return [
-    {
-      filename: file.name,
-      content: file.buffer,
-      contentType: "application/pdf",
-    },
-  ];
 }
 
 module.exports = InvoicePaymentService;

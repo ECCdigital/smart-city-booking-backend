@@ -1,5 +1,5 @@
-const TenantModel = require("../data-managers/models/tenantModel");
-const { NotFoundError } = require("../../errors/BaseError");
+const TenantManager = require("../data-managers/tenant-manager");
+const { BadRequestError, NotFoundError } = require("../../errors/BaseError");
 
 /**
  * The counter a document type draws its numbers from, per year, at the
@@ -29,25 +29,21 @@ class IdGenerator {
   static async next(tenantId, leadingZeros = 0, idType) {
     const counter = COUNTERS[idType];
     if (!counter) {
-      throw new Error(`Unknown document type: ${idType}`);
+      throw new BadRequestError("unknown_document_type", { type: idType });
     }
 
     const year = new Date().getFullYear();
-    const path = `${counter}.${year}`;
+    const value = await TenantManager.incrementDocumentCounter(
+      tenantId,
+      counter,
+      year,
+    );
 
-    const tenant = await TenantModel.findOneAndUpdate(
-      { id: tenantId },
-      { $inc: { [path]: 1 } },
-      { new: true },
-    )
-      .select(counter)
-      .lean();
-
-    if (!tenant) {
+    if (value === null) {
       throw new NotFoundError("tenant_not_found", { tenantId });
     }
 
-    return formatId(tenant[counter][year], year, leadingZeros);
+    return formatId(value, year, leadingZeros);
   }
 }
 

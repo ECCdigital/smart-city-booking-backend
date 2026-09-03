@@ -12,15 +12,8 @@ const {
 } = require("../../../commons/services/payment/cancellation-refund-service");
 const {
   issue: issueDocument,
+  mailAttachments,
 } = require("../../../commons/services/documents/document-issuance");
-const {
-  BookingConsistencyService,
-  checkSameContactDetails,
-  checkSameStatus,
-  checkSamePaymentProvider,
-  checkInvoicePaymentProvider,
-  checkPayedStatus,
-} = require("../../../commons/services/booking-consitency-service");
 const { ConflictError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
@@ -440,11 +433,10 @@ class GroupBookingController {
           RolePermission.MANAGE_BOOKINGS,
         ))
       ) {
-        const errors = new BookingConsistencyService([
-          checkSameContactDetails,
-          checkSameStatus,
-          checkPayedStatus,
-        ]).validate(groupBooking.bookings);
+        const errors = BookingService.reprintErrors(
+          "receipt",
+          groupBooking.bookings,
+        );
         if (errors.length > 0) {
           logger.error(
             `${tenantId} -- group-booking ${groupBookingId} cannot get a receipt: ${JSON.stringify(errors)}`,
@@ -518,12 +510,10 @@ class GroupBookingController {
           });
         }
 
-        const errors = new BookingConsistencyService([
-          checkSameContactDetails,
-          checkSameStatus,
-          checkSamePaymentProvider,
-          checkInvoicePaymentProvider,
-        ]).validate(groupBooking.bookings);
+        const errors = BookingService.reprintErrors(
+          "invoice",
+          groupBooking.bookings,
+        );
         if (errors.length > 0) {
           logger.error(
             `${tenantId} -- group-booking ${groupBookingId} cannot get an invoice: ${JSON.stringify(errors)}`,
@@ -539,20 +529,12 @@ class GroupBookingController {
         });
 
         if (shouldSendEmail) {
-          const attachments = [
-            {
-              filename: file.name,
-              content: file.buffer,
-              contentType: "application/pdf",
-            },
-          ];
-
           try {
             await MailController.sendInvoice(
               groupBooking.bookings[0].mail,
               groupBooking.bookingIds,
               tenantId,
-              attachments,
+              mailAttachments(file),
               true,
             );
           } catch (err) {

@@ -13,11 +13,8 @@ const ReceiptService = require("../../../commons/services/payment/receipt-servic
 const InvoiceService = require("../../../commons/services/payment/invoice-service");
 const {
   issue: issueDocument,
+  mailAttachments,
 } = require("../../../commons/services/documents/document-issuance");
-const {
-  BookingConsistencyService,
-  checkPayedStatus,
-} = require("../../../commons/services/booking-consitency-service");
 const { ConflictError } = require("../../../errors/BaseError");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const {
@@ -941,11 +938,46 @@ class BookingController {
     }
   }
 
+  /**
+   * The booking a reprint is asked for, once the request may have it: the
+   * booking exists (else 404) and the user manages bookings or owns it
+   * (else 403). Answers the request itself and returns null where not.
+   */
+  static async _reprintable(request, response, what) {
+    const {
+      params: { tenant: tenantId, id: bookingId },
+      user,
+    } = request;
+
+    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    if (!booking) {
+      response.status(404).send({ message: "Booking not found." });
+      return null;
+    }
+
+    const hasPermission =
+      (await UserManager.hasPermission(
+        user.id,
+        tenantId,
+        RolePermission.MANAGE_BOOKINGS,
+        "updateAny",
+      )) || PermissionsService._isOwner(booking, user.id, tenantId);
+
+    if (!hasPermission) {
+      logger.warn(
+        `${tenantId} -- User ${user?.id} is not allowed to create ${what}.`,
+      );
+      response.sendStatus(403);
+      return null;
+    }
+
+    return booking;
+  }
+
   static async createReceipt(request, response) {
     try {
       const {
         params: { tenant: tenantId, id: bookingId },
-        user,
       } = request;
 
       if (!tenantId || !bookingId) {
@@ -953,26 +985,14 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-          "updateAny",
-        )) || PermissionsService._isOwner(booking, user.id, tenantId);
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to create receipt.`,
-        );
-        return response.sendStatus(403);
-      }
-
-      const errors = new BookingConsistencyService([checkPayedStatus]).validate(
-        [booking],
+      const booking = await BookingController._reprintable(
+        request,
+        response,
+        "receipt",
       );
+      if (!booking) return;
+
+      const errors = BookingService.reprintErrors("receipt", [booking]);
       if (errors.length > 0) {
         logger.error(
           `${tenantId} -- booking ${booking.id} cannot get a receipt: ${JSON.stringify(errors)}`,
@@ -1013,7 +1033,6 @@ class BookingController {
     try {
       const {
         params: { tenant: tenantId, id: bookingId },
-        user,
       } = request;
 
       if (!tenantId || !bookingId) {
@@ -1021,25 +1040,12 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
-      if (!booking) {
-        return response.status(404).send({ message: "Booking not found." });
-      }
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-          "updateAny",
-        )) || PermissionsService._isOwner(booking, user.id, tenantId);
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to create cancellation receipt.`,
-        );
-        return response.sendStatus(403);
-      }
+      const booking = await BookingController._reprintable(
+        request,
+        response,
+        "cancellation receipt",
+      );
+      if (!booking) return;
 
       if (!booking.cancellationRefund) {
         const error = new ConflictError("not_cancelled", { bookingId });
@@ -1183,20 +1189,12 @@ class BookingController {
       });
 
       if (shouldSendEmail) {
-        const attachments = [
-          {
-            filename: file.name,
-            content: file.buffer,
-            contentType: "application/pdf",
-          },
-        ];
-
         try {
           await MailController.sendInvoice(
             booking.mail,
             bookingId,
             tenantId,
-            attachments,
+            mailAttachments(file),
           );
         } catch (err) {
           logger.error("Error while sending invoice:", bookingId, err);

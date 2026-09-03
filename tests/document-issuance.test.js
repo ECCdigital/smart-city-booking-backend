@@ -61,7 +61,10 @@ describe("IdGenerator.next: unique, not gapless", function () {
     });
   });
 
-  it("gives ten parallel draws ten distinct numbers", async function () {
+  it("draws in one findOneAndUpdate with $inc, so ten parallel draws give ten distinct numbers", async function () {
+    // The stub applies `$inc` the way MongoDB does; what the test proves is
+    // that the draw is one increment at the row, not a read followed by a
+    // write - the shape that made two parallel draws share a number.
     tenantRow();
 
     const numbers = await Promise.all(
@@ -92,7 +95,7 @@ describe("IdGenerator.next: unique, not gapless", function () {
     const { findOneAndUpdate } = tenantRow();
 
     await assert.rejects(() => IdGenerator.next(TENANT, 4, "voucher"), {
-      message: /unknown document type/i,
+      code: "unknown_document_type",
     });
     assert.strictEqual(findOneAndUpdate.called, false);
   });
@@ -103,6 +106,30 @@ describe("IdGenerator.next: unique, not gapless", function () {
     await assert.rejects(() => IdGenerator.next("other", 4, "receipt"), {
       code: "tenant_not_found",
     });
+  });
+
+  it("is not rolled back by a whole-tenant write from a stale copy", async function () {
+    // The admin's tenant PUT writes the tenant it read earlier; the counters
+    // are the draw's alone and stay out of that write.
+    const TenantManager = require("../src/commons/data-managers/tenant-manager");
+    sinon.stub(TenantModel, "findOne").returns({
+      lean: async () => ({ id: TENANT, bookableCustomFields: [] }),
+    });
+    const updateOne = sinon.stub(TenantModel, "updateOne").resolves();
+
+    await TenantManager.storeTenant({
+      id: TENANT,
+      name: "Stadt",
+      receiptCount: { [YEAR]: 3 },
+      invoiceCount: { [YEAR]: 1 },
+      cancellationCount: {},
+    });
+
+    const update = updateOne.firstCall.args[1];
+    assert.strictEqual(update.name, "Stadt");
+    assert.strictEqual("receiptCount" in update, false);
+    assert.strictEqual("invoiceCount" in update, false);
+    assert.strictEqual("cancellationCount" in update, false);
   });
 });
 
@@ -198,7 +225,6 @@ describe("issue: a document number exists exactly when its attachment does", fun
 describe("issue: revisions, aggregation and gaps", function () {
   const bunyan = require("bunyan");
   const InvoiceService = require("../src/commons/services/payment/invoice-service");
-  const CancellationService = require("../src/commons/services/payment/cancellation-service");
   const {
     remove,
     groupBookingIdOf,
@@ -413,6 +439,39 @@ describe("issue: revisions, aggregation and gaps", function () {
     });
     assert.strictEqual(byBooking.B2.cancellation.refundAmountEur, 20);
     assert.strictEqual(byBooking.B2.cancellation.bookingId, undefined);
+  });
+
+  it("logs a push that fails part-way through a group, naming who got the document and who did not", async function () {
+    const w = world({
+      bookings: [booking("B1"), booking("B2"), booking("B3")],
+    });
+    sinon
+      .stub(ReceiptService, "render")
+      .resolves({ name: "group.pdf", buffer: Buffer.from("%PDF") });
+    const failure = new Error("connection reset");
+    w.addAttachment.onSecondCall().rejects(failure);
+    const log = sinon.stub(bunyan.prototype, "error");
+
+    await assert.rejects(
+      () =>
+        issue({
+          tenantId: TENANT,
+          bookingIds: ["B1", "B2", "B3"],
+          type: "receipt",
+          groupBookingId: "G1",
+        }),
+      failure,
+    );
+
+    assert.deepStrictEqual(
+      w.pushed.map((push) => push.bookingId),
+      ["B1"],
+    );
+    const entry = log.getCalls().find((call) => call.args[0]?.missing);
+    assert.ok(entry, "the partial push is logged");
+    assert.deepStrictEqual(entry.args[0].attached, ["B1"]);
+    assert.deepStrictEqual(entry.args[0].missing, ["B2", "B3"]);
+    assert.strictEqual(entry.args[0].number, `RE-${YEAR}-0001-1`);
   });
 
   it("keeps the entities the caller holds in step, so a later whole write carries the attachment", async function () {

@@ -97,8 +97,10 @@ const DOCUMENT_TYPES = Object.freeze({
  *
  * Fails after the draw leave the number a gap: rendering or storing that
  * throws is logged with number, type and bookings and rethrown, and no
- * booking is touched. Nothing is mailed here - the mail is the transition's
- * or the administration's.
+ * booking is touched. A push that fails part-way through a group is logged
+ * with the bookings that got the document and those that did not, and
+ * rethrown. Nothing is mailed here - the mail is the transition's or the
+ * administration's.
  *
  * @param {Object} params
  * @param {string} params.tenantId
@@ -197,9 +199,29 @@ async function issue({
     ...fieldsOf(rendered.attachmentFields, bookingId),
   });
 
+  const attached = [];
   for (const booking of loaded) {
     const attachment = attachmentFor(booking.id);
-    await BookingManager.addAttachment(tenantId, booking.id, attachment);
+    try {
+      await BookingManager.addAttachment(tenantId, booking.id, attachment);
+    } catch (err) {
+      // A push that fails leaves the bookings before it with the document
+      // and the ones from it on without; the medium references them all.
+      // There is no compensation: the log names both sides.
+      logger.error(
+        {
+          tenantId,
+          type,
+          number,
+          attached,
+          missing: loaded.slice(attached.length).map((b) => b.id),
+          err,
+        },
+        `Document ${number} could not be attached to every booking`,
+      );
+      throw err;
+    }
+    attached.push(booking.id);
     if (bookings) {
       booking.attachments = booking.attachments || [];
       booking.attachments.push(attachment);
@@ -285,6 +307,22 @@ async function nextNumber(tenantId, type, spec, bookings) {
   };
 }
 
+/**
+ * The file of an issued document as the mail stack takes it.
+ *
+ * @param {{ name: string, buffer: Buffer }} file
+ * @returns {Array<{ filename: string, content: Buffer, contentType: string }>}
+ */
+function mailAttachments(file) {
+  return [
+    {
+      filename: file.name,
+      content: file.buffer,
+      contentType: "application/pdf",
+    },
+  ];
+}
+
 function fieldsOf(attachmentFields, bookingId) {
   if (typeof attachmentFields === "function") {
     return attachmentFields(bookingId) || {};
@@ -293,8 +331,8 @@ function fieldsOf(attachmentFields, bookingId) {
 }
 
 module.exports = {
-  DOCUMENT_TYPES,
   issue,
   remove,
   groupBookingIdOf,
+  mailAttachments,
 };

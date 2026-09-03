@@ -25,6 +25,8 @@ const {
   checkSameContactDetails,
   checkSameStatus,
   checkSamePaymentProvider,
+  checkInvoicePaymentProvider,
+  checkPayedStatus,
   validatePaymentProviderRequirement,
 } = require("../booking-consitency-service");
 const {
@@ -48,6 +50,7 @@ const {
   issue: issueDocument,
   remove: removeDocuments,
   groupBookingIdOf,
+  mailAttachments,
 } = require("../documents/document-issuance");
 const MediaManager = require("../../data-managers/media-manager");
 const MediaService = require("../media/media-service");
@@ -1242,13 +1245,7 @@ class BookingService {
           options,
         });
 
-        attachments = [
-          {
-            filename: file.name,
-            content: file.buffer,
-            contentType: "application/pdf",
-          },
-        ];
+        attachments = mailAttachments(file);
       }
 
       await BookingManager.storeBooking(booking);
@@ -1370,13 +1367,7 @@ class BookingService {
         options,
       });
 
-      attachments = [
-        {
-          filename: file.name,
-          content: file.buffer,
-          contentType: "application/pdf",
-        },
-      ];
+      attachments = mailAttachments(file);
     }
 
     for (const booking of bookings) {
@@ -1550,6 +1541,31 @@ class BookingService {
     };
   }
 
+  /**
+   * What stands against reprinting a document for these bookings: the
+   * consistency errors of the reprint endpoints (`POST .../receipt`,
+   * `.../invoice`), empty when the document may be issued. A receipt needs
+   * paid bookings; an invoice needs bookings paying by invoice; a group
+   * needs one contact and one state.
+   *
+   * @param {"receipt"|"invoice"} type
+   * @param {Booking[]} bookings One booking, or the members of a group
+   * @returns {Object[]} The consistency errors
+   */
+  static reprintErrors(type, bookings) {
+    const groupChecks =
+      bookings.length > 1 ? [checkSameContactDetails, checkSameStatus] : [];
+    const checks =
+      type === "invoice"
+        ? [
+            ...groupChecks,
+            checkSamePaymentProvider,
+            checkInvoicePaymentProvider,
+          ]
+        : [...groupChecks, checkPayedStatus];
+    return new BookingConsistencyService(checks).validate(bookings);
+  }
+
   static async verifyBookingOwnership(tenantId, bookingId, name) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
 
@@ -1598,13 +1614,7 @@ class BookingService {
           bookings: [booking],
         });
 
-        attachments = [
-          {
-            filename: file.name,
-            content: file.buffer,
-            contentType: "application/pdf",
-          },
-        ];
+        attachments = mailAttachments(file);
       }
 
       try {
@@ -1669,13 +1679,7 @@ class BookingService {
           bookings,
         });
 
-        attachments = [
-          {
-            filename: file.name,
-            content: file.buffer,
-            contentType: "application/pdf",
-          },
-        ];
+        attachments = mailAttachments(file);
       }
 
       try {
