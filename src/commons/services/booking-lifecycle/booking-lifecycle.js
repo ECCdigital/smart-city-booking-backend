@@ -11,9 +11,10 @@
  * by transition; so far: `confirm`, `pay`, `cancel`, `requestCancel`,
  * `reinstate`, `amend`.
  *
- * A transition takes `(tenantId, bookingId, options)`, `trigger` being
- * mandatory (glossary "Auslöser"): `workflow` says a workflow action set
- * it off and the workflow event is left out. It answers an `Outcome` or
+ * A transition takes `(tenantId, bookingId, options)` - `amend` the new
+ * booking instead of the id - `trigger` being mandatory (glossary
+ * "Auslöser"): `workflow` says a workflow action set it off and the
+ * workflow event is left out. It answers an `Outcome` or
  * throws: `NotFoundError booking_not_found` and the guard's `ConflictError
  * invalid_transition` before any effect, `LifecycleError` when an effect
  * with abort policy failed (persist writes restored).
@@ -497,9 +498,12 @@ function createBookingLifecycle(adapters) {
   /**
    * The amendment (spec part 1, section 6; part 2, section 8, `amend`;
    * glossary "Änderung"): the content of a booking changes, its state
-   * does not. The new booking is written in the state the stored one is in
-   * - whatever state and refund audit the new one carries, the stored
-   * ones stand, they belong to the lifecycle, not to the form. Then the
+   * does not. The new booking carries the state the caller knows the
+   * booking to be in, and is written on the condition that the stored one
+   * still is (spec part 2, section 5): a booking that moved in between - a
+   * payment webhook, say - is the guard's `ConflictError`, and the plan
+   * the caller made no longer applies. The refund audit is the stored
+   * one's, whatever the form says; it belongs to the lifecycle. Then the
    * access follows the content: moved along at `confirmed`, the
    * compartments held anew at `requested | payment_due` (`holdForBooking`
    * never holds one twice and drops the held ones beyond what is booked
@@ -511,7 +515,8 @@ function createBookingLifecycle(adapters) {
    *
    * @param {string} tenantId
    * @param {Object} booking The booking as it is to be, prepared by the
-   *   checkout under `CheckoutPolicy.ADMIN_MANUAL`
+   *   checkout under `CheckoutPolicy.ADMIN_MANUAL`, with `status` the state
+   *   the caller knows it to be in
    * @param {{ trigger: string }} options
    * @returns {Promise<Object>} The outcome
    */
@@ -520,8 +525,8 @@ function createBookingLifecycle(adapters) {
     assertTrigger(transition, trigger);
 
     const current = await load(tenantId, booking.id);
-    const from = current.status;
-    booking.status = nextState(from, transition, current);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
     if (current.cancellationRefund) {
       booking.cancellationRefund = current.cancellationRefund;
     } else {

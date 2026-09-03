@@ -690,6 +690,9 @@ class BookingService {
       booking.rejectionReason = oldBooking.rejectionReason || "";
     }
 
+    // The content write goes in the state the plan is made for; the
+    // checkout read another off the flags of the form.
+    booking.status = oldBooking.status;
     booking.validate();
 
     const plan = planUpdate(oldBooking.status, flags, booking.priceEur, {
@@ -703,14 +706,16 @@ class BookingService {
       });
     }
 
-    return plan.length === 1
+    const onlyAmended = plan.length === 1;
+    return onlyAmended
       ? booking
       : await BookingManager.getBooking(booking.id, tenantId);
   }
 
   /**
    * One transition of an update plan, as the administration (glossary
-   * "Auslöser"). The confirmation keeps its consistency check in front
+   * "Auslöser"), through the facade each transition has during the
+   * migration. The confirmation keeps its consistency check in front
    * (`commitBooking`), whose refusal is the 400 of before; the cancellation
    * of a flipped flag refunds in full, the form carrying no percentage, and
    * names the user who flipped it.
@@ -741,14 +746,16 @@ class BookingService {
         return;
       }
       case TRANSITION.PAY:
-        await bookingLifecycle.pay(tenantId, booking.id, {
+        await BookingService.setBookingPayed({
+          tenantId,
+          bookingId: booking.id,
           trigger,
           paymentMethod: booking.paymentMethod,
           timePaid: booking.timePaid,
         });
         return;
       case TRANSITION.CANCEL:
-        await bookingLifecycle.cancel(tenantId, booking.id, {
+        await BookingService.rejectBooking(tenantId, booking.id, {
           trigger,
           reason: booking.rejectionReason,
           refundPercentage: 100,

@@ -18,7 +18,7 @@ const {
 const {
   TRIGGER,
 } = require("../src/commons/services/booking-lifecycle/booking-state");
-const { NotFoundError } = require("../src/errors/BaseError");
+const { ConflictError, NotFoundError } = require("../src/errors/BaseError");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const {
   inMemoryAdapters,
@@ -228,12 +228,12 @@ describe("booking lifecycle: amend", function () {
     expect(adapters.access.calls).to.deep.equal([]);
   });
 
-  it("never flips the state: a form that says confirmed writes a request as a request, and a refund audit the form carries is dropped", async function () {
+  it("writes the state the caller knows, the refund audit the store holds: an audit the form carries at a live booking is dropped", async function () {
     const { adapters, lifecycle } = lifecycleOver({
       bookings: [booking({ status: "requested" })],
     });
 
-    const form = amended({ status: "confirmed" });
+    const form = amended({ status: "requested" });
     form.cancellationRefund = { origin: "admin", cancelledFrom: "confirmed" };
     const outcome = await lifecycle.amend(TENANT, form, {
       trigger: TRIGGER.ADMIN,
@@ -247,9 +247,34 @@ describe("booking lifecycle: amend", function () {
       isRejected: false,
     });
     expect(stored.cancellationRefund).to.equal(undefined);
+  });
+
+  it("refuses a caller whose state is stale: the form says requested, a payment moved the booking on - ConflictError, nothing written", async function () {
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [booking({ status: "payment_due" })],
+    });
+
+    const err = await failing(
+      lifecycle.amend(TENANT, amended({ status: "requested" }), {
+        trigger: TRIGGER.ADMIN,
+      }),
+    );
+
+    expect(err).to.be.instanceOf(ConflictError);
+    expect(err.code).to.equal("invalid_transition");
+    expect(err.params).to.deep.equal({
+      bookingId: "B-1",
+      status: "payment_due",
+      transition: "amend",
+    });
+    expect(adapters.store.rows.get("B-1")).to.include({
+      status: "payment_due",
+      comment: "",
+    });
     expect(adapters.store.calls).to.deep.equal([
       { op: "save", args: ["B-1", "requested"] },
     ]);
+    expect(adapters.access.calls).to.deep.equal([]);
   });
 
   it("a hold that fails aborts before anything is revoked: the old content is back, LifecycleError", async function () {
