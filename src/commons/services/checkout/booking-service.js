@@ -692,9 +692,18 @@ class BookingService {
       );
 
       if (onCommit) {
-        await BookingService.commitBooking(tenantId, booking, {
-          trigger: TRIGGER.ADMIN,
-        });
+        const committed = await BookingService.commitBooking(
+          tenantId,
+          booking,
+          { trigger: TRIGGER.ADMIN },
+        );
+        if (!committed.success) {
+          // The consistency check refused: the content write left the
+          // booking a request, so the answer must not say otherwise.
+          throw new BadRequestError(committed.errors[0].code, {
+            errors: committed.errors,
+          });
+        }
         booking.status = requestedStatus;
       }
 
@@ -790,7 +799,7 @@ class BookingService {
     }
 
     const outcome = await bookingLifecycle.confirm(tenantId, booking.id, {
-      trigger: trigger || TRIGGER.ADMIN,
+      trigger,
     });
     logger.info(
       `${tenantId} -- booking ${booking.id} committed, now ${outcome.status}`,

@@ -199,6 +199,38 @@ describe("booking lifecycle: confirm", function () {
     ]);
   });
 
+  it("confirms a free ticket booking: grant, free booking confirmation and the organizer mail, no payment request", async function () {
+    const { adapters, lifecycle } = lifecycleOver({
+      bookings: [
+        booking({
+          priceEur: 0,
+          bookableItems: [
+            {
+              bookableId: "ticket",
+              amount: 1,
+              _bookableUsed: { type: "ticket", eventId: "E1" },
+            },
+          ],
+        }),
+      ],
+    });
+
+    const outcome = await lifecycle.confirm(TENANT, "B-1", {
+      trigger: TRIGGER.ADMIN,
+    });
+
+    expect(effectTable(outcome)).to.deep.equal([
+      "persist store.save ok",
+      "provision access.provision ok",
+      "notify workflow.emit ok",
+      "notify mail.sendFreeBookingConfirmation ok",
+      "notify payment.requestPayment skipped",
+      "notify mail.sendEmailToOrganizer ok",
+    ]);
+    expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
+    expect(adapters.payment.calls).to.deep.equal([]);
+  });
+
   describe("the guard", function () {
     for (const status of [
       "payment_due",
