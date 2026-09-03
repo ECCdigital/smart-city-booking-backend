@@ -50,6 +50,8 @@ class TenantManager {
    * @returns {Promise<Object>}
    */
   static async _reachCondition(scope, owned) {
+    // `ownCondition` holds the reach's rules (`public`, or `own` without a
+    // user, is a programming error) and names the user under `own` only.
     const { userId } = ownCondition("userId", scope);
     if (!userId) {
       return {};

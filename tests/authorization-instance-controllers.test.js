@@ -186,11 +186,7 @@ describe("instance controllers on the reach", function () {
       const store = sinon.stub(TenantManager, "storeTenant").resolves();
       const next = sinon.stub();
       await TenantController.storeTenant(
-        request({
-          reach: "any",
-          principal: instanceOwnerLike(customer),
-          body: { id: "new" },
-        }),
+        request({ reach: "any", principal: customer, body: { id: "new" } }),
         response(),
         next,
       );
@@ -350,8 +346,3 @@ describe("instance controllers on the reach", function () {
     });
   });
 });
-
-/** A signed-in principal who is neither owner nor allowed to open a tenant. */
-function instanceOwnerLike(base) {
-  return { ...base, isInstanceOwner: false, mayCreateTenant: false };
-}

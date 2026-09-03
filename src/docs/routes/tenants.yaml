@@ -47,7 +47,7 @@
                   $ref: "#/components/schemas/TenantLegalDocuments"
       "201":
         description: |
-          An unknown id created a tenant instead - for the instance owner, who
+          An unknown id created a tenant instead — for the instance owner, who
           alone owns a tenant that does not exist yet; everyone else opens a
           tenant with `POST /api/tenants`. The body is empty — read the new
           tenant back with `GET /api/tenants/{id}`.
@@ -59,8 +59,6 @@
           `media_reference_not_public` for an `intern` one.
       "403":
         description: Neither owner of the tenant named by `id` nor instance owner, or no right to pick the medium
-      "404":
-        description: The tenant named by `id` exists for the saver but was not found
 
   get:
     tags:

@@ -3,6 +3,7 @@ const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const UserService = require("../../../commons/services/user-service");
 const { decide } = require("../../../commons/services/authorization");
+const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
@@ -21,11 +22,12 @@ class UserController {
     return await UserManager.findRawUserByIdOrKeycloak(userId, keycloakId);
   }
 
-  /** The one 404 of a user the manager did not find. */
+  /** The 404 of a user the manager did not find. */
   static _notFound(response, id) {
-    return response
-      .status(404)
-      .send(new NotFoundError("user_not_found", { id }).toJSON());
+    return ApiResponse.fail(
+      response,
+      new NotFoundError("user_not_found", { id }),
+    );
   }
 
   /**
@@ -83,7 +85,7 @@ class UserController {
   }
 
   /**
-   * @obsolete Use createUser or updateUser instead.
+   * @deprecated Use createUser or updateUser instead.
    *
    * The route carries `user.update`; an unknown id creates, which is the
    * adapter's second decision (authorize spec §12).
@@ -168,8 +170,7 @@ class UserController {
 
       const existingUser = await UserManager.getUser(newInfos.id, true);
       if (!existingUser) {
-        response.status(404).send("User not found");
-        return;
+        return UserController._notFound(response, newInfos.id);
       }
 
       await UserManager.updateUser(newInfos);
@@ -219,8 +220,7 @@ class UserController {
         keycloakId,
       );
       if (!currentUser) {
-        response.status(404).send("User not found");
-        return;
+        return UserController._notFound(response, currentId);
       }
 
       const changeResult = await UserService.changeUserId({
@@ -267,7 +267,7 @@ class UserController {
         keycloakId,
       );
       if (!rawUser) {
-        return response.sendStatus(404);
+        return UserController._notFound(response, id);
       }
 
       const userObject = rawUser.toEntity();

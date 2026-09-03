@@ -44,6 +44,7 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const { decide, scopeOf } = require("../../../commons/services/authorization");
+const ApiResponse = require("../../../commons/utilities/api-response");
 const Formatters = require("../../../commons/utilities/formatters");
 
 const PDF_TEMPLATE_FIELDS = {
@@ -129,11 +130,12 @@ const logger = bunyan.createLogger({
  * the protection of an owner against removal by a user manager.
  */
 class TenantController {
-  /** The one 404 of a tenant the manager did not find. */
+  /** The 404 of a tenant the manager did not find. */
   static _notFound(response, id) {
-    return response
-      .status(404)
-      .send(new NotFoundError("tenant_not_found", { id }).toJSON());
+    return ApiResponse.fail(
+      response,
+      new NotFoundError("tenant_not_found", { id }),
+    );
   }
 
   /**
@@ -204,7 +206,7 @@ class TenantController {
   }
 
   /**
-   * @obsolete Use createTenant or updateTenant instead.
+   * @deprecated Use createTenant or updateTenant instead.
    *
    * The route carries `tenant.update` for the tenant of the body; an
    * unknown id creates, which is the adapter's second decision
@@ -745,10 +747,11 @@ class TenantController {
         );
 
       // Only an owner removes an owner: the route's `tenantUser.manage` is
-      // the user manager's, the target's ownership is not in the table.
+      // the user manager's, the target's ownership is the second decision
+      // (`tenantUser.owner`, as at `remove-owner`).
       if (
         targetMembership?.owner &&
-        !TenantController._actsAsOwner(request.principal)
+        decide(request.principal, "tenantUser", "owner") !== "any"
       ) {
         return next(new ForbiddenError());
       }
@@ -1030,19 +1033,6 @@ class TenantController {
         .status(500)
         .send("Could not update booking notification recipients");
     }
-  }
-
-  /**
-   * Whether the principal acts as an owner of the tenant: the tenant owner,
-   * or the instance owner (who satisfies every level, membership or not).
-   *
-   * @param {Object} principal
-   * @returns {boolean}
-   */
-  static _actsAsOwner(principal) {
-    return (
-      principal?.isInstanceOwner === true || principal?.isTenantOwner === true
-    );
   }
 
   // The challenges: the right is the router's (`tenant.challenge`, §7.5).

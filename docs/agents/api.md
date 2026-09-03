@@ -19,7 +19,7 @@ Controllers are static-method classes:
 ```javascript
 class BookingController {
   static async getBooking(req, res) {
-    const { tenantId, bookingId } = req.params;
+    const { tenant, id } = req.params;
     // authenticate, authorize, delegate to service/manager, respond
   }
 }
@@ -35,10 +35,10 @@ class BookingController {
 
 ## Tenant scoping
 
-Most tenant routes include `:tenantId` in the path. Always:
+A route about one tenant names it `:tenant` in the path; the authorization loads the principal in that tenant. Always:
 
-- Validate the authenticated user has access to that tenant
-- Pass `tenantId` to managers and services
+- Let the route's marker decide the reach in that tenant
+- Pass `req.params.tenant` to managers and services
 - Never return data from other tenants
 
 ## API documentation

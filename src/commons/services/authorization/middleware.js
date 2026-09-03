@@ -44,10 +44,20 @@ const MARKER = Object.freeze({
 const tenantParam = (req) => req.params?.tenant;
 
 /**
+ * Where a route names its tenant, when not in `:tenant` (`PUT /api/tenants`
+ * names it in the body). An option of `authorize` alone: a `public` route
+ * with a tenant elsewhere has not turned up.
+ *
+ * @callback TenantOf
+ * @param {import("express").Request} req
+ * @returns {string|undefined}
+ */
+
+/**
  * The principal of a request, loaded once.
  *
  * @param {import("express").Request} req
- * @param {(req: import("express").Request) => string|undefined} [tenantOf]
+ * @param {TenantOf} [tenantOf]
  * @returns {Promise<Object>}
  */
 async function principalOf(req, tenantOf = tenantParam) {
@@ -93,8 +103,8 @@ function afterAuth(auth, req, res, next, then) {
  * @param {string} resource
  * @param {string} action
  * @param {Object} [options]
- * @param {(req: import("express").Request) => string|undefined} [options.tenantOf]
- *   Where the route names its tenant, when not in `:tenant`.
+ * @param {TenantOf} [options.tenantOf] Where the route names its tenant,
+ *   when not in `:tenant`.
  * @returns {import("express").RequestHandler}
  */
 function authorize(resource, action, { tenantOf = tenantParam } = {}) {
@@ -124,11 +134,9 @@ function authorize(resource, action, { tenantOf = tenantParam } = {}) {
  *
  * @param {string} [resource]
  * @param {string} [action]
- * @param {Object} [options]
- * @param {(req: import("express").Request) => string|undefined} [options.tenantOf]
  * @returns {import("express").RequestHandler}
  */
-function publicRoute(resource, action, { tenantOf = tenantParam } = {}) {
+function publicRoute(resource, action) {
   const decided = resource !== undefined || action !== undefined;
   if (decided && entryOf(resource, action).public !== true) {
     throw new Error(
@@ -139,7 +147,7 @@ function publicRoute(resource, action, { tenantOf = tenantParam } = {}) {
   const handler = (req, res, next) =>
     afterAuth(optionalAuth, req, res, next, async () => {
       req.reach = decided
-        ? decide(await principalOf(req, tenantOf), resource, action)
+        ? decide(await principalOf(req), resource, action)
         : "public";
       next();
     });

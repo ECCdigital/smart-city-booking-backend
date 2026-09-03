@@ -17,6 +17,7 @@ const {
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const BookingCheckout = require("../../../commons/services/checkout/booking-checkout");
 const {
@@ -108,8 +109,10 @@ class BookingController {
 
   /** Answers the 404 of a booking that is not there for this request. */
   static _notFound(response, bookingId) {
-    const error = new NotFoundError("booking_not_found", { bookingId });
-    return response.status(error.statusCode).json(error.toJSON());
+    return ApiResponse.fail(
+      response,
+      new NotFoundError("booking_not_found", { bookingId }),
+    );
   }
 
   static anonymizeBooking(booking) {

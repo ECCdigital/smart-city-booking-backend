@@ -34,6 +34,18 @@ class ApiResponse {
   static error(res, message = "Internal server error") {
     return res.status(500).json({ success: false, error: message });
   }
+
+  /**
+   * Answers a `BaseError` in the one JSON form the central error handler
+   * uses (`{ error, code, statusCode, params }`), for a handler that answers
+   * itself instead of passing the error to `next`.
+   * @param {import("express").Response} res Response to send
+   * @param {import("../../errors/BaseError").BaseError} error The error
+   * @returns {import("express").Response} The sent response
+   */
+  static fail(res, error) {
+    return res.status(error.statusCode).json(error.toJSON());
+  }
 }
 
 module.exports = ApiResponse;
