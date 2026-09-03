@@ -6,15 +6,17 @@ const {
   Booking,
   BOOKING_HOOK_TYPES,
 } = require("../../../commons/entities/booking/booking");
-const { RolePermission } = require("../../../commons/entities/role/role");
-const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const InvoiceService = require("../../../commons/services/payment/invoice-service");
 const {
   issue: issueDocument,
 } = require("../../../commons/services/documents/document-issuance");
-const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
+const {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const BookingCheckout = require("../../../commons/services/checkout/booking-checkout");
 const {
@@ -28,10 +30,7 @@ const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
-const PermissionsService = require("../../../commons/services/permission-service");
-const {
-  authenticateIfNeeded,
-} = require("../../../commons/utilities/auth-utils");
+const { decide, scopeOf } = require("../../../commons/services/authorization");
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
@@ -107,6 +106,12 @@ class BookingController {
     }
   }
 
+  /** Answers the 404 of a booking that is not there for this request. */
+  static _notFound(response, bookingId) {
+    const error = new NotFoundError("booking_not_found", { bookingId });
+    return response.status(error.statusCode).json(error.toJSON());
+  }
+
   static anonymizeBooking(booking) {
     return {
       id: booking.id,
@@ -118,19 +123,21 @@ class BookingController {
   }
 
   /**
-   * Get all bookings. If public-flag ist set, then all bookings can be received. Otherwise only bookings, the user is
-   * allowed to read.
+   * Get all bookings. With the public flag the anonymized projection of every
+   * booking, for anyone; otherwise the bookings within the reach of the
+   * request (authorize spec §4.1) - the public has none and is refused.
    * @param request
    * @param response
+   * @param next
    * @returns {Promise<void>}
    */
-  static async getBookings(request, response) {
+  static async getBookings(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const bookings = await BookingManager.getTenantBookings(tenant);
 
       if (request.query.public === "true") {
+        const bookings = await BookingManager.getTenantBookings(tenant);
         const anonymizedBookings = bookings.map((b) => {
           return BookingController.anonymizeBooking(b);
         });
@@ -138,36 +145,29 @@ class BookingController {
         logger.info(
           `${tenant} -- sending ${anonymizedBookings.length} anonymized bookings to user ${user?.id}`,
         );
-        response.status(200).send(anonymizedBookings);
-      } else if (user) {
-        const readContext = await PermissionsService.createReadContext(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
+        return response.status(200).send(anonymizedBookings);
+      }
 
-        const allowedBookings = PermissionsService.canReadAllWithContext(
-          readContext,
-        )
-          ? bookings
-          : bookings.filter((booking) =>
-              PermissionsService.allowReadWithContext(booking, readContext),
-            );
-
-        if (request.query.populate === "true") {
-          await BookingController._populate(allowedBookings);
-        }
-
-        logger.info(
-          `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
-        );
-        response.status(200).send(allowedBookings);
-      } else {
+      if (request.reach === "public") {
         logger.warn(
           `${tenant} -- could not get bookings. User is not authenticated`,
         );
-        response.sendStatus(403);
+        return next(new ForbiddenError());
       }
+
+      const allowedBookings = await BookingManager.getTenantBookings(
+        tenant,
+        scopeOf(request),
+      );
+
+      if (request.query.populate === "true") {
+        await BookingController._populate(allowedBookings);
+      }
+
+      logger.info(
+        `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
+      );
+      response.status(200).send(allowedBookings);
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get bookings");
@@ -188,7 +188,7 @@ class BookingController {
       const filter = tenant ? { tenantId: tenant } : {};
 
       const bookings = await BookingManager.getAssignedBookings({
-        userID: user.id,
+        userID: request.principal.userId,
         filter,
       });
 
@@ -208,22 +208,32 @@ class BookingController {
 
   /**
    * Get all Bookings including those that have a relation to parent or child bookables.
-   * IMPORTANT: User needs readAny-Permission to access this endpoint without public-flag.
+   * With the public flag the anonymized projection of every booking, for
+   * anyone; otherwise the bookings within the reach of the request (authorize
+   * spec §4.1) - the public has none and is refused.
    * @param request
    * @param response
+   * @param next
    * @returns {Promise<void>}
    */
-  static async getRelatedBookings(request, response) {
+  static async getRelatedBookings(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const bookableId = request.params.id;
 
+      const isPublicView = request.query.public === "true";
       const includeRelatedBookings = request.query.related === "true";
       const includeParentBookings = request.query.parent === "true";
+
+      if (!isPublicView && request.reach === "public") {
+        return next(new ForbiddenError());
+      }
+      const scope = isPublicView ? undefined : scopeOf(request);
 
       let bookings = await BookingManager.getRelatedBookings(
         tenant,
         bookableId,
+        scope,
       );
 
       if (includeRelatedBookings) {
@@ -237,6 +247,7 @@ class BookingController {
           const bookingsForRelated = await BookingManager.getRelatedBookings(
             tenant,
             relatedBookable.id,
+            scope,
           );
           relatedBookings = relatedBookings.concat(bookingsForRelated || []);
         }
@@ -253,6 +264,7 @@ class BookingController {
           const bookingsForParent = await BookingManager.getRelatedBookings(
             tenant,
             parentBookable.id,
+            scope,
           );
           parentBookings = parentBookings.concat(bookingsForParent || []);
         }
@@ -263,7 +275,7 @@ class BookingController {
         new Map(bookings.map((booking) => [booking.id, booking])).values(),
       );
 
-      if (request.query.public === "true") {
+      if (isPublicView) {
         const anonymizedBookings = bookings.map((b) => {
           return {
             id: b.id,
@@ -276,24 +288,7 @@ class BookingController {
 
         response.status(200).send(anonymizedBookings);
       } else {
-        const user = await authenticateIfNeeded(request, true);
-
-        if (user) {
-          const hasPermission = await UserManager.hasPermission(
-            user.id,
-            tenant,
-            RolePermission.MANAGE_BOOKINGS,
-            "readAny",
-          );
-
-          if (hasPermission) {
-            response.status(200).send(bookings);
-          } else {
-            response.sendStatus(403);
-          }
-        } else {
-          response.sendStatus(403);
-        }
+        response.status(200).send(bookings);
       }
     } catch (err) {
       logger.error(err);
@@ -314,28 +309,19 @@ class BookingController {
       const id = request.params.id;
 
       if (id) {
-        const booking = await BookingManager.getBooking(id, tenantId);
-
-        const hasPermission =
-          (await UserManager.hasPermission(
-            user.id,
-            tenantId,
-            RolePermission.MANAGE_BOOKINGS,
-            "readAny",
-          )) || PermissionsService._isOwner(booking, user.id, tenantId);
-
-        if (hasPermission) {
-          await BookingController._populate([booking]);
-          logger.info(
-            `${tenantId} -- sending booking ${id} to user ${user?.id}`,
-          );
-          response.status(200).send(booking);
-        } else {
-          logger.warn(
-            `${tenantId} -- could not get booking. User ${user?.id} is not authenticated`,
-          );
-          response.sendStatus(403);
+        // The booking within the reach of the request; none there is a 404.
+        const booking = await BookingManager.getBooking(
+          id,
+          tenantId,
+          scopeOf(request),
+        );
+        if (!booking) {
+          return BookingController._notFound(response, id);
         }
+
+        await BookingController._populate([booking]);
+        logger.info(`${tenantId} -- sending booking ${id} to user ${user?.id}`);
+        response.status(200).send(booking);
       } else {
         response.sendStatus(400);
       }
@@ -358,8 +344,6 @@ class BookingController {
       const tenantId = request.params.tenant;
       const ids = request.params.ids;
 
-      console.log(ids);
-
       if (ids) {
         const splitIds = ids.split(",");
 
@@ -367,10 +351,6 @@ class BookingController {
           tenantId,
           splitIds,
         );
-
-        for (const id of splitIds) {
-          const tmp = await BookingService.getBookingStatus(tenantId, splitIds);
-        }
 
         logger.info(
           `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,
@@ -414,18 +394,13 @@ class BookingController {
     const booking = bookingFromRequest(request.body);
     const tenantId = request.params.tenant;
 
-    if (
-      !(await PermissionsService._allowCreate(
-        booking,
-        user.id,
-        booking.tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-      ))
-    ) {
+    // The obsolete PUT carries the update marker; the creation is the
+    // adapter's second decision (authorize spec §5, §11).
+    if (decide(request.principal, "booking", "create") !== "any") {
       logger.warn(
         `${booking.tenantId} -- User ${user?.id} is not allowed to create booking.`,
       );
-      return response.sendStatus(403);
+      return next(new ForbiddenError());
     }
 
     const { checkoutId } = await resolveCheckoutId(
@@ -455,36 +430,22 @@ class BookingController {
       const user = request.user;
       const booking = bookingFromRequest(request.body);
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        const savedBooking = await BookingCheckout.updateBooking(
-          tenant,
-          booking,
-          { requestBody: request.body, userId: user.id },
-        );
+      const savedBooking = await BookingCheckout.updateBooking(
+        tenant,
+        booking,
+        { requestBody: request.body, userId: user.id },
+      );
 
-        await WorkflowService.updateTask(
-          tenant,
-          booking.id,
-          request.body._populated?.workflowStatus,
-        );
+      await WorkflowService.updateTask(
+        tenant,
+        booking.id,
+        request.body._populated?.workflowStatus,
+      );
 
-        logger.info(
-          `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
-        );
-        response.status(201).send(savedBooking);
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to update booking.`,
-        );
-        response.sendStatus(403);
-      }
+      logger.info(
+        `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
+      );
+      response.status(201).send(savedBooking);
     } catch (err) {
       next(err);
     }
@@ -497,26 +458,19 @@ class BookingController {
 
       const id = request.params.id;
       if (id) {
-        const booking = await BookingManager.getBooking(id, tenant);
-
-        if (
-          await PermissionsService._allowDelete(
-            booking,
-            user.id,
-            tenant,
-            RolePermission.MANAGE_BOOKINGS,
-          )
-        ) {
-          await bookingDeletion.remove(tenant, id);
-          await WorkflowService.removeTask(tenant, id);
-          logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
-          response.sendStatus(200);
-        } else {
-          logger.warn(
-            `${tenant} -- User ${user?.id} is not allowed to remove booking.`,
-          );
-          response.sendStatus(403);
+        const booking = await BookingManager.getBooking(
+          id,
+          tenant,
+          scopeOf(request),
+        );
+        if (!booking) {
+          return BookingController._notFound(response, id);
         }
+
+        await bookingDeletion.remove(tenant, id);
+        await WorkflowService.removeTask(tenant, id);
+        logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
+        response.sendStatus(200);
       } else {
         logger.warn(
           `${tenant} -- could not remove booking. No booking ID provided`,
@@ -544,48 +498,34 @@ class BookingController {
         return response.status(error.statusCode).json(error.toJSON());
       }
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        logger.info(
-          `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
+      logger.info(
+        `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
+      );
+      // The consistency check in front of the transition keeps its
+      // answer; the transition itself throws or succeeds.
+      const errors = BookingService.transitionErrors(TRANSITION.CONFIRM, [
+        booking,
+      ]);
+      if (errors.length > 0) {
+        logger.error(
+          `${tenant} -- booking ${booking.id} cannot be committed: ${JSON.stringify(errors)}`,
         );
-        // The consistency check in front of the transition keeps its
-        // answer; the transition itself throws or succeeds.
-        const errors = BookingService.transitionErrors(TRANSITION.CONFIRM, [
-          booking,
-        ]);
-        if (errors.length > 0) {
-          logger.error(
-            `${tenant} -- booking ${booking.id} cannot be committed: ${JSON.stringify(errors)}`,
-          );
-          return response.status(200).json({
-            success: false,
-            data: null,
-            errors,
-          });
-        }
-
-        await bookingLifecycle.confirm(tenant, booking.id, {
-          trigger: TRIGGER.ADMIN,
-        });
-
         return response.status(200).json({
-          success: true,
+          success: false,
           data: null,
-          errors: [],
+          errors,
         });
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
-        );
-        return response.sendStatus(403);
       }
+
+      await bookingLifecycle.confirm(tenant, booking.id, {
+        trigger: TRIGGER.ADMIN,
+      });
+
+      return response.status(200).json({
+        success: true,
+        data: null,
+        errors: [],
+      });
     } catch (err) {
       answerTransitionError(err, response, {
         code: "booking_commit_failed",
@@ -609,33 +549,19 @@ class BookingController {
         return response.status(error.statusCode).json(error.toJSON());
       }
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        logger.info(
-          `${tenant} -- setting booking ${booking.id} as paid by user ${user?.id}`,
-        );
-        await bookingLifecycle.pay(tenant, id, {
-          trigger: TRIGGER.ADMIN,
-          paymentMethod,
-          timePaid,
-        });
-        return response.status(200).send({
-          success: true,
-          data: null,
-          errors: [],
-        });
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to set booking as paid.`,
-        );
-        return response.sendStatus(403);
-      }
+      logger.info(
+        `${tenant} -- setting booking ${booking.id} as paid by user ${user?.id}`,
+      );
+      await bookingLifecycle.pay(tenant, id, {
+        trigger: TRIGGER.ADMIN,
+        paymentMethod,
+        timePaid,
+      });
+      return response.status(200).send({
+        success: true,
+        data: null,
+        errors: [],
+      });
     } catch (err) {
       answerTransitionError(err, response, {
         code: "set_booking_payed_failed",
@@ -648,21 +574,15 @@ class BookingController {
     try {
       const tenantId = request.params.tenant;
       const bookingId = request.params.id;
-      const user = request.user;
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenantId,
+        scopeOf(request),
+      );
 
       if (!booking) {
         return response.sendStatus(404);
-      }
-
-      const hasPermission = await PermissionsService._allowUpdate(
-        booking,
-        user.id,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-      );
-      if (!hasPermission) {
-        return response.sendStatus(403);
       }
 
       const preview = await BookingService.getCancellationRefundPreview(
@@ -750,32 +670,18 @@ class BookingController {
         return response.status(error.statusCode).json(error.toJSON());
       }
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        logger.info(
-          `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
-        );
-        await bookingLifecycle.cancel(tenantId, id, {
-          trigger: TRIGGER.ADMIN,
-          reason,
-          bankDetails: bankDetails || null,
-          refundPercentage,
-          cancelledByUserId: user.id,
-          withDocument: !skipCancellation,
-        });
-        return response.sendStatus(200);
-      } else {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to reject booking.`,
-        );
-        return response.sendStatus(403);
-      }
+      logger.info(
+        `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
+      );
+      await bookingLifecycle.cancel(tenantId, id, {
+        trigger: TRIGGER.ADMIN,
+        reason,
+        bankDetails: bankDetails || null,
+        refundPercentage,
+        cancelledByUserId: user.id,
+        withDocument: !skipCancellation,
+      });
+      return response.sendStatus(200);
     } catch (err) {
       answerTransitionError(err, response, {
         code: "booking_rejection_failed",
@@ -859,30 +765,16 @@ class BookingController {
       const user = request.user;
       const eventId = request.params.id;
 
-      const bookables = await BookableManager.getBookables(tenantId);
-      const eventTickets = bookables.filter(
-        (b) => b.type === "ticket" && b.eventId === eventId,
-      );
-
-      const bookings = await BookingManager.getTenantBookings(tenantId);
-      const eventBookings = bookings.filter((b) =>
-        b.bookableIds.some((id) => eventTickets.some((t) => t.id === id)),
-      );
-
-      const allowedBookings = [];
-      for (const booking of eventBookings) {
-        if (
-          user &&
-          (await PermissionsService._allowRead(
-            booking,
-            user.id,
-            tenantId,
-            RolePermission.MANAGE_BOOKINGS,
-          ))
-        ) {
-          allowedBookings.push(booking);
-        }
-      }
+      // The public sees no bookings of an event; the rest is the reach's
+      // (authorize spec §4.1).
+      const allowedBookings =
+        request.reach === "public"
+          ? []
+          : await BookingManager.getEventBookings(
+              tenantId,
+              eventId,
+              scopeOf(request),
+            );
 
       logger.info(
         `${tenantId} -- sending ${allowedBookings.length} allowed event bookings to user ${user?.id}`,
@@ -906,27 +798,14 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to get receipt.`,
-        );
-        return response.sendStatus(403);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
       }
 
       const receipt = await ReceiptService.getReceipt(
@@ -952,35 +831,22 @@ class BookingController {
   }
 
   /**
-   * The booking a reprint is asked for, once the request may have it: the
-   * booking exists (else 404) and the user manages bookings or owns it
-   * (else 403). Answers the request itself and returns null where not.
+   * The booking a reprint is asked for: the one within the reach of the
+   * request (authorize spec §4.1), else 404. Answers the request itself
+   * and returns null where not.
    */
-  static async _reprintable(request, response, what) {
+  static async _reprintable(request, response) {
     const {
       params: { tenant: tenantId, id: bookingId },
-      user,
     } = request;
 
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      scopeOf(request),
+    );
     if (!booking) {
       response.status(404).send({ message: "Booking not found." });
-      return null;
-    }
-
-    const hasPermission =
-      (await UserManager.hasPermission(
-        user.id,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "updateAny",
-      )) || PermissionsService._isOwner(booking, user.id, tenantId);
-
-    if (!hasPermission) {
-      logger.warn(
-        `${tenantId} -- User ${user?.id} is not allowed to create ${what}.`,
-      );
-      response.sendStatus(403);
       return null;
     }
 
@@ -998,11 +864,7 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingController._reprintable(
-        request,
-        response,
-        "receipt",
-      );
+      const booking = await BookingController._reprintable(request, response);
       if (!booking) return;
 
       const errors = BookingService.reprintErrors("receipt", [booking]);
@@ -1053,11 +915,7 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingController._reprintable(
-        request,
-        response,
-        "cancellation receipt",
-      );
+      const booking = await BookingController._reprintable(request, response);
       if (!booking) return;
 
       if (!booking.cancellationRefund) {
@@ -1102,27 +960,14 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to get invoice.`,
-        );
-        return response.sendStatus(403);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
       }
 
       const invoice = await InvoiceService.getInvoice(
@@ -1156,7 +1001,6 @@ class BookingController {
       const {
         params: { tenant: tenantId, id: bookingId },
         query: { sendEmail },
-        user,
       } = request;
 
       const shouldSendEmail = sendEmail !== "false";
@@ -1164,20 +1008,6 @@ class BookingController {
       if (!tenantId || !bookingId) {
         logger.warn(`${tenantId} -- Missing required parameters.`);
         return response.status(400).send("Missing required parameters.");
-      }
-
-      const hasPermission = await UserManager.hasPermission(
-        user.id,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "updateAny",
-      );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to create invoice.`,
-        );
-        return response.sendStatus(403);
       }
 
       const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
@@ -1242,27 +1072,14 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to get cancellation receipt.`,
-        );
-        return response.sendStatus(403);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
       }
 
       const cancellationReceipt =

@@ -1,15 +1,19 @@
 const GroupBookingModel = require("./models/groupBookingModel");
 const { GroupBooking } = require("../entities/groupBooking/groupBooking");
+const { ownCondition } = require("../services/authorization/reach");
 
 class GroupBookingManager {
   /**
    * Get all group bookings for a tenant
    * @param {string} tenantId Tenant ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<GroupBooking[]>} Array of group bookings
    */
-  static async getGroupBookings(tenantId) {
+  static async getGroupBookings(tenantId, scope) {
     const rawGroupBookings = await GroupBookingModel.find({
       tenantId: tenantId,
+      ...ownCondition("assignedUserId", scope),
     });
     return rawGroupBookings.map((doc) => doc.toEntity());
   }
@@ -19,12 +23,20 @@ class GroupBookingManager {
    * @param {string} tenantId Tenant ID
    * @param {string} groupBookingId Group booking ID
    * @param {boolean} populate Whether to populate bookings
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<GroupBooking|null>} Group booking or null
    */
-  static async getGroupBooking(tenantId, groupBookingId, populate = false) {
+  static async getGroupBooking(
+    tenantId,
+    groupBookingId,
+    populate = false,
+    scope,
+  ) {
     let query = GroupBookingModel.findOne({
       tenantId: tenantId,
       id: groupBookingId,
+      ...ownCondition("assignedUserId", scope),
     });
 
     if (populate) {
@@ -51,16 +63,20 @@ class GroupBookingManager {
    * @param {string} tenantId Tenant ID
    * @param {string} bookingId Booking ID
    * @param {boolean} populate Whether to populate bookings
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<GroupBooking|null>} Group booking or null
    */
   static async getGroupBookingByBookingId(
     tenantId,
     bookingId,
     populate = false,
+    scope,
   ) {
     let query = GroupBookingModel.findOne({
       tenantId: tenantId,
       bookingIds: bookingId,
+      ...ownCondition("assignedUserId", scope),
     });
 
     if (populate) {

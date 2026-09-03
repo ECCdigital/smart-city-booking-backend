@@ -3,7 +3,6 @@ const GroupBookingManager = require("../../../commons/data-managers/group-bookin
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
 const AccessService = require("../../../commons/services/access/access-service");
-const PermissionService = require("../../../commons/services/permission-service");
 const { BaseError } = require("../../../errors/BaseError");
 const {
   LifecycleError,
@@ -75,6 +74,13 @@ class PaymentController {
     logger.debug(
       `Create payment request received for tenant ${tenantId}, bookingIds ${bookingIds}, aggregated ${aggregated}`,
     );
+
+    // Without booking ids the lookup threw before the try and the request
+    // never got an answer (authorize spec §11).
+    if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+      response.status(400).send({ message: "Bookings not found", code: 0 });
+      return;
+    }
 
     const bookings = await BookingManager.getBookings(tenantId, bookingIds);
 
@@ -421,22 +427,13 @@ class PaymentController {
     }
   }
 
+  /**
+   * The connection test of a provider: the right is the router's
+   * (`tenant.paymentTest`, the tenant of the route - it read the tenant
+   * from the body of a GET before, §11).
+   */
   static async testConnection(request, response) {
     const { tenant: tenantId, provider } = request.params;
-
-    const user = request.user;
-    const hasPermission =
-      (await PermissionService._isTenantOwner(user.id, request.body.id)) ||
-      (await PermissionService._isInstanceOwner(user.id));
-
-    if (!hasPermission) {
-      response.status(403).send({
-        success: false,
-        message:
-          "Forbidden: You don't have permission to test this payment provider.",
-      });
-      return;
-    }
 
     try {
       const paymentService = await PaymentUtils.getPaymentService(

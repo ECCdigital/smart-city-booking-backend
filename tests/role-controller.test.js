@@ -4,7 +4,7 @@ const sinon = require("sinon");
 const { Role } = require("../src/commons/entities/role/role.js");
 
 describe("RoleController.getRoles", () => {
-  let sandbox, fakeLogger, RoleController, RoleManager, PermissionService;
+  let sandbox, fakeLogger, RoleController, RoleManager;
   let req, res, roles;
 
   beforeEach(() => {
@@ -38,7 +38,6 @@ describe("RoleController.getRoles", () => {
     );
     RoleManager =
       require("../src/commons/data-managers/role-manager").RoleManager;
-    PermissionService = require("../src/commons/services/permission-service");
 
     req = { user: { id: "user123" }, params: {}, query: {} };
     res = { status: sandbox.stub().returnsThis(), send: sandbox.stub() };
@@ -62,10 +61,10 @@ describe("RoleController.getRoles", () => {
     expect(res.send.calledWith(["role1Public", "role2Public"])).to.be.true;
   });
 
-  it("should return all roles for private view", async () => {
+  it("should return all roles for private view under the reach any", async () => {
     sandbox.stub(RoleManager, "getRoles").resolves(roles);
-    sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
+    req.reach = "any";
     req.query.public = "false";
     await RoleController.getRoles(req, res);
 
@@ -89,20 +88,29 @@ describe("RoleController.getRoles", () => {
       .be.true;
   });
 
-  it("should return tenant-specific roles for a user based on permissions", async () => {
-    sandbox.stub(RoleManager, "getTenantRoles").resolves(roles);
+  it("answers the public projection under the reach own, where asked for", async () => {
     sandbox
-      .stub(PermissionService, "_allowRead")
-      .onFirstCall()
-      .resolves(true)
-      .onSecondCall()
-      .resolves(false);
+      .stub(RoleManager, "getTenantRoles")
+      .resolves(roles.map((r) => ({ toPublic: () => r.id + "Public" })));
 
     req.params.tenant = "tenant123";
+    req.reach = "own";
+    req.query.public = "true";
     await RoleController.getRoles(req, res);
 
     expect(res.status.calledWith(200)).to.be.true;
-    expect(res.send.calledWith([roles[0]])).to.be.true;
+    expect(res.send.calledWith(["role1Public", "role2Public"])).to.be.true;
+  });
+
+  it("answers no roles under the reach own: a role has no owner", async () => {
+    sandbox.stub(RoleManager, "getTenantRoles").resolves(roles);
+
+    req.params.tenant = "tenant123";
+    req.reach = "own";
+    await RoleController.getRoles(req, res);
+
+    expect(res.status.calledWith(200)).to.be.true;
+    expect(res.send.calledWith([])).to.be.true;
   });
 
   it("should return 500 and log error on failure", async () => {

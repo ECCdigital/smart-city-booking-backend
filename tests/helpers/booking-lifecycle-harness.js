@@ -402,10 +402,15 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
 
   // --- the booking store -------------------------------------------------
 
+  /** Whether a stored document is within the reach of a request (§4.1). */
+  const withinReach = (doc, scope) =>
+    doc && (scope?.reach !== "own" || doc.assignedUserId === scope.userId);
   sinon
     .stub(BookingManager, "getBooking")
-    .callsFake(async (id) =>
-      store.has(id) ? new Booking(clone(store.get(id))) : null,
+    .callsFake(async (id, tenantId, scope) =>
+      withinReach(store.get(id), scope)
+        ? new Booking(clone(store.get(id)))
+        : null,
     );
   sinon
     .stub(BookingManager, "getBookings")
@@ -501,6 +506,13 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     store.delete(id);
     record("store.remove", label(id));
   });
+  sinon
+    .stub(BookingManager, "getTenantBookings")
+    .callsFake(async (tenantId, scope) =>
+      [...store.values()]
+        .filter((doc) => doc.tenantId === tenantId && withinReach(doc, scope))
+        .map((doc) => new Booking(clone(doc))),
+    );
   sinon.stub(BookingManager, "getConcurrentBookings").resolves([]);
   sinon.stub(BookingManager, "getRelatedBookings").resolves([]);
   sinon.stub(BookingManager, "getEventBookings").resolves([]);
@@ -516,18 +528,18 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     });
   sinon
     .stub(GroupBookingManager, "getGroupBooking")
-    .callsFake(async (tenantId, id, populate = false) => {
+    .callsFake(async (tenantId, id, populate = false, scope) => {
       const doc = groups.get(id);
-      if (!doc) return null;
+      if (!withinReach(doc, scope)) return null;
       return populate ? populated(doc) : new GroupBooking(clone(doc));
     });
   sinon
     .stub(GroupBookingManager, "getGroupBookingByBookingId")
-    .callsFake(async (tenantId, bookingId, populate = false) => {
+    .callsFake(async (tenantId, bookingId, populate = false, scope) => {
       const doc = [...groups.values()].find((group) =>
         group.bookingIds.includes(bookingId),
       );
-      if (!doc) return null;
+      if (!withinReach(doc, scope)) return null;
       return populate ? populated(doc) : new GroupBooking(clone(doc));
     });
   sinon

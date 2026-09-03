@@ -142,19 +142,13 @@ describe("Phase 1 booking performance", () => {
         },
       ];
 
-      sinon.stub(BookingManager, "getTenantBookings").resolves(bookings);
-      sinon.stub(PermissionsService, "createReadContext").resolves({
-        userId: "user-1",
-        tenantId: "tenant-1",
-        isInstanceOwner: false,
-        isTenantOwner: false,
-        hasReadAny: false,
-        hasReadOwn: true,
-      });
-      sinon.stub(PermissionsService, "canReadAllWithContext").returns(false);
-      sinon
-        .stub(PermissionsService, "allowReadWithContext")
-        .callsFake((booking) => booking.id === "booking-allowed");
+      // The reach is the manager's query condition: under `own` the store
+      // answers the user's own booking only (authorize spec §4.1).
+      const getTenantBookings = sinon
+        .stub(BookingManager, "getTenantBookings")
+        .callsFake(async (tenantId, scope) =>
+          scope?.reach === "own" ? [bookings[0]] : bookings,
+        );
 
       const getBookablesStub = sinon
         .stub(BookableManager, "getBookablesByIdsWithCustomFields")
@@ -169,10 +163,16 @@ describe("Phase 1 booking performance", () => {
           params: { tenant: "tenant-1" },
           query: { populate: "true" },
           user: { id: "user-1" },
+          reach: "own",
+          principal: { userId: "user-1" },
         },
         response,
       );
 
+      assert.deepStrictEqual(getTenantBookings.firstCall.args, [
+        "tenant-1",
+        { reach: "own", userId: "user-1" },
+      ]);
       assert.strictEqual(response.statusCode, 200);
       assert.strictEqual(response.body.length, 1);
       assert.strictEqual(response.body[0].id, "booking-allowed");

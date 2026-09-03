@@ -28,8 +28,8 @@ class BookingController {
 ## Request flow
 
 1. Router matches URL → controller method
-2. `auth-middleware.js` validates JWT (where required)
-3. Controller checks permissions via `PermissionsService` / `RolePermission`
+2. The route's marker from `src/commons/services/authorization/` runs: `authorize(resource, action)` verifies the JWT and decides the reach (`any | own`) over the rights table (`table.js`), `public(resource?, action?)` decides for the anonymous too, `tokenAuthorized()` marks a route authorized by a secret the handler checks. The handler gets `req.reach` and `req.principal`.
+3. Controller hands `scopeOf(req)` to the managers, which translate `own` into their query condition; a handler never branches over rights. Two adapter-level exceptions (authorize spec §5, §12): the obsolete PUT store routes decide the creation with `decide(req.principal, resource, "create")`, and the booking lists with an anonymized `?public=true` projection answer the reach `public` themselves. (Routers not converted yet still check via `PermissionsService` / `RolePermission`; that goes with the last step of the authorize chain.)
 4. Business logic in services (`src/commons/services/`)
 5. Response via `api-response.js` helpers
 
@@ -51,7 +51,7 @@ Most tenant routes include `:tenantId` in the path. Always:
 
 1. Add controller method in `src/platform/api/controllers/`
 2. Register route in the appropriate router file
-3. Add permission checks consistent with similar endpoints
+3. Mark the route with `authorize`/`public`/`tokenAuthorized` and add the `(resource, action)` entry to the rights table if it is new
 4. Add OpenAPI YAML in `src/docs/routes/`
 5. Add tests in `tests/`
 

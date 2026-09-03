@@ -8,7 +8,6 @@ const {
 } = require("../src/platform/api/controllers/group-booking-controller");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
-const PermissionsService = require("../src/commons/services/permission-service");
 const BookingService = require("../src/commons/services/checkout/booking-service");
 
 function response(sandbox) {
@@ -37,8 +36,9 @@ describe("cancellation refund controllers", function () {
       bookingId: "booking-1",
       appliedRefundPercentage: 50,
     };
-    sandbox.stub(BookingManager, "getBooking").resolves(booking);
-    sandbox.stub(PermissionsService, "_allowUpdate").resolves(true);
+    const getBooking = sandbox
+      .stub(BookingManager, "getBooking")
+      .resolves(booking);
     sandbox
       .stub(BookingService, "getCancellationRefundPreview")
       .resolves(preview);
@@ -48,19 +48,26 @@ describe("cancellation refund controllers", function () {
       {
         params: { tenant: "tenant-1", id: "booking-1" },
         user: { id: "admin-1" },
+        reach: "any",
+        principal: { userId: "admin-1" },
       },
       res,
     );
 
     assert.strictEqual(res.status.calledWith(200), true);
     assert.strictEqual(res.send.calledWith(preview), true);
+    assert.deepStrictEqual(getBooking.firstCall.args, [
+      "booking-1",
+      "tenant-1",
+      { reach: "any", userId: "admin-1" },
+    ]);
   });
 
-  it("denies a single-booking refund preview without permission", async function () {
-    sandbox
+  it("answers 404 for a booking outside the reach of the request", async function () {
+    // The manager loads under the reach `own` and finds nothing.
+    const getBooking = sandbox
       .stub(BookingManager, "getBooking")
-      .resolves({ id: "booking-1", tenantId: "tenant-1" });
-    sandbox.stub(PermissionsService, "_allowUpdate").resolves(false);
+      .resolves(null);
     const preview = sandbox.stub(
       BookingService,
       "getCancellationRefundPreview",
@@ -70,13 +77,19 @@ describe("cancellation refund controllers", function () {
     await BookingController.getCancellationRefundPreview(
       {
         params: { tenant: "tenant-1", id: "booking-1" },
-        user: { id: "admin-1" },
+        user: { id: "erika" },
+        reach: "own",
+        principal: { userId: "erika" },
       },
       res,
     );
 
-    assert.strictEqual(res.sendStatus.calledWith(403), true);
+    assert.strictEqual(res.sendStatus.calledWith(404), true);
     assert.strictEqual(preview.called, false);
+    assert.deepStrictEqual(getBooking.firstCall.args[2], {
+      reach: "own",
+      userId: "erika",
+    });
   });
 
   it("rejects an invalid single-booking admin override", async function () {
@@ -99,7 +112,6 @@ describe("cancellation refund controllers", function () {
     const groupBooking = { id: "group-1", tenantId: "tenant-1" };
     const preview = { groupBookingId: "group-1", bookings: [] };
     sandbox.stub(GroupBookingManager, "getGroupBooking").resolves(groupBooking);
-    sandbox.stub(PermissionsService, "_allowUpdate").resolves(true);
     sandbox
       .stub(BookingService, "getGroupCancellationRefundPreview")
       .resolves(preview);

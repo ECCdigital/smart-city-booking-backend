@@ -30,9 +30,9 @@
       "401":
         description: Not authenticated
       "403":
-        description: Neither booking management nor the owner
+        description: No reach on the route (the JSON form of ForbiddenError)
       "404":
-        description: Booking not found
+        description: Booking not found, or outside the reach of the request
       "409":
         description: The booking is not cancelled (`code` `not_cancelled`)
         content:
@@ -71,9 +71,9 @@
       "401":
         description: Not authenticated
       "403":
-        description: Missing booking management permission
+        description: No reach on the route (the JSON form of ForbiddenError)
       "404":
-        description: Group booking not found
+        description: Group booking not found, or outside the reach of the request
       "409":
         description: A member of the group is not cancelled (`code` `not_cancelled`)
         content:

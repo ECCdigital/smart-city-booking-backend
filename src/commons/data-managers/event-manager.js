@@ -1,5 +1,6 @@
 const { Event } = require("../entities/event/event");
 const EventModel = require("./models/eventModel");
+const { ownCondition } = require("../services/authorization/reach");
 
 /**
  * Data Manager for Event objects.
@@ -8,11 +9,14 @@ class EventManager {
   /**
    * Get all events related to a tenant
    * @param {string} tenantId Identifier of the tenant
-   * @returns List of bookings
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
+   * @returns List of events
    */
-  static async getEvents(tenantId) {
+  static async getEvents(tenantId, scope) {
     const rawEvents = await EventModel.find({
       tenantId: tenantId,
+      ...ownCondition("ownerUserId", scope),
     });
     return rawEvents.map((doc) => doc.toEntity());
   }
@@ -22,10 +26,16 @@ class EventManager {
    *
    * @param {string} id Logical identifier of the event object
    * @param {string} tenantId Identifier of the tenant
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns A single event object
    */
-  static async getEvent(id, tenantId) {
-    const rawEvent = await EventModel.findOne({ id: id, tenantId: tenantId });
+  static async getEvent(id, tenantId, scope) {
+    const rawEvent = await EventModel.findOne({
+      id: id,
+      tenantId: tenantId,
+      ...ownCondition("ownerUserId", scope),
+    });
     if (!rawEvent) {
       return null;
     }

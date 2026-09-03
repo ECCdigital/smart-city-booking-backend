@@ -663,29 +663,18 @@ class TenantController {
   static async getUsers(request, response) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
 
-      if (
-        await PermissionService._allowReadAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        )
-      ) {
-        const memberships =
-          await MembershipManager.getMembershipsByTenantID(tenantId);
+      const memberships =
+        await MembershipManager.getMembershipsByTenantID(tenantId);
 
-        const userDetails = await UserManager.getUsersById(
-          memberships.map((m) => m.userId),
-        );
+      const userDetails = await UserManager.getUsersById(
+        memberships.map((m) => m.userId),
+      );
 
-        response.status(200).send({
-          users: memberships,
-          userDetails: userDetails,
-        });
-      } else {
-        response.sendStatus(403);
-      }
+      response.status(200).send({
+        users: memberships,
+        userDetails: userDetails,
+      });
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get users");
@@ -1210,25 +1199,14 @@ class TenantController {
     }
   }
 
+  // The challenges: the right is the router's (`tenant.challenge`, §7.5).
   static async getChallenges(request, response) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
 
-      if (
-        (await PermissionService._allowReadAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        const challenges =
-          await ChallengeManager.getChallengesByTenantID(tenantId);
-        response.status(200).send(challenges);
-      } else {
-        response.sendStatus(403);
-      }
+      const challenges =
+        await ChallengeManager.getChallengesByTenantID(tenantId);
+      response.status(200).send(challenges);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get challenges for tenant");
@@ -1237,28 +1215,13 @@ class TenantController {
 
   static async createChallenge(request, response) {
     try {
-      const tenantId = request.params.id;
+      const tenantId = request.params.tenant;
       const body = request.body;
-      const user = request.user;
 
-      if (
-        (await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        body.id = uuidv4();
+      body.id = uuidv4();
 
-        console.log(body);
-
-        const challenge = await ChallengeManager.createChallenge(
-          tenantId,
-          body,
-        );
-        response.status(201).send(challenge);
-      }
+      const challenge = await ChallengeManager.createChallenge(tenantId, body);
+      response.status(201).send(challenge);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not create challenge for tenant");
@@ -1269,23 +1232,13 @@ class TenantController {
     try {
       const tenantId = request.params.tenant;
       const body = request.body;
-      const user = request.user;
 
-      if (
-        (await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        const challenge = await ChallengeManager.updateChallenge(
-          tenantId,
-          body.id,
-          body,
-        );
-        response.status(200).send(challenge);
-      }
+      const challenge = await ChallengeManager.updateChallenge(
+        tenantId,
+        body.id,
+        body,
+      );
+      response.status(200).send(challenge);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not update challenge for tenant");
@@ -1295,20 +1248,10 @@ class TenantController {
   static async deleteChallenge(request, response) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
       const challengeID = request.params.id;
 
-      if (
-        (await PermissionService._allowUpdateAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_TENANTS,
-        )) ||
-        (await PermissionService._isInstanceOwner(user.id))
-      ) {
-        await ChallengeManager.deleteChallenge(tenantId, challengeID);
-        response.sendStatus(200);
-      }
+      await ChallengeManager.deleteChallenge(tenantId, challengeID);
+      response.sendStatus(200);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not delete challenge for tenant");

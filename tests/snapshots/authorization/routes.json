@@ -358,9 +358,9 @@
   },
   "GET /api/tenants/:id/users": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 200,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "POST /api/tenants/:id/update-user-status": {
@@ -749,18 +749,18 @@
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookables/:id/bookings": {
-    "anonymous": 403,
-    "signedIn": 403,
+    "anonymous": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookables/:id/openingHours": {
-    "anonymous": 500,
-    "signedIn": 500,
-    "roleHolder": 500,
-    "tenantOwner": 500,
-    "instanceOwner": 500
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
   },
   "GET /api/:tenant/bookables/:id/availability/v1": {
     "anonymous": 200,
@@ -806,35 +806,35 @@
   },
   "GET /api/:tenant/bookables": {
     "anonymous": 401,
-    "signedIn": 200,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookables/_template": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookables/:id": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "PUT /api/:tenant/bookables": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 201,
     "tenantOwner": 201,
     "instanceOwner": 201
   },
   "DELETE /api/:tenant/bookables/:id": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -876,14 +876,14 @@
   },
   "PUT /api/:tenant/events": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 201,
     "tenantOwner": 201,
     "instanceOwner": 201
   },
   "DELETE /api/:tenant/events/:id": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -904,13 +904,13 @@
   },
   "GET /api/:tenant/events/:id/count": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookings": {
-    "anonymous": 403,
+    "anonymous": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
@@ -918,7 +918,7 @@
   },
   "PUT /api/:tenant/bookings": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400
@@ -939,17 +939,17 @@
   },
   "DELETE /api/:tenant/bookings/:id": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookings/:ids/status": {
-    "anonymous": 500,
-    "signedIn": 500,
-    "roleHolder": 500,
-    "tenantOwner": 500,
-    "instanceOwner": 500
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
   },
   "GET /api/:tenant/bookings/:id/status/public": {
     "anonymous": 400,
@@ -960,21 +960,21 @@
   },
   "GET /api/:tenant/bookings/:id/commit": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 409,
     "tenantOwner": 409,
     "instanceOwner": 409
   },
   "POST /api/:tenant/bookings/:id/pay": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 409,
     "tenantOwner": 409,
     "instanceOwner": 409
   },
   "GET /api/:tenant/bookings/:id/cancellation-refund-preview": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -988,7 +988,7 @@
   },
   "POST /api/:tenant/bookings/:id/reject": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -1044,7 +1044,7 @@
   },
   "POST /api/:tenant/bookings/:id/invoice": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -1065,7 +1065,7 @@
   },
   "GET /api/:tenant/users": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -1079,77 +1079,77 @@
   },
   "GET /api/:tenant/group-bookings/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to read group booking\"}",
+    "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "PUT /api/:tenant/group-bookings/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to update group booking\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/group-bookings/:id/commit": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to commit group booking\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 409,
     "tenantOwner": 409,
     "instanceOwner": 409
   },
   "POST /api/:tenant/group-bookings/:id/pay": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to pay group booking\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 409,
     "tenantOwner": 409,
     "instanceOwner": 409
   },
   "GET /api/:tenant/group-bookings/:id/cancellation-refund-preview": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/group-bookings/:id/reject": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to reject group booking\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/group-bookings/booking/:bookingId": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to read group booking\"}",
+    "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "DELETE /api/:tenant/group-bookings/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to remove group booking\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/group-bookings/:id/receipt": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to create group booking receipt\"}",
+    "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/group-bookings/:id/invoice": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to create group booking invoice\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/group-bookings/:id/cancellation-receipt": {
     "anonymous": 401,
-    "signedIn": "403 {\"message\":\"User not allowed to create group booking cancellation receipt\"}",
+    "signedIn": 409,
     "roleHolder": 409,
     "tenantOwner": 409,
     "instanceOwner": 409
@@ -1183,11 +1183,11 @@
     "instanceOwner": 200
   },
   "POST /api/:tenant/payments": {
-    "anonymous": "timeout",
-    "signedIn": "timeout",
-    "roleHolder": "timeout",
-    "tenantOwner": "timeout",
-    "instanceOwner": "timeout"
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
   },
   "GET /api/:tenant/payments/notify": {
     "anonymous": 200,
@@ -1219,8 +1219,8 @@
   },
   "GET /api/:tenant/payments/providers/:provider/test": {
     "anonymous": 401,
-    "signedIn": "403 {\"success\":false,\"message\":\"Forbidden: You don't have permission to test this payment provider.\"}",
-    "roleHolder": "403 {\"success\":false,\"message\":\"Forbidden: You don't have permission to test this payment provider.\"}",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 200,
     "instanceOwner": 200
   },
@@ -1232,8 +1232,8 @@
     "instanceOwner": 200
   },
   "GET /api/:tenant/coupons": {
-    "anonymous": 500,
-    "signedIn": 200,
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -1247,14 +1247,14 @@
   },
   "PUT /api/:tenant/coupons": {
     "anonymous": 401,
-    "signedIn": "403 You are not allowed to update this coupon",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 201,
     "tenantOwner": 201,
     "instanceOwner": 201
   },
   "DELETE /api/:tenant/coupons/:id": {
     "anonymous": 401,
-    "signedIn": "403 You are not allowed to delete this coupon",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 204,
     "tenantOwner": 204,
     "instanceOwner": 204
@@ -1268,49 +1268,49 @@
   },
   "GET /api/:tenant/workflow/": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/workflow/": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "PUT /api/:tenant/workflow/": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/workflow/states": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "PUT /api/:tenant/workflow/task": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "PUT /api/:tenant/workflow/archive": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/workflow/backlog": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -1325,48 +1325,48 @@
   "GET /api/:tenant/roles/tenant": {
     "anonymous": 401,
     "signedIn": 200,
-    "roleHolder": 500,
+    "roleHolder": 200,
     "tenantOwner": 200,
-    "instanceOwner": 500
+    "instanceOwner": 200
   },
   "PUT /api/:tenant/roles": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 201,
     "tenantOwner": 201,
     "instanceOwner": 201
   },
   "GET /api/:tenant/roles/:id": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "DELETE /api/:tenant/roles/:id": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/invitations": {
     "anonymous": 401,
-    "signedIn": "403 Forbidden: You don't have permission to access invitations.",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/invitations": {
     "anonymous": 401,
-    "signedIn": "403 Forbidden: You don't have permission to create invitations.",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400
   },
   "DELETE /api/:tenant/invitations/:token": {
     "anonymous": 401,
-    "signedIn": "403 Forbidden: You don't have permission to delete invitations.",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -1394,56 +1394,56 @@
   },
   "POST /api/:tenant/invitations/resend": {
     "anonymous": 401,
-    "signedIn": 400,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400
   },
   "GET /api/:tenant/challenges": {
     "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/challenges": {
     "anonymous": 401,
-    "signedIn": "timeout",
-    "roleHolder": "timeout",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 201,
     "instanceOwner": 201
   },
   "PUT /api/:tenant/challenges": {
     "anonymous": 401,
-    "signedIn": "timeout",
-    "roleHolder": "timeout",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "DELETE /api/:tenant/challenges/:id": {
     "anonymous": 401,
-    "signedIn": "timeout",
-    "roleHolder": "timeout",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "POST /api/:tenant/invitations/approve": {
     "anonymous": 401,
-    "signedIn": "403 Forbidden: You don't have permission to approve challenges.",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400
   },
   "POST /api/:tenant/invitations/reject": {
     "anonymous": 401,
-    "signedIn": "403 Forbidden: You don't have permission to reject challenges.",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400
   },
   "DELETE /api/:tenant/invitations/user/:userId": {
     "anonymous": 401,
-    "signedIn": "403 Forbidden: You don't have permission to delete user invitations.",
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 500,
     "tenantOwner": 500,
     "instanceOwner": 500

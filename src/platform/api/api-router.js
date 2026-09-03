@@ -14,6 +14,7 @@ const { BookingController } = require("./controllers/booking-controller");
 const AccessController = require("./controllers/access-controller");
 const { optionalAuth } = require("../../middleware/auth-middleware");
 const InstanceController = require("./controllers/instance-controller");
+const { authorize } = require("../../commons/services/authorization");
 
 const router = express.Router({ mergeParams: true });
 
@@ -188,9 +189,11 @@ router.post(
   TenantController.removeUserRole,
 );
 
+// The three handlers shared with the tenant router carry its markers
+// already (authorize spec §9.2); the rest of this router follows in step 3.
 router.get(
   "/tenants/:id/users",
-  AuthenticationController.isSignedIn,
+  authorize("tenantUser", "read"),
   TenantController.getUsers,
 );
 
@@ -246,11 +249,7 @@ router.delete(
   UserController.removeUser,
 );
 
-router.get(
-  "/roles",
-  AuthenticationController.isSignedIn,
-  RoleController.getRoles,
-);
+router.get("/roles", authorize("role", "list"), RoleController.getRoles);
 
 router.get("/holidays", HolidayController.getHolidays);
 
@@ -317,7 +316,7 @@ router.get("/files/get", optionalAuth, FileController.getFile);
 //Bookings
 router.get(
   "/bookings/assigned",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "read"),
   BookingController.getAssignedBookings,
 );
 

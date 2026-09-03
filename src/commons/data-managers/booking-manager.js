@@ -8,6 +8,7 @@ const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
 const { BookableManager } = require("./bookable-manager");
 const { NotFoundError } = require("../../errors/BaseError");
+const { ownCondition } = require("../services/authorization/reach");
 
 /**
  * Data Manager for Booking objects.
@@ -81,10 +82,15 @@ class BookingManager {
   /**
    * Get all bookings related to a tenant
    * @param {string} tenantId Identifier of the tenant
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getTenantBookings(tenantId) {
-    const rawBookings = await BookingModel.find({ tenantId: tenantId });
+  static async getTenantBookings(tenantId, scope) {
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      ...ownCondition("assignedUserId", scope),
+    });
     return BookingManager._toEntities(rawBookings);
   }
 
@@ -106,12 +112,15 @@ class BookingManager {
    * Get all bookings related to a bookable object
    * @param {string} tenantId Identifier of the tenant
    * @param {string} bookableId Bookable ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getRelatedBookings(tenantId, bookableId) {
+  static async getRelatedBookings(tenantId, bookableId, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": bookableId,
+      ...ownCondition("assignedUserId", scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -120,12 +129,15 @@ class BookingManager {
    * Get bookings related to multiple bookables
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookableIds Array of bookable IDs
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getRelatedBookingsBatch(tenantId, bookableIds) {
+  static async getRelatedBookingsBatch(tenantId, bookableIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": { $in: bookableIds },
+      ...ownCondition("assignedUserId", scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -149,12 +161,15 @@ class BookingManager {
    * Get a specific booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking|null>} Booking or null
    */
-  static async getBooking(id, tenantId) {
+  static async getBooking(id, tenantId, scope) {
     const rawBooking = await BookingModel.findOne({
       id: id,
       tenantId: tenantId,
+      ...ownCondition("assignedUserId", scope),
     });
 
     if (!rawBooking) {
@@ -504,9 +519,11 @@ class BookingManager {
    * Get bookings for an event
    * @param {string} tenantId Tenant ID
    * @param {string} eventId Event ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} Event bookings
    */
-  static async getEventBookings(tenantId, eventId) {
+  static async getEventBookings(tenantId, eventId, scope) {
     const bookables = await BookableModel.find({
       tenantId: tenantId,
       eventId: eventId,
@@ -514,7 +531,11 @@ class BookingManager {
     });
 
     const bookableIds = bookables.map((b) => b.id);
-    return await BookingManager.getRelatedBookingsBatch(tenantId, bookableIds);
+    return await BookingManager.getRelatedBookingsBatch(
+      tenantId,
+      bookableIds,
+      scope,
+    );
   }
 
   static async getBookedSeatsCount(

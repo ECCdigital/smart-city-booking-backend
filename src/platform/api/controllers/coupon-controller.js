@@ -1,7 +1,7 @@
-const { RolePermission } = require("../../../commons/entities/role/role");
 const CouponManager = require("../../../commons/data-managers/coupon-manager");
 const { Coupon } = require("../../../commons/entities/coupon/coupon");
-const PermissionService = require("../../../commons/services/permission-service");
+const { ForbiddenError } = require("../../../errors/BaseError");
+const { decide, scopeOf } = require("../../../commons/services/authorization");
 const bunyan = require("bunyan");
 const CouponService = require("../../../commons/services/coupon-service");
 
@@ -11,7 +11,7 @@ const logger = bunyan.createLogger({
 });
 
 class CouponController {
-  static async storeCoupon(request, response) {
+  static async storeCoupon(request, response, next) {
     const tenant = request.params.tenant;
     try {
       const coupon = new Coupon(request.body);
@@ -30,7 +30,7 @@ class CouponController {
       if (isUpdate) {
         await CouponController.updateCoupon(request, response);
       } else {
-        await CouponController.createCoupon(request, response);
+        await CouponController.createCoupon(request, response, next);
       }
     } catch (err) {
       logger.error(err);
@@ -38,7 +38,11 @@ class CouponController {
     }
   }
 
-  static async createCoupon(request, response) {
+  /**
+   * The obsolete PUT carries the update marker; the creation is the
+   * adapter's second decision (authorize spec §5, §11).
+   */
+  static async createCoupon(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
@@ -46,33 +50,23 @@ class CouponController {
 
       coupon.tenantId = tenant;
 
-      if (
-        await PermissionService._allowCreate(
-          coupon,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_COUPONS,
-        )
-      ) {
-        try {
-          coupon.ownerUserId = user.id;
-          const updatedCoupon = await CouponService.createCoupon(
-            coupon,
-            tenant,
-          );
-          logger.info(
-            `${tenant} -- created coupon ${coupon.id} by user ${user?.id}`,
-          );
-          response.status(201).send(updatedCoupon);
-        } catch (err) {
-          logger.error(err);
-          return response.status(400).send(err.message);
-        }
-      } else {
+      if (decide(request.principal, "coupon", "create") !== "any") {
         logger.warn(
           `User ${user?.id} not allowed to create coupons ${coupon?.id}`,
         );
-        response.status(403).send("You are not allowed to create coupons");
+        return next(new ForbiddenError());
+      }
+
+      try {
+        coupon.ownerUserId = user.id;
+        const updatedCoupon = await CouponService.createCoupon(coupon, tenant);
+        logger.info(
+          `${tenant} -- created coupon ${coupon.id} by user ${user?.id}`,
+        );
+        response.status(201).send(updatedCoupon);
+      } catch (err) {
+        logger.error(err);
+        return response.status(400).send(err.message);
       }
     } catch (err) {
       logger.error(err);
@@ -86,32 +80,25 @@ class CouponController {
       const user = request.user;
       const coupon = new Coupon(request.body);
 
-      if (
-        await PermissionService._allowUpdate(
-          coupon,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_COUPONS,
-        )
-      ) {
-        try {
-          const updatedCoupon = await CouponService.updateCoupon(
-            coupon,
-            tenant,
-          );
-          logger.info(
-            `${tenant} -- updated coupon ${coupon.id} by user ${user?.id}`,
-          );
-          response.status(201).send(updatedCoupon);
-        } catch (err) {
-          logger.error(err);
-          return response.status(400).send(err.message);
-        }
-      } else {
-        logger.warn(
-          `User ${user?.id} is not allowed to update coupons ${coupon?.id}`,
+      // The coupon within the reach of the request; none there is a 404.
+      const existingCoupon = await CouponManager.getCoupon(
+        coupon.id,
+        tenant,
+        scopeOf(request),
+      );
+      if (!existingCoupon) {
+        return response.status(404).send("Coupon not found");
+      }
+
+      try {
+        const updatedCoupon = await CouponService.updateCoupon(coupon, tenant);
+        logger.info(
+          `${tenant} -- updated coupon ${coupon.id} by user ${user?.id}`,
         );
-        response.status(403).send("You are not allowed to update this coupon");
+        response.status(201).send(updatedCoupon);
+      } catch (err) {
+        logger.error(err);
+        return response.status(400).send(err.message);
       }
     } catch (err) {
       logger.error(err);
@@ -124,21 +111,10 @@ class CouponController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const coupons = await CouponManager.getCoupons(tenant);
-
-      let allowedCoupons = [];
-      for (let coupon of coupons) {
-        if (
-          await PermissionService._allowRead(
-            coupon,
-            user.id,
-            tenant,
-            RolePermission.MANAGE_COUPONS,
-          )
-        ) {
-          allowedCoupons.push(coupon);
-        }
-      }
+      const allowedCoupons = await CouponManager.getCoupons(
+        tenant,
+        scopeOf(request),
+      );
 
       logger.info(
         `${tenant} -- Sending ${allowedCoupons.length} coupons to user ${user?.id}`,
@@ -180,27 +156,21 @@ class CouponController {
       const user = request.user;
       const { id } = request.params;
 
-      const coupon = await CouponManager.getCoupon(id, tenant);
-
-      if (
-        await PermissionService._allowDelete(
-          coupon,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_COUPONS,
-        )
-      ) {
-        await CouponManager.removeCoupon(id, tenant);
-        logger.info(
-          `${tenant} -- removed coupon ${coupon.id} by user ${user?.id}`,
-        );
-        response.status(204).send();
-      } else {
-        logger.warn(
-          `User ${user?.id} is not allowed to delete coupon ${coupon?.id}`,
-        );
-        response.status(403).send("You are not allowed to delete this coupon");
+      // The coupon within the reach of the request; none there is a 404.
+      const coupon = await CouponManager.getCoupon(
+        id,
+        tenant,
+        scopeOf(request),
+      );
+      if (!coupon) {
+        return response.status(404).send("Coupon not found");
       }
+
+      await CouponManager.removeCoupon(id, tenant);
+      logger.info(
+        `${tenant} -- removed coupon ${coupon.id} by user ${user?.id}`,
+      );
+      response.status(204).send();
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not delete coupon");
