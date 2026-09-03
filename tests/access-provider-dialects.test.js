@@ -45,7 +45,7 @@ const AccessPointManager = require("../src/commons/data-managers/access-point-ma
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const PermissionsService = require("../src/commons/services/permission-service");
-const MailController = require("../src/commons/mail-service/mail-controller");
+const mailModule = require("../src/commons/mail-service");
 const SecurityUtils = require("../src/commons/utilities/security-utils");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const {
@@ -1386,7 +1386,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
       .stub(AccessPointManager, "getAccessPoint")
       .callsFake(async (id) => doors.find((door) => door.id === id) || null);
     sandbox.stub(AccessLogService, "log").resolves();
-    sandbox.stub(MailController, "sendAccessProvisioned").resolves();
+    sandbox.stub(mailModule, "compose").resolves([]);
     sandbox.stub(PermissionsService, "_isOwner").returns(true);
     sandbox.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
   }
@@ -1920,13 +1920,13 @@ describe("access provider dialects: what AccessService makes of them", () => {
       const secret = SecurityUtils.decrypt(entry.grant.secret);
       expect(secret).to.match(/^\d{6}$/);
 
-      expect(MailController.sendAccessProvisioned.calledOnce).to.be.true;
-      expect(MailController.sendAccessProvisioned.firstCall.args).to.deep.equal(
-        [
-          "erika@example.test",
-          "booking-1",
-          TENANT,
-          [
+      expect(mailModule.compose.calledOnce).to.be.true;
+      expect(mailModule.compose.firstCall.args).to.deep.equal([
+        "ACCESS_PROVISIONED",
+        {
+          tenantId: TENANT,
+          bookingIds: ["booking-1"],
+          accessPoints: [
             {
               accessPointId: "door-1",
               label: "Main door",
@@ -1935,8 +1935,8 @@ describe("access provider dialects: what AccessService makes of them", () => {
               pin: secret,
             },
           ],
-        ],
-      );
+        },
+      ]);
       expect(BookingManager.storeBooking.calledOnceWith(booking)).to.be.true;
     });
 

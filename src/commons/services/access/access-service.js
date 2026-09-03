@@ -13,7 +13,7 @@ const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 const { RolePermission } = require("../../entities/role/role");
-const MailController = require("../../mail-service/mail-controller");
+const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
@@ -2846,18 +2846,25 @@ class AccessService {
       .join("|");
   }
 
+  /**
+   * The access notice (`ACCESS_PROVISIONED`) of the booker, over the mail
+   * module's `compose` + `send`; a mail that fails is logged, the grant
+   * stands.
+   */
   static async _sendProvisionedMail(booking, provisionedAccessPoints) {
     if (!provisionedAccessPoints.length || !booking.mail) {
       return;
     }
 
     try {
-      await MailController.sendAccessProvisioned(
-        booking.mail,
-        booking.id,
-        booking.tenantId,
-        provisionedAccessPoints,
-      );
+      const mails = await mailService.compose("ACCESS_PROVISIONED", {
+        tenantId: booking.tenantId,
+        bookingIds: [booking.id],
+        accessPoints: provisionedAccessPoints,
+      });
+      for (const mail of mails) {
+        await mailService.send(mail);
+      }
     } catch (err) {
       logger.error(
         `${booking.tenantId} -- failed to send access provisioned mail for booking ${booking.id}: ${err.message}`,

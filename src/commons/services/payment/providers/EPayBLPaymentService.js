@@ -2,7 +2,6 @@ const PaymentService = require("./payment-service");
 const { getBooking } = require("../../../data-managers/booking-manager");
 const { getTenantApp } = require("../../../data-managers/tenant-manager");
 const BookingManager = require("../../../data-managers/booking-manager");
-const MailController = require("../../../mail-service/mail-controller");
 const axios = require("axios");
 const crypto = require("crypto");
 const { Agent } = require("node:https");
@@ -545,37 +544,6 @@ class EPayBLPaymentService extends PaymentService {
       logger.error("ePayBL notification error:", error);
       throw error;
     }
-  }
-
-  async paymentRequest() {
-    if (this.aggregated) {
-      return this.aggregatedPaymentLink();
-    }
-    return this.separatePaymentLink();
-  }
-
-  async separatePaymentLink() {
-    for (const bookingId of this.bookingIds) {
-      const booking = await BookingManager.getBooking(bookingId, this.tenantId);
-      await MailController.sendPaymentLinkAfterBookingApproval(
-        booking.mail,
-        bookingId,
-        this.tenantId,
-      );
-    }
-  }
-
-  async aggregatedPaymentLink() {
-    const bookings = await BookingManager.getBookings(
-      this.tenantId,
-      this.bookingIds,
-    );
-    await MailController.sendPaymentLinkAfterBookingApproval(
-      bookings[0].mail,
-      this.bookingIds,
-      this.tenantId,
-      true,
-    );
   }
 
   async testConnection() {

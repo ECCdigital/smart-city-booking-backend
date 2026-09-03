@@ -1,22 +1,21 @@
 /**
  * Characterization of every notice (glossary "Mitteilung") the platform
- * sends: the 14 booking notices over `compose` + `send`, the two tenant
- * notices and the five instance notices that `MailController` still
- * renders and sends directly - each run over the fixture of
- * `helpers/mail-stack-fixtures.js` and the in-memory transport, and
- * pinned as a snapshot of recipient, subject, attachment names and the
- * rendered HTML under `tests/snapshots/mail/`.
+ * sends - the 14 booking notices, the two tenant notices and the five
+ * instance notices, all over `compose` + `send` - each run over the
+ * fixture of `helpers/mail-stack-fixtures.js` and the in-memory
+ * transport, and pinned as a snapshot of recipient, subject, attachment
+ * names and the rendered HTML under `tests/snapshots/mail/`.
  *
- * The nine notices the booking lifecycle sends go in through its mail
+ * The twelve notices the booking lifecycle sends go in through its mail
  * adapter (`booking-lifecycle/adapters/mail.js`, `send(type, ctx)`), the
- * way the lifecycle calls them; the five booking notices of the other
- * callers go in at the `MailController` facade, the way the payment
- * providers, the reprint and the access service still call it until the
- * last ticket of the chain.
+ * way the lifecycle calls them - the three forms of the payment request
+ * with the value the payment provider answers; the notices of the other
+ * callers - the reprint, the access service, the workflow action, the
+ * account services - go in as those call `compose` and `send`.
  *
  * Written for the first ticket of the mail-stack chain (Wayfinder,
  * "Mail-Stack (1): Charakterisierung ..."; spec section 6) against the
- * stack as it was, and kept byte-identical through ticket 3 (compose): the
+ * stack as it was, and kept byte-identical through the chain: the
  * snapshots are the regression net of the split. A change the chain makes
  * on purpose is accepted with `UPDATE_SNAPSHOTS=1 npm test` and named in
  * the changelog.
@@ -29,11 +28,9 @@
 const { expect } = require("chai");
 const sinon = require("sinon");
 
-const MailController = require("../src/commons/mail-service/mail-controller");
+const { compose, send } = require("../src/commons/mail-service");
 const mail = require("../src/commons/services/booking-lifecycle/adapters/mail");
-const {
-  mailAttachments: fileAttachment,
-} = require("../src/commons/services/documents/document-issuance");
+const PaymentService = require("../src/commons/services/payment/providers/payment-service");
 const { expectSnapshot } = require("./helpers/snapshot");
 const {
   installInMemoryMailTransport,
@@ -109,6 +106,16 @@ describe("mail characterization: every notice as it goes out today", function ()
     process.env.FRONTEND_URL = env.FRONTEND_URL;
     process.env.BACKEND_URL = env.BACKEND_URL;
   });
+
+  /**
+   * Composes a notice and sends every mail of it, the way the callers
+   * outside the lifecycle do.
+   */
+  async function sendAll(type, ctx) {
+    for (const value of await compose(type, ctx)) {
+      await send(value);
+    }
+  }
 
   /** Runs a send and pins the first of the mails it produced. */
   async function pin(name, send, { count = 1 } = {}) {
@@ -259,94 +266,87 @@ describe("mail characterization: every notice as it goes out today", function ()
     });
   });
 
-  describe("booking notices of the other callers, at the facade", function () {
-    it("invoice (reprint and invoice payment): the invoice, no iCal", async function () {
-      await pin("invoice", () =>
-        MailController.sendInvoice(
-          CUSTOMER,
-          "B-1",
-          TENANT,
-          fileAttachment(issuedFile("RG-1.pdf")),
-        ),
+  describe("booking notices of the lifecycle's payment request, from the provider's value", function () {
+    it("payment link after approval: the link the provider answers, for the one booking", async function () {
+      const { paymentUrl } = await new PaymentService(
+        TENANT,
+        "B-1",
+      ).paymentRequest();
+      await pin("payment-link-after-approval", () =>
+        mail.send("PAYMENT_LINK_AFTER_APPROVAL", single("B-1", { paymentUrl })),
       );
     });
 
-    it("group invoice", async function () {
-      await pin("invoice.group", () =>
-        MailController.sendInvoice(
-          CUSTOMER,
-          ["G-1", "G-2", "G-3"],
-          TENANT,
-          fileAttachment(issuedFile("RG-2.pdf")),
-          true,
+    it("payment link after approval of a group: one link for all members", async function () {
+      const { paymentUrl } = await new PaymentService(
+        TENANT,
+        GROUP_MEMBER_IDS,
+        { aggregated: true, groupBookingId: GROUP },
+      ).paymentRequest();
+      await pin("payment-link-after-approval.group", () =>
+        mail.send("PAYMENT_LINK_AFTER_APPROVAL", group({ paymentUrl })),
+      );
+    });
+
+    it("invoice after approval: the invoice the provider issued, no cancellation link", async function () {
+      await pin("invoice-after-approval", () =>
+        mail.send(
+          "INVOICE_AFTER_APPROVAL",
+          single("B-1", { attachments: [issuedFile("RG-1.pdf")] }),
         ),
       );
     });
 
     it("booking confirmed, invoice to follow: iCal, no document", async function () {
       await pin("booking-confirmed-invoice-pending", () =>
-        MailController.sendBookingConfirmedInvoicePending(
-          CUSTOMER,
-          "B-1",
-          TENANT,
+        mail.send("BOOKING_CONFIRMED_INVOICE_PENDING", single("B-1")),
+      );
+    });
+  });
+
+  describe("booking notices of the other callers, over compose + send", function () {
+    it("invoice (reprint and the checkout's invoice payment): the invoice, no iCal", async function () {
+      await pin("invoice", () =>
+        sendAll(
+          "INVOICE",
+          single("B-1", { attachments: [issuedFile("RG-1.pdf")] }),
         ),
       );
     });
 
-    it("invoice after approval: the invoice, no cancellation link", async function () {
-      await pin("invoice-after-approval", () =>
-        MailController.sendInvoiceAfterBookingApproval(
-          CUSTOMER,
-          "B-1",
-          TENANT,
-          fileAttachment(issuedFile("RG-1.pdf")),
-        ),
-      );
-    });
-
-    it("payment link after approval: the link of the one booking", async function () {
-      await pin("payment-link-after-approval", () =>
-        MailController.sendPaymentLinkAfterBookingApproval(
-          CUSTOMER,
-          "B-1",
-          TENANT,
-        ),
-      );
-    });
-
-    it("payment link after approval of a group: one link for all members", async function () {
-      await pin("payment-link-after-approval.group", () =>
-        MailController.sendPaymentLinkAfterBookingApproval(
-          CUSTOMER,
-          ["G-1", "G-2", "G-3"],
-          TENANT,
-          true,
-        ),
+    it("group invoice", async function () {
+      await pin("invoice.group", () =>
+        sendAll("INVOICE", group({ attachments: [issuedFile("RG-2.pdf")] })),
       );
     });
 
     it("access provisioned: the access points with their PINs", async function () {
       await pin("access-provisioned", () =>
-        MailController.sendAccessProvisioned(CUSTOMER, "B-1", TENANT, [
-          {
-            label: "Haupteingang",
-            bookableTitle: "Großer Saal",
-            provider: "nuki",
-            pin: "482913",
-          },
-          { label: "Seiteneingang", provider: "salto-ks", pin: "775310" },
-        ]),
+        sendAll(
+          "ACCESS_PROVISIONED",
+          single("B-1", {
+            accessPoints: [
+              {
+                label: "Haupteingang",
+                bookableTitle: "Großer Saal",
+                provider: "nuki",
+                pin: "482913",
+              },
+              { label: "Seiteneingang", provider: "salto-ks", pin: "775310" },
+            ],
+          }),
+        ),
       );
     });
   });
 
-  describe("tenant notices without the booking mail stack", function () {
+  describe("tenant notices", function () {
     it("workflow notification: the status change, over the tenant's template", async function () {
       await pin("workflow-notification", () =>
-        MailController.sendWorkflowNotification({
-          sendTo: SUPERVISOR,
+        sendAll("WORKFLOW_NOTIFICATION", {
           tenantId: TENANT,
-          bookingId: "B-1",
+          bookingIds: ["B-1"],
+          to: SUPERVISOR,
           oldStatus: "Eingegangen",
           newStatus: "Geprüft",
         }),
@@ -355,9 +355,9 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("invitation: the link with the token, over the tenant's template", async function () {
       await pin("invitation", () =>
-        MailController.sendInvitationEmail({
-          sendTo: "neu@example.test",
+        sendAll("INVITATION", {
           tenantId: TENANT,
+          to: "neu@example.test",
           token: "invite-token-1",
         }),
       );
@@ -367,50 +367,58 @@ describe("mail characterization: every notice as it goes out today", function ()
   describe("instance notices", function () {
     it("verification request with the storefront's verify URL", async function () {
       await pin("verification-request", () =>
-        MailController.sendVerificationRequest(
-          CUSTOMER,
-          "hook-verify-1",
-          `${FRONTEND_URL}/auth/verify`,
-        ),
+        sendAll("VERIFICATION_REQUEST", {
+          to: CUSTOMER,
+          hookId: "hook-verify-1",
+          verifyUrl: `${FRONTEND_URL}/auth/verify`,
+        }),
       );
     });
 
     it("verification request without a verify URL: the backend's own route", async function () {
       await pin("verification-request.backend-url", () =>
-        MailController.sendVerificationRequest(CUSTOMER, "hook-verify-1"),
+        sendAll("VERIFICATION_REQUEST", {
+          to: CUSTOMER,
+          hookId: "hook-verify-1",
+        }),
       );
     });
 
     it("password reset: the backend's confirmation route", async function () {
       await pin("password-reset", () =>
-        MailController.sendPasswordResetRequest(CUSTOMER, "hook-reset-1"),
+        sendAll("PASSWORD_RESET", { to: CUSTOMER, hookId: "hook-reset-1" }),
       );
     });
 
     it("forgot password with the storefront's reset URL", async function () {
       await pin("forgot-password-request", () =>
-        MailController.sendForgotPasswordRequest(
-          CUSTOMER,
-          "hook-forgot-1",
-          `${FRONTEND_URL}/auth/reset`,
-        ),
+        sendAll("FORGOT_PASSWORD_REQUEST", {
+          to: CUSTOMER,
+          hookId: "hook-forgot-1",
+          resetUrl: `${FRONTEND_URL}/auth/reset`,
+        }),
       );
     });
 
     it("forgot password without a reset URL: the storefront's default route", async function () {
       await pin("forgot-password-request.default-url", () =>
-        MailController.sendForgotPasswordRequest(CUSTOMER, "hook-forgot-1"),
+        sendAll("FORGOT_PASSWORD_REQUEST", {
+          to: CUSTOMER,
+          hookId: "hook-forgot-1",
+        }),
       );
     });
 
     it("user created: to the instance's address", async function () {
-      await pin("user-created", () => MailController.sendUserCreated(CUSTOMER));
+      await pin("user-created", () =>
+        sendAll("USER_CREATED", { userId: CUSTOMER }),
+      );
     });
 
     it("card link request with the storefront's link URL", async function () {
       await pin("card-link-request", () =>
-        MailController.sendCardLinkRequest({
-          address: CUSTOMER,
+        sendAll("CARD_LINK_REQUEST", {
+          to: CUSTOMER,
           firstName: "Erika",
           hookId: "hook-card-1",
           cardLabel: "Bibliothekskarte",
@@ -421,8 +429,8 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("card link request without a link URL: the backend's own route", async function () {
       await pin("card-link-request.backend-url", () =>
-        MailController.sendCardLinkRequest({
-          address: CUSTOMER,
+        sendAll("CARD_LINK_REQUEST", {
+          to: CUSTOMER,
           firstName: "",
           hookId: "hook-card-1",
           cardLabel: "",

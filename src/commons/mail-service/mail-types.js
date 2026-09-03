@@ -6,11 +6,13 @@
  *
  * Fields:
  * - `family`: the context the loader builds - `booking` (a tenant, its
- *   bookings, their bookables and events). `tenant` and `instance` follow
- *   with the last ticket of the chain.
+ *   bookings, their bookables and events), `tenant` (the tenant, whose
+ *   shell template the notice goes out in) or `instance` (the instance,
+ *   and the user `ctx.userId` names).
  * - `templateName`: the snippet, and the key of the tenant's overrides.
  * - `audience`: the recipients (glossary "Empfängerkreis") - `booker`,
- *   `tenant`, `supervisors`, `organizers` or `named` (`ctx.to`).
+ *   `tenant`, `supervisors`, `organizers`, `instanceAdmin` (the instance's
+ *   address) or `named` (`ctx.to`).
  * - `subject(ctx)`: the default subject; a subject override of the
  *   tenant takes precedence.
  * - `includeQRCode(ctx)`, `sendBCC(ctx)`, `addRejectionLink`: as before.
@@ -19,15 +21,30 @@
  *   with it.
  * - `gate({ tenant })`: the audience only gets it where this holds.
  * - `templateData(ctx, loaded)`: the type's own template variables from
- *   the caller's context and the loaded bookings.
+ *   the caller's context and what the loader read.
  *
- * `ctx` of `subject`, `includeQRCode` and `sendBCC` is
- * `{ tenant, hasAttachments }`.
+ * Of a booking notice, `ctx` of `subject`, `includeQRCode` and `sendBCC`
+ * is `{ tenant, hasAttachments }`, and `templateData` gets the
+ * type-specific part of the caller's context and the loaded bookings.
+ * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal`,
+ * `mergeMailAttach` and `gate` are of the booking family only.
+ *
+ * Of a tenant or instance notice (the account mails, the invitation, the
+ * workflow notification), `templateData` gets the whole context and
+ * `{ tenant, instance, user }`, and `subject` gets `{ tenant }` joined by
+ * the template data. The links these notices carry are built here: the
+ * storefront's route where the caller names one, the backend's own
+ * otherwise.
  */
 
 const {
   CancellationRefundService,
 } = require("../services/payment/cancellation-refund-service");
+
+/** A storefront route with the hook's token and the address it is for. */
+function hookLink(base, hookId, address) {
+  return `${base}?token=${hookId}&id=${encodeURIComponent(address)}`;
+}
 
 const MailType = Object.freeze({
   BOOKING_CONFIRMATION: {
@@ -196,6 +213,99 @@ const MailType = Object.freeze({
     sendBCC: false,
     addRejectionLink: false,
     templateData: ({ accessPoints }) => ({ accessPoints }),
+  },
+
+  WORKFLOW_NOTIFICATION: {
+    family: "tenant",
+    templateName: "workflow-notification",
+    audience: "named",
+    subject: (ctx) =>
+      `Änderung bei der Buchung Nr. ${ctx.bookingId} - Neuer Status`,
+    templateData: ({ bookingIds, oldStatus, newStatus }, { tenant }) => ({
+      bookingId: bookingIds[0],
+      tenantName: tenant.name,
+      oldStatus,
+      newStatus,
+    }),
+  },
+
+  INVITATION: {
+    family: "tenant",
+    templateName: "invitation",
+    audience: "named",
+    subject: (ctx) => `Biletado - Einladung zum ${ctx.tenant.name} Mandanten`,
+    templateData: ({ tenantId, token }, { tenant }) => ({
+      tenantName: tenant.name,
+      invitationUrl: `${process.env.FRONTEND_URL}/auth/invitation/${tenantId}?token=${token}`,
+      supportEmail: tenant.mail,
+    }),
+  },
+
+  VERIFICATION_REQUEST: {
+    family: "instance",
+    templateName: "verification-request",
+    audience: "named",
+    subject: () => "Bestätigen Sie Ihre E-Mail-Adresse",
+    templateData: ({ to, hookId, verifyUrl }) => ({
+      verifyUrl: verifyUrl
+        ? hookLink(verifyUrl, hookId, to)
+        : `${process.env.BACKEND_URL}/auth/verify/${hookId}`,
+    }),
+  },
+
+  PASSWORD_RESET: {
+    family: "instance",
+    templateName: "password-reset",
+    audience: "named",
+    subject: () => "Bestätigen Sie die Änderung Ihres Kennworts",
+    templateData: ({ hookId }) => ({
+      resetUrl: `${process.env.BACKEND_URL}/auth/reset/${hookId}`,
+    }),
+  },
+
+  FORGOT_PASSWORD_REQUEST: {
+    family: "instance",
+    templateName: "forgot-password-request",
+    audience: "named",
+    subject: () => "Kennwort zurücksetzen",
+    templateData: ({ to, hookId, resetUrl }) => ({
+      resetUrl: hookLink(
+        resetUrl || `${process.env.FRONTEND_URL}/password/reset`,
+        hookId,
+        to,
+      ),
+    }),
+  },
+
+  USER_CREATED: {
+    family: "instance",
+    templateName: "user-created",
+    audience: "instanceAdmin",
+    subject: () => "Ein neuer Benutzer wurde erstellt",
+    templateData: (ctx, { user }) => ({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      company: user.company,
+      email: user.id,
+      createDate: user.created,
+    }),
+  },
+
+  CARD_LINK_REQUEST: {
+    family: "instance",
+    templateName: "card-link-request",
+    audience: "named",
+    subject: () => "Karte mit Ihrem Account verknüpfen",
+    templateData: ({ to, firstName, hookId, cardLabel, linkUrlBase }) => ({
+      email: to,
+      firstName,
+      cardLabel,
+      linkUrl: hookLink(
+        linkUrlBase || `${process.env.BACKEND_URL}/auth/card/link`,
+        hookId,
+        to,
+      ),
+    }),
   },
 });
 

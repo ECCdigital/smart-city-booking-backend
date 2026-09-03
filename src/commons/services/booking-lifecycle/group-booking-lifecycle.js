@@ -28,6 +28,7 @@ const {
   assertTrigger,
   isPriced,
   hasTicketPosition,
+  paymentRequestSteps,
 } = require("./booking-lifecycle");
 const {
   CancellationRefundService,
@@ -176,18 +177,24 @@ function createGroupBookingLifecycle(adapters) {
     );
   }
 
-  /** The aggregated notice of the group over the mail adapter. */
+  /**
+   * The aggregated notice of the group over the mail adapter; the
+   * type-specific part may be a function, read when the step runs.
+   */
   function noticeOf(tenantId, group) {
+    const base = {
+      tenantId,
+      bookingIds: group.bookingIds,
+      groupBookingId: group.id,
+    };
     return (type, specific = {}, options) =>
       noticeStep(
         mail,
         type,
-        {
-          tenantId,
-          bookingIds: group.bookingIds,
-          groupBookingId: group.id,
-          ...specific,
-        },
+        () => ({
+          ...base,
+          ...(typeof specific === "function" ? specific() : specific),
+        }),
         options,
       );
   }
@@ -278,18 +285,16 @@ function createGroupBookingLifecycle(adapters) {
       ),
       ...emitEach(bookings, WORKFLOW_EVENT.CREATE, trigger),
       notice("BOOKING_REQUEST_CONFIRMATION", {}, { when: requested }),
-      step(
-        PHASE.NOTIFY,
-        "payment",
-        "requestPayment",
-        () =>
-          payment.requestPayment({
-            tenantId,
-            bookingIds: group.bookingIds,
-            paymentProvider: bookings[0].paymentProvider,
-            groupBookingId: group.id,
-          }),
-        { when: () => paymentDue() && trigger !== TRIGGER.CUSTOMER },
+      ...paymentRequestSteps(
+        payment,
+        notice,
+        {
+          tenantId,
+          bookingIds: group.bookingIds,
+          paymentProvider: bookings[0].paymentProvider,
+          groupBookingId: group.id,
+        },
+        () => paymentDue() && trigger !== TRIGGER.CUSTOMER,
       ),
       notice(
         "BOOKING_CONFIRMATION",
@@ -312,7 +317,8 @@ function createGroupBookingLifecycle(adapters) {
    * member `requested → payment_due | confirmed` by its own price, written
    * one by one; the confirmed ones granted; the workflow told per member;
    * then one free booking confirmation where every member is confirmed,
-   * else one payment request for the group.
+   * else one payment request for the group, in the form the payment
+   * provider answers.
    *
    * @param {string} tenantId
    * @param {string} groupBookingId
@@ -343,18 +349,16 @@ function createGroupBookingLifecycle(adapters) {
       ...accessEach(bookings, "provision", confirmed),
       ...emitEach(bookings, WORKFLOW_EVENT.COMMIT, trigger),
       notice("FREE_BOOKING_CONFIRMATION", {}, { when: allConfirmed }),
-      step(
-        PHASE.NOTIFY,
-        "payment",
-        "requestPayment",
-        () =>
-          payment.requestPayment({
-            tenantId,
-            bookingIds: group.bookingIds,
-            paymentProvider: bookings[0].paymentProvider,
-            groupBookingId: group.id,
-          }),
-        { when: paymentDue },
+      ...paymentRequestSteps(
+        payment,
+        notice,
+        {
+          tenantId,
+          bookingIds: group.bookingIds,
+          paymentProvider: bookings[0].paymentProvider,
+          groupBookingId: group.id,
+        },
+        paymentDue,
       ),
       ...organizerEach(bookings),
     ]);

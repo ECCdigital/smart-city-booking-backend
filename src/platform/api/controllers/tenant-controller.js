@@ -14,7 +14,7 @@ const Membership = require("../../../commons/entities/tenant/membership");
 const InvitationService = require("../../../commons/services/invitation-service");
 const ChallengeManager = require("../../../commons/data-managers/challenge-manager");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
-const SupervisorNotificationService = require("../../../commons/services/supervisor-notification-service");
+const MembershipService = require("../../../commons/services/membership/membership-service");
 const AccessAppLifecycleService = require("../../../commons/services/access/access-app-lifecycle-service");
 const {
   validateMailSnippets,
@@ -1166,7 +1166,7 @@ class TenantController {
         let recipients;
         try {
           recipients =
-            await SupervisorNotificationService.prepareRecipientsForWrite(
+            await MembershipService.prepareBookingNotificationRecipients(
               tenantId,
               bookingNotificationRecipients,
             );

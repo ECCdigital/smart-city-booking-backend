@@ -1,6 +1,6 @@
 const Invitation = require("../entities/tenant/invitation");
 const MembershipManager = require("../data-managers/membership-manager");
-const MailController = require("../mail-service/mail-controller");
+const mailService = require("../mail-service");
 const crypto = require("crypto");
 const InvitationManager = require("../data-managers/invitation-manager");
 const ChallengeManager = require("../data-managers/challenge-manager");
@@ -95,11 +95,11 @@ class InvitationService {
       throw new Error("No recipient email or intended user ID provided");
     }
 
-    await MailController.sendInvitationEmail({
-      sendTo: recipientEmail ? recipientEmail : invitation.intendedUserId,
+    await sendInvitation(
+      tenantID,
+      recipientEmail ? recipientEmail : invitation.intendedUserId,
       token,
-      tenantId: tenantID,
-    });
+    );
 
     return true;
   }
@@ -119,11 +119,11 @@ class InvitationService {
       status: "active",
     });
 
-    await MailController.sendInvitationEmail({
-      sendTo: invitation[0].intendedUserId,
-      token: invitation[0].token,
-      tenantId: tenantID,
-    });
+    await sendInvitation(
+      tenantID,
+      invitation[0].intendedUserId,
+      invitation[0].token,
+    );
 
     await MembershipManager.updateMembership(tenantID, userID, {
       status: "pending",
@@ -786,6 +786,17 @@ class InvitationService {
 }
 
 module.exports = InvitationService;
+
+/** The invitation, a tenant notice to the address named. */
+async function sendInvitation(tenantId, to, token) {
+  for (const mail of await mailService.compose("INVITATION", {
+    tenantId,
+    to,
+    token,
+  })) {
+    await mailService.send(mail);
+  }
+}
 
 function isDuplicateSingleInvitationError(error) {
   return error && error.code === 11000;

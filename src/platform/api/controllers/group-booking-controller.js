@@ -5,13 +5,12 @@ const { RolePermission } = require("../../../commons/entities/role/role");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const MailController = require("../../../commons/mail-service/mail-controller");
+const mailService = require("../../../commons/mail-service");
 const {
   CancellationRefundService,
 } = require("../../../commons/services/payment/cancellation-refund-service");
 const {
   issue: issueDocument,
-  mailAttachments,
 } = require("../../../commons/services/documents/document-issuance");
 const {
   groupBookingLifecycle,
@@ -559,13 +558,15 @@ class GroupBookingController {
 
         if (shouldSendEmail) {
           try {
-            await MailController.sendInvoice(
-              groupBooking.bookings[0].mail,
-              groupBooking.bookingIds,
+            const mails = await mailService.compose("INVOICE", {
               tenantId,
-              mailAttachments(file),
-              true,
-            );
+              bookingIds: groupBooking.bookingIds,
+              groupBookingId,
+              attachments: [file],
+            });
+            for (const mail of mails) {
+              await mailService.send(mail);
+            }
           } catch (err) {
             logger.error(
               "Error while sending aggregated invoice:",

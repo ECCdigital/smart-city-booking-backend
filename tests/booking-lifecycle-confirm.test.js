@@ -63,6 +63,9 @@ describe("booking lifecycle: confirm", function () {
       "notify workflow.emit ok",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
     ]);
     expect(outcome).to.include({
@@ -114,6 +117,9 @@ describe("booking lifecycle: confirm", function () {
       "notify workflow.emit ok",
       "notify mail.FREE_BOOKING_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
     ]);
     expect(outcome).to.include({ status: "confirmed", failure: null });
@@ -152,10 +158,131 @@ describe("booking lifecycle: confirm", function () {
       "notify workflow.emit ok",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
     ]);
     expect(outcome).to.include({ status: "payment_due", failure: null });
     expect(adapters.store.rows.get("B-1").status).to.equal("payment_due");
+  });
+
+  describe("the notice of the payment request, from the provider's answer", function () {
+    const table = (form) => [
+      "persist store.save ok",
+      "provision access.provision skipped",
+      "notify workflow.emit ok",
+      "notify mail.FREE_BOOKING_CONFIRMATION skipped",
+      "notify payment.requestPayment ok",
+      `notify mail.PAYMENT_LINK_AFTER_APPROVAL ${form === "link" ? "ok" : "skipped"}`,
+      `notify mail.INVOICE_AFTER_APPROVAL ${form === "invoice" ? "ok" : "skipped"}`,
+      `notify mail.BOOKING_CONFIRMED_INVOICE_PENDING ${form === "pending" ? "ok" : "skipped"}`,
+      "notify mail.NEW_BOOKING skipped",
+    ];
+
+    it("a link: the payment link mail with the provider's URL", async function () {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking()],
+        paymentRequest: {
+          form: "link",
+          paymentUrl: "https://pay.example.test/x",
+        },
+      });
+
+      const outcome = await lifecycle.confirm(TENANT, "B-1", {
+        trigger: TRIGGER.ADMIN,
+      });
+
+      expect(effectTable(outcome)).to.deep.equal(table("link"));
+      expect(adapters.mail.calls).to.deep.equal([
+        {
+          op: "send",
+          args: [
+            "PAYMENT_LINK_AFTER_APPROVAL",
+            {
+              tenantId: TENANT,
+              bookingIds: ["B-1"],
+              groupBookingId: null,
+              paymentUrl: "https://pay.example.test/x",
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("an invoice: the invoice mail with the file the provider issued", async function () {
+      const file = { name: "RG-1.pdf", buffer: Buffer.from("%PDF") };
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking()],
+        paymentRequest: { form: "invoice", files: [file] },
+      });
+
+      const outcome = await lifecycle.confirm(TENANT, "B-1", {
+        trigger: TRIGGER.ADMIN,
+      });
+
+      expect(effectTable(outcome)).to.deep.equal(table("invoice"));
+      expect(adapters.mail.calls).to.deep.equal([
+        {
+          op: "send",
+          args: [
+            "INVOICE_AFTER_APPROVAL",
+            {
+              tenantId: TENANT,
+              bookingIds: ["B-1"],
+              groupBookingId: null,
+              attachments: [file],
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("an invoice to follow: the announcement", async function () {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking()],
+        paymentRequest: { form: "pending" },
+      });
+
+      const outcome = await lifecycle.confirm(TENANT, "B-1", {
+        trigger: TRIGGER.ADMIN,
+      });
+
+      expect(effectTable(outcome)).to.deep.equal(table("pending"));
+      expect(adapters.mail.calls).to.deep.equal([
+        {
+          op: "send",
+          args: [
+            "BOOKING_CONFIRMED_INVOICE_PENDING",
+            { tenantId: TENANT, bookingIds: ["B-1"], groupBookingId: null },
+          ],
+        },
+      ]);
+    });
+
+    it("a payment request that fails is recorded and sends nothing", async function () {
+      const { adapters, lifecycle } = lifecycleOver({
+        bookings: [booking()],
+        failOn: { payment: ["requestPayment"] },
+      });
+
+      const outcome = await lifecycle.confirm(TENANT, "B-1", {
+        trigger: TRIGGER.ADMIN,
+      });
+
+      expect(effectTable(outcome)).to.deep.equal([
+        "persist store.save ok",
+        "provision access.provision skipped",
+        "notify workflow.emit ok",
+        "notify mail.FREE_BOOKING_CONFIRMATION skipped",
+        "notify payment.requestPayment recorded",
+        "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+        "notify mail.INVOICE_AFTER_APPROVAL skipped",
+        "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
+        "notify mail.NEW_BOOKING skipped",
+      ]);
+      expect(adapters.mail.calls).to.deep.equal([]);
+    });
   });
 
   it("leaves the workflow event out when a workflow action triggered the confirmation", async function () {
@@ -171,6 +298,9 @@ describe("booking lifecycle: confirm", function () {
       "notify workflow.emit skipped",
       "notify mail.FREE_BOOKING_CONFIRMATION skipped",
       "notify payment.requestPayment ok",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
     ]);
     expect(adapters.workflow.calls).to.deep.equal([]);
@@ -227,6 +357,9 @@ describe("booking lifecycle: confirm", function () {
       "notify workflow.emit ok",
       "notify mail.FREE_BOOKING_CONFIRMATION ok",
       "notify payment.requestPayment skipped",
+      "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+      "notify mail.INVOICE_AFTER_APPROVAL skipped",
+      "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING ok",
     ]);
     expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
@@ -329,6 +462,9 @@ describe("booking lifecycle: confirm", function () {
         "notify workflow.emit ok",
         "notify mail.FREE_BOOKING_CONFIRMATION ok",
         "notify payment.requestPayment skipped",
+        "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+        "notify mail.INVOICE_AFTER_APPROVAL skipped",
+        "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
         "notify mail.NEW_BOOKING skipped",
       ]);
       expect(outcome.failure).to.equal(null);
@@ -350,6 +486,9 @@ describe("booking lifecycle: confirm", function () {
 
       expect(effectTable(outcome)[4]).to.equal(
         "notify payment.requestPayment recorded",
+        "notify mail.PAYMENT_LINK_AFTER_APPROVAL skipped",
+        "notify mail.INVOICE_AFTER_APPROVAL skipped",
+        "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       );
       expect(outcome.failure).to.equal(null);
       expect(adapters.store.rows.get("B-1").status).to.equal("payment_due");

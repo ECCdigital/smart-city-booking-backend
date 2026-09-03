@@ -27,7 +27,7 @@ const {
   TRIGGERS,
   nextState,
 } = require("./booking-state");
-const { PHASE, step, noticeStep, runPipeline } = require("./pipeline");
+const { PHASE, SKIPPED, step, noticeStep, runPipeline } = require("./pipeline");
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
@@ -76,6 +76,56 @@ function assertTrigger(transition, trigger) {
 }
 
 /**
+ * The payment request (glossary "Zahlungsaufforderung") as steps of the
+ * notify phase (mail-stack spec, section 4): the tenant's payment provider
+ * is asked and answers a value - `{ form: "link" | "invoice" | "pending",
+ * paymentUrl?, files? }` - and the notice of that form goes to the booker
+ * over the mail adapter: the payment link, the invoice the provider
+ * issued, or the announcement of an invoice to follow. A request that is
+ * skipped (no provider), fails (recorded) or answers no form leaves all
+ * three notices skipped.
+ *
+ * @param {Object} payment The payment adapter
+ * @param {function} notice The `noticeOf` of the transition
+ * @param {Object} params What `payment.requestPayment` takes
+ * @param {function(): boolean} when The condition of the request
+ * @returns {Object[]} The request and the three notices, as steps
+ */
+function paymentRequestSteps(payment, notice, params, when) {
+  let answer = {};
+  return [
+    step(
+      PHASE.NOTIFY,
+      "payment",
+      "requestPayment",
+      async () => {
+        const result = await payment.requestPayment(params);
+        answer = result && result !== SKIPPED ? result : {};
+        return result;
+      },
+      { when },
+    ),
+    notice(
+      "PAYMENT_LINK_AFTER_APPROVAL",
+      () => ({ paymentUrl: answer.paymentUrl }),
+      { when: () => answer.form === "link" },
+    ),
+    notice(
+      "INVOICE_AFTER_APPROVAL",
+      () => ({ attachments: answer.files || [] }),
+      { when: () => answer.form === "invoice" },
+    ),
+    notice(
+      "BOOKING_CONFIRMED_INVOICE_PENDING",
+      {},
+      {
+        when: () => answer.form === "pending",
+      },
+    ),
+  ];
+}
+
+/**
  * @param {Object} adapters The seam (spec part 2, section 10)
  * @param {Object} adapters.store
  * @param {Object} adapters.access
@@ -96,18 +146,20 @@ function createBookingLifecycle(adapters) {
     clock = Date.now,
   } = adapters;
 
-  /** The notices of one booking over the mail adapter. */
+  /**
+   * The notices of one booking over the mail adapter; the type-specific
+   * part may be a function, read when the step runs.
+   */
   function noticeOf(tenantId, bookingId) {
+    const base = { tenantId, bookingIds: [bookingId], groupBookingId: null };
     return (type, specific = {}, options) =>
       noticeStep(
         mail,
         type,
-        {
-          tenantId,
-          bookingIds: [bookingId],
-          groupBookingId: null,
-          ...specific,
-        },
+        () => ({
+          ...base,
+          ...(typeof specific === "function" ? specific() : specific),
+        }),
         options,
       );
   }
@@ -138,14 +190,15 @@ function createBookingLifecycle(adapters) {
    * hold; a booking confirmed and paid at once gets its receipt; then the
    * workflow is told (`onCreate`), the customer gets
    * exactly one mail - the receipt of a request, the payment request
-   * (glossary "Zahlungsaufforderung") of a booking awaiting payment, the
-   * confirmation with the receipt of a paid one, the free booking
-   * confirmation of a free one - and the tenant, the supervisors and the
-   * organizer of a ticket their notice. A customer at the storefront is
-   * asked to pay by the checkout's own answer, the payment page it hands
-   * the customer on to; the payment request would ask twice, so it goes
-   * out for every trigger but `customer`. A hold that fails aborts with
-   * nothing to restore: the checkout deletes the booking.
+   * (glossary "Zahlungsaufforderung") of a booking awaiting payment in the
+   * form the payment provider answers, the confirmation with the receipt
+   * of a paid one, the free booking confirmation of a free one - and the
+   * tenant, the supervisors and the organizer of a ticket their notice. A
+   * customer at the storefront is asked to pay by the checkout's own
+   * answer, the payment page it hands the customer on to; the payment
+   * request would ask twice, so it goes out for every trigger but
+   * `customer`. A hold that fails aborts with nothing to restore: the
+   * checkout deletes the booking.
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -200,18 +253,16 @@ function createBookingLifecycle(adapters) {
         { when: () => trigger !== TRIGGER.WORKFLOW },
       ),
       notice("BOOKING_REQUEST_CONFIRMATION", {}, { when: requested }),
-      step(
-        PHASE.NOTIFY,
-        "payment",
-        "requestPayment",
-        () =>
-          payment.requestPayment({
-            tenantId,
-            bookingIds: [bookingId],
-            paymentProvider: booking.paymentProvider,
-            groupBookingId: null,
-          }),
-        { when: () => paymentDue() && trigger !== TRIGGER.CUSTOMER },
+      ...paymentRequestSteps(
+        payment,
+        notice,
+        {
+          tenantId,
+          bookingIds: [bookingId],
+          paymentProvider: booking.paymentProvider,
+          groupBookingId: null,
+        },
+        () => paymentDue() && trigger !== TRIGGER.CUSTOMER,
       ),
       notice(
         "BOOKING_CONFIRMATION",
@@ -232,10 +283,10 @@ function createBookingLifecycle(adapters) {
   /**
    * The confirmation (spec part 2, section 8, `confirm`): `requested →
    * payment_due` for a priced booking, which is then asked to pay
-   * (glossary "Zahlungsaufforderung"), `requested → confirmed` for a free
-   * one, which is granted and told so. A tenant without a payment service
-   * leaves the payment request skipped: the booking awaits payment all the
-   * same.
+   * (glossary "Zahlungsaufforderung") in the form the payment provider
+   * answers, `requested → confirmed` for a free one, which is granted and
+   * told so. A tenant without a payment service leaves the payment request
+   * skipped: the booking awaits payment all the same.
    *
    * @param {string} tenantId
    * @param {string} bookingId
@@ -273,18 +324,16 @@ function createBookingLifecycle(adapters) {
         { when: () => trigger !== TRIGGER.WORKFLOW },
       ),
       notice("FREE_BOOKING_CONFIRMATION", {}, { when: confirmed }),
-      step(
-        PHASE.NOTIFY,
-        "payment",
-        "requestPayment",
-        () =>
-          payment.requestPayment({
-            tenantId,
-            bookingIds: [bookingId],
-            paymentProvider: booking.paymentProvider,
-            groupBookingId: null,
-          }),
-        { when: paymentDue },
+      ...paymentRequestSteps(
+        payment,
+        notice,
+        {
+          tenantId,
+          bookingIds: [bookingId],
+          paymentProvider: booking.paymentProvider,
+          groupBookingId: null,
+        },
+        paymentDue,
       ),
       notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
     ]);
@@ -669,4 +718,5 @@ module.exports = {
   assertTrigger,
   isPriced,
   hasTicketPosition,
+  paymentRequestSteps,
 };

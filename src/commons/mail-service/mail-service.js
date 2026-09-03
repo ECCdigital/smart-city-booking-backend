@@ -140,8 +140,8 @@ function isCompleteTenantMailConfig(tenant) {
  * takes a mail value, chooses between the instance's and the tenant's
  * no-reply account and delivers over a pooled transporter with three
  * attempts. `renderHtml` renders a shell template into a finished body
- * for the notices that do not go through `compose` yet - the rule engine
- * and the seven tenant and instance notices of `MailController`.
+ * for the rule engine, which builds its mail value itself from the rule's
+ * body; every other notice is composed by `compose`.
  */
 class MailerService {
   static getConfigHash(config) {

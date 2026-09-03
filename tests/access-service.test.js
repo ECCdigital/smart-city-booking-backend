@@ -8,7 +8,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
-const MailController = require("../src/commons/mail-service/mail-controller");
+const mailModule = require("../src/commons/mail-service");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const AccessScanService = require("../src/commons/services/access/access-scan-service");
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
@@ -638,7 +638,7 @@ describe("AccessService provisionForBooking", () => {
       ],
     });
     sandbox.stub(BookingManager, "storeBooking").resolves(booking);
-    sandbox.stub(MailController, "sendAccessProvisioned").resolves();
+    sandbox.stub(mailModule, "compose").resolves([]);
     sandbox.stub(AccessLogService, "log").resolves();
 
     const result = await AccessService.provisionForBooking(

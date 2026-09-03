@@ -101,12 +101,20 @@ function policyOf(adapter, op) {
  *
  * @param {Object} mail The mail adapter
  * @param {string} type A key of the mail registry
- * @param {Object} ctx The context of `compose`
+ * @param {Object|function(): Object} ctx The context of `compose`; a
+ *   function is read when the step runs, for a context an earlier step of
+ *   the run fills in (the answer of the payment request)
  * @param {{ when?: function(Object): boolean, bookingId?: string }} [options]
  * @returns {Object} The step
  */
 function noticeStep(mail, type, ctx, options) {
-  return step(PHASE.NOTIFY, "mail", type, () => mail.send(type, ctx), options);
+  return step(
+    PHASE.NOTIFY,
+    "mail",
+    type,
+    () => mail.send(type, typeof ctx === "function" ? ctx() : ctx),
+    options,
+  );
 }
 
 class LifecycleError extends Error {

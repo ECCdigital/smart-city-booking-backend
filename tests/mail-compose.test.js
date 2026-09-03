@@ -10,6 +10,7 @@
 
 const { expect } = require("chai");
 const sinon = require("sinon");
+const Handlebars = require("handlebars");
 
 const { compose } = require("../src/commons/mail-service");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
@@ -19,9 +20,11 @@ const {
 } = require("../src/commons/data-managers/bookable-manager");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const { BadRequestError } = require("../src/errors/BaseError");
+const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const {
   TENANT,
   TENANT_MAIL,
+  INSTANCE_MAIL,
   CUSTOMER,
   SUPERVISOR,
   SECRETARY,
@@ -29,6 +32,7 @@ const {
   GROUP,
   GROUP_MEMBER_IDS,
   FRONTEND_URL,
+  BACKEND_URL,
   NOW,
   tenant,
   booking,
@@ -42,14 +46,19 @@ describe("compose: a notice as mail values", function () {
   let env;
 
   beforeEach(function () {
-    env = process.env.FRONTEND_URL;
+    env = {
+      FRONTEND_URL: process.env.FRONTEND_URL,
+      BACKEND_URL: process.env.BACKEND_URL,
+    };
     process.env.FRONTEND_URL = FRONTEND_URL;
+    process.env.BACKEND_URL = BACKEND_URL;
     sinon.useFakeTimers({ now: NOW, toFake: ["Date"] });
   });
 
   afterEach(function () {
     sinon.restore();
-    process.env.FRONTEND_URL = env;
+    process.env.FRONTEND_URL = env.FRONTEND_URL;
+    process.env.BACKEND_URL = env.BACKEND_URL;
   });
 
   const filenames = (mail) => mail.attachments.map((att) => att.filename);
@@ -302,6 +311,147 @@ describe("compose: a notice as mail values", function () {
 
       installMailStackStore({ events: [concert({ eventOrganizer: {} })] });
       expect(await compose("NEW_BOOKING", single("G-3"))).to.deep.equal([]);
+    });
+  });
+
+  describe("the account and tenant notices", function () {
+    const encoded = encodeURIComponent(CUSTOMER);
+    /** A link as the snippet prints it: Handlebars-escaped. */
+    const link = (url) => Handlebars.Utils.escapeExpression(url);
+
+    it("a verification request: an instance mail to the address named, the storefront's verify URL carrying token and address", async function () {
+      installMailStackStore();
+
+      const mails = await compose("VERIFICATION_REQUEST", {
+        to: CUSTOMER,
+        hookId: "hook-verify-1",
+        verifyUrl: `${FRONTEND_URL}/auth/verify`,
+      });
+
+      expect(mails).to.have.length(1);
+      expect(mails[0]).to.include({
+        type: "VERIFICATION_REQUEST",
+        tenantId: null,
+        to: CUSTOMER,
+        subject: "Bestätigen Sie Ihre E-Mail-Adresse",
+      });
+      expect(mails[0].attachments).to.deep.equal([]);
+      expect(mails[0].html).to.include(
+        link(`${FRONTEND_URL}/auth/verify?token=hook-verify-1&id=${encoded}`),
+      );
+    });
+
+    it("a verification request without a verify URL links the backend's own route", async function () {
+      installMailStackStore();
+
+      const [mail] = await compose("VERIFICATION_REQUEST", {
+        to: CUSTOMER,
+        hookId: "hook-verify-1",
+      });
+
+      expect(mail.html).to.include(
+        link(`${BACKEND_URL}/auth/verify/hook-verify-1`),
+      );
+    });
+
+    it("a forgot-password request and a card link request build their links the same way, with the storefront's route or the backend's", async function () {
+      installMailStackStore();
+
+      const [forgot] = await compose("FORGOT_PASSWORD_REQUEST", {
+        to: CUSTOMER,
+        hookId: "hook-forgot-1",
+      });
+      const [card] = await compose("CARD_LINK_REQUEST", {
+        to: CUSTOMER,
+        firstName: "Erika",
+        hookId: "hook-card-1",
+        cardLabel: "Bibliothekskarte",
+        linkUrlBase: `${FRONTEND_URL}/auth/card/link`,
+      });
+
+      expect(forgot.html).to.include(
+        link(
+          `${FRONTEND_URL}/password/reset?token=hook-forgot-1&id=${encoded}`,
+        ),
+      );
+      expect(card.html).to.include(
+        link(`${FRONTEND_URL}/auth/card/link?token=hook-card-1&id=${encoded}`),
+      );
+      expect(card.html).to.include("Bibliothekskarte");
+    });
+
+    it("the notice of a new user goes to the instance's address, the user read by id", async function () {
+      installMailStackStore();
+
+      const mails = await compose("USER_CREATED", { userId: CUSTOMER });
+
+      expect(mails).to.have.length(1);
+      expect(mails[0]).to.include({
+        tenantId: null,
+        to: INSTANCE_MAIL,
+        subject: "Ein neuer Benutzer wurde erstellt",
+      });
+      expect(mails[0].html).to.include("Musterfrau");
+      expect(mails[0].html).to.include(CUSTOMER);
+    });
+
+    it("an invitation is a tenant mail to the address named, over the tenant's template, with the storefront's invitation link", async function () {
+      installMailStackStore();
+
+      const [mail] = await compose("INVITATION", {
+        tenantId: TENANT,
+        to: "neu@example.test",
+        token: "invite-token-1",
+      });
+
+      expect(mail).to.include({
+        type: "INVITATION",
+        tenantId: TENANT,
+        to: "neu@example.test",
+        subject: "Biletado - Einladung zum Stadthalle Musterstadt Mandanten",
+      });
+      expect(mail.html).to.include(
+        link(`${FRONTEND_URL}/auth/invitation/${TENANT}?token=invite-token-1`),
+      );
+    });
+
+    it("a workflow notification names the booking in its subject and reads the tenant only, never the booking", async function () {
+      installMailStackStore();
+
+      const [mail] = await compose("WORKFLOW_NOTIFICATION", {
+        tenantId: TENANT,
+        bookingIds: ["B-1"],
+        to: SUPERVISOR,
+        oldStatus: "Eingegangen",
+        newStatus: "Geprüft",
+      });
+
+      expect(mail).to.include({
+        tenantId: TENANT,
+        to: SUPERVISOR,
+        subject: "Änderung bei der Buchung Nr. B-1 - Neuer Status",
+      });
+      expect(mail.html).to.include("Geprüft");
+      expect(TenantManager.getTenant.callCount).to.equal(1);
+      expect(BookingManager.getBookings.callCount).to.equal(0);
+      expect(BookingManager.getBooking.callCount).to.equal(0);
+    });
+
+    it("an instance notice reads the instance once and no tenant", async function () {
+      installMailStackStore();
+
+      await compose("PASSWORD_RESET", { to: CUSTOMER, hookId: "hook-reset-1" });
+
+      expect(InstanceManager.getInstance.callCount).to.equal(1);
+      expect(TenantManager.getTenant.callCount).to.equal(0);
+    });
+
+    it("a notice to a named address without one is nothing", async function () {
+      installMailStackStore();
+
+      expect(
+        await compose("PASSWORD_RESET", { hookId: "hook-reset-1" }),
+      ).to.deep.equal([]);
     });
   });
 

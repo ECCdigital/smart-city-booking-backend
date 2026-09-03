@@ -246,7 +246,7 @@ Eine erneute Ausstellung eines Buchungsdokuments unter derselben Dokumentnummer,
 _Avoid_: Nachdruck (als Modellbegriff — das ist die Handlung), Reprint, Belegkopie, Duplikat
 
 **Zahlungsaufforderung**:
-Die eine Mitteilung, mit der der Mandant den Buchenden zur Zahlung einer Buchung in „Zahlung offen" auffordert. Ihre Form bestimmt der Zahlungsanbieter des Mandanten: ein Zahlungslink, eine ausgestellte Rechnung oder die Ankündigung einer später erstellten Rechnung. Eine Mitteilung, kein Zustand: scheitert sie, bleibt die Buchung in „Zahlung offen". Bucht der Buchende selbst, ist die Antwort des Checkouts – die Zahlungsseite, auf die er weitergeleitet wird – seine Zahlungsaufforderung; die Aufnahme sendet dann keine zweite.
+Die eine Mitteilung, mit der der Mandant den Buchenden zur Zahlung einer Buchung in „Zahlung offen" auffordert. Ihre Form bestimmt der Zahlungsanbieter des Mandanten und antwortet sie dem Übergang als Wert: ein Zahlungslink, eine ausgestellte Rechnung oder die Ankündigung einer später erstellten Rechnung; die Mitteilung dieser Form sendet der Übergang, kein Anbieter versendet selbst. Eine Mitteilung, kein Zustand: scheitert sie, bleibt die Buchung in „Zahlung offen". Bucht der Buchende selbst, ist die Antwort des Checkouts – die Zahlungsseite, auf die er weitergeleitet wird – seine Zahlungsaufforderung; die Aufnahme sendet dann keine zweite.
 _Avoid_: paymentRequest (als Sprechbegriff), Rechnungsversand (das ist nur eine der drei Formen), Zahlungserinnerung (das gibt es nicht)
 
 **Löschung (einer Buchung)**:
@@ -260,11 +260,11 @@ Eine Mail, die die Plattform aus einem Anlass versendet — mit einer Mitteilung
 _Avoid_: Mail (unqualifiziert), E-Mail-Benachrichtigung, Notification, Sendung
 
 **Mitteilungsart**:
-Der Anlass einer Mitteilung — Buchungsbestätigung, Stornierung, Zahlungsaufforderung, Einladung, Passwort-Reset und so fort. Sie legt fest, wer sie bekommt, welche Mail-Vorlage sie trägt und was ihr beiliegt; Aufrufer nennen die Art, nie einen Empfänger oder ein Template.
-_Avoid_: MailType (als Sprechbegriff), Template-Name, Mail-Typ
+Der Anlass einer Mitteilung — Buchungsbestätigung, Stornierung, Zahlungsaufforderung, Einladung, Passwort-Reset und so fort. Sie legt fest, wer sie bekommt, welche Mail-Vorlage sie trägt, was ihr beiliegt und in welchem Rahmen sie ausgeht — dem des Mandanten bei einer _Buchungs-_ oder _Mandanten-Mitteilung_, dem der Plattform bei einer _Instanz-Mitteilung_ (Konto-Mails); Aufrufer nennen die Art und den Anlass, nie einen Empfänger, ein Template oder einen Link.
+_Avoid_: MailType (als Sprechbegriff), Template-Name, Mail-Typ, Konto-Mail (als Modellbegriff — das ist eine Instanz-Mitteilung)
 
 **Empfängerkreis (einer Mitteilungsart)**:
-Wer eine Mitteilung dieser Art bekommt: der _Buchende_, der _Mandant_, die _Aufsicht_ (die am Mandanten hinterlegten Benachrichtigungsempfänger), die _Veranstalter_ (die Eigner der gebuchten Ressourcen), die _Instanz_ oder eine _genannte Adresse_. Ein Kreis kann leer sein — dann gibt es keine Mitteilung, keinen Fehler.
+Wer eine Mitteilung dieser Art bekommt: der _Buchende_, der _Mandant_, die _Aufsicht_ (die an der Mitgliedschaft des Buchenden hinterlegten Benachrichtigungsempfänger), die _Veranstalter_ (die Eigner der gebuchten Veranstaltungen), die _Instanz_ (die Adresse der Plattform-Verwaltung) oder eine _genannte Adresse_ (Verifizierung, Einladung, Karten-Link, Workflow). Ein Kreis kann leer sein — dann gibt es keine Mitteilung, keinen Fehler.
 _Avoid_: address (als Parameter), Adressat, Recipient-Liste, BCC (das ist eine Kopie, kein Kreis)
 
 **Sammelmitteilung**:

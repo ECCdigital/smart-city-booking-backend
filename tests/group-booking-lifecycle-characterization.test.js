@@ -283,6 +283,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "workflow.onCommit B1",
         "workflow.onCommit B2",
         "payment.paymentRequest B1,B2 aggregated",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
       ]);
     });
 
@@ -337,6 +338,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "workflow.onCommit B1",
         "workflow.onCommit B2",
         "payment.paymentRequest B1,B2 aggregated",
+        "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
         "mail.NEW_BOOKING orga@example.test",
         "mail.NEW_BOOKING orga@example.test",
       ]);

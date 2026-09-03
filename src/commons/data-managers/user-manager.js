@@ -248,20 +248,6 @@ class UserManager {
     }
   }
 
-  static async resetPassword(user, password) {
-    const MailController = require("../mail-service/mail-controller");
-    try {
-      const userEntity = user instanceof User ? user : new User(user);
-
-      const hook = userEntity.addPasswordResetHook(password);
-      await UserManager.updateUser(userEntity);
-      await MailController.sendPasswordResetRequest(userEntity.id, hook.id);
-      return hook;
-    } catch (err) {
-      throw err;
-    }
-  }
-
   static async getUserByHookID(hookID) {
     const rawUser = await UserModel.findOne({ "hooks.id": hookID });
 

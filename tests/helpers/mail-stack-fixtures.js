@@ -7,8 +7,8 @@
  * account mails go out from.
  *
  * `installMailStackStore` puts that fixture behind the data managers the
- * mail stack reads through, so `MailController` and the lifecycle mail
- * adapter run unchanged over it; the transport is the in-memory one
+ * mail stack reads through, so `compose` and the lifecycle mail adapter
+ * run unchanged over it; the transport is the in-memory one
  * (`in-memory-mail-transport.js`). Nothing here reaches a database.
  */
 
