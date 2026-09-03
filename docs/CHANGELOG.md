@@ -37,6 +37,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- Booking lifecycle, step 1 of 9: characterization tests over HTTP (`supertest`, new dev dependency) pin every state change of a booking and a group booking as it is today - admission, commit, pay, reject, cancellation request, the admin PUT and the reprint endpoints - each as a table of its effects at the seam. The known defects are pinned as today's behaviour and name the ticket that turns them. No production code changed
 - Access provider contract test against NUKI, Salto KS, iFBS and an in-memory test provider, plus characterization tests that pin today's provider dialects. Access providers accept an injected API client (`{ client }`) for tests; production behaviour is unchanged
 
 - Manual price per bookable item: `bookableItems[].manualPriceEur` (net, per unit) on the admin booking API (`PUT /api/:tenant/bookings`). Under the `ADMIN_MANUAL` checkout policy it replaces the price that categories or external providers would yield — VAT, amount and coupons apply as before — and it stays on the stored item until the admin clears it (`null`), so moving the booking never silently reprices it. A self-service checkout that carries the field has it stripped (on copies — the caller's items are left untouched), so it can never reach a stored booking. Until now the Admin UI could only express an entered price by rewriting one price category of the item, which silently missed whenever that category did not match the booking date

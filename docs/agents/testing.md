@@ -5,7 +5,7 @@
 - **Runner:** Mocha (`npm test`)
 - **Assertions:** Node `assert` or Chai
 - **Mocking:** Sinon (`sinon.stub`, `sinon.spy`)
-- **HTTP tests:** chai-http (where used)
+- **HTTP tests:** supertest against the real routers on a bare express app (see `tests/helpers/booking-lifecycle-harness.js`); chai-http is still installed but unused
 
 ## Location
 
