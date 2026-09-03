@@ -788,14 +788,8 @@ class InvitationService {
 module.exports = InvitationService;
 
 /** The invitation, a tenant notice to the address named. */
-async function sendInvitation(tenantId, to, token) {
-  for (const mail of await mailService.compose("INVITATION", {
-    tenantId,
-    to,
-    token,
-  })) {
-    await mailService.send(mail);
-  }
+function sendInvitation(tenantId, to, token) {
+  return mailService.notify("INVITATION", { tenantId, to, token });
 }
 
 function isDuplicateSingleInvitationError(error) {

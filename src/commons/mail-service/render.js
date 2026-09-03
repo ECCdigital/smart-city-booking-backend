@@ -363,8 +363,9 @@ async function render(
 }
 
 /**
- * Renders a tenant or instance notice - the account mails, the invitation,
- * the workflow notification - into its mail values, one per recipient: the
+ * Renders a tenant or instance notice - verification, password, user
+ * created, card link, invitation, workflow - into its mail values, one per
+ * recipient: the
  * snippet with the type's template data, in the shell template of the
  * tenant (`genericMailTemplate`) or the instance (`mailTemplate`), the
  * subject as its title. No override, no booking details, no attachments.
@@ -383,14 +384,7 @@ async function renderShellNotice(
   type,
   { mailType, tenantId, tenant, instance, recipients, templateData = {} },
 ) {
-  if (recipients.length === 0) {
-    return [];
-  }
-  const subject = resolve(mailType.subject, {
-    tenant,
-    hasAttachments: false,
-    ...templateData,
-  });
+  const subject = resolve(mailType.subject, { tenant, ...templateData });
   const content = renderSnippet(mailType.templateName, templateData);
   const shellTemplate =
     mailType.family === "tenant"

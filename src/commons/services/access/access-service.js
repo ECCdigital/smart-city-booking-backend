@@ -2847,9 +2847,8 @@ class AccessService {
   }
 
   /**
-   * The access notice (`ACCESS_PROVISIONED`) of the booker, over the mail
-   * module's `compose` + `send`; a mail that fails is logged, the grant
-   * stands.
+   * The access notice (`ACCESS_PROVISIONED`) of the booker; a mail that
+   * fails is logged, the grant stands.
    */
   static async _sendProvisionedMail(booking, provisionedAccessPoints) {
     if (!provisionedAccessPoints.length || !booking.mail) {
@@ -2857,14 +2856,11 @@ class AccessService {
     }
 
     try {
-      const mails = await mailService.compose("ACCESS_PROVISIONED", {
+      await mailService.notify("ACCESS_PROVISIONED", {
         tenantId: booking.tenantId,
         bookingIds: [booking.id],
         accessPoints: provisionedAccessPoints,
       });
-      for (const mail of mails) {
-        await mailService.send(mail);
-      }
     } catch (err) {
       logger.error(
         `${booking.tenantId} -- failed to send access provisioned mail for booking ${booking.id}: ${err.message}`,

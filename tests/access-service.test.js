@@ -638,7 +638,7 @@ describe("AccessService provisionForBooking", () => {
       ],
     });
     sandbox.stub(BookingManager, "storeBooking").resolves(booking);
-    sandbox.stub(mailModule, "compose").resolves([]);
+    sandbox.stub(mailModule, "notify").resolves([]);
     sandbox.stub(AccessLogService, "log").resolves();
 
     const result = await AccessService.provisionForBooking(

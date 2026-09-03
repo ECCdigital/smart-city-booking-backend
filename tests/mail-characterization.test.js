@@ -11,7 +11,8 @@
  * way the lifecycle calls them - the three forms of the payment request
  * with the value the payment provider answers; the notices of the other
  * callers - the reprint, the access service, the workflow action, the
- * account services - go in as those call `compose` and `send`.
+ * user, invitation and card services - go in as those call `compose` and
+ * `send`.
  *
  * Written for the first ticket of the mail-stack chain (Wayfinder,
  * "Mail-Stack (1): Charakterisierung ..."; spec section 6) against the
@@ -28,7 +29,7 @@
 const { expect } = require("chai");
 const sinon = require("sinon");
 
-const { compose, send } = require("../src/commons/mail-service");
+const { notify } = require("../src/commons/mail-service");
 const mail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const PaymentService = require("../src/commons/services/payment/providers/payment-service");
 const { expectSnapshot } = require("./helpers/snapshot");
@@ -106,16 +107,6 @@ describe("mail characterization: every notice as it goes out today", function ()
     process.env.FRONTEND_URL = env.FRONTEND_URL;
     process.env.BACKEND_URL = env.BACKEND_URL;
   });
-
-  /**
-   * Composes a notice and sends every mail of it, the way the callers
-   * outside the lifecycle do.
-   */
-  async function sendAll(type, ctx) {
-    for (const value of await compose(type, ctx)) {
-      await send(value);
-    }
-  }
 
   /** Runs a send and pins the first of the mails it produced. */
   async function pin(name, send, { count = 1 } = {}) {
@@ -307,7 +298,7 @@ describe("mail characterization: every notice as it goes out today", function ()
   describe("booking notices of the other callers, over compose + send", function () {
     it("invoice (reprint and the checkout's invoice payment): the invoice, no iCal", async function () {
       await pin("invoice", () =>
-        sendAll(
+        notify(
           "INVOICE",
           single("B-1", { attachments: [issuedFile("RG-1.pdf")] }),
         ),
@@ -316,13 +307,13 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("group invoice", async function () {
       await pin("invoice.group", () =>
-        sendAll("INVOICE", group({ attachments: [issuedFile("RG-2.pdf")] })),
+        notify("INVOICE", group({ attachments: [issuedFile("RG-2.pdf")] })),
       );
     });
 
     it("access provisioned: the access points with their PINs", async function () {
       await pin("access-provisioned", () =>
-        sendAll(
+        notify(
           "ACCESS_PROVISIONED",
           single("B-1", {
             accessPoints: [
@@ -343,7 +334,7 @@ describe("mail characterization: every notice as it goes out today", function ()
   describe("tenant notices", function () {
     it("workflow notification: the status change, over the tenant's template", async function () {
       await pin("workflow-notification", () =>
-        sendAll("WORKFLOW_NOTIFICATION", {
+        notify("WORKFLOW_NOTIFICATION", {
           tenantId: TENANT,
           bookingIds: ["B-1"],
           to: SUPERVISOR,
@@ -355,7 +346,7 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("invitation: the link with the token, over the tenant's template", async function () {
       await pin("invitation", () =>
-        sendAll("INVITATION", {
+        notify("INVITATION", {
           tenantId: TENANT,
           to: "neu@example.test",
           token: "invite-token-1",
@@ -367,7 +358,7 @@ describe("mail characterization: every notice as it goes out today", function ()
   describe("instance notices", function () {
     it("verification request with the storefront's verify URL", async function () {
       await pin("verification-request", () =>
-        sendAll("VERIFICATION_REQUEST", {
+        notify("VERIFICATION_REQUEST", {
           to: CUSTOMER,
           hookId: "hook-verify-1",
           verifyUrl: `${FRONTEND_URL}/auth/verify`,
@@ -377,7 +368,7 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("verification request without a verify URL: the backend's own route", async function () {
       await pin("verification-request.backend-url", () =>
-        sendAll("VERIFICATION_REQUEST", {
+        notify("VERIFICATION_REQUEST", {
           to: CUSTOMER,
           hookId: "hook-verify-1",
         }),
@@ -386,13 +377,13 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("password reset: the backend's confirmation route", async function () {
       await pin("password-reset", () =>
-        sendAll("PASSWORD_RESET", { to: CUSTOMER, hookId: "hook-reset-1" }),
+        notify("PASSWORD_RESET", { to: CUSTOMER, hookId: "hook-reset-1" }),
       );
     });
 
     it("forgot password with the storefront's reset URL", async function () {
       await pin("forgot-password-request", () =>
-        sendAll("FORGOT_PASSWORD_REQUEST", {
+        notify("FORGOT_PASSWORD_REQUEST", {
           to: CUSTOMER,
           hookId: "hook-forgot-1",
           resetUrl: `${FRONTEND_URL}/auth/reset`,
@@ -402,7 +393,7 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("forgot password without a reset URL: the storefront's default route", async function () {
       await pin("forgot-password-request.default-url", () =>
-        sendAll("FORGOT_PASSWORD_REQUEST", {
+        notify("FORGOT_PASSWORD_REQUEST", {
           to: CUSTOMER,
           hookId: "hook-forgot-1",
         }),
@@ -411,13 +402,13 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("user created: to the instance's address", async function () {
       await pin("user-created", () =>
-        sendAll("USER_CREATED", { userId: CUSTOMER }),
+        notify("USER_CREATED", { userId: CUSTOMER }),
       );
     });
 
     it("card link request with the storefront's link URL", async function () {
       await pin("card-link-request", () =>
-        sendAll("CARD_LINK_REQUEST", {
+        notify("CARD_LINK_REQUEST", {
           to: CUSTOMER,
           firstName: "Erika",
           hookId: "hook-card-1",
@@ -429,7 +420,7 @@ describe("mail characterization: every notice as it goes out today", function ()
 
     it("card link request without a link URL: the backend's own route", async function () {
       await pin("card-link-request.backend-url", () =>
-        sendAll("CARD_LINK_REQUEST", {
+        notify("CARD_LINK_REQUEST", {
           to: CUSTOMER,
           firstName: "",
           hookId: "hook-card-1",

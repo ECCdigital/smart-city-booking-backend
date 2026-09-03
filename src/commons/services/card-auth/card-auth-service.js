@@ -168,16 +168,13 @@ class CardAuthService {
 
       await UserManager.updateUser(existingEmailUser);
 
-      const mails = await mailService.compose("CARD_LINK_REQUEST", {
+      await mailService.notify("CARD_LINK_REQUEST", {
         to: existingEmailUser.id,
         firstName: existingEmailUser.firstName,
         hookId: hook.id,
         cardLabel: app.label,
         linkUrlBase: linkUrl,
       });
-      for (const mail of mails) {
-        await mailService.send(mail);
-      }
 
       logger.info(
         `Card link request sent: user=${existingEmailUser.id}, app=${appId}`,

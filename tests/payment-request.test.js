@@ -85,8 +85,7 @@ describe("the payment request as a value", function () {
       sinon.stub(BookingManager, "getBooking").resolves(booking);
       sinon.stub(issuance, "issue").resolves({ attachment, file });
       sinon.stub(issuance, "groupBookingIdOf").resolves("G");
-      sinon.stub(mailModule, "compose").resolves([]);
-      sinon.stub(mailModule, "send").resolves({ status: "sent" });
+      sinon.stub(mailModule, "notify").resolves([]);
     }
 
     it("announces an invoice the administration creates later, issuing nothing and sending nothing", async function () {
@@ -99,8 +98,7 @@ describe("the payment request as a value", function () {
 
       expect(answer).to.deep.equal({ form: "pending" });
       expect(issuance.issue.called).to.equal(false);
-      expect(mailModule.compose.called).to.equal(false);
-      expect(mailModule.send.called).to.equal(false);
+      expect(mailModule.notify.called).to.equal(false);
     });
 
     it("issues the invoice and answers it as a file, sending nothing itself", async function () {
@@ -119,8 +117,7 @@ describe("the payment request as a value", function () {
         groupBookingId: null,
         bookings: [booking],
       });
-      expect(mailModule.compose.called).to.equal(false);
-      expect(mailModule.send.called).to.equal(false);
+      expect(mailModule.notify.called).to.equal(false);
     });
 
     it("issues one aggregated invoice for a group", async function () {
@@ -141,10 +138,8 @@ describe("the payment request as a value", function () {
       ]);
     });
 
-    it("the checkout's invoice payment (createPayment) still issues and mails the invoice, over compose + send", async function () {
+    it("the checkout's invoice payment (createPayment) still issues and mails the invoice, over notify", async function () {
       given();
-      const value = { type: "INVOICE", to: "erika@example.test" };
-      mailModule.compose.resolves([value]);
 
       const answer = await new InvoicePaymentService(
         TENANT,
@@ -154,7 +149,7 @@ describe("the payment request as a value", function () {
       expect(answer).to.deep.equal([
         { bookingId: "B-1", name: "RG-1.pdf", invoiceId: "RG-1", revision: 1 },
       ]);
-      expect(mailModule.compose.firstCall.args).to.deep.equal([
+      expect(mailModule.notify.firstCall.args).to.deep.equal([
         "INVOICE",
         {
           tenantId: TENANT,
@@ -163,7 +158,6 @@ describe("the payment request as a value", function () {
           attachments: [file],
         },
       ]);
-      expect(mailModule.send.calledOnceWith(value)).to.equal(true);
     });
 
     it("the checkout's aggregated invoice payment mails one aggregated invoice", async function () {
@@ -180,7 +174,7 @@ describe("the payment request as a value", function () {
         invoiceId: "RG-1",
         revision: 1,
       });
-      expect(mailModule.compose.firstCall.args).to.deep.equal([
+      expect(mailModule.notify.firstCall.args).to.deep.equal([
         "INVOICE",
         {
           tenantId: TENANT,
@@ -203,7 +197,7 @@ describe("the payment request as a value", function () {
         manualCreation: true,
         bookingIds: ["B-1"],
       });
-      expect(mailModule.compose.firstCall.args).to.deep.equal([
+      expect(mailModule.notify.firstCall.args).to.deep.equal([
         "BOOKING_CONFIRMED_INVOICE_PENDING",
         { tenantId: TENANT, bookingIds: ["B-1"], groupBookingId: null },
       ]);
@@ -211,7 +205,7 @@ describe("the payment request as a value", function () {
 
     it("a mail that fails at the checkout's invoice payment is logged, the invoice stands", async function () {
       given();
-      mailModule.compose.rejects(new Error("smtp down"));
+      mailModule.notify.rejects(new Error("smtp down"));
 
       const answer = await new InvoicePaymentService(
         TENANT,

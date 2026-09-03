@@ -14,14 +14,7 @@ const CouponManager = require("../data-managers/coupon-manager");
 const MembershipManager = require("../data-managers/membership-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
-const mailService = require("../mail-service");
-
-/** Sends an account notice (an instance mail) over compose + send. */
-async function notify(type, ctx) {
-  for (const mail of await mailService.compose(type, ctx)) {
-    await mailService.send(mail);
-  }
-}
+const { notify } = require("../mail-service");
 
 class UserService {
   static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {

@@ -29,10 +29,10 @@
  * `includeQRCode`, `sendBCC`, `addRejectionLink`, `attachICal`,
  * `mergeMailAttach` and `gate` are of the booking family only.
  *
- * Of a tenant or instance notice (the account mails, the invitation, the
- * workflow notification), `templateData` gets the whole context and
- * `{ tenant, instance, user }`, and `subject` gets `{ tenant }` joined by
- * the template data. The links these notices carry are built here: the
+ * Of a tenant or instance notice (verification, password, user created,
+ * card link, invitation, workflow), `templateData` gets the whole context
+ * and `{ tenant, instance, user }`, and `subject` gets `{ tenant }` joined
+ * by the template data. The links these notices carry are built here: the
  * storefront's route where the caller names one, the backend's own
  * otherwise.
  */

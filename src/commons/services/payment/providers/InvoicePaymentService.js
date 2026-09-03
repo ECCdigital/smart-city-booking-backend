@@ -135,15 +135,12 @@ class InvoicePaymentService extends PaymentService {
    */
   async _notify(type, bookingIds, groupBookingId, specific = {}) {
     try {
-      const mails = await mailService.compose(type, {
+      await mailService.notify(type, {
         tenantId: this.tenantId,
         bookingIds,
         groupBookingId,
         ...specific,
       });
-      for (const mail of mails) {
-        await mailService.send(mail);
-      }
     } catch (err) {
       logger.error(
         `${this.tenantId} -- ${type} for ${bookingIds.join(", ")} failed: ${err.message}`,

@@ -27,7 +27,7 @@ const {
   TRIGGERS,
   nextState,
 } = require("./booking-state");
-const { PHASE, SKIPPED, step, noticeStep, runPipeline } = require("./pipeline");
+const { PHASE, SKIPPED, step, noticesOf, runPipeline } = require("./pipeline");
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
@@ -146,22 +146,13 @@ function createBookingLifecycle(adapters) {
     clock = Date.now,
   } = adapters;
 
-  /**
-   * The notices of one booking over the mail adapter; the type-specific
-   * part may be a function, read when the step runs.
-   */
+  /** The notices of one booking over the mail adapter. */
   function noticeOf(tenantId, bookingId) {
-    const base = { tenantId, bookingIds: [bookingId], groupBookingId: null };
-    return (type, specific = {}, options) =>
-      noticeStep(
-        mail,
-        type,
-        () => ({
-          ...base,
-          ...(typeof specific === "function" ? specific() : specific),
-        }),
-        options,
-      );
+    return noticesOf(mail, {
+      tenantId,
+      bookingIds: [bookingId],
+      groupBookingId: null,
+    });
   }
 
   async function load(tenantId, bookingId) {

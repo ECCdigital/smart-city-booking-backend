@@ -117,6 +117,29 @@ function noticeStep(mail, type, ctx, options) {
   );
 }
 
+/**
+ * The notices of one booking or one group: `notice(type, specific,
+ * options)` declares the notify step of a type over `base` - the tenant,
+ * the bookings, the group - joined by the type-specific part, which may
+ * be a function read when the step runs.
+ *
+ * @param {Object} mail The mail adapter
+ * @param {{ tenantId: string, bookingIds: string[], groupBookingId: string|null }} base
+ * @returns {function(string, Object|function, Object=): Object}
+ */
+function noticesOf(mail, base) {
+  return (type, specific = {}, options) =>
+    noticeStep(
+      mail,
+      type,
+      () => ({
+        ...base,
+        ...(typeof specific === "function" ? specific() : specific),
+      }),
+      options,
+    );
+}
+
 class LifecycleError extends Error {
   /**
    * @param {string} transition
@@ -363,6 +386,7 @@ module.exports = {
   EFFECT_STATUS,
   SKIPPED,
   noticeStep,
+  noticesOf,
   policyOf,
   step,
   runPipeline,

@@ -21,7 +21,13 @@
  */
 
 const { STATUS, TRANSITION, TRIGGER, nextState } = require("./booking-state");
-const { PHASE, step, noticeStep, runPipeline } = require("./pipeline");
+const {
+  PHASE,
+  step,
+  noticeStep,
+  noticesOf,
+  runPipeline,
+} = require("./pipeline");
 const {
   WORKFLOW_EVENT,
   REFUND_ORIGIN,
@@ -177,26 +183,13 @@ function createGroupBookingLifecycle(adapters) {
     );
   }
 
-  /**
-   * The aggregated notice of the group over the mail adapter; the
-   * type-specific part may be a function, read when the step runs.
-   */
+  /** The aggregated notice of the group over the mail adapter. */
   function noticeOf(tenantId, group) {
-    const base = {
+    return noticesOf(mail, {
       tenantId,
       bookingIds: group.bookingIds,
       groupBookingId: group.id,
-    };
-    return (type, specific = {}, options) =>
-      noticeStep(
-        mail,
-        type,
-        () => ({
-          ...base,
-          ...(typeof specific === "function" ? specific() : specific),
-        }),
-        options,
-      );
+    });
   }
 
   /** The workflow event of every member, unless a workflow action set it off. */

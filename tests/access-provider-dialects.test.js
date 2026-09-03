@@ -1386,7 +1386,7 @@ describe("access provider dialects: what AccessService makes of them", () => {
       .stub(AccessPointManager, "getAccessPoint")
       .callsFake(async (id) => doors.find((door) => door.id === id) || null);
     sandbox.stub(AccessLogService, "log").resolves();
-    sandbox.stub(mailModule, "compose").resolves([]);
+    sandbox.stub(mailModule, "notify").resolves([]);
     sandbox.stub(PermissionsService, "_isOwner").returns(true);
     sandbox.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
   }
@@ -1920,8 +1920,8 @@ describe("access provider dialects: what AccessService makes of them", () => {
       const secret = SecurityUtils.decrypt(entry.grant.secret);
       expect(secret).to.match(/^\d{6}$/);
 
-      expect(mailModule.compose.calledOnce).to.be.true;
-      expect(mailModule.compose.firstCall.args).to.deep.equal([
+      expect(mailModule.notify.calledOnce).to.be.true;
+      expect(mailModule.notify.firstCall.args).to.deep.equal([
         "ACCESS_PROVISIONED",
         {
           tenantId: TENANT,

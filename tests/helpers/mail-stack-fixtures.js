@@ -4,7 +4,7 @@
  * subject overrides, a booking with custom fields of every mail visibility,
  * a cancelled booking with a refund, a group of three members - one of
  * them a ticket for an event with an organizer - and the instance the
- * account mails go out from.
+ * instance notices go out from.
  *
  * `installMailStackStore` puts that fixture behind the data managers the
  * mail stack reads through, so `compose` and the lifecycle mail adapter

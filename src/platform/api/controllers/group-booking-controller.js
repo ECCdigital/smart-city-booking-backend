@@ -558,15 +558,12 @@ class GroupBookingController {
 
         if (shouldSendEmail) {
           try {
-            const mails = await mailService.compose("INVOICE", {
+            await mailService.notify("INVOICE", {
               tenantId,
               bookingIds: groupBooking.bookingIds,
               groupBookingId,
               attachments: [file],
             });
-            for (const mail of mails) {
-              await mailService.send(mail);
-            }
           } catch (err) {
             logger.error(
               "Error while sending aggregated invoice:",

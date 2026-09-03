@@ -197,7 +197,7 @@ describe("Compartments on the access seam", function () {
     sinon.stub(TenantManager, "getTenant").resolves(tenant());
     sinon.stub(UserManager, "getRawUser").resolves({ _id: "64f1" });
     sinon.stub(AccessLogService, "log").resolves();
-    sinon.stub(mailModule, "compose").resolves([]);
+    sinon.stub(mailModule, "notify").resolves([]);
     sinon.stub(PermissionsService, "_isOwner").returns(true);
   }
 
@@ -506,7 +506,7 @@ describe("Compartments on the access seam", function () {
       expect(entries.every((entry) => entry.isProvisioned)).to.equal(true);
       expect(entries.every((entry) => entry.hold === null)).to.equal(true);
       expect(pareva.rentalsInState("open")).to.have.length(2);
-      expect(mailModule.compose.called).to.equal(false);
+      expect(mailModule.notify.called).to.equal(false);
     });
 
     it("grants nothing twice", async function () {

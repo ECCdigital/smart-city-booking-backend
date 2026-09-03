@@ -48,16 +48,13 @@ class EmailAction extends WorkflowAction {
     // The workflow notification is a tenant notice to the addresses the
     // action names (`audience: named`), one per receiver.
     for (const receiver of receivers) {
-      const mails = await mailService.compose("WORKFLOW_NOTIFICATION", {
+      await mailService.notify("WORKFLOW_NOTIFICATION", {
         tenantId: this.tenantId,
         bookingIds: [this.taskId],
         to: receiver,
         oldStatus: this.sourceStatus,
         newStatus: this.destinationStatus,
       });
-      for (const mail of mails) {
-        await mailService.send(mail);
-      }
     }
   }
 }
