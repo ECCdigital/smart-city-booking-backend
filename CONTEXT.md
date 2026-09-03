@@ -278,3 +278,21 @@ _Avoid_: Snippet (das ist die Speicherform), Template (unqualifiziert), Override
 **Versandweg**:
 Der Weg, über den eine Mitteilung zugestellt wird: der _Mandanten-Versand_ über die vollständige Mail-Konfiguration des Mandanten oder der _Instanz-Versand_ über die der Plattform. Ein Mandant ohne vollständige Konfiguration versendet über die Instanz; die Wahl trifft der Versand, nie die Mitteilung.
 _Avoid_: Transport (als Sprechbegriff), useInstanceMail (das ist das Feld), Mailer, SMTP (das ist nur eine Form)
+
+### Rechte
+
+**Reichweite**:
+Die Antwort einer Berechtigungsprüfung, wenn sie nicht „nein“ lautet: _any_ (alle Datensätze des Mandanten) oder _own_ (nur die eigenen — dem Nutzer gehörend oder ihm zugewiesen). Ein Wert, der vom Router an Handler und Manager weitergereicht wird und dort zur Abfragebedingung wird; kein Handler verzweigt selbst über Rechte. Ein Datensatz außerhalb der Reichweite existiert für diesen Nutzer nicht (404), fehlende Reichweite auf der Route ist eine Verweigerung (403). Was jemand an einem eigenen Datensatz _tun_ darf (z.B. eine Buchung stornieren, aber nicht umbuchen), ist keine Reichweite, sondern Sache des jeweiligen Lebenszyklus.
+_Avoid_: Scope (bei Medien bereits Tenant- vs. Instanz-Scope), Level, AccessLevel (das sind die Rollenstufen `readAny`/`readOwn` …)
+
+**Prinzipal**:
+Wer einen Request stellt, als ein einmal je Request geladener Wert: Nutzer (oder anonym), Mandant (oder Instanz-Ebene), ob Instance-Owner, ob Tenant-Owner, die zusammengeführten Rollenstufen im Mandanten und ob er Mandanten anlegen darf. Vier Stufen mit fester Vorrangordnung: Instance-Owner erfüllt alles, Tenant-Owner alles im Mandanten, Rolle ihre Stufen, der Angemeldete seine eigenen Datensätze. Die Domäne kennt den Prinzipal nicht, nur die daraus abgeleitete Reichweite.
+_Avoid_: User (das ist die Entität), Subject, Caller, Session
+
+**Rechtetabelle**:
+Die eine Stelle, die je geschützter Sache (_resource_, z.B. Buchung, AccessPoint) und Handlung (_action_, z.B. lesen, schreiben, bedienen) sagt, welche Stufe des Prinzipals welche Reichweite bekommt. Daten, kein Code; jede Route nennt ihren Eintrag. Handlungen jenseits von anlegen, lesen, ändern, löschen sind benannte Einträge, keine neuen Rollenstufen.
+_Avoid_: Policy (als Sprechbegriff), ACL, Permission-Matrix, Rollengruppe (das ist die Stufe, nicht die Tabelle)
+
+**Berechtigung**:
+Die Prüfung an einer Route, ob der Prinzipal die Handlung an der Sache ausführen darf, und mit welcher Reichweite. Steht am Router, vor dem Handler; fehlt sie, ist die Route ausdrücklich öffentlich oder über ein Geheimnis (Token, Hook) autorisiert. Nicht zu verwechseln mit der Zugangsentscheidung, die das Bedienen von AccessPoints betrifft und nur das Verwaltungs-Ja der Berechtigung als Eingabe erhält.
+_Avoid_: Authorization (als Sprechbegriff), Berechtigungsprüfung (bei der Zugangsentscheidung als Altname gemeint), Rechteprüfung, Auth (das ist die Anmeldung)

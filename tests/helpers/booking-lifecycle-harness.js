@@ -67,7 +67,8 @@ const MediaManager = require("../../src/commons/data-managers/media-manager");
 const WorkflowManager = require("../../src/commons/data-managers/workflow-manager");
 const OpeningHoursManager = require("../../src/commons/utilities/opening-hours-manager");
 const PaymentUtils = require("../../src/commons/utilities/payment-utils");
-const PermissionsService = require("../../src/commons/services/permission-service");
+const InstanceManager = require("../../src/commons/data-managers/instance-manager");
+const { RoleManager } = require("../../src/commons/data-managers/role-manager");
 const CouponService = require("../../src/commons/services/coupon-service");
 const WorkflowService = require("../../src/commons/services/workflow/workflow-service");
 const MailerService = require("../../src/commons/mail-service/mail-service");
@@ -80,6 +81,8 @@ const MediaService = require("../../src/commons/services/media/media-service");
 const IdGenerator = require("../../src/commons/utilities/id-generator");
 const PaymentService = require("../../src/commons/services/payment/providers/payment-service");
 const { Bookable } = require("../../src/commons/entities/bookable/bookable");
+const { Role } = require("../../src/commons/entities/role/role");
+const Instance = require("../../src/commons/entities/instance/instance");
 const { Booking } = require("../../src/commons/entities/booking/booking");
 const {
   GroupBooking,
@@ -87,8 +90,18 @@ const {
 
 const TENANT = "tenant-1";
 const TENANT_MAIL = "stadt@example.test";
+/**
+ * The principals (glossary "Prinzipal") of the tenant, one per level:
+ * the instance owner, who also holds the all-role in the tenant; the
+ * tenant owner without a role; the holder of every level of every role
+ * group; and the customer, signed in without any role.
+ */
 const ADMIN = "admin@example.test";
+const OWNER = "owner@example.test";
+const ROLE_HOLDER = "rolle@example.test";
 const CUSTOMER = "erika@example.test";
+/** The one role of the tenant: every level of every group. */
+const ROLE_ALL = "role-all";
 const ORGANIZER = "orga@example.test";
 /** The one supervisor named at the customer's membership. */
 const SUPERVISOR = "chef@example.test";
@@ -109,8 +122,33 @@ const DAY = 24 * HOUR;
 const TIME_BEGIN = Date.UTC(2027, 5, 21, 10, 0, 0);
 const TIME_END = Date.UTC(2027, 5, 21, 12, 0, 0);
 
-const ROUTER = "../../src/platform/api/api-router-tenant-related";
-const ROUTER_V2 = "../../src/platform/api/v2/routes";
+const ROUTER = require.resolve(
+  "../../src/platform/api/api-router-tenant-related",
+);
+const ROUTER_V2 = require.resolve("../../src/platform/api/v2/routes");
+const ROUTER_AUTH = require.resolve(
+  "../../src/platform/authentication/authentication-router",
+);
+const ROUTER_API = require.resolve("../../src/platform/api/api-router");
+const ROUTER_HTML = require.resolve(
+  "../../src/platform/html-engine/html-router-tenant-related",
+);
+const ROUTER_JSON = require.resolve(
+  "../../src/platform/json-engine/json-router-tenant-related",
+);
+const ROUTER_CSV =
+  "../../src/platform/exporters/exporters-router-tenant-related";
+
+/** Every router of the platform with its mount, in the order of `server.js`. */
+const MOUNTS = Object.freeze([
+  ["/auth", ROUTER_AUTH],
+  ["/api", ROUTER_API],
+  ["/api/v2", ROUTER_V2],
+  ["/api/:tenant", ROUTER],
+  ["/html/:tenant", ROUTER_HTML],
+  ["/json/:tenant", ROUTER_JSON],
+  ["/csv/:tenant", ROUTER_CSV],
+]);
 
 /**
  * The state a booking is in, read off its three flags the way the spec's
@@ -252,11 +290,76 @@ function tenant(overrides = {}) {
 function createApp() {
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
   // The same mounting order as `server.js`.
-  app.use("/api/v2", require(ROUTER_V2));
-  app.use("/api/:tenant", require(ROUTER));
+  for (const [mount, router] of MOUNTS) {
+    app.use(mount, require(router));
+  }
   app.use(errorHandler);
   return app;
+}
+
+/** The role holding every level of every group. */
+function roleAll() {
+  return new Role({
+    id: ROLE_ALL,
+    name: "Alles",
+    tenantId: TENANT,
+    adminInterfaces: [],
+    ...Object.fromEntries(
+      [
+        "manageUsers",
+        "manageBookables",
+        "manageBookings",
+        "manageCoupons",
+        "manageMedia",
+        "manageRoles",
+      ].map((group) => [
+        group,
+        {
+          create: true,
+          readAny: true,
+          readOwn: true,
+          updateAny: true,
+          updateOwn: true,
+          deleteAny: true,
+          deleteOwn: true,
+        },
+      ]),
+    ),
+  });
+}
+
+/**
+ * The active membership of a user in the tenant: the owner is the tenant
+ * owner, the admin and the role holder carry the all-role, the customer
+ * names one supervisor; nobody else's does.
+ */
+function membershipOf(userId, tenantId = TENANT) {
+  return {
+    userId,
+    tenantId,
+    status: "active",
+    source: "manually",
+    owner: userId === OWNER,
+    roles: userId === ADMIN || userId === ROLE_HOLDER ? [ROLE_ALL] : [],
+    bookingNotificationRecipients:
+      userId === CUSTOMER
+        ? [{ type: "email", value: SUPERVISOR, label: "" }]
+        : [],
+    invitations: [],
+  };
+}
+
+/** The instance: the admin owns it, nobody else may open a tenant. */
+function instance() {
+  return new Instance({
+    id: "instance",
+    ownerUserIds: [ADMIN],
+    allowAllUsersToCreateTenant: false,
+    allowedUsersToCreateTenant: [],
+    mailEnabled: true,
+  });
 }
 
 /**
@@ -483,24 +586,19 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     );
   sinon.stub(UserManager, "getRawUser").resolves({ _id: CUSTOMER_DB_ID });
   sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
-  sinon
-    .stub(UserManager, "hasPermission")
-    .callsFake(async (userId) => userId === ADMIN);
-  sinon
-    .stub(PermissionsService, "_isInstanceOwner")
-    .callsFake(async (userId) => userId === ADMIN);
-  sinon.stub(PermissionsService, "_isTenantOwner").resolves(false);
-  // The customer's membership names one supervisor; nobody else's does.
+  // The rights run for real over the instance, the memberships and the
+  // one role: `PermissionService`, `UserManager.hasPermission` and
+  // `getUserPermissions` read these.
+  sinon.stub(InstanceManager, "getInstance").callsFake(async () => instance());
   sinon
     .stub(MembershipManager, "getMembershipByTenantAndUserID")
-    .callsFake(async (tenantId, userId) => ({
-      userId,
-      roles: [],
-      bookingNotificationRecipients:
-        userId === CUSTOMER
-          ? [{ type: "email", value: SUPERVISOR, label: "" }]
-          : [],
-    }));
+    .callsFake(async (tenantId, userId) => membershipOf(userId, tenantId));
+  sinon
+    .stub(MembershipManager, "getMembershipsByUserID")
+    .callsFake(async (userId) => [membershipOf(userId)]);
+  sinon
+    .stub(RoleManager, "getRole")
+    .callsFake(async (id) => (id === ROLE_ALL ? roleAll() : null));
   sinon.stub(MembershipManager, "getMembershipsByTenantAndRoles").resolves([]);
   // The event of the ticket, with what the organizer's notice prints.
   sinon.stub(EventManager, "getEvent").resolves({
@@ -707,6 +805,8 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     api().post(`/api/${TENANT}/payments/notify?${query}`).send(body);
 
   return {
+    /** The express app, every router mounted. */
+    app,
     /** A supertest request against the app. */
     api,
     /** Stops the server. */
@@ -772,6 +872,7 @@ function adminForm(stored, changes = {}) {
 
 module.exports = {
   installHarness,
+  createApp,
   bookable,
   checkoutBody,
   adminForm,
@@ -779,7 +880,11 @@ module.exports = {
   request,
   TENANT,
   TENANT_MAIL,
+  MOUNTS,
   ADMIN,
+  OWNER,
+  ROLE_HOLDER,
+  ROLE_ALL,
   CUSTOMER,
   ORGANIZER,
   SUPERVISOR,

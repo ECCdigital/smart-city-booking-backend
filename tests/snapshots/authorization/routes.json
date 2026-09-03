@@ -1,0 +1,1773 @@
+{
+  "POST /auth/signup": {
+    "anonymous": 409,
+    "signedIn": 409,
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "POST /auth/refresh": {
+    "anonymous": 401,
+    "signedIn": 401,
+    "roleHolder": 401,
+    "tenantOwner": 401,
+    "instanceOwner": 401
+  },
+  "POST /auth/resetpassword": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /auth/check-email": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /auth/forgot-password": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /auth/reset-password": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /auth/sso/signin": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /auth/sso/signup": {
+    "anonymous": "timeout",
+    "signedIn": "timeout",
+    "roleHolder": "timeout",
+    "tenantOwner": "timeout",
+    "instanceOwner": "timeout"
+  },
+  "POST /auth/sso/verify": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /auth/card-methods": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /auth/card/signin": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /auth/card/signup": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /auth/auth/card/link": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /auth/card/link": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /auth/verify/:hookId": {
+    "anonymous": 302,
+    "signedIn": 302,
+    "roleHolder": 302,
+    "tenantOwner": 302,
+    "instanceOwner": 302
+  },
+  "GET /auth/reset/:hookId": {
+    "anonymous": 302,
+    "signedIn": 302,
+    "roleHolder": 302,
+    "tenantOwner": 302,
+    "instanceOwner": 302
+  },
+  "POST /auth/verify-email": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /auth/signin": {
+    "anonymous": "403 {\"message\":\"Authentication failed\"}",
+    "signedIn": "403 {\"message\":\"Authentication failed\"}",
+    "roleHolder": "403 {\"message\":\"Authentication failed\"}",
+    "tenantOwner": "403 {\"message\":\"Authentication failed\"}",
+    "instanceOwner": "403 {\"message\":\"Authentication failed\"}"
+  },
+  "POST /auth/signout": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /auth/me": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/webhooks/access/:provider/:tenant": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/instances/public": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/instances": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "PUT /api/instances": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "GET /api/rules/meta": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "GET /api/rules/executions": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "GET /api/rules": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "POST /api/rules": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 400
+  },
+  "GET /api/rules/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "PUT /api/rules/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 400
+  },
+  "PUT /api/rules/:id/enabled": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "DELETE /api/rules/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 204
+  },
+  "POST /api/rules/:id/run": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 409
+  },
+  "POST /api/rules/:id/dry-run": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 500
+  },
+  "GET /api/rules/:id/executions": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/public": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/:id/payment-apps": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/:id/mail/templates/default": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/tenants": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 201
+  },
+  "DELETE /api/tenants/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/count/check": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:id/pdf-preview": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/tenants/:id/add-user": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/tenants/:id/remove-user": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:id/edit-user-roles": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "POST /api/tenants/:id/add-owner": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/tenants/:id/remove-owner": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/tenants/:id/remove-user-role": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/tenants/:id/users": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:id/update-user-status": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/tenants/:id/update-user-booking-notification-recipients": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/users": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/users/ids": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/users/:id": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/users/:id/change-id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 400
+  },
+  "PUT /api/users": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 200
+  },
+  "PUT /api/user": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "DELETE /api/users/:id": {
+    "anonymous": 401,
+    "signedIn": 500,
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "GET /api/roles": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/holidays": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/invitations/my": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/memberships": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 200
+  },
+  "GET /api/memberships/my/pending": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/memberships/my": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/catalog": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 200
+  },
+  "GET /api/catalog/public": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/catalog/mode": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/catalog/bundle": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/catalog": {
+    "anonymous": 401,
+    "signedIn": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
+    "roleHolder": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
+    "tenantOwner": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
+    "instanceOwner": 500
+  },
+  "GET /api/catalog/themes/:slug": {
+    "anonymous": 500,
+    "signedIn": 500,
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "GET /api/catalog/themes": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/catalog/availability/:slug": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/catalog/:slug": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/files/get": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/bookings/assigned": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/access/bookings": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/access/access-points/:accessPointId/bookings": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/instances/public #2": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/instances/bookable-custom-fields": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/instances/": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "PUT /api/instances/": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"Permission denied\"}",
+    "roleHolder": "403 {\"message\":\"Permission denied\"}",
+    "tenantOwner": "403 {\"message\":\"Permission denied\"}",
+    "instanceOwner": 200
+  },
+  "POST /api/v2/instance/media/": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400
+  },
+  "GET /api/v2/instance/media/": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200
+  },
+  "GET /api/v2/instance/media/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200
+  },
+  "PATCH /api/v2/instance/media/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400
+  },
+  "DELETE /api/v2/instance/media/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 204
+  },
+  "GET /api/v2/instance/media/:id/file": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/instance/media/:id/usage": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200
+  },
+  "POST /api/v2/:tenant/checkout/validate-group": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/v2/:tenant/checkout/validate/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/v2/:tenant/checkout/": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/v2/:tenant/checkout/group": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/:tenant/checkout/permissions/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/:tenant/coupon/validate/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/:tenant/bookings/:ids/status": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/v2/:tenant/media/": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/v2/:tenant/media/": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/:tenant/media/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PATCH /api/v2/:tenant/media/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "DELETE /api/v2/:tenant/media/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 204,
+    "tenantOwner": 204,
+    "instanceOwner": 204
+  },
+  "GET /api/v2/:tenant/media/:id/file": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/:tenant/media/:id/usage": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/public": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/public/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/:id/bookings": {
+    "anonymous": 403,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/:id/openingHours": {
+    "anonymous": 500,
+    "signedIn": 500,
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "GET /api/:tenant/bookables/:id/availability/v1": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/:id/availability/v2": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/:id/availability": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/:id/block-periods": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/bookables/:id/occupancy": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/:id/prices": {
+    "anonymous": "403 Bookable with id fx is not public",
+    "signedIn": "403 Bookable with id fx is not public",
+    "roleHolder": "403 Bookable with id fx is not public",
+    "tenantOwner": "403 Bookable with id fx is not public",
+    "instanceOwner": "403 Bookable with id fx is not public"
+  },
+  "GET /api/:tenant/bookables": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/_template": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/bookables": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
+  "DELETE /api/:tenant/bookables/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/_meta/tags": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookables/count/check": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/events": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/events/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/events/:id/bookings": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/events": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
+  "DELETE /api/:tenant/events/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/events/_meta/tags": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/events/count/check": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/events/:id/count": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookings": {
+    "anonymous": 403,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/bookings": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/bookings/assigned": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookings/:id": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "DELETE /api/:tenant/bookings/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookings/:ids/status": {
+    "anonymous": 500,
+    "signedIn": 500,
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "GET /api/:tenant/bookings/:id/status/public": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/bookings/:id/commit": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "POST /api/:tenant/bookings/:id/pay": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "GET /api/:tenant/bookings/:id/cancellation-refund-preview": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookings/:id/cancellation-refund-preview/public": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/:tenant/bookings/:id/reject": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/bookings/:id/request-reject": {
+    "anonymous": 201,
+    "signedIn": 201,
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
+  "GET /api/:tenant/bookings/:id/verify-ownership": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/bookings/:id/hooks/:hookId/cancellation-refund-preview": {
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /api/:tenant/bookings/:id/hooks/:hookId/release": {
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "POST /api/:tenant/bookings/:id/receipt": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookings/:id/receipt/:receiptId": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/bookings/:id/invoice/:invoiceId": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/bookings/:id/invoice": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/bookings/:id/cancellation-receipt": {
+    "anonymous": 401,
+    "signedIn": 409,
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "GET /api/:tenant/bookings/:id/cancellation-receipt/:cancellationReceiptId": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/users": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/group-bookings": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/group-bookings/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to read group booking\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/group-bookings/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to update group booking\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/group-bookings/:id/commit": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to commit group booking\"}",
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "POST /api/:tenant/group-bookings/:id/pay": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to pay group booking\"}",
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "GET /api/:tenant/group-bookings/:id/cancellation-refund-preview": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/group-bookings/:id/reject": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to reject group booking\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/group-bookings/booking/:bookingId": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to read group booking\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "DELETE /api/:tenant/group-bookings/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to remove group booking\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/group-bookings/:id/receipt": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to create group booking receipt\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/group-bookings/:id/invoice": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to create group booking invoice\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/group-bookings/:id/cancellation-receipt": {
+    "anonymous": 401,
+    "signedIn": "403 {\"message\":\"User not allowed to create group booking cancellation receipt\"}",
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "POST /api/:tenant/checkout": {
+    "anonymous": 409,
+    "signedIn": 409,
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
+  "POST /api/:tenant/checkout/group": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/:tenant/checkout/validateItem": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/checkout/permissions/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/payments": {
+    "anonymous": "timeout",
+    "signedIn": "timeout",
+    "roleHolder": "timeout",
+    "tenantOwner": "timeout",
+    "instanceOwner": "timeout"
+  },
+  "GET /api/:tenant/payments/notify": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/payments/notify": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/payments/response": {
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /api/:tenant/payments/response": {
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /api/:tenant/payments/providers/:provider/test": {
+    "anonymous": 401,
+    "signedIn": "403 {\"success\":false,\"message\":\"Forbidden: You don't have permission to test this payment provider.\"}",
+    "roleHolder": "403 {\"success\":false,\"message\":\"Forbidden: You don't have permission to test this payment provider.\"}",
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/calendar/occupancy": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/coupons": {
+    "anonymous": 500,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/coupons/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/coupons": {
+    "anonymous": 401,
+    "signedIn": "403 You are not allowed to update this coupon",
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
+  "DELETE /api/:tenant/coupons/:id": {
+    "anonymous": 401,
+    "signedIn": "403 You are not allowed to delete this coupon",
+    "roleHolder": 204,
+    "tenantOwner": 204,
+    "instanceOwner": 204
+  },
+  "GET /api/:tenant/files/get": {
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/workflow/": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/workflow/": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/workflow/": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/workflow/states": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/workflow/task": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/workflow/archive": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/workflow/backlog": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/roles": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/roles/tenant": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 500,
+    "tenantOwner": 200,
+    "instanceOwner": 500
+  },
+  "PUT /api/:tenant/roles": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
+  "GET /api/:tenant/roles/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "DELETE /api/:tenant/roles/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/invitations": {
+    "anonymous": 401,
+    "signedIn": "403 Forbidden: You don't have permission to access invitations.",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/invitations": {
+    "anonymous": 401,
+    "signedIn": "403 Forbidden: You don't have permission to create invitations.",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "DELETE /api/:tenant/invitations/:token": {
+    "anonymous": 401,
+    "signedIn": "403 Forbidden: You don't have permission to delete invitations.",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/invitations/:token/verify": {
+    "anonymous": 401,
+    "signedIn": "403 This invitation is not intended for you",
+    "roleHolder": 200,
+    "tenantOwner": "403 This invitation is not intended for you",
+    "instanceOwner": "403 This invitation is not intended for you"
+  },
+  "POST /api/:tenant/invitations/:token/accept": {
+    "anonymous": 401,
+    "signedIn": "403 This invitation is not intended for you",
+    "roleHolder": 200,
+    "tenantOwner": "403 This invitation is not intended for you",
+    "instanceOwner": "403 This invitation is not intended for you"
+  },
+  "POST /api/:tenant/invitations/:token/reject": {
+    "anonymous": 401,
+    "signedIn": "403 This invitation is not intended for you",
+    "roleHolder": 200,
+    "tenantOwner": "403 This invitation is not intended for you",
+    "instanceOwner": "403 This invitation is not intended for you"
+  },
+  "POST /api/:tenant/invitations/resend": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/challenges": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/challenges": {
+    "anonymous": 401,
+    "signedIn": "timeout",
+    "roleHolder": "timeout",
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
+  "PUT /api/:tenant/challenges": {
+    "anonymous": 401,
+    "signedIn": "timeout",
+    "roleHolder": "timeout",
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "DELETE /api/:tenant/challenges/:id": {
+    "anonymous": 401,
+    "signedIn": "timeout",
+    "roleHolder": "timeout",
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/invitations/approve": {
+    "anonymous": 401,
+    "signedIn": "403 Forbidden: You don't have permission to approve challenges.",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/:tenant/invitations/reject": {
+    "anonymous": 401,
+    "signedIn": "403 Forbidden: You don't have permission to reject challenges.",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "DELETE /api/:tenant/invitations/user/:userId": {
+    "anonymous": 401,
+    "signedIn": "403 Forbidden: You don't have permission to delete user invitations.",
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "GET /api/:tenant/catalog/": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/catalog/": {
+    "anonymous": 401,
+    "signedIn": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
+    "roleHolder": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
+    "tenantOwner": "403 {\"success\":false,\"message\":\"You do not have permission to store this catalog.\"}",
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/locker/:provider/locations": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /api/:tenant/locker/:provider/locations/:locationId": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /api/:tenant/locker/:provider/locations/:locationId/status": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /api/:tenant/locker/:provider/locations/:locationId/price": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/:tenant/locker/:provider/test": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/access/audit/export": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/access/resolve-scan/:scanCode": {
+    "anonymous": 401,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/access/:accessPointId/open": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 403
+  },
+  "POST /api/:tenant/access/:accessPointId/unlatch": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 403
+  },
+  "POST /api/:tenant/access/:accessPointId/close": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 403
+  },
+  "GET /api/:tenant/access/:accessPointId/open-status": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 403
+  },
+  "GET /api/:tenant/access/:accessPointId/status": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 403
+  },
+  "GET /api/:tenant/access/": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 403,
+    "instanceOwner": 403
+  },
+  "GET /api/:tenant/access-apps/providers": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/access-apps/:provider/access-points": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
+  },
+  "GET /api/:tenant/access-apps/salto-ks/iqs": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "POST /api/:tenant/access-apps/salto-ks/iqs/:iqId/activation/start": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "POST /api/:tenant/access-apps/salto-ks/iqs/:iqId/activation/complete": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "DELETE /api/:tenant/access-apps/salto-ks/iqs/:iqId/activation": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "POST /api/:tenant/access-apps/:provider/test": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/access-apps/:provider/webhook/register": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "POST /api/:tenant/access-apps/:provider/webhook/unregister": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/accesspoints/": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "PUT /api/:tenant/accesspoints/": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /api/:tenant/accesspoints/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/accesspoints/:id/qrcode": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/accesspoints/:id/location-prefill": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "POST /api/:tenant/accesspoints/:id/rotate-scan-code": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "DELETE /api/:tenant/accesspoints/:id": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 403,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/ical/events": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/ical/events/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/ical/feed/events": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/ical/feed/events/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/:tenant/ical/bookings": {
+    "anonymous": 401,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
+  "GET /api/:tenant/ical/bookings/:id": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /html/:tenant/bookables": {
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /html/:tenant/bookables/:id": {
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /html/:tenant/events": {
+    "anonymous": "timeout",
+    "signedIn": "timeout",
+    "roleHolder": "timeout",
+    "tenantOwner": "timeout",
+    "instanceOwner": "timeout"
+  },
+  "GET /html/:tenant/events/:id": {
+    "anonymous": "timeout",
+    "signedIn": "timeout",
+    "roleHolder": "timeout",
+    "tenantOwner": "timeout",
+    "instanceOwner": "timeout"
+  },
+  "GET /json/:tenant/bookables": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /json/:tenant/bookables/:id": {
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
+  },
+  "GET /json/:tenant/events": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /json/:tenant/events/:id": {
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /csv/:tenant/events/:id/bookings": {
+    "anonymous": 401,
+    "signedIn": 403,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  }
+}
