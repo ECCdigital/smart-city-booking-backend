@@ -194,3 +194,49 @@ _Avoid_: Salto-User (unqualifiziert), Nutzer, Account
 **Widerruf (eines Grants)**:
 Das Zurücknehmen eines Grants beim Provider, mit der Auskunft, ob der externe Principal dabei entfernt wurde. Ein wiederholter Widerruf desselben Grants ist erlaubt und holt nur nach, was fehlt.
 _Avoid_: Revoke (als deutsches Nomen), Löschung, Deprovisionierung
+
+### Buchungslebenszyklus
+
+**Buchungszustand**:
+Der eine gespeicherte Wert, der sagt, wo eine Buchung in ihrem Leben steht: _angefragt_ (noch nicht bestätigt), _Zahlung offen_ (bestätigt, Preis größer null, unbezahlt), _bestätigt_ (bestätigt und bezahlt, oder bestätigt und kostenlos), _abgelehnt_ (aus „angefragt" heraus storniert) oder _storniert_ (aus „Zahlung offen" oder „bestätigt" heraus storniert). „Bezahlt, aber nicht bestätigt" gibt es nicht. Die drei Flags bestätigt/bezahlt/storniert sind Ableitungen des Zustands, nie seine Quelle.
+_Avoid_: isCommitted/isPayed/isRejected (als Sprechbegriffe — das sind die abgeleiteten Flags), Status-Key (das ist die Frontend-Übersetzung), Buchungsstatus (unqualifiziert)
+
+**Lebenszyklus-Übergang**:
+Ein benannter Wechsel des Buchungszustands mit seinen Effekten: Aufnahme, Bestätigung, Zahlung, Storno, Wiederherstellung, Änderung und Stornoanfrage. Welcher Übergang aus welchem Zustand erlaubt ist, steht in einer Tabelle; alles andere ist ein Fehler, keine stille Annahme. Ein Übergang gilt immer einer Buchung; eine Gruppenbuchung durchläuft ihre Übergänge als eigener Lebenszyklus über den Übergängen ihrer Mitglieder.
+_Avoid_: Aktion, Statuswechsel, Flag setzen, Übergang (unqualifiziert)
+
+**Effekt (eines Übergangs)**:
+Eine beobachtbare Nebenwirkung, die ein Lebenszyklus-Übergang auslöst: Vormerkung oder Grant an AccessPoints, ein Buchungsdokument, eine Mail, ein Workflow-Ereignis. Effekte gehören zum Übergang, nie zum Aufrufer; welche laufen und was bei ihrem Scheitern passiert, entscheidet allein der Lebenszyklus.
+_Avoid_: Side-Effect, Hook (das ist das Workflow-Ereignis bzw. die Stornoanfrage), Nachbearbeitung
+
+**Auslöser (eines Übergangs)**:
+Wer einen Lebenszyklus-Übergang veranlasst hat: _Buchender_, _Verwaltung_, _Zahlung_ (ein Zahlungsanbieter), _Workflow_ (eine Workflow-Aktion) oder _System_. Ein Wert am Übergang, der z.B. die Erstattungsregel des Stornos wählt und Workflow-Schleifen verhindert. Nicht zu verwechseln mit der Zugriffsrolle, die sich auf das Bedienen von AccessPoints bezieht.
+_Avoid_: Origin (Altname im Storno), skipWorkflow (das ist die Alt-Kodierung für „Auslöser Workflow"), Herkunft
+
+**Aufnahme (einer Buchung)**:
+Der erste Lebenszyklus-Übergang: eine vom Checkout gespeicherte Buchung wird in den Lebenszyklus aufgenommen, mit den Effekten des Zustands, in dem sie ankommt. Der Checkout entscheidet den Anfangszustand (angefragt, Zahlung offen oder bestätigt) und endet mit dem Speichern; bricht die Aufnahme ab, entsteht die Buchung nicht.
+_Avoid_: Create (als Übergangsname), Anlegen, Checkout (das ist der Vorgang davor)
+
+**Stornoanfrage**:
+Der vom Buchenden geäußerte Wunsch, eine Buchung zu stornieren, der erst mit seiner Bestätigung zum Storno wird. Ein offener Vorgang an einem Buchungszustand, kein eigener Zustand: die Buchung bleibt währenddessen gültig. Nur möglich, wenn die Stornierungsregel der Buchung sie zulässt.
+_Avoid_: Reject-Hook (das ist die Speicherform), Kündigung, Stornierung (das ist der Übergang danach)
+
+**Wiederherstellung (einer Buchung)**:
+Der Lebenszyklus-Übergang, der eine abgelehnte oder stornierte Buchung in den Zustand zurückholt, den sie vor dem Storno hatte, mit Preis und Positionen von damals; die Erstattung fällt weg, der Zugang wird neu gewährt. Der Zustand vor dem Storno wird beim Storno festgehalten.
+_Avoid_: Unreject, Reaktivierung, Rücknahme des Stornos (das ist die Handlung, nicht der Übergang)
+
+**Fehlerpolitik (eines Effekts)**:
+Was ein gescheiterter Effekt mit seinem Lebenszyklus-Übergang macht: _abbrechen_ (der Übergang findet nicht statt, schon Geschriebenes wird zurückgenommen) oder _protokollieren_ (der Übergang gilt, der Fehler steht im Ergebnis und im Log). Am Effekt festgelegt, für jeden Übergang gleich, nie vom Aufrufer gewählt. Nur das Speichern und die Vormerkung brechen ab; Zugang, Dokument und Mitteilungen werden protokolliert.
+_Avoid_: onFailure (als Sprechbegriff), Verschlucken, Rollback (das ist die Handlung beim Abbrechen, nicht die Politik), Retry (gibt es nicht)
+
+**Ausstellung (eines Buchungsdokuments)**:
+Der eine Vorgang, in dem ein Buchungsdokument entsteht: Nummer ziehen, erzeugen, ablegen und an alle zugehörigen Buchungen anhängen. Eine Dokumentnummer ohne Anhang gibt es nicht; eine Nummer, die durch einen Fehler beim Erzeugen verloren geht, ist eine erklärte Lücke, keine Doppelvergabe. Die Ausstellung versendet nichts — die Mail ist eine Mitteilung des Übergangs oder der Verwaltung.
+_Avoid_: Issuance (als deutsches Nomen), Erzeugen (das ist nur das Rendern), Belegerstellung (unqualifiziert)
+
+**Revision (eines Buchungsdokuments)**:
+Eine erneute Ausstellung eines Buchungsdokuments unter derselben Dokumentnummer, fortlaufend gezählt. Ein Nachdruck durch die Verwaltung ist eine Revision, keine Kopie: er entsteht als neues Medium mit derselben Nummer.
+_Avoid_: Nachdruck (als Modellbegriff — das ist die Handlung), Reprint, Belegkopie, Duplikat
+
+**Zahlungsaufforderung**:
+Die eine Mitteilung, mit der der Mandant den Buchenden zur Zahlung einer Buchung in „Zahlung offen" auffordert. Ihre Form bestimmt der Zahlungsanbieter des Mandanten: ein Zahlungslink, eine ausgestellte Rechnung oder die Ankündigung einer später erstellten Rechnung. Eine Mitteilung, kein Zustand: scheitert sie, bleibt die Buchung in „Zahlung offen".
+_Avoid_: paymentRequest (als Sprechbegriff), Rechnungsversand (das ist nur eine der drei Formen), Zahlungserinnerung (das gibt es nicht)
