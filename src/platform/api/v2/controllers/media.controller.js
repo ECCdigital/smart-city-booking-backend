@@ -32,7 +32,7 @@ const {
   assertBookingDocumentAccess,
   assertInstanceMediaFileAccess,
   assertMediaFileAccess,
-  mayUpdateBookingDocument,
+  coversBookingDocument,
 } = require("../../../../commons/services/media/media-access");
 
 const logger = bunyan.createLogger({
@@ -126,6 +126,19 @@ class MediaControllerV2 {
   }
 
   /**
+   * The resource of the rights table a request is about: the tenant library
+   * or the instance one. This is what tells the two apart (§3.2) - the
+   * handlers are the same for both, and a second decision of the adapter has
+   * to name the resource it asks about, as the route's marker did.
+   *
+   * @param {Object} req - Express request.
+   * @returns {"media"|"instanceMedia"} The resource of the request.
+   */
+  static _resource(req) {
+    return MediaControllerV2._tenantId(req) ? "media" : "instanceMedia";
+  }
+
+  /**
    * Public representation of a medium. Storage keys stay internal.
    *
    * @param {Object} media - The medium.
@@ -163,9 +176,12 @@ class MediaControllerV2 {
 
   /**
    * The rule a medium follows when its metadata is read: the receipt rule for
-   * a booking document, the library's own `media.read` otherwise. The route
-   * marker is the door both come through (`media.metadata`), so the rule that
-   * applies is decided here, on the principal already loaded (§5).
+   * a booking document, the library's own `read` otherwise. At the tenant
+   * routes the marker is the door both come through (`media.metadata`), so
+   * the rule that applies is decided here, on the principal already loaded
+   * (§5); at the instance routes the marker is the rule and asking again
+   * answers the same. A booking document always belongs to a tenant, so its
+   * rule is the tenant one.
    *
    * @param {Object} req - Express request.
    * @param {Object} media - The medium.
@@ -179,7 +195,9 @@ class MediaControllerV2 {
       );
     }
 
-    if (!withinReach(media, "uploadedBy", scopeFor(req, "media", "read"))) {
+    const scope = scopeFor(req, MediaControllerV2._resource(req), "read");
+
+    if (!withinReach(media, "uploadedBy", scope)) {
       throw new ForbiddenError("forbidden");
     }
   }
@@ -187,7 +205,7 @@ class MediaControllerV2 {
   /**
    * The rule a medium follows when its metadata is changed: a booking
    * document follows the update side of the receipt rule, everything else the
-   * library's `media.update`.
+   * `update` of its own library.
    *
    * @param {Object} req - Express request.
    * @param {Object} media - The medium.
@@ -195,7 +213,7 @@ class MediaControllerV2 {
    */
   static async _assertUpdateAccess(req, media) {
     if (media.isBookingDocument()) {
-      const allowed = await mayUpdateBookingDocument(
+      const allowed = await coversBookingDocument(
         media,
         scopeFor(req, "media", "updateBookingDocument"),
       );
@@ -207,7 +225,9 @@ class MediaControllerV2 {
       return;
     }
 
-    if (!withinReach(media, "uploadedBy", scopeFor(req, "media", "update"))) {
+    const scope = scopeFor(req, MediaControllerV2._resource(req), "update");
+
+    if (!withinReach(media, "uploadedBy", scope)) {
       throw new ForbiddenError("forbidden");
     }
   }
@@ -222,7 +242,7 @@ class MediaControllerV2 {
    * @throws {UnauthorizedError|ForbiddenError}
    */
   static async _assertFileAccess(req, media) {
-    if (!MediaControllerV2._tenantId(req)) {
+    if (MediaControllerV2._resource(req) === "instanceMedia") {
       return assertInstanceMediaFileAccess(media, scopeOf(req));
     }
 

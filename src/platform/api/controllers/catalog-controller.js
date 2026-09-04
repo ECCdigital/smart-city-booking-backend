@@ -279,7 +279,7 @@ class CatalogController {
         content: updatedCatalog,
       });
     } catch (error) {
-      console.error("Error in CatalogController.storeCatalog:", error);
+      logger.error(error, "Could not store the catalog");
       response.status(500).send({
         success: false,
         message: error.message || "Internal Server Error",

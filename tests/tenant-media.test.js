@@ -184,7 +184,7 @@ describe("tenant media", function () {
       await MediaReferenceGuard.assertTenantStorable(
         tenantWith(mediaReference(MEDIA)),
         TENANT,
-        USER,
+        PICKER,
       );
 
       assert.deepStrictEqual(getMedia.firstCall.args, [MEDIA, TENANT]);
@@ -201,7 +201,7 @@ describe("tenant media", function () {
           MediaReferenceGuard.assertTenantStorable(
             tenantWith(mediaReference(foreign)),
             TENANT,
-            USER,
+            PICKER,
           ),
           { statusCode: 400, code: "media_reference_unknown" },
         );
@@ -262,7 +262,7 @@ describe("tenant media", function () {
       await MediaReferenceGuard.assertTenantStorable(
         tenantWith(externalReference("https://example.org/agb.pdf")),
         TENANT,
-        USER,
+        PICKER,
       );
 
       assert.strictEqual(getMedia.called, false);

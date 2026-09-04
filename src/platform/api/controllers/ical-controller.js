@@ -4,7 +4,10 @@ const {
   sendIcalFeed,
 } = require("../../../commons/utilities/ical-response-helper");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const { scopeOf } = require("../../../commons/services/authorization");
+const {
+  readsRecords,
+  scopeOf,
+} = require("../../../commons/services/authorization");
 const EventManager = require("../../../commons/data-managers/event-manager");
 const {
   UnauthorizedError,
@@ -37,7 +40,7 @@ function parseIds(raw) {
 function privateScopeOf(request) {
   const scope = scopeOf(request);
 
-  if (scope.reach === "own" || scope.reach === "any") {
+  if (readsRecords(scope)) {
     return scope;
   }
 

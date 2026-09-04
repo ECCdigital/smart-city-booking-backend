@@ -17,7 +17,13 @@
  * `withinReach` is the same question about a record already in hand, for
  * an adapter that loaded it before it knew which reach applies (a medium
  * that turns out to be a booking document, a referenced medium that has
- * to be told apart from an unknown one).
+ * to be told apart from an unknown one). It is asked by adapters, which
+ * always hold a reach, so it answers no to everything but `any` and an
+ * owned record - where `ownCondition` widens for a caller inside the
+ * domain, `withinReach` closes.
+ *
+ * `readsRecords` is the question the two of them leave open: whether a
+ * reach reaches records at all, or only what the public sees.
  */
 
 const { REACH } = require("./policy");
@@ -49,7 +55,7 @@ function ownCondition(key, { reach, userId } = {}) {
  * @returns {boolean}
  */
 function withinReach(record, key, { reach, userId } = {}) {
-  if (reach === undefined || reach === REACH.ANY) {
+  if (reach === REACH.ANY) {
     return true;
   }
   if (reach === REACH.OWN) {
@@ -58,4 +64,15 @@ function withinReach(record, key, { reach, userId } = {}) {
   return false;
 }
 
-module.exports = { ownCondition, withinReach };
+/**
+ * Whether a reach reaches records at all: `any` and `own` do, `public` and
+ * no reach do not.
+ *
+ * @param {{reach?: string}} [scope]
+ * @returns {boolean}
+ */
+function readsRecords({ reach } = {}) {
+  return reach === REACH.ANY || reach === REACH.OWN;
+}
+
+module.exports = { ownCondition, withinReach, readsRecords };

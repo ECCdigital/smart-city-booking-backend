@@ -7,7 +7,7 @@
 
 const { loadPrincipal } = require("./principal");
 const { decide, REACH } = require("./policy");
-const { ownCondition, withinReach } = require("./reach");
+const { ownCondition, withinReach, readsRecords } = require("./reach");
 const { TABLE, ROLE_GROUPS, ROLE_LEVELS } = require("./table");
 const {
   authorize,
@@ -24,6 +24,7 @@ module.exports = {
   REACH,
   ownCondition,
   withinReach,
+  readsRecords,
   TABLE,
   ROLE_GROUPS,
   ROLE_LEVELS,

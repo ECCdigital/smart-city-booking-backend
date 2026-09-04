@@ -28,6 +28,7 @@ const {
   hasActiveMembership,
 } = require("../../../commons/services/media/media-access");
 const {
+  readsRecords,
   scopeFor,
   scopeOf,
 } = require("../../../commons/services/authorization");
@@ -328,9 +329,7 @@ class FileController {
       return;
     }
 
-    const { reach } = scopeOf(request);
-
-    if (reach !== "own" && reach !== "any") {
+    if (!readsRecords(scopeOf(request))) {
       throw new UnauthorizedError("unauthorized");
     }
   }

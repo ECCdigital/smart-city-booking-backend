@@ -1,6 +1,6 @@
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
-const { withinReach } = require("../authorization/reach");
+const { readsRecords, withinReach } = require("../authorization/reach");
 const {
   ForbiddenError,
   UnauthorizedError,
@@ -63,42 +63,21 @@ async function anyReferencedBooking(media, predicate) {
 }
 
 /**
- * The receipt rule under a reach: `any` reads every document of the tenant,
- * `own` the documents of one's own bookings — a paying customer gets their
- * invoice without holding any role, and an aggregated document is readable
- * for every participant of its group.
+ * The receipt rule: `any` covers every booking document of the tenant, `own`
+ * the documents of one's own bookings — a paying customer gets their invoice
+ * without holding any role, and an aggregated document is covered for every
+ * participant of its group.
+ *
+ * Reading and changing a document are two entries of the rights table
+ * (`media.bookingDocument` and `media.updateBookingDocument`), and the same
+ * rule reads both: the caller passes the reach of the entry that applies.
  *
  * @param {Object} media - The booking document.
- * @param {{reach?: string, userId?: string|null}} scope - The reach of
- *   `media.bookingDocument`.
+ * @param {{reach?: string, userId?: string|null}} [scope] - The reach of the
+ *   entry the caller is asking about.
  * @returns {Promise<boolean>}
  */
-async function mayReadBookingDocument(media, scope) {
-  return await coversAnyBooking(media, scope);
-}
-
-/**
- * The write side of the receipt rule: `any` changes every document of the
- * tenant, `own` the documents of one's own bookings.
- *
- * @param {Object} media - The booking document.
- * @param {{reach?: string, userId?: string|null}} scope - The reach of
- *   `media.updateBookingDocument`.
- * @returns {Promise<boolean>}
- */
-async function mayUpdateBookingDocument(media, scope) {
-  return await coversAnyBooking(media, scope);
-}
-
-/**
- * Whether a reach covers a booking document: everything under `any`, and
- * under `own` a document of a booking assigned to the user.
- *
- * @param {Object} media - The booking document.
- * @param {{reach?: string, userId?: string|null}} [scope]
- * @returns {Promise<boolean>}
- */
-async function coversAnyBooking(media, scope = {}) {
+async function coversBookingDocument(media, scope = {}) {
   if (scope.reach === "any") {
     return true;
   }
@@ -126,7 +105,7 @@ async function assertBookingDocumentAccess(media, scope = {}) {
     throw new UnauthorizedError("unauthorized");
   }
 
-  if (!(await mayReadBookingDocument(media, scope))) {
+  if (!(await coversBookingDocument(media, scope))) {
     throw new ForbiddenError("forbidden");
   }
 }
@@ -185,7 +164,7 @@ function assertInstanceMediaFileAccess(media, scope = {}) {
     return;
   }
 
-  if (scope.reach !== "own" && scope.reach !== "any") {
+  if (!readsRecords(scope)) {
     throw new UnauthorizedError("unauthorized");
   }
 }
@@ -194,7 +173,6 @@ module.exports = {
   assertBookingDocumentAccess,
   assertInstanceMediaFileAccess,
   assertMediaFileAccess,
+  coversBookingDocument,
   hasActiveMembership,
-  mayReadBookingDocument,
-  mayUpdateBookingDocument,
 };
