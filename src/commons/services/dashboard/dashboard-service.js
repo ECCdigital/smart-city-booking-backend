@@ -213,11 +213,13 @@ function zeroFillByPeriod(
   const end = startOfBerlinPeriod(endMs, granularity);
   while (cursor <= end) {
     const key = periodKeyFromDateTime(cursor, granularity);
+    const revenueEntry = revenue.get(key) || {};
     rows.push({
       period: key,
       bookings: bookings.get(key) || 0,
       cancellations: cancellations.get(key) || 0,
-      revenueEur: roundMoney(revenue.get(key) || 0),
+      revenueEur: roundMoney(revenueEntry.revenueEur || 0),
+      regularRevenueEur: roundMoney(revenueEntry.regularRevenueEur || 0),
     });
     cursor = plusOnePeriod(cursor, granularity);
   }
@@ -306,6 +308,13 @@ function sortByBookableRows(rows) {
 
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function revenueTotals(entry) {
+  return {
+    revenueEur: roundMoney(entry && entry.revenueEur),
+    regularRevenueEur: roundMoney(entry && entry.regularRevenueEur),
+  };
 }
 
 class DashboardService {
@@ -453,6 +462,7 @@ class DashboardService {
         bookableObjects: 0,
       };
       const booking = bookingsByTenant.get(tenant.id) || { bookings: 0 };
+      const revenue = revenueTotals(revenueByTenant.get(tenant.id));
       return {
         tenantId: tenant.id,
         tenantName: tenant.name,
@@ -463,7 +473,8 @@ class DashboardService {
         bookableObjects: stock.bookableObjects,
         events: eventsByTenant.get(tenant.id) || 0,
         activeEvents: activeEventsByTenant.get(tenant.id) || 0,
-        revenueEur: roundMoney(revenueByTenant.get(tenant.id)?.revenueEur || 0),
+        revenueEur: revenue.revenueEur,
+        regularRevenueEur: revenue.regularRevenueEur,
       };
     });
 
@@ -479,6 +490,7 @@ class DashboardService {
       events: 0,
       activeEvents: 0,
       revenueEur: 0,
+      regularRevenueEur: 0,
     };
 
     for (const row of byTenant) {
@@ -489,8 +501,10 @@ class DashboardService {
       totals.events += row.events;
       totals.activeEvents += row.activeEvents;
       totals.revenueEur += row.revenueEur;
+      totals.regularRevenueEur += row.regularRevenueEur;
     }
     totals.revenueEur = roundMoney(totals.revenueEur);
+    totals.regularRevenueEur = roundMoney(totals.regularRevenueEur);
 
     const byPeriod = await buildByPeriod(
       tenantIds,
@@ -584,7 +598,7 @@ class DashboardService {
       bookings: 0,
       byStatus: emptyStatusCounts(),
     };
-    const revenue = revenueByTenant.get(tenant.id) || { revenueEur: 0 };
+    const revenue = revenueTotals(revenueByTenant.get(tenant.id));
 
     const byPeriod = await buildByPeriod(
       tenantIds,
@@ -612,7 +626,8 @@ class DashboardService {
         bookableObjects: stock.bookableObjects,
         events: eventsByTenant.get(tenant.id) || 0,
         activeEvents: activeEventsByTenant.get(tenant.id) || 0,
-        revenueEur: roundMoney(revenue.revenueEur),
+        revenueEur: revenue.revenueEur,
+        regularRevenueEur: revenue.regularRevenueEur,
       },
       byStatus: statusArrayFromCounts(booking.byStatus || emptyStatusCounts()),
       byPeriod,

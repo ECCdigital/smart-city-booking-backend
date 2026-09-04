@@ -74,7 +74,9 @@ describe("DashboardService helpers", function () {
   it("zero-fills byPeriod in Europe/Berlin and counts buckets", function () {
     const bookings = new Map([["2026-02", 4]]);
     const cancellations = new Map([["2026-01", 1]]);
-    const revenue = new Map([["2026-02", 12.5]]);
+    const revenue = new Map([
+      ["2026-02", { revenueEur: 12.5, regularRevenueEur: 20 }],
+    ]);
     const rows = DashboardService.zeroFillByPeriod(
       { bookings, cancellations, revenue },
       Date.parse("2026-01-15T00:00:00.000Z"),
@@ -82,9 +84,27 @@ describe("DashboardService helpers", function () {
       "month",
     );
     assert.deepStrictEqual(rows, [
-      { period: "2026-01", bookings: 0, cancellations: 1, revenueEur: 0 },
-      { period: "2026-02", bookings: 4, cancellations: 0, revenueEur: 12.5 },
-      { period: "2026-03", bookings: 0, cancellations: 0, revenueEur: 0 },
+      {
+        period: "2026-01",
+        bookings: 0,
+        cancellations: 1,
+        revenueEur: 0,
+        regularRevenueEur: 0,
+      },
+      {
+        period: "2026-02",
+        bookings: 4,
+        cancellations: 0,
+        revenueEur: 12.5,
+        regularRevenueEur: 20,
+      },
+      {
+        period: "2026-03",
+        bookings: 0,
+        cancellations: 0,
+        revenueEur: 0,
+        regularRevenueEur: 0,
+      },
     ]);
 
     // Midday UTC stays on the same Europe/Berlin calendar day.
@@ -174,8 +194,8 @@ describe("DashboardService summaries", function () {
     );
     sandbox.stub(DashboardManager, "aggregateRevenueByTenant").resolves(
       new Map([
-        ["demo", { revenueEur: 18450.5 }],
-        ["nord", { revenueEur: 3650 }],
+        ["demo", { revenueEur: 18450.5, regularRevenueEur: 21000 }],
+        ["nord", { revenueEur: 3650, regularRevenueEur: 4000 }],
       ]),
     );
     sandbox.stub(DashboardManager, "getTenantCreatedAtMap").resolves(
@@ -199,9 +219,11 @@ describe("DashboardService summaries", function () {
     assert.strictEqual(data.totals.cancellations, 30);
     assert.strictEqual(data.totals.activeEvents, 3);
     assert.strictEqual(data.totals.revenueEur, 22100.5);
+    assert.strictEqual(data.totals.regularRevenueEur, 25000);
     assert.strictEqual(data.byTenant.length, 2);
     assert.strictEqual(data.byTenant[0].tenantId, "demo");
     assert.strictEqual(data.byTenant[0].activeEvents, 2);
+    assert.strictEqual(data.byTenant[0].regularRevenueEur, 21000);
     assert.strictEqual(data.from, "2026-01-01T00:00:00.000Z");
     assert.strictEqual(data.to, "2026-06-30T12:00:00.000Z");
     assert.deepStrictEqual(data.status, [
@@ -266,7 +288,9 @@ describe("DashboardService summaries", function () {
       .resolves(new Map([["demo", 12]]));
     sandbox
       .stub(DashboardManager, "aggregateRevenueByTenant")
-      .resolves(new Map([["demo", { revenueEur: 18450.5 }]]));
+      .resolves(
+        new Map([["demo", { revenueEur: 18450.5, regularRevenueEur: 20000 }]]),
+      );
     sandbox.stub(DashboardManager, "aggregateByBookable").resolves([
       {
         bookableId: "room-a",
@@ -295,8 +319,8 @@ describe("DashboardService summaries", function () {
       .resolves(new Map([["2026-01", 4]]));
     sandbox.stub(DashboardManager, "aggregateRevenueByPeriod").resolves(
       new Map([
-        ["2026-01", 2100],
-        ["2026-02", 3450.5],
+        ["2026-01", { revenueEur: 2100, regularRevenueEur: 2500 }],
+        ["2026-02", { revenueEur: 3450.5, regularRevenueEur: 4000 }],
       ]),
     );
 
@@ -321,6 +345,8 @@ describe("DashboardService summaries", function () {
     assert.strictEqual(data.byPeriod[0].period, "2026-01");
     assert.strictEqual(data.byPeriod[0].bookings, 100);
     assert.strictEqual(data.byPeriod[0].revenueEur, 2100);
+    assert.strictEqual(data.byPeriod[0].regularRevenueEur, 2500);
+    assert.strictEqual(data.totals.regularRevenueEur, 20000);
     assert.strictEqual(data.byBookable.length, 1);
     assert.strictEqual(data.byBookable[0].bookableId, "room-a");
     assert.strictEqual(data.byBookableHasMore, true);
@@ -353,7 +379,7 @@ describe("DashboardService summaries", function () {
       .resolves(new Map([["demo", 0]]));
     sandbox
       .stub(DashboardManager, "aggregateRevenueByTenant")
-      .resolves(new Map([["demo", { revenueEur: 0 }]]));
+      .resolves(new Map([["demo", { revenueEur: 0, regularRevenueEur: 0 }]]));
     sandbox.stub(DashboardManager, "aggregateByBookable").resolves([]);
     sandbox
       .stub(DashboardManager, "getTenantCreatedAtMap")
@@ -415,7 +441,7 @@ describe("DashboardService summaries", function () {
       .resolves(new Map([["demo", 0]]));
     sandbox
       .stub(DashboardManager, "aggregateRevenueByTenant")
-      .resolves(new Map([["demo", { revenueEur: 0 }]]));
+      .resolves(new Map([["demo", { revenueEur: 0, regularRevenueEur: 0 }]]));
     sandbox
       .stub(DashboardManager, "getTenantCreatedAtMap")
       .resolves(new Map([["demo", Date.parse("2026-01-01T00:00:00.000Z")]]));

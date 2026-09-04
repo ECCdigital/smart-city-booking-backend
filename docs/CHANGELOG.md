@@ -13,6 +13,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- Dashboard `regularRevenueEur`: catalog/full gross (before user/role discounts and coupons) alongside invoice `revenueEur` on instance/tenant totals, `byTenant`, and `byPeriod`
 - Dashboard summary extensions: `activeEvents` totals, multi-value `status` (OR), optional `granularity` + Europe/Berlin `byPeriod` on Instance and Tenant summary (replaces `revenueByMonth`)
 - Admin Dashboard KPI API: `GET /api/v2/dashboard/summary` (cross-tenant) and `GET /api/v2/:tenant/dashboard/summary` (tenant detail with status, revenue-by-month, and by-bookable breakdowns); live aggregations with short in-process cache
 - Tenant setting `mailBookingPeriodFormat` (`default`, `fromTo`, `timeFirst`, `long`, `compact`) to control how booking periods are rendered in email booking details
