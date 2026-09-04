@@ -418,12 +418,12 @@ describe("mail transport pool: the configuration hash", function () {
   });
 });
 
-describe("mail transport SMTP: the transporter configuration today", function () {
+describe("mail transport SMTP: the transporter configuration", function () {
   afterEach(function () {
     sinon.restore();
   });
 
-  it("uses an implicit TLS pool, and for STARTTLS the legacy ciphers without certificate verification (own ticket outside the chain)", function () {
+  it("pools both paths without own TLS options, so implicit TLS and STARTTLS verify the certificate over the Node defaults", function () {
     const createTransport = sinon
       .stub(nodemailer, "createTransport")
       .returns({ async sendMail() {} });
@@ -447,10 +447,12 @@ describe("mail transport SMTP: the transporter configuration today", function ()
       secure: true,
       auth: { user: "instanz", pass: "instanz-geheim" },
     });
-    assert.strictEqual(starttls.secure, false);
-    assert.deepStrictEqual(starttls.tls, {
-      ciphers: "SSLv3",
-      rejectUnauthorized: false,
+    assert.deepStrictEqual(starttls, {
+      pool: true,
+      host: "smtp.starttls.example.test",
+      port: 465,
+      secure: false,
+      auth: { user: "instanz", pass: "instanz-geheim" },
     });
   });
 });

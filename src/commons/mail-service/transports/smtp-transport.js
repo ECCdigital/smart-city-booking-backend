@@ -4,8 +4,9 @@ const nodemailer = require("nodemailer");
  * The SMTP adapter of the transport (glossary "Versandweg"): a pooled
  * nodemailer transporter for the no-reply account of the configuration.
  *
- * STARTTLS keeps the legacy ciphers without certificate verification - an
- * own ticket outside the mail-stack chain (spec section 3).
+ * Both paths verify the server certificate and negotiate over the Node
+ * defaults: implicit TLS carries no `tls` options, and STARTTLS carries
+ * none either.
  *
  * @param {Object} mailConfig The no-reply account: `noreplyHost`,
  *   `noreplyPort`, `noreplyUser`, `noreplyPassword`, `noreplyStarttls`
@@ -21,9 +22,6 @@ function createSmtpTransport(mailConfig) {
       user: mailConfig.noreplyUser,
       pass: mailConfig.noreplyPassword,
     },
-    ...(mailConfig.noreplyStarttls && {
-      tls: { ciphers: "SSLv3", rejectUnauthorized: false },
-    }),
   });
 }
 
