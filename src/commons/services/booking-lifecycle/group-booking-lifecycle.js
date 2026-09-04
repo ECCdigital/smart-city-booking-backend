@@ -35,6 +35,7 @@ const {
   isPriced,
   hasTicketPosition,
   paymentRequestSteps,
+  provisionFailureNotice,
 } = require("./booking-lifecycle");
 const {
   CancellationRefundService,
@@ -302,6 +303,7 @@ function createGroupBookingLifecycle(adapters) {
       notice("INCOMING_BOOKING"),
       notice("SUPERVISOR_BOOKING_NOTIFICATION"),
       ...organizerEach(bookings),
+      provisionFailureNotice(notice),
     ]);
   }
 
@@ -354,6 +356,7 @@ function createGroupBookingLifecycle(adapters) {
         paymentDue,
       ),
       ...organizerEach(bookings),
+      provisionFailureNotice(notice),
     ]);
   }
 
@@ -418,6 +421,7 @@ function createGroupBookingLifecycle(adapters) {
       ...emitEach(bookings, WORKFLOW_EVENT.PAY, trigger),
       notice("BOOKING_CONFIRMATION", { attachments: files }),
       ...organizerEach(bookings),
+      provisionFailureNotice(notice),
     ]);
   }
 

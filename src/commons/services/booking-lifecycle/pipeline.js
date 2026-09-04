@@ -76,6 +76,26 @@ const POLICY_TABLE = Object.freeze({
 const SKIPPED = Symbol("skipped");
 
 /**
+ * The rows of an operation this run recorded as failed, in execution
+ * order. A later step reads them to answer for an earlier failure - the
+ * notice the tenant gets when a grant did not come through - which is why
+ * a step's condition and its `run` are handed the outcome so far.
+ *
+ * @param {Object} outcome The outcome as it stands
+ * @param {string} adapter
+ * @param {string} op
+ * @returns {Object[]} The effect rows, empty where the operation held
+ */
+function recordedFailures(outcome, adapter, op) {
+  return outcome.effects.filter(
+    (effect) =>
+      effect.adapter === adapter &&
+      effect.op === op &&
+      effect.status === EFFECT_STATUS.RECORDED,
+  );
+}
+
+/**
  * The failure policy of an adapter operation.
  *
  * @param {string} adapter
@@ -112,7 +132,8 @@ function noticeStep(mail, type, ctx, options) {
     PHASE.NOTIFY,
     "mail",
     type,
-    () => mail.send(type, typeof ctx === "function" ? ctx() : ctx),
+    (_ctx, outcome) =>
+      mail.send(type, typeof ctx === "function" ? ctx(outcome) : ctx),
     options,
   );
 }
@@ -132,9 +153,9 @@ function noticesOf(mail, base) {
     noticeStep(
       mail,
       type,
-      () => ({
+      (outcome) => ({
         ...base,
-        ...(typeof specific === "function" ? specific() : specific),
+        ...(typeof specific === "function" ? specific(outcome) : specific),
       }),
       options,
     );
@@ -273,13 +294,13 @@ async function runPipeline(ctx, steps) {
       ...(s.bookingId ? { bookingId: s.bookingId } : {}),
     };
 
-    if (!s.when(ctx)) {
+    if (!s.when(ctx, outcome)) {
       outcome.effects.push({ ...effect, status: EFFECT_STATUS.SKIPPED });
       continue;
     }
 
     try {
-      const result = await s.run(ctx);
+      const result = await s.run(ctx, outcome);
       if (result === SKIPPED) {
         outcome.effects.push({ ...effect, status: EFFECT_STATUS.SKIPPED });
         continue;
@@ -387,6 +408,7 @@ module.exports = {
   SKIPPED,
   noticeStep,
   noticesOf,
+  recordedFailures,
   policyOf,
   step,
   runPipeline,

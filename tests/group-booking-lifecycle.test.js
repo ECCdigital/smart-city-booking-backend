@@ -113,6 +113,7 @@ describe("group booking lifecycle: confirm", function () {
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({
       transition: "confirm",
@@ -172,6 +173,7 @@ describe("group booking lifecycle: confirm, the other cases", function () {
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome.status).to.equal("confirmed");
     expect(states(adapters)).to.deep.equal(["confirmed", "confirmed"]);
@@ -207,6 +209,7 @@ describe("group booking lifecycle: confirm, the other cases", function () {
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome.status).to.equal(null);
     expect(states(adapters)).to.deep.equal(["payment_due", "confirmed"]);
@@ -240,9 +243,10 @@ describe("group booking lifecycle: confirm, the other cases", function () {
       trigger: TRIGGER.ADMIN,
     });
 
-    expect(effectTable(outcome).slice(-2)).to.deep.equal([
+    expect(effectTable(outcome).slice(-3)).to.deep.equal([
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 ok",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     const organizer = adapters.mail.calls.find(
       (call) => call.args[0] === "NEW_BOOKING",
@@ -305,6 +309,7 @@ describe("group booking lifecycle: confirm, the other cases", function () {
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
+      "notify mail.ACCESS_PROVISION_FAILED ok",
     ]);
     const recorded = outcome.effects.find((e) => e.status === "recorded");
     expect(recorded.bookingId).to.equal("B-2");
@@ -546,6 +551,7 @@ describe("group booking lifecycle: pay", function () {
       "notify mail.BOOKING_CONFIRMATION ok",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({
       transition: "pay",
@@ -937,6 +943,7 @@ describe("group booking lifecycle: admit", function () {
       "notify mail.SUPERVISOR_BOOKING_NOTIFICATION ok",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({
       transition: "admit",
@@ -1042,6 +1049,7 @@ describe("group booking lifecycle: admit", function () {
       "notify mail.SUPERVISOR_BOOKING_NOTIFICATION ok",
       "notify mail.NEW_BOOKING B-1 skipped",
       "notify mail.NEW_BOOKING B-2 skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     for (const id of ["B-1", "B-2"]) {
       expect(

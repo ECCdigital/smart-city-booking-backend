@@ -271,6 +271,10 @@ _Avoid_: address (als Parameter), Adressat, Recipient-Liste, BCC (das ist eine K
 Eine Mitteilung, die einer Gruppenbuchung als Ganzem gilt — eine Mail mit den Mitgliedern in Kurzform, einem Buchungsdokument und einem Zahlungslink für die Gruppe. Eine Gruppe bekommt je Anlass genau eine, nie eine je Mitglied.
 _Avoid_: aggregated (als Sprechbegriff), Aggregat-Mail, Sammelmail, Gruppen-Mail
 
+**Störungsmitteilung**:
+Eine Mitteilung an den Mandanten über einen protokollierten Effekt, den er von Hand nachtragen muss — heute die eine Art „Zugang konnte nicht eingerichtet werden": die Buchung gilt und ist bezahlt, aber Tür oder Fach lassen sich nicht öffnen. Sie geht ungeachtet dessen hinaus, was der Mandant an Mitteilungen über neue Buchungen eingestellt hat, und ist die letzte Mitteilung ihres Übergangs. Sie meldet nur; das Nachfahren des Effekts ist nicht ihre Sache.
+_Avoid_: Fehler-Mail, Admin-Benachrichtigung, Alert
+
 **Mail-Vorlage (einer Mitteilungsart)**:
 Die vom Mandanten änderbaren Teile einer Mitteilungsart: Textkörper, Nachtext und Betreff. Was nicht dazugehört — Buchungsdetails, Anhänge, Rahmen — bestimmt die Plattform. Nicht jede Mitteilungsart hat eine.
 _Avoid_: Snippet (das ist die Speicherform), Template (unqualifiziert), Override

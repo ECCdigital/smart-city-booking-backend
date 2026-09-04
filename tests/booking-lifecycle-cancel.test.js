@@ -683,6 +683,7 @@ describe("booking lifecycle: reinstate", function () {
       "persist store.save ok",
       "provision access.hold skipped",
       "provision access.provision ok",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({
       transition: "reinstate",
@@ -734,6 +735,7 @@ describe("booking lifecycle: reinstate", function () {
       "persist store.save ok",
       "provision access.hold ok",
       "provision access.provision skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(adapters.store.rows.get("B-1")).to.include({
       status: "payment_due",
@@ -766,6 +768,7 @@ describe("booking lifecycle: reinstate", function () {
       "persist store.save ok",
       "provision access.hold ok",
       "provision access.provision skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(adapters.store.rows.get("B-1")).to.include({
       status: "requested",
@@ -819,9 +822,10 @@ describe("booking lifecycle: reinstate", function () {
       trigger: TRIGGER.ADMIN,
     });
 
-    expect(effectTable(outcome).at(-1)).to.equal(
+    expect(effectTable(outcome).slice(-2)).to.deep.equal([
       "provision access.provision recorded",
-    );
+      "notify mail.ACCESS_PROVISION_FAILED ok",
+    ]);
     expect(outcome.failure).to.equal(null);
     expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
   });

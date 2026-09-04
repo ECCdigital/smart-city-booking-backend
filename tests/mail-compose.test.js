@@ -219,6 +219,21 @@ describe("compose: a notice as mail values", function () {
 
       expect(await compose("INCOMING_BOOKING", single())).to.deep.equal([]);
     });
+
+    it("a failed grant goes to the tenant's address, whatever the tenant wants of new bookings", async function () {
+      installMailStackStore({ tenant: tenant({ notifyOnNewBooking: false }) });
+
+      const mails = await compose("ACCESS_PROVISION_FAILED", {
+        ...single(),
+        transition: "pay",
+        reason: "door refused",
+      });
+
+      expect(mails.map((mail) => mail.to)).to.deep.equal([TENANT_MAIL]);
+      expect(mails[0].attachments || []).to.deep.equal([]);
+      expect(mails[0].bcc).to.equal(undefined);
+      expect(mails[0].html).to.contain("door refused");
+    });
   });
 
   describe("the supervisors' notice", function () {

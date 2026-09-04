@@ -27,7 +27,14 @@ const {
   TRIGGERS,
   nextState,
 } = require("./booking-state");
-const { PHASE, SKIPPED, step, noticesOf, runPipeline } = require("./pipeline");
+const {
+  PHASE,
+  SKIPPED,
+  step,
+  noticesOf,
+  recordedFailures,
+  runPipeline,
+} = require("./pipeline");
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
@@ -123,6 +130,42 @@ function paymentRequestSteps(payment, notice, params, when) {
       },
     ),
   ];
+}
+
+/**
+ * The notice of a failed grant (glossary "Mitteilung"): `access.provision`
+ * is a recorded operation, so a booking whose grant did not come through
+ * stays paid and confirmed while nobody can open the door. This tells the
+ * tenant's address that it happened - one notice per run, naming the
+ * bookings whose grant was recorded and the reason the first one gave.
+ *
+ * It is the last notify step of every transition that grants, so the
+ * booker's own notices go out first, and it is skipped where the grant
+ * held. It reports; it does not retry - a run-behind job for recorded
+ * effects is its own question (the card's fog).
+ *
+ * @param {function} notice The `noticeOf` of the transition
+ * @returns {Object} The notice, as a step
+ */
+function provisionFailureNotice(notice) {
+  const failuresOf = (outcome) =>
+    recordedFailures(outcome, "access", "provision");
+
+  return notice(
+    "ACCESS_PROVISION_FAILED",
+    (outcome) => {
+      const recorded = failuresOf(outcome);
+      const failed = recorded.map((row) => row.bookingId).filter(Boolean);
+      return {
+        // A group names the members that failed; a single booking is the
+        // one the base already names.
+        ...(failed.length > 0 ? { bookingIds: failed } : {}),
+        transition: outcome.transition,
+        reason: recorded[0].error.message,
+      };
+    },
+    { when: (_ctx, outcome) => failuresOf(outcome).length > 0 },
+  );
 }
 
 /**
@@ -268,6 +311,7 @@ function createBookingLifecycle(adapters) {
       notice("INCOMING_BOOKING"),
       notice("SUPERVISOR_BOOKING_NOTIFICATION"),
       notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
+      provisionFailureNotice(notice),
     ]);
   }
 
@@ -327,6 +371,7 @@ function createBookingLifecycle(adapters) {
         paymentDue,
       ),
       notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
+      provisionFailureNotice(notice),
     ]);
   }
 
@@ -391,6 +436,7 @@ function createBookingLifecycle(adapters) {
       ),
       notice("BOOKING_CONFIRMATION", { attachments: files }),
       notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
+      provisionFailureNotice(notice),
     ]);
   }
 
@@ -596,6 +642,10 @@ function createBookingLifecycle(adapters) {
     delete booking.cancellationRefund;
     const confirmed = () => booking.status === STATUS.CONFIRMED;
 
+    // A reinstatement tells the booker nothing; the failed grant is the
+    // one notice it can send.
+    const notice = noticeOf(tenantId, bookingId);
+
     return runPipeline({ transition, tenantId, bookingId, booking, store }, [
       step(PHASE.PERSIST, "store", "save", () =>
         store.save(booking, {
@@ -618,6 +668,7 @@ function createBookingLifecycle(adapters) {
         () => access.provision(tenantId, bookingId),
         { when: confirmed },
       ),
+      provisionFailureNotice(notice),
     ]);
   }
 
@@ -710,4 +761,5 @@ module.exports = {
   isPriced,
   hasTicketPosition,
   paymentRequestSteps,
+  provisionFailureNotice,
 };

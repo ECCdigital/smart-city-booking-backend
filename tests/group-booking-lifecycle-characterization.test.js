@@ -562,6 +562,7 @@ describe("group booking lifecycle today: what each state change does at the seam
         "workflow.onPay B1",
         "workflow.onPay B2",
         "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchungen.ics]",
+        "mail.ACCESS_PROVISION_FAILED stadt@example.test",
       ]);
     });
 
