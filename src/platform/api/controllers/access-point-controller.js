@@ -9,10 +9,19 @@ const AccessQrService = require("../../../commons/services/access/access-qr-serv
 const AccessLocationService = require("../../../commons/services/access/access-location-service");
 const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
+const AccessService = require("../../../commons/services/access/access-service");
 const { ValidationError } = require("../../../errors/ValidationError");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("access-point-controller.js");
+
+/**
+ * How many bookings the access point's booking list names. Not a parameter of
+ * the request: this is a warning the administration reads before a delete, so
+ * the few it can act on plus the count of the rest is the whole answer. A
+ * caller who could ask for more would be asking for a booking export.
+ */
+const LIVE_ACCESS_BOOKING_LIMIT = 10;
 
 const WRITABLE_FIELDS = [
   "label",
@@ -64,6 +73,37 @@ class AccessPointController {
       }
 
       return response.status(200).send(accessPoint.toResponse());
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * The bookings that hold a live access at this access point, for the
+   * administration to see before it deletes one - what a live access is, and
+   * which booking still holds it, is `AccessService.getBookingsWithLiveAccess`.
+   *
+   * The list names {@link LIVE_ACCESS_BOOKING_LIMIT} of them and carries the
+   * whole `total` next to it.
+   */
+  static async getAccessPointBookings(request, response, next) {
+    try {
+      const tenantId = request.params.tenant;
+      const id = request.params.id;
+
+      const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
+
+      if (!accessPoint) {
+        return response.sendStatus(404);
+      }
+
+      const result = await AccessService.getBookingsWithLiveAccess(
+        tenantId,
+        id,
+        { limit: LIVE_ACCESS_BOOKING_LIMIT },
+      );
+
+      return response.status(200).json(result);
     } catch (err) {
       return next(err);
     }

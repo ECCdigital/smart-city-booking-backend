@@ -164,6 +164,60 @@
       "404":
         description: The tenant has no access point with that id
 
+/api/{tenant}/accesspoints/{id}/bookings:
+  get:
+    tags:
+      - Access Points
+    summary: List the bookings that hold a live access at an access point
+    description: |
+      Returns the bookings of the tenant that currently hold a granted,
+      unrevoked access at this access point, so an administration can see what
+      a deletion would tear up: `DELETE /api/{tenant}/accesspoints/{id}`
+      detaches the access point from the bookables and drops the row, but it
+      revokes nothing at the provider.
+
+      A booking counts when it carries an entry at this access point that is
+      provisioned and not revoked, its period has not passed (a booking
+      without an end never ends) and it is not rejected. "Provisioned", not
+      "has a grant": a door in mode `remote` is marked provisioned without a
+      grant object, while a compartment that is only held is not provisioned
+      yet. A booking is named once, however many compartments it holds at a
+      locker system.
+
+      Requires `readAny` on `manageBookings` - the answer names bookings and
+      their customers, so it is the booking reader's right and not the one
+      that carries the access point list. Tenant owners, who alone may delete
+      an access point, are covered by that.
+
+      An administrative warning, not a booking export: each hit carries the
+      booking id, the customer's name and mail address and the period, nothing
+      further. The list names at most ten bookings, the ones already running
+      first, and `total` counts all of them. The cap is not a parameter - a
+      caller who could raise it would be asking for a booking export.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        description: Unique identifier of the access point
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The bookings with a live access at this access point
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessPointBookings"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not allowed to read the bookings of the tenant
+      "404":
+        description: The tenant has no access point with that id
+
 /api/{tenant}/accesspoints/{id}/qrcode:
   get:
     tags:
@@ -329,6 +383,54 @@
 
 components:
   schemas:
+    AccessPointBookings:
+      type: object
+      description: |
+        The bookings with a live access at an access point: `total` counts all
+        of them, `bookings` names at most ten, by start time.
+      properties:
+        total:
+          type: integer
+          description: How many bookings hold a live access at the access point
+          example: 23
+        bookings:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessPointBooking"
+      required:
+        - total
+        - bookings
+
+    AccessPointBooking:
+      type: object
+      description: |
+        One booking with a live access, in the little the warning needs to
+        name it.
+      properties:
+        id:
+          type: string
+          example: "1699999999999-abc"
+        name:
+          type: string
+          nullable: true
+          description: The customer's name
+          example: Erika Muster
+        mail:
+          type: string
+          nullable: true
+          description: The customer's mail address
+          example: erika@example.org
+        timeBegin:
+          type: number
+          nullable: true
+          description: Start of the booking period, in epoch milliseconds
+          example: 1700000000000
+        timeEnd:
+          type: number
+          nullable: true
+          description: End of the booking period, in epoch milliseconds
+          example: 1700003600000
+
     ManagedAccessPoint:
       type: object
       description: |

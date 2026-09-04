@@ -106,6 +106,23 @@ describe("authorization on the access, locker, catalog and calendar routes", fun
     ).to.equal(200);
   });
 
+  it("puts the bookings of an access point on the booking reader, not the bookable reader", async function () {
+    const path = `/accesspoints/${FIXTURE_ID}/bookings`;
+
+    expect((await get(path)).status).to.equal(401);
+
+    const customer = await get(path, CUSTOMER);
+    expect(customer.status).to.equal(403);
+    expect(customer.body).to.deep.equal(FORBIDDEN);
+
+    // The role holder of the world holds every level, `manageBookings.readAny`
+    // among them; the tenant owner, who alone may delete the access point,
+    // reaches it as well.
+    expect((await get(path, ROLE_HOLDER)).status).to.equal(200);
+    expect((await get(path, OWNER)).status).to.equal(200);
+    expect((await get(path, ADMIN)).status).to.equal(200);
+  });
+
   it("puts the access apps on the tenant owner, where the dead role group stood", async function () {
     // Reading the providers is the bookable reader's ...
     expect((await get("/access-apps/providers", ROLE_HOLDER)).status).to.equal(

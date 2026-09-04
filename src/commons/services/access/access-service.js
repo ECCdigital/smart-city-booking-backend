@@ -1471,6 +1471,98 @@ class AccessService {
   }
 
   /**
+   * The bookings of a tenant that hold a live access at one access point -
+   * the answer the administration needs before it deletes one, because the
+   * deletion detaches the access point without revoking anything at the
+   * provider.
+   *
+   * A live access is an entry of the booking's `accessInfo` at this access
+   * point that is provisioned and not revoked. Not "has a grant": a door in
+   * mode `remote` is marked provisioned without one (`_provisionDoors`),
+   * while a compartment that is only held carries a `hold` and is not
+   * provisioned yet (`_ensureCompartmentEntries`). A revoke sets both
+   * `isProvisioned: false` and `revokedAt`, and the entry stays behind as the
+   * record of the revoke - hence both halves of the predicate.
+   *
+   * This reads the stored flag, which `_upsertAccessInfo` maintains for doors
+   * and compartments alike. It is not the same question as
+   * `_compartmentContext`, which recomputes `isProvisioned` from the grant:
+   * that one judges one compartment for the access decision, where a grant is
+   * the only way to be provisioned, and would call a `remote` door unprovisioned.
+   *
+   * Bookings whose period has passed are left out: their access is over, so
+   * the deletion takes nothing from them. A booking without an end never ends
+   * and stays in. Rejected ones are out too.
+   *
+   * The whole predicate is in the query, so what is loaded is bounded by how
+   * many bookings hold a live access at once and not by how long the access
+   * point has existed - every past booking keeps its revoked entry forever,
+   * and a query on the id alone would grow without end. The memory pass then
+   * decides, the way `getUserBookingsFiltered` re-checks the price validity it
+   * cannot express: it is the readable form of the rule, and it does not
+   * depend on how a mixed `accessInfo` subdocument compares in the database.
+   *
+   * The list is capped and the whole count is answered next to it: at a busy
+   * locker system this is a warning, not an export.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @param {Object} [opts]
+   * @param {number} [opts.limit=10] How many bookings the list names
+   * @param {number} [opts.now=Date.now()] The moment "still running" is
+   *   judged against
+   * @returns {Promise<{total: number, bookings: Object[]}>} The count of all
+   *   bookings with a live access, and the first `limit` of them by start
+   *   time - id, customer and period, nothing further
+   */
+  static async getBookingsWithLiveAccess(
+    tenant,
+    accessPointId,
+    { limit = 10, now = Date.now() } = {},
+  ) {
+    const id = String(accessPointId);
+    const bookings = await BookingManager.getBookingsCustomFilter(tenant, {
+      isRejected: { $ne: true },
+      $or: [{ timeEnd: null }, { timeEnd: { $gte: now } }],
+      accessInfo: {
+        $elemMatch: {
+          accessPointId: id,
+          isProvisioned: true,
+          revokedAt: null,
+        },
+      },
+    });
+
+    const running = bookings
+      .filter(
+        (booking) =>
+          (booking.timeEnd == null || booking.timeEnd >= now) &&
+          (booking.accessInfo || []).some(
+            (entry) =>
+              String(entry?.accessPointId) === id &&
+              entry?.isProvisioned === true &&
+              !entry?.revokedAt,
+          ),
+      )
+      .sort(
+        (a, b) =>
+          (a.timeBegin ?? 0) - (b.timeBegin ?? 0) ||
+          String(a.id).localeCompare(String(b.id)),
+      );
+
+    return {
+      total: running.length,
+      bookings: running.slice(0, limit).map((booking) => ({
+        id: booking.id,
+        name: booking.name ?? null,
+        mail: booking.mail ?? null,
+        timeBegin: booking.timeBegin ?? null,
+        timeEnd: booking.timeEnd ?? null,
+      })),
+    };
+  }
+
+  /**
    * @private
    * Builds one trigger map per tenant.
    * @returns {Promise<Map<string, Map<string, Map<string, string>>>>}
