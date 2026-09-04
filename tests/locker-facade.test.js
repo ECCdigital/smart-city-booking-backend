@@ -2,8 +2,9 @@
  * The `/locker/:provider/...` routes stay one release as a facade for the
  * admin UI: the locations and sizes come from `AccessInfoService`
  * (`listAccessPoints`), the price from the checkout price provider, the
- * connection test from the access test registry. The read permission is
- * `MANAGE_BOOKABLES` as before; the test needs only that.
+ * connection test from the access test registry. Who may read is the routes'
+ * (`locker.read`, `locker.test`) and is pinned in
+ * `authorization-access-routes.test.js`, not here.
  */
 
 const { expect } = require("chai");
@@ -12,8 +13,6 @@ const sinon = require("sinon");
 const { lockerFacade } = require("../src/platform/api/routes/locker.routes");
 const AccessInfoService = require("../src/commons/services/access/access-info-service");
 const ExternalPriceService = require("../src/commons/services/external-price-service");
-const PermissionService = require("../src/commons/services/permission-service");
-const { RolePermission } = require("../src/commons/entities/role/role");
 
 const TENANT = "tenant-1";
 
@@ -34,7 +33,6 @@ const LOCATION_8 = { ...LOCATION_7, id: "8", externalId: "8", label: "Markt" };
 describe("/locker facade", () => {
   let request;
   let response;
-  let allowRead;
 
   beforeEach(() => {
     request = {
@@ -47,7 +45,6 @@ describe("/locker facade", () => {
       send: sinon.stub(),
       sendStatus: sinon.stub(),
     };
-    allowRead = sinon.stub(PermissionService, "_allowReadAny").resolves(true);
     sinon
       .stub(AccessInfoService, "getAccessPoints")
       .resolves([LOCATION_7, LOCATION_8]);
@@ -55,14 +52,9 @@ describe("/locker facade", () => {
 
   afterEach(() => sinon.restore());
 
-  it("lists the provider's access points as the locations, for whoever may read bookables", async () => {
+  it("lists the provider's access points as the locations", async () => {
     await lockerFacade.listLocations(request, response);
 
-    expect(allowRead.firstCall.args).to.deep.equal([
-      "user-1",
-      TENANT,
-      RolePermission.MANAGE_BOOKABLES,
-    ]);
     expect(AccessInfoService.getAccessPoints.firstCall.args).to.deep.equal([
       TENANT,
       "ifbs",
@@ -72,15 +64,6 @@ describe("/locker facade", () => {
       LOCATION_7,
       LOCATION_8,
     ]);
-  });
-
-  it("refuses whoever may not read bookables", async () => {
-    allowRead.resolves(false);
-
-    await lockerFacade.listLocations(request, response);
-
-    expect(response.sendStatus.firstCall.args).to.deep.equal([403]);
-    expect(AccessInfoService.getAccessPoints.called).to.equal(false);
   });
 
   it("answers one location by its id, and 404 for one the provider does not list", async () => {
@@ -129,7 +112,7 @@ describe("/locker facade", () => {
     expect(response.status.firstCall.args).to.deep.equal([400]);
   });
 
-  it("tests a connection with the given configuration, for whoever may read bookables", async () => {
+  it("tests a connection with the given configuration", async () => {
     const result = { success: true, message: "Connection successful" };
     const testConnection = sinon
       .stub(AccessInfoService, "testConnection")
@@ -144,16 +127,6 @@ describe("/locker facade", () => {
       { tenantId: TENANT },
     ]);
     expect(response.send.firstCall.args[0]).to.deep.equal(result);
-  });
-
-  it("refuses the connection test to whoever may not read bookables", async () => {
-    allowRead.resolves(false);
-    const testConnection = sinon.stub(AccessInfoService, "testConnection");
-
-    await lockerFacade.testConnection(request, response);
-
-    expect(response.sendStatus.firstCall.args).to.deep.equal([403]);
-    expect(testConnection.called).to.equal(false);
   });
 
   it("answers 400 for a connection test of a provider without one", async () => {

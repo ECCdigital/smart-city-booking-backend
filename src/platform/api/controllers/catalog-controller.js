@@ -1,8 +1,8 @@
 const CatalogService = require("../../../commons/services/catalog-service");
-const PermissionService = require("../../../commons/services/permission-service");
 const bunyan = require("bunyan");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const InstanceManager = require("../../../commons/data-managers/instance-manager");
+const { scopeFor } = require("../../../commons/services/authorization");
+const { ForbiddenError } = require("../../../errors/BaseError");
 const {
   authenticateIfNeeded,
 } = require("../../../commons/utilities/auth-utils");
@@ -96,28 +96,19 @@ class CatalogController {
     }
   }
 
+  // The tenant catalog: the right is the router's (`tenant.catalog`: the
+  // tenant owner).
   static async getCatalogByTenant(request, response) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
 
-      const tenant = await TenantManager.getTenant(tenantId);
+      logger.info(
+        `Sending catalog for tenant ${tenantId} to user ${request.user?.id} with details`,
+      );
 
-      if (
-        user &&
-        ((await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-          (await PermissionService._isInstanceOwner(user.id)))
-      ) {
-        logger.info(
-          `Sending catalog for tenant ${tenantId} to user ${user?.id} with details`,
-        );
+      const catalog = await CatalogService.getCatalogByTenant(tenantId);
 
-        const catalog = await CatalogService.getCatalogByTenant(tenantId);
-
-        response.status(200).send(catalog);
-      } else {
-        response.sendStatus(403);
-      }
+      response.status(200).send(catalog);
     } catch (error) {
       response.status(error.code || 500).send({
         success: false,
@@ -232,13 +223,18 @@ class CatalogController {
     }
   }
 
-  static async storeCatalog(request, response) {
+  /**
+   * `PUT /:tenant/catalog` carries the tenant catalog (`tenant.catalog`: the
+   * tenant owner) and, for a catalog that is not a single tenant's, the
+   * instance catalog - the second decision of the adapter
+   * (`instanceCatalog.store`: the instance owner, spec §5). A body naming
+   * another tenant than the route is refused: the route's tenant is the one
+   * the marker was decided in.
+   */
+  static async storeCatalog(request, response, next) {
     try {
       const catalogData = request.body;
-      const user = request.user;
       const tenantId = request.params.tenant;
-
-      console.log("Catalog data received:", catalogData);
 
       if (!catalogData) {
         return response.status(400).send({
@@ -248,54 +244,40 @@ class CatalogController {
       }
 
       if (catalogData.type === "single") {
-        const tenant = await TenantManager.getTenant(tenantId);
-
-        if (
-          tenantId === catalogData.tenantId &&
-          user &&
-          ((await PermissionService._isTenantOwner(user.id, tenant.id)) ||
-            (await PermissionService._isInstanceOwner(user.id)))
-        ) {
-          if (catalogData._id) {
-            const updatedCatalog = await CatalogService.updateTenantCatalog(
-              tenantId,
-              catalogData,
-            );
-            response.status(200).send({
-              success: true,
-              content: updatedCatalog,
-            });
-          } else {
-            const createdCatalog = await CatalogService.createTenantCatalog(
-              tenantId,
-              catalogData,
-            );
-            response.status(201).send({
-              success: true,
-              content: createdCatalog,
-            });
-          }
-        } else {
-          return response.status(403).send({
-            success: false,
-            message: "You do not have permission to store this catalog.",
-          });
+        if (tenantId !== catalogData.tenantId) {
+          return next(new ForbiddenError());
         }
-      } else {
-        if (user && (await PermissionService._isInstanceOwner(user.id))) {
-          const updatedCatalog =
-            await CatalogService.updateCatalog(catalogData);
-          response.status(200).send({
+
+        if (catalogData._id) {
+          const updatedCatalog = await CatalogService.updateTenantCatalog(
+            tenantId,
+            catalogData,
+          );
+          return response.status(200).send({
             success: true,
             content: updatedCatalog,
           });
-        } else {
-          return response.status(403).send({
-            success: false,
-            message: "You do not have permission to store this catalog.",
-          });
         }
+
+        const createdCatalog = await CatalogService.createTenantCatalog(
+          tenantId,
+          catalogData,
+        );
+        return response.status(201).send({
+          success: true,
+          content: createdCatalog,
+        });
       }
+
+      if (scopeFor(request, "instanceCatalog", "store").reach !== "any") {
+        return next(new ForbiddenError());
+      }
+
+      const updatedCatalog = await CatalogService.updateCatalog(catalogData);
+      response.status(200).send({
+        success: true,
+        content: updatedCatalog,
+      });
     } catch (error) {
       console.error("Error in CatalogController.storeCatalog:", error);
       response.status(500).send({

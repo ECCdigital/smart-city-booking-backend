@@ -7,13 +7,14 @@
 
 const { loadPrincipal } = require("./principal");
 const { decide, REACH } = require("./policy");
-const { ownCondition } = require("./reach");
+const { ownCondition, withinReach } = require("./reach");
 const { TABLE, ROLE_GROUPS, ROLE_LEVELS } = require("./table");
 const {
   authorize,
   publicRoute,
   tokenAuthorized,
   scopeOf,
+  scopeFor,
   MARKER,
 } = require("./middleware");
 
@@ -22,6 +23,7 @@ module.exports = {
   decide,
   REACH,
   ownCondition,
+  withinReach,
   TABLE,
   ROLE_GROUPS,
   ROLE_LEVELS,
@@ -30,5 +32,6 @@ module.exports = {
   publicRoute,
   tokenAuthorized,
   scopeOf,
+  scopeFor,
   MARKER,
 };

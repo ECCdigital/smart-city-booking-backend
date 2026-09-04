@@ -9,7 +9,11 @@ const {
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
-const { decide, scopeOf } = require("../../../commons/services/authorization");
+const {
+  decide,
+  scopeOf,
+  scopeFor,
+} = require("../../../commons/services/authorization");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -128,7 +132,11 @@ class EventController {
         throw new Error(`Maximum number of  public  events reached.`);
       }
 
-      await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
+      await MediaReferenceGuard.assertEventStorable(
+        event,
+        tenant,
+        scopeFor(request, "media", "read"),
+      );
       await EventService.createEvent(tenant, event, user, withTicketsBoolean);
 
       logger.info(`${tenant} -- created event ${event.id} by user ${user?.id}`);
@@ -165,7 +173,11 @@ class EventController {
         }
       }
 
-      await MediaReferenceGuard.assertEventStorable(event, tenant, user.id);
+      await MediaReferenceGuard.assertEventStorable(
+        event,
+        tenant,
+        scopeFor(request, "media", "read"),
+      );
       await EventManager.storeEvent(event);
       logger.info(`${tenant} -- updated event ${event.id} by user ${user?.id}`);
       response.sendStatus(201);

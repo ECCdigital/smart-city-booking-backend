@@ -1,6 +1,4 @@
 const bunyan = require("bunyan");
-const PermissionService = require("../../../commons/services/permission-service");
-const { RolePermission } = require("../../../commons/entities/role/role");
 const { scopeOf } = require("../../../commons/services/authorization");
 const AccessService = require("../../../commons/services/access/access-service");
 const AccessScanService = require("../../../commons/services/access/access-scan-service");
@@ -59,10 +57,7 @@ class AccessController {
     const user = request.user;
 
     try {
-      const hasManagePermission = await AccessController._hasManagePermission(
-        user.id,
-        tenant,
-      );
+      const hasManagePermission = AccessController._canManage(request);
 
       const outcome = await AccessService[action](
         tenant,
@@ -168,11 +163,12 @@ class AccessController {
       const { bookingId } = request.query;
       const user = request.user;
 
-      const allowed = await AccessController._canOperate(
+      const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
+        AccessController._canManage(request),
       );
       if (!allowed) return response.sendStatus(403);
 
@@ -202,11 +198,12 @@ class AccessController {
       const { openProcessId, bookingId } = request.query;
       const user = request.user;
 
-      const allowed = await AccessController._canOperate(
+      const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
+        AccessController._canManage(request),
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -234,11 +231,12 @@ class AccessController {
       const { bookingId } = request.query;
       const user = request.user;
 
-      const allowed = await AccessController._canOperate(
+      const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
+        AccessController._canManage(request),
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -272,10 +270,7 @@ class AccessController {
       const { bookingId } = request.query;
       const user = request.user;
 
-      const hasManagePermission = await AccessController._hasManagePermission(
-        user.id,
-        tenant,
-      );
+      const hasManagePermission = AccessController._canManage(request);
       const allowed = await AccessService.canView(
         user.id,
         tenant,
@@ -416,35 +411,18 @@ class AccessController {
 
   /**
    * @private
-   * Checks that the booking is active (committed, paid if priced, not rejected
-   * and within its time window) and that the user is either the booking owner
-   * or has the manage-bookings permission. The booking conditions apply to
-   * everyone, including managers/admins.
+   * Whether the request acts in the manager role at someone else's booking:
+   * the reach `any` of `booking.operate` is what waives the ownership
+   * requirement of the access decision (authorize spec §5). The booking
+   * conditions - committed, paid if priced, not rejected, within its window -
+   * apply to everyone, the manager included; the reach only replaces who the
+   * booking has to belong to.
+   *
+   * @param {Object} request Express request
+   * @returns {boolean} Whether the caller may manage the tenant's bookings
    */
-  static async _canOperate(userId, tenant, bookingId, accessPointId) {
-    return AccessService.canOperate(
-      userId,
-      tenant,
-      bookingId,
-      accessPointId,
-      await AccessController._hasManagePermission(userId, tenant),
-    );
-  }
-
-  /**
-   * @private
-   * Whether the user may manage the bookings of a tenant, which replaces the
-   * booking ownership requirement of the access checks.
-   * @param {string} userId User ID
-   * @param {string} tenant Tenant ID
-   * @returns {Promise<boolean>} Whether the user may manage bookings
-   */
-  static async _hasManagePermission(userId, tenant) {
-    return PermissionService._allowUpdateAny(
-      userId,
-      tenant,
-      RolePermission.MANAGE_BOOKINGS,
-    );
+  static _canManage(request) {
+    return scopeOf(request).reach === "any";
   }
 }
 

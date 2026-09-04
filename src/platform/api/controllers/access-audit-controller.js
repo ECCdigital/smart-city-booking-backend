@@ -1,6 +1,4 @@
 const bunyan = require("bunyan");
-const PermissionService = require("../../../commons/services/permission-service");
-const { RolePermission } = require("../../../commons/entities/role/role");
 const AccessAuditService = require("../../../commons/services/access/access-audit-service");
 
 const logger = bunyan.createLogger({
@@ -17,16 +15,14 @@ class AccessAuditController {
    *   - from, to: ISO date or epoch ms (inclusive bounds)
    *   - bookingId, accessPointId, provider, action, result: optional filters
    *
-   * Returns a tenant-wide access audit log export for compliance.
+   * Returns a tenant-wide access audit log export for compliance. Audit data
+   * covers all bookings of a tenant, so the route asks for the tenant-wide
+   * booking read right (`accessAudit.export`).
    */
   static async exportAudit(request, response) {
     try {
       const { tenant } = request.params;
       const user = request.user;
-
-      if (!(await AccessAuditController._canExport(user.id, tenant))) {
-        return response.sendStatus(403);
-      }
 
       const format = String(request.query.format || "csv").toLowerCase();
       const filters = {
@@ -77,19 +73,6 @@ class AccessAuditController {
       logger.error(err);
       return response.status(500).send("Could not export access audit log");
     }
-  }
-
-  /**
-   * @private
-   * Audit data covers all bookings of a tenant, so it requires the
-   * tenant-wide booking-management permission (or tenant/instance ownership).
-   */
-  static async _canExport(userId, tenant) {
-    return PermissionService._allowReadAny(
-      userId,
-      tenant,
-      RolePermission.MANAGE_BOOKINGS,
-    );
   }
 }
 

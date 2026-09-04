@@ -7,7 +7,11 @@ const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
 const { BaseError, ForbiddenError } = require("../../../errors/BaseError");
-const { decide, scopeOf } = require("../../../commons/services/authorization");
+const {
+  decide,
+  scopeOf,
+  scopeFor,
+} = require("../../../commons/services/authorization");
 const {
   getRelatedOpeningHours,
 } = require("../../../commons/utilities/opening-hours-manager");
@@ -270,7 +274,10 @@ class BookableController {
 
       await BookableController._validateAccessPointIds(bookable, tenant);
       BookableController._validateAccessBuffers(bookable);
-      await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
+      await MediaReferenceGuard.assertBookableStorable(
+        bookable,
+        scopeFor(request, "media", "read"),
+      );
       await BookableManager.storeBookable(bookable);
       logger.info(
         `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
@@ -331,7 +338,10 @@ class BookableController {
 
       await BookableController._validateAccessPointIds(bookable, tenant);
       BookableController._validateAccessBuffers(bookable);
-      await MediaReferenceGuard.assertBookableStorable(bookable, user.id);
+      await MediaReferenceGuard.assertBookableStorable(
+        bookable,
+        scopeFor(request, "media", "read"),
+      );
       await BookableManager.storeBookable(bookable);
       logger.info(
         `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,

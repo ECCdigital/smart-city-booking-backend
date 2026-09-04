@@ -5,12 +5,16 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
 const AccessAppController = require("../src/platform/api/controllers/access-app-controller");
-const PermissionService = require("../src/commons/services/permission-service");
 const SaltoKsIqActivationService = require("../src/commons/services/access/salto-ks-iq-activation-service");
 const { BadRequestError } = require("../src/errors/BaseError");
 
 const IQ_ID = "5dfdc54e-8335-11f0-a2ed-6045bd92d38f";
 
+/**
+ * The wizard renders what the activation service answers. Who may run it is
+ * the route's (`accessApp.manage`: the tenant owner) and is pinned in
+ * `authorization-access-routes.test.js`, not here.
+ */
 describe("AccessAppController Salto KS IQ wizard", () => {
   let sandbox;
   let request;
@@ -34,12 +38,7 @@ describe("AccessAppController Salto KS IQ wizard", () => {
     sandbox.restore();
   });
 
-  function allowManage(allowed) {
-    sandbox.stub(PermissionService, "_allowUpdateAny").resolves(allowed);
-  }
-
   it("lists the IQs with their local state for a tenant manager", async () => {
-    allowManage(true);
     const iqs = [{ id: IQ_ID, state: "activated" }];
     sandbox.stub(SaltoKsIqActivationService, "listIqs").resolves(iqs);
 
@@ -51,21 +50,7 @@ describe("AccessAppController Salto KS IQ wizard", () => {
     expect(response.send.calledOnceWith(iqs)).to.be.true;
   });
 
-  it("refuses the wizard without the manage-tenants permission", async () => {
-    allowManage(false);
-    sandbox.stub(SaltoKsIqActivationService, "listIqs");
-    sandbox.stub(SaltoKsIqActivationService, "startActivation");
-
-    await AccessAppController.saltoKsListIqs(request, response);
-    await AccessAppController.saltoKsStartIqActivation(request, response);
-
-    expect(response.sendStatus.alwaysCalledWith(403)).to.be.true;
-    expect(SaltoKsIqActivationService.listIqs.called).to.be.false;
-    expect(SaltoKsIqActivationService.startActivation.called).to.be.false;
-  });
-
   it("starts an activation", async () => {
-    allowManage(true);
     sandbox
       .stub(SaltoKsIqActivationService, "startActivation")
       .resolves({ iqId: IQ_ID, state: "pending_pin" });
@@ -86,7 +71,6 @@ describe("AccessAppController Salto KS IQ wizard", () => {
   });
 
   it("renders a refused wizard step with its code", async () => {
-    allowManage(true);
     sandbox
       .stub(SaltoKsIqActivationService, "startActivation")
       .rejects(new BadRequestError("salto_iq_already_activated_at_salto"));
@@ -100,7 +84,6 @@ describe("AccessAppController Salto KS IQ wizard", () => {
   });
 
   it("completes an activation with the mailed pin", async () => {
-    allowManage(true);
     request.body = { pin: "1234" };
     sandbox
       .stub(SaltoKsIqActivationService, "completeActivation")
@@ -119,7 +102,6 @@ describe("AccessAppController Salto KS IQ wizard", () => {
   });
 
   it("discards an activation", async () => {
-    allowManage(true);
     sandbox
       .stub(SaltoKsIqActivationService, "discardActivation")
       .resolves({ iqId: IQ_ID, state: "not_activated" });

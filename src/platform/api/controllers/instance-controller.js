@@ -1,5 +1,6 @@
 const InstanceManger = require("../../../commons/data-managers/instance-manager");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
+const { scopeFor } = require("../../../commons/services/authorization");
 const { BaseError } = require("../../../errors/BaseError");
 
 /**
@@ -28,9 +29,12 @@ class InstanceController {
 
   static async storeInstance(request, response) {
     try {
-      const { user, body } = request;
+      const { body } = request;
 
-      await MediaReferenceGuard.assertInstanceStorable(body, user.id);
+      await MediaReferenceGuard.assertInstanceStorable(
+        body,
+        scopeFor(request, "instanceMedia", "read"),
+      );
 
       const updatedInstance = await InstanceManger.updateInstance(body);
       response

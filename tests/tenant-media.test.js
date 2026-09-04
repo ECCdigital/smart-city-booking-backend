@@ -3,7 +3,6 @@ const sinon = require("sinon");
 
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
-const PermissionService = require("../src/commons/services/permission-service");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const TenantModel = require("../src/commons/data-managers/models/tenantModel");
 const Tenant = require("../src/commons/entities/tenant/tenant");
@@ -19,6 +18,9 @@ const {
 const TENANT = "tenant1";
 const MEDIA = "doc-1";
 const USER = "owner@stadt.de";
+// The reach of `media.read` the adapter hands the guard (authorize spec §5).
+const PICKER = { reach: "any", userId: USER };
+const NO_PICKER = { reach: null, userId: USER };
 
 function mediaReference(mediaId) {
   return { source: "media", mediaId, url: null };
@@ -178,7 +180,6 @@ describe("tenant media", function () {
       const getMedia = sandbox
         .stub(MediaManager, "getMedia")
         .resolves(documentFixture());
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
       await MediaReferenceGuard.assertTenantStorable(
         tenantWith(mediaReference(MEDIA)),
@@ -212,13 +213,12 @@ describe("tenant media", function () {
       sandbox
         .stub(MediaManager, "getMedia")
         .resolves(documentFixture({ visibility: "intern" }));
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
       await assert.rejects(
         MediaReferenceGuard.assertTenantStorable(
           tenantWith(mediaReference(MEDIA)),
           TENANT,
-          USER,
+          PICKER,
         ),
         (err) => {
           assert.strictEqual(err.statusCode, 400);
@@ -228,15 +228,14 @@ describe("tenant media", function () {
       );
     });
 
-    it("rejects a saver without the picker right", async function () {
+    it("rejects a saver whose reach does not cover the medium", async function () {
       sandbox.stub(MediaManager, "getMedia").resolves(documentFixture());
-      sandbox.stub(PermissionService, "_allowRead").resolves(false);
 
       await assert.rejects(
         MediaReferenceGuard.assertTenantStorable(
           tenantWith(mediaReference(MEDIA)),
           TENANT,
-          USER,
+          NO_PICKER,
         ),
         (err) => {
           assert.strictEqual(err.statusCode, 403);
@@ -249,11 +248,10 @@ describe("tenant media", function () {
       const getMedia = sandbox
         .stub(MediaManager, "getMedia")
         .resolves(documentFixture());
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
       const forged = tenantWith(mediaReference(MEDIA));
       forged.id = "other-tenant";
 
-      await MediaReferenceGuard.assertTenantStorable(forged, TENANT, USER);
+      await MediaReferenceGuard.assertTenantStorable(forged, TENANT, PICKER);
 
       assert.deepStrictEqual(getMedia.firstCall.args, [MEDIA, TENANT]);
     });

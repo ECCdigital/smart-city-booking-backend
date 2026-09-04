@@ -13,6 +13,11 @@
  * each manager's own answer (its public records, or nothing), so asking
  * for a condition under it is a programming error, as is `own` without a
  * user - the condition would match records nobody owns.
+ *
+ * `withinReach` is the same question about a record already in hand, for
+ * an adapter that loaded it before it knew which reach applies (a medium
+ * that turns out to be a booking document, a referenced medium that has
+ * to be told apart from an unknown one).
  */
 
 const { REACH } = require("./policy");
@@ -35,4 +40,22 @@ function ownCondition(key, { reach, userId } = {}) {
   throw new Error(`authorization: no record condition under reach ${reach}`);
 }
 
-module.exports = { ownCondition };
+/**
+ * Whether a record the caller already holds lies within a reach.
+ *
+ * @param {Object} record - The record.
+ * @param {string} key - The field that names the owner of the entity.
+ * @param {{reach?: string, userId?: string|null}} [scope]
+ * @returns {boolean}
+ */
+function withinReach(record, key, { reach, userId } = {}) {
+  if (reach === undefined || reach === REACH.ANY) {
+    return true;
+  }
+  if (reach === REACH.OWN) {
+    return Boolean(userId) && record?.[key] === userId;
+  }
+  return false;
+}
+
+module.exports = { ownCondition, withinReach };

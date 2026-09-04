@@ -175,6 +175,14 @@ const TABLE = {
   media: {
     // Metadata and usage.
     read: { own: "manageMedia.readOwn", any: "manageMedia.readAny" },
+    // The door of the metadata routes (`GET /media/:id`, `/usage`,
+    // `PATCH /media/:id`), which serve two populations: the library, whose
+    // rule is `read`/`update`, and the booking documents, whose rule is the
+    // receipt rule below. One route carries one marker, so the marker is the
+    // door both come through - signed in, as today - and the handler asks the
+    // table again for the rule that applies (§5, like the creation over the
+    // obsolete PUTs in §12).
+    metadata: { own: "signedIn" },
     // Reading the file; the visibility `public | intern` of the medium
     // stays in the media module, in addition to the reach (§5).
     file: {
@@ -273,7 +281,16 @@ const TABLE = {
   },
 
   ical: {
+    // `/ical/feed/events*`: the subscribable calendar, public events only.
     feed: { public: true },
+    // `/ical/events*`: the same public calendar for everyone; the reach says
+    // which private events `?includePrivate=true` may add - the public
+    // projection that lets the entry be a mixed one (§12).
+    events: {
+      public: true,
+      own: "manageBookables.readOwn",
+      any: "manageBookables.readAny",
+    },
     bookings: { own: "signedIn", any: "manageBookings.readAny" },
   },
 

@@ -246,8 +246,9 @@ describe("authorization policy: invariants of the table", function () {
   it("an entry with a role level for own names a resource whose manager knows its owner key (§4.1)", function () {
     // The manager of each of these entities translates `own` into its own
     // query condition; `own` with the level `signedIn` means "self" and
-    // needs no key.
-    const OWNED = ["bookable", "event", "coupon", "booking", "media"];
+    // needs no key. The calendar `ical.events` is the events' own reach,
+    // translated by the `EventManager` like every other event read.
+    const OWNED = ["bookable", "event", "coupon", "booking", "media", "ical"];
     for (const { resource, entry } of entries()) {
       if (typeof entry.own === "string" && ROLE_LEVEL.test(entry.own)) {
         expect(OWNED, `${resource} has own=${entry.own}`).to.include(resource);

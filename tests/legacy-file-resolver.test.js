@@ -51,12 +51,30 @@ function createResponse() {
   };
 }
 
-function createRequest({ user = null, name = LEGACY_PATH, params = {} } = {}) {
+/**
+ * The resolver runs behind `public("media", "file")` (tenant) and
+ * `public("instanceMedia", "file")` (instance), so a request carries the
+ * reach the marker decided: `public` for the anonymous, `own` for a
+ * signed-in user without a media role.
+ */
+function createRequest({
+  user = null,
+  name = LEGACY_PATH,
+  params = {},
+  reach = user ? "own" : "public",
+} = {}) {
   return {
     user,
     params,
     query: { name },
     headers: {},
+    reach,
+    principal: {
+      userId: user?.id ?? null,
+      isInstanceOwner: false,
+      isTenantOwner: false,
+      grants: {},
+    },
     on() {},
   };
 }

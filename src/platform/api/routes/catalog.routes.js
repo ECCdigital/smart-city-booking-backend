@@ -1,17 +1,14 @@
 const express = require("express");
 const router = express.Router({ mergeParams: true });
 
-const AuthenticationController = require("../../authentication/controllers/authentication-controller");
+const { authorize } = require("../../../commons/services/authorization");
 const CatalogController = require("../controllers/catalog-controller");
+
 router.get(
   "/",
-  AuthenticationController.isSignedIn,
+  authorize("tenant", "catalog"),
   CatalogController.getCatalogByTenant,
 );
-router.put(
-  "/",
-  AuthenticationController.isSignedIn,
-  CatalogController.storeCatalog,
-);
+router.put("/", authorize("tenant", "catalog"), CatalogController.storeCatalog);
 
 module.exports = router;

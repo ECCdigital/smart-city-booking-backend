@@ -1,6 +1,5 @@
 const MediaManager = require("../../data-managers/media-manager");
-const PermissionService = require("../permission-service");
-const { RolePermission } = require("../../entities/role/role");
+const { withinReach } = require("../authorization/reach");
 const {
   BadRequestError,
   ForbiddenError,
@@ -16,8 +15,13 @@ const { tenantDocumentReferences } = require("./tenant-media");
  * Guards the way into the reference sites of an entity (§4.3 of the media
  * spec). Saving a reference is not a media operation the media API sees, so
  * the three checks it would have made have to happen here: the medium belongs
- * to the tenant of the entity, whoever saves may pick it, and a publicly
- * visible entity carries only public media.
+ * to the tenant of the entity, the reach of the saver covers it, and a
+ * publicly visible entity carries only public media.
+ *
+ * The guard asks nothing about rights (authorize spec §5): the caller hands
+ * in the reach of `media.read` — the picker right, decided a second time in
+ * the adapter that saves the entity — and the guard reads it against the
+ * medium it loaded.
  */
 class MediaReferenceGuard {
   /**
@@ -27,18 +31,19 @@ class MediaReferenceGuard {
    *
    * @param {Object} params
    * @param {string} params.tenantId - Tenant of the entity being saved.
-   * @param {string} params.userId - Who is saving.
+   * @param {{reach?: string, userId?: string|null}} params.scope - The reach
+   *   of `media.read`, the picker right of whoever is saving.
    * @param {Array<Object|string>} params.references - Stored reference sites.
    * @param {boolean} params.requirePublic - Whether the entity is publicly
    *   visible, in which case only public media may be referenced.
    * @returns {Promise<void>}
    * @throws {BadRequestError} Unknown medium, or an intern medium in a public
    *   context.
-   * @throws {ForbiddenError} No picker right on the medium.
+   * @throws {ForbiddenError} The reach does not cover the medium.
    */
   static async assertReferencesStorable({
     tenantId,
-    userId,
+    scope,
     references,
     requirePublic,
   }) {
@@ -57,14 +62,7 @@ class MediaReferenceGuard {
         throw new BadRequestError("media_reference_unknown", { mediaId });
       }
 
-      const mayPick = await PermissionService._allowRead(
-        media,
-        userId,
-        tenantId,
-        RolePermission.MANAGE_MEDIA,
-      );
-
-      if (!mayPick) {
+      if (!withinReach(media, "uploadedBy", scope)) {
         throw new ForbiddenError("forbidden", { mediaId });
       }
 
@@ -114,13 +112,14 @@ class MediaReferenceGuard {
    * Checks the reference sites of a bookable before it is stored.
    *
    * @param {Object} bookable - The bookable being saved.
-   * @param {string} userId - Who is saving.
+   * @param {{reach?: string, userId?: string|null}} scope - The reach of
+   *   `media.read`.
    * @returns {Promise<void>}
    */
-  static async assertBookableStorable(bookable, userId) {
+  static async assertBookableStorable(bookable, scope) {
     await MediaReferenceGuard.assertReferencesStorable({
       tenantId: bookable.tenantId,
-      userId,
+      scope,
       references: MediaReferenceGuard.bookableReferences(bookable),
       requirePublic: Boolean(bookable.isPublic),
     });
@@ -131,13 +130,14 @@ class MediaReferenceGuard {
    *
    * @param {Object} event - The event being saved.
    * @param {string} tenantId - Tenant of the event.
-   * @param {string} userId - Who is saving.
+   * @param {{reach?: string, userId?: string|null}} scope - The reach of
+   *   `media.read`.
    * @returns {Promise<void>}
    */
-  static async assertEventStorable(event, tenantId, userId) {
+  static async assertEventStorable(event, tenantId, scope) {
     await MediaReferenceGuard.assertReferencesStorable({
       tenantId: event.tenantId || tenantId,
-      userId,
+      scope,
       references: MediaReferenceGuard.eventReferences(event),
       requirePublic: Boolean(event.isPublic),
     });
@@ -156,13 +156,14 @@ class MediaReferenceGuard {
    *
    * @param {Object} tenant - The tenant being saved.
    * @param {string} tenantId - Tenant the caller resolved and checked.
-   * @param {string} userId - Who is saving.
+   * @param {{reach?: string, userId?: string|null}} scope - The reach of
+   *   `media.read`.
    * @returns {Promise<void>}
    */
-  static async assertTenantStorable(tenant, tenantId, userId) {
+  static async assertTenantStorable(tenant, tenantId, scope) {
     await MediaReferenceGuard.assertReferencesStorable({
       tenantId: tenantId || tenant.id,
-      userId,
+      scope,
       references: tenantDocumentReferences(tenant),
       requirePublic: true,
     });
@@ -175,17 +176,18 @@ class MediaReferenceGuard {
    * directions.
    *
    * @param {Object} params
-   * @param {string} params.userId - Who is saving.
+   * @param {{reach?: string, userId?: string|null}} params.scope - The reach
+   *   of `instanceMedia.read`; only `any` (the instance owner) picks here.
    * @param {Array<Object|string>} params.references - Stored reference sites.
    * @param {boolean} params.requirePublic - Whether only public media may be
    *   referenced here.
    * @returns {Promise<void>}
    * @throws {BadRequestError} Unknown medium, or an intern medium in a public
    *   context.
-   * @throws {ForbiddenError} Not the instance owner.
+   * @throws {ForbiddenError} The reach does not cover the instance library.
    */
   static async assertInstanceReferencesStorable({
-    userId,
+    scope,
     references,
     requirePublic,
   }) {
@@ -195,7 +197,7 @@ class MediaReferenceGuard {
       return;
     }
 
-    if (!(await PermissionService._isInstanceOwner(userId))) {
+    if (scope?.reach !== "any") {
       throw new ForbiddenError("forbidden");
     }
 
@@ -218,18 +220,19 @@ class MediaReferenceGuard {
    * legal documents may be internal.
    *
    * @param {Object} instance - The instance being saved.
-   * @param {string} userId - Who is saving.
+   * @param {{reach?: string, userId?: string|null}} scope - The reach of
+   *   `instanceMedia.read`.
    * @returns {Promise<void>}
    */
-  static async assertInstanceStorable(instance, userId) {
+  static async assertInstanceStorable(instance, scope) {
     await MediaReferenceGuard.assertInstanceReferencesStorable({
-      userId,
+      scope,
       references: instanceBrandingReferences(instance),
       requirePublic: true,
     });
 
     await MediaReferenceGuard.assertInstanceReferencesStorable({
-      userId,
+      scope,
       references: instanceDocumentReferences(instance),
       requirePublic: false,
     });

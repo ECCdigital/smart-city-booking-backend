@@ -9,8 +9,6 @@ const AccessQrService = require("../../../commons/services/access/access-qr-serv
 const AccessLocationService = require("../../../commons/services/access/access-location-service");
 const AccessEvidenceService = require("../../../commons/services/access/access-evidence-service");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
-const { RolePermission } = require("../../../commons/entities/role/role");
-const PermissionService = require("../../../commons/services/permission-service");
 const { ValidationError } = require("../../../errors/ValidationError");
 const createComponentLogger = require("../../../middleware/logger");
 
@@ -29,21 +27,15 @@ const WRITABLE_FIELDS = [
 ];
 
 /**
- * Web Controller for the access point management API. Reading is open to
- * everyone who may read bookables, writing is reserved for tenant owners.
+ * Web Controller for the access point management API. Who may read and who may
+ * write is the routes' (`accessPoint.read`, `accessPoint.write`): reading is
+ * open to everyone who may read bookables, writing is the tenant owner's.
  */
 class AccessPointController {
   static async getAccessPoints(request, response, next) {
     try {
       const tenantId = request.params.tenant;
       const user = request.user;
-
-      if (!(await AccessPointController._canRead(user.id, tenantId))) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to read access points`,
-        );
-        return response.sendStatus(403);
-      }
 
       const accessPoints = await AccessPointManager.getAccessPoints(tenantId);
 
@@ -61,14 +53,6 @@ class AccessPointController {
   static async getAccessPoint(request, response, next) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
-
-      if (!(await AccessPointController._canRead(user.id, tenantId))) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to read access points`,
-        );
-        return response.sendStatus(403);
-      }
 
       const accessPoint = await AccessPointManager.getAccessPoint(
         request.params.id,
@@ -94,14 +78,6 @@ class AccessPointController {
   static async storeAccessPoint(request, response, next) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
-
-      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to write access points`,
-        );
-        return response.sendStatus(403);
-      }
 
       if (request.body.id) {
         return await AccessPointController._updateAccessPoint(
@@ -184,13 +160,6 @@ class AccessPointController {
       const user = request.user;
       const id = request.params.id;
 
-      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to delete access points`,
-        );
-        return response.sendStatus(403);
-      }
-
       const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
 
       if (!accessPoint) {
@@ -218,15 +187,7 @@ class AccessPointController {
   static async getQrCode(request, response, next) {
     try {
       const tenantId = request.params.tenant;
-      const user = request.user;
       const format = request.query.format || AccessQrService.QR_FORMATS.SVG;
-
-      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to render access point QR codes`,
-        );
-        return response.sendStatus(403);
-      }
 
       if (!Object.values(AccessQrService.QR_FORMATS).includes(format)) {
         return response.status(400).send(`Unsupported format: ${format}`);
@@ -260,21 +221,14 @@ class AccessPointController {
    * is the revocation mechanism; a reprint is simply rotate, then fetch the QR
    * code again.
    *
-   * Reserved for tenant owners. The response carries neither the old nor the
-   * new scan code - both stay server knowledge.
+   * The response carries neither the old nor the new scan code - both stay
+   * server knowledge.
    */
   static async rotateScanCode(request, response, next) {
     try {
       const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
-
-      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to rotate scan codes`,
-        );
-        return response.sendStatus(403);
-      }
 
       const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
 
@@ -305,8 +259,8 @@ class AccessPointController {
    * is written to the access point. Adopting it is an explicit PUT, which keeps
    * the entity the only source of the location.
    *
-   * Reserved for tenant owners. Providers without the optional `getLocation`
-   * capability - and providers that simply know no position - answer `null`.
+   * Providers without the optional `getLocation` capability - and providers
+   * that simply know no position - answer `null`.
    *
    * @param {Object} request Express request, `params.tenant` and `params.id`
    * @param {Object} response Express response, receives the location or `null`
@@ -318,13 +272,6 @@ class AccessPointController {
       const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
-
-      if (!(await AccessPointController._canWrite(user.id, tenantId))) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to read access point location prefills`,
-        );
-        return response.sendStatus(403);
-      }
 
       const accessPoint = await AccessPointManager.getAccessPoint(id, tenantId);
 
@@ -419,21 +366,6 @@ class AccessPointController {
       }
       return fields;
     }, {});
-  }
-
-  static _canRead(userId, tenantId) {
-    return PermissionService._allowReadAny(
-      userId,
-      tenantId,
-      RolePermission.MANAGE_BOOKABLES,
-    );
-  }
-
-  static async _canWrite(userId, tenantId) {
-    return (
-      (await PermissionService._isTenantOwner(userId, tenantId)) ||
-      (await PermissionService._isInstanceOwner(userId))
-    );
   }
 }
 

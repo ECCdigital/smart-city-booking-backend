@@ -43,7 +43,11 @@ const {
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
-const { decide, scopeOf } = require("../../../commons/services/authorization");
+const {
+  decide,
+  scopeOf,
+  scopeFor,
+} = require("../../../commons/services/authorization");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const Formatters = require("../../../commons/utilities/formatters");
 
@@ -301,7 +305,7 @@ class TenantController {
       await MediaReferenceGuard.assertTenantStorable(
         tenant,
         tenant.id,
-        user.id,
+        scopeFor(request, "media", "read"),
       );
 
       const membership = new Membership({
@@ -470,7 +474,7 @@ class TenantController {
       await MediaReferenceGuard.assertTenantStorable(
         request.body,
         tenant.id,
-        user.id,
+        scopeFor(request, "media", "read"),
       );
 
       fields.forEach((field) => {

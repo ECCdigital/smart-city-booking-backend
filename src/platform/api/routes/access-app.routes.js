@@ -1,17 +1,17 @@
 const express = require("express");
 const router = express.Router({ mergeParams: true });
-const AuthenticationController = require("../../authentication/controllers/authentication-controller");
+const { authorize } = require("../../../commons/services/authorization");
 const AccessAppController = require("../controllers/access-app-controller");
 
 router.get(
   "/providers",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "read"),
   AccessAppController.getProviders,
 );
 
 router.get(
   "/:provider/access-points",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "read"),
   AccessAppController.getAccessPoints,
 );
 
@@ -19,43 +19,43 @@ router.get(
 // activation is a Salto concept, so these routes do not take a :provider.
 router.get(
   "/salto-ks/iqs",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "manage"),
   AccessAppController.saltoKsListIqs,
 );
 
 router.post(
   "/salto-ks/iqs/:iqId/activation/start",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "manage"),
   AccessAppController.saltoKsStartIqActivation,
 );
 
 router.post(
   "/salto-ks/iqs/:iqId/activation/complete",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "manage"),
   AccessAppController.saltoKsCompleteIqActivation,
 );
 
 router.delete(
   "/salto-ks/iqs/:iqId/activation",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "manage"),
   AccessAppController.saltoKsDiscardIqActivation,
 );
 
 router.post(
   "/:provider/test",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "manage"),
   AccessAppController.testConnection,
 );
 
 router.post(
   "/:provider/webhook/register",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "manage"),
   AccessAppController.registerWebhook,
 );
 
 router.post(
   "/:provider/webhook/unregister",
-  AuthenticationController.isSignedIn,
+  authorize("accessApp", "manage"),
   AccessAppController.unregisterWebhook,
 );
 

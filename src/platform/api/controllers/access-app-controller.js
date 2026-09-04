@@ -1,6 +1,4 @@
 const bunyan = require("bunyan");
-const { RolePermission } = require("../../../commons/entities/role/role");
-const PermissionService = require("../../../commons/services/permission-service");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const SaltoKsIqActivationService = require("../../../commons/services/access/salto-ks-iq-activation-service");
 const {
@@ -13,16 +11,16 @@ const logger = bunyan.createLogger({
   level: process.env.LOG_LEVEL,
 });
 
+/**
+ * The access apps of a tenant: what a provider knows and what it is
+ * configured with. Who may read and who may configure is the routes'
+ * (`accessApp.read`, `accessApp.manage`) - the latter the tenant owner's,
+ * where the dead role group `manageTenants` used to stand (spec §7.3).
+ */
 class AccessAppController {
   static async getProviders(request, response) {
     try {
       const { tenant } = request.params;
-      const user = request.user;
-
-      if (!(await AccessAppController._canRead(user.id, tenant))) {
-        return response.sendStatus(403);
-      }
-
       const providers = await AccessInfoService.getActiveProviders(tenant);
       return response.status(200).send(providers);
     } catch (err) {
@@ -34,12 +32,6 @@ class AccessAppController {
   static async getAccessPoints(request, response) {
     try {
       const { tenant, provider } = request.params;
-      const user = request.user;
-
-      if (!(await AccessAppController._canRead(user.id, tenant))) {
-        return response.sendStatus(403);
-      }
-
       const points = await AccessInfoService.getAccessPoints(tenant, provider);
       return response.status(200).send(points);
     } catch (err) {
@@ -52,10 +44,6 @@ class AccessAppController {
     try {
       const { tenant, provider } = request.params;
       const user = request.user;
-
-      if (!(await AccessAppController._canManageTenants(user.id, tenant))) {
-        return response.sendStatus(403);
-      }
 
       if (!hasTestHandler(provider)) {
         return response
@@ -82,12 +70,6 @@ class AccessAppController {
     try {
       const { tenant, provider } = request.params;
       const { callbackUrl } = request.body;
-      const user = request.user;
-
-      if (!(await AccessAppController._canManageTenants(user.id, tenant))) {
-        return response.sendStatus(403);
-      }
-
       if (!callbackUrl) {
         return response.status(400).send("Missing callbackUrl");
       }
@@ -108,12 +90,6 @@ class AccessAppController {
     try {
       const { tenant, provider } = request.params;
       const { notificationId } = request.body;
-      const user = request.user;
-
-      if (!(await AccessAppController._canManageTenants(user.id, tenant))) {
-        return response.sendStatus(403);
-      }
-
       const result = await AccessInfoService.unregisterWebhook(
         tenant,
         provider,
@@ -193,19 +169,13 @@ class AccessAppController {
 
   /**
    * @private
-   * One wizard step: guarded like the connection test (manage-tenants), a
+   * One wizard step: guarded like the connection test (`accessApp.manage`), a
    * refused step answers with its error code so the wizard can say what
    * happened - e.g. that the system user is already activated at the IQ.
    */
   static async _renderSaltoKsWizardStep(request, response, step, errorMessage) {
     try {
       const { tenant, iqId } = request.params;
-      const user = request.user;
-
-      if (!(await AccessAppController._canManageTenants(user.id, tenant))) {
-        return response.sendStatus(403);
-      }
-
       const result = await step({ tenant, iqId });
       return response.status(200).send(result);
     } catch (err) {
@@ -216,22 +186,6 @@ class AccessAppController {
       logger.error(err);
       return response.status(500).send(errorMessage);
     }
-  }
-
-  static async _canRead(userId, tenant) {
-    return PermissionService._allowReadAny(
-      userId,
-      tenant,
-      RolePermission.MANAGE_BOOKABLES,
-    );
-  }
-
-  static async _canManageTenants(userId, tenant) {
-    return PermissionService._allowUpdateAny(
-      userId,
-      tenant,
-      RolePermission.MANAGE_TENANTS,
-    );
   }
 }
 

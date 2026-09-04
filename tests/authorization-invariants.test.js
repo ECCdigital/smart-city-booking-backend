@@ -88,6 +88,13 @@ describe("authorization invariants: the order of the routers", function () {
       type: "access",
     }));
     sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
+    // The markers load the principal; an instance owner passes every route,
+    // so the order of the routes is what these two tests read.
+    sinon.stub(UserManager, "getUserPermissions").resolves({
+      tenants: [],
+      instanceOwner: true,
+      allowCreateTenant: false,
+    });
   });
 
   afterEach(function () {
