@@ -15,6 +15,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- A door or compartment its provider cannot serve was skipped in silence: `AccessService._provisionDoors` logged the audit row `action: provision, result: failure` for a lock that does not support the access point's mode, `_provisionCompartments` did the same for a locker provider that grants no compartments, and both then `continue`d. `provisionForBooking` resolved as if all were well, so the lifecycle's effect row read `ok` - booking paid and confirmed, door shut, the failure in the audit log and nobody told. The skipped access points are collected now and the run throws `AccessProvisionError` (`provision_incomplete`) at the end, naming each and why. The skip itself is unchanged: the other doors of the booking are still granted, what was granted is still stored, and the booker still gets the PINs that worked - the throw comes after all of it, so that the effect is recorded and the tenant gets its fault notice.
+
 - The OpenAPI of the group bookings parsed no more: the unquoted description of `POST /group-bookings/{id}/pay` carries a colon (`` `success: true` ``), which YAML reads as a nested mapping, so the whole file was dropped and the server logged a `YAMLSemanticError` at every start. The description is quoted; every file under `src/docs/` parses, and the five group-booking operations are back in the spec.
 
 ### Removed

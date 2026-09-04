@@ -22,6 +22,7 @@ process.env.CRYPTO_SECRET =
   process.env.CRYPTO_SECRET || "0123456789abcdef0123456789abcdef";
 
 const AccessService = require("../src/commons/services/access/access-service");
+const AccessProvisionError = require("../src/errors/AccessProvisionError");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const NukiAccessProvider = require("../src/commons/services/access/providers/nuki-access-provider");
 const SaltoKsAccessProvider = require("../src/commons/services/access/providers/salto-ks-access-provider");
@@ -1983,12 +1984,19 @@ describe("access provider dialects: what AccessService makes of them", () => {
       registerFakeProviders();
       stubBooking(createBooking(), [NUKI_DOOR]);
 
-      const accessInfo = await AccessService.provisionForBooking(
-        TENANT,
-        "booking-1",
-      );
+      // The door is skipped, the rest of the booking is still granted -
+      // but the operation says it did not get every grant, so the
+      // lifecycle records it and the tenant is told (spec part 2,
+      // "Stoerungsmitteilung").
+      let error;
+      try {
+        await AccessService.provisionForBooking(TENANT, "booking-1");
+      } catch (err) {
+        error = err;
+      }
 
-      expect(accessInfo).to.deep.equal([]);
+      expect(error).to.be.instanceOf(AccessProvisionError);
+      expect(error.message).to.contain("door-1");
       expect(clients.nuki.authorizations.size).to.equal(0);
       expect(loggedPayload("provision")).to.include({
         result: "failure",
