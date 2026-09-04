@@ -18,8 +18,6 @@ const logger = bunyan.createLogger({
  * @author Lennard Scheffler, lennard.scheffler@e-c-crew.de
  */
 class AuthenticationController {
-  static isSignedIn = require("../../../middleware/jwt-auth");
-
   static async signin(request, response) {
     const user = request.user;
     try {

@@ -27,7 +27,6 @@ const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
-const PermissionsService = require("../src/commons/services/permission-service");
 const mailModule = require("../src/commons/mail-service");
 const {
   registerAccessProvider,
@@ -198,7 +197,6 @@ describe("Compartments on the access seam", function () {
     sinon.stub(UserManager, "getRawUser").resolves({ _id: "64f1" });
     sinon.stub(AccessLogService, "log").resolves();
     sinon.stub(mailModule, "notify").resolves([]);
-    sinon.stub(PermissionsService, "_isOwner").returns(true);
   }
 
   function clone(value) {

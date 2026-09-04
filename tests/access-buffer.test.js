@@ -3,7 +3,6 @@ const sinon = require("sinon");
 
 const AccessService = require("../src/commons/services/access/access-service");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
-const PermissionsService = require("../src/commons/services/permission-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
 
 const MINUTE = 60 * 1000;
@@ -19,6 +18,9 @@ function createBooking(overrides = {}) {
     timeBegin: 1000,
     timeEnd: 2000,
     bookableItems: [{ bookableId: "room" }],
+    // The booker of every booking here: the access decision reads the
+    // booking's owner key, it asks nobody (authorize spec §4.1, §5).
+    assignedUserId: "user-1",
     ...overrides,
   });
 }
@@ -166,7 +168,6 @@ describe("AccessService.canOperate with buffer", () => {
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
     stubDoor(booking, { beforeMs: 15 * MINUTE, afterMs: 0 });
-    sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
@@ -186,7 +187,6 @@ describe("AccessService.canOperate with buffer", () => {
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
     stubDoor(booking, { beforeMs: 15 * MINUTE, afterMs: 0 });
-    sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
@@ -219,7 +219,6 @@ describe("AccessService.canOperate with buffer", () => {
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
     stubCompartment(booking, { beforeMs: 15 * MINUTE, afterMs: 0 });
-    sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
@@ -239,7 +238,6 @@ describe("AccessService.canOperate with buffer", () => {
     });
     sandbox.stub(BookingManager, "getBooking").resolves(booking);
     stubCompartment(booking, { beforeMs: 0, afterMs: 0 });
-    sandbox.stub(PermissionsService, "_isOwner").resolves(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",

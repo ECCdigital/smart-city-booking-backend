@@ -311,8 +311,8 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
   });
   stubManager(UserManager, {
     one: () => user(),
-    // The rights run for real.
-    skip: ["hasPermission", "getUserPermissions"],
+    // The rights run for real: the principal is loaded from this.
+    skip: ["getUserPermissions"],
     only: {
       getUserByHookID: async () => null,
       getUserByCard: async () => null,

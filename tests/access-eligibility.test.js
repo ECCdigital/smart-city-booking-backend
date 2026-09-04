@@ -9,7 +9,6 @@ const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
-const PermissionsService = require("../src/commons/services/permission-service");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const {
   AccessPointMode,
@@ -96,7 +95,6 @@ describe("AccessService.canOperate", () => {
         },
       },
     ]);
-    sandbox.stub(PermissionsService, "_isOwner").returns(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
@@ -121,7 +119,6 @@ describe("AccessService.canOperate", () => {
         bookingContext: { grant: { authorizationId: "auth-1" } },
       }),
     ]);
-    sandbox.stub(PermissionsService, "_isOwner").returns(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
@@ -146,7 +143,6 @@ describe("AccessService.canOperate", () => {
         bookingContext: { isProvisioned: false },
       }),
     ]);
-    sandbox.stub(PermissionsService, "_isOwner").returns(true);
 
     const allowed = await AccessService.canOperate(
       "user-1",
@@ -207,14 +203,14 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
     sandbox
       .stub(AccessService, "_getFilteredBookingAccessPointEntries")
       .resolves([createDoorEntry()]);
-    sandbox
-      .stub(AccessService, "_resolveManagePermissionByTenant")
-      .resolves(new Map([["tenant-1", false]]));
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([]);
 
     const results = await AccessService.getUserBookingsWithAccess("user-1", {
       state: "active",
       includeEligibility: true,
+      // The caller's answer, not the service's question (spec §5): this
+      // one manages the bookings of no tenant.
+      canManageIn: async () => false,
       now,
     });
 
@@ -254,14 +250,14 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
           accessBuffer: { beforeMs: 15 * MINUTE, afterMs: 0 },
         }),
       ]);
-    sandbox
-      .stub(AccessService, "_resolveManagePermissionByTenant")
-      .resolves(new Map([["tenant-1", false]]));
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([]);
 
     const results = await AccessService.getUserBookingsWithAccess("user-1", {
       state: "active",
       includeEligibility: true,
+      // The caller's answer, not the service's question (spec §5): this
+      // one manages the bookings of no tenant.
+      canManageIn: async () => false,
       now,
     });
 
@@ -299,14 +295,14 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
           accessBuffer: { beforeMs: 15 * MINUTE, afterMs: 0 },
         }),
       ]);
-    sandbox
-      .stub(AccessService, "_resolveManagePermissionByTenant")
-      .resolves(new Map([["tenant-1", false]]));
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([]);
 
     const results = await AccessService.getUserBookingsWithAccess("user-1", {
       state: "active",
       includeEligibility: true,
+      // The caller's answer, not the service's question (spec §5): this
+      // one manages the bookings of no tenant.
+      canManageIn: async () => false,
       now,
     });
 
@@ -357,14 +353,13 @@ describe("AccessService.getUserBookingsWithAccess includeAccessPoints", () => {
     sandbox
       .stub(AccessService, "_getFilteredBookingAccessPointEntries")
       .resolves([createDoorEntry({ validationRules: [{ type: "qrScan" }] })]);
-    sandbox
-      .stub(AccessService, "_resolveManagePermissionByTenant")
-      .resolves(new Map([["tenant-1", true]]));
     sandbox.stub(BookableManager, "getBookablesByIds").resolves([]);
 
     return AccessService.getUserBookingsWithAccess(userId, {
       state: "active",
       includeAccessPoints: true,
+      // Whoever is listed here manages the bookings of the tenant.
+      canManageIn: async () => true,
       now,
     });
   }

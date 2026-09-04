@@ -2,11 +2,11 @@
  * The invariants of the route markers and the order of the routers
  * (authorize spec §8.3).
  *
- * Every route under `src/platform` is to carry exactly one of the three
- * markers - `authorize`, `public`, `tokenAuthorized`. Until ticket 5 of
- * the chain marks the last router, this only lists the unmarked routes
- * (`LIST_UNMARKED_ROUTES=1` prints them one by one); ticket 5 turns the
- * list into a failure.
+ * Every route under `src/platform` carries exactly one of the three
+ * markers - `authorize`, `public`, `tokenAuthorized`. Ticket 5 of the
+ * chain marked the last router, so an unmarked route is a failure here
+ * and names itself: a route added without a marker is a route nobody
+ * decided about.
  *
  * The two order comments of the routers become tests here: a scan code
  * is never read as an access point id, and `instance` is never read as a
@@ -29,21 +29,24 @@ const AccessController = require("../src/platform/api/controllers/access-control
 const MediaControllerV2 = require("../src/platform/api/v2/controllers/media.controller");
 
 describe("authorization invariants: every route carries one marker", function () {
-  it("lists the routes without a marker (a failure from ticket 5 on)", function () {
+  /** `GET /api/foo` for every route, to name the offenders in the message. */
+  const named = (routes) => routes.map((r) => `${r.method} ${r.path}`);
+
+  it("leaves no route unmarked", function () {
     const routes = routesOf(createApp());
     const unmarked = routes.filter((route) => route.markers.length === 0);
+
+    expect(named(unmarked), "routes without a marker").to.deep.equal([]);
+    expect(routes.length).to.be.greaterThan(0);
+  });
+
+  it("marks no route twice", function () {
+    const routes = routesOf(createApp());
     const overMarked = routes.filter((route) => route.markers.length > 1);
 
-    expect(overMarked, "routes with more than one marker").to.deep.equal([]);
-
-    console.log(
-      `      authorization markers: ${routes.length - unmarked.length} of ${routes.length} routes marked, ${unmarked.length} unmarked`,
+    expect(named(overMarked), "routes with more than one marker").to.deep.equal(
+      [],
     );
-    if (process.env.LIST_UNMARKED_ROUTES === "1") {
-      for (const route of unmarked) {
-        console.log(`        ${route.method} ${route.path}`);
-      }
-    }
   });
 
   it("puts a public entry only behind public(), and authorize() only on the rest", function () {

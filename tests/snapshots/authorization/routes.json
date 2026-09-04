@@ -1765,7 +1765,7 @@
   },
   "GET /csv/:tenant/events/:id/bookings": {
     "anonymous": 401,
-    "signedIn": 403,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200

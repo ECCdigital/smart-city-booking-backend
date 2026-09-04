@@ -42,17 +42,6 @@ class Media {
   }
 
   /**
-   * The uploader is the owner of a medium. Exposing it under the name the
-   * `PermissionService` looks for lets the own/any checks work without a
-   * special case for media.
-   *
-   * @returns {string|null}
-   */
-  get ownerUserId() {
-    return this.uploadedBy;
-  }
-
-  /**
    * Whether the medium is readable without any authentication.
    *
    * @returns {boolean}

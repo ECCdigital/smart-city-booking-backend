@@ -1,5 +1,9 @@
 const bunyan = require("bunyan");
-const { scopeOf } = require("../../../commons/services/authorization");
+const {
+  decide,
+  loadPrincipal,
+  scopeOf,
+} = require("../../../commons/services/authorization");
 const AccessService = require("../../../commons/services/access/access-service");
 const AccessScanService = require("../../../commons/services/access/access-scan-service");
 const ApiResponse = require("../../../commons/utilities/api-response");
@@ -311,7 +315,10 @@ class AccessController {
 
       const bookings = await AccessService.getUserBookingsWithAccess(
         targetUserId,
-        options,
+        {
+          ...options,
+          canManageIn: AccessController._canManageIn(targetUserId),
+        },
       );
 
       return ApiResponse.ok(response, { data: bookings });
@@ -343,7 +350,10 @@ class AccessController {
       const bookings = await AccessService.getUserBookingsForAccessPoint(
         targetUserId,
         accessPointId,
-        options,
+        {
+          ...options,
+          canManageIn: AccessController._canManageIn(targetUserId),
+        },
       );
 
       return ApiResponse.ok(response, { data: bookings });
@@ -423,6 +433,28 @@ class AccessController {
    */
   static _canManage(request) {
     return scopeOf(request).reach === "any";
+  }
+
+  /**
+   * @private
+   * The same question as {@link _canManage}, asked per tenant: whether the
+   * user manages the bookings of that tenant. The two tenant-independent
+   * lists need it, and the reach of their route is one of the instance -
+   * an instance answers nothing about a tenant. So this hands the service
+   * a function (authorize spec §5, §15) that loads the principal in the
+   * tenant and asks the table what the marker of a tenant route asks.
+   *
+   * The user is the one whose bookings are listed, not always the caller:
+   * with `?userId=` an instance owner reads someone else's list, and what
+   * it shows is what *they* would meet at the door.
+   *
+   * @param {string} userId
+   * @returns {(tenantId: string) => Promise<boolean>}
+   */
+  static _canManageIn(userId) {
+    return async (tenantId) =>
+      decide(await loadPrincipal(userId, tenantId), "booking", "operate") ===
+      "any";
   }
 }
 

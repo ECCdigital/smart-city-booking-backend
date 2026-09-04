@@ -258,29 +258,6 @@ class UserManager {
     return rawUser.toEntity();
   }
 
-  static async hasPermission(userId, tenantId, permissionName, accessLevel) {
-    if (!userId || !tenantId || !permissionName || !accessLevel) {
-      return false;
-    }
-    try {
-      const userPermissions = await UserManager.getUserPermissions(userId);
-
-      const userTenantPermissions = userPermissions.tenants.find(
-        (p) => p.tenantId === tenantId,
-      );
-
-      if (!userTenantPermissions || !userTenantPermissions[permissionName]) {
-        return false;
-      }
-      return (
-        userTenantPermissions.isOwner ||
-        userTenantPermissions[permissionName][accessLevel] === true
-      );
-    } catch (err) {
-      return false;
-    }
-  }
-
   static async getUserPermissions(userId) {
     const tenantPermissions = [];
     const instance = await InstanceManager.getInstance(false);

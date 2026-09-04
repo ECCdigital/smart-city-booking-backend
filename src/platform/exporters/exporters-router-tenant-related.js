@@ -1,11 +1,12 @@
-const express = require("express");
 const CsvExportController = require("./controllers/csv-export-controller");
-const AuthenticationController = require("../authentication/controllers/authentication-controller");
-const router = express.Router({ mergeParams: true });
+const { authorize } = require("../../commons/services/authorization");
+const { asyncRouter } = require("../../middleware/async-router");
+
+const router = asyncRouter();
 
 router.get(
   "/events/:id/bookings",
-  AuthenticationController.isSignedIn,
+  authorize("exporter", "export"),
   CsvExportController.getEventBookings,
 );
 

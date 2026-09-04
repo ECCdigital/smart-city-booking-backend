@@ -155,8 +155,8 @@ describe("MediaControllerV2", function () {
   let provider;
   let deliveryStream;
 
-  // The three sources every permission check reads. Tests set them instead of
-  // stubbing the PermissionService, so the real rules run.
+  // The three sources the principal is loaded from. Tests set them rather
+  // than stubbing the authorization, so the real rules run.
   let instance;
   let membership;
   let permissions;

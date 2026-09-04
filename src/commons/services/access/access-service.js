@@ -4,7 +4,6 @@ const AccessProvider = require("./providers/access-provider");
 const BookingManager = require("../../data-managers/booking-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const AccessPointManager = require("../../data-managers/access-point-manager");
-const PermissionsService = require("../permission-service");
 const SecurityUtils = require("../../utilities/security-utils");
 const GrantCleanupService = require("./grant-cleanup-service");
 const AccessLogService = require("./access-log-service");
@@ -12,7 +11,6 @@ const { decide, satisfy } = require("./access-decision");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
-const { RolePermission } = require("../../entities/role/role");
 const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 
@@ -1302,6 +1300,10 @@ class AccessService {
    * @param {boolean} [opts.includeBuffer=false] Honor the access buffer for state="active"
    * @param {boolean} [opts.includeEligibility=false] Attach per-booking access eligibility
    *   (implicitly honors access buffers for `state="active"` filtering and evaluation)
+   * @param {(tenantId: string) => Promise<boolean>} [opts.canManageIn] Whether the
+   *   user manages the bookings of a tenant - the caller's answer, never asked
+   *   here (spec §5). Only consulted with `includeEligibility` or
+   *   `includeAccessPoints`; the default manages nothing.
    * @param {number} [opts.now=Date.now()] Reference timestamp
    * @returns {Promise<Object[]>} Matching bookings (sensitive data stripped)
    */
@@ -1314,6 +1316,7 @@ class AccessService {
       includeLockers = false,
       includeBuffer = false,
       includeEligibility = false,
+      canManageIn = async () => false,
       now = Date.now(),
     } = {},
   ) {
@@ -1339,7 +1342,7 @@ class AccessService {
     const managePermissionByTenant =
       includeEligibility || includeAccessPoints
         ? await this._resolveManagePermissionByTenant(
-            userId,
+            canManageIn,
             this._uniqueTenantIds(bookings),
           )
         : null;
@@ -1387,6 +1390,7 @@ class AccessService {
       includeLockers = false,
       includeBuffer = false,
       includeEligibility = false,
+      canManageIn = async () => false,
       now = Date.now(),
     } = {},
   ) {
@@ -1429,7 +1433,7 @@ class AccessService {
       userId,
       managePermissionByTenant:
         includeEligibility || includeAccessPoints
-          ? await this._resolveManagePermissionByTenant(userId, tenantIds)
+          ? await this._resolveManagePermissionByTenant(canManageIn, tenantIds)
           : null,
       now,
       resolve: (booking) => {
@@ -2693,15 +2697,23 @@ class AccessService {
     );
   }
 
-  static async _resolveManagePermissionByTenant(userId, tenantIds) {
+  /**
+   * Whether the user may manage bookings, per tenant of the bookings found.
+   * The service does not ask - the caller hands in `canManageIn` (spec §5),
+   * because the reach of a request at the instance does not answer a
+   * question about a tenant, and the tenants only turn up in the result.
+   * A caller inside the domain that hands in nothing gets the narrow
+   * answer: no tenant managed.
+   *
+   * @param {(tenantId: string) => Promise<boolean>} canManageIn
+   * @param {string[]} tenantIds
+   * @returns {Promise<Map<string, boolean>>}
+   */
+  static async _resolveManagePermissionByTenant(canManageIn, tenantIds) {
     const entries = await Promise.all(
       tenantIds.map(async (tenantId) => [
         tenantId,
-        await PermissionsService._allowUpdateAny(
-          userId,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        ),
+        Boolean(await canManageIn(tenantId)),
       ]),
     );
     return new Map(entries);

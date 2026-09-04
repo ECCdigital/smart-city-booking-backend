@@ -44,7 +44,6 @@ const {
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
-const PermissionsService = require("../src/commons/services/permission-service");
 const mailModule = require("../src/commons/mail-service");
 const SecurityUtils = require("../src/commons/utilities/security-utils");
 const { Booking } = require("../src/commons/entities/booking/booking");
@@ -1387,7 +1386,6 @@ describe("access provider dialects: what AccessService makes of them", () => {
       .callsFake(async (id) => doors.find((door) => door.id === id) || null);
     sandbox.stub(AccessLogService, "log").resolves();
     sandbox.stub(mailModule, "notify").resolves([]);
-    sandbox.stub(PermissionsService, "_isOwner").returns(true);
     sandbox.stub(TenantManager, "getTenant").resolves(tenantWithSaltoApp());
   }
 

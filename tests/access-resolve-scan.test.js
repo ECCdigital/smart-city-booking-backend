@@ -4,7 +4,6 @@ const sinon = require("sinon");
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const AccessScanService = require("../src/commons/services/access/access-scan-service");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
-const PermissionsService = require("../src/commons/services/permission-service");
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
 
 describe("AccessController.resolveScan", () => {
@@ -14,8 +13,6 @@ describe("AccessController.resolveScan", () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    sandbox.stub(PermissionsService, "_allowUpdateAny").resolves(false);
-
     request = {
       params: { tenant: "tenant-1", scanCode: "code-1" },
       query: {},
@@ -45,8 +42,7 @@ describe("AccessController.resolveScan", () => {
     ).to.be.true;
   });
 
-  it("reports the rules of the door to a user who may manage the bookings", async () => {
-    PermissionsService._allowUpdateAny.resolves(true);
+  it("reports the rule types of the door it resolved", async () => {
     const accessPoint = AccessPoint.create({
       id: "point-1",
       tenantId: "tenant-1",

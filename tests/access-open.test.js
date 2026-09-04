@@ -10,7 +10,6 @@ const AccessProvider = require("../src/commons/services/access/providers/access-
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
-const PermissionsService = require("../src/commons/services/permission-service");
 const {
   registerAccessProvider,
 } = require("../src/commons/services/access/providers/access-provider-registry");
@@ -164,7 +163,6 @@ describe("AccessService.open", () => {
       .stub()
       .resolves({ state: "pending", openProcessId: "99" });
     sandbox.stub(AccessLogService, "log").resolves();
-    sandbox.stub(PermissionsService, "_isOwner").returns(true);
   });
 
   afterEach(() => {
@@ -274,7 +272,6 @@ describe("AccessService.open", () => {
   }
 
   it("denies a user who neither owns the booking nor may manage it", async () => {
-    PermissionsService._isOwner.returns(false);
     stubResolvedDoor(sandbox, createBooking());
 
     const outcome = await AccessService.open(
@@ -292,7 +289,6 @@ describe("AccessService.open", () => {
   });
 
   it("opens for a user with the manage-bookings permission", async () => {
-    PermissionsService._isOwner.returns(false);
     stubResolvedDoor(sandbox, createBooking());
 
     const outcome = await AccessService.open(

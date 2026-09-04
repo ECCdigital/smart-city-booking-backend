@@ -4,7 +4,8 @@ const {
 } = require("./access-blocking-reasons");
 const { getValidationRule } = require("./access-validation-rules");
 const AccessEvidenceService = require("./access-evidence-service");
-const PermissionsService = require("../permission-service");
+const { withinReach } = require("../authorization/reach");
+const { REACH } = require("../authorization/policy");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 
@@ -17,8 +18,8 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  * synchronous - data in, decision out - and know neither the database nor the
  * providers. They load no rights either: whether the person may manage the
  * bookings of the tenant is a fact the caller has established and hands in,
- * and whether the booking is theirs is read off the loaded booking with the
- * ownership rule of the permission service.
+ * and whether the booking is theirs is read off the loaded booking at its
+ * owner key (`assignedUserId`, spec §4.1).
  *
  * @typedef {Object} AccessPointEntry An access point of a booking, as the
  *   resolver pairs it with the booking context it was resolved with
@@ -284,9 +285,10 @@ function demandedEvidenceOf(accessPoint) {
  * whoever holds both is the booker at their own booking.
  */
 function resolveAccessRole(booking, userId, canManage) {
-  const isOwnBooking = Boolean(
-    userId && PermissionsService._isOwner(booking, userId, booking.tenantId),
-  );
+  const isOwnBooking = withinReach(booking, "assignedUserId", {
+    reach: REACH.OWN,
+    userId,
+  });
 
   if (isOwnBooking) {
     return "booker";
