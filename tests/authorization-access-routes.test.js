@@ -1,10 +1,10 @@
 /**
  * The routes under `api/routes/*` on the authorization, end to end over the
  * lifecycle harness (authorize spec §3.1, ticket 4): access points and access
- * apps, the locker facade, the tenant catalog, the audit export, the scan
- * resolver and the calendars. What each principal reaches is the routes'
- * alone - the controllers ask nothing any more - and a refusal is the one
- * JSON form of `ForbiddenError`.
+ * apps, the tenant catalog, the audit export, the scan resolver and the
+ * calendars. What each principal reaches is the routes' alone - the
+ * controllers ask nothing any more - and a refusal is the one JSON form of
+ * `ForbiddenError`.
  */
 
 const { expect } = require("chai");
@@ -20,7 +20,6 @@ const {
   CUSTOMER,
 } = require("./helpers/booking-lifecycle-harness");
 const { installRouteWorld, FIXTURE_ID } = require("./helpers/route-world");
-const AccessInfoService = require("../src/commons/services/access/access-info-service");
 
 // The QR code of an access point encodes a store-front address.
 process.env.STORE_FRONT_URL ||= "https://store.example.test";
@@ -32,14 +31,12 @@ const FORBIDDEN = {
   params: {},
 };
 
-describe("authorization on the access, locker, catalog and calendar routes", function () {
+describe("authorization on the access, catalog and calendar routes", function () {
   this.timeout(20000);
 
-  let h;
   // The harness and the route world stub in `before` and stand for the whole
-  // suite; what a single test stubs goes into its own sandbox, so restoring
-  // it does not take the world down with it.
-  let sandbox;
+  // suite.
+  let h;
 
   before(async function () {
     h = await installHarness({
@@ -57,14 +54,6 @@ describe("authorization on the access, locker, catalog and calendar routes", fun
       ownerUserId: ROLE_HOLDER,
       bookables: h.bookables,
     });
-  });
-
-  beforeEach(function () {
-    sandbox = sinon.createSandbox();
-  });
-
-  afterEach(function () {
-    sandbox.restore();
   });
 
   after(async function () {
@@ -124,16 +113,7 @@ describe("authorization on the access, locker, catalog and calendar routes", fun
     );
   });
 
-  it("opens the locker facade and the audit export to whoever may read them", async function () {
-    sandbox.stub(AccessInfoService, "getAccessPoints").resolves([]);
-
-    expect((await get("/locker/nuki/locations", CUSTOMER)).status).to.equal(
-      403,
-    );
-    expect((await get("/locker/nuki/locations", ROLE_HOLDER)).status).to.equal(
-      200,
-    );
-
+  it("opens the audit export to whoever may read the bookings", async function () {
     expect((await get("/access/audit/export", CUSTOMER)).status).to.equal(403);
     expect((await get("/access/audit/export", ROLE_HOLDER)).status).to.equal(
       200,

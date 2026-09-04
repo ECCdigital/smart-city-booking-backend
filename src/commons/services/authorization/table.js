@@ -222,12 +222,6 @@ const TABLE = {
     resolve: { own: "signedIn" },
   },
 
-  // The `/locker/*` facade, one release.
-  locker: {
-    read: { any: "manageBookables.readAny" },
-    test: { any: "manageBookables.readAny" },
-  },
-
   workflow: {
     // workflow, states, backlog
     read: { any: "manageBookings.readAny" },
