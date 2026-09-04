@@ -5,7 +5,6 @@ const axios = require("axios");
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaService = require("../src/commons/services/media/media-service");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
-const PermissionService = require("../src/commons/services/permission-service");
 const {
   prepareMailAttachments,
 } = require("../src/commons/mail-service/mail-attachments");
@@ -19,6 +18,10 @@ const { Media } = require("../src/commons/entities/media/media");
 
 const TENANT = "tenant1";
 const USER = "admin@stadt.de";
+// The reach of `media.read` the adapter hands the guard (authorize spec §5):
+// `any` is the whole library, `null` is no picker right at all.
+const PICKER = { reach: "any", userId: USER };
+const NO_PICKER = { reach: null, userId: USER };
 const BACKEND_URL = "https://booking.example.org";
 
 function mediaReference(mediaId) {
@@ -369,7 +372,7 @@ describe("media references at bookables and events", function () {
       await assert.rejects(
         MediaReferenceGuard.assertBookableStorable(
           bookableFixture({ images: [mediaReference("media-1")] }),
-          USER,
+          PICKER,
         ),
         (err) => {
           assert.strictEqual(err.statusCode, 400);
@@ -379,14 +382,13 @@ describe("media references at bookables and events", function () {
       );
     });
 
-    it("rejects a saver without the picker right", async function () {
+    it("rejects a saver whose reach does not cover the medium", async function () {
       sandbox.stub(MediaManager, "getMedia").resolves(imageFixture());
-      sandbox.stub(PermissionService, "_allowRead").resolves(false);
 
       await assert.rejects(
         MediaReferenceGuard.assertBookableStorable(
           bookableFixture({ images: [mediaReference("media-1")] }),
-          USER,
+          NO_PICKER,
         ),
         (err) => {
           assert.strictEqual(err.statusCode, 403);
@@ -399,7 +401,6 @@ describe("media references at bookables and events", function () {
       sandbox
         .stub(MediaManager, "getMedia")
         .resolves(imageFixture({ visibility: "intern" }));
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
       await assert.rejects(
         MediaReferenceGuard.assertBookableStorable(
@@ -407,7 +408,7 @@ describe("media references at bookables and events", function () {
             isPublic: true,
             images: [mediaReference("media-1")],
           }),
-          USER,
+          PICKER,
         ),
         (err) => {
           assert.strictEqual(err.statusCode, 400);
@@ -421,11 +422,10 @@ describe("media references at bookables and events", function () {
       sandbox
         .stub(MediaManager, "getMedia")
         .resolves(imageFixture({ visibility: "intern" }));
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
       await MediaReferenceGuard.assertBookableStorable(
         bookableFixture({ images: [mediaReference("media-1")] }),
-        USER,
+        PICKER,
       );
     });
 
@@ -433,7 +433,6 @@ describe("media references at bookables and events", function () {
       const getMedia = sandbox
         .stub(MediaManager, "getMedia")
         .resolves(imageFixture());
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
       await MediaReferenceGuard.assertEventStorable(
         eventFixture({
@@ -450,7 +449,7 @@ describe("media references at bookables and events", function () {
           attachments: [{ id: "a1", reference: mediaReference("media-3") }],
         }),
         TENANT,
-        USER,
+        PICKER,
       );
 
       assert.deepStrictEqual(
@@ -466,7 +465,7 @@ describe("media references at bookables and events", function () {
         MediaReferenceGuard.assertEventStorable(
           eventFixture({ images: [mediaReference("media-5")] }),
           TENANT,
-          USER,
+          PICKER,
         ),
         (err) => {
           assert.strictEqual(err.statusCode, 400);
@@ -480,7 +479,6 @@ describe("media references at bookables and events", function () {
       sandbox
         .stub(MediaManager, "getMedia")
         .resolves(imageFixture({ visibility: "intern" }));
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
       await assert.rejects(
         MediaReferenceGuard.assertEventStorable(
@@ -494,7 +492,7 @@ describe("media references at bookables and events", function () {
             },
           }),
           TENANT,
-          USER,
+          PICKER,
         ),
         (err) => {
           assert.strictEqual(err.statusCode, 400);
@@ -508,7 +506,6 @@ describe("media references at bookables and events", function () {
       sandbox
         .stub(MediaManager, "getMedia")
         .resolves(imageFixture({ visibility: "intern" }));
-      sandbox.stub(PermissionService, "_allowRead").resolves(true);
 
       await MediaReferenceGuard.assertEventStorable(
         eventFixture({
@@ -518,7 +515,7 @@ describe("media references at bookables and events", function () {
           },
         }),
         TENANT,
-        USER,
+        PICKER,
       );
     });
 
@@ -530,7 +527,7 @@ describe("media references at bookables and events", function () {
           isPublic: true,
           images: [externalReference("https://other.example.org/pic.jpg")],
         }),
-        USER,
+        PICKER,
       );
 
       assert.strictEqual(getMedia.called, false);

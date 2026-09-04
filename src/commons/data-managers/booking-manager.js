@@ -98,12 +98,15 @@ class BookingManager {
    * Get bookings by IDs
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookingIds Array of booking IDs
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getBookings(tenantId, bookingIds) {
+  static async getBookings(tenantId, bookingIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       id: { $in: bookingIds },
+      ...ownCondition("assignedUserId", scope),
     });
     return BookingManager._toEntities(rawBookings);
   }

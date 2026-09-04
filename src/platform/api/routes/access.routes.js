@@ -1,12 +1,12 @@
 const express = require("express");
 const router = express.Router({ mergeParams: true });
-const AuthenticationController = require("../../authentication/controllers/authentication-controller");
+const { authorize } = require("../../../commons/services/authorization");
 const AccessController = require("../controllers/access-controller");
 const AccessAuditController = require("../controllers/access-audit-controller");
 
 router.get(
   "/audit/export",
-  AuthenticationController.isSignedIn,
+  authorize("accessAudit", "export"),
   AccessAuditController.exportAudit,
 );
 
@@ -14,43 +14,45 @@ router.get(
 // as an access point id.
 router.get(
   "/resolve-scan/:scanCode",
-  AuthenticationController.isSignedIn,
+  authorize("accessScan", "resolve"),
   AccessController.resolveScan,
 );
 
+// Operating a door is the booking's right: the reach `any` is what waives the
+// booking ownership at the access decision (authorize spec §5).
 router.post(
   "/:accessPointId/open",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "operate"),
   AccessController.open,
 );
 
 router.post(
   "/:accessPointId/unlatch",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "operate"),
   AccessController.unlatch,
 );
 
 router.post(
   "/:accessPointId/close",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "operate"),
   AccessController.close,
 );
 
 router.get(
   "/:accessPointId/open-status",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "operate"),
   AccessController.getOpenStatus,
 );
 
 router.get(
   "/:accessPointId/status",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "operate"),
   AccessController.getStatus,
 );
 
 router.get(
   "/",
-  AuthenticationController.isSignedIn,
+  authorize("booking", "operate"),
   AccessController.getAccessPoints,
 );
 

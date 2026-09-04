@@ -5,15 +5,16 @@
  * provider, the price is the checkout price provider's, and the connection
  * test is the access test registry's. The admin UI follow-up moves to the
  * access point area (`/access-apps`, `/accesspoints`); then these go.
+ *
+ * The facade asks nothing about rights any more: the routes carry the
+ * markers `locker.read` and `locker.test` (authorize spec §3.1).
  */
 
 const express = require("express");
 const bunyan = require("bunyan");
-const AuthenticationController = require("../../authentication/controllers/authentication-controller");
+const { authorize } = require("../../../commons/services/authorization");
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const ExternalPriceService = require("../../../commons/services/external-price-service");
-const PermissionService = require("../../../commons/services/permission-service");
-const { RolePermission } = require("../../../commons/entities/role/role");
 const {
   hasTestHandler,
 } = require("../../../commons/services/access/clients/access-test-registry");
@@ -24,14 +25,6 @@ const logger = bunyan.createLogger({
   name: "locker.routes.js",
   level: process.env.LOG_LEVEL,
 });
-
-function canRead(userId, tenant) {
-  return PermissionService._allowReadAny(
-    userId,
-    tenant,
-    RolePermission.MANAGE_BOOKABLES,
-  );
-}
 
 function fail(response, err, message) {
   logger.error(err);
@@ -65,10 +58,6 @@ async function answerLocation(request, response, message) {
       return response.status(400).send("Missing locationId");
     }
 
-    if (!(await canRead(request.user.id, tenant))) {
-      return response.sendStatus(403);
-    }
-
     const location = await findLocation(tenant, provider, locationId);
 
     if (!location) {
@@ -86,10 +75,6 @@ const lockerFacade = {
   async listLocations(request, response) {
     try {
       const { tenant, provider } = request.params;
-
-      if (!(await canRead(request.user.id, tenant))) {
-        return response.sendStatus(403);
-      }
 
       const locations = await AccessInfoService.getAccessPoints(
         tenant,
@@ -128,10 +113,6 @@ const lockerFacade = {
         return response.status(400).send("Missing locationId");
       }
 
-      if (!(await canRead(request.user.id, tenant))) {
-        return response.sendStatus(403);
-      }
-
       const categories = await ExternalPriceService.categoriesOf(
         tenant,
         provider,
@@ -154,10 +135,6 @@ const lockerFacade = {
   async testConnection(request, response) {
     try {
       const { tenant, provider } = request.params;
-
-      if (!(await canRead(request.user.id, tenant))) {
-        return response.sendStatus(403);
-      }
 
       if (!hasTestHandler(provider)) {
         return response
@@ -184,31 +161,31 @@ const lockerFacade = {
 
 router.get(
   "/:provider/locations",
-  AuthenticationController.isSignedIn,
+  authorize("locker", "read"),
   lockerFacade.listLocations,
 );
 
 router.get(
   "/:provider/locations/:locationId",
-  AuthenticationController.isSignedIn,
+  authorize("locker", "read"),
   lockerFacade.getLocation,
 );
 
 router.get(
   "/:provider/locations/:locationId/status",
-  AuthenticationController.isSignedIn,
+  authorize("locker", "read"),
   lockerFacade.getLocationStatus,
 );
 
 router.get(
   "/:provider/locations/:locationId/price",
-  AuthenticationController.isSignedIn,
+  authorize("locker", "read"),
   lockerFacade.getLocationPrice,
 );
 
 router.post(
   "/:provider/test",
-  AuthenticationController.isSignedIn,
+  authorize("locker", "test"),
   lockerFacade.testConnection,
 );
 

@@ -157,7 +157,7 @@
     description: |
       Runs the provider's connection test with the configuration in the
       body, without storing it - the same test as
-      `POST /access-apps/{provider}/test`, which needs `MANAGE_TENANTS`;
+      `POST /access-apps/{provider}/test`, which is the tenant owner's;
       here the `MANAGE_BOOKABLES` read permission suffices, as it did.
     security:
       - bearerAuth: []

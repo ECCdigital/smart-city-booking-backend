@@ -1,47 +1,47 @@
 const express = require("express");
 const router = express.Router({ mergeParams: true });
-const AuthenticationController = require("../../authentication/controllers/authentication-controller");
+const { authorize } = require("../../../commons/services/authorization");
 const AccessPointController = require("../controllers/access-point-controller");
 
 router.get(
   "/",
-  AuthenticationController.isSignedIn,
+  authorize("accessPoint", "read"),
   AccessPointController.getAccessPoints,
 );
 
 router.put(
   "/",
-  AuthenticationController.isSignedIn,
+  authorize("accessPoint", "write"),
   AccessPointController.storeAccessPoint,
 );
 
 router.get(
   "/:id",
-  AuthenticationController.isSignedIn,
+  authorize("accessPoint", "read"),
   AccessPointController.getAccessPoint,
 );
 
 router.get(
   "/:id/qrcode",
-  AuthenticationController.isSignedIn,
+  authorize("accessPoint", "write"),
   AccessPointController.getQrCode,
 );
 
 router.get(
   "/:id/location-prefill",
-  AuthenticationController.isSignedIn,
+  authorize("accessPoint", "write"),
   AccessPointController.getLocationPrefill,
 );
 
 router.post(
   "/:id/rotate-scan-code",
-  AuthenticationController.isSignedIn,
+  authorize("accessPoint", "write"),
   AccessPointController.rotateScanCode,
 );
 
 router.delete(
   "/:id",
-  AuthenticationController.isSignedIn,
+  authorize("accessPoint", "write"),
   AccessPointController.removeAccessPoint,
 );
 

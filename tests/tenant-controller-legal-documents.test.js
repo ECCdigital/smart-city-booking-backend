@@ -33,6 +33,14 @@ describe("TenantController legal documents", function () {
       params: {},
       query: {},
       body: { id: TENANT },
+      reach: "any",
+      principal: {
+        userId: USER,
+        isInstanceOwner: true,
+        isTenantOwner: true,
+        grants: {},
+        mayCreateTenant: true,
+      },
     };
     res = {
       status: sandbox.stub().returnsThis(),
@@ -121,10 +129,11 @@ describe("TenantController legal documents", function () {
       await TenantController.updateTenant(req, res);
 
       expect(guardStub.calledOnce).to.be.true;
-      const [checked, tenantId, userId] = guardStub.firstCall.args;
+      const [checked, tenantId, scope] = guardStub.firstCall.args;
       expect(checked.legalDocuments).to.deep.equal(req.body.legalDocuments);
       expect(tenantId).to.equal(TENANT);
-      expect(userId).to.equal(USER);
+      // The reach of `media.read`, decided a second time in the adapter (§5).
+      expect(scope).to.deep.equal({ reach: "any", userId: USER });
     });
 
     it("answers 400 with the code when the medium may not be referenced", async function () {
@@ -282,7 +291,13 @@ describe("TenantController legal documents", function () {
       );
       const next = sandbox.stub();
 
-      req.principal = { userId: USER, mayCreateTenant: false };
+      req.principal = {
+        userId: USER,
+        isInstanceOwner: false,
+        isTenantOwner: false,
+        grants: {},
+        mayCreateTenant: false,
+      };
       req.body.legalDocuments = [
         { type: "dataProtection", title: "", reference: mediaReference() },
       ];

@@ -435,8 +435,13 @@ router.delete(
 // The tenant listing and upload are gone with the media library — the admin UI
 // picks and uploads media (§4.10). `GET /files/get` stays for good as the
 // resolver of stored legacy addresses; the medium's visibility is the media
-// module's (authorize spec §5), decided in the handler.
-router.get("/files/get", publicRoute(), FileController.getTenantFile);
+// module's (authorize spec §5), decided in the handler in addition to the
+// reach the marker hands it.
+router.get(
+  "/files/get",
+  publicRoute("media", "file"),
+  FileController.getTenantFile,
+);
 
 // WORKFLOW
 // ========

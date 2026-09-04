@@ -64,7 +64,7 @@
                 description: The moment of the payment as a Unix timestamp in milliseconds; now if omitted
     responses:
       "200":
-        description: Group booking paid (`success: true`, `data` the group with its members)
+        description: "Group booking paid (`success: true`, `data` the group with its members)"
       "401":
         description: Not authenticated
       "403":

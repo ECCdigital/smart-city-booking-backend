@@ -28,6 +28,11 @@ const {
   hasActiveMembership,
 } = require("../../../commons/services/media/media-access");
 const {
+  readsRecords,
+  scopeFor,
+  scopeOf,
+} = require("../../../commons/services/authorization");
+const {
   isImportPending,
 } = require("../../../commons/services/media/media-import-status");
 
@@ -295,10 +300,14 @@ class FileController {
       return;
     }
 
-    const userId = request.user?.id;
+    const { reach, userId } = scopeOf(request);
 
     if (!userId) {
       throw new UnauthorizedError("unauthorized");
+    }
+
+    if (reach === "any") {
+      return;
     }
 
     if (!(await hasActiveMembership(userId, tenantId))) {
@@ -320,7 +329,7 @@ class FileController {
       return;
     }
 
-    if (!request.user?.id) {
+    if (!readsRecords(scopeOf(request))) {
       throw new UnauthorizedError("unauthorized");
     }
   }
@@ -332,7 +341,7 @@ class FileController {
     return await FileController._resolve(request, response, next, {
       tenantId: () => null,
       assertMediaAccess: (req, media) =>
-        assertInstanceMediaFileAccess(req.user?.id, media),
+        assertInstanceMediaFileAccess(media, scopeOf(req)),
       assertLegacyAccess: (req, legacyPath) =>
         FileController._assertLegacyInstanceAccess(req, legacyPath),
     });
@@ -345,7 +354,10 @@ class FileController {
     return await FileController._resolve(request, response, next, {
       tenantId: (req) => req.params.tenant,
       assertMediaAccess: (req, media) =>
-        assertMediaFileAccess(req.user?.id, media),
+        assertMediaFileAccess(media, {
+          file: scopeOf(req),
+          document: scopeFor(req, "media", "bookingDocument"),
+        }),
       assertLegacyAccess: (req, legacyPath) =>
         FileController._assertLegacyTenantAccess(
           req,

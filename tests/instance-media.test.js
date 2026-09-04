@@ -53,8 +53,10 @@ function createResponse() {
 }
 
 /**
- * A request on the instance routes: no `:tenant` at all — that absence is what
- * puts the shared handlers into the instance scope.
+ * A request on the instance routes: no `:tenant` at all — that absence is the
+ * address of the instance library. The reach is what the route decided
+ * (`instanceMedia.*`, authorize spec §3.2); who gets which reach is pinned in
+ * `authorization-media-routes.test.js`, so a request here simply carries one.
  */
 function instanceRequest({
   user = null,
@@ -62,9 +64,29 @@ function instanceRequest({
   query = {},
   body = {},
   files,
+  reach = user ? "any" : "public",
 }) {
-  return { user, params, query, body, files, headers: {}, on() {} };
+  return {
+    user,
+    params,
+    query,
+    body,
+    files,
+    headers: {},
+    reach,
+    principal: {
+      userId: user?.id ?? null,
+      isInstanceOwner: Boolean(user) && user.id === OWNER.id,
+      isTenantOwner: false,
+      grants: {},
+    },
+    on() {},
+  };
 }
+
+/** The reach of `instanceMedia.read`, as the instance owner holds it. */
+const OWNER_PICKS = { reach: "any", userId: OWNER.id };
+const SIGNED_IN_PICKS = { reach: null, userId: SIGNED_IN.id };
 
 function createStream() {
   return {
@@ -167,7 +189,7 @@ describe("instance media", function () {
     sandbox.restore();
   });
 
-  describe("owner-only management", function () {
+  describe("what the instance owner's reach opens", function () {
     beforeEach(function () {
       sandbox.stub(MediaManager, "getMedia").resolves(instanceMediaFixture());
       sandbox
@@ -178,76 +200,6 @@ describe("instance media", function () {
         .resolves({ items: [], total: 0, page: 1, pageSize: 25 });
       sandbox.stub(MediaService, "deleteMedia").resolves(true);
     });
-
-    const operations = [
-      {
-        name: "upload",
-        run: (user) =>
-          MediaControllerV2.createMedia(
-            instanceRequest({
-              user,
-              body: { name: "Logo" },
-            }),
-            createResponse(),
-          ),
-      },
-      {
-        name: "listing",
-        run: (user) =>
-          MediaControllerV2.getMediaList(
-            instanceRequest({ user }),
-            createResponse(),
-          ),
-      },
-      {
-        name: "metadata",
-        run: (user) =>
-          MediaControllerV2.getMedia(
-            instanceRequest({ user, params: { id: "media-1" } }),
-            createResponse(),
-          ),
-      },
-      {
-        name: "usage proof",
-        run: (user) =>
-          MediaControllerV2.getMediaUsage(
-            instanceRequest({ user, params: { id: "media-1" } }),
-            createResponse(),
-          ),
-      },
-      {
-        name: "patch",
-        run: (user) =>
-          MediaControllerV2.updateMedia(
-            instanceRequest({
-              user,
-              params: { id: "media-1" },
-              body: { title: "New" },
-            }),
-            createResponse(),
-          ),
-      },
-      {
-        name: "delete",
-        run: (user) =>
-          MediaControllerV2.deleteMedia(
-            instanceRequest({ user, params: { id: "media-1" } }),
-            createResponse(),
-          ),
-      },
-    ];
-
-    for (const operation of operations) {
-      it(`refuses ${operation.name} for a signed-in non-owner`, async function () {
-        await assert.rejects(() => operation.run(SIGNED_IN), {
-          statusCode: 403,
-        });
-      });
-
-      it(`refuses ${operation.name} anonymously`, async function () {
-        await assert.rejects(() => operation.run(null), { statusCode: 401 });
-      });
-    }
 
     it("lets the instance owner see the whole library, unnarrowed", async function () {
       await MediaControllerV2.getMediaList(
@@ -353,12 +305,18 @@ describe("instance media", function () {
       sandbox.stub(MediaService, "getStream").resolves(createStream());
     });
 
+    // `instanceMedia.file`: `public` for the anonymous, `own` for any
+    // signed-in user, `any` for the owner.
     async function deliver(media, user) {
       sandbox.stub(MediaManager, "getMedia").resolves(media);
       const res = createResponse();
 
       await MediaControllerV2.getMediaFile(
-        instanceRequest({ user, params: { id: "media-1" } }),
+        instanceRequest({
+          user,
+          params: { id: "media-1" },
+          reach: user ? (user.id === OWNER.id ? "any" : "own") : "public",
+        }),
         res,
       );
 
@@ -435,7 +393,7 @@ describe("instance media", function () {
             {
               branding: { logo: { source: "media", mediaId: "tenant-media" } },
             },
-            OWNER.id,
+            OWNER_PICKS,
           ),
         { statusCode: 400, code: "media_reference_unknown" },
       );
@@ -453,7 +411,7 @@ describe("instance media", function () {
         () =>
           MediaReferenceGuard.assertReferencesStorable({
             tenantId: TENANT,
-            userId: OWNER.id,
+            scope: OWNER_PICKS,
             references: [{ source: "media", mediaId: "media-1" }],
             requirePublic: false,
           }),
@@ -475,18 +433,18 @@ describe("instance media", function () {
             reference: { source: "media", mediaId: "media-1" },
           },
         },
-        OWNER.id,
+        OWNER_PICKS,
       );
     });
 
-    it("refuses references saved by anyone but the instance owner", async function () {
+    it("refuses references saved by a reach that does not cover the library", async function () {
       sandbox.stub(MediaManager, "getMedia").resolves(instanceMediaFixture());
 
       await assert.rejects(
         () =>
           MediaReferenceGuard.assertInstanceStorable(
             { branding: { logo: { source: "media", mediaId: "media-1" } } },
-            SIGNED_IN.id,
+            SIGNED_IN_PICKS,
           ),
         { statusCode: 403 },
       );
@@ -501,7 +459,7 @@ describe("instance media", function () {
         () =>
           MediaReferenceGuard.assertInstanceStorable(
             { branding: { favicon: { source: "media", mediaId: "media-1" } } },
-            OWNER.id,
+            OWNER_PICKS,
           ),
         { statusCode: 400, code: "media_reference_not_public" },
       );
@@ -520,7 +478,7 @@ describe("instance media", function () {
             reference: { source: "media", mediaId: "media-1" },
           },
         },
-        OWNER.id,
+        OWNER_PICKS,
       );
     });
 
@@ -529,7 +487,7 @@ describe("instance media", function () {
 
       await MediaReferenceGuard.assertInstanceStorable(
         { branding: { logoUrl: "https://example.org/logo.png" } },
-        SIGNED_IN.id,
+        SIGNED_IN_PICKS,
       );
 
       assert.strictEqual(getMedia.called, false);

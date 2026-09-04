@@ -3,6 +3,10 @@ const sinon = require("sinon");
 const sharp = require("sharp");
 
 const MediaControllerV2 = require("../src/platform/api/v2/controllers/media.controller");
+const {
+  decide,
+  ROLE_GROUPS,
+} = require("../src/commons/services/authorization");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const MediaManager = require("../src/commons/data-managers/media-manager");
@@ -61,25 +65,6 @@ function createResponse() {
     destroy() {
       this.destroyed = true;
     },
-  };
-}
-
-function createRequest({
-  user = null,
-  params = {},
-  query = {},
-  body = {},
-  headers = {},
-  files,
-} = {}) {
-  return {
-    user,
-    params: { tenant: TENANT, ...params },
-    query,
-    body,
-    headers,
-    files,
-    on() {},
   };
 }
 
@@ -179,6 +164,59 @@ describe("MediaControllerV2", function () {
   // The usage proof is searched over the entities, which no unit test holds —
   // tests that care about it set this list.
   let usage;
+
+  /**
+   * The principal of a request, built from the same three sources the tests
+   * set (`instance`, `membership`, `permissions`) that the real loader reads.
+   */
+  function createPrincipal(user) {
+    const tenantPermissions = permissions.tenants.find(
+      (entry) => entry.tenantId === TENANT,
+    );
+    const grants = {};
+    for (const group of ROLE_GROUPS) {
+      grants[group] = { ...(tenantPermissions?.[group] || {}) };
+    }
+
+    return {
+      userId: user?.id ?? null,
+      tenantId: TENANT,
+      isInstanceOwner: Boolean(user) && instance.ownerUserIds.includes(user.id),
+      isTenantOwner: membership?.owner === true,
+      grants,
+      mayCreateTenant: false,
+    };
+  }
+
+  /**
+   * A request as it reaches a handler: the principal loaded once and the reach
+   * the route's marker decided. Who is turned away at the door - the anonymous
+   * with 401, a principal without reach with 403 - is the router's and is
+   * pinned in `authorization-media-routes.test.js`; here every request is one
+   * that got through, so the handler's own decisions can be read.
+   */
+  function createRequest({
+    user = null,
+    params = {},
+    query = {},
+    body = {},
+    headers = {},
+    files,
+    marker = ["media", "metadata"],
+  } = {}) {
+    const principal = createPrincipal(user);
+    return {
+      user,
+      params: { tenant: TENANT, ...params },
+      query,
+      body,
+      headers,
+      files,
+      principal,
+      reach: decide(principal, marker[0], marker[1]),
+      on() {},
+    };
+  }
 
   before(async function () {
     pngBytes = await sharp({
@@ -283,7 +321,13 @@ describe("MediaControllerV2", function () {
     const res = createResponse();
 
     await MediaControllerV2.getMediaFile(
-      createRequest({ user, params: { id: "media-1" }, query, headers }),
+      createRequest({
+        user,
+        params: { id: "media-1" },
+        query,
+        headers,
+        marker: ["media", "file"],
+      }),
       res,
     );
 
@@ -373,20 +417,6 @@ describe("MediaControllerV2", function () {
       );
     });
 
-    it("refuses uploads from users without the media create right", async function () {
-      grant({ manageMedia: { readAny: true } });
-      const req = createRequest({
-        user: MEMBER,
-        files: { file: pngUpload() },
-      });
-
-      await assert.rejects(
-        () => MediaControllerV2.createMedia(req, createResponse()),
-        (error) => error.statusCode === 403,
-      );
-      assert.strictEqual(provider.put.called, false);
-    });
-
     it("lets the tenant owner upload without any media role", async function () {
       grant({});
       asTenantOwner();
@@ -412,31 +442,9 @@ describe("MediaControllerV2", function () {
 
       assert.strictEqual(res.statusCode, 201);
     });
-
-    it("refuses anonymous uploads", async function () {
-      const req = createRequest({ files: { file: pngUpload() } });
-
-      await assert.rejects(
-        () => MediaControllerV2.createMedia(req, createResponse()),
-        (error) => error.statusCode === 401,
-      );
-    });
   });
 
   describe("reading the metadata of a medium", function () {
-    it("refuses anonymous callers even for a public medium", async function () {
-      sandbox.stub(MediaManager, "getMedia").resolves(mediaFixture());
-
-      await assert.rejects(
-        () =>
-          MediaControllerV2.getMedia(
-            createRequest({ params: { id: "media-1" } }),
-            createResponse(),
-          ),
-        (error) => error.statusCode === 401,
-      );
-    });
-
     it("refuses a signed-in user without any media right", async function () {
       sandbox.stub(MediaManager, "getMedia").resolves(mediaFixture());
       asActiveMember();
@@ -548,34 +556,12 @@ describe("MediaControllerV2", function () {
       });
     });
 
-    it("refuses anonymous callers", async function () {
-      await assert.rejects(
-        () => MediaControllerV2.getMediaList(createRequest(), createResponse()),
-        (error) => error.statusCode === 401,
-      );
-      assert.strictEqual(MediaManager.getMediaList.called, false);
-    });
-
-    it("refuses a signed-in user without any media right", async function () {
-      asActiveMember();
-
-      await assert.rejects(
-        () =>
-          MediaControllerV2.getMediaList(
-            createRequest({ user: MEMBER }),
-            createResponse(),
-          ),
-        (error) => error.statusCode === 403,
-      );
-      assert.strictEqual(MediaManager.getMediaList.called, false);
-    });
-
     it("shows a user with readAny the whole library", async function () {
       grant({ manageMedia: { readAny: true } });
       const res = createResponse();
 
       await MediaControllerV2.getMediaList(
-        createRequest({ user: MEMBER }),
+        createRequest({ user: MEMBER, marker: ["media", "read"] }),
         res,
       );
 
@@ -591,7 +577,7 @@ describe("MediaControllerV2", function () {
       grant({ manageMedia: { readOwn: true } });
 
       await MediaControllerV2.getMediaList(
-        createRequest({ user: MEMBER }),
+        createRequest({ user: MEMBER, marker: ["media", "read"] }),
         createResponse(),
       );
 
@@ -605,7 +591,7 @@ describe("MediaControllerV2", function () {
       asTenantOwner();
 
       await MediaControllerV2.getMediaList(
-        createRequest({ user: MEMBER }),
+        createRequest({ user: MEMBER, marker: ["media", "read"] }),
         createResponse(),
       );
 
@@ -619,7 +605,7 @@ describe("MediaControllerV2", function () {
       asInstanceOwner(MEMBER.id);
 
       await MediaControllerV2.getMediaList(
-        createRequest({ user: MEMBER }),
+        createRequest({ user: MEMBER, marker: ["media", "read"] }),
         createResponse(),
       );
 
@@ -780,34 +766,6 @@ describe("MediaControllerV2", function () {
         (error) => error.statusCode === 403,
       );
       assert.strictEqual(MediaManager.storeMedia.called, false);
-    });
-
-    it("refuses updates from users without any media right", async function () {
-      asActiveMember();
-
-      await assert.rejects(
-        () =>
-          MediaControllerV2.updateMedia(
-            createRequest({
-              user: MEMBER,
-              params: { id: "media-1" },
-              body: { title: "x" },
-            }),
-            createResponse(),
-          ),
-        (error) => error.statusCode === 403,
-      );
-    });
-
-    it("refuses anonymous updates", async function () {
-      await assert.rejects(
-        () =>
-          MediaControllerV2.updateMedia(
-            createRequest({ params: { id: "media-1" }, body: { title: "x" } }),
-            createResponse(),
-          ),
-        (error) => error.statusCode === 401,
-      );
     });
   });
 
@@ -1367,21 +1325,6 @@ describe("MediaControllerV2", function () {
       );
       assert.strictEqual(removeMedia.called, false);
     });
-
-    it("refuses deletion from users without any media right", async function () {
-      asActiveMember();
-      const removeMedia = sandbox.stub(MediaManager, "removeMedia");
-
-      await assert.rejects(
-        () =>
-          MediaControllerV2.deleteMedia(
-            createRequest({ user: MEMBER, params: { id: "media-1" } }),
-            createResponse(),
-          ),
-        (error) => error.statusCode === 403,
-      );
-      assert.strictEqual(removeMedia.called, false);
-    });
   });
 
   describe("usage proof", function () {
@@ -1422,19 +1365,6 @@ describe("MediaControllerV2", function () {
       );
 
       assert.deepStrictEqual(res.body, []);
-    });
-
-    it("needs the same right as reading the metadata", async function () {
-      asActiveMember();
-
-      await assert.rejects(
-        () =>
-          MediaControllerV2.getMediaUsage(
-            createRequest({ user: MEMBER, params: { id: "media-1" } }),
-            createResponse(),
-          ),
-        (error) => error.statusCode === 403,
-      );
     });
 
     it("blocks the deletion of a medium in use with the same body", async function () {

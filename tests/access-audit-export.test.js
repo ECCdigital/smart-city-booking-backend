@@ -5,7 +5,6 @@ const AccessAuditService = require("../src/commons/services/access/access-audit-
 const AccessAuditController = require("../src/platform/api/controllers/access-audit-controller");
 const AccessLogManager = require("../src/commons/data-managers/access-log-manager");
 const AccessLogModel = require("../src/commons/data-managers/models/accessLogModel");
-const PermissionService = require("../src/commons/services/permission-service");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const PdfService = require("../src/commons/pdf-service/pdf-service");
 const {
@@ -327,7 +326,6 @@ describe("Access audit export filters", () => {
   });
 
   it("hands the endpoint's filters to the export", async () => {
-    sandbox.stub(PermissionService, "_allowReadAny").resolves(true);
     const getAuditEntries = sandbox
       .stub(AccessAuditService, "getAuditEntries")
       .resolves([]);
@@ -353,29 +351,5 @@ describe("Access audit export filters", () => {
     expect(filters.result).to.equal("denied");
     expect(filters.action).to.equal("scan");
     expect(response.status.calledWith(200)).to.be.true;
-  });
-
-  it("still refuses the export without the booking-management permission", async () => {
-    sandbox.stub(PermissionService, "_allowReadAny").resolves(false);
-    const getAuditEntries = sandbox.stub(AccessAuditService, "getAuditEntries");
-
-    const response = {
-      status: sandbox.stub().returnsThis(),
-      send: sandbox.stub(),
-      sendStatus: sandbox.stub(),
-      setHeader: sandbox.stub(),
-    };
-
-    await AccessAuditController.exportAudit(
-      {
-        params: { tenant: "tenant-1" },
-        query: { result: "denied" },
-        user: { id: "user-1" },
-      },
-      response,
-    );
-
-    expect(response.sendStatus.calledOnceWithExactly(403)).to.be.true;
-    expect(getAuditEntries.called).to.be.false;
   });
 });

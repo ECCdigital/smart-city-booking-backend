@@ -3,7 +3,6 @@ const sinon = require("sinon");
 
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const AccessService = require("../src/commons/services/access/access-service");
-const PermissionsService = require("../src/commons/services/permission-service");
 
 describe("AccessController.getAccessPoints", () => {
   let sandbox;
@@ -12,14 +11,16 @@ describe("AccessController.getAccessPoints", () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    sandbox.stub(PermissionsService, "_allowUpdateAny").resolves(true);
     sandbox.stub(AccessService, "canView").resolves(true);
 
+    // The reach `any` of `booking.operate` is the manager's (spec §5).
     request = {
       params: { tenant: "tenant-1" },
       query: { bookingId: "booking-1" },
       body: {},
       user: { id: "user-1" },
+      reach: "any",
+      principal: { userId: "user-1" },
     };
     response = {
       status: sandbox.stub().returnsThis(),

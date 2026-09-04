@@ -31,7 +31,7 @@ const {
   optionalAuth,
 } = require("../../../middleware/auth-middleware");
 const { ForbiddenError } = require("../../../errors/BaseError");
-const { loadPrincipal } = require("./principal");
+const { loadPrincipal, anonymous } = require("./principal");
 const { decide, entryOf } = require("./policy");
 
 const MARKER = Object.freeze({
@@ -182,6 +182,27 @@ function scopeOf(req) {
 }
 
 /**
+ * The reach of a *second* decision of the same request, as the managers and
+ * the domain take it (spec §5): a route carries one marker, but an adapter
+ * sometimes has a second question to ask - whether the obsolete PUT may
+ * create, which media the saver may reference, whether a medium that turned
+ * out to be a booking document is theirs. It asks the table again, on the
+ * principal already loaded.
+ *
+ * @param {import("express").Request} req
+ * @param {string} resource
+ * @param {string} action
+ * @returns {{reach: string|null, userId: string|null}}
+ */
+function scopeFor(req, resource, action) {
+  const principal = req.principal ?? anonymous();
+  return {
+    reach: decide(principal, resource, action),
+    userId: principal.userId ?? null,
+  };
+}
+
+/**
  * The marker a middleware carries, if any.
  *
  * @param {Function} handler
@@ -199,5 +220,6 @@ module.exports = {
   markerOf,
   principalOf,
   scopeOf,
+  scopeFor,
   MARKER,
 };

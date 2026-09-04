@@ -3,7 +3,6 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
-const { RolePermission } = require("../src/commons/entities/role/role");
 const { ValidationError } = require("../src/errors/ValidationError");
 const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
 
@@ -18,6 +17,11 @@ function createAccessPoint(overrides = {}) {
   });
 }
 
+/**
+ * What the controller does with an access point. Who may read and who may
+ * write is the routes' (`accessPoint.read`, `accessPoint.write`) and is
+ * pinned in `authorization-access-routes.test.js`, not here.
+ */
 describe("AccessPointController", () => {
   let sandbox;
   let AccessPointController;
@@ -26,7 +30,6 @@ describe("AccessPointController", () => {
   let AccessLocationService;
   let AccessInfoService;
   let BookableManager;
-  let PermissionService;
   let request;
   let response;
   let next;
@@ -50,7 +53,6 @@ describe("AccessPointController", () => {
     AccessInfoService = require("../src/commons/services/access/access-info-service");
     BookableManager =
       require("../src/commons/data-managers/bookable-manager").BookableManager;
-    PermissionService = require("../src/commons/services/permission-service");
 
     request = {
       params: { tenant: "tenant-1" },
@@ -73,46 +75,8 @@ describe("AccessPointController", () => {
     mock.stopAll();
   });
 
-  function allowRead(allowed) {
-    return sandbox.stub(PermissionService, "_allowReadAny").resolves(allowed);
-  }
-
-  function allowWrite({ tenantOwner = false, instanceOwner = false } = {}) {
-    sandbox.stub(PermissionService, "_isTenantOwner").resolves(tenantOwner);
-    sandbox.stub(PermissionService, "_isInstanceOwner").resolves(instanceOwner);
-  }
-
   describe("getAccessPoints", () => {
-    it("requires readAny on manageBookables", async () => {
-      const allowReadAny = allowRead(true);
-      sandbox.stub(AccessPointManager, "getAccessPoints").resolves([]);
-
-      await AccessPointController.getAccessPoints(request, response, next);
-
-      expect(
-        allowReadAny.calledOnceWithExactly(
-          "user-1",
-          "tenant-1",
-          RolePermission.MANAGE_BOOKABLES,
-        ),
-      ).to.be.true;
-    });
-
-    it("answers 403 without that permission", async () => {
-      allowRead(false);
-      const getAccessPoints = sandbox.stub(
-        AccessPointManager,
-        "getAccessPoints",
-      );
-
-      await AccessPointController.getAccessPoints(request, response, next);
-
-      expect(response.sendStatus.calledWith(403)).to.be.true;
-      expect(getAccessPoints.called).to.be.false;
-    });
-
     it("only lists access points of the tenant in the path", async () => {
-      allowRead(true);
       const getAccessPoints = sandbox
         .stub(AccessPointManager, "getAccessPoints")
         .resolves([]);
@@ -123,7 +87,6 @@ describe("AccessPointController", () => {
     });
 
     it("sends the access points without their scan codes", async () => {
-      allowRead(true);
       const accessPoint = createAccessPoint();
       accessPoint.previousScanCodes = ["rotated-code"];
       sandbox
@@ -141,7 +104,6 @@ describe("AccessPointController", () => {
     });
 
     it("hands unexpected errors to the error handler", async () => {
-      allowRead(true);
       const failure = new Error("Database Error");
       sandbox.stub(AccessPointManager, "getAccessPoints").rejects(failure);
 
@@ -156,18 +118,7 @@ describe("AccessPointController", () => {
       request.params.id = "point-1";
     });
 
-    it("answers 403 without readAny on manageBookables", async () => {
-      allowRead(false);
-      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
-
-      await AccessPointController.getAccessPoint(request, response, next);
-
-      expect(response.sendStatus.calledWith(403)).to.be.true;
-      expect(getAccessPoint.called).to.be.false;
-    });
-
     it("answers 404 for an access point of another tenant", async () => {
-      allowRead(true);
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
 
       await AccessPointController.getAccessPoint(request, response, next);
@@ -176,7 +127,6 @@ describe("AccessPointController", () => {
     });
 
     it("sends the access point without its scan codes", async () => {
-      allowRead(true);
       sandbox
         .stub(AccessPointManager, "getAccessPoint")
         .resolves(createAccessPoint());
@@ -204,30 +154,7 @@ describe("AccessPointController", () => {
         .resolves(null);
     });
 
-    it("answers 403 for a user who is not a tenant owner", async () => {
-      allowWrite();
-      request.body = { provider: "nuki", externalId: "lock-1" };
-
-      await AccessPointController.storeAccessPoint(request, response, next);
-
-      expect(response.sendStatus.calledWith(403)).to.be.true;
-      expect(storeAccessPoint.called).to.be.false;
-    });
-
-    it("allows the instance owner", async () => {
-      allowWrite({ instanceOwner: true });
-      request.body = { provider: "nuki", externalId: "lock-1" };
-
-      await AccessPointController.storeAccessPoint(request, response, next);
-
-      expect(storeAccessPoint.calledOnce).to.be.true;
-    });
-
     describe("create", () => {
-      beforeEach(() => {
-        allowWrite({ tenantOwner: true });
-      });
-
       it("creates an access point with a server-side id and scan code", async () => {
         request.body = { provider: "nuki", externalId: "lock-1" };
 
@@ -372,7 +299,6 @@ describe("AccessPointController", () => {
       let existing;
 
       beforeEach(() => {
-        allowWrite({ tenantOwner: true });
         existing = createAccessPoint();
         sandbox.stub(AccessPointManager, "getAccessPoint").resolves(existing);
       });
@@ -500,10 +426,6 @@ describe("AccessPointController", () => {
     });
 
     describe("mode support", () => {
-      beforeEach(() => {
-        allowWrite({ tenantOwner: true });
-      });
-
       it("refuses a mode the provider does not report as supported", async () => {
         getSupportedModes.resolves(["authorization"]);
         request.body = {
@@ -640,7 +562,6 @@ describe("AccessPointController", () => {
     });
 
     it("answers 404 when the tenant has no access point with that id", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
       request.body = { id: "unknown-point", label: "Neuer Name" };
 
@@ -665,19 +586,7 @@ describe("AccessPointController", () => {
         .resolves();
     });
 
-    it("answers 403 for a user who is not a tenant owner", async () => {
-      allowWrite();
-      sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
-
-      await AccessPointController.removeAccessPoint(request, response, next);
-
-      expect(response.sendStatus.calledWith(403)).to.be.true;
-      expect(removeAccessPoint.called).to.be.false;
-      expect(detachAccessPoint.called).to.be.false;
-    });
-
     it("answers 404 for an access point of another tenant", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
 
       await AccessPointController.removeAccessPoint(request, response, next);
@@ -687,7 +596,6 @@ describe("AccessPointController", () => {
     });
 
     it("deletes the access point of the tenant in the path", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox
         .stub(AccessPointManager, "getAccessPoint")
         .resolves(createAccessPoint());
@@ -700,7 +608,6 @@ describe("AccessPointController", () => {
     });
 
     it("detaches the id from every bookable of the tenant", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox
         .stub(AccessPointManager, "getAccessPoint")
         .resolves(createAccessPoint());
@@ -712,7 +619,6 @@ describe("AccessPointController", () => {
     });
 
     it("detaches the id before the access point is gone", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox
         .stub(AccessPointManager, "getAccessPoint")
         .resolves(createAccessPoint());
@@ -723,7 +629,6 @@ describe("AccessPointController", () => {
     });
 
     it("hands unexpected errors to the error handler", async () => {
-      allowWrite({ tenantOwner: true });
       const failure = new Error("Database Error");
       sandbox.stub(AccessPointManager, "getAccessPoint").rejects(failure);
 
@@ -746,19 +651,7 @@ describe("AccessPointController", () => {
       });
     });
 
-    it("answers 403 for a user who is not a tenant owner", async () => {
-      allowWrite();
-      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
-
-      await AccessPointController.getQrCode(request, response, next);
-
-      expect(response.sendStatus.calledWith(403)).to.be.true;
-      expect(getAccessPoint.called).to.be.false;
-      expect(render.called).to.be.false;
-    });
-
     it("answers 404 for an access point of another tenant", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
 
       await AccessPointController.getQrCode(request, response, next);
@@ -768,7 +661,6 @@ describe("AccessPointController", () => {
     });
 
     it("renders an svg by default", async () => {
-      allowWrite({ tenantOwner: true });
       const accessPoint = createAccessPoint();
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
 
@@ -782,7 +674,6 @@ describe("AccessPointController", () => {
     });
 
     it("passes the requested format through", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox
         .stub(AccessPointManager, "getAccessPoint")
         .resolves(createAccessPoint());
@@ -802,7 +693,6 @@ describe("AccessPointController", () => {
     });
 
     it("answers 400 for an unsupported format", async () => {
-      allowWrite({ tenantOwner: true });
       const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
 
       request.query.format = "bmp";
@@ -815,7 +705,6 @@ describe("AccessPointController", () => {
     });
 
     it("hands unexpected errors to the error handler", async () => {
-      allowWrite({ tenantOwner: true });
       const failure = new Error("Render Error");
       sandbox
         .stub(AccessPointManager, "getAccessPoint")
@@ -838,19 +727,7 @@ describe("AccessPointController", () => {
         .callsFake(async (accessPoint) => accessPoint);
     });
 
-    it("answers 403 for a user who is not a tenant owner", async () => {
-      allowWrite();
-      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
-
-      await AccessPointController.rotateScanCode(request, response, next);
-
-      expect(response.sendStatus.calledWith(403)).to.be.true;
-      expect(getAccessPoint.called).to.be.false;
-      expect(storeAccessPoint.called).to.be.false;
-    });
-
     it("answers 404 for an access point of another tenant", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
 
       await AccessPointController.rotateScanCode(request, response, next);
@@ -860,7 +737,6 @@ describe("AccessPointController", () => {
     });
 
     it("rotates the scan code and persists it for the tenant in the path", async () => {
-      allowWrite({ tenantOwner: true });
       const accessPoint = createAccessPoint();
       const codeBefore = accessPoint.scanCode;
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
@@ -876,7 +752,6 @@ describe("AccessPointController", () => {
     });
 
     it("returns neither the old nor the new scan code", async () => {
-      allowWrite({ tenantOwner: true });
       const accessPoint = createAccessPoint();
       const codeBefore = accessPoint.scanCode;
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
@@ -892,7 +767,6 @@ describe("AccessPointController", () => {
     });
 
     it("hands unexpected errors to the error handler", async () => {
-      allowWrite({ tenantOwner: true });
       const failure = new Error("Database Error");
       sandbox.stub(AccessPointManager, "getAccessPoint").rejects(failure);
 
@@ -914,19 +788,7 @@ describe("AccessPointController", () => {
       storeAccessPoint = sandbox.stub(AccessPointManager, "storeAccessPoint");
     });
 
-    it("answers 403 for a user who is not a tenant owner", async () => {
-      allowWrite();
-      const getAccessPoint = sandbox.stub(AccessPointManager, "getAccessPoint");
-
-      await AccessPointController.getLocationPrefill(request, response, next);
-
-      expect(response.sendStatus.calledWith(403)).to.be.true;
-      expect(getAccessPoint.called).to.be.false;
-      expect(getLocationPrefill.called).to.be.false;
-    });
-
     it("answers 404 for an access point of another tenant", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(null);
 
       await AccessPointController.getLocationPrefill(request, response, next);
@@ -936,7 +798,6 @@ describe("AccessPointController", () => {
     });
 
     it("sends the location the provider reports", async () => {
-      allowWrite({ tenantOwner: true });
       const accessPoint = createAccessPoint();
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
 
@@ -951,7 +812,6 @@ describe("AccessPointController", () => {
     });
 
     it("sends null for a provider that knows no location", async () => {
-      allowWrite({ tenantOwner: true });
       sandbox
         .stub(AccessPointManager, "getAccessPoint")
         .resolves(createAccessPoint({ provider: "salto-ks" }));
@@ -964,7 +824,6 @@ describe("AccessPointController", () => {
     });
 
     it("writes nothing to the access point, adopting the location is a PUT", async () => {
-      allowWrite({ tenantOwner: true });
       const accessPoint = createAccessPoint();
       const locationBefore = accessPoint.location;
       sandbox.stub(AccessPointManager, "getAccessPoint").resolves(accessPoint);
@@ -976,7 +835,6 @@ describe("AccessPointController", () => {
     });
 
     it("hands unexpected errors to the error handler", async () => {
-      allowWrite({ tenantOwner: true });
       const failure = new Error("Nuki API Error");
       sandbox
         .stub(AccessPointManager, "getAccessPoint")

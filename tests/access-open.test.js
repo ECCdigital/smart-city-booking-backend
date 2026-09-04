@@ -946,13 +946,16 @@ describe("AccessController.open", () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    sandbox.stub(PermissionsService, "_allowUpdateAny").resolves(false);
 
+    // The reach of `booking.operate` the route decided: `own` is the booker,
+    // `any` the manager (authorize spec §5).
     request = {
       params: { tenant: "tenant-1", accessPointId: "door-1" },
       query: { bookingId: "booking-1" },
       body: {},
       user: { id: "user-1" },
+      reach: "own",
+      principal: { userId: "user-1" },
     };
     response = {
       status: sandbox.stub().returnsThis(),
@@ -996,8 +999,8 @@ describe("AccessController.open", () => {
     });
   });
 
-  it("hands the manage-bookings permission to the service", async () => {
-    PermissionsService._allowUpdateAny.resolves(true);
+  it("hands the reach `any` to the service as the manage permission", async () => {
+    request.reach = "any";
     const open = sandbox
       .stub(AccessService, "open")
       .resolves({ success: true, data: {} });
@@ -1090,13 +1093,16 @@ describe("AccessController.unlatch", () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    sandbox.stub(PermissionsService, "_allowUpdateAny").resolves(false);
 
+    // The reach of `booking.operate` the route decided: `own` is the booker,
+    // `any` the manager (authorize spec §5).
     request = {
       params: { tenant: "tenant-1", accessPointId: "door-1" },
       query: { bookingId: "booking-1" },
       body: {},
       user: { id: "user-1" },
+      reach: "own",
+      principal: { userId: "user-1" },
     };
     response = {
       status: sandbox.stub().returnsThis(),
