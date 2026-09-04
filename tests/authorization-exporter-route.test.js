@@ -32,9 +32,15 @@ describe("authorization on the CSV export route", function () {
   this.timeout(20000);
 
   let h;
-  // `EventManager.getEvent` is already a stub of the route world; a test
-  // that wants another answer sets it and `afterEach` puts the fixture
-  // back, rather than wrapping a wrapped method.
+  // The harness and the route world stub in `before` and stand for the whole
+  // suite; `sinon.restore()` belongs in `after`, because it takes that world
+  // down - calling it after every test would leave the second one running
+  // against the real managers.
+  //
+  // Per-test isolation is `afterEach` instead: the one thing a test here
+  // changes is the route world's own `EventManager.getEvent` stub, which it
+  // re-answers rather than wrapping (a wrapped method cannot be wrapped
+  // again), so putting the fixture answer back is what restores it.
   let fixtureEvent;
   const answerFixture = () =>
     EventManager.getEvent.callsFake(async () => fixtureEvent);
