@@ -274,8 +274,10 @@ components:
             type: object
             description: |
               An iFBS location `{ lockerSystem: "ifbs", locationId, amount }`
-              or a size `{ id, lockerSystem, amount }`; `amount` is the
-              bookable's.
+              or a size `{ id, lockerSystem, amount }`; `amount` is what the
+              bookable distributes to that row
+              (`accessPointDetails.accessPointAmounts`), its own where it
+              distributes none.
             additionalProperties: true
 
     BookingLockerInfo:

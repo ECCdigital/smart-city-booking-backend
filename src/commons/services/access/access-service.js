@@ -11,6 +11,9 @@ const { decide, satisfy } = require("./access-decision");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
+const {
+  compartmentsAt,
+} = require("../../entities/bookable/access-point-amounts");
 const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 const AccessProvisionError = require("../../../errors/AccessProvisionError");
@@ -580,14 +583,14 @@ class AccessService {
   /**
    * Holds a compartment of every locker system the booking books, for a
    * booking not paid yet. One `accessInfo` entry per compartment is made at
-   * the locker system's row - `bookableItem.amount` of them per system - and
-   * each is held: by the provider where it holds compartments itself (iFBS
-   * keeps a box for two minutes), by the stored booking where it does not
-   * (Pareva). The platform-held ones are checked against the capacity of
-   * the bookable after the booking is stored, so that two checkouts racing
-   * for the last compartment cannot both get it: the occupancy of the
-   * bookable in the booking's window, this booking included, must not
-   * exceed `bookable.amount`.
+   * the locker system's row - as many as the bookable distributes to it
+   * (`compartmentsAt`) - and each is held: by the provider where it holds
+   * compartments itself (iFBS keeps a box for two minutes), by the stored
+   * booking where it does not (Pareva). The platform-held ones are checked
+   * against the capacity of the bookable after the booking is stored, so
+   * that two checkouts racing for the last compartment cannot both get it:
+   * the occupancy of the bookable in the booking's window, this booking
+   * included, must not exceed `bookable.amount`.
    *
    * A hold the provider refuses, or a capacity that is exceeded, is thrown;
    * the checkout then rolls the booking back. Entries held or granted
@@ -2231,8 +2234,8 @@ class AccessService {
   /**
    * @private
    * Makes the entries of the compartments the booking is owed: as many
-   * per locker system as the bookable's item books, minus those there
-   * already and not revoked. Where new ones are needed the revoked entries
+   * per locker system as the bookable owes there, minus those already
+   * there and not revoked. Where new ones are needed the revoked entries
    * of that system make way for them - a fresh grant starts the
    * compartments of a system over, as it does a door's entry - while a
    * system whose compartments are all revoked and none needed keeps them
@@ -2288,7 +2291,7 @@ class AccessService {
    * @private
    * Drops the entries only held - not granted, not revoked - beyond what
    * the booking books now: at a locker system it no longer books, or past
-   * the amount its item books, the granted ones counted first. What the
+   * the amount owed there, the granted ones counted first. What the
    * provider holds for them lapses by itself.
    *
    * @param {Object} booking The booking, written into
@@ -2345,7 +2348,10 @@ class AccessService {
    * Fails where the bookable has fewer compartments than the bookings in
    * this booking's window take, this booking included. The occupancy is
    * counted off the bookings' items, which is what `bookable.amount` is the
-   * capacity of.
+   * capacity of - not off the compartments made, which follow the bookable's
+   * distribution over its systems. Where the distribution and `amount`
+   * disagree the two drift apart; that is the admin's to answer, and the
+   * editor warns about it (locker spec §L2.2).
    *
    * @param {string} tenant Tenant ID
    * @param {Object} booking The booking that holds
@@ -2425,11 +2431,13 @@ class AccessService {
    * @private
    * The locker systems a booking books, keyed by row id: the row as the
    * compartments are resolved at it, the bookable that books it and how
-   * many compartments that bookable's item books. Only the bookables
-   * booked themselves count - a compartment is exclusive to its booking
-   * and nothing a parent or child bookable confers. Systems the booking
-   * holds compartments at without booking them any more come along with
-   * nothing owed, for the revoke.
+   * many compartments it is owed there: the number the bookable distributes
+   * to that system (`compartmentsAt`), and what the booking's item books at
+   * a system it distributes nothing to. Only the bookables booked
+   * themselves count - a compartment is exclusive to its
+   * booking and nothing a parent or child bookable confers. Systems the
+   * booking holds compartments at without booking them any more come along
+   * with nothing owed, for the revoke.
    *
    * @returns {Map<string, { accessPoint: Object, bookable: Object|null,
    *   amount: number }>}
@@ -2462,7 +2470,11 @@ class AccessService {
         systems.set(key, {
           accessPoint: this._resolvedAccessPoint(tenant, accessPoint, bookable),
           bookable,
-          amount: this._itemAmount(booking, bookable.id),
+          amount: compartmentsAt(
+            bookable,
+            key,
+            this._itemAmount(booking, bookable.id),
+          ),
         });
       }
     }
