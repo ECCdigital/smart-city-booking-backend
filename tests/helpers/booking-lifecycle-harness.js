@@ -589,8 +589,8 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   sinon.stub(UserManager, "getRawUser").resolves({ _id: CUSTOMER_DB_ID });
   sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
   // The rights run for real over the instance, the memberships and the
-  // one role: `PermissionService`, `UserManager.hasPermission` and
-  // `getUserPermissions` read these.
+  // one role: `UserManager.getUserPermissions` reads these, and the
+  // principal of the authorization is built from its answer.
   sinon.stub(InstanceManager, "getInstance").callsFake(async () => instance());
   sinon
     .stub(MembershipManager, "getMembershipByTenantAndUserID")

@@ -1,8 +1,8 @@
-const { RolePermission } = require("../../../commons/entities/role/role");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
 const Formatters = require("../../../commons/utilities/formatters");
-const UserManager = require("../../../commons/data-managers/user-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const { scopeOf } = require("../../../commons/services/authorization");
+const { NotFoundError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -23,47 +23,29 @@ class CsvExportController {
     return [header, ...lines].join("\r\n");
   }
 
-  static async _hasPermission(event, userId, tenant) {
-    if (
-      event.tenantId === tenant &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_BOOKABLES,
-        "updateAny",
-      ))
-    )
-      return true;
-
-    if (
-      event.tenantId === tenant &&
-      event.ownerUserId === userId &&
-      (await UserManager.hasPermission(
-        userId,
-        tenant,
-        RolePermission.MANAGE_BOOKABLES,
-        "updateOwn",
-      ))
-    )
-      return true;
-
-    return false;
-  }
-
+  /**
+   * GET /csv/:tenant/events/:id/bookings
+   *
+   * The attendee list of an event, for whoever may change the event
+   * (`exporter.export`). The reach loads it: under `any` every event of
+   * the tenant, under `own` only the ones the caller owns - an event out
+   * of reach is a 404, not a 403 (spec §4.2).
+   */
   static async getEventBookings(request, response) {
+    const {
+      params: { tenant: tenantId, id: eventId },
+    } = request;
+
+    const event = await EventManager.getEvent(
+      eventId,
+      tenantId,
+      scopeOf(request),
+    );
+    if (!event) {
+      throw new NotFoundError("event_not_found");
+    }
+
     try {
-      const {
-        params: { tenant: tenantId, id: eventId },
-        user,
-      } = request;
-
-      const event = await EventManager.getEvent(eventId, tenantId);
-      if (
-        !(await CsvExportController._hasPermission(event, user?.id, tenantId))
-      ) {
-        return response.sendStatus(403);
-      }
-
       const eventBookings = await BookingManager.getEventBookings(
         tenantId,
         eventId,

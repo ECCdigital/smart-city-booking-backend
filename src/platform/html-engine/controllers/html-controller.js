@@ -3,6 +3,10 @@ const {
 } = require("../../../commons/data-managers/bookable-manager");
 const HtmlEngine = require("../html-engine");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const {
+  readsRecords,
+  scopeOf,
+} = require("../../../commons/services/authorization");
 
 class HtmlController {
   static async getBookables(request, response) {
@@ -100,14 +104,17 @@ class HtmlController {
   }
 
   static async getEvent(request, response) {
-    const user = request.user;
+    // Whether the reader gets more than the public projection. The `html`
+    // entry is public only, so this is false for everyone - as it was
+    // before the route carried a marker and `request.user` was never set.
+    const beyondPublic = readsRecords(scopeOf(request));
     const tenantId = request.params.tenant;
     const id = request.params.id;
     const sanitizedId = id.trim();
     const event = await EventManager.getEvent(sanitizedId, tenantId);
 
     if (event?.id) {
-      const htmlOutput = await HtmlEngine.event(event, !!user);
+      const htmlOutput = await HtmlEngine.event(event, beyondPublic);
 
       response.setHeader("content-type", "text/plain");
       response.status(200).send(htmlOutput);

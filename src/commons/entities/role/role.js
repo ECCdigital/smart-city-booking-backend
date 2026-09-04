@@ -5,7 +5,6 @@ const { roleSchemaDefinition } = require("../../schemas/roleSchema");
 const RolePermission = Object.freeze({
   MANAGE_BOOKABLES: "manageBookables",
   MANAGE_USERS: "manageUsers",
-  MANAGE_TENANTS: "manageTenants",
   MANAGE_ROLES: "manageRoles",
   MANAGE_BOOKINGS: "manageBookings",
   MANAGE_COUPONS: "manageCoupons",

@@ -288,7 +288,6 @@ describe("SaltoKsAccessProvider.open", () => {
 describe("AccessController rendering of open failures", () => {
   const AccessController = require("../src/platform/api/controllers/access-controller");
   const AccessService = require("../src/commons/services/access/access-service");
-  const PermissionService = require("../src/commons/services/permission-service");
 
   let request;
   let response;
@@ -306,7 +305,6 @@ describe("AccessController rendering of open failures", () => {
       send: sinon.stub(),
       sendStatus: sinon.stub(),
     };
-    sinon.stub(PermissionService, "_allowUpdateAny").resolves(false);
   });
 
   afterEach(() => {

@@ -23,7 +23,7 @@
  * `operate`, `document`, `challenge`, ...) are named entries here, never
  * new role steps: the role steps stay the seven of the role schema.
  * `own: "signedIn"` at an entry whose handler has no owner key
- * (`exporter.export`, `bookable.meta`, `event.meta`, `role.list`,
+ * (`bookable.meta`, `event.meta`, `role.list`,
  * `invitation.respond`, `tenant.countCheck`) means "any signed-in user,
  * for themselves": the reach `own` is then the handler's to read as
  * "self", not a query condition (§11, §12).
@@ -300,8 +300,18 @@ const TABLE = {
   bookingStatus: { all: { public: true } },
   html: { all: { public: true } },
   json: { all: { public: true } },
-  // `isSignedIn` today, and the handler checks nothing further.
-  exporter: { export: { own: "signedIn" } },
+  // `GET /csv/:tenant/events/:id/bookings`: the attendee list of an event.
+  // The route carried `isSignedIn` and the controller the same two levels
+  // behind it - whoever may change an event may read who booked it. It
+  // checked them through the raw `UserManager.hasPermission`, the one
+  // helper without an instance-owner branch, so the standing precedence
+  // now reaches this route too (§15).
+  exporter: {
+    export: {
+      own: "manageBookables.updateOwn",
+      any: "manageBookables.updateAny",
+    },
+  },
 
   // --- instance level (`/api`, `/api/v2/instance`) ---------------------
 
