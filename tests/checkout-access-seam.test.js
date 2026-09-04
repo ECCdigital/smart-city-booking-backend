@@ -263,8 +263,12 @@ describe("checkout on the access seam", function () {
       expect(stored.firstCall.args[0].isPayed).to.equal(true);
       expect(stored.firstCall.args[1]).to.equal("payment_due");
       expect(issue.calledOnce).to.equal(true);
-      expect(send.calledOnce).to.equal(true);
+      // The booker's confirmation, and the tenant told that the grant
+      // did not come through.
+      expect(send.calledTwice).to.equal(true);
       expect(send.firstCall.args[0]).to.equal("BOOKING_CONFIRMATION");
+      expect(send.secondCall.args[0]).to.equal("ACCESS_PROVISION_FAILED");
+      expect(send.secondCall.args[1].reason).to.equal("iFBS refused the box");
     });
 
     it("leaves every booking of an aggregated payment paid when one grant fails", async function () {

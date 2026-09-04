@@ -86,6 +86,7 @@ describe("booking lifecycle: admit", function () {
       "notify mail.INCOMING_BOOKING ok",
       "notify mail.SUPERVISOR_BOOKING_NOTIFICATION ok",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({
       transition: "admit",
@@ -136,6 +137,7 @@ describe("booking lifecycle: admit", function () {
       "notify mail.INCOMING_BOOKING ok",
       "notify mail.SUPERVISOR_BOOKING_NOTIFICATION ok",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome.status).to.equal("payment_due");
     expect(adapters.payment.calls).to.deep.equal([
@@ -203,6 +205,7 @@ describe("booking lifecycle: admit", function () {
       "notify mail.INCOMING_BOOKING ok",
       "notify mail.SUPERVISOR_BOOKING_NOTIFICATION ok",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome.status).to.equal("confirmed");
     expect(adapters.access.calls).to.deep.equal([
@@ -247,6 +250,7 @@ describe("booking lifecycle: admit", function () {
       "notify mail.INCOMING_BOOKING ok",
       "notify mail.SUPERVISOR_BOOKING_NOTIFICATION ok",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(adapters.documents.calls).to.deep.equal([]);
   });
@@ -344,7 +348,8 @@ describe("booking lifecycle: admit", function () {
       "notify mail.BOOKING_CONFIRMATION ok",
     ]);
     expect(outcome.failure).to.equal(null);
-    expect(adapters.mail.calls).to.have.length(3);
+    // The confirmation, the two that are gated - and the failed grant.
+    expect(adapters.mail.calls).to.have.length(4);
   });
 
   it("a mail that fails is recorded and the rest goes out; a tenant that wants no notice leaves that mail skipped", async function () {

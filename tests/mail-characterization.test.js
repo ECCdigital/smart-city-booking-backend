@@ -329,6 +329,19 @@ describe("mail characterization: every notice as it goes out today", function ()
         ),
       );
     });
+
+    it("access provision failed: the fault notice to the tenant, with the provider's message", async function () {
+      await pin("access-provision-failed", () =>
+        notify(
+          "ACCESS_PROVISION_FAILED",
+          single("B-1", {
+            transition: "pay",
+            reason:
+              "door-1: Access mode 'authorization' is not supported by access point 'door-1'",
+          }),
+        ),
+      );
+    });
   });
 
   describe("tenant notices", function () {

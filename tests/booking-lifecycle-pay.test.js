@@ -48,6 +48,7 @@ const PAY_TABLE = [
   "notify workflow.emit ok",
   "notify mail.BOOKING_CONFIRMATION ok",
   "notify mail.NEW_BOOKING skipped",
+  "notify mail.ACCESS_PROVISION_FAILED skipped",
 ];
 
 describe("booking lifecycle: pay", function () {
@@ -130,6 +131,7 @@ describe("booking lifecycle: pay", function () {
       "notify workflow.emit skipped",
       "notify mail.BOOKING_CONFIRMATION ok",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(adapters.workflow.calls).to.deep.equal([]);
   });
@@ -153,7 +155,7 @@ describe("booking lifecycle: pay", function () {
       trigger: TRIGGER.ADMIN,
     });
 
-    expect(effectTable(outcome).at(-1)).to.equal("notify mail.NEW_BOOKING ok");
+    expect(effectTable(outcome).at(-2)).to.equal("notify mail.NEW_BOOKING ok");
     expect(adapters.mail.calls.at(-1).args[1].bookingIds).to.deep.equal([
       "B-1",
     ]);
@@ -273,6 +275,7 @@ describe("booking lifecycle: pay", function () {
         "notify workflow.emit ok",
         "notify mail.BOOKING_CONFIRMATION ok",
         "notify mail.NEW_BOOKING skipped",
+        "notify mail.ACCESS_PROVISION_FAILED ok",
       ]);
       expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
     });
@@ -294,6 +297,7 @@ describe("booking lifecycle: pay", function () {
         "notify workflow.emit ok",
         "notify mail.BOOKING_CONFIRMATION ok",
         "notify mail.NEW_BOOKING skipped",
+        "notify mail.ACCESS_PROVISION_FAILED skipped",
       ]);
       expect(outcome.failure).to.equal(null);
       expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");

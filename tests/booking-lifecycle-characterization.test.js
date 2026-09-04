@@ -392,6 +392,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "access.provision B1 FAILED",
         "workflow.onCommit B1",
         "mail.FREE_BOOKING_CONFIRMATION erika@example.test [buchung-B1.ics]",
+        "mail.ACCESS_PROVISION_FAILED stadt@example.test",
       ]);
     });
 
@@ -579,6 +580,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
         "store.attach B1 receipt",
         "workflow.onPay B1",
         "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
+        "mail.ACCESS_PROVISION_FAILED stadt@example.test",
       ]);
     });
 

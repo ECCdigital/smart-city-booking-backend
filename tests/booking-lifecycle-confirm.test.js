@@ -67,6 +67,7 @@ describe("booking lifecycle: confirm", function () {
       "notify mail.INVOICE_AFTER_APPROVAL skipped",
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({
       transition: "confirm",
@@ -121,6 +122,7 @@ describe("booking lifecycle: confirm", function () {
       "notify mail.INVOICE_AFTER_APPROVAL skipped",
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({ status: "confirmed", failure: null });
     expect(adapters.store.rows.get("B-1")).to.include({
@@ -162,6 +164,7 @@ describe("booking lifecycle: confirm", function () {
       "notify mail.INVOICE_AFTER_APPROVAL skipped",
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(outcome).to.include({ status: "payment_due", failure: null });
     expect(adapters.store.rows.get("B-1").status).to.equal("payment_due");
@@ -178,6 +181,7 @@ describe("booking lifecycle: confirm", function () {
       `notify mail.INVOICE_AFTER_APPROVAL ${form === "invoice" ? "ok" : "skipped"}`,
       `notify mail.BOOKING_CONFIRMED_INVOICE_PENDING ${form === "pending" ? "ok" : "skipped"}`,
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ];
 
     it("a link: the payment link mail with the provider's URL", async function () {
@@ -280,6 +284,7 @@ describe("booking lifecycle: confirm", function () {
         "notify mail.INVOICE_AFTER_APPROVAL skipped",
         "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
         "notify mail.NEW_BOOKING skipped",
+        "notify mail.ACCESS_PROVISION_FAILED skipped",
       ]);
       expect(adapters.mail.calls).to.deep.equal([]);
     });
@@ -302,6 +307,7 @@ describe("booking lifecycle: confirm", function () {
       "notify mail.INVOICE_AFTER_APPROVAL skipped",
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING skipped",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(adapters.workflow.calls).to.deep.equal([]);
   });
@@ -325,7 +331,7 @@ describe("booking lifecycle: confirm", function () {
       trigger: TRIGGER.ADMIN,
     });
 
-    expect(effectTable(outcome).at(-1)).to.equal("notify mail.NEW_BOOKING ok");
+    expect(effectTable(outcome).at(-2)).to.equal("notify mail.NEW_BOOKING ok");
     expect(adapters.mail.calls.at(-1).args[1].bookingIds).to.deep.equal([
       "B-1",
     ]);
@@ -361,6 +367,7 @@ describe("booking lifecycle: confirm", function () {
       "notify mail.INVOICE_AFTER_APPROVAL skipped",
       "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
       "notify mail.NEW_BOOKING ok",
+      "notify mail.ACCESS_PROVISION_FAILED skipped",
     ]);
     expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
     expect(adapters.payment.calls).to.deep.equal([]);
@@ -466,6 +473,7 @@ describe("booking lifecycle: confirm", function () {
         "notify mail.INVOICE_AFTER_APPROVAL skipped",
         "notify mail.BOOKING_CONFIRMED_INVOICE_PENDING skipped",
         "notify mail.NEW_BOOKING skipped",
+        "notify mail.ACCESS_PROVISION_FAILED ok",
       ]);
       expect(outcome.failure).to.equal(null);
       expect(adapters.store.rows.get("B-1").status).to.equal("confirmed");
@@ -514,9 +522,10 @@ describe("booking lifecycle: confirm", function () {
         trigger: TRIGGER.ADMIN,
       });
 
-      expect(effectTable(outcome).at(-1)).to.equal(
+      expect(effectTable(outcome).slice(-2)).to.deep.equal([
         "notify mail.NEW_BOOKING recorded",
-      );
+        "notify mail.ACCESS_PROVISION_FAILED skipped",
+      ]);
       expect(outcome.failure).to.equal(null);
     });
 

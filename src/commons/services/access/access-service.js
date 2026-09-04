@@ -13,6 +13,7 @@ const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
+const AccessProvisionError = require("../../../errors/AccessProvisionError");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -782,6 +783,10 @@ class AccessService {
   static async _provisionResolved(tenant, { booking, doors, lockerSystems }) {
     const bookingId = booking.id;
     const provisionedAccessPoints = [];
+    // The access points a provider cannot serve. They are skipped rather
+    // than aborting the run, so the rest of the booking is provisioned -
+    // but the run has to say it did not get every grant.
+    const skipped = [];
 
     // A grant that fails after others went through leaves those at the
     // provider: the booking has to say so, or the next attempt grants them
@@ -792,15 +797,25 @@ class AccessService {
         booking,
         doors,
         provisionedAccessPoints,
+        skipped,
       );
-      await this._provisionCompartments(tenant, booking, lockerSystems);
+      await this._provisionCompartments(
+        tenant,
+        booking,
+        lockerSystems,
+        skipped,
+      );
     } catch (err) {
       await BookingManager.storeBooking(booking);
       throw err;
     }
 
     await BookingManager.storeBooking(booking);
+    // The doors that worked carry their PINs to the booker either way.
     await this._sendProvisionedMail(booking, provisionedAccessPoints);
+    if (skipped.length > 0) {
+      throw new AccessProvisionError(skipped, { tenantId: tenant, bookingId });
+    }
     return booking.accessInfo;
   }
 
@@ -815,6 +830,7 @@ class AccessService {
     booking,
     doors,
     provisionedAccessPoints,
+    skipped,
   ) {
     const bookingId = booking.id;
 
@@ -857,15 +873,17 @@ class AccessService {
       );
 
       if (supportedModes && !supportedModes.includes(accessPoint.mode)) {
+        const reason = `Access mode '${accessPoint.mode}' is not supported by access point '${accessPoint.id}'`;
         await this._log({
           tenantId: tenant,
           accessPoint,
           bookingId,
           action: "provision",
           result: "failure",
-          errorMessage: `Access mode '${accessPoint.mode}' is not supported by access point '${accessPoint.id}'`,
+          errorMessage: reason,
           actor: { source: "system" },
         });
+        skipped.push({ accessPointId: accessPoint.id, reason });
         continue;
       }
 
@@ -934,7 +952,7 @@ class AccessService {
    * @param {Map<string, Object>|undefined} lockerSystems The locker systems
    *   the booking books, as the resolver answers them
    */
-  static async _provisionCompartments(tenant, booking, lockerSystems) {
+  static async _provisionCompartments(tenant, booking, lockerSystems, skipped) {
     if (!lockerSystems?.size) {
       return;
     }
@@ -951,15 +969,17 @@ class AccessService {
       const heldAccessPoint = this._compartmentAccessPoint(system, entry);
 
       if (!provider.constructor.capabilities.includes("grantAuthorization")) {
+        const reason = `Provider '${system.accessPoint.provider}' grants no compartments`;
         await this._log({
           tenantId: tenant,
           accessPoint: heldAccessPoint,
           bookingId: booking.id,
           action: "provision",
           result: "failure",
-          errorMessage: `Provider '${system.accessPoint.provider}' grants no compartments`,
+          errorMessage: reason,
           actor: { source: "system" },
         });
+        skipped.push({ accessPointId: system.accessPoint.id, reason });
         continue;
       }
 

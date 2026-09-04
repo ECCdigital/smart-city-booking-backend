@@ -215,6 +215,23 @@ const MailType = Object.freeze({
     templateData: ({ accessPoints }) => ({ accessPoints }),
   },
 
+  ACCESS_PROVISION_FAILED: {
+    family: "booking",
+    templateName: "access-provision-failed",
+    audience: "tenant",
+    subject: (ctx) =>
+      `Zugang konnte nicht eingerichtet werden (${ctx.tenant.name})`,
+    includeQRCode: false,
+    sendBCC: false,
+    addRejectionLink: false,
+    // No gate: this is a fault report, not a notice of new bookings, and
+    // the tenant is the only one who can go and open the door by hand.
+    templateData: ({ reason, transition }) => ({
+      failureReason: reason,
+      transition,
+    }),
+  },
+
   WORKFLOW_NOTIFICATION: {
     family: "tenant",
     templateName: "workflow-notification",
