@@ -203,6 +203,13 @@ const TABLE = {
 
   accessPoint: {
     read: { any: "manageBookables.readAny" },
+    // `GET /accesspoints/:id/bookings`: which bookings hold a live access at
+    // this access point. The answer names bookings and their customers, so it
+    // is the booking reader's level and not the bookable reader's - as the
+    // bookings of a bookable (`bookable.relatedBookings`) and the audit
+    // export (`accessAudit.export`) are. A tenant owner, who alone may delete
+    // an access point, satisfies it either way.
+    bookings: { any: "manageBookings.readAny" },
     // store, remove, qr, rotate, location prefill.
     write: { any: "tenantOwner" },
   },

@@ -195,6 +195,10 @@ _Avoid_: Salto-User (unqualifiziert), Nutzer, Account
 Das Zurücknehmen eines Grants beim Provider, mit der Auskunft, ob der externe Principal dabei entfernt wurde. Ein wiederholter Widerruf desselben Grants ist erlaubt und holt nur nach, was fehlt.
 _Avoid_: Revoke (als deutsches Nomen), Löschung, Deprovisionierung
 
+**Laufender Zugang (einer Buchung an einem AccessPoint)**:
+Der Eintrag einer Buchung an einem AccessPoint, der erteilt und nicht widerrufen ist, solange die Buchung noch läuft — die eine Antwort darauf, wem das Löschen eines AccessPoints etwas wegnimmt. Erteilt heißt provisioniert, nicht „hat einen Grant": eine Tür im Modus `remote` gilt ohne Grant als provisioniert, ein bloß vorgemerktes Fach noch nicht. Eine abgelaufene oder abgelehnte Buchung hat keinen laufenden Zugang mehr; eine Buchung ohne Ende endet nie.
+_Avoid_: Aktiver Grant, offener Zugang, Live-Zugriff
+
 ### Buchungslebenszyklus
 
 **Buchungszustand**:
