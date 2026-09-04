@@ -271,12 +271,14 @@ describe("DashboardService summaries", function () {
       {
         bookableId: "room-a",
         bookableTitle: "Raum A",
+        bookableDeleted: false,
         bookings: 48,
         cancellations: 3,
       },
       {
         bookableId: "room-b",
         bookableTitle: "Raum B",
+        bookableDeleted: false,
         bookings: 10,
         cancellations: 0,
       },
