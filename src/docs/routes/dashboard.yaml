@@ -327,6 +327,12 @@ components:
                 type: string
               bookableTitle:
                 type: string
+                description: >
+                  Live bookable title when the bookable still exists; otherwise
+                  the title snapshot stored on the booking (`_bookableUsed.title`).
+              bookableDeleted:
+                type: boolean
+                description: True when the bookable no longer exists.
               bookings:
                 type: integer
               cancellations:
