@@ -1,4 +1,5 @@
 const { AccessPointType } = require("../../schemas/accessPointSchema");
+const { compartmentsAt } = require("./access-point-amounts");
 
 const IFBS = "ifbs";
 
@@ -7,9 +8,10 @@ const IFBS = "ifbs";
  * fold, derived from the locker rows the bookable references: `active`
  * while the bookable's access points are switched on and a locker system
  * is among them, one unit per row in the shape the row's provider used to
- * be configured in - an iFBS location, a Pareva size - with the bookable's
- * amount as the unit's, since capacity is the bookable's. Nothing writes
- * it; the rows are the truth.
+ * be configured in - an iFBS location, a Pareva size - with the
+ * compartments the bookable distributes to that row as the unit's amount,
+ * its own amount where it distributes none. Nothing writes it; the rows
+ * are the truth.
  *
  * @param {Object} bookable The bookable, read for `accessPointDetails` and
  *   `amount`
@@ -25,7 +27,9 @@ function deriveLockerDetails(bookable, accessPoints) {
       referenced.includes(String(accessPoint.id)),
   );
   const amount = Number(bookable.amount);
-  const units = rows.map((row) => toUnit(row, amount));
+  const units = rows.map((row) =>
+    toUnit(row, compartmentsAt(bookable, row.id, amount)),
+  );
 
   return {
     active: details.active === true && units.length > 0,

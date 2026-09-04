@@ -112,9 +112,28 @@ function bookable(id, title, accessPointIds, amount = 2) {
   };
 }
 
+/**
+ * A bookable at both locker systems whose `amount` is distributed over
+ * them by the editor: so many compartments here, so many there - not the
+ * amount again at every system. A system left out of `accessPointAmounts`
+ * is meant to keep what it had before there was a distribution.
+ */
+function distributed(id, title, amount, accessPointAmounts) {
+  const item = bookable(id, title, [BIKE_BOXES.id, SIZE_S_LOCKERS.id], amount);
+  item.accessPointDetails.accessPointAmounts = accessPointAmounts;
+  return item;
+}
+
 const BOOKABLES = {
   bikebox: bookable("bikebox", "Fahrradbox", [BIKE_BOXES.id]),
   "locker-s": bookable("locker-s", "Schließfach S", [SIZE_S_LOCKERS.id]),
+  distributed: distributed("distributed", "Anlagen gemischt", 3, {
+    [BIKE_BOXES.id]: 1,
+    [SIZE_S_LOCKERS.id]: 2,
+  }),
+  "half-distributed": distributed("half-distributed", "Teilweise verteilt", 3, {
+    [SIZE_S_LOCKERS.id]: 2,
+  }),
 };
 
 describe("Compartments on the access seam", function () {
@@ -386,6 +405,43 @@ describe("Compartments on the access seam", function () {
       await AccessService.holdForBooking(TENANT, "booking-1");
 
       expect(compartments()).to.have.length(0);
+    });
+  });
+
+  describe("the amount per locker system", function () {
+    const at = (accessPointId) =>
+      compartments().filter((entry) => entry.accessPointId === accessPointId);
+
+    it("takes the number of compartments of each system from the bookable's distribution, not the booked amount at every system", async function () {
+      storeBooking("distributed", 3);
+
+      await AccessService.holdForBooking(TENANT, "booking-1");
+
+      expect(at(BIKE_BOXES.id)).to.have.length(1);
+      expect(at(SIZE_S_LOCKERS.id)).to.have.length(2);
+      expect(compartments()).to.have.length(3);
+    });
+
+    it("gives a system without a number what the booking books, as before the distribution", async function () {
+      storeBooking("half-distributed", 1);
+
+      await AccessService.holdForBooking(TENANT, "booking-1");
+
+      expect(at(BIKE_BOXES.id)).to.have.length(1);
+      expect(at(SIZE_S_LOCKERS.id)).to.have.length(2);
+    });
+
+    it("keeps the distribution when the booked amount changes - the number is the bookable's, not the booking's", async function () {
+      storeBooking("distributed", 3);
+      await AccessService.holdForBooking(TENANT, "booking-1");
+      const booking = stored();
+      booking.bookableItems = [{ bookableId: "distributed", amount: 1 }];
+      store.set(booking.id, booking);
+
+      await AccessService.holdForBooking(TENANT, "booking-1");
+
+      expect(at(BIKE_BOXES.id)).to.have.length(1);
+      expect(at(SIZE_S_LOCKERS.id)).to.have.length(2);
     });
   });
 
