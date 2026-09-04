@@ -36,6 +36,10 @@ describe("authorization on the access, locker, catalog and calendar routes", fun
   this.timeout(20000);
 
   let h;
+  // The harness and the route world stub in `before` and stand for the whole
+  // suite; what a single test stubs goes into its own sandbox, so restoring
+  // it does not take the world down with it.
+  let sandbox;
 
   before(async function () {
     h = await installHarness({
@@ -53,6 +57,14 @@ describe("authorization on the access, locker, catalog and calendar routes", fun
       ownerUserId: ROLE_HOLDER,
       bookables: h.bookables,
     });
+  });
+
+  beforeEach(function () {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(function () {
+    sandbox.restore();
   });
 
   after(async function () {
@@ -113,7 +125,7 @@ describe("authorization on the access, locker, catalog and calendar routes", fun
   });
 
   it("opens the locker facade and the audit export to whoever may read them", async function () {
-    sinon.stub(AccessInfoService, "getAccessPoints").resolves([]);
+    sandbox.stub(AccessInfoService, "getAccessPoints").resolves([]);
 
     expect((await get("/locker/nuki/locations", CUSTOMER)).status).to.equal(
       403,
@@ -126,8 +138,6 @@ describe("authorization on the access, locker, catalog and calendar routes", fun
     expect((await get("/access/audit/export", ROLE_HOLDER)).status).to.equal(
       200,
     );
-
-    AccessInfoService.getAccessPoints.restore();
   });
 
   it("keeps the scan resolver behind a login and nothing more", async function () {

@@ -76,18 +76,19 @@ describe("authorization on the media routes", function () {
     await h.close();
   });
 
-  /** Puts one medium behind the lookup for the length of a test. */
-  function serve(value, booking) {
-    MediaManager.getMedia.restore();
-    sinon.stub(MediaManager, "getMedia").resolves(value);
-    if (booking) {
-      BookingManager.getBooking.restore();
-      sinon.stub(BookingManager, "getBooking").resolves(booking);
-    }
+  /**
+   * Teaches the world's two lookups what this test is about. The stubs are
+   * the route world's and stand for the whole suite; a test only says what
+   * they answer, so nothing of it leaks into the next one - `beforeEach`
+   * puts both back.
+   */
+  function serve(value, booking = null) {
+    MediaManager.getMedia.resolves(value);
+    BookingManager.getBooking.resolves(booking);
   }
 
-  afterEach(function () {
-    serve(media(), null);
+  beforeEach(function () {
+    serve(media());
   });
 
   const call = (method, path, userId) => {
@@ -164,8 +165,6 @@ describe("authorization on the media routes", function () {
   });
 
   it("serves a public file anonymously in both libraries", async function () {
-    serve(media());
-
     expect((await get(tenantMedia("/file"))).status).to.equal(200);
     expect((await get(instanceMedia("/file"))).status).to.equal(200);
   });
