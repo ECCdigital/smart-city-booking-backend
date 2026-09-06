@@ -81,7 +81,7 @@ Ein physischer Zugangspunkt, den die Plattform über einen Provider (z.B. NUKI, 
 _Avoid_: Tür (als Entity-Name), Door, Schloss, Lock, Locker
 
 **Schließfachanlage**:
-Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Die Plattform kennt vor der Buchung nur die Anlage, nie das Fach. Kapazität ist Sache des Bookables, nicht der Anlage.
+Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Die Plattform kennt vor der Buchung nur die Anlage, nie das Fach. Kapazität ist Sache des Bookables, nicht der Anlage: `amount` gilt insgesamt und wird über `accessPointDetails.accessPointAmounts` auf die Anlagen des Bookables verteilt, nicht an jeder Anlage erneut geschuldet. Eine Anlage, zu der nichts verteilt ist, bekommt so viele Fächer, wie die Position der Buchung bucht.
 _Avoid_: Locker, Locker-Unit, Location (als Entity), Schließfach (unqualifiziert — das ist das Fach)
 
 **Fach**:
