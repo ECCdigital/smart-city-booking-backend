@@ -1,11 +1,13 @@
 /**
  * The admin PUT as a plan (BookingLifecycle spec, part 1, section 6).
  *
- * The PUT keeps carrying the three flags. `planUpdate` reads them against
- * the state the booking is in and answers the lifecycle transitions the
+ * The PUT may carry the three flags. `planUpdate` reads them against the
+ * state the booking is in and answers the lifecycle transitions the
  * update needs: `amend` first, the content change, then the state changes
  * the flags ask for, each one atomic for itself. Flags no sequence of
- * transitions reaches are a `BadRequestError invalid_status_change`.
+ * transitions reaches are a `BadRequestError invalid_status_change`. A
+ * form that carries none of the flags says "state unchanged": the plan is
+ * `[amend]` alone (booking strand ticket 1).
  *
  * Pure. `booking-checkout.js` (`updateBooking`) runs the plan.
  */
@@ -15,6 +17,7 @@ const {
   STATUS,
   TRANSITION,
   nextState,
+  carriesFlags,
   normalizeFlags,
   flagsFromStatus,
   isImpossibleFlagCombination,
@@ -90,7 +93,7 @@ function flagsAfter(path, currentStatus, priceEur, cancelledFrom) {
  *
  * @param {string} currentStatus The state the booking is in
  * @param {{ isCommitted?: boolean, isPayed?: boolean, isRejected?: boolean }} requestedFlags
- *   The flags the PUT carries
+ *   The flags the PUT carries; none of them present is "state unchanged"
  * @param {number} priceEur The price the booking has after the update
  * @param {{ cancelledFrom?: string }} [context] The state a cancelled booking
  *   was cancelled from (`cancellationRefund.cancelledFrom`)
@@ -103,6 +106,10 @@ function planUpdate(
   priceEur,
   { cancelledFrom } = {},
 ) {
+  if (!carriesFlags(requestedFlags)) {
+    return [TRANSITION.AMEND];
+  }
+
   const requested = normalizeFlags(requestedFlags);
   const current = flagsFromStatus(currentStatus, priceEur, cancelledFrom);
 

@@ -160,6 +160,44 @@ describe("the initial state of a booking at the checkout", function () {
       );
     });
 
+    // Booking strand ticket 1: the administration names the state as
+    // `status`; it wins over the flags, and `confirmed` with a price needs
+    // the payment named.
+    it("starts where `status` says, whatever the flags say", async function () {
+      const booking = await bundle(CheckoutPolicy.ADMIN_MANUAL, {
+        status: "requested",
+        isCommitted: true,
+        isPayed: true,
+      }).prepareBooking();
+
+      assert.strictEqual(booking.status, "requested");
+    });
+
+    it("refuses a `status` a booking cannot be born in with 400 invalid_status", async function () {
+      for (const status of ["rejected", "cancelled", "paid"]) {
+        await assert.rejects(
+          bundle(CheckoutPolicy.ADMIN_MANUAL, { status }).prepareBooking(),
+          (err) =>
+            err instanceof BadRequestError &&
+            err.code === "invalid_status" &&
+            err.params.status === status,
+        );
+      }
+    });
+
+    it("refuses `confirmed` with a price and no payment named with 400 missing_payment_details", async function () {
+      await assert.rejects(
+        bundle(CheckoutPolicy.ADMIN_MANUAL, {
+          status: "confirmed",
+          paymentMethod: "CASH",
+        }).prepareBooking(),
+        (err) =>
+          err instanceof BadRequestError &&
+          err.code === "missing_payment_details" &&
+          err.params.missing.join() === "timePaid",
+      );
+    });
+
     it("refuses a booking born cancelled with 400 invalid_status", async function () {
       await assert.rejects(
         bundle(CheckoutPolicy.ADMIN_MANUAL, {

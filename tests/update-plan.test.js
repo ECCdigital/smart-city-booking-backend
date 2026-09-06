@@ -147,8 +147,51 @@ describe("update-plan: planUpdate", function () {
     }
   });
 
-  it("reads missing flags as false", function () {
-    expect(planUpdate("requested", {}, 40)).to.deep.equal(["amend"]);
+  // Since the booking strand's ticket 1 a form that carries none of the
+  // three flags says "state unchanged": the plan is `[amend]` from every
+  // state, the reinstatement of a rejected booking included. A form that
+  // carries one flag speaks in flags, and the missing ones read as false
+  // as before.
+  describe("a form without flags: the state stays", function () {
+    const CASES = [
+      // [current, cancelledFrom, plan]
+      ["requested", undefined, ["amend"]],
+      ["payment_due", undefined, ["amend"]],
+      ["confirmed", undefined, ["amend"]],
+      ["rejected", undefined, ["amend"]],
+      ["cancelled", "confirmed", ["amend"]],
+      ["cancelled", "payment_due", ["amend"]],
+    ];
+
+    for (const [current, cancelledFrom, expected] of CASES) {
+      it(`${current}${cancelledFrom ? ` from ${cancelledFrom}` : ""} + no flags → ${JSON.stringify(expected)}`, function () {
+        expect(plan(current, {}, 40, { cancelledFrom })).to.deep.equal(
+          expected,
+        );
+      });
+    }
+
+    it("a body without the three keys at all is a form without flags", function () {
+      expect(plan("confirmed", { comment: "geändert" }, 40)).to.deep.equal([
+        "amend",
+      ]);
+    });
+
+    it("a flag that is present reads the missing ones as false, as before", function () {
+      expect(plan("requested", { isCommitted: true }, 40)).to.deep.equal([
+        "amend",
+        "confirm",
+      ]);
+      expect(plan("rejected", { isRejected: false }, 40)).to.deep.equal([
+        "amend",
+        "reinstate",
+      ]);
+      expect(plan("confirmed", { isRejected: false }, 40)).to.equal(BAD);
+      expect(plan("payment_due", { isPayed: true }, 40)).to.equal(BAD);
+    });
+  });
+
+  it("reads a flag that is present but not boolean as a boolean", function () {
     expect(planUpdate("requested", { isCommitted: 1 }, "40")).to.deep.equal([
       "amend",
       "confirm",

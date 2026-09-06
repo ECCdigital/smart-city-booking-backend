@@ -1,0 +1,145 @@
+/api/{tenant}/bookings:
+  put:
+    tags:
+      - Bookings
+    summary: Create a manual booking, or update one
+    description: |
+      Without an `id` the administration books on behalf of a customer (a
+      manual booking): the booking is prepared, stored in the state the
+      form names and admitted to the lifecycle - the compartments held or
+      the access granted, the receipt of a paid booking issued, the
+      customer, the tenant and the supervisors mailed. The state is named
+      as `status` (`requested`, `payment_due` or `confirmed`; an explicit
+      `status` wins over the three flags sent with it), or in the older
+      form of the flags `isCommitted` and `isPayed`.
+
+      With an `id` the booking is updated: the content change (`amend`)
+      first, then the transitions the three flags ask for, each atomic for
+      itself. A body that carries none of `isCommitted`, `isPayed` and
+      `isRejected` is the content change alone, the state stays; a body
+      that carries any of them reads the missing ones as `false`. The
+      transitions have routes of their own (`/commit`, `/pay`, `/reject`,
+      `/reinstate`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: The booking to update; absent on a create
+              tenantId:
+                type: string
+              status:
+                type: string
+                enum: [requested, payment_due, confirmed]
+                description: |
+                  Create only: the state the booking starts in. `confirmed`
+                  on a priced booking needs `paymentMethod` and `timePaid`.
+                  Discarded on an update, where the state is not an input.
+              paymentMethod:
+                type: string
+                description: The payment method of a booking born confirmed
+              timePaid:
+                type: integer
+                description: The moment of the payment as a Unix timestamp in milliseconds, of a booking born confirmed
+              isCommitted:
+                type: boolean
+                description: The older form of the state; on an update, the flags are the plan of transitions
+              isPayed:
+                type: boolean
+              isRejected:
+                type: boolean
+              timeBegin:
+                type: integer
+              timeEnd:
+                type: integer
+              bookableItems:
+                type: array
+                items:
+                  type: object
+              name:
+                type: string
+              mail:
+                type: string
+              paymentProvider:
+                type: string
+    responses:
+      "200":
+        description: Created - the booking as stored, with its attachments
+      "201":
+        description: Updated - the booking as stored
+      "400":
+        description: >-
+          `invalid_status` - a state a booking cannot be born in (params carry
+          `status`, or the flags); `missing_payment_details` - `confirmed`
+          with a price and no payment named (params carry `status` and
+          `missing`); `invalid_status_change` - flags no transition reaches on
+          an update (params carry `status` and `requested`)
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: Booking not found on an update
+      "409":
+        description: >-
+          `invalid_transition` - the booking moved between the load and the
+          write, a payment webhook say (params carry `bookingId`, `status`,
+          `transition`)
+
+/api/{tenant}/bookings/{bookingId}/reinstate:
+  post:
+    tags:
+      - Bookings
+    summary: Reinstate a rejected or cancelled booking
+    description: |
+      Brings a rejected booking back to `requested` and a cancelled one back
+      to the state it was cancelled from, with price and positions of before;
+      the refund audit is removed and the reason cleared. The access is
+      granted again at `confirmed`, held at `requested` or `payment_due`. No
+      document, no mail. Answer and errors as `POST /bookings/{id}/pay`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdParam"
+    responses:
+      "200":
+        description: "Booking reinstated (`success: true`, `data: null`, `errors: []`)"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Missing booking management permission
+      "404":
+        description: "`booking_not_found`"
+      "409":
+        description: >-
+          `invalid_transition` - the booking is not rejected or cancelled, or
+          a cancelled one does not know what it was cancelled from (params
+          carry `bookingId`, `status`, `transition`)
+      "500":
+        description: "`booking_reinstatement_failed` - the reinstatement aborted, the booking stays as it was"
+
+components:
+  parameters:
+    BookingTenantParam:
+      name: tenant
+      in: path
+      required: true
+      description: Tenant identifier
+      schema:
+        type: string
+    BookingIdParam:
+      name: bookingId
+      in: path
+      required: true
+      description: Booking identifier
+      schema:
+        type: string

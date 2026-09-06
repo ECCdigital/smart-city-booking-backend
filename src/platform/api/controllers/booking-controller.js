@@ -48,9 +48,10 @@ const logger = bunyan.createLogger({
 });
 
 /**
- * A booking as the request describes it. The HTTP form speaks in the three
- * flags; a `status` the client sends back from a GET is not an input and
- * would otherwise outrank the flags it edited.
+ * A booking as the request describes it, for the update and the upsert
+ * decision - the create does not read one (`createBooking`). On an update
+ * the state is not an input: a `status` the client sends back from a GET
+ * would otherwise outrank the flags it edited, so it is discarded here.
  */
 function bookingFromRequest(body = {}) {
   const fields = { ...body };
@@ -394,21 +395,23 @@ class BookingController {
 
   static async createBooking(request, response, next) {
     const user = request.user;
-    const booking = bookingFromRequest(request.body);
     const tenantId = request.params.tenant;
 
     // The obsolete PUT carries the update marker; the creation is the
     // adapter's second decision (authorize spec §5, §11).
     if (decide(request.principal, "booking", "create") !== "any") {
       logger.warn(
-        `${booking.tenantId} -- User ${user?.id} is not allowed to create booking.`,
+        `${tenantId} -- User ${user?.id} is not allowed to create booking.`,
       );
       return next(new ForbiddenError());
     }
 
+    // The body as sent is the checkout's: `status` names the state the
+    // booking starts in (booking strand ticket 1), so no entity is read
+    // off it here.
     const { checkoutId } = await resolveCheckoutId(
       undefined,
-      booking.mail,
+      request.body.mail,
       tenantId,
     );
 
@@ -569,6 +572,36 @@ class BookingController {
       answerTransitionError(err, response, {
         code: "set_booking_payed_failed",
         fallback: "Could not set booking as paid",
+      });
+    }
+  }
+
+  /**
+   * The reinstatement of a rejected or cancelled booking (glossary
+   * "Wiederherstellung"): the lifecycle transition `reinstate` by the
+   * administration, on a route of its own since the booking strand's
+   * ticket 1. Answer and errors as `pay`.
+   */
+  static async reinstateBooking(request, response) {
+    try {
+      const { tenant, id } = request.params;
+      const { user } = request;
+
+      logger.info(`${tenant} -- reinstating booking ${id} by user ${user?.id}`);
+      // A booking the lifecycle does not find is its `NotFoundError`, the
+      // 404 of `answerTransitionError`.
+      await bookingLifecycle.reinstate(tenant, id, {
+        trigger: TRIGGER.ADMIN,
+      });
+      return response.status(200).send({
+        success: true,
+        data: null,
+        errors: [],
+      });
+    } catch (err) {
+      answerTransitionError(err, response, {
+        code: "booking_reinstatement_failed",
+        fallback: "Could not reinstate booking",
       });
     }
   }
