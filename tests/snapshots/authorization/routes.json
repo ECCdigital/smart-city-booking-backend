@@ -972,6 +972,13 @@
     "tenantOwner": 409,
     "instanceOwner": 409
   },
+  "POST /api/:tenant/bookings/:id/reinstate": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 409,
+    "tenantOwner": 409,
+    "instanceOwner": 409
+  },
   "GET /api/:tenant/bookings/:id/cancellation-refund-preview": {
     "anonymous": 401,
     "signedIn": 200,

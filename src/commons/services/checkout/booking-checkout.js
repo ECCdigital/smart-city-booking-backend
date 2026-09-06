@@ -42,7 +42,10 @@ const {
   TRANSITION,
   TRIGGER,
 } = require("../booking-lifecycle");
-const { normalizeFlags } = require("../booking-lifecycle/booking-state");
+const {
+  carriesFlags,
+  normalizeFlags,
+} = require("../booking-lifecycle/booking-state");
 const { planUpdate } = require("../booking-lifecycle/update-plan");
 const BookingService = require("./booking-service");
 
@@ -170,9 +173,12 @@ async function createBooking({
     comment,
     attachmentStatus,
     paymentProvider,
+    status,
     isCommitted,
     isPayed,
     isRejected,
+    paymentMethod,
+    timePaid,
     bookWithoutDiscount,
     customFieldValues: rawCustomFieldValues,
     cancellationPolicy,
@@ -197,13 +203,20 @@ async function createBooking({
     ? await resolveCheckoutItems(bookableItems, tenantId)
     : bookableItems;
 
-  const adminOverrides = checkoutPolicy.acceptsAdminOverrides(policy)
+  // The administration names the state the booking starts in as `status`
+  // (booking strand ticket 1), or in the older form of the three flags;
+  // `initialStatus` reads them. The payment of a booking born confirmed
+  // is what the form says.
+  const manual = checkoutPolicy.acceptsAdminOverrides(policy);
+  const adminOverrides = manual
     ? {
         internalComments: bookingAttempt.internalComments || "",
         rejectionReason: bookingAttempt.rejectionReason || "",
+        status,
         isCommitted: Boolean(isCommitted),
         isPayed: Boolean(isPayed),
         isRejected: Boolean(isRejected),
+        paymentMethod,
         cancellationPolicy,
       }
     : undefined;
@@ -214,6 +227,7 @@ async function createBooking({
       tenant: tenantId,
       timeBegin,
       timeEnd,
+      timePaid: manual ? timePaid : undefined,
       bookableItems: checkoutItems,
       couponCode,
       name,
@@ -511,7 +525,8 @@ async function runUpdateTransition(tenantId, transition, { booking, userId }) {
  * `planUpdate` reads the three flags of the form against the state the
  * booking is in and answers the transitions the update needs - `amend`
  * first, the content change, then what the flags ask for - and each runs
- * for itself, atomic, in order. There is no rollback across transitions:
+ * for itself, atomic, in order. A form that carries none of the flags is
+ * the content change alone, whatever the state. There is no rollback across transitions:
  * where transition k fails, 1..k-1 stand and the error of k is the
  * answer. Flags no sequence of transitions reaches are refused with
  * `BadRequestError invalid_status_change` before anything is written.
@@ -524,8 +539,9 @@ async function runUpdateTransition(tenantId, transition, { booking, userId }) {
  * @param {{ requestBody?: Object, userId?: string|null }} [options] The
  *   form as it was sent, whose three flags the plan reads (the entity
  *   derives its flags from the state it read off them, so "paid but not
- *   confirmed" is not visible on it any more), and the user updating,
- *   named at the cancellation the plan runs
+ *   confirmed" is not visible on it any more; a caller without a body hands
+ *   the entity, which always carries the three, so it speaks in flags),
+ *   and the user updating, named at the cancellation the plan runs
  * @returns {Promise<Booking>} The booking as it is stored afterwards
  * @throws {NotFoundError} `booking_not_found`
  * @throws {BadRequestError} `invalid_status_change`, or the code of a
@@ -547,8 +563,13 @@ async function updateBooking(
     });
   }
 
-  const flags = normalizeFlags(requestBody);
-  const onUnreject = oldBooking.isRejected && !flags.isRejected;
+  // A form without any of the three flags is a content change alone
+  // (booking strand ticket 1): the plan is `[amend]`, and nothing of the
+  // reinstatement below applies.
+  const speaksInFlags = carriesFlags(requestBody);
+  const flags = speaksInFlags ? normalizeFlags(requestBody) : {};
+  const onUnreject =
+    speaksInFlags && oldBooking.isRejected && !flags.isRejected;
 
   const { checkoutId } = await resolveCheckoutId(
     undefined,

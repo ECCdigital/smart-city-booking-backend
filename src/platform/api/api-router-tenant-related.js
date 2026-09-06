@@ -212,6 +212,11 @@ router.post(
   authorize("booking", "pay"),
   BookingController.payBooking,
 );
+router.post(
+  "/bookings/:id/reinstate",
+  authorize("booking", "update"),
+  BookingController.reinstateBooking,
+);
 router.get(
   "/bookings/:id/cancellation-refund-preview",
   authorize("booking", "cancel"),

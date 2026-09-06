@@ -153,6 +153,21 @@ function nextState(status, transition, booking = {}) {
   return target;
 }
 
+const FLAGS = Object.freeze(["isCommitted", "isPayed", "isRejected"]);
+
+/**
+ * Whether a body speaks in flags at all: at least one of the three is
+ * present. A body without them says "state unchanged" (spec part 1,
+ * section 6, booking strand ticket 1); one with any of them reads the
+ * missing ones as false (`normalizeFlags`).
+ *
+ * @param {{ isCommitted?: boolean, isPayed?: boolean, isRejected?: boolean }} [body]
+ * @returns {boolean}
+ */
+function carriesFlags(body = {}) {
+  return FLAGS.some((flag) => body[flag] !== undefined);
+}
+
 /**
  * The three flags as booleans, missing ones read as false.
  *
@@ -271,6 +286,7 @@ module.exports = {
   TRIGGER,
   TRIGGERS,
   nextState,
+  carriesFlags,
   normalizeFlags,
   flagsFromStatus,
   cancelledFromFlags,

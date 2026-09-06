@@ -8,6 +8,7 @@ const { COUPON_TYPE } = require("../../entities/coupon/coupon");
 const { primaryEmailFromMail } = require("../../utilities/checkout-utils");
 const {
   STATUS,
+  LIVE_STATUSES,
   normalizeFlags,
   statusFromFlags,
   isImpossibleFlagCombination,
@@ -54,6 +55,8 @@ class BundleCheckoutService {
    *   admin-authoritative values. Passing this under SELF_SERVICE is an error.
    * @param {string} [adminOverrides.internalComments]
    * @param {string} [adminOverrides.rejectionReason]
+   * @param {string} [adminOverrides.status] - The state the booking starts
+   *   in, `requested | payment_due | confirmed`; wins over the three flags.
    * @param {boolean} [adminOverrides.isCommitted] - With `isPayed` and
    *   `isRejected` the flags the administration's form speaks in; the
    *   checkout reads the initial state off them (`initialStatus`).
@@ -354,17 +357,41 @@ class BundleCheckoutService {
    * The state a booking starts its life in (spec part 1, 5.1; glossary
    * "Aufnahme"): a self-service booking is a request, or - where every
    * bookable confirms at once - awaits payment with a price and is
-   * confirmed without one; a manual booking starts where the flags of the
-   * administration say. Flags no state stands for - paid but never
-   * confirmed, or born cancelled - are refused before the booking exists.
+   * confirmed without one; a manual booking starts where the
+   * administration says - as `status` (booking strand ticket 1), which
+   * wins over the three flags, or in the flags. A state a booking cannot
+   * be born in - rejected, cancelled, one the model does not know; in
+   * flags, paid but never confirmed - is refused before the booking
+   * exists, as is `confirmed` with a price and no payment named.
    *
    * @returns {Promise<string>} One of the booking states
-   * @throws {BadRequestError} `invalid_status`
+   * @throws {BadRequestError} `invalid_status`, `missing_payment_details`
    */
   async initialStatus() {
     const priceEur = await this.userGrossPriceEur();
 
     if (checkoutPolicy.acceptsAdminOverrides(this.policy)) {
+      // Only an absent `status` falls back to the flags; a key that is sent
+      // - `null` or empty included - is judged as the state it names.
+      const { status } = this.adminOverrides;
+      if (status !== undefined) {
+        if (!LIVE_STATUSES.includes(status)) {
+          throw new BadRequestError("invalid_status", { status });
+        }
+        if (status === STATUS.CONFIRMED && priceEur > 0) {
+          const missing = [];
+          if (!this.adminOverrides.paymentMethod) missing.push("paymentMethod");
+          if (!this.timePaid) missing.push("timePaid");
+          if (missing.length > 0) {
+            throw new BadRequestError("missing_payment_details", {
+              status,
+              missing,
+            });
+          }
+        }
+        return status;
+      }
+
       const flags = normalizeFlags(this.adminOverrides);
       if (flags.isRejected || isImpossibleFlagCombination(flags, priceEur)) {
         throw new BadRequestError("invalid_status", flags);

@@ -129,6 +129,8 @@ const TABLE = {
     invoice: { any: "manageBookings.updateAny" },
     // The admin PUT.
     create: { any: "manageBookings.create" },
+    // The admin PUT, and `POST /bookings/:id/reinstate` - the
+    // reinstatement the PUT reached by clearing `isRejected` before.
     update: { any: "manageBookings.updateAny" },
     commit: { any: "manageBookings.updateAny" },
     pay: { any: "manageBookings.updateAny" },

@@ -40,6 +40,7 @@ const {
 const {
   BookingStatusAction,
 } = require("../src/commons/services/workflow/workflow-action");
+const BookingCheckout = require("../src/commons/services/checkout/booking-checkout");
 
 describe("booking lifecycle today: what each state change does at the seam", function () {
   let h;
@@ -265,6 +266,118 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(res.body.code).to.equal("invalid_status");
       expect(h.store.size).to.equal(0);
       expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    // Since the booking strand's ticket 1 a manual booking names the state
+    // it starts in as `status` (`requested | payment_due | confirmed`);
+    // the flags stay as the older form of the same choice.
+    describe("a manual booking with a `status`", function () {
+      const create = (body) =>
+        api()
+          .put(`/api/${TENANT}/bookings`)
+          .set(h.as(ADMIN))
+          .send({ tenantId: TENANT, ...checkoutBody("room"), ...body });
+
+      it("`requested` arrives as requested", async function () {
+        const booking = await h.manualBooking("room", { status: "requested" });
+
+        expect(stateOf(h.stored(booking.id))).to.equal("requested");
+        expect(h.takeEffects()).to.deep.equal([
+          "store.save B1 requested",
+          "access.hold B1",
+          "workflow.onCreate B1",
+          "mail.BOOKING_REQUEST_CONFIRMATION erika@example.test",
+          "mail.INCOMING_BOOKING stadt@example.test",
+          "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
+        ]);
+      });
+
+      it("`payment_due` arrives awaiting payment and is asked to pay", async function () {
+        const booking = await h.manualBooking("room", {
+          status: "payment_due",
+        });
+
+        expect(stateOf(h.stored(booking.id))).to.equal("payment_due");
+        expect(h.takeEffects()).to.deep.equal([
+          "store.save B1 payment_due",
+          "access.hold B1",
+          "workflow.onCreate B1",
+          "payment.paymentRequest B1",
+          "mail.PAYMENT_LINK_AFTER_APPROVAL erika@example.test",
+          "mail.INCOMING_BOOKING stadt@example.test",
+          "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
+        ]);
+      });
+
+      it("`confirmed` with the payment named arrives confirmed and paid: granted, receipted, the payment recorded", async function () {
+        const booking = await h.manualBooking("room", {
+          status: "confirmed",
+          paymentMethod: "CASH",
+          timePaid: 1700000000000,
+        });
+
+        const stored = h.stored(booking.id);
+        expect(stateOf(stored)).to.equal("confirmed");
+        expect(stored).to.include({
+          paymentMethod: "CASH",
+          timePaid: 1700000000000,
+        });
+        expect(h.takeEffects()).to.deep.equal([
+          "store.save B1 confirmed",
+          "access.hold B1",
+          "access.provision B1",
+          "documents.receipt B1",
+          "store.attach B1 receipt",
+          "workflow.onCreate B1",
+          "mail.BOOKING_CONFIRMATION erika@example.test [RE-1.pdf,buchung-B1.ics]",
+          "mail.INCOMING_BOOKING stadt@example.test",
+          "mail.SUPERVISOR_BOOKING_NOTIFICATION chef@example.test",
+        ]);
+      });
+
+      it("`confirmed` on a priced booking without the payment is 400 missing_payment_details: nothing is written", async function () {
+        const res = await create({ status: "confirmed" });
+
+        expect(res.status).to.equal(400);
+        expect(res.body.code).to.equal("missing_payment_details");
+        expect(res.body.params).to.deep.equal({
+          status: "confirmed",
+          missing: ["paymentMethod", "timePaid"],
+        });
+        expect(h.store.size).to.equal(0);
+        expect(h.takeEffects()).to.deep.equal([]);
+      });
+
+      it("`confirmed` on a free booking needs no payment", async function () {
+        const booking = await h.manualBooking("free-room", {
+          status: "confirmed",
+        });
+
+        expect(stateOf(h.stored(booking.id))).to.equal("confirmed");
+        expect(h.stored(booking.id)).to.include({ priceEur: 0 });
+      });
+
+      it("a state a booking cannot be born in is 400 invalid_status: rejected, cancelled, or one the model does not know", async function () {
+        for (const status of ["rejected", "cancelled", "paid"]) {
+          const res = await create({ status });
+
+          expect(res.status, status).to.equal(400);
+          expect(res.body.code, status).to.equal("invalid_status");
+          expect(res.body.params, status).to.deep.equal({ status });
+        }
+        expect(h.store.size).to.equal(0);
+        expect(h.takeEffects()).to.deep.equal([]);
+      });
+
+      it("an explicit `status` wins over flags sent with it", async function () {
+        const booking = await h.manualBooking("room", {
+          status: "requested",
+          isCommitted: true,
+          isPayed: true,
+        });
+
+        expect(stateOf(h.stored(booking.id))).to.equal("requested");
+      });
     });
 
     it("a hold that fails rolls the booking back: it never existed, and the checkout answers what the hold threw", async function () {
@@ -1297,9 +1410,222 @@ describe("booking lifecycle today: what each state change does at the seam", fun
       expect(stateOf(h.stored(id))).to.equal("confirmed");
       expect(h.takeEffects()).to.deep.equal([]);
     });
+
+    // Since the booking strand's ticket 1 a form without any of the three
+    // flags says "state unchanged": the plan is `[amend]`, whatever the
+    // state - before, the missing flags read as false, which was a 400 on
+    // a confirmed booking and a silent reinstatement on a rejected one.
+    describe("a form without flags is a content change alone", function () {
+      /** The admin form without the three flags: content only. */
+      const contentForm = (id, changes) => {
+        const form = adminForm(h.stored(id), changes);
+        delete form.isCommitted;
+        delete form.isPayed;
+        delete form.isRejected;
+        return form;
+      };
+      const updateContent = (id, changes) =>
+        api()
+          .put(`/api/${TENANT}/bookings`)
+          .set(h.as(ADMIN))
+          .send(contentForm(id, changes));
+
+      it("moves a paid booking: [amend], not the 400 of 'confirmed cannot become a request'", async function () {
+        const id = await bookingIn("confirmed");
+
+        const res = await updateContent(id, {
+          timeBegin: TIME_BEGIN + DAY,
+          timeEnd: TIME_END + DAY,
+        });
+
+        expect(res.status).to.equal(201);
+        expect(res.body).to.include({ id, timeBegin: TIME_BEGIN + DAY });
+        expect(stateOf(h.stored(id))).to.equal("confirmed");
+        expect(h.takeEffects()).to.deep.equal([
+          "store.save B1 confirmed [receipt]",
+          "access.update B1",
+        ]);
+      });
+
+      it("changes a rejected request: it stays rejected, no reinstatement, the reason and the audit kept", async function () {
+        const id = await bookingIn("requested");
+        await reject(id, { reason: "Kein Platz" });
+        h.clearEffects();
+
+        const res = await updateContent(id, { comment: "nachgetragen" });
+
+        expect(res.status).to.equal(201);
+        const stored = h.stored(id);
+        expect(stateOf(stored)).to.equal("rejected");
+        expect(stored).to.include({
+          comment: "nachgetragen",
+          rejectionReason: "Kein Platz",
+        });
+        expect(h.takeEffects()).to.deep.equal([
+          "store.save B1 rejected [cancellation]",
+        ]);
+      });
+
+      it("a booking that moved between the load and the write is the 409 of the content write, as before: nothing written", async function () {
+        const id = await bookingIn("payment_due");
+        // The payment webhook lands once the update has loaded the booking
+        // (the harness reads the store twice for one load).
+        const updateBooking = BookingCheckout.updateBooking;
+        sinon
+          .stub(BookingCheckout, "updateBooking")
+          .callsFake(async (...args) => {
+            let reads = 0;
+            h.store.get = function (key) {
+              const document = Map.prototype.get.call(this, key);
+              if (key === id && ++reads === 2) {
+                this.set(id, {
+                  ...document,
+                  status: "confirmed",
+                  isPayed: true,
+                });
+              }
+              return document;
+            };
+            try {
+              return await updateBooking(...args);
+            } finally {
+              delete h.store.get;
+            }
+          });
+
+        const res = await updateContent(id, { comment: "zu spät" });
+
+        expect(res.status).to.equal(409);
+        expect(res.body).to.include({ code: "invalid_transition" });
+        // The params name the state the booking is in now, not the one
+        // the form knew: what the admin UI shows on a 409.
+        expect(res.body.params).to.deep.equal({
+          bookingId: id,
+          status: "confirmed",
+          transition: "amend",
+        });
+        expect(stateOf(h.stored(id))).to.equal("confirmed");
+        expect(h.stored(id).comment).to.not.equal("zu spät");
+        expect(h.takeEffects()).to.deep.equal([]);
+      });
+
+      it("changes a cancelled booking: it stays cancelled with its refund audit", async function () {
+        const id = await bookingIn("confirmed");
+        await reject(id, { reason: "Irrtum", refundPercentage: 50 });
+        h.clearEffects();
+
+        const res = await updateContent(id, { comment: "moved" });
+
+        expect(res.status).to.equal(201);
+        const stored = h.stored(id);
+        expect(stateOf(stored)).to.equal("cancelled");
+        expect(stored.cancellationRefund).to.include({
+          appliedRefundPercentage: 50,
+          cancelledFrom: "confirmed",
+        });
+        expect(h.takeEffects()).to.deep.equal([
+          "store.save B1 cancelled [receipt,cancellation]",
+        ]);
+      });
+    });
   });
 
   // -----------------------------------------------------------------------
+
+  // Since the booking strand's ticket 1 the reinstatement has a route of
+  // its own (glossary "Wiederherstellung"); before, only the PUT reached it
+  // by clearing `isRejected`. Answer and errors as `pay`.
+  describe("reinstatement: POST /bookings/:id/reinstate", function () {
+    const reinstate = (id, as = ADMIN) =>
+      api().post(`/api/${TENANT}/bookings/${id}/reinstate`).set(h.as(as));
+
+    it("brings a cancelled paid booking back to confirmed: state write without the audit, a new grant, no document, no mail", async function () {
+      const id = await bookingIn("confirmed");
+      await reject(id, { reason: "Irrtum", refundPercentage: 50 });
+      h.clearEffects();
+
+      const res = await reinstate(id);
+
+      expect(res.status).to.equal(200);
+      expect(res.body).to.deep.equal({ success: true, data: null, errors: [] });
+      const stored = h.stored(id);
+      expect(stateOf(stored)).to.equal("confirmed");
+      expect(stored).to.include({ priceEur: 40, rejectionReason: "" });
+      expect(stored.cancellationRefund).to.equal(undefined);
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 confirmed [receipt,cancellation]",
+        "access.provision B1",
+      ]);
+    });
+
+    it("brings a rejected request back to requested: the compartments held", async function () {
+      const id = await bookingIn("requested");
+      await reject(id, { reason: "Kein Platz" });
+      h.clearEffects();
+
+      const res = await reinstate(id);
+
+      expect(res.status).to.equal(200);
+      expect(stateOf(h.stored(id))).to.equal("requested");
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 requested [cancellation]",
+        "access.hold B1",
+      ]);
+    });
+
+    it("refuses a booking that is not cancelled: 409 invalid_transition, nothing runs", async function () {
+      const id = await bookingIn("requested");
+
+      const res = await reinstate(id);
+
+      expect(res.status).to.equal(409);
+      expect(res.body).to.include({ code: "invalid_transition" });
+      expect(res.body.params).to.deep.equal({
+        bookingId: id,
+        status: "requested",
+        transition: "reinstate",
+      });
+      expect(stateOf(h.stored(id))).to.equal("requested");
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("answers 404 for a booking it does not know", async function () {
+      const res = await reinstate("no-such-booking");
+
+      expect(res.status).to.equal(404);
+      expect(res.body).to.include({ code: "booking_not_found" });
+    });
+
+    it("is the administration's: a customer is refused with 403, their own booking or not", async function () {
+      const id = await bookingIn("confirmed");
+      await reject(id, { reason: "Irrtum" });
+      h.clearEffects();
+
+      const res = await reinstate(id, CUSTOMER);
+
+      expect(res.status).to.equal(403);
+      expect(stateOf(h.stored(id))).to.equal("cancelled");
+      expect(h.takeEffects()).to.deep.equal([]);
+    });
+
+    it("a hold that fails aborts the reinstatement: 500, the booking stays rejected", async function () {
+      const id = await bookingIn("requested");
+      await reject(id, { reason: "Kein Platz" });
+      h.clearEffects();
+      h.failing.add("access.hold");
+
+      const res = await reinstate(id);
+
+      expect(res.status).to.equal(500);
+      expect(res.text).to.equal("Could not reinstate booking");
+      expect(stateOf(h.stored(id))).to.equal("rejected");
+      expect(h.takeEffects()).to.deep.equal([
+        "store.save B1 requested [cancellation]",
+        "access.hold B1 FAILED",
+        "store.restore B1 rejected",
+      ]);
+    });
+  });
 
   describe("reprint: POST /bookings/:id/receipt and /invoice", function () {
     it("reprints the receipt of a paid booking as a revision under the same number and answers the booking", async function () {
