@@ -231,7 +231,6 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
     deletePrefix: async () => {},
   });
   sinon.stub(ExternalPriceService, "resolve").resolves(null);
-  sinon.stub(ExternalPriceService, "categoriesOf").resolves(null);
 
   stubManager(AccessLogManager, {
     one: () => ({}),

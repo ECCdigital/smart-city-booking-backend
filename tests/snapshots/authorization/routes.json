@@ -1462,41 +1462,6 @@
     "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
-  "GET /api/:tenant/locker/:provider/locations": {
-    "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 404,
-    "tenantOwner": 404,
-    "instanceOwner": 404
-  },
-  "GET /api/:tenant/locker/:provider/locations/:locationId": {
-    "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 404,
-    "tenantOwner": 404,
-    "instanceOwner": 404
-  },
-  "GET /api/:tenant/locker/:provider/locations/:locationId/status": {
-    "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 404,
-    "tenantOwner": 404,
-    "instanceOwner": 404
-  },
-  "GET /api/:tenant/locker/:provider/locations/:locationId/price": {
-    "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 400,
-    "tenantOwner": 400,
-    "instanceOwner": 400
-  },
-  "POST /api/:tenant/locker/:provider/test": {
-    "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "roleHolder": 200,
-    "tenantOwner": 200,
-    "instanceOwner": 200
-  },
   "GET /api/:tenant/access/audit/export": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
