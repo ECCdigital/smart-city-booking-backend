@@ -869,6 +869,17 @@ class CheckoutControllerV2 {
    * shape with a reason code.
    */
   static _toCheckoutError(err) {
+    // The compartment shortage the access hold throws at the admission
+    // (AccessService._assertCompartmentCapacity): a plain BaseError carries
+    // no reason, so the storefront would read it as checkout.unknown.
+    if (err instanceof BaseError && err.code === "compartments_unavailable") {
+      return new CheckoutError({
+        reason: CHECKOUT_REASONS.COMPARTMENTS_UNAVAILABLE,
+        statusCode: 409,
+        params: err.params,
+      });
+    }
+
     if (err instanceof BaseError) return err;
 
     // Plain { checkType, message, ... } from ItemCheckoutService

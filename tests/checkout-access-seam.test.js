@@ -10,7 +10,9 @@
  * fails - at the admission of a booking paid at once as after the payment
  * - leaves the booking as it is, the failure standing in the audit log for
  * the administration. A hold lost before the payment starts is answered as
- * the compartment being unavailable, 409.
+ * the compartment being unavailable, 409. A platform-held system that is
+ * full at the admission is answered by the v2 checkout as the reason
+ * `checkout.compartments_unavailable`.
  */
 
 const assert = require("assert");
@@ -47,6 +49,7 @@ const {
   CHECKOUT_REASONS,
 } = require("../src/commons/services/checkout/checkout-reasons");
 const { CheckoutError } = require("../src/errors/CheckoutError");
+const { ConflictError, NotFoundError } = require("../src/errors/BaseError");
 const { Booking } = require("../src/commons/entities/booking/booking");
 const lifecycleMail = require("../src/commons/services/booking-lifecycle/adapters/mail");
 const lifecycleDocuments = require("../src/commons/services/booking-lifecycle/adapters/documents");
@@ -198,6 +201,51 @@ describe("checkout on the access seam", function () {
         ).to.deep.equal(calls);
       });
     }
+
+    it("the v2 checkout answers a platform-held system that is full with the reason compartments_unavailable", async function () {
+      const prepared = booking();
+      sinon
+        .stub(BundleCheckoutService.prototype, "prepareBooking")
+        .resolves(prepared);
+      seam.hold.rejects(
+        new ConflictError("compartments_unavailable", {
+          bookableId: "bikebox",
+          capacity: 4,
+          occupied: 5,
+        }),
+      );
+      const response = {
+        status: sinon.stub().returnsThis(),
+        json: sinon.stub().returnsThis(),
+      };
+
+      await CheckoutController.checkout(
+        {
+          params: { tenant: TENANT },
+          query: {},
+          user: { id: "erika@example.test" },
+          body: {
+            checkoutId: "01checkout",
+            timeBegin: prepared.timeBegin,
+            timeEnd: prepared.timeEnd,
+            bookableItems: prepared.bookableItems,
+            mail: prepared.mail,
+          },
+        },
+        response,
+      );
+
+      expect(response.status.firstCall.args).to.deep.equal([200]);
+      expect(response.json.firstCall.args[0]).to.deep.equal({
+        success: false,
+        error: {
+          reason: "checkout.compartments_unavailable",
+          checkType: null,
+          params: { bookableId: "bikebox", capacity: 4, occupied: 5 },
+        },
+      });
+      expect(store.has(prepared.id)).to.equal(false);
+    });
   });
 
   describe("changing a booking that is not paid", function () {
@@ -419,5 +467,33 @@ describe("checkout on the access seam", function () {
         expect(refresh.firstCall.args).to.deep.equal([TENANT, ["B-1"]]);
       });
     }
+  });
+
+  describe("a compartment shortage at the admission", function () {
+    it("is answered as the reason compartments_unavailable, 409, with the count", function () {
+      const shortage = new ConflictError("compartments_unavailable", {
+        bookableId: "bikebox",
+        capacity: 4,
+        occupied: 5,
+      });
+
+      const answer = CheckoutController._toCheckoutError(shortage);
+
+      expect(answer).to.be.instanceOf(CheckoutError);
+      expect(answer.reason).to.equal(CHECKOUT_REASONS.COMPARTMENTS_UNAVAILABLE);
+      expect(answer.reason).to.equal("checkout.compartments_unavailable");
+      expect(answer.statusCode).to.equal(409);
+      expect(answer.params).to.deep.equal({
+        bookableId: "bikebox",
+        capacity: 4,
+        occupied: 5,
+      });
+    });
+
+    it("leaves any other BaseError as it is", function () {
+      const notFound = new NotFoundError("booking_not_found", { id: "B-9" });
+
+      expect(CheckoutController._toCheckoutError(notFound)).to.equal(notFound);
+    });
   });
 });
