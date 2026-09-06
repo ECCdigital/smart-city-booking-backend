@@ -371,8 +371,10 @@ class BundleCheckoutService {
     const priceEur = await this.userGrossPriceEur();
 
     if (checkoutPolicy.acceptsAdminOverrides(this.policy)) {
+      // Only an absent `status` falls back to the flags; a key that is sent
+      // - `null` or empty included - is judged as the state it names.
       const { status } = this.adminOverrides;
-      if (status != null && status !== "") {
+      if (status !== undefined) {
         if (!LIVE_STATUSES.includes(status)) {
           throw new BadRequestError("invalid_status", { status });
         }

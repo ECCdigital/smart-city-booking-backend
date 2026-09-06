@@ -127,9 +127,10 @@ const TABLE = {
     reprint: { own: "signedIn", any: "manageBookings.updateAny" },
     // The administration's manual invoice.
     invoice: { any: "manageBookings.updateAny" },
+    // The admin PUT.
+    create: { any: "manageBookings.create" },
     // The admin PUT, and `POST /bookings/:id/reinstate` - the
     // reinstatement the PUT reached by clearing `isRejected` before.
-    create: { any: "manageBookings.create" },
     update: { any: "manageBookings.updateAny" },
     commit: { any: "manageBookings.updateAny" },
     pay: { any: "manageBookings.updateAny" },

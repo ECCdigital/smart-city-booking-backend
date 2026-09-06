@@ -185,6 +185,21 @@ describe("the initial state of a booking at the checkout", function () {
       }
     });
 
+    it("refuses a `status` that is sent but empty with 400 invalid_status: only an absent key falls back to the flags", async function () {
+      for (const status of [null, ""]) {
+        await assert.rejects(
+          bundle(CheckoutPolicy.ADMIN_MANUAL, {
+            status,
+            isCommitted: true,
+          }).prepareBooking(),
+          (err) =>
+            err instanceof BadRequestError &&
+            err.code === "invalid_status" &&
+            err.params.status === status,
+        );
+      }
+    });
+
     it("refuses `confirmed` with a price and no payment named with 400 missing_payment_details", async function () {
       await assert.rejects(
         bundle(CheckoutPolicy.ADMIN_MANUAL, {
