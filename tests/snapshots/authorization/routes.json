@@ -1637,6 +1637,13 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
+  "GET /api/:tenant/accesspoints/:id/bookings": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
   "GET /api/:tenant/accesspoints/:id/qrcode": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",

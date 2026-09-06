@@ -21,6 +21,15 @@ router.get(
   AccessPointController.getAccessPoint,
 );
 
+// Naming the bookings of an access point names their customers, so the reach
+// is the booking reader's (`accessPoint.bookings`) and not the one that
+// carries the access point list.
+router.get(
+  "/:id/bookings",
+  authorize("accessPoint", "bookings"),
+  AccessPointController.getAccessPointBookings,
+);
+
 router.get(
   "/:id/qrcode",
   authorize("accessPoint", "write"),
