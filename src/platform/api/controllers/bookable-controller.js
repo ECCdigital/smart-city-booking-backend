@@ -6,6 +6,9 @@ const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
+const {
+  isCompartmentAmount,
+} = require("../../../commons/entities/bookable/access-point-amounts");
 const { BaseError, ForbiddenError } = require("../../../errors/BaseError");
 const {
   decide,
@@ -273,6 +276,7 @@ class BookableController {
       }
 
       await BookableController._validateAccessPointIds(bookable, tenant);
+      BookableController._normalizeAccessPointAmounts(bookable);
       BookableController._validateAccessBuffers(bookable);
       await MediaReferenceGuard.assertBookableStorable(
         bookable,
@@ -337,6 +341,7 @@ class BookableController {
       }
 
       await BookableController._validateAccessPointIds(bookable, tenant);
+      BookableController._normalizeAccessPointAmounts(bookable);
       BookableController._validateAccessBuffers(bookable);
       await MediaReferenceGuard.assertBookableStorable(
         bookable,
@@ -394,6 +399,71 @@ class BookableController {
     if (errors.length > 0) {
       throw new ValidationError(errors);
     }
+  }
+
+  /**
+   * Normalizes the compartments a bookable distributes over its locker
+   * systems (`accessPointDetails.accessPointAmounts`, `{ <accessPointId>:
+   * <n> }`): the bookable's `amount` is spread over its systems, not owed
+   * at each of them again. Only entries for access points the bookable
+   * references mean anything - one for an access point it dropped is
+   * discarded rather than kept as a second truth about a reference that is
+   * gone. A system the map says nothing about keeps what a booking's item
+   * books, so nothing changes for a bookable saved without the field.
+   *
+   * @param {Bookable} bookable The bookable to be stored, normalized in place
+   * @throws {ValidationError} If the map is no map of amounts
+   *   (`invalid_amounts`), or an amount is no whole number of compartments
+   *   (`invalid_amount`)
+   */
+  static _normalizeAccessPointAmounts(bookable) {
+    const details = bookable.accessPointDetails;
+    const amounts = details?.accessPointAmounts;
+
+    if (amounts === undefined || amounts === null) {
+      return;
+    }
+
+    if (typeof amounts !== "object" || Array.isArray(amounts)) {
+      throw new ValidationError([
+        {
+          field: "accessPointDetails.accessPointAmounts",
+          code: "invalid_amounts",
+          params: { accessPointAmounts: amounts },
+        },
+      ]);
+    }
+
+    const referenced = new Set(
+      (details.accessPointIds || []).map((accessPointId) =>
+        String(accessPointId),
+      ),
+    );
+    const errors = [];
+    const normalized = {};
+
+    for (const [accessPointId, amount] of Object.entries(amounts)) {
+      if (!referenced.has(accessPointId)) {
+        continue;
+      }
+
+      if (!isCompartmentAmount(amount)) {
+        errors.push({
+          field: "accessPointDetails.accessPointAmounts",
+          code: "invalid_amount",
+          params: { accessPointId: accessPointId, amount: amount },
+        });
+        continue;
+      }
+
+      normalized[accessPointId] = Number(amount);
+    }
+
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
+    }
+
+    details.accessPointAmounts = normalized;
   }
 
   /**

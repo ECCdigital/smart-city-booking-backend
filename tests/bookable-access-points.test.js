@@ -127,6 +127,80 @@ describe("BookableController access point references", () => {
     expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
   });
 
+  describe("the amount per locker system", () => {
+    function withAmounts(accessPointIds, accessPointAmounts) {
+      request.body.accessPointDetails = {
+        active: true,
+        accessPointIds: accessPointIds,
+        accessPointAmounts: accessPointAmounts,
+      };
+      stubAccessPoints(accessPointIds);
+    }
+
+    const stored = () =>
+      storeBookable.firstCall.args[0].accessPointDetails.accessPointAmounts;
+
+    it("keeps the amounts of the referenced access points, as numbers", async () => {
+      withAmounts(["locker-1", "locker-2"], { "locker-1": 3, "locker-2": "4" });
+
+      await BookableController.updateBookable(request, response, next);
+
+      expect(stored()).to.deep.equal({ "locker-1": 3, "locker-2": 4 });
+    });
+
+    it("drops an amount for an access point the bookable does not reference", async () => {
+      withAmounts(["locker-1"], { "locker-1": 3, gone: 4 });
+
+      await BookableController.updateBookable(request, response, next);
+
+      expect(stored()).to.deep.equal({ "locker-1": 3 });
+    });
+
+    it("rejects an amount that is not a whole number of compartments", async () => {
+      withAmounts(["locker-1"], { "locker-1": -1 });
+
+      await BookableController.updateBookable(request, response, next);
+
+      expect(storeBookable.called).to.be.false;
+      const err = next.firstCall.args[0];
+      expect(err).to.be.instanceOf(ValidationError);
+      expect(err.errors).to.deep.equal([
+        {
+          field: "accessPointDetails.accessPointAmounts",
+          code: "invalid_amount",
+          params: { accessPointId: "locker-1", amount: -1 },
+        },
+      ]);
+    });
+
+    it("rejects a field that is no map of amounts at all", async () => {
+      withAmounts(["locker-1"], [3]);
+
+      await BookableController.updateBookable(request, response, next);
+
+      expect(storeBookable.called).to.be.false;
+      const err = next.firstCall.args[0];
+      expect(err).to.be.instanceOf(ValidationError);
+      expect(err.errors).to.deep.equal([
+        {
+          field: "accessPointDetails.accessPointAmounts",
+          code: "invalid_amounts",
+          params: { accessPointAmounts: [3] },
+        },
+      ]);
+    });
+
+    it("leaves a bookable without the field alone", async () => {
+      request.body.accessPointDetails.accessPointIds = ["locker-1"];
+      stubAccessPoints(["locker-1"]);
+
+      await BookableController.updateBookable(request, response, next);
+
+      expect(storeBookable.calledOnce).to.be.true;
+      expect(stored()).to.equal(undefined);
+    });
+  });
+
   it("does not query the collection without references", async () => {
     const getAccessPointsByIds = stubAccessPoints([]);
 
@@ -172,7 +246,7 @@ describe("BookableManager access point references", () => {
     });
   });
 
-  it("pulls a deleted access point out of the bookables of its tenant", async () => {
+  it("pulls a deleted access point out of the bookables of its tenant, its distributed compartments with it", async () => {
     const updateMany = sandbox.stub(BookableModel, "updateMany").resolves();
 
     await BookableManager.detachAccessPoint("tenant-1", "door-1");
@@ -182,7 +256,10 @@ describe("BookableManager access point references", () => {
         tenantId: "tenant-1",
         "accessPointDetails.accessPointIds": "door-1",
       },
-      { $pull: { "accessPointDetails.accessPointIds": "door-1" } },
+      {
+        $pull: { "accessPointDetails.accessPointIds": "door-1" },
+        $unset: { "accessPointDetails.accessPointAmounts.door-1": "" },
+      },
     ]);
   });
 });

@@ -11,6 +11,9 @@ const { decide, satisfy } = require("./access-decision");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
+const {
+  compartmentsAt,
+} = require("../../entities/bookable/access-point-amounts");
 const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 const AccessProvisionError = require("../../../errors/AccessProvisionError");
@@ -580,14 +583,14 @@ class AccessService {
   /**
    * Holds a compartment of every locker system the booking books, for a
    * booking not paid yet. One `accessInfo` entry per compartment is made at
-   * the locker system's row - `bookableItem.amount` of them per system - and
-   * each is held: by the provider where it holds compartments itself (iFBS
-   * keeps a box for two minutes), by the stored booking where it does not
-   * (Pareva). The platform-held ones are checked against the capacity of
-   * the bookable after the booking is stored, so that two checkouts racing
-   * for the last compartment cannot both get it: the occupancy of the
-   * bookable in the booking's window, this booking included, must not
-   * exceed `bookable.amount`.
+   * the locker system's row - as many as the bookable distributes to it
+   * (`compartmentsAt`) - and each is held: by the provider where it holds
+   * compartments itself (iFBS keeps a box for two minutes), by the stored
+   * booking where it does not (Pareva). The platform-held ones are checked
+   * against the capacity of the bookable after the booking is stored, so
+   * that two checkouts racing for the last compartment cannot both get it:
+   * the occupancy of the bookable in the booking's window, this booking
+   * included, must not exceed `bookable.amount`.
    *
    * A hold the provider refuses, or a capacity that is exceeded, is thrown;
    * the checkout then rolls the booking back. Entries held or granted
@@ -1471,6 +1474,98 @@ class AccessService {
   }
 
   /**
+   * The bookings of a tenant that hold a live access at one access point -
+   * the answer the administration needs before it deletes one, because the
+   * deletion detaches the access point without revoking anything at the
+   * provider.
+   *
+   * A live access is an entry of the booking's `accessInfo` at this access
+   * point that is provisioned and not revoked. Not "has a grant": a door in
+   * mode `remote` is marked provisioned without one (`_provisionDoors`),
+   * while a compartment that is only held carries a `hold` and is not
+   * provisioned yet (`_ensureCompartmentEntries`). A revoke sets both
+   * `isProvisioned: false` and `revokedAt`, and the entry stays behind as the
+   * record of the revoke - hence both halves of the predicate.
+   *
+   * This reads the stored flag, which `_upsertAccessInfo` maintains for doors
+   * and compartments alike. It is not the same question as
+   * `_compartmentContext`, which recomputes `isProvisioned` from the grant:
+   * that one judges one compartment for the access decision, where a grant is
+   * the only way to be provisioned, and would call a `remote` door unprovisioned.
+   *
+   * Bookings whose period has passed are left out: their access is over, so
+   * the deletion takes nothing from them. A booking without an end never ends
+   * and stays in. Rejected ones are out too.
+   *
+   * The whole predicate is in the query, so what is loaded is bounded by how
+   * many bookings hold a live access at once and not by how long the access
+   * point has existed - every past booking keeps its revoked entry forever,
+   * and a query on the id alone would grow without end. The memory pass then
+   * decides, the way `getUserBookingsFiltered` re-checks the price validity it
+   * cannot express: it is the readable form of the rule, and it does not
+   * depend on how a mixed `accessInfo` subdocument compares in the database.
+   *
+   * The list is capped and the whole count is answered next to it: at a busy
+   * locker system this is a warning, not an export.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @param {Object} [opts]
+   * @param {number} [opts.limit=10] How many bookings the list names
+   * @param {number} [opts.now=Date.now()] The moment "still running" is
+   *   judged against
+   * @returns {Promise<{total: number, bookings: Object[]}>} The count of all
+   *   bookings with a live access, and the first `limit` of them by start
+   *   time - id, customer and period, nothing further
+   */
+  static async getBookingsWithLiveAccess(
+    tenant,
+    accessPointId,
+    { limit = 10, now = Date.now() } = {},
+  ) {
+    const id = String(accessPointId);
+    const bookings = await BookingManager.getBookingsCustomFilter(tenant, {
+      isRejected: { $ne: true },
+      $or: [{ timeEnd: null }, { timeEnd: { $gte: now } }],
+      accessInfo: {
+        $elemMatch: {
+          accessPointId: id,
+          isProvisioned: true,
+          revokedAt: null,
+        },
+      },
+    });
+
+    const running = bookings
+      .filter(
+        (booking) =>
+          (booking.timeEnd == null || booking.timeEnd >= now) &&
+          (booking.accessInfo || []).some(
+            (entry) =>
+              String(entry?.accessPointId) === id &&
+              entry?.isProvisioned === true &&
+              !entry?.revokedAt,
+          ),
+      )
+      .sort(
+        (a, b) =>
+          (a.timeBegin ?? 0) - (b.timeBegin ?? 0) ||
+          String(a.id).localeCompare(String(b.id)),
+      );
+
+    return {
+      total: running.length,
+      bookings: running.slice(0, limit).map((booking) => ({
+        id: booking.id,
+        name: booking.name ?? null,
+        mail: booking.mail ?? null,
+        timeBegin: booking.timeBegin ?? null,
+        timeEnd: booking.timeEnd ?? null,
+      })),
+    };
+  }
+
+  /**
    * @private
    * Builds one trigger map per tenant.
    * @returns {Promise<Map<string, Map<string, Map<string, string>>>>}
@@ -2231,8 +2326,8 @@ class AccessService {
   /**
    * @private
    * Makes the entries of the compartments the booking is owed: as many
-   * per locker system as the bookable's item books, minus those there
-   * already and not revoked. Where new ones are needed the revoked entries
+   * per locker system as the bookable owes there, minus those already
+   * there and not revoked. Where new ones are needed the revoked entries
    * of that system make way for them - a fresh grant starts the
    * compartments of a system over, as it does a door's entry - while a
    * system whose compartments are all revoked and none needed keeps them
@@ -2288,7 +2383,7 @@ class AccessService {
    * @private
    * Drops the entries only held - not granted, not revoked - beyond what
    * the booking books now: at a locker system it no longer books, or past
-   * the amount its item books, the granted ones counted first. What the
+   * the amount owed there, the granted ones counted first. What the
    * provider holds for them lapses by itself.
    *
    * @param {Object} booking The booking, written into
@@ -2345,7 +2440,10 @@ class AccessService {
    * Fails where the bookable has fewer compartments than the bookings in
    * this booking's window take, this booking included. The occupancy is
    * counted off the bookings' items, which is what `bookable.amount` is the
-   * capacity of.
+   * capacity of - not off the compartments made, which follow the bookable's
+   * distribution over its systems. Where the distribution and `amount`
+   * disagree the two drift apart; that is the admin's to answer, and the
+   * editor warns about it (locker spec §L2.2).
    *
    * @param {string} tenant Tenant ID
    * @param {Object} booking The booking that holds
@@ -2425,11 +2523,13 @@ class AccessService {
    * @private
    * The locker systems a booking books, keyed by row id: the row as the
    * compartments are resolved at it, the bookable that books it and how
-   * many compartments that bookable's item books. Only the bookables
-   * booked themselves count - a compartment is exclusive to its booking
-   * and nothing a parent or child bookable confers. Systems the booking
-   * holds compartments at without booking them any more come along with
-   * nothing owed, for the revoke.
+   * many compartments it is owed there: the number the bookable distributes
+   * to that system (`compartmentsAt`), and what the booking's item books at
+   * a system it distributes nothing to. Only the bookables booked
+   * themselves count - a compartment is exclusive to its
+   * booking and nothing a parent or child bookable confers. Systems the
+   * booking holds compartments at without booking them any more come along
+   * with nothing owed, for the revoke.
    *
    * @returns {Map<string, { accessPoint: Object, bookable: Object|null,
    *   amount: number }>}
@@ -2462,7 +2562,11 @@ class AccessService {
         systems.set(key, {
           accessPoint: this._resolvedAccessPoint(tenant, accessPoint, bookable),
           bookable,
-          amount: this._itemAmount(booking, bookable.id),
+          amount: compartmentsAt(
+            bookable,
+            key,
+            this._itemAmount(booking, bookable.id),
+          ),
         });
       }
     }

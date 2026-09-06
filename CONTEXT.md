@@ -81,7 +81,7 @@ Ein physischer Zugangspunkt, den die Plattform über einen Provider (z.B. NUKI, 
 _Avoid_: Tür (als Entity-Name), Door, Schloss, Lock, Locker
 
 **Schließfachanlage**:
-Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Die Plattform kennt vor der Buchung nur die Anlage, nie das Fach. Kapazität ist Sache des Bookables, nicht der Anlage.
+Ein AccessPoint, dessen Provider je Buchung ein Fach zuteilt: bei iFBS ein Standort mit Fahrradboxen (genau ein Fach je Buchung, iFBS wählt es), bei Pareva ein Produkt einer Schließfachanlage (mehrere Fächer je Buchung, Pareva gibt den Zugangscode selbst an den Buchenden). Die Plattform kennt vor der Buchung nur die Anlage, nie das Fach. Kapazität ist Sache des Bookables, nicht der Anlage: `amount` gilt insgesamt und wird über `accessPointDetails.accessPointAmounts` auf die Anlagen des Bookables verteilt, nicht an jeder Anlage erneut geschuldet. Eine Anlage, zu der nichts verteilt ist, bekommt so viele Fächer, wie die Position der Buchung bucht.
 _Avoid_: Locker, Locker-Unit, Location (als Entity), Schließfach (unqualifiziert — das ist das Fach)
 
 **Fach**:
@@ -194,6 +194,10 @@ _Avoid_: Salto-User (unqualifiziert), Nutzer, Account
 **Widerruf (eines Grants)**:
 Das Zurücknehmen eines Grants beim Provider, mit der Auskunft, ob der externe Principal dabei entfernt wurde. Ein wiederholter Widerruf desselben Grants ist erlaubt und holt nur nach, was fehlt.
 _Avoid_: Revoke (als deutsches Nomen), Löschung, Deprovisionierung
+
+**Laufender Zugang (einer Buchung an einem AccessPoint)**:
+Der Eintrag einer Buchung an einem AccessPoint, der erteilt und nicht widerrufen ist, solange die Buchung noch läuft — die eine Antwort darauf, wem das Löschen eines AccessPoints etwas wegnimmt. Erteilt heißt provisioniert, nicht „hat einen Grant": eine Tür im Modus `remote` gilt ohne Grant als provisioniert, ein bloß vorgemerktes Fach noch nicht. Eine abgelaufene oder abgelehnte Buchung hat keinen laufenden Zugang mehr; eine Buchung ohne Ende endet nie.
+_Avoid_: Aktiver Grant, offener Zugang, Live-Zugriff
 
 ### Buchungslebenszyklus
 

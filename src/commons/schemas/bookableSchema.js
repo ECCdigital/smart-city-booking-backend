@@ -267,13 +267,19 @@ const bookableSchemaDefinition = {
     type: [new Schema(attachmentSchemaDefinition, { _id: false })],
     default: [],
   },
+  // `accessPointAmounts` maps an access point id to the compartments a
+  // booking gets at that locker system: the bookable's `amount` distributed
+  // over its systems, not owed at each of them again. The default is made
+  // per bookable - `SchemaUtils.createDefaults` hands a plain default out by
+  // reference, and the details are written into while a bookable is stored.
   accessPointDetails: {
     type: Object,
-    default: {
+    default: () => ({
       active: false,
       accessBuffer: { before: 0, after: 0 },
       accessPointIds: [],
-    },
+      accessPointAmounts: {},
+    }),
   },
   requiredFields: { type: [String], default: ["address", "zipCode", "city"] },
 

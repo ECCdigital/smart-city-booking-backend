@@ -91,6 +91,24 @@ describe("deriveLockerDetails", () => {
     });
   });
 
+  it("gives a unit the amount the bookable distributes to its row, the bookable's where none is distributed", () => {
+    const spread = bookable({
+      accessPointDetails: {
+        active: true,
+        accessPointIds: [BIKE_BOXES.id, SIZE_S.id],
+        accessPointAmounts: { [SIZE_S.id]: 5 },
+      },
+    });
+
+    expect(deriveLockerDetails(spread, [BIKE_BOXES, SIZE_S])).to.deep.equal({
+      active: true,
+      units: [
+        { lockerSystem: "ifbs", locationId: "7", amount: 2 },
+        { id: "S", lockerSystem: "pareva", amount: 5 },
+      ],
+    });
+  });
+
   it("is dropped from a bookable handed in with one", () => {
     const entity = new Bookable({
       id: "bikebox",
