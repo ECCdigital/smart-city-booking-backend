@@ -480,7 +480,6 @@ describe("checkout on the access seam", function () {
       const answer = CheckoutController._toCheckoutError(shortage);
 
       expect(answer).to.be.instanceOf(CheckoutError);
-      expect(answer.reason).to.equal(CHECKOUT_REASONS.COMPARTMENTS_UNAVAILABLE);
       expect(answer.reason).to.equal("checkout.compartments_unavailable");
       expect(answer.statusCode).to.equal(409);
       expect(answer.params).to.deep.equal({
