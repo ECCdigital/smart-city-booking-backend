@@ -110,6 +110,13 @@ function createClients({ nukiSmartlocks, saltoLocks } = {}) {
           Name: "Bahnhof",
           boxes: [IFBS_BOX_NUMBER],
         },
+        // A second city: listed with the first while IFBS_CITY_IDS is unset.
+        {
+          LocationID: IFBS_OTHER_CITY_LOCATION_ID,
+          Name: "Rathaus",
+          CityID: "36",
+          boxes: [],
+        },
       ],
       bookingIds: [IFBS_BOOKING_ID],
     }),
@@ -141,6 +148,9 @@ const SALTO_DOOR = {
   mode: AccessPointMode.AUTHORIZATION,
   validationRules: [],
 };
+
+// The iFBS location of the second city the fake lists.
+const IFBS_OTHER_CITY_LOCATION_ID = "36001";
 
 const IFBS_LOCKER = {
   id: "location-7",
@@ -723,13 +733,23 @@ describe("access provider dialects: the adapters as they answer", () => {
       });
     };
 
+    // The list test expects every city: the filter env of the shell must
+    // not reach it, and must be back afterwards.
+    const cityIdsBefore = process.env.IFBS_CITY_IDS;
+
     beforeEach(() => {
+      delete process.env.IFBS_CITY_IDS;
       provider = new IfbsAccessProvider({ client: clients.ifbs });
       sinon.stub(UserManager, "getRawUser").resolves(null);
     });
 
     afterEach(() => {
       sinon.restore();
+      if (cityIdsBefore === undefined) {
+        delete process.env.IFBS_CITY_IDS;
+      } else {
+        process.env.IFBS_CITY_IDS = cityIdsBefore;
+      }
     });
 
     it("answers an open as pending, with the open-box process to poll", async () => {
@@ -1021,7 +1041,7 @@ describe("access provider dialects: the adapters as they answer", () => {
       );
     });
 
-    it("lists the locations as locker access points that open remotely", async () => {
+    it("lists the locations of every city as locker access points that open remotely", async () => {
       const points = await provider.listAccessPoints(TENANT);
 
       expect(points).to.deep.equal([
@@ -1035,6 +1055,20 @@ describe("access provider dialects: the adapters as they answer", () => {
           capabilities: ["remote"],
           supportedModes: [AccessPointMode.REMOTE],
           metadata: { LocationID: IFBS_LOCATION_ID, Name: "Bahnhof" },
+        },
+        {
+          id: IFBS_OTHER_CITY_LOCATION_ID,
+          type: "locker",
+          provider: "ifbs",
+          externalId: IFBS_OTHER_CITY_LOCATION_ID,
+          locationId: IFBS_OTHER_CITY_LOCATION_ID,
+          label: "Rathaus",
+          capabilities: ["remote"],
+          supportedModes: [AccessPointMode.REMOTE],
+          metadata: {
+            LocationID: IFBS_OTHER_CITY_LOCATION_ID,
+            Name: "Rathaus",
+          },
         },
       ]);
     });

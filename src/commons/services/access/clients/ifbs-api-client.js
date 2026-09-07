@@ -37,12 +37,34 @@ class IfbsApiClient extends BaseAccessApiClient {
     return requestedLocation || null;
   }
 
+  /**
+   * The cities the iFBS server knows, each with its locations - restricted
+   * to the CityIDs of `IFBS_CITY_IDS` where that is set. The env is read at
+   * every call, so a changed value counts without rebuilding the client.
+   */
   async getLocations() {
     const response = await this._get("getLocations.php");
-    const filteredCities = response.cities.filter(
-      (city) => city.CityID === "35",
-    );
-    return filteredCities || [];
+    const cities = response.cities;
+    const cityIds = IfbsApiClient.cityIdsFromEnv(process.env.IFBS_CITY_IDS);
+    if (cityIds.length === 0) {
+      return cities;
+    }
+    return cities.filter((city) => cityIds.includes(String(city.CityID)));
+  }
+
+  /**
+   * The CityIDs of a comma-separated list such as `IFBS_CITY_IDS` (`35` or
+   * `35, 42`): whitespace around every entry dropped, empty entries
+   * ignored, each id a string as the API answers it. An unset or empty
+   * value means no restriction and answers an empty list.
+   * @param {string|undefined} value
+   * @returns {string[]}
+   */
+  static cityIdsFromEnv(value) {
+    return String(value ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
   }
 
   async getLocationById(locationId) {

@@ -29,6 +29,8 @@ const IfbsApiError = require("../../src/commons/services/access/clients/ifbs-api
 const ERR_NO_WAIT_PROCESS_NOT_FOUND = 1902;
 
 const FAKE_SECRET_PHRASE = "secret-phrase";
+// The city a location lies in when the test names none.
+const DEFAULT_CITY_ID = "35";
 const HOLD_TTL_MS = 2 * 60 * 1000;
 
 /** A network failure as axios raises it - no response at all. */
@@ -48,7 +50,8 @@ class FakeIfbsApiClient extends IfbsApiClient {
   /**
    * @param {Object} [options]
    * @param {Object[]} [options.locations] Locations iFBS knows, each
-   *   `{ LocationID, Name?, boxes: string[] }` with the numbers of its boxes
+   *   `{ LocationID, Name?, CityID?, boxes: string[] }` with the numbers of
+   *   its boxes; a location without a `CityID` lies in city `"35"`
    * @param {string[]} [options.bookingIds] iFBS booking ids that exist as
    *   booked already and whose box can be opened
    * @param {boolean} [options.confirmsOnWait=true] Whether the box confirms
@@ -63,6 +66,7 @@ class FakeIfbsApiClient extends IfbsApiClient {
         {
           ...location,
           LocationID: String(location.LocationID),
+          CityID: String(location.CityID ?? DEFAULT_CITY_ID),
           boxes: (location.boxes || []).map(String),
         },
       ]),
@@ -124,19 +128,7 @@ class FakeIfbsApiClient extends IfbsApiClient {
   _respond(endpoint, params) {
     switch (endpoint) {
       case "getLocations.php":
-        return {
-          success: "true",
-          cities: [
-            {
-              CityID: "35",
-              locations: [...this.locations.values()].map((location) => {
-                const listed = { ...location };
-                delete listed.boxes;
-                return listed;
-              }),
-            },
-          ],
-        };
+        return { success: "true", cities: this._cities() };
 
       case "getBox.php":
         return this._getBox(params);
@@ -189,6 +181,26 @@ class FakeIfbsApiClient extends IfbsApiClient {
       default:
         throw new Error(`fake-ifbs-api-client: unexpected request ${endpoint}`);
     }
+  }
+
+  /**
+   * The cities of `getLocations.php`: one per distinct `CityID`, in the
+   * order the locations were given, each listing its locations as iFBS
+   * does: without their boxes, and without the city they are grouped under.
+   * @private
+   */
+  _cities() {
+    const cities = new Map();
+    for (const location of this.locations.values()) {
+      const listed = { ...location };
+      delete listed.boxes;
+      delete listed.CityID;
+      if (!cities.has(location.CityID)) {
+        cities.set(location.CityID, { CityID: location.CityID, locations: [] });
+      }
+      cities.get(location.CityID).locations.push(listed);
+    }
+    return [...cities.values()];
   }
 
   _getBox(params) {
