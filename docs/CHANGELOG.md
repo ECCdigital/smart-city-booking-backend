@@ -9,6 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- `GET /api/tenants/public` carries `accessApps[]` - the customer-service contact (`name`, `phone`, `email`) of every active access application that has one, and nothing else of the application; it replaces the removed `/locker/:provider/customer-service-info` for the storefront. A tenant without such an application answers `[]`.
 - `POST /api/:tenant/bookings/:id/reinstate` reinstates a rejected or cancelled booking (glossary "Wiederherstellung") - the transition `reinstate` by the administration on a route of its own; before, only the admin PUT reached it by clearing `isRejected`. Right `booking.update`, answer and errors as `/pay` (`409 invalid_transition`, `404 booking_not_found`, a plain-text 500 when the transition aborts), no group variant. And a manual booking names the state it starts in: `PUT /api/:tenant/bookings` without an `id` takes `status` (`requested | payment_due | confirmed`), which wins over the flags sent with it; `confirmed` with a price needs `paymentMethod` and `timePaid` (`400 missing_payment_details`), any other state is `400 invalid_status`. OpenAPI: `src/docs/routes/bookings.yaml`.
 
 ### Changed

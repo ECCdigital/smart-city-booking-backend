@@ -32,12 +32,38 @@ class Tenant {
       "enablePublicStatusView",
     ];
 
-    return publicFields.reduce((result, field) => {
+    const exported = publicFields.reduce((result, field) => {
       if (this[field] !== undefined) {
         result[field] = this[field];
       }
       return result;
     }, {});
+    exported.accessApps = this._exportPublicAccessApps();
+    return exported;
+  }
+
+  /**
+   * The customer-service contact of every access application that has one
+   * (glossary "Notfallhilfe"), for the storefront's emergency help. Each
+   * entry is built key by key - an application carries its provider's
+   * credentials, and nothing of it leaves but what is named here.
+   *
+   * @returns {Array<{ id: string, customerService: { name, phone, email } }>}
+   */
+  _exportPublicAccessApps() {
+    return (this.applications || [])
+      .filter(
+        (app) =>
+          app.type === "access" && app.active === true && app.customerService,
+      )
+      .map((app) => ({
+        id: app.id,
+        customerService: {
+          name: app.customerService.name,
+          phone: app.customerService.phone,
+          email: app.customerService.email,
+        },
+      }));
   }
 
   /**
