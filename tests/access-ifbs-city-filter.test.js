@@ -84,15 +84,10 @@ describe("iFBS city filter: IFBS_CITY_IDS on getLocations()", () => {
   });
 
   it("reads the env at the call, not when the client is built", async () => {
-    const built = new FakeIfbsApiClient({
-      locations: [
-        { LocationID: "1001", boxes: [] },
-        { LocationID: "1002", CityID: "36", boxes: [] },
-      ],
-    });
+    // `client` was built in beforeEach with the env unset.
     process.env.IFBS_CITY_IDS = "36";
 
-    const cities = await built.getLocations();
+    const cities = await client.getLocations();
 
     expect(cityIdsOf(cities)).to.deep.equal(["36"]);
   });

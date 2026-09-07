@@ -44,7 +44,7 @@ class IfbsApiClient extends BaseAccessApiClient {
    */
   async getLocations() {
     const response = await this._get("getLocations.php");
-    const cities = response.cities || [];
+    const cities = response.cities;
     const cityIds = IfbsApiClient.cityIdsFromEnv(process.env.IFBS_CITY_IDS);
     if (cityIds.length === 0) {
       return cities;

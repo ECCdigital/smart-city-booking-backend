@@ -733,13 +733,23 @@ describe("access provider dialects: the adapters as they answer", () => {
       });
     };
 
+    // The list test expects every city: the filter env of the shell must
+    // not reach it, and must be back afterwards.
+    const cityIdsBefore = process.env.IFBS_CITY_IDS;
+
     beforeEach(() => {
+      delete process.env.IFBS_CITY_IDS;
       provider = new IfbsAccessProvider({ client: clients.ifbs });
       sinon.stub(UserManager, "getRawUser").resolves(null);
     });
 
     afterEach(() => {
       sinon.restore();
+      if (cityIdsBefore === undefined) {
+        delete process.env.IFBS_CITY_IDS;
+      } else {
+        process.env.IFBS_CITY_IDS = cityIdsBefore;
+      }
     });
 
     it("answers an open as pending, with the open-box process to poll", async () => {
@@ -1044,11 +1054,7 @@ describe("access provider dialects: the adapters as they answer", () => {
           label: "Bahnhof",
           capabilities: ["remote"],
           supportedModes: [AccessPointMode.REMOTE],
-          metadata: {
-            LocationID: IFBS_LOCATION_ID,
-            Name: "Bahnhof",
-            CityID: "35",
-          },
+          metadata: { LocationID: IFBS_LOCATION_ID, Name: "Bahnhof" },
         },
         {
           id: IFBS_OTHER_CITY_LOCATION_ID,
@@ -1062,7 +1068,6 @@ describe("access provider dialects: the adapters as they answer", () => {
           metadata: {
             LocationID: IFBS_OTHER_CITY_LOCATION_ID,
             Name: "Rathaus",
-            CityID: "36",
           },
         },
       ]);

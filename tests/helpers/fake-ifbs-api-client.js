@@ -185,8 +185,8 @@ class FakeIfbsApiClient extends IfbsApiClient {
 
   /**
    * The cities of `getLocations.php`: one per distinct `CityID`, in the
-   * order the locations were given, each listing its locations without
-   * their boxes - iFBS lists the boxes elsewhere.
+   * order the locations were given, each listing its locations as iFBS
+   * does: without their boxes, and without the city they are grouped under.
    * @private
    */
   _cities() {
@@ -194,6 +194,7 @@ class FakeIfbsApiClient extends IfbsApiClient {
     for (const location of this.locations.values()) {
       const listed = { ...location };
       delete listed.boxes;
+      delete listed.CityID;
       if (!cities.has(location.CityID)) {
         cities.set(location.CityID, { CityID: location.CityID, locations: [] });
       }
