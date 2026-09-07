@@ -110,6 +110,13 @@ function createClients({ nukiSmartlocks, saltoLocks } = {}) {
           Name: "Bahnhof",
           boxes: [IFBS_BOX_NUMBER],
         },
+        // A second city: listed with the first while IFBS_CITY_IDS is unset.
+        {
+          LocationID: IFBS_OTHER_CITY_LOCATION_ID,
+          Name: "Rathaus",
+          CityID: "36",
+          boxes: [],
+        },
       ],
       bookingIds: [IFBS_BOOKING_ID],
     }),
@@ -141,6 +148,9 @@ const SALTO_DOOR = {
   mode: AccessPointMode.AUTHORIZATION,
   validationRules: [],
 };
+
+// The iFBS location of the second city the fake lists.
+const IFBS_OTHER_CITY_LOCATION_ID = "36001";
 
 const IFBS_LOCKER = {
   id: "location-7",
@@ -1021,7 +1031,7 @@ describe("access provider dialects: the adapters as they answer", () => {
       );
     });
 
-    it("lists the locations as locker access points that open remotely", async () => {
+    it("lists the locations of every city as locker access points that open remotely", async () => {
       const points = await provider.listAccessPoints(TENANT);
 
       expect(points).to.deep.equal([
@@ -1034,7 +1044,26 @@ describe("access provider dialects: the adapters as they answer", () => {
           label: "Bahnhof",
           capabilities: ["remote"],
           supportedModes: [AccessPointMode.REMOTE],
-          metadata: { LocationID: IFBS_LOCATION_ID, Name: "Bahnhof" },
+          metadata: {
+            LocationID: IFBS_LOCATION_ID,
+            Name: "Bahnhof",
+            CityID: "35",
+          },
+        },
+        {
+          id: IFBS_OTHER_CITY_LOCATION_ID,
+          type: "locker",
+          provider: "ifbs",
+          externalId: IFBS_OTHER_CITY_LOCATION_ID,
+          locationId: IFBS_OTHER_CITY_LOCATION_ID,
+          label: "Rathaus",
+          capabilities: ["remote"],
+          supportedModes: [AccessPointMode.REMOTE],
+          metadata: {
+            LocationID: IFBS_OTHER_CITY_LOCATION_ID,
+            Name: "Rathaus",
+            CityID: "36",
+          },
         },
       ]);
     });
