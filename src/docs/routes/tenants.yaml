@@ -68,7 +68,9 @@
       Every tenant the caller owns, read the same way as a single one — each
       media reference of the legal documents carries the address it resolves
       to. With `publicTenants=true` the list switches to the public tenant
-      export, which does not carry legal documents at all.
+      export, which does not carry legal documents at all, but `accessApps`:
+      the customer-service contact of every active access application that
+      has one, and nothing else of the application.
     security:
       - bearerAuth: []
     parameters:
@@ -92,6 +94,24 @@
                     type: string
                   legalDocuments:
                     $ref: "#/components/schemas/TenantLegalDocuments"
+                  accessApps:
+                    type: array
+                    description: Public export only - the customer-service contacts of the active access applications
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: ifbs
+                        customerService:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            phone:
+                              type: string
+                            email:
+                              type: string
 
 /api/tenants/{id}:
   get:

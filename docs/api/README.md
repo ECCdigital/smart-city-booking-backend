@@ -21,6 +21,14 @@ Instance-level routes under `/api/tenants`.
 
 Returns a public list of tenants. **No authentication required.**
 
+Each tenant carries `accessApps[]`: the customer-service contact of every active access application that has one, and nothing else of the application (its credentials never leave). The storefront reads it for the emergency help of a locker compartment.
+
+```json
+"accessApps": [
+  { "id": "ifbs", "customerService": { "name": "…", "phone": "…", "email": "…" } }
+]
+```
+
 ### GET /api/tenants
 
 Returns tenants visible to the authenticated user. **Requires JWT.**

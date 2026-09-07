@@ -48,6 +48,7 @@ const CHECKOUT_REASONS = {
 
   // payment (triggered as part of v2 checkout)
   LOCKER_UNAVAILABLE: "checkout.locker_unavailable",
+  COMPARTMENTS_UNAVAILABLE: "checkout.compartments_unavailable",
   PAYMENT_PROVIDER_UNAVAILABLE: "checkout.payment_provider_unavailable",
   PAYMENT_FAILED: "checkout.payment_failed",
 };
