@@ -26,5 +26,6 @@ Same filters as instance, plus `byBookableLimit`.
 - Stock KPIs (tenants/users/objects/`events`) ignore time and status; instance `users` = user docs, tenant `users` = active memberships
 - `activeEvents`: now-snapshot via `isEventBookable`; ignores `from`/`to`; undated events count as active
 - `byPeriod`: Europe/Berlin keys (`YYYY-MM-DD`, `YYYY-Www`, `YYYY-MM`, `YYYY`); zero-filled over effective range; max 366 buckets else 400. Replaces `revenueByMonth`.
+- `byBookable[].bookableTitle`: current bookable title when it still exists; otherwise the snapshot on the booking (`bookableItems._bookableUsed.title`). `bookableDeleted` is `true` when the bookable was removed.
 
 OpenAPI: `src/docs/routes/dashboard.yaml`.

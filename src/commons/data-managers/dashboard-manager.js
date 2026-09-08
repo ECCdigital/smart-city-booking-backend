@@ -129,6 +129,25 @@ function bookableIdMatch(bookableId) {
   return { "bookableItems.bookableId": bookableId };
 }
 
+function snapshotTitleFromAggRow(row) {
+  const title = row && row.bookableTitle;
+  if (typeof title === "string" && title.trim()) {
+    return title;
+  }
+  return "";
+}
+
+function resolveByBookableTitle(row, liveTitles) {
+  const snapshot = snapshotTitleFromAggRow(row) || row.bookableId;
+  const bookableDeleted = !liveTitles.has(row.bookableId);
+  const liveTitle = liveTitles.get(row.bookableId);
+  const hasLiveTitle = typeof liveTitle === "string" && liveTitle.trim();
+  return {
+    bookableTitle: !bookableDeleted && hasLiveTitle ? liveTitle : snapshot,
+    bookableDeleted,
+  };
+}
+
 function tenantIdMatch(tenantIds) {
   if (!tenantIds || tenantIds.length === 0) {
     return { tenantId: { $in: [] } };
@@ -610,6 +629,8 @@ class DashboardManager {
 
   /**
    * Activity-only per-bookable bookings + cancellations for one tenant.
+   * Title comes from the booking snapshot (`_bookableUsed.title`), replaced
+   * by the live bookable title when it still exists.
    * Returns unsorted rows (bookings/cancellations > 0). Caller applies limit.
    */
   static async aggregateByBookable({
@@ -636,6 +657,7 @@ class DashboardManager {
         $group: {
           _id: "$bookableItems.bookableId",
           bookings: { $sum: 1 },
+          bookableTitle: { $first: "$bookableItems._bookableUsed.title" },
         },
       },
     ]).exec();
@@ -678,6 +700,7 @@ class DashboardManager {
           $group: {
             _id: "$bookableItems.bookableId",
             cancellations: { $sum: 1 },
+            bookableTitle: { $first: "$bookableItems._bookableUsed.title" },
           },
         },
       );
@@ -698,6 +721,7 @@ class DashboardManager {
         bookableId: row._id,
         bookings: row.bookings,
         cancellations: 0,
+        bookableTitle: snapshotTitleFromAggRow(row),
       });
     }
     for (const row of cancellationRows) {
@@ -705,13 +729,18 @@ class DashboardManager {
         continue;
       }
       const existing = merged.get(row._id);
+      const snapshotTitle = snapshotTitleFromAggRow(row);
       if (existing) {
         existing.cancellations = row.cancellations;
+        if (!existing.bookableTitle && snapshotTitle) {
+          existing.bookableTitle = snapshotTitle;
+        }
       } else {
         merged.set(row._id, {
           bookableId: row._id,
           bookings: 0,
           cancellations: row.cancellations,
+          bookableTitle: snapshotTitle,
         });
       }
     }
@@ -721,23 +750,30 @@ class DashboardManager {
     );
 
     const ids = active.map((r) => r.bookableId);
-    const titles = new Map();
+    const liveTitles = new Map();
     if (ids.length) {
       const bookables = await BookableModel.find(
         { tenantId, id: { $in: ids } },
         { id: 1, title: 1 },
       ).lean();
       for (const b of bookables) {
-        titles.set(b.id, b.title);
+        liveTitles.set(b.id, b.title);
       }
     }
 
-    return active.map((row) => ({
-      bookableId: row.bookableId,
-      bookableTitle: titles.get(row.bookableId) || row.bookableId,
-      bookings: row.bookings,
-      cancellations: row.cancellations,
-    }));
+    return active.map((row) => {
+      const { bookableTitle, bookableDeleted } = resolveByBookableTitle(
+        row,
+        liveTitles,
+      );
+      return {
+        bookableId: row.bookableId,
+        bookableTitle,
+        bookableDeleted,
+        bookings: row.bookings,
+        cancellations: row.cancellations,
+      };
+    });
   }
 }
 
