@@ -188,6 +188,18 @@ describe("authorization policy: hand cases", function () {
     expect(decide(signedIn(), "bookable", "readPublic")).to.equal(REACH.PUBLIC);
   });
 
+  it("the prices of a bookable reach as far as the bookable itself, and the public beyond", function () {
+    expect(decide(anonymous(), "bookable", "prices")).to.equal(REACH.PUBLIC);
+    expect(decide(signedIn(), "bookable", "prices")).to.equal(REACH.PUBLIC);
+    expect(
+      decide(roleHolder("manageBookables.readOwn"), "bookable", "prices"),
+    ).to.equal(REACH.OWN);
+    expect(
+      decide(roleHolder("manageBookables.readAny"), "bookable", "prices"),
+    ).to.equal(REACH.ANY);
+    expect(decide(tenantOwner(), "bookable", "prices")).to.equal(REACH.ANY);
+  });
+
   it("a tenant owner reaches any of the tenant, but not the instance", function () {
     expect(decide(tenantOwner(), "accessPoint", "write")).to.equal(REACH.ANY);
     expect(decide(tenantOwner(), "instance", "update")).to.equal(null);

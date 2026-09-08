@@ -83,7 +83,7 @@ router.get(
 );
 router.get(
   "/bookables/:id/prices",
-  publicRoute("bookable", "readPublic"),
+  publicRoute("bookable", "prices"),
   BookableController.getBookablePriceCategories,
 );
 

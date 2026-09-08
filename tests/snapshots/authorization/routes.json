@@ -800,9 +800,9 @@
   "GET /api/:tenant/bookables/:id/prices": {
     "anonymous": "403 Bookable with id fx is not public",
     "signedIn": "403 Bookable with id fx is not public",
-    "roleHolder": "403 Bookable with id fx is not public",
-    "tenantOwner": "403 Bookable with id fx is not public",
-    "instanceOwner": "403 Bookable with id fx is not public"
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
   },
   "GET /api/:tenant/bookables": {
     "anonymous": 401,
