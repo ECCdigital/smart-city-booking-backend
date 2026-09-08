@@ -697,25 +697,15 @@ class ItemCheckoutService {
   }
 
   /**
-   * Whether an external provider replaces the platform's own count against
-   * `bookable.amount` (iFBS); a narrowing one (Pareva) runs after it.
-   */
-  get hasReplacingAvailability() {
-    return this.externalProviders.some(
-      (provider) =>
-        provider.handlesAvailability && !provider.narrowsAvailability,
-    );
-  }
-
-  /**
-   * The one availability seam: the platform's own count, unless a
-   * replacing provider is the source of the capacity, and then every
-   * narrowing provider, each of which can only refuse further. The answer
-   * is the count's; a narrowing provider that refuses throws in the same
-   * shape, one that cannot answer (`unknown: true`) passes.
+   * The one availability seam: the platform's own count, unless the
+   * bookable declares an external provider that replaces it (iFBS, with
+   * `availability` among its `handles`), and then every narrowing provider
+   * (Pareva), each of which can only refuse further. The answer is the
+   * count's; a narrowing provider that refuses throws in the same shape,
+   * one that cannot answer (`unknown: true`) passes.
    */
   async checkAvailability() {
-    const result = this.hasReplacingAvailability
+    const result = this.hasExternalAvailability
       ? await this._checkExternalAvailability()
       : await runAvailabilityCheck(await this._availabilityParams());
 
@@ -735,15 +725,7 @@ class ItemCheckoutService {
       if (result.unknown === true) continue;
 
       if (!result.available) {
-        throw {
-          checkType: CHECK_TYPES.AVAILABILITY,
-          available: false,
-          message:
-            result.message ||
-            `${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-          externalSource: true,
-          ...result,
-        };
+        throw this._externalAvailabilityRefusal(result);
       }
     }
   }
@@ -757,15 +739,7 @@ class ItemCheckoutService {
       const result = await provider.checkAvailability();
 
       if (!result.available) {
-        throw {
-          checkType: CHECK_TYPES.AVAILABILITY,
-          available: false,
-          message:
-            result.message ||
-            `${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
-          externalSource: true,
-          ...result,
-        };
+        throw this._externalAvailabilityRefusal(result);
       }
     }
 
@@ -773,6 +747,19 @@ class ItemCheckoutService {
       checkType: CHECK_TYPES.AVAILABILITY,
       available: true,
       externalSource: true,
+    };
+  }
+
+  /** The `CHECK_TYPES.AVAILABILITY` refusal an external provider's answer becomes. */
+  _externalAvailabilityRefusal(result) {
+    return {
+      checkType: CHECK_TYPES.AVAILABILITY,
+      available: false,
+      message:
+        result.message ||
+        `${this.originBookable.title} ist für den gewählten Zeitraum nicht verfügbar.`,
+      externalSource: true,
+      ...result,
     };
   }
 

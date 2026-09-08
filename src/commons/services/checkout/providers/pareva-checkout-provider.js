@@ -74,7 +74,7 @@ class ParevaCheckoutProvider extends BaseCheckoutProvider {
           () => this.client.getAvailableAssignments(productId, begin, end),
         );
       } catch (err) {
-        return this._unknown(accessPoint, err);
+        return this._unknownAnswer(accessPoint, err);
       }
 
       const remaining = entries.length;
@@ -104,7 +104,7 @@ class ParevaCheckoutProvider extends BaseCheckoutProvider {
    * the log names the row, so an admin can put the Produkt-ID right.
    * @private
    */
-  _unknown(accessPoint, err) {
+  _unknownAnswer(accessPoint, err) {
     const status = err?.response?.status;
     const message =
       status === 404 || status === 400

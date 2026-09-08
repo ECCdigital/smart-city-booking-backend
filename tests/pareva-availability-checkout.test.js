@@ -466,6 +466,32 @@ describe("Pareva availability at the checkout", function () {
       assert.strictEqual(BookingManager.getConcurrentBookings.callCount, 0);
     });
 
+    it("keeps the platform count for an iFBS bookable whose declaration does not hand iFBS the availability", async function () {
+      tenantApps = [ifbsApp()];
+      bookable = lockerBookable({
+        amount: 1,
+        accessPointDetails: null,
+        externalProviders: [
+          {
+            provider: "ifbs",
+            active: true,
+            handles: ["pricing"],
+            config: { locationId: "7", amount: 1 },
+          },
+        ],
+      });
+      concurrentBookings = [booked(1)];
+      const ifbsCheck = sinon
+        .stub(IfbsCheckoutProvider.prototype, "checkAvailability")
+        .resolves({ available: true, externalSource: "ifbs" });
+      const ics = await checkout(1);
+
+      await rejectsAvailability(ics.checkAvailability(), (err) => {
+        assert.strictEqual(err.totalCapacity, 1);
+      });
+      assert.strictEqual(ifbsCheck.callCount, 0);
+    });
+
     it("asks Pareva once per product and window for the checks of one calendar render", async function () {
       const externalCache = new Map();
       const first = await checkout(1, externalCache);
