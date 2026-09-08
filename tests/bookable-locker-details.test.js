@@ -91,19 +91,20 @@ describe("deriveLockerDetails", () => {
     });
   });
 
-  it("gives a unit the amount the bookable distributes to its row, the bookable's where none is distributed", () => {
-    const spread = bookable({
+  it("gives every unit the bookable's amount - nothing is distributed over the rows, a stored distribution counts for nothing", () => {
+    const twoRows = bookable({
+      amount: 5,
       accessPointDetails: {
         active: true,
         accessPointIds: [BIKE_BOXES.id, SIZE_S.id],
-        accessPointAmounts: { [SIZE_S.id]: 5 },
+        accessPointAmounts: { [SIZE_S.id]: 1 },
       },
     });
 
-    expect(deriveLockerDetails(spread, [BIKE_BOXES, SIZE_S])).to.deep.equal({
+    expect(deriveLockerDetails(twoRows, [BIKE_BOXES, SIZE_S])).to.deep.equal({
       active: true,
       units: [
-        { lockerSystem: "ifbs", locationId: "7", amount: 2 },
+        { lockerSystem: "ifbs", locationId: "7", amount: 5 },
         { id: "S", lockerSystem: "pareva", amount: 5 },
       ],
     });

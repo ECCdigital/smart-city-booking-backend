@@ -1,8 +1,5 @@
 const bunyan = require("bunyan");
 const BaseCheckoutProvider = require("./base-checkout-provider");
-const {
-  compartmentsAt,
-} = require("../../../entities/bookable/access-point-amounts");
 
 const logger = bunyan.createLogger({
   name: "pareva-checkout-provider.js",
@@ -17,10 +14,12 @@ const PROVIDER_ID = "pareva";
  * platform keeps no number for it. So the check asks Pareva live, once per
  * product and window: `rental/available` answers one entry per free
  * compartment, and the booking fits when there are at least as many as it
- * needs at that Anlage (`compartmentsAt`).
+ * needs at that Anlage: one per booked unit of the item.
  *
  * The check narrows the platform's own count against `bookable.amount`, it
- * never replaces it - both have to pass. And it never refuses because
+ * never replaces it - both have to pass; where that count has nothing to
+ * check, an unlimited `amount`, this check decides alone. And it never
+ * refuses because
  * Pareva is down: a Pareva that cannot answer (timeout, a non-2xx answer,
  * an unreadable body) makes the check `unknown`, and the platform count
  * decides alone.
@@ -65,7 +64,7 @@ class ParevaCheckoutProvider extends BaseCheckoutProvider {
 
     for (const accessPoint of this.accessPoints) {
       const productId = String(accessPoint.externalId);
-      const needed = compartmentsAt(this.bookable, accessPoint.id, this.amount);
+      const needed = this.amount;
 
       let entries;
       try {

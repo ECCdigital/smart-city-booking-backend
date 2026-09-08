@@ -127,77 +127,41 @@ describe("BookableController access point references", () => {
     expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
   });
 
-  describe("the amount per locker system", () => {
-    function withAmounts(accessPointIds, accessPointAmounts) {
+  describe("accessPointAmounts, the removed distribution", () => {
+    function withAmounts(accessPointAmounts) {
       request.body.accessPointDetails = {
         active: true,
-        accessPointIds: accessPointIds,
-        accessPointAmounts: accessPointAmounts,
+        accessPointIds: ["locker-1"],
+        accessPointAmounts,
       };
-      stubAccessPoints(accessPointIds);
+      stubAccessPoints(["locker-1"]);
     }
 
-    const stored = () =>
-      storeBookable.firstCall.args[0].accessPointDetails.accessPointAmounts;
+    const storedDetails = () =>
+      storeBookable.firstCall.args[0].accessPointDetails;
 
-    it("keeps the amounts of the referenced access points, as numbers", async () => {
-      withAmounts(["locker-1", "locker-2"], { "locker-1": 3, "locker-2": "4" });
+    it("ignores the field a client still sends on update: stored without it, no error", async () => {
+      withAmounts({ "locker-1": 3 });
 
       await BookableController.updateBookable(request, response, next);
 
-      expect(stored()).to.deep.equal({ "locker-1": 3, "locker-2": 4 });
+      expect(next.called).to.be.false;
+      expect(response.status.calledWith(201)).to.be.true;
+      expect(storedDetails()).to.deep.equal({
+        active: true,
+        accessPointIds: ["locker-1"],
+      });
     });
 
-    it("drops an amount for an access point the bookable does not reference", async () => {
-      withAmounts(["locker-1"], { "locker-1": 3, gone: 4 });
+    it("ignores the field on create as well, whatever shape it has", async () => {
+      delete request.body.id;
+      withAmounts([3]);
 
-      await BookableController.updateBookable(request, response, next);
+      await BookableController.createBookable(request, response, next);
 
-      expect(stored()).to.deep.equal({ "locker-1": 3 });
-    });
-
-    it("rejects an amount that is not a whole number of compartments", async () => {
-      withAmounts(["locker-1"], { "locker-1": -1 });
-
-      await BookableController.updateBookable(request, response, next);
-
-      expect(storeBookable.called).to.be.false;
-      const err = next.firstCall.args[0];
-      expect(err).to.be.instanceOf(ValidationError);
-      expect(err.errors).to.deep.equal([
-        {
-          field: "accessPointDetails.accessPointAmounts",
-          code: "invalid_amount",
-          params: { accessPointId: "locker-1", amount: -1 },
-        },
-      ]);
-    });
-
-    it("rejects a field that is no map of amounts at all", async () => {
-      withAmounts(["locker-1"], [3]);
-
-      await BookableController.updateBookable(request, response, next);
-
-      expect(storeBookable.called).to.be.false;
-      const err = next.firstCall.args[0];
-      expect(err).to.be.instanceOf(ValidationError);
-      expect(err.errors).to.deep.equal([
-        {
-          field: "accessPointDetails.accessPointAmounts",
-          code: "invalid_amounts",
-          params: { accessPointAmounts: [3] },
-        },
-      ]);
-    });
-
-    it("leaves a bookable without the field alone", async () => {
-      request.body.accessPointDetails.accessPointIds = ["locker-1"];
-      stubAccessPoints(["locker-1"]);
-
-      await BookableController.updateBookable(request, response, next);
-
-      expect(storeBookable.calledOnce).to.be.true;
-      expect(stored()).to.equal(undefined);
+      expect(next.called).to.be.false;
+      expect(response.status.calledWith(201)).to.be.true;
+      expect(storedDetails()).to.not.have.property("accessPointAmounts");
     });
   });
 
@@ -246,7 +210,7 @@ describe("BookableManager access point references", () => {
     });
   });
 
-  it("pulls a deleted access point out of the bookables of its tenant, its distributed compartments with it", async () => {
+  it("pulls a deleted access point out of the bookables of its tenant", async () => {
     const updateMany = sandbox.stub(BookableModel, "updateMany").resolves();
 
     await BookableManager.detachAccessPoint("tenant-1", "door-1");
@@ -258,7 +222,6 @@ describe("BookableManager access point references", () => {
       },
       {
         $pull: { "accessPointDetails.accessPointIds": "door-1" },
-        $unset: { "accessPointDetails.accessPointAmounts.door-1": "" },
       },
     ]);
   });

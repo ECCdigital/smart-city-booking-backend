@@ -181,7 +181,30 @@ describe("Pareva availability at the checkout", function () {
     });
 
     it("refuses when Pareva lists fewer free compartments than the booking needs at the product", async function () {
-      // Two compartments per booking at this Anlage; Pareva has one free.
+      // A booking of two needs two compartments; Pareva has one free.
+      const provider = checkoutProvider(parevaWith(1), { amount: 2 });
+
+      const result = await provider.checkAvailability();
+
+      assert.strictEqual(result.available, false);
+      assert.strictEqual(result.remaining, 1);
+      assert.strictEqual(result.needed, 2);
+      assert.strictEqual(result.externalSource, "pareva");
+      assert.strictEqual(result.productId, PRODUCT_ID);
+      assert.match(result.message, /Schließfach/);
+    });
+
+    it("needs one compartment per booked unit: a booking of three asks Pareva for three", async function () {
+      const provider = checkoutProvider(parevaWith(5), { amount: 3 });
+
+      const result = await provider.checkAvailability();
+
+      assert.strictEqual(result.available, true);
+      assert.strictEqual(result.needed, 3);
+      assert.strictEqual(result.remaining, 5);
+    });
+
+    it("pays no attention to a distribution still stored at the bookable", async function () {
       const provider = checkoutProvider(parevaWith(1), {
         bookable: lockerBookable({
           accessPointDetails: {
@@ -195,12 +218,8 @@ describe("Pareva availability at the checkout", function () {
 
       const result = await provider.checkAvailability();
 
-      assert.strictEqual(result.available, false);
-      assert.strictEqual(result.remaining, 1);
-      assert.strictEqual(result.needed, 2);
-      assert.strictEqual(result.externalSource, "pareva");
-      assert.strictEqual(result.productId, PRODUCT_ID);
-      assert.match(result.message, /Schließfach/);
+      assert.strictEqual(result.available, true);
+      assert.strictEqual(result.needed, 1);
     });
 
     it("answers unknown, never a refusal, when Pareva cannot be reached", async function () {
@@ -388,6 +407,48 @@ describe("Pareva availability at the checkout", function () {
       assert.strictEqual(result.totalCapacity, 5);
       assert.strictEqual(result.booked, 0);
       assert.strictEqual(pareva.availabilityRequests.length, 1);
+    });
+
+    it("passes a booking of three when the amount has room and Pareva lists at least three", async function () {
+      bookable = lockerBookable({ amount: 3 });
+      pareva = parevaWith(5);
+      const ics = await checkout(3);
+
+      const result = await ics.checkAvailability();
+
+      assert.strictEqual(result.available, true);
+      assert.strictEqual(result.totalCapacity, 3);
+      assert.strictEqual(pareva.availabilityRequests.length, 1);
+    });
+
+    it("refuses a booking of three when Pareva lists only two, although the amount has room", async function () {
+      bookable = lockerBookable({ amount: 3 });
+      pareva = parevaWith(2);
+      const ics = await checkout(3);
+
+      await rejectsAvailability(ics.checkAvailability(), (err) => {
+        assert.strictEqual(err.externalSource, "pareva");
+        assert.strictEqual(err.remaining, 2);
+        assert.strictEqual(err.needed, 3);
+      });
+    });
+
+    it("leaves the decision to Pareva alone when the bookable's amount is unlimited", async function () {
+      bookable = lockerBookable({ amount: null });
+      concurrentBookings = [booked(7)];
+      pareva = parevaWith(1);
+
+      const result = await (await checkout(1)).checkAvailability();
+      assert.strictEqual(result.available, true);
+
+      pareva = parevaWith(0);
+      await rejectsAvailability(
+        (await checkout(1)).checkAvailability(),
+        (err) => {
+          assert.strictEqual(err.externalSource, "pareva");
+          assert.strictEqual(err.needed, 1);
+        },
+      );
     });
 
     it("leaves the decision to the platform count when Pareva cannot answer", async function () {

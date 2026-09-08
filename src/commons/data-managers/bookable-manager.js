@@ -335,9 +335,7 @@ class BookableManager {
   /**
    * Remove an access point reference from every bookable of a tenant. Called
    * when the access point itself is deleted, so no bookable is left pointing at
-   * an access point that no longer exists. The compartments the bookable
-   * distributed to it go with the reference - an amount without a reference
-   * means nothing and would only be a second truth about one that is gone.
+   * an access point that no longer exists.
    * @param {string} tenantId Tenant ID
    * @param {string} accessPointId Access point ID
    * @returns {Promise<void>}
@@ -350,9 +348,6 @@ class BookableManager {
       },
       {
         $pull: { "accessPointDetails.accessPointIds": accessPointId },
-        $unset: {
-          [`accessPointDetails.accessPointAmounts.${accessPointId}`]: "",
-        },
       },
     );
   }
