@@ -11,6 +11,7 @@ const {
   decide,
   scopeOf,
   scopeFor,
+  withinReach,
 } = require("../../../commons/services/authorization");
 const {
   getRelatedOpeningHours,
@@ -624,7 +625,12 @@ class BookableController {
           .send(`Bookable with id ${bookableId} not found`);
       }
 
-      if (!bookable.isPublic) {
+      // The public sees the prices of a public bookable; whoever may read
+      // the bookable itself sees them before it is listed.
+      if (
+        !bookable.isPublic &&
+        !withinReach(bookable, "ownerUserId", scopeOf(request))
+      ) {
         logger.warn(
           `${tenantId} -- Bookable with id ${bookableId} is not public.`,
         );

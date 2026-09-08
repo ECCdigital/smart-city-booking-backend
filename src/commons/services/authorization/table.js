@@ -75,8 +75,17 @@ const TABLE = {
   // away itself (§11, ticket 2).
   bookable: {
     ...crud("manageBookables"),
-    // `/bookables/public*`, `openingHours`, `occupancy`, `prices`
+    // `/bookables/public*`, `openingHours`, `occupancy`
     readPublic: { public: true },
+    // `GET /bookables/:id/prices`: the public projection is the prices of
+    // a public bookable; whoever may read the bookable itself reads the
+    // prices of a hidden one too - the admin UI previews a provider's
+    // prices before the bookable is listed.
+    prices: {
+      public: true,
+      own: "manageBookables.readOwn",
+      any: "manageBookables.readAny",
+    },
     template: { any: "manageBookables.create" },
     // `_meta/tags`, `count/check`: signed in, nothing further (as today).
     meta: { own: "signedIn" },
