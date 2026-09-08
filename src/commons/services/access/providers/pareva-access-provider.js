@@ -1,10 +1,6 @@
 const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const { createClient } = require("../clients/access-client-registry");
-const {
-  AccessCapability,
-  AccessPointMode,
-} = require("../../../entities/access/access-point");
 const { NotFoundError } = require("../../../../errors/BaseError");
 
 require("../clients");
@@ -13,12 +9,18 @@ const PROVIDER_ID = "pareva";
 const APP_TYPE = "access";
 
 /**
- * Pareva locker systems: an access point is a size (product) of the
- * tenant's locker system, and a grant is a rental of one compartment of
- * that size. Pareva mails the access code to the person itself, so the
- * platform neither learns a secret nor opens anything: the adapter grants,
- * revokes and lists, and declares no `open`, `getStatus` or `hold` - the
- * stored booking is the claim on a compartment until the payment.
+ * Pareva locker systems: an access point is a product of the tenant's
+ * locker system, its `externalId` the Pareva product id (a 24-hex id, the
+ * Produkt-ID an admin enters by hand), and a grant is a rental of one
+ * compartment of that product. Pareva mails the access code to the person
+ * itself, so the platform neither learns a secret nor opens anything: the
+ * adapter grants and revokes, and declares no `open`, `getStatus` or `hold`
+ * - the stored booking is the claim on a compartment until the payment.
+ *
+ * It lists no access points: what `GET /locker/{lockerId}/available` lists
+ * are size codes, not products, so a listed entry could never be rented.
+ * How many compartments of a product are free is asked live at checkout by
+ * `ParevaCheckoutProvider`.
  */
 class ParevaAccessProvider extends AccessProvider {
   /**
@@ -49,11 +51,11 @@ class ParevaAccessProvider extends AccessProvider {
   }
 
   /**
-   * Starts a rental of one compartment of the size for the booking's time.
+   * Starts a rental of one compartment of the product for the booking's time.
    * Pareva answers the process of the rental, which is the grant, and
    * mails the access code to the booking's address from the tenant's.
    *
-   * @param {Object} accessPoint The size, its `externalId` the Pareva
+   * @param {Object} accessPoint The product, its `externalId` the Pareva
    *   product id
    * @param {Object} bookingContext The booking that rents; `booking.mail`
    *   is where Pareva sends the code
@@ -75,7 +77,7 @@ class ParevaAccessProvider extends AccessProvider {
 
     if (rental?.processId == null) {
       throw new Error(
-        `Pareva answered the rental of size '${accessPoint.externalId}' without a processId`,
+        `Pareva answered the rental of product '${accessPoint.externalId}' without a processId`,
       );
     }
 
@@ -91,7 +93,7 @@ class ParevaAccessProvider extends AccessProvider {
    * to do; a cancel Pareva refuses is thrown, since the person keeps the
    * compartment then and the failure has to be seen.
    *
-   * @param {Object} accessPoint The size the rental was made for
+   * @param {Object} accessPoint The product the rental was made for
    * @param {import("./access-provider").Grant} grant The grant to revoke
    * @returns {Promise<import("./access-provider").Revocation>} Always with
    *   no principal to remove
@@ -126,36 +128,8 @@ class ParevaAccessProvider extends AccessProvider {
     return { principalRemoved: null };
   }
 
-  /**
-   * The sizes the tenant's locker system offers, one access point each.
-   * The locker system itself is the location they share.
-   *
-   * @param {string} tenant Tenant to list for
-   * @returns {Promise<import("./access-provider").ListedAccessPoint[]>}
-   */
-  async listAccessPoints(tenant) {
-    const client = await this._getClient(tenant);
-    const sizes = await client.listSizes();
-
-    return sizes.map((size) => {
-      const sizeId = String(size.size);
-
-      return {
-        id: sizeId,
-        type: "locker",
-        provider: PROVIDER_ID,
-        externalId: sizeId,
-        locationId: client.lockerId != null ? String(client.lockerId) : null,
-        label: String(size.name || sizeId),
-        capabilities: [AccessCapability.AUTHORIZATION],
-        supportedModes: [AccessPointMode.AUTHORIZATION],
-        metadata: size,
-      };
-    });
-  }
-
   static get capabilities() {
-    return ["grantAuthorization", "revokeAuthorization", "listAccessPoints"];
+    return ["grantAuthorization", "revokeAuthorization"];
   }
 }
 

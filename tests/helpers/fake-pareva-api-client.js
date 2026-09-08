@@ -6,7 +6,11 @@
  *
  * What the fake models of Pareva, as far as the platform has learned it:
  * - `GET /locker/{lockerId}/available` lists the sizes.
- * - `POST /locker/{lockerId}/rental/{size}/open` starts a rental and
+ * - `POST /locker/{lockerId}/rental/available?v=2` answers one
+ *   `ProductAssignment` per compartment of the product that is free in the
+ *   window: what the product has (`free`) less the open rentals that
+ *   overlap the window. A product Pareva does not have is a 404.
+ * - `POST /locker/{lockerId}/rental/{productId}/open` starts a rental and
  *   answers its `processId`; Pareva mails the access code itself, so the
  *   fake records the rental and nothing else.
  * - `POST /locker/{lockerId}/process/{processId}/cancel` cancels a rental
@@ -33,8 +37,10 @@ class FakeParevaApiClient extends ParevaApiClient {
   /**
    * @param {Object} [options]
    * @param {string} [options.lockerId="locker-1"] The locker system
-   * @param {(string|Object)[]} [options.sizes] The sizes it offers, each a
-   *   size id or a record `{ size, ... }` as the listing carries it
+   * @param {(string|Object)[]} [options.sizes] The products it rents, each
+   *   a product id or a record `{ size, free, ... }` - `size` the id the
+   *   rental and the availability check address, `free` how many
+   *   compartments of it are free (none when absent)
    */
   constructor({ lockerId = "locker-1", sizes = [] } = {}) {
     super("https://pareva.fake", lockerId, "user", "password");
@@ -43,6 +49,8 @@ class FakeParevaApiClient extends ParevaApiClient {
         ? { size }
         : { ...size, size: String(size.size) },
     );
+    /** @type {Object[]} The bodies of every availability check asked */
+    this.availabilityRequests = [];
     /**
      * @type {Map<string, Object>} processId -> rental:
      *   `{ processId, size, state, ...the body the rental was started
@@ -65,6 +73,34 @@ class FakeParevaApiClient extends ParevaApiClient {
 
     if (route === `GET /locker/${this.lockerId}/available`) {
       return { availableSizes: this.sizes.map((size) => ({ ...size })) };
+    }
+
+    if (
+      (match = path.match(/^\/locker\/([^/]+)\/rental\/available\?v=2$/)) &&
+      method === "post"
+    ) {
+      this._lockerSystem(match[1]);
+      const request = JSON.parse(data);
+      this.availabilityRequests.push(request);
+      const product = this.sizes.find(
+        (candidate) => candidate.size === String(request.productId),
+      );
+      if (!product) {
+        throw parevaHttpError(404, { reason: "product not found" });
+      }
+      const rented = this.rentalsInState("open").filter(
+        (rental) =>
+          rental.size === product.size &&
+          Number(rental.plannedBegin) < request.end &&
+          Number(rental.plannedBegin) + Number(rental.date_estimate_delivery) >
+            request.begin,
+      ).length;
+      const free = Math.max(0, (product.free || 0) - rented);
+      return Array.from({ length: free }, (_, index) => ({
+        id: `${product.size}-${index + 1}`,
+        lockerId: this.lockerId,
+        stock: 1,
+      }));
     }
 
     if (

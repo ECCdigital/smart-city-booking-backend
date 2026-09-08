@@ -861,7 +861,7 @@ Example:
 
 ### AccessPoint
 
-Access points are tenant-wide entities (`accesspoints` collection) a bookable references through `accessPointDetails.accessPointIds`: a door (`type: door`, shared, configured once) or a locker system (`type: locker`, exclusive, a compartment assigned per booking - an iFBS location or a Pareva size).
+Access points are tenant-wide entities (`accesspoints` collection) a bookable references through `accessPointDetails.accessPointIds`: a door (`type: door`, shared, configured once) or a locker system (`type: locker`, exclusive, a compartment assigned per booking - an iFBS location or a Pareva product, its `externalId` the product's 24-hex id at Pareva, entered by hand; how many compartments of it are free is asked live at checkout).
 
 Example:
 

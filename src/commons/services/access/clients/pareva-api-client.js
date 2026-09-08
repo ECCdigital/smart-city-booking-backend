@@ -53,11 +53,45 @@ class ParevaApiClient extends BaseAccessApiClient {
   }
 
   /**
-   * Starts a rental of one compartment of the given size:
+   * Asks how many compartments of a product are free in a window:
+   * `POST /locker/{lockerId}/rental/available?v=2`. Pareva answers one
+   * `ProductAssignment` per free compartment, so the caller counts the
+   * entries; the platform's holds are not in the answer, Pareva learns of a
+   * booking only when its rental starts.
+   *
+   * @param {string} productId The product, a 24-hex id at Pareva
+   * @param {number} begin Start of the window, epoch ms
+   * @param {number} end End of the window, epoch ms
+   * @returns {Promise<Object[]>} The free compartments, one entry each
+   * @throws {Error} Pareva's own error, or one of our own when the answer
+   *   is no list
+   */
+  async getAvailableAssignments(productId, begin, end) {
+    const entries = await this._request(
+      "post",
+      `/locker/${this.lockerId}/rental/available?v=2`,
+      JSON.stringify({
+        productId,
+        begin: new Date(begin).getTime(),
+        end: new Date(end).getTime(),
+      }),
+    );
+
+    if (!Array.isArray(entries)) {
+      throw new Error(
+        `Pareva answered the availability of product '${productId}' without a list`,
+      );
+    }
+
+    return entries;
+  }
+
+  /**
+   * Starts a rental of one compartment of the given product:
    * `POST /locker/{lockerId}/rental/{productId}/open`. Pareva answers with
    * the `processId` of the rental and mails the access code to `email`.
    *
-   * @param {string} productId The size to rent
+   * @param {string} productId The product to rent
    * @param {Object} rental
    * @param {string} rental.email Who rents, and gets the code from Pareva
    * @param {string} rental.fromEmail The tenant's address Pareva mails from
@@ -103,6 +137,7 @@ class ParevaApiClient extends BaseAccessApiClient {
       "getLocations",
       "getLocationById",
       "listSizes",
+      "getAvailableAssignments",
       "startRental",
       "cancelRental",
     ];

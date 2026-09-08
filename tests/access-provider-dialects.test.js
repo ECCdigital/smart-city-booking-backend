@@ -1137,8 +1137,18 @@ describe("access provider dialects: the adapters as they answer", () => {
       expect(ParevaAccessProvider.capabilities).to.deep.equal([
         "grantAuthorization",
         "revokeAuthorization",
-        "listAccessPoints",
       ]);
+    });
+
+    it("declares no listAccessPoints: the listing lists size codes, and an Anlage is a product entered by hand", async () => {
+      expect(ParevaAccessProvider.capabilities).not.to.include(
+        "listAccessPoints",
+      );
+      await rejects(
+        provider.listAccessPoints(TENANT),
+        Error,
+        "listAccessPoints() is not supported by ParevaAccessProvider",
+      );
     });
 
     it("answers a grant as a Grant: the rental's process, no principal, no secret", async () => {
@@ -1245,24 +1255,6 @@ describe("access provider dialects: the adapters as they answer", () => {
         }),
         (err) => expect(err.response.status).to.equal(500),
       );
-    });
-
-    it("lists the sizes as locker access points that take a code, located at the locker system", async () => {
-      const points = await provider.listAccessPoints(TENANT);
-
-      expect(points).to.deep.equal([
-        {
-          id: PAREVA_SIZE,
-          type: "locker",
-          provider: "pareva",
-          externalId: PAREVA_SIZE,
-          locationId: PAREVA_LOCKER_ID,
-          label: PAREVA_SIZE,
-          capabilities: ["authorization"],
-          supportedModes: [AccessPointMode.AUTHORIZATION],
-          metadata: { size: PAREVA_SIZE },
-        },
-      ]);
     });
 
     const parevaApplication = (type) => ({

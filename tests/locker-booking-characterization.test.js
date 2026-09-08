@@ -62,6 +62,8 @@ const {
 const IfbsAccessProvider = require("../src/commons/services/access/providers/ifbs-access-provider");
 const ParevaAccessProvider = require("../src/commons/services/access/providers/pareva-access-provider");
 const IfbsApiClient = require("../src/commons/services/access/clients/ifbs-api-client");
+const ParevaCheckoutProvider = require("../src/commons/services/checkout/providers/pareva-checkout-provider");
+const checkoutProviderRegistry = require("../src/commons/services/checkout/providers/register");
 const { FakeIfbsApiClient } = require("./helpers/fake-ifbs-api-client");
 const { FakeParevaApiClient } = require("./helpers/fake-pareva-api-client");
 
@@ -199,20 +201,33 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
         }
       },
     );
+    // The checkout asks Pareva live how many compartments are free: the
+    // same fake answers, so the suite never reaches the network.
+    checkoutProviderRegistry.register(
+      "pareva",
+      class extends ParevaCheckoutProvider {
+        constructor(client, context) {
+          super(pareva, context);
+        }
+      },
+    );
   }
 
   after(function () {
     registerAccessProvider("ifbs", IfbsAccessProvider);
     registerAccessProvider("pareva", ParevaAccessProvider);
+    checkoutProviderRegistry.register("pareva", ParevaCheckoutProvider);
   });
 
   beforeEach(function () {
     ifbs = new FakeIfbsApiClient({
       locations: [{ LocationID: IFBS_LOCATION, boxes: [BOX_A, BOX_B] }],
     });
+    // Product S has two compartments at Pareva, as many as the bookable
+    // offers.
     pareva = new FakeParevaApiClient({
       lockerId: PAREVA_LOCKER_ID,
-      sizes: [SIZE_S],
+      sizes: [{ size: SIZE_S, free: 2 }],
     });
     installFakeProviders();
     store = new Map();
@@ -413,6 +428,24 @@ describe("locker booking outcomes: what the locker stack leaves at the booking a
         });
       }
       expect(pareva.rentals.size).to.equal(0);
+    });
+
+    it("refuses a booking when Pareva has fewer compartments of the product free than it needs", async function () {
+      pareva = new FakeParevaApiClient({
+        lockerId: PAREVA_LOCKER_ID,
+        sizes: [{ size: SIZE_S, free: 1 }],
+      });
+
+      await assert.rejects(createUnpaidBooking("locker-s", 2), (err) => {
+        expect(err.message).to.include("nicht verfügbar");
+        return true;
+      });
+      expect(store.size).to.equal(0);
+
+      const booking = await createUnpaidBooking("locker-s", 1);
+
+      expect(stored(booking.id).lockerInfo).to.have.length(1);
+      expect(pareva.availabilityRequests).to.have.length(2);
     });
 
     it("counts Pareva compartments against the concurrent bookings of the bookable", async function () {
