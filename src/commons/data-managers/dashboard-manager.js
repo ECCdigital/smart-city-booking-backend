@@ -129,6 +129,86 @@ function bookableIdMatch(bookableId) {
   return { "bookableItems.bookableId": bookableId };
 }
 
+function paidRevenueMatch({ tenantIds, fromMs, toMs, bookableId }) {
+  return {
+    ...tenantIdMatch(tenantIds),
+    isPayed: true,
+    isRejected: false,
+    ...timeRangeMatch("timePaid", fromMs, toMs),
+    ...bookableIdMatch(bookableId),
+  };
+}
+
+/**
+ * Catalog/full gross (VAT included) as if no user/role discounts or coupons
+ * applied. Uses expression `$sum` of `$map` (not a `$group` accumulator) so
+ * MongoDB actually adds the item prices. Floored at invoice `priceEur` —
+ * full price cannot be below what was paid.
+ */
+function bookingRegularGrossEurExpr() {
+  return {
+    $max: [
+      {
+        $sum: {
+          $map: {
+            input: { $ifNull: ["$bookableItems", []] },
+            as: "item",
+            in: {
+              $multiply: [
+                { $ifNull: ["$$item.regularGrossPriceEur", 0] },
+                {
+                  $cond: [
+                    { $eq: ["$$item.ignoreAmount", true] },
+                    1,
+                    {
+                      $let: {
+                        vars: {
+                          amount: {
+                            $convert: {
+                              input: "$$item.amount",
+                              to: "double",
+                              onError: 1,
+                              onNull: 1,
+                            },
+                          },
+                        },
+                        in: {
+                          $cond: [{ $gt: ["$$amount", 0] }, "$$amount", 1],
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      { $ifNull: ["$priceEur", 0] },
+    ],
+  };
+}
+
+function paidRevenueStages(groupIdExpr) {
+  return [
+    { $addFields: { _regularGrossEur: bookingRegularGrossEurExpr() } },
+    {
+      $group: {
+        _id: groupIdExpr,
+        revenueEur: { $sum: "$priceEur" },
+        regularRevenueEur: { $sum: "$_regularGrossEur" },
+      },
+    },
+  ];
+}
+
+function revenueTotalsFromRow(row) {
+  return {
+    revenueEur: row.revenueEur || 0,
+    regularRevenueEur: row.regularRevenueEur || 0,
+  };
+}
+
 function snapshotTitleFromAggRow(row) {
   const title = row && row.bookableTitle;
   if (typeof title === "string" && title.trim()) {
@@ -464,6 +544,8 @@ class DashboardManager {
   /**
    * Revenue totals by tenant. Unaffected by status filter.
    * Uses timePaid + isPayed && !isRejected.
+   * `revenueEur` is invoice (paid) amount; `regularRevenueEur` is catalog/full
+   * gross as if every user paid `regularGrossPriceEur`.
    */
   static async aggregateRevenueByTenant({
     tenantIds,
@@ -475,25 +557,12 @@ class DashboardManager {
       return new Map();
     }
 
-    const match = {
-      ...tenantIdMatch(tenantIds),
-      isPayed: true,
-      isRejected: false,
-      ...timeRangeMatch("timePaid", fromMs, toMs),
-      ...bookableIdMatch(bookableId),
-    };
-
     const rows = await BookingModel.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: "$tenantId",
-          revenueEur: { $sum: "$priceEur" },
-        },
-      },
+      { $match: paidRevenueMatch({ tenantIds, fromMs, toMs, bookableId }) },
+      ...paidRevenueStages("$tenantId"),
     ]).exec();
 
-    return new Map(rows.map((r) => [r._id, { revenueEur: r.revenueEur }]));
+    return new Map(rows.map((r) => [r._id, revenueTotalsFromRow(r)]));
   }
 
   /**
@@ -593,7 +662,7 @@ class DashboardManager {
 
   /**
    * Revenue grouped by Europe/Berlin period key. Unaffected by status filter.
-   * @returns {Promise<Map<string, number>>} period → revenueEur
+   * @returns {Promise<Map<string, { revenueEur: number, regularRevenueEur: number }>>}
    */
   static async aggregateRevenueByPeriod({
     tenantIds,
@@ -606,25 +675,14 @@ class DashboardManager {
       return new Map();
     }
 
-    const match = {
-      ...tenantIdMatch(tenantIds),
-      isPayed: true,
-      isRejected: false,
-      ...timeRangeMatch("timePaid", fromMs, toMs),
-      ...bookableIdMatch(bookableId),
-    };
-
     const rows = await BookingModel.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: periodKeyExpr(epochMsToDateExpr("$timePaid"), granularity),
-          revenueEur: { $sum: "$priceEur" },
-        },
-      },
+      { $match: paidRevenueMatch({ tenantIds, fromMs, toMs, bookableId }) },
+      ...paidRevenueStages(
+        periodKeyExpr(epochMsToDateExpr("$timePaid"), granularity),
+      ),
     ]).exec();
 
-    return new Map(rows.map((r) => [r._id, r.revenueEur]));
+    return new Map(rows.map((r) => [r._id, revenueTotalsFromRow(r)]));
   }
 
   /**

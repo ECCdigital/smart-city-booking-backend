@@ -22,7 +22,7 @@ Same filters as instance, plus `byBookableLimit`.
 
 - Bookings / status: `timeCreated` (bookings include rejected); multi-`status` OR filters booking-side KPIs only
 - Cancellations: `isRejected`, time via `cancellationRefund.cancelledAt` (fallback `timeCreated`); zero when status filter omits rejected
-- Revenue: `isPayed && !isRejected`, sum `priceEur` on `timePaid`; `status` does not constrain revenue (totals or `byPeriod`)
+- Revenue: `isPayed && !isRejected`, time via `timePaid`; `status` does not constrain revenue (totals or `byPeriod`). `revenueEur` is invoice (`priceEur` / user gross). `regularRevenueEur` is catalog/full gross (`bookableItems.regularGrossPriceEur × amount`) as if no user/role discounts or coupons applied; never below `revenueEur` (legacy bookings without a snapshot use `priceEur`).
 - Stock KPIs (tenants/users/objects/`events`) ignore time and status; instance `users` = user docs, tenant `users` = active memberships
 - `activeEvents`: now-snapshot via `isEventBookable`; ignores `from`/`to`; undated events count as active
 - `byPeriod`: Europe/Berlin keys (`YYYY-MM-DD`, `YYYY-Www`, `YYYY-MM`, `YYYY`); zero-filled over effective range; max 366 buckets else 400. Replaces `revenueByMonth`.

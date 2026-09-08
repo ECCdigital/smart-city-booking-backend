@@ -206,6 +206,12 @@ components:
           type: integer
         revenueEur:
           type: number
+          description: Invoice revenue (sum of paid `priceEur`)
+        regularRevenueEur:
+          type: number
+          description: >
+            Catalog/full gross as if every user paid `regularGrossPriceEur`
+            (before user/role discounts and coupons)
     DashboardTenantKpis:
       type: object
       properties:
@@ -226,6 +232,12 @@ components:
           description: Now-snapshot Active Event count (isEventBookable); ignores from/to
         revenueEur:
           type: number
+          description: Invoice revenue (sum of paid `priceEur`)
+        regularRevenueEur:
+          type: number
+          description: >
+            Catalog/full gross as if every user paid `regularGrossPriceEur`
+            (before user/role discounts and coupons)
     DashboardInstanceSummary:
       type: object
       properties:
