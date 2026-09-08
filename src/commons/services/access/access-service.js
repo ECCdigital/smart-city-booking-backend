@@ -11,9 +11,6 @@ const { decide, satisfy } = require("./access-decision");
 const { projectAccessPoint } = require("./access-point-projection");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
-const {
-  compartmentsAt,
-} = require("../../entities/bookable/access-point-amounts");
 const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 const AccessProvisionError = require("../../../errors/AccessProvisionError");
@@ -583,10 +580,10 @@ class AccessService {
   /**
    * Holds a compartment of every locker system the booking books, for a
    * booking not paid yet. One `accessInfo` entry per compartment is made at
-   * the locker system's row - as many as the bookable distributes to it
-   * (`compartmentsAt`) - and each is held: by the provider where it holds
-   * compartments itself (iFBS keeps a box for two minutes), by the stored
-   * booking where it does not (Pareva). The platform-held ones are checked
+   * the locker system's row - one per unit the booking's item books - and
+   * each is held: by the provider where it holds compartments itself (iFBS
+   * keeps a box for two minutes), by the stored booking where it does not
+   * (Pareva). The platform-held ones are checked
    * against the capacity of the bookable after the booking is stored, so
    * that two checkouts racing for the last compartment cannot both get it:
    * the occupancy of the bookable in the booking's window, this booking
@@ -2440,10 +2437,8 @@ class AccessService {
    * Fails where the bookable has fewer compartments than the bookings in
    * this booking's window take, this booking included. The occupancy is
    * counted off the bookings' items, which is what `bookable.amount` is the
-   * capacity of - not off the compartments made, which follow the bookable's
-   * distribution over its systems. Where the distribution and `amount`
-   * disagree the two drift apart; that is the admin's to answer, and the
-   * editor warns about it (locker spec §L2.2).
+   * capacity of: the bookable as a whole, however many locker systems it
+   * has. An `amount` that is no number is unlimited, and nothing is checked.
    *
    * @param {string} tenant Tenant ID
    * @param {Object} booking The booking that holds
@@ -2523,10 +2518,9 @@ class AccessService {
    * @private
    * The locker systems a booking books, keyed by row id: the row as the
    * compartments are resolved at it, the bookable that books it and how
-   * many compartments it is owed there: the number the bookable distributes
-   * to that system (`compartmentsAt`), and what the booking's item books at
-   * a system it distributes nothing to. Only the bookables booked
-   * themselves count - a compartment is exclusive to its
+   * many compartments it is owed there: what the booking's item books, one
+   * per booked unit, at every system of the bookable alike. Only the
+   * bookables booked themselves count - a compartment is exclusive to its
    * booking and nothing a parent or child bookable confers. Systems the
    * booking holds compartments at without booking them any more come along
    * with nothing owed, for the revoke.
@@ -2562,11 +2556,7 @@ class AccessService {
         systems.set(key, {
           accessPoint: this._resolvedAccessPoint(tenant, accessPoint, bookable),
           bookable,
-          amount: compartmentsAt(
-            bookable,
-            key,
-            this._itemAmount(booking, bookable.id),
-          ),
+          amount: this._itemAmount(booking, bookable.id),
         });
       }
     }
