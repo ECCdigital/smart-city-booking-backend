@@ -1,9 +1,7 @@
-const MailController = require("../../mail-service/mail-controller");
+const mailService = require("../../mail-service");
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
-const {
-  CANCELLATION_ORIGINS,
-} = require("../payment/cancellation-refund-service");
+const { TRIGGER } = require("../booking-lifecycle/booking-state");
 
 class WorkflowAction {
   constructor(action) {
@@ -47,11 +45,13 @@ class EmailAction extends WorkflowAction {
       }
     }
 
+    // The workflow notification is a tenant notice to the addresses the
+    // action names (`audience: named`), one per receiver.
     for (const receiver of receivers) {
-      await MailController.sendWorkflowNotification({
-        sendTo: receiver,
+      await mailService.notify("WORKFLOW_NOTIFICATION", {
         tenantId: this.tenantId,
-        bookingId: this.taskId,
+        bookingIds: [this.taskId],
+        to: receiver,
         oldStatus: this.sourceStatus,
         newStatus: this.destinationStatus,
       });
@@ -76,39 +76,21 @@ class BookingStatusAction extends WorkflowAction {
 
     if (!booking) return;
 
-    const bookingService = require("../../services/checkout/booking-service");
+    // The transitions a workflow action sets off run without their own
+    // workflow event (glossary "Auslöser": `workflow`), so a state change
+    // never loops back into the workflow.
+    const { bookingLifecycle } = require("../booking-lifecycle");
+    const options = { trigger: TRIGGER.WORKFLOW };
 
     for (const bs of this._action.bookingStatus) {
       if (bs === "commit") {
-        console.log("Committing booking as part of workflow action");
-        await bookingService.commitBooking(
-          this.tenantId,
-          {
-            id: this.bookingId,
-          },
-          true,
-        );
+        await bookingLifecycle.confirm(this.tenantId, this.bookingId, options);
       }
       if (bs === "paid") {
-        console.log("Setting booking as paid as part of workflow action");
-        await bookingService.setBookingPayed({
-          tenantId: this.tenantId,
-          bookingId: this.bookingId,
-          skipWorkflow: true,
-        });
+        await bookingLifecycle.pay(this.tenantId, this.bookingId, options);
       }
       if (bs === "reject") {
-        console.log("Rejecting booking as part of workflow action");
-        await bookingService.rejectBooking(
-          this.tenantId,
-          this.bookingId,
-          "",
-          null,
-          true,
-          false,
-          null,
-          { origin: CANCELLATION_ORIGINS.SYSTEM },
-        );
+        await bookingLifecycle.cancel(this.tenantId, this.bookingId, options);
       }
     }
   }

@@ -3,7 +3,7 @@ const PmPaymentApplication = require("./payment/pmPaymentApplication");
 const GiroCockpitApplication = require("./payment/giroCockpitApplication");
 const InvoiceApplication = require("./payment/invoiceApplication");
 const AuthApplication = require("./authApplication");
-const { createLockerApplication } = require("./lockerApplication");
+const { createAccessApplication } = require("./accessApplication");
 const CardAuthApplication = require("./cardAuthApplication");
 
 const PAYMENT_CLASS_MAP = {
@@ -28,8 +28,8 @@ class ApplicationFactory {
       return new PaymentClass(data);
     }
 
-    if (data.type === "locker") {
-      return createLockerApplication(data);
+    if (data.type === "access") {
+      return createAccessApplication(data);
     }
 
     const ApplicationClass = TYPE_CLASS_MAP[data.type];

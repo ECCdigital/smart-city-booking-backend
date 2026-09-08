@@ -6,11 +6,11 @@ This repository contains the **backend API** of the platform.
 
 ## Components
 
-| Component | Repository | Role |
-|-----------|------------|------|
-| **Backend API** | [smart-city-booking-backend](https://github.com/ECCdigital/smart-city-booking-backend) | REST API, authentication, bookings, tenants, business logic |
-| **Storefront** | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) | Public booking UI for citizens and guests (v4) |
-| **Admin UI** | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app) | Administration, configuration, and [JS web interface](docs/web-integration.md) for website embedding |
+| Component       | Repository                                                                                     | Role                                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Backend API** | [smart-city-booking-backend](https://github.com/ECCdigital/smart-city-booking-backend)         | REST API, authentication, bookings, tenants, business logic                                          |
+| **Storefront**  | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) | Public booking UI for citizens and guests (v4)                                                       |
+| **Admin UI**    | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app)         | Administration, configuration, and [JS web interface](docs/web-integration.md) for website embedding |
 
 ## Data flow
 
@@ -37,10 +37,10 @@ The vue-app also ships `booking-manager.min.js` for [embedding components into e
 
 ## Version lines
 
-| Version | Public UI | Admin UI |
-|---------|-----------|----------|
-| **v4.x** | Storefront | vue-app |
-| **v3.x** | vue-app (combined) | vue-app |
+| Version  | Public UI          | Admin UI |
+| -------- | ------------------ | -------- |
+| **v4.x** | Storefront         | vue-app  |
+| **v3.x** | vue-app (combined) | vue-app  |
 
 v3 maintenance continues on the `version/3.x` branch. Active v4 development is on `develop`; stable v4 releases are maintained on `version/4.x`.
 

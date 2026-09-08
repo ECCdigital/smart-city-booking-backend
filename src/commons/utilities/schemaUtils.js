@@ -25,6 +25,7 @@ const ERROR_CODES = {
   minItems: "min_items",
   maxItems: "max_items",
   format: "invalid_format",
+  enum: "invalid_enum",
   greaterThan: "greater_than",
   greaterEqualThan: "greater_equal_than",
   validate: "invalid_custom",

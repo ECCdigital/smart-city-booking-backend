@@ -6,14 +6,14 @@ Instructions for AI coding agents (Codex, Cursor, Claude Code). Human docs live 
 
 Node.js/Express REST API for multi-tenant resource booking (rooms, sports facilities, makerspaces). MongoDB via Mongoose. GPL-3.0.
 
-| Area | Path | Purpose |
-|------|------|---------|
-| Business logic | `src/commons/` | Entities, managers, services, schemas |
-| HTTP layer | `src/platform/` | Controllers, routers, auth |
-| Rule engine | `src/rule-engine/` | JSON-logic booking rules |
-| Migrations | `migrations/` | One-off DB migration scripts |
-| Tests | `tests/` | Mocha unit/integration tests |
-| API docs | `src/docs/`, `docs/api/` | OpenAPI YAML |
+| Area           | Path                     | Purpose                               |
+| -------------- | ------------------------ | ------------------------------------- |
+| Business logic | `src/commons/`           | Entities, managers, services, schemas |
+| HTTP layer     | `src/platform/`          | Controllers, routers, auth            |
+| Rule engine    | `src/rule-engine/`       | JSON-logic booking rules              |
+| Migrations     | `migrations/`            | One-off DB migration scripts          |
+| Tests          | `tests/`                 | Mocha unit/integration tests          |
+| API docs       | `src/docs/`, `docs/api/` | OpenAPI YAML                          |
 
 See [docs/agents/architecture.md](docs/agents/architecture.md) for layout and data model.
 
@@ -21,10 +21,10 @@ See [docs/agents/architecture.md](docs/agents/architecture.md) for layout and da
 
 This repo is the **backend API only**. Frontends live in separate repositories:
 
-| Component | Repository | Role |
-|-----------|------------|------|
-| **Admin UI** | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app) | Administration, configuration, JS web interface |
-| **Storefront** | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) | Public booking UI (v4) |
+| Component      | Repository                                                                                     | Role                                            |
+| -------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| **Admin UI**   | [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app)         | Administration, configuration, JS web interface |
+| **Storefront** | [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) | Public booking UI (v4)                          |
 
 Do not assume frontend code is in this repo. API changes may require coordinated updates in those repos.
 
@@ -58,12 +58,12 @@ Details: [docs/agents/coding-standards.md](docs/agents/coding-standards.md)
 
 ## Domain-specific guides
 
-| Topic | File |
-|-------|------|
+| Topic                     | File                                                       |
+| ------------------------- | ---------------------------------------------------------- |
 | Architecture & data model | [docs/agents/architecture.md](docs/agents/architecture.md) |
-| API controllers & routes | [docs/agents/api.md](docs/agents/api.md) |
-| Tests | [docs/agents/testing.md](docs/agents/testing.md) |
-| Migrations | [docs/agents/migrations.md](docs/agents/migrations.md) |
+| API controllers & routes  | [docs/agents/api.md](docs/agents/api.md)                   |
+| Tests                     | [docs/agents/testing.md](docs/agents/testing.md)           |
+| Migrations                | [docs/agents/migrations.md](docs/agents/migrations.md)     |
 
 ## Guardrails
 
@@ -76,10 +76,10 @@ Details: [docs/agents/coding-standards.md](docs/agents/coding-standards.md)
 
 ## Tool setup
 
-| Tool | Entry point |
-|------|-------------|
-| **Codex** | Reads this file (`AGENTS.md`) natively |
-| **Cursor** | Reads `AGENTS.md` + `.cursor/rules/*.mdc` |
-| **Claude Code** | Reads `CLAUDE.md` → imports this file |
+| Tool            | Entry point                               |
+| --------------- | ----------------------------------------- |
+| **Codex**       | Reads this file (`AGENTS.md`) natively    |
+| **Cursor**      | Reads `AGENTS.md` + `.cursor/rules/*.mdc` |
+| **Claude Code** | Reads `CLAUDE.md` → imports this file     |
 
 Structure overview: [docs/agents/README.md](docs/agents/README.md)

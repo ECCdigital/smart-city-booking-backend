@@ -1,0 +1,32 @@
+<div style="font-family: sans-serif;">
+  <p>
+    Hallo,<br>
+    für Ihre Buchung im <strong>{{tenantName}}</strong> wurden Zugangsdaten eingerichtet.
+  </p>
+
+  <p>
+    Die Zugangsdaten sind nur im gebuchten Zeitraum gültig.
+  </p>
+
+  {{#if booking.timeBegin}}
+    <p>
+      <strong>Buchungszeitraum:</strong>
+      {{formatDateTime booking.timeBegin}} - {{formatDateTime booking.timeEnd}}
+    </p>
+  {{/if}}
+
+  <h3>Zugänge</h3>
+  <ul>
+    {{#each accessPoints}}
+      <li>
+        <strong>{{label}}</strong>{{#if bookableTitle}} ({{bookableTitle}}){{/if}}<br>
+        Anbieter: {{provider}}<br>
+        PIN: <strong>{{pin}}</strong>
+      </li>
+    {{/each}}
+  </ul>
+
+  <p>
+    Bitte geben Sie diese Zugangsdaten nicht an unberechtigte Personen weiter.
+  </p>
+</div>

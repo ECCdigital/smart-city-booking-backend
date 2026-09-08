@@ -1,8 +1,9 @@
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
-const { Role, RolePermission } = require("../../../commons/entities/role/role");
+const { Role } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
-const PermissionService = require("../../../commons/services/permission-service");
+const { ForbiddenError } = require("../../../errors/BaseError");
+const { decide } = require("../../../commons/services/authorization");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("role-controller.js");
@@ -26,25 +27,15 @@ class RoleController {
         roles = await RoleManager.getRoles();
       }
 
-      let allowedRoles = [];
-
+      // Under `any` the roles; under `own` the public projection where asked
+      // for, else none - a role has no owner (authorize spec §4.1).
+      let allowedRoles;
       if (isPublicView) {
-        for (let role of roles) {
-          allowedRoles.push(role.toPublic());
-        }
+        allowedRoles = roles.map((role) => role.toPublic());
+      } else if (request.reach === "any") {
+        allowedRoles = roles;
       } else {
-        for (let role of roles) {
-          if (
-            await PermissionService._allowRead(
-              role,
-              user.id,
-              tenantId,
-              RolePermission.MANAGE_ROLES,
-            )
-          ) {
-            allowedRoles.push(role);
-          }
-        }
+        allowedRoles = [];
       }
 
       logger.info(`Sending ${allowedRoles.length} roles to user ${user?.id}`);
@@ -55,19 +46,19 @@ class RoleController {
     }
   }
 
+  /**
+   * The roles of the signed-in user in the tenant (authorize spec §7.4): the
+   * public projection where asked for.
+   */
   static async getUserRolesByTenant(req, res) {
-    const user = req.user;
-    if (!user) {
-      return res.status(400).json({ error: "User not authenticated" });
-    }
-
+    const userId = req.principal.userId;
     const tenantId = req.params.tenant;
     const isPublicView = Boolean(req.query.public);
 
     try {
       const membership = await MembershipManager.getMembershipByTenantAndUserID(
         tenantId,
-        user.id,
+        userId,
       );
 
       const roleIds = membership ? membership.roles : [];
@@ -77,25 +68,11 @@ class RoleController {
       );
       const validRoles = roles.filter((r) => r);
 
-      let allowedRoles;
-      if (isPublicView) {
-        allowedRoles = validRoles.map((role) => role.toPublic());
-      } else {
-        const checks = await Promise.all(
-          validRoles.map(async (role) => {
-            const allowed = await PermissionService.allowRead(
-              role,
-              user.id,
-              tenantId,
-              RolePermission.MANAGE_ROLES,
-            );
-            return allowed ? role : null;
-          }),
-        );
-        allowedRoles = checks.filter((r) => r);
-      }
+      const allowedRoles = isPublicView
+        ? validRoles.map((role) => role.toPublic())
+        : validRoles;
 
-      logger.info(`Sending ${allowedRoles.length} roles to user ${user.id}`);
+      logger.info(`Sending ${allowedRoles.length} roles to user ${userId}`);
       return res.status(200).json(allowedRoles);
     } catch (err) {
       logger.error("Error in getUserRolesByTenant:", err);
@@ -112,22 +89,8 @@ class RoleController {
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
         if (role) {
-          if (
-            await PermissionService._allowRead(
-              role,
-              user.id,
-              tenantId,
-              RolePermission.MANAGE_ROLES,
-            )
-          ) {
-            logger.info(`Sending role ${role.id} to user ${user?.id}`);
-            response.status(200).send(role);
-          } else {
-            logger.warn(
-              `User ${user?.id} is not allowed to read role ${role.id}`,
-            );
-            response.sendStatus(403);
-          }
+          logger.info(`Sending role ${role.id} to user ${user?.id}`);
+          response.status(200).send(role);
         } else {
           response.sendStatus(404);
         }
@@ -146,7 +109,7 @@ class RoleController {
    * @param response
    * @returns {Promise<void>}
    */
-  static async storeRole(request, response) {
+  static async storeRole(request, response, next) {
     const roleId = request.body.id;
     const tenantId = request.params.tenant;
     const role = await RoleManager.getRole(roleId, tenantId);
@@ -156,35 +119,32 @@ class RoleController {
     if (isUpdate) {
       await RoleController.updateRole(request, response);
     } else {
-      await RoleController.createRole(request, response);
+      await RoleController.createRole(request, response, next);
     }
   }
 
-  static async createRole(request, response) {
+  /**
+   * The obsolete PUT carries the update marker; the creation is the
+   * adapter's second decision (authorize spec §5, §11).
+   */
+  static async createRole(request, response, next) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-      const role = new Role(request.body);
 
+      if (decide(request.principal, "role", "create") !== "any") {
+        logger.warn(`User ${user?.id} not allowed to create role`);
+        return next(new ForbiddenError());
+      }
+
+      const role = new Role(request.body);
       role.id = uuidv4();
       role.ownerUserId = user.id;
       role.tenantId = tenantId;
 
-      if (
-        await PermissionService._allowCreate(
-          role,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_ROLES,
-        )
-      ) {
-        await RoleManager.storeRole(role, tenantId);
-        logger.info(`Created role ${role.id} by user ${user?.id}`);
-        response.sendStatus(201);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to create role`);
-        response.sendStatus(403);
-      }
+      await RoleManager.storeRole(role, tenantId);
+      logger.info(`Created role ${role.id} by user ${user?.id}`);
+      response.sendStatus(201);
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not create role");
@@ -197,21 +157,9 @@ class RoleController {
       const tenantId = request.params.tenant;
       const role = new Role(request.body);
 
-      if (
-        await PermissionService._allowUpdate(
-          role,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_ROLES,
-        )
-      ) {
-        await RoleManager.storeRole(role, tenantId);
-        logger.info(`Updated role ${role.id} by user ${user?.id}`);
-        response.sendStatus(201);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to update role`);
-        response.sendStatus(403);
-      }
+      await RoleManager.storeRole(role, tenantId);
+      logger.info(`Updated role ${role.id} by user ${user?.id}`);
+      response.sendStatus(201);
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not update role");
@@ -226,21 +174,12 @@ class RoleController {
 
       if (roleId) {
         const role = await RoleManager.getRole(roleId, tenantId);
-        if (
-          await PermissionService._allowDelete(
-            role,
-            user.id,
-            tenantId,
-            RolePermission.MANAGE_ROLES,
-          )
-        ) {
-          await RoleManager.removeRole(roleId, tenantId);
-          logger.info(`Removed role ${role.id} by user ${user?.id}`);
-          response.sendStatus(200);
-        } else {
-          logger.warn(`User ${user?.id} not allowed to remove role`);
-          response.sendStatus(403);
+        if (!role) {
+          return response.sendStatus(404);
         }
+        await RoleManager.removeRole(roleId, tenantId);
+        logger.info(`Removed role ${role.id} by user ${user?.id}`);
+        response.sendStatus(200);
       } else {
         response.sendStatus(400);
       }

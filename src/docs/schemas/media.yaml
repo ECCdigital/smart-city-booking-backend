@@ -1,0 +1,227 @@
+# swagger/schemas/media.yaml
+
+components:
+  schemas:
+    MediaVariant:
+      type: object
+      description: An actually generated size/format derivative of an image medium.
+      properties:
+        name:
+          type: string
+          description: |
+            Preset name — request it at `/media/{id}/file?size=`. Presets that
+            would not shrink the original produce no variant, so only the ones
+            listed here exist.
+          enum: [thumb, sm, md, lg]
+          example: thumb
+        format:
+          type: string
+          example: webp
+        width:
+          type: integer
+          nullable: true
+          example: 160
+        height:
+          type: integer
+          nullable: true
+          example: 160
+        size:
+          type: integer
+          nullable: true
+          description: Size in bytes
+          example: 4821
+        checksum:
+          type: string
+          description: Checksum of the variant, used as its ETag
+          example: 6b1f2c…
+
+    MediaStorage:
+      type: object
+      description: |
+        Where the bytes of the medium live. Reading always follows the medium's
+        own provider; the instance configuration only steers new uploads.
+      properties:
+        provider:
+          type: string
+          enum: [nextcloud, s3]
+          example: nextcloud
+
+    Media:
+      type: object
+      description: A platform-managed file — the database is the source of truth.
+      properties:
+        id:
+          type: string
+          example: 8f1c2a44-1f1c-4d1a-9c1b-2f3a4b5c6d7e
+        tenantId:
+          type: string
+          nullable: true
+          description: Owning tenant, null for instance media
+          example: tenant1
+        kind:
+          type: string
+          enum: [image, document]
+          example: image
+        mimeType:
+          type: string
+          example: image/png
+        size:
+          type: integer
+          description: Size of the original in bytes
+          example: 184320
+        checksum:
+          type: string
+          description: SHA-256 checksum of the original
+        originalFileName:
+          type: string
+          example: beach.png
+        title:
+          type: string
+          example: Beach
+        altText:
+          type: string
+          example: A beach at sunset
+        tags:
+          type: array
+          items:
+            type: string
+          example: [summer, beach]
+        visibility:
+          type: string
+          enum: [public, intern]
+          description: |
+            `public` media are readable anonymously, `intern` media require an
+            active membership in the owning tenant — or, for instance media,
+            any signed-in user of the instance.
+          example: public
+        uploadedBy:
+          type: string
+          nullable: true
+          description: Id of the uploading user (ownership for media permissions)
+        bookingIds:
+          type: array
+          items:
+            type: string
+          description: |
+            The bookings a booking document belongs to — non-empty exactly on
+            booking documents, empty on normal media. An aggregated document
+            is one medium referencing every booking of its group.
+        storage:
+          $ref: "#/components/schemas/MediaStorage"
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaVariant"
+        url:
+          type: string
+          description: |
+            Relative URL of the original file. Instance media take `instance`
+            where the tenant id stands.
+          example: /api/v2/tenant1/media/8f1c2a44/file
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    MediaList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Media"
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 25
+
+    MediaReference:
+      type: object
+      description: |
+        The typed usage of a file at an entity — either a medium or an external
+        link, exactly one of both.
+      required: [source]
+      properties:
+        source:
+          type: string
+          enum: [media, external]
+        mediaId:
+          type: string
+          nullable: true
+          description: Required when `source` is `media`
+        url:
+          type: string
+          nullable: true
+          description: |
+            Required when `source` is `external`. On entity exports this field
+            also carries the resolved delivery address of a `media` reference
+            (`/api/v2/{tenant}/media/{id}/file`, or
+            `/api/v2/instance/media/{id}/file` at the instance), so frontends
+            never assemble media routes themselves.
+
+    MediaUsageSite:
+      type: object
+      description: One entity that references the medium.
+      properties:
+        type:
+          type: string
+          enum: [bookable, event, booking, instance, tenant]
+          example: bookable
+        id:
+          type: string
+          nullable: true
+          description: Id of the entity — null for the instance, which is a singleton
+          example: 3f9a1c22-8d4e-4a1b-9f6c-0b2d3e4f5a6b
+        title:
+          type: string
+          example: Meeting room 1
+
+    MediaUsage:
+      type: array
+      description: |
+        The usage proof of a medium: one entry per usage site, searched on
+        demand. An empty array means the medium is unused and can be deleted.
+      items:
+        $ref: "#/components/schemas/MediaUsageSite"
+
+    MediaApiError:
+      type: object
+      description: Error body produced by the central v2 error handler.
+      properties:
+        error:
+          type: string
+          example: BadRequestError
+        code:
+          type: string
+          example: invalid_visibility
+        statusCode:
+          type: integer
+          example: 400
+        params:
+          type: object
+          additionalProperties: true
+
+    MediaPatch:
+      type: object
+      description: Metadata of a medium — the file itself is immutable.
+      properties:
+        title:
+          type: string
+        altText:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        visibility:
+          type: string
+          enum: [public, intern]

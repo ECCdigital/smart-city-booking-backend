@@ -16,7 +16,7 @@ const {
   InMemoryAvailabilityDataProvider,
 } = require("../src/commons/availability/providers");
 const {
-  ManualItemCheckoutService,
+  ItemCheckoutService,
   CHECK_TYPES,
 } = require("../src/commons/services/checkout/item-checkout-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
@@ -197,7 +197,7 @@ describe("time period checkout and availability rules", () => {
   it("accepts a full time period through checkout checkTimePeriod", async () => {
     const bookable = timePeriodBookable();
     const instance = getTuesdaySlotInstance();
-    const checkout = new ManualItemCheckoutService({
+    const checkout = new ItemCheckoutService({
       user: "user-1",
       tenantId: TENANT_ID,
       timeBegin: instance.timeBegin,

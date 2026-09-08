@@ -1,61 +1,49 @@
 const TenantManager = require("../data-managers/tenant-manager");
+const { BadRequestError, NotFoundError } = require("../../errors/BaseError");
 
 /**
- * The ID Generator is used to generate unique IDs for receipts.
+ * The counter a document type draws its numbers from, per year, at the
+ * tenant.
+ */
+const COUNTERS = Object.freeze({
+  receipt: "receiptCount",
+  invoice: "invoiceCount",
+  cancellation: "cancellationCount",
+});
+
+/**
+ * Draws the document numbers of a tenant: unique, not gapless. A draw is one
+ * atomic increment at the tenant row, so two documents issued at the same
+ * moment can never share a number; a number lost to a failure after the
+ * draw stays a gap (spec part 2, 6.2).
  */
 class IdGenerator {
   /**
-   * Get the next ID for the given namespace.
+   * The next number of a document type for the current year.
    *
-   * @param tenantId The tenant ID
-   * @param leadingZeros The number of leading zeros to pad the ID with
-   * @param {string} idType The type of ID to generate. Can be "receipt" or "invoice".
-   * @returns {string} The next ID
+   * @param {string} tenantId The tenant
+   * @param {number} leadingZeros Width the counter is padded to (0: none)
+   * @param {"receipt"|"invoice"|"cancellation"} idType The document type
+   * @returns {Promise<string>} The number as `<year>-<counter>`
    */
   static async next(tenantId, leadingZeros = 0, idType) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    let newId = 0;
-    const year = new Date().getFullYear();
-    let updatedTenant;
-
-    if (idType === "receipt") {
-      const idForCurrentYear =
-        (tenant.receiptCount && tenant.receiptCount[year]) || 0;
-      newId = idForCurrentYear + 1;
-      updatedTenant = {
-        ...tenant,
-        receiptCount: {
-          ...tenant.receiptCount,
-          [year]: newId,
-        },
-      };
-    } else if (idType === "invoice") {
-      const idForCurrentYear =
-        (tenant.invoiceCount && tenant.invoiceCount[year]) || 0;
-      newId = idForCurrentYear + 1;
-      updatedTenant = {
-        ...tenant,
-        invoiceCount: {
-          ...tenant.invoiceCount,
-          [year]: newId,
-        },
-      };
-    } else if (idType === "cancellation") {
-      const idForCurrentYear =
-        (tenant.cancellationCount && tenant.cancellationCount[year]) || 0;
-      newId = idForCurrentYear + 1;
-      updatedTenant = {
-        ...tenant,
-        cancellationCount: {
-          ...tenant.cancellationCount,
-          [year]: newId,
-        },
-      };
+    const counter = COUNTERS[idType];
+    if (!counter) {
+      throw new BadRequestError("unknown_document_type", { type: idType });
     }
 
-    await TenantManager.storeTenant(updatedTenant);
+    const year = new Date().getFullYear();
+    const value = await TenantManager.incrementDocumentCounter(
+      tenantId,
+      counter,
+      year,
+    );
 
-    return formatId(newId, year, leadingZeros);
+    if (value === null) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
+    }
+
+    return formatId(value, year, leadingZeros);
   }
 }
 

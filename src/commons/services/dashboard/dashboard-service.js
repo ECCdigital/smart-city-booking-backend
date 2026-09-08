@@ -1,10 +1,9 @@
 const { DateTime } = require("luxon");
 const TenantManager = require("../../data-managers/tenant-manager");
 const UserManager = require("../../data-managers/user-manager");
-const PermissionService = require("../permission-service");
 const DashboardManager = require("../../data-managers/dashboard-manager");
 const { DashboardCache } = require("./dashboard-cache");
-const { RolePermission } = require("../../entities/role/role");
+const { REACH } = require("../authorization/policy");
 const {
   BadRequestError,
   ForbiddenError,
@@ -319,14 +318,16 @@ function revenueTotals(entry) {
 
 class DashboardService {
   /**
-   * Tenants the user may see on the dashboard.
-   * Instance owner → all; else tenant owner or manageBookings.readAny.
+   * Tenants the dashboard shows within a reach (`instanceDashboard.read`):
+   * every tenant under `any`; under `own` the ones the user owns or has
+   * `manageBookings.readAny` in.
+   *
+   * @param {{reach?: string, userId?: string|null}} scope
    */
-  static async getAllowedTenants(userId) {
-    const isInstanceOwner = await PermissionService._isInstanceOwner(userId);
+  static async getAllowedTenants({ reach, userId }) {
     const allTenants = await TenantManager.getTenants();
 
-    if (isInstanceOwner) {
+    if (reach === REACH.ANY) {
       return allTenants;
     }
 
@@ -342,26 +343,20 @@ class DashboardService {
     return allTenants.filter((t) => allowedIds.has(t.id));
   }
 
-  static async assertTenantAccess(userId, tenantId) {
-    const allowed = await PermissionService._allowReadAny(
-      userId,
-      tenantId,
-      RolePermission.MANAGE_BOOKINGS,
-    );
-    if (!allowed) {
-      throw new ForbiddenError("Permission denied");
-    }
-  }
-
-  static async getInstanceSummary(userId, query) {
+  /**
+   * @param {{reach?: string, userId?: string|null}} scope - The reach of
+   *   `instanceDashboard.read`, as the route marker decided it.
+   * @param {Object} query
+   */
+  static async getInstanceSummary(scope, query) {
     const filters = parseFilters(query);
-    const key = cacheKey("instance", userId, filters);
+    const key = cacheKey("instance", scope.userId, filters);
     const cached = DashboardCache.get(key);
     if (cached) {
       return cached;
     }
 
-    const allowedTenants = await DashboardService.getAllowedTenants(userId);
+    const allowedTenants = await DashboardService.getAllowedTenants(scope);
     if (!allowedTenants.length) {
       throw new ForbiddenError("Permission denied");
     }
@@ -374,16 +369,21 @@ class DashboardService {
     return data;
   }
 
-  static async getTenantSummary(userId, tenantId, query) {
-    await DashboardService.assertTenantAccess(userId, tenantId);
-
+  /**
+   * The route marker (`dashboard.read`) has decided who may read this.
+   *
+   * @param {{reach?: string, userId?: string|null}} scope
+   * @param {string} tenantId
+   * @param {Object} query
+   */
+  static async getTenantSummary(scope, tenantId, query) {
     const tenant = await TenantManager.getTenant(tenantId);
     if (!tenant) {
       throw new NotFoundError("Tenant not found");
     }
 
     const filters = parseFilters(query, { includeByBookableLimit: true });
-    const key = cacheKey("tenant", userId, filters, { tenantId });
+    const key = cacheKey("tenant", scope.userId, filters, { tenantId });
     const cached = DashboardCache.get(key);
     if (cached) {
       return cached;

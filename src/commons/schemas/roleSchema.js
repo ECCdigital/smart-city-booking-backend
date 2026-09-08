@@ -14,6 +14,7 @@ const roleSchemaDefinition = {
       "resources",
       "tickets",
       "events",
+      "media",
     ],
     default: [],
   },
@@ -45,6 +46,15 @@ const roleSchemaDefinition = {
     deleteOwn: { type: Boolean, default: false },
   },
   manageCoupons: {
+    create: { type: Boolean, default: false },
+    readAny: { type: Boolean, default: false },
+    readOwn: { type: Boolean, default: false },
+    updateAny: { type: Boolean, default: false },
+    updateOwn: { type: Boolean, default: false },
+    deleteAny: { type: Boolean, default: false },
+    deleteOwn: { type: Boolean, default: false },
+  },
+  manageMedia: {
     create: { type: Boolean, default: false },
     readAny: { type: Boolean, default: false },
     readOwn: { type: Boolean, default: false },

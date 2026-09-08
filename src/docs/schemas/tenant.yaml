@@ -1,0 +1,67 @@
+# swagger/schemas/tenant.yaml
+
+components:
+  schemas:
+    TenantLegalDocument:
+      type: object
+      description: |
+        One legal document a tenant files. The four known types carry no title —
+        their label comes from the admin UI translation, the server stores types,
+        not wordings. A known type may appear at most once per tenant, and two
+        `other` documents may not share a title; a violation is refused with
+        `400`, never silently corrected.
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum:
+            - dataProtection
+            - legalNotice
+            - termsAndConditions
+            - rightOfWithdrawal
+            - other
+          example: termsAndConditions
+        title:
+          type: string
+          description: |
+            Required for `other` and empty for every other type.
+          default: ""
+          example: ""
+        reference:
+          allOf:
+            - $ref: "#/components/schemas/MediaReference"
+          nullable: true
+          description: |
+            The document itself — a medium of this tenant or an external link.
+            A referenced medium has to belong to the tenant and be `public`,
+            since a legal document is meant to be published; anything else is
+            refused with `400` (`media_reference_not_public`,
+            `media_reference_unknown`) or `403` when the saver may not pick it.
+            On the way out the reference carries the address it resolves to in
+            `url`.
+
+    TenantLegalDocuments:
+      type: array
+      description: |
+        The legal documents of a tenant, stored under `legalDocuments`. There is
+        no endpoint of its own: the field travels with the tenant, written by
+        `PUT /api/tenants` and read back by `GET /api/tenants/{id}` and
+        `GET /api/tenants`. Writing it needs tenant or instance ownership, like
+        every other tenant field. The public tenant export does not carry it —
+        the platform files and maintains these documents, it does not deliver
+        them.
+      items:
+        $ref: "#/components/schemas/TenantLegalDocument"
+      example:
+        - type: termsAndConditions
+          title: ""
+          reference:
+            source: media
+            mediaId: 8f1c2a44-1f1c-4d1a-9c1b-2f3a4b5c6d7e
+            url: /api/v2/tenant1/media/8f1c2a44-1f1c-4d1a-9c1b-2f3a4b5c6d7e/file
+        - type: other
+          title: Hausordnung
+          reference:
+            source: external
+            mediaId: null
+            url: https://example.com/hausordnung.pdf

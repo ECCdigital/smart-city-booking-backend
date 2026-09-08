@@ -1,0 +1,765 @@
+/**
+ * The booking lifecycle (glossary "Buchungslebenszyklus"; spec part 1,
+ * section 8 and part 2, section 8): the transitions of a single booking,
+ * each declaring its effects as steps of the pipeline over the six adapters
+ * of the seam - store, access, documents, payment, mail, workflow.
+ *
+ * `createBookingLifecycle(adapters)` builds an instance over any adapters;
+ * the default instance below runs over the production adapters in
+ * `adapters/`, tests build theirs over the in-memory ones. The callers -
+ * the controllers, the checkout (`checkout/booking-checkout.js`), the
+ * payment webhook, the workflow action and the rule engine - call the
+ * default instance.
+ *
+ * A transition takes `(tenantId, bookingId, options)` - `amend` the new
+ * booking instead of the id - `trigger` being mandatory (glossary
+ * "Auslöser"): `workflow` says a workflow action set it off and the
+ * workflow event is left out. It answers an `Outcome` or
+ * throws: `NotFoundError booking_not_found` and the guard's `ConflictError
+ * invalid_transition` before any effect, `LifecycleError` when an effect
+ * with abort policy failed (persist writes restored).
+ */
+
+const {
+  STATUS,
+  TRANSITION,
+  TRIGGER,
+  TRIGGERS,
+  nextState,
+} = require("./booking-state");
+const {
+  PHASE,
+  SKIPPED,
+  step,
+  noticesOf,
+  recordedFailures,
+  runPipeline,
+} = require("./pipeline");
+const {
+  CancellationRefundService,
+  CANCELLATION_ORIGINS,
+  sanitizeBankDetails,
+} = require("../payment/cancellation-refund-service");
+const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
+const { NotFoundError, ForbiddenError } = require("../../../errors/BaseError");
+
+const WORKFLOW_EVENT = Object.freeze({
+  CREATE: "onCreate",
+  COMMIT: "onCommit",
+  PAY: "onPay",
+  REJECT: "onReject",
+});
+
+/**
+ * The origin the refund rule of a cancellation reads, per trigger (spec
+ * part 1, 4.2): the customer's cancellation follows the tenant's tiers, the
+ * administration's may override them, everything else refunds in full.
+ */
+const REFUND_ORIGIN = Object.freeze({
+  [TRIGGER.CUSTOMER]: CANCELLATION_ORIGINS.USER,
+  [TRIGGER.ADMIN]: CANCELLATION_ORIGINS.ADMIN,
+  [TRIGGER.PAYMENT]: CANCELLATION_ORIGINS.SYSTEM,
+  [TRIGGER.WORKFLOW]: CANCELLATION_ORIGINS.SYSTEM,
+  [TRIGGER.SYSTEM]: CANCELLATION_ORIGINS.SYSTEM,
+});
+
+function isPriced(booking) {
+  return (Number(booking.priceEur) || 0) > 0;
+}
+
+/** Whether the booking books a ticket of an event. */
+function hasTicketPosition(booking) {
+  return (booking.bookableItems || []).some(
+    (item) => item?._bookableUsed?.type === "ticket",
+  );
+}
+
+function assertTrigger(transition, trigger) {
+  if (!TRIGGERS.includes(trigger)) {
+    throw new Error(
+      `booking-lifecycle: ${transition} needs a trigger, one of ${TRIGGERS.join(", ")}; got ${trigger}`,
+    );
+  }
+}
+
+/**
+ * The payment request (glossary "Zahlungsaufforderung") as steps of the
+ * notify phase (mail-stack spec, section 4): the tenant's payment provider
+ * is asked and answers a value - `{ form: "link" | "invoice" | "pending",
+ * paymentUrl?, files? }` - and the notice of that form goes to the booker
+ * over the mail adapter: the payment link, the invoice the provider
+ * issued, or the announcement of an invoice to follow. A request that is
+ * skipped (no provider), fails (recorded) or answers no form leaves all
+ * three notices skipped.
+ *
+ * @param {Object} payment The payment adapter
+ * @param {function} notice The `noticeOf` of the transition
+ * @param {Object} params What `payment.requestPayment` takes
+ * @param {function(): boolean} when The condition of the request
+ * @returns {Object[]} The request and the three notices, as steps
+ */
+function paymentRequestSteps(payment, notice, params, when) {
+  let answer = {};
+  return [
+    step(
+      PHASE.NOTIFY,
+      "payment",
+      "requestPayment",
+      async () => {
+        const result = await payment.requestPayment(params);
+        answer = result && result !== SKIPPED ? result : {};
+        return result;
+      },
+      { when },
+    ),
+    notice(
+      "PAYMENT_LINK_AFTER_APPROVAL",
+      () => ({ paymentUrl: answer.paymentUrl }),
+      { when: () => answer.form === "link" },
+    ),
+    notice(
+      "INVOICE_AFTER_APPROVAL",
+      () => ({ attachments: answer.files || [] }),
+      { when: () => answer.form === "invoice" },
+    ),
+    notice(
+      "BOOKING_CONFIRMED_INVOICE_PENDING",
+      {},
+      {
+        when: () => answer.form === "pending",
+      },
+    ),
+  ];
+}
+
+/**
+ * The notice of a failed grant (glossary "Mitteilung"): `access.provision`
+ * is a recorded operation, so a booking whose grant did not come through
+ * stays paid and confirmed while nobody can open the door. This tells the
+ * tenant's address that it happened - one notice per run, naming the
+ * bookings whose grant was recorded and the reason the first one gave.
+ *
+ * It is the last notify step of every transition that grants, so the
+ * booker's own notices go out first, and it is skipped where the grant
+ * held. It reports; it does not retry - a run-behind job for recorded
+ * effects is its own question (the card's fog).
+ *
+ * @param {function} notice The `noticeOf` of the transition
+ * @returns {Object} The notice, as a step
+ */
+function provisionFailureNotice(notice) {
+  const failuresOf = (outcome) =>
+    recordedFailures(outcome, "access", "provision");
+
+  return notice(
+    "ACCESS_PROVISION_FAILED",
+    (outcome) => {
+      const recorded = failuresOf(outcome);
+      const failed = recorded.map((row) => row.bookingId).filter(Boolean);
+      return {
+        // A group names the members that failed; a single booking is the
+        // one the base already names.
+        ...(failed.length > 0 ? { bookingIds: failed } : {}),
+        transition: outcome.transition,
+        reason: recorded[0].error.message,
+      };
+    },
+    { when: (_ctx, outcome) => failuresOf(outcome).length > 0 },
+  );
+}
+
+/**
+ * @param {Object} adapters The seam (spec part 2, section 10)
+ * @param {Object} adapters.store
+ * @param {Object} adapters.access
+ * @param {Object} adapters.documents
+ * @param {Object} adapters.payment
+ * @param {Object} adapters.mail
+ * @param {Object} adapters.workflow
+ * @param {function(): number} [adapters.clock]
+ */
+function createBookingLifecycle(adapters) {
+  const {
+    store,
+    access,
+    documents,
+    payment,
+    mail,
+    workflow,
+    clock = Date.now,
+  } = adapters;
+
+  /** The notices of one booking over the mail adapter. */
+  function noticeOf(tenantId, bookingId) {
+    return noticesOf(mail, {
+      tenantId,
+      bookingIds: [bookingId],
+      groupBookingId: null,
+    });
+  }
+
+  async function load(tenantId, bookingId) {
+    const booking = await store.get(tenantId, bookingId);
+    if (!booking) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    return booking;
+  }
+
+  async function loadTenant(tenantId) {
+    const tenant = await store.getTenant(tenantId);
+    if (!tenant) {
+      throw new NotFoundError("tenant_not_found", { tenantId });
+    }
+    return tenant;
+  }
+
+  /**
+   * The admission (spec part 1, 5.2; part 2, section 8, `admit`; glossary
+   * "Aufnahme"): the checkout stored the booking in the state it chose,
+   * the lifecycle runs the effects of that state. Nothing is written: the
+   * compartments are held - in every state, the hold being the one step
+   * that checks their capacity and aborts, so a booking that finds none
+   * never exists - and the access granted at `confirmed`, consuming the
+   * hold; a booking confirmed and paid at once gets its receipt; then the
+   * workflow is told (`onCreate`), the customer gets
+   * exactly one mail - the receipt of a request, the payment request
+   * (glossary "Zahlungsaufforderung") of a booking awaiting payment in the
+   * form the payment provider answers, the confirmation with the receipt
+   * of a paid one, the free booking confirmation of a free one - and the
+   * tenant, the supervisors and the organizer of a ticket their notice. A
+   * customer at the storefront is asked to pay by the checkout's own
+   * answer, the payment page it hands the customer on to; the payment
+   * request would ask twice, so it goes out for every trigger but
+   * `customer`. A hold that fails aborts with nothing to restore: the
+   * checkout deletes the booking.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function admit(tenantId, bookingId, { trigger } = {}) {
+    const transition = TRANSITION.ADMIT;
+    assertTrigger(transition, trigger);
+
+    const booking = await load(tenantId, bookingId);
+    const status = nextState(booking.status, transition, booking);
+    const requested = () => status === STATUS.REQUESTED;
+    const paymentDue = () => status === STATUS.PAYMENT_DUE;
+    const confirmed = () => status === STATUS.CONFIRMED;
+    const files = [];
+
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PROVISION, "access", "hold", () =>
+        access.hold(tenantId, bookingId),
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "provision",
+        () => access.provision(tenantId, bookingId),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.DOCUMENT,
+        "documents",
+        "issue",
+        async () => {
+          const issued = await documents.issue({
+            tenantId,
+            bookingIds: [bookingId],
+            type: "receipt",
+            bookings: [booking],
+          });
+          files.push(issued.file);
+          return issued;
+        },
+        { when: () => confirmed() && isPriced(booking) },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.CREATE),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      notice("BOOKING_REQUEST_CONFIRMATION", {}, { when: requested }),
+      ...paymentRequestSteps(
+        payment,
+        notice,
+        {
+          tenantId,
+          bookingIds: [bookingId],
+          paymentProvider: booking.paymentProvider,
+          groupBookingId: null,
+        },
+        () => paymentDue() && trigger !== TRIGGER.CUSTOMER,
+      ),
+      notice(
+        "BOOKING_CONFIRMATION",
+        { attachments: files },
+        { when: () => confirmed() && isPriced(booking) },
+      ),
+      notice(
+        "FREE_BOOKING_CONFIRMATION",
+        {},
+        { when: () => confirmed() && !isPriced(booking) },
+      ),
+      notice("INCOMING_BOOKING"),
+      notice("SUPERVISOR_BOOKING_NOTIFICATION"),
+      notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
+      provisionFailureNotice(notice),
+    ]);
+  }
+
+  /**
+   * The confirmation (spec part 2, section 8, `confirm`): `requested →
+   * payment_due` for a priced booking, which is then asked to pay
+   * (glossary "Zahlungsaufforderung") in the form the payment provider
+   * answers, `requested → confirmed` for a free one, which is granted and
+   * told so. A tenant without a payment service leaves the payment request
+   * skipped: the booking awaits payment all the same.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function confirm(tenantId, bookingId, { trigger } = {}) {
+    const transition = TRANSITION.CONFIRM;
+    assertTrigger(transition, trigger);
+
+    const booking = await load(tenantId, bookingId);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+    const confirmed = () => booking.status === STATUS.CONFIRMED;
+    const paymentDue = () => booking.status === STATUS.PAYMENT_DUE;
+
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "provision",
+        () => access.provision(tenantId, bookingId),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.COMMIT),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      notice("FREE_BOOKING_CONFIRMATION", {}, { when: confirmed }),
+      ...paymentRequestSteps(
+        payment,
+        notice,
+        {
+          tenantId,
+          bookingIds: [bookingId],
+          paymentProvider: booking.paymentProvider,
+          groupBookingId: null,
+        },
+        paymentDue,
+      ),
+      notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
+      provisionFailureNotice(notice),
+    ]);
+  }
+
+  /**
+   * The payment (spec part 2, section 8, `pay`): `payment_due → confirmed`.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string, paymentMethod?: string, timePaid?: number }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function pay(
+    tenantId,
+    bookingId,
+    { trigger, paymentMethod, timePaid } = {},
+  ) {
+    const transition = TRANSITION.PAY;
+    assertTrigger(transition, trigger);
+
+    const booking = await load(tenantId, bookingId);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+    booking.timePaid =
+      typeof timePaid === "number" && timePaid > 0 ? timePaid : clock();
+    if (paymentMethod) {
+      booking.paymentMethod = paymentMethod;
+    }
+
+    const files = [];
+
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(PHASE.PROVISION, "access", "provision", () =>
+        access.provision(tenantId, bookingId),
+      ),
+      step(
+        PHASE.DOCUMENT,
+        "documents",
+        "issue",
+        async () => {
+          const issued = await documents.issue({
+            tenantId,
+            bookingIds: [bookingId],
+            type: "receipt",
+            bookings: [booking],
+          });
+          files.push(issued.file);
+          return issued;
+        },
+        { when: () => isPriced(booking) },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.PAY),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      notice("BOOKING_CONFIRMATION", { attachments: files }),
+      notice("NEW_BOOKING", {}, { when: () => hasTicketPosition(booking) }),
+      provisionFailureNotice(notice),
+    ]);
+  }
+
+  /**
+   * The cancellation (spec part 2, section 8, `cancel`): `requested →
+   * rejected`, `payment_due | confirmed → cancelled`. The state write
+   * carries the reason, the refund audit with the state cancelled from
+   * (glossary "Wiederherstellung" returns to it) and drops the hook of a
+   * cancellation request; then the access is revoked, the cancellation
+   * document issued for a priced booking unless the caller leaves it out,
+   * the workflow told and the customer mailed - the rejection of a request,
+   * the cancellation otherwise (a request the customer withdrew through a
+   * hook reads as a cancellation, as before).
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string, reason?: string, hookId?: string|null, bankDetails?: Object|null, refundPercentage?: number, cancelledByUserId?: string|null, cancelledAt?: number, withDocument?: boolean }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function cancel(
+    tenantId,
+    bookingId,
+    {
+      trigger,
+      reason = "",
+      hookId = null,
+      bankDetails = null,
+      refundPercentage,
+      cancelledByUserId = null,
+      cancelledAt,
+      withDocument = true,
+    } = {},
+  ) {
+    const transition = TRANSITION.CANCEL;
+    assertTrigger(transition, trigger);
+
+    const [booking, tenant] = await Promise.all([
+      load(tenantId, bookingId),
+      loadTenant(tenantId),
+    ]);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+    booking.rejectionReason = reason;
+    if (hookId) {
+      booking.removeHook(hookId);
+    }
+
+    const refund = CancellationRefundService.calculate({
+      tenant,
+      booking,
+      cancelledAt: cancelledAt ?? clock(),
+      origin: REFUND_ORIGIN[trigger],
+      refundPercentage,
+      cancelledByUserId,
+    });
+    booking.cancellationRefund =
+      booking.status === STATUS.CANCELLED
+        ? { ...refund, cancelledFrom: from }
+        : { ...refund };
+
+    const rejection = booking.status === STATUS.REJECTED && !hookId;
+    const files = [];
+
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(PHASE.PROVISION, "access", "revoke", () =>
+        access.revoke(tenantId, bookingId),
+      ),
+      step(
+        PHASE.DOCUMENT,
+        "documents",
+        "issue",
+        async () => {
+          const issued = await documents.issue({
+            tenantId,
+            bookingIds: [bookingId],
+            type: "cancellation",
+            bookings: [booking],
+            options: {
+              alreadyPaid: from === STATUS.CONFIRMED,
+              bankDetails: sanitizeBankDetails(bankDetails) || undefined,
+              cancellationReason: reason,
+              refundCalculation: refund,
+            },
+          });
+          files.push(issued.file);
+          return issued;
+        },
+        { when: () => withDocument && isPriced(booking) },
+      ),
+      step(
+        PHASE.NOTIFY,
+        "workflow",
+        "emit",
+        () => workflow.emit(tenantId, bookingId, WORKFLOW_EVENT.REJECT),
+        { when: () => trigger !== TRIGGER.WORKFLOW },
+      ),
+      notice(
+        "BOOKING_REJECTION",
+        { attachments: files, reason },
+        { when: () => rejection },
+      ),
+      notice(
+        "BOOKING_CANCEL",
+        { attachments: files, reason },
+        { when: () => !rejection },
+      ),
+    ]);
+  }
+
+  /**
+   * The cancellation request (spec part 2, section 8, `requestCancel`;
+   * glossary "Stornoanfrage"): the state stays, a hook `REJECT` with the
+   * reason and the bank details is written, and the customer is asked to
+   * verify, with the refund the customer's cancellation would bring. Only
+   * where the booking's cancellation policy allows it: otherwise
+   * `ForbiddenError booking_user_cancellation_disabled`, the answer of
+   * before, in front of the state guard.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string, reason?: string, bankDetails?: Object|null }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function requestCancel(
+    tenantId,
+    bookingId,
+    { trigger, reason = "", bankDetails = null } = {},
+  ) {
+    const transition = TRANSITION.REQUEST_CANCEL;
+    assertTrigger(transition, trigger);
+
+    const booking = await load(tenantId, bookingId);
+    if (booking.cancellationPolicy?.userCancellable !== true) {
+      throw new ForbiddenError("booking_user_cancellation_disabled", {
+        bookingId,
+      });
+    }
+    const status = booking.status;
+    nextState(status, transition, booking);
+
+    const payload = { reason };
+    const sanitizedBankDetails = sanitizeBankDetails(bankDetails);
+    if (sanitizedBankDetails) {
+      payload.bankDetails = sanitizedBankDetails;
+    }
+    const hook = booking.addHook(BOOKING_HOOK_TYPES.REJECT, payload);
+
+    // The preview shows what the customer's cancellation would refund:
+    // releasing the hook cancels as the customer, whoever asked.
+    const tenant = await loadTenant(tenantId);
+    const refundPreview = CancellationRefundService.toCustomerPreview(
+      CancellationRefundService.calculate({
+        tenant,
+        booking,
+        cancelledAt: clock(),
+        origin: CANCELLATION_ORIGINS.USER,
+      }),
+      bookingId,
+    );
+
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: status, transition }),
+      ),
+      notice("VERIFY_BOOKING_REJECTION", {
+        hookId: hook.id,
+        reason,
+        refundPreview,
+      }),
+    ]);
+  }
+
+  /**
+   * The reinstatement (spec part 2, section 8, `reinstate`; glossary
+   * "Wiederherstellung"): `rejected → requested`, `cancelled → ` the state
+   * it was cancelled from. Price, positions and coupon are what the stored
+   * booking still carries from before the cancellation; the reason is
+   * cleared and the refund audit removed. The access is granted again at
+   * `confirmed`, held at `requested | payment_due` - a hold that fails
+   * aborts, the booking is cancelled again. No document, no workflow
+   * event, no mail.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ trigger: string }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function reinstate(tenantId, bookingId, { trigger } = {}) {
+    const transition = TRANSITION.REINSTATE;
+    assertTrigger(transition, trigger);
+
+    const booking = await load(tenantId, bookingId);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+    booking.rejectionReason = "";
+    delete booking.cancellationRefund;
+    const confirmed = () => booking.status === STATUS.CONFIRMED;
+
+    // A reinstatement tells the booker nothing; the failed grant is the
+    // one notice it can send.
+    const notice = noticeOf(tenantId, bookingId);
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, {
+          expectStatus: from,
+          transition,
+          unset: ["cancellationRefund"],
+        }),
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "hold",
+        () => access.hold(tenantId, bookingId),
+        { when: () => !confirmed() },
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "provision",
+        () => access.provision(tenantId, bookingId),
+        { when: confirmed },
+      ),
+      provisionFailureNotice(notice),
+    ]);
+  }
+
+  /**
+   * The amendment (spec part 1, section 6; part 2, section 8, `amend`;
+   * glossary "Änderung"): the content of a booking changes, its state
+   * does not. The new booking carries the state the caller knows the
+   * booking to be in, and is written on the condition that the stored one
+   * still is (spec part 2, section 5): a booking that moved in between - a
+   * payment webhook, say - is the guard's `ConflictError`, and the plan
+   * the caller made no longer applies. The refund audit and the hooks - an
+   * open cancellation request (glossary "Stornoanfrage") - are the stored
+   * booking's, whatever the form says; they belong to the lifecycle. Then the
+   * access follows the content: moved along at `confirmed`, the
+   * compartments held anew at `requested | payment_due` (`holdForBooking`
+   * never holds one twice and drops the held ones beyond what is booked
+   * now, so the hold comes first and a hold that fails aborts before
+   * anything is revoked: the booking is its old self again, its old holds
+   * standing), then whatever an unpaid booking still holds granted is
+   * taken back. Nothing at `rejected | cancelled`. No document, no
+   * workflow event, no mail.
+   *
+   * @param {string} tenantId
+   * @param {Object} booking The booking as it is to be, prepared by the
+   *   checkout under `CheckoutPolicy.ADMIN_MANUAL`, with `status` the state
+   *   the caller knows it to be in
+   * @param {{ trigger: string }} options
+   * @returns {Promise<Object>} The outcome
+   */
+  async function amend(tenantId, booking, { trigger } = {}) {
+    const transition = TRANSITION.AMEND;
+    assertTrigger(transition, trigger);
+
+    const current = await load(tenantId, booking.id);
+    const from = booking.status;
+    booking.status = nextState(from, transition, booking);
+    if (current.cancellationRefund) {
+      booking.cancellationRefund = current.cancellationRefund;
+    } else {
+      delete booking.cancellationRefund;
+    }
+    booking.hooks = current.hooks || [];
+    const bookingId = booking.id;
+    const confirmed = () => booking.status === STATUS.CONFIRMED;
+    const unpaid = () =>
+      booking.status === STATUS.REQUESTED ||
+      booking.status === STATUS.PAYMENT_DUE;
+
+    return runPipeline({ transition, tenantId, bookingId, booking, store }, [
+      step(PHASE.PERSIST, "store", "save", () =>
+        store.save(booking, { expectStatus: from, transition }),
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "update",
+        () => access.update(tenantId, current, booking),
+        { when: confirmed },
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "hold",
+        () => access.hold(tenantId, bookingId),
+        { when: unpaid },
+      ),
+      step(
+        PHASE.PROVISION,
+        "access",
+        "revoke",
+        () => access.revoke(tenantId, bookingId),
+        { when: unpaid },
+      ),
+    ]);
+  }
+
+  return { admit, confirm, pay, cancel, requestCancel, reinstate, amend };
+}
+
+/** The lifecycle over the production adapters. */
+const bookingLifecycle = createBookingLifecycle(require("./adapters"));
+
+module.exports = {
+  createBookingLifecycle,
+  bookingLifecycle,
+  // The building blocks the group lifecycle shares (spec part 1, section 7).
+  WORKFLOW_EVENT,
+  REFUND_ORIGIN,
+  assertTrigger,
+  isPriced,
+  hasTicketPosition,
+  paymentRequestSteps,
+  provisionFailureNotice,
+};

@@ -32,18 +32,18 @@ const entityHookSchemaDefinition = {
   id: { type: String, required: true },
   type: { type: String, required: true },
   timeCreated: { type: Double, default: () => Date.now() },
-  payload: { type: Object, default: {} }
+  payload: { type: Object, default: {} },
 };
 
 const entitySchemaDefinition = {
   id: { type: String, required: true },
   // Entity-specific fields
-  hooks: { type: [entityHookSchemaDefinition], default: [] }
+  hooks: { type: [entityHookSchemaDefinition], default: [] },
 };
 
 module.exports = {
   entitySchemaDefinition,
-  entityHookSchemaDefinition
+  entityHookSchemaDefinition,
 };
 ```
 
@@ -73,7 +73,7 @@ class EntityHook {
     const hook = new EntityHook({
       id: uuidv4(),
       timeCreated: Date.now(),
-      ...params
+      ...params,
     });
     hook.validate();
     return hook;
@@ -82,7 +82,7 @@ class EntityHook {
 
 module.exports = {
   EntityHook,
-  ENTITY_HOOK_TYPES
+  ENTITY_HOOK_TYPES,
 };
 ```
 
@@ -100,8 +100,8 @@ class Entity {
 
     // Convert hooks to EntityHook entities
     if (this.hooks && Array.isArray(this.hooks)) {
-      this.hooks = this.hooks.map(hook =>
-        hook instanceof EntityHook ? hook : new EntityHook(hook)
+      this.hooks = this.hooks.map((hook) =>
+        hook instanceof EntityHook ? hook : new EntityHook(hook),
       );
     }
   }
@@ -128,7 +128,7 @@ class Entity {
 
 module.exports = {
   Entity,
-  ENTITY_HOOK_TYPES
+  ENTITY_HOOK_TYPES,
 };
 ```
 
@@ -148,15 +148,16 @@ EntitySchema.pre(
   async function (next) {
     // Cleanup logic
     next();
-  }
+  },
 );
 
-EntitySchema.methods.toEntity = function() {
+EntitySchema.methods.toEntity = function () {
   const { Entity } = require("../../entities/entity/entity");
   return new Entity(this.toObject());
 };
 
-module.exports = mongoose.models.Entity || mongoose.model("Entity", EntitySchema);
+module.exports =
+  mongoose.models.Entity || mongoose.model("Entity", EntitySchema);
 ```
 
 ### 5. Manager (`src/commons/data-managers/entity-manager.js`)
@@ -190,16 +191,15 @@ class EntityManager {
    */
   static async storeEntity(entity, upsert = true) {
     // Ensure we have an Entity instance
-    const entityInstance = entity instanceof Entity ? entity : new Entity(entity);
+    const entityInstance =
+      entity instanceof Entity ? entity : new Entity(entity);
 
     // Validate before storing
     entityInstance.validate();
 
-    await EntityModel.updateOne(
-      { id: entityInstance.id },
-      entityInstance,
-      { upsert: upsert }
-    );
+    await EntityModel.updateOne({ id: entityInstance.id }, entityInstance, {
+      upsert: upsert,
+    });
 
     return entityInstance;
   }
@@ -210,7 +210,7 @@ class EntityManager {
    */
   static async getEntities() {
     const rawEntities = await EntityModel.find({});
-    return rawEntities.map(doc => doc.toEntity());
+    return rawEntities.map((doc) => doc.toEntity());
   }
 
   /**
@@ -231,15 +231,18 @@ module.exports = EntityManager;
 ### Naming Conventions
 
 1. **Files and Directories**:
+
    - Use kebab-case for file and directory names: `entity-manager.js`, `user-hook.js`
    - Entity directories should be singular: `user/` not `users/`
 
 2. **Classes**:
+
    - Use PascalCase for class names: `UserManager`, `BookingHook`
    - Manager classes should end with "Manager": `UserManager`, `BookingManager`
    - Model classes should end with "Model": `UserModel`, `BookingModel`
 
 3. **Methods and Functions**:
+
    - Use camelCase for method and function names: `getUser()`, `storeBooking()`
    - Getter methods should start with "get": `getUser()`, `getBookings()`
    - Setter methods should start with "set", "store", "update", etc.: `storeUser()`, `updateBooking()`
@@ -252,6 +255,7 @@ module.exports = EntityManager;
 1. **Class Documentation**:
 
    Document classes with JSDoc comments that include:
+
    - Description
    - Author (optional)
 
@@ -268,6 +272,7 @@ module.exports = EntityManager;
 2. **Method Documentation**:
 
    Document methods with JSDoc comments that include:
+
    - Description
    - Parameters with types and descriptions
    - Return value with type and description
@@ -286,15 +291,18 @@ module.exports = EntityManager;
 ### Code Organization
 
 1. **Imports**:
+
    - Required modules first
    - Local imports second
    - Separate with a blank line
 
 2. **Exports**:
+
    - Use named exports for multiple exports
    - Use module.exports for single exports
 
 3. **Error Handling**:
+
    - Use try/catch blocks for async operations
    - Propagate errors with meaningful messages
 

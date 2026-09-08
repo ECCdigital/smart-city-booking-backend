@@ -6,32 +6,58 @@ const {
   Booking,
   BOOKING_HOOK_TYPES,
 } = require("../../../commons/entities/booking/booking");
-const { RolePermission } = require("../../../commons/entities/role/role");
-const UserManager = require("../../../commons/data-managers/user-manager");
 const bunyan = require("bunyan");
 const ReceiptService = require("../../../commons/services/payment/receipt-service");
 const InvoiceService = require("../../../commons/services/payment/invoice-service");
-const BookingService = require("../../../commons/services/checkout/booking-service");
-const WorkflowService = require("../../../commons/services/workflow/workflow-service");
-const PermissionsService = require("../../../commons/services/permission-service");
 const {
-  authenticateIfNeeded,
-} = require("../../../commons/utilities/auth-utils");
+  issue: issueDocument,
+} = require("../../../commons/services/documents/document-issuance");
+const {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
+const BookingService = require("../../../commons/services/checkout/booking-service");
+const BookingCheckout = require("../../../commons/services/checkout/booking-checkout");
+const {
+  bookingLifecycle,
+  bookingDeletion,
+  TRANSITION,
+  TRIGGER,
+} = require("../../../commons/services/booking-lifecycle");
+const { answerTransitionError } = require("./transition-error-answer");
+const {
+  CheckoutPolicy,
+} = require("../../../commons/services/checkout/checkout-policy");
+const WorkflowService = require("../../../commons/services/workflow/workflow-service");
+const { decide, scopeOf } = require("../../../commons/services/authorization");
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
-const MailController = require("../../../commons/mail-service/mail-controller");
+const mailService = require("../../../commons/mail-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
   CancellationRefundService,
-  CANCELLATION_ORIGINS,
 } = require("../../../commons/services/payment/cancellation-refund-service");
 
 const logger = bunyan.createLogger({
   name: "booking-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/**
+ * A booking as the request describes it, for the update and the upsert
+ * decision - the create does not read one (`createBooking`). On an update
+ * the state is not an input: a `status` the client sends back from a GET
+ * would otherwise outrank the flags it edited, so it is discarded here.
+ */
+function bookingFromRequest(body = {}) {
+  const fields = { ...body };
+  delete fields.status;
+  return new Booking(fields);
+}
 
 /**
  * Web Controller for Bookings.
@@ -82,6 +108,14 @@ class BookingController {
     }
   }
 
+  /** Answers the 404 of a booking that is not there for this request. */
+  static _notFound(response, bookingId) {
+    return ApiResponse.fail(
+      response,
+      new NotFoundError("booking_not_found", { bookingId }),
+    );
+  }
+
   static anonymizeBooking(booking) {
     return {
       id: booking.id,
@@ -93,19 +127,21 @@ class BookingController {
   }
 
   /**
-   * Get all bookings. If public-flag ist set, then all bookings can be received. Otherwise only bookings, the user is
-   * allowed to read.
+   * Get all bookings. With the public flag the anonymized projection of every
+   * booking, for anyone; otherwise the bookings within the reach of the
+   * request (authorize spec §4.1) - the public has none and is refused.
    * @param request
    * @param response
+   * @param next
    * @returns {Promise<void>}
    */
-  static async getBookings(request, response) {
+  static async getBookings(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const bookings = await BookingManager.getTenantBookings(tenant);
 
       if (request.query.public === "true") {
+        const bookings = await BookingManager.getTenantBookings(tenant);
         const anonymizedBookings = bookings.map((b) => {
           return BookingController.anonymizeBooking(b);
         });
@@ -113,36 +149,29 @@ class BookingController {
         logger.info(
           `${tenant} -- sending ${anonymizedBookings.length} anonymized bookings to user ${user?.id}`,
         );
-        response.status(200).send(anonymizedBookings);
-      } else if (user) {
-        const readContext = await PermissionsService.createReadContext(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
+        return response.status(200).send(anonymizedBookings);
+      }
 
-        const allowedBookings = PermissionsService.canReadAllWithContext(
-          readContext,
-        )
-          ? bookings
-          : bookings.filter((booking) =>
-              PermissionsService.allowReadWithContext(booking, readContext),
-            );
-
-        if (request.query.populate === "true") {
-          await BookingController._populate(allowedBookings);
-        }
-
-        logger.info(
-          `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
-        );
-        response.status(200).send(allowedBookings);
-      } else {
+      if (request.reach === "public") {
         logger.warn(
           `${tenant} -- could not get bookings. User is not authenticated`,
         );
-        response.sendStatus(403);
+        return next(new ForbiddenError());
       }
+
+      const allowedBookings = await BookingManager.getTenantBookings(
+        tenant,
+        scopeOf(request),
+      );
+
+      if (request.query.populate === "true") {
+        await BookingController._populate(allowedBookings);
+      }
+
+      logger.info(
+        `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
+      );
+      response.status(200).send(allowedBookings);
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get bookings");
@@ -163,7 +192,7 @@ class BookingController {
       const filter = tenant ? { tenantId: tenant } : {};
 
       const bookings = await BookingManager.getAssignedBookings({
-        userID: user.id,
+        userID: request.principal.userId,
         filter,
       });
 
@@ -183,22 +212,32 @@ class BookingController {
 
   /**
    * Get all Bookings including those that have a relation to parent or child bookables.
-   * IMPORTANT: User needs readAny-Permission to access this endpoint without public-flag.
+   * With the public flag the anonymized projection of every booking, for
+   * anyone; otherwise the bookings within the reach of the request (authorize
+   * spec §4.1) - the public has none and is refused.
    * @param request
    * @param response
+   * @param next
    * @returns {Promise<void>}
    */
-  static async getRelatedBookings(request, response) {
+  static async getRelatedBookings(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const bookableId = request.params.id;
 
+      const isPublicView = request.query.public === "true";
       const includeRelatedBookings = request.query.related === "true";
       const includeParentBookings = request.query.parent === "true";
+
+      if (!isPublicView && request.reach === "public") {
+        return next(new ForbiddenError());
+      }
+      const scope = isPublicView ? undefined : scopeOf(request);
 
       let bookings = await BookingManager.getRelatedBookings(
         tenant,
         bookableId,
+        scope,
       );
 
       if (includeRelatedBookings) {
@@ -212,6 +251,7 @@ class BookingController {
           const bookingsForRelated = await BookingManager.getRelatedBookings(
             tenant,
             relatedBookable.id,
+            scope,
           );
           relatedBookings = relatedBookings.concat(bookingsForRelated || []);
         }
@@ -228,6 +268,7 @@ class BookingController {
           const bookingsForParent = await BookingManager.getRelatedBookings(
             tenant,
             parentBookable.id,
+            scope,
           );
           parentBookings = parentBookings.concat(bookingsForParent || []);
         }
@@ -238,7 +279,7 @@ class BookingController {
         new Map(bookings.map((booking) => [booking.id, booking])).values(),
       );
 
-      if (request.query.public === "true") {
+      if (isPublicView) {
         const anonymizedBookings = bookings.map((b) => {
           return {
             id: b.id,
@@ -251,24 +292,7 @@ class BookingController {
 
         response.status(200).send(anonymizedBookings);
       } else {
-        const user = await authenticateIfNeeded(request, true);
-
-        if (user) {
-          const hasPermission = await UserManager.hasPermission(
-            user.id,
-            tenant,
-            RolePermission.MANAGE_BOOKINGS,
-            "readAny",
-          );
-
-          if (hasPermission) {
-            response.status(200).send(bookings);
-          } else {
-            response.sendStatus(403);
-          }
-        } else {
-          response.sendStatus(403);
-        }
+        response.status(200).send(bookings);
       }
     } catch (err) {
       logger.error(err);
@@ -289,28 +313,19 @@ class BookingController {
       const id = request.params.id;
 
       if (id) {
-        const booking = await BookingManager.getBooking(id, tenantId);
-
-        const hasPermission =
-          (await UserManager.hasPermission(
-            user.id,
-            tenantId,
-            RolePermission.MANAGE_BOOKINGS,
-            "readAny",
-          )) || PermissionsService._isOwner(booking, user.id, tenantId);
-
-        if (hasPermission) {
-          await BookingController._populate([booking]);
-          logger.info(
-            `${tenantId} -- sending booking ${id} to user ${user?.id}`,
-          );
-          response.status(200).send(booking);
-        } else {
-          logger.warn(
-            `${tenantId} -- could not get booking. User ${user?.id} is not authenticated`,
-          );
-          response.sendStatus(403);
+        // The booking within the reach of the request; none there is a 404.
+        const booking = await BookingManager.getBooking(
+          id,
+          tenantId,
+          scopeOf(request),
+        );
+        if (!booking) {
+          return BookingController._notFound(response, id);
         }
+
+        await BookingController._populate([booking]);
+        logger.info(`${tenantId} -- sending booking ${id} to user ${user?.id}`);
+        response.status(200).send(booking);
       } else {
         response.sendStatus(400);
       }
@@ -333,8 +348,6 @@ class BookingController {
       const tenantId = request.params.tenant;
       const ids = request.params.ids;
 
-      console.log(ids);
-
       if (ids) {
         const splitIds = ids.split(",");
 
@@ -342,10 +355,6 @@ class BookingController {
           tenantId,
           splitIds,
         );
-
-        for (const id of splitIds) {
-          const tmp = await BookingService.getBookingStatus(tenantId, splitIds);
-        }
 
         logger.info(
           `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,
@@ -371,7 +380,7 @@ class BookingController {
    * @returns {Promise<void>}
    */
   static async storeBooking(request, response, next) {
-    const booking = new Booking(request.body);
+    const booking = bookingFromRequest(request.body);
 
     let isUpdate =
       !!(await BookingManager.getBooking(booking.id, booking.tenantId)) &&
@@ -386,36 +395,33 @@ class BookingController {
 
   static async createBooking(request, response, next) {
     const user = request.user;
-    const booking = new Booking(request.body);
     const tenantId = request.params.tenant;
 
-    if (
-      !(await PermissionsService._allowCreate(
-        booking,
-        user.id,
-        booking.tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-      ))
-    ) {
+    // The obsolete PUT carries the update marker; the creation is the
+    // adapter's second decision (authorize spec §5, §11).
+    if (decide(request.principal, "booking", "create") !== "any") {
       logger.warn(
-        `${booking.tenantId} -- User ${user?.id} is not allowed to create booking.`,
+        `${tenantId} -- User ${user?.id} is not allowed to create booking.`,
       );
-      return response.sendStatus(403);
+      return next(new ForbiddenError());
     }
 
+    // The body as sent is the checkout's: `status` names the state the
+    // booking starts in (booking strand ticket 1), so no entity is read
+    // off it here.
     const { checkoutId } = await resolveCheckoutId(
       undefined,
-      booking.mail,
+      request.body.mail,
       tenantId,
     );
 
     try {
-      const newBooking = await BookingService.createSingleBooking({
+      const newBooking = await BookingCheckout.createSingleBooking({
         tenantId,
         user,
         simulate: false,
         bookingAttempt: request.body,
-        manualBooking: true,
+        policy: CheckoutPolicy.ADMIN_MANUAL,
         checkoutId,
       });
       return response.status(200).send(newBooking);
@@ -428,38 +434,24 @@ class BookingController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const booking = new Booking(request.body);
+      const booking = bookingFromRequest(request.body);
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        const savedBooking = await BookingService.updateBooking(
-          tenant,
-          booking,
-          { requestBody: request.body },
-        );
+      const savedBooking = await BookingCheckout.updateBooking(
+        tenant,
+        booking,
+        { requestBody: request.body, userId: user.id },
+      );
 
-        await WorkflowService.updateTask(
-          tenant,
-          booking.id,
-          request.body._populated?.workflowStatus,
-        );
+      await WorkflowService.updateTask(
+        tenant,
+        booking.id,
+        request.body._populated?.workflowStatus,
+      );
 
-        logger.info(
-          `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
-        );
-        response.status(201).send(savedBooking);
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to update booking.`,
-        );
-        response.sendStatus(403);
-      }
+      logger.info(
+        `${tenant} -- updated booking ${booking.id} by user ${user?.id}`,
+      );
+      response.status(201).send(savedBooking);
     } catch (err) {
       next(err);
     }
@@ -472,26 +464,19 @@ class BookingController {
 
       const id = request.params.id;
       if (id) {
-        const booking = await BookingManager.getBooking(id, tenant);
-
-        if (
-          await PermissionsService._allowDelete(
-            booking,
-            user.id,
-            tenant,
-            RolePermission.MANAGE_BOOKINGS,
-          )
-        ) {
-          await BookingService.cancelBooking(tenant, id);
-          await WorkflowService.removeTask(tenant, id);
-          logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
-          response.sendStatus(200);
-        } else {
-          logger.warn(
-            `${tenant} -- User ${user?.id} is not allowed to remove booking.`,
-          );
-          response.sendStatus(403);
+        const booking = await BookingManager.getBooking(
+          id,
+          tenant,
+          scopeOf(request),
+        );
+        if (!booking) {
+          return BookingController._notFound(response, id);
         }
+
+        await bookingDeletion.remove(tenant, id);
+        await WorkflowService.removeTask(tenant, id);
+        logger.info(`${tenant} -- removed booking ${id} by user ${user?.id}`);
+        response.sendStatus(200);
       } else {
         logger.warn(
           `${tenant} -- could not remove booking. No booking ID provided`,
@@ -514,44 +499,44 @@ class BookingController {
       }
 
       const booking = await BookingManager.getBooking(id, tenant);
+      if (!booking) {
+        const error = new NotFoundError("booking_not_found", { bookingId: id });
+        return response.status(error.statusCode).json(error.toJSON());
+      }
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        logger.info(
-          `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
+      logger.info(
+        `${tenant} -- committed booking ${booking.id} by user ${user?.id}`,
+      );
+      // The consistency check in front of the transition keeps its
+      // answer; the transition itself throws or succeeds.
+      const errors = BookingService.transitionErrors(TRANSITION.CONFIRM, [
+        booking,
+      ]);
+      if (errors.length > 0) {
+        logger.error(
+          `${tenant} -- booking ${booking.id} cannot be committed: ${JSON.stringify(errors)}`,
         );
-        const result = await BookingService.commitBooking(tenant, booking);
-
-        if (!result.success) {
-          return response.status(200).json({
-            success: false,
-            data: null,
-            errors: result.errors,
-          });
-        }
-
         return response.status(200).json({
-          success: true,
+          success: false,
           data: null,
-          errors: [],
+          errors,
         });
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to commit booking.`,
-        );
-        return response.sendStatus(403);
       }
+
+      await bookingLifecycle.confirm(tenant, booking.id, {
+        trigger: TRIGGER.ADMIN,
+      });
+
+      return response.status(200).json({
+        success: true,
+        data: null,
+        errors: [],
+      });
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not commit booking");
-      }
+      answerTransitionError(err, response, {
+        code: "booking_commit_failed",
+        fallback: "Could not commit booking",
+      });
     }
   }
 
@@ -565,41 +550,59 @@ class BookingController {
       }
 
       const booking = await BookingManager.getBooking(id, tenant);
+      if (!booking) {
+        const error = new NotFoundError("booking_not_found", { bookingId: id });
+        return response.status(error.statusCode).json(error.toJSON());
+      }
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        logger.info(
-          `${tenant} -- setting booking ${booking.id} as paid by user ${user?.id}`,
-        );
-        await BookingService.setBookingPayed({
-          tenantId: tenant,
-          bookingId: id,
-          skipWorkflow: false,
-          paymentMethod,
-          timePaid,
-        });
-        return response.status(200).send({
-          success: true,
-          data: null,
-          errors: [],
-        });
-      } else {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to set booking as paid.`,
-        );
-        return response.sendStatus(403);
-      }
+      logger.info(
+        `${tenant} -- setting booking ${booking.id} as paid by user ${user?.id}`,
+      );
+      await bookingLifecycle.pay(tenant, id, {
+        trigger: TRIGGER.ADMIN,
+        paymentMethod,
+        timePaid,
+      });
+      return response.status(200).send({
+        success: true,
+        data: null,
+        errors: [],
+      });
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not set booking as paid");
-      }
+      answerTransitionError(err, response, {
+        code: "set_booking_payed_failed",
+        fallback: "Could not set booking as paid",
+      });
+    }
+  }
+
+  /**
+   * The reinstatement of a rejected or cancelled booking (glossary
+   * "Wiederherstellung"): the lifecycle transition `reinstate` by the
+   * administration, on a route of its own since the booking strand's
+   * ticket 1. Answer and errors as `pay`.
+   */
+  static async reinstateBooking(request, response) {
+    try {
+      const { tenant, id } = request.params;
+      const { user } = request;
+
+      logger.info(`${tenant} -- reinstating booking ${id} by user ${user?.id}`);
+      // A booking the lifecycle does not find is its `NotFoundError`, the
+      // 404 of `answerTransitionError`.
+      await bookingLifecycle.reinstate(tenant, id, {
+        trigger: TRIGGER.ADMIN,
+      });
+      return response.status(200).send({
+        success: true,
+        data: null,
+        errors: [],
+      });
+    } catch (err) {
+      answerTransitionError(err, response, {
+        code: "booking_reinstatement_failed",
+        fallback: "Could not reinstate booking",
+      });
     }
   }
 
@@ -607,21 +610,15 @@ class BookingController {
     try {
       const tenantId = request.params.tenant;
       const bookingId = request.params.id;
-      const user = request.user;
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenantId,
+        scopeOf(request),
+      );
 
       if (!booking) {
         return response.sendStatus(404);
-      }
-
-      const hasPermission = await PermissionsService._allowUpdate(
-        booking,
-        user.id,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-      );
-      if (!hasPermission) {
-        return response.sendStatus(403);
       }
 
       const preview = await BookingService.getCancellationRefundPreview(
@@ -704,44 +701,28 @@ class BookingController {
       }
 
       const booking = await BookingManager.getBooking(id, tenantId);
+      if (!booking) {
+        const error = new NotFoundError("booking_not_found", { bookingId: id });
+        return response.status(error.statusCode).json(error.toJSON());
+      }
 
-      if (
-        await PermissionsService._allowUpdate(
-          booking,
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-        )
-      ) {
-        logger.info(
-          `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
-        );
-        await BookingService.rejectBooking(
-          tenantId,
-          id,
-          reason,
-          null,
-          false,
-          Boolean(skipCancellation),
-          bankDetails || null,
-          {
-            origin: CANCELLATION_ORIGINS.ADMIN,
-            refundPercentage,
-            cancelledByUserId: user.id,
-          },
-        );
-        return response.sendStatus(200);
-      } else {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to reject booking.`,
-        );
-        return response.sendStatus(403);
-      }
+      logger.info(
+        `${tenantId} -- rejected booking ${booking.id} by user ${user?.id}`,
+      );
+      await bookingLifecycle.cancel(tenantId, id, {
+        trigger: TRIGGER.ADMIN,
+        reason,
+        bankDetails: bankDetails || null,
+        refundPercentage,
+        cancelledByUserId: user.id,
+        withDocument: !skipCancellation,
+      });
+      return response.sendStatus(200);
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not reject booking");
-      }
+      answerTransitionError(err, response, {
+        code: "booking_rejection_failed",
+        fallback: "Could not reject booking",
+      });
     }
   }
 
@@ -754,25 +735,22 @@ class BookingController {
       }
 
       const payload = request.body || {};
-      const reason = payload.reason ?? request.body?.reason ?? "";
+      const reason = payload.reason ?? "";
       const bankDetails = payload.bankDetails ?? null;
 
-      await BookingService.requestRejectBooking(tenant, id, {
+      await bookingLifecycle.requestCancel(tenant, id, {
+        trigger: TRIGGER.CUSTOMER,
         reason,
         bankDetails,
       });
 
       response.sendStatus(201);
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        if (err && typeof err.statusCode === "number") {
-          return response
-            .status(err.statusCode)
-            .send({ code: err.code, message: err.message });
-        }
-        response.status(500).send("Could not reject booking");
-      }
+      answerTransitionError(err, response, {
+        code: "booking_reject_request_failed",
+        fallback: "Could not reject booking",
+        body: (error) => ({ code: error.code, message: error.message }),
+      });
     }
   }
 
@@ -787,7 +765,7 @@ class BookingController {
 
       const booking = await BookingManager.getBooking(id, tenant);
 
-      if (!booking.hooks || booking.hooks.length === 0) {
+      if (!booking || !booking.hooks || booking.hooks.length === 0) {
         return response.sendStatus(404);
       }
 
@@ -795,16 +773,12 @@ class BookingController {
       if (hook) {
         if (hook.type === BOOKING_HOOK_TYPES.REJECT) {
           const { reason, bankDetails } = hook.payload || {};
-          await BookingService.rejectBooking(
-            tenant,
-            id,
+          await bookingLifecycle.cancel(tenant, id, {
+            trigger: TRIGGER.CUSTOMER,
             reason,
             hookId,
-            false,
-            false,
-            bankDetails || null,
-            { origin: CANCELLATION_ORIGINS.USER },
-          );
+            bankDetails: bankDetails || null,
+          });
         } else {
           return response.sendStatus(400);
         }
@@ -814,10 +788,10 @@ class BookingController {
 
       response.sendStatus(200);
     } catch (err) {
-      logger.error(err);
-      if (!response.headersSent) {
-        response.status(500).send("Could not reject booking");
-      }
+      answerTransitionError(err, response, {
+        code: "booking_rejection_failed",
+        fallback: "Could not reject booking",
+      });
     }
   }
 
@@ -827,30 +801,16 @@ class BookingController {
       const user = request.user;
       const eventId = request.params.id;
 
-      const bookables = await BookableManager.getBookables(tenantId);
-      const eventTickets = bookables.filter(
-        (b) => b.type === "ticket" && b.eventId === eventId,
-      );
-
-      const bookings = await BookingManager.getTenantBookings(tenantId);
-      const eventBookings = bookings.filter((b) =>
-        b.bookableIds.some((id) => eventTickets.some((t) => t.id === id)),
-      );
-
-      const allowedBookings = [];
-      for (const booking of eventBookings) {
-        if (
-          user &&
-          (await PermissionsService._allowRead(
-            booking,
-            user.id,
-            tenantId,
-            RolePermission.MANAGE_BOOKINGS,
-          ))
-        ) {
-          allowedBookings.push(booking);
-        }
-      }
+      // The public sees no bookings of an event; the rest is the reach's
+      // (authorize spec §4.1).
+      const allowedBookings =
+        request.reach === "public"
+          ? []
+          : await BookingManager.getEventBookings(
+              tenantId,
+              eventId,
+              scopeOf(request),
+            );
 
       logger.info(
         `${tenantId} -- sending ${allowedBookings.length} allowed event bookings to user ${user?.id}`,
@@ -874,30 +834,21 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to get receipt.`,
-        );
-        return response.sendStatus(403);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
       }
 
-      const receipt = await ReceiptService.getReceipt(tenant, receiptId);
+      const receipt = await ReceiptService.getReceipt(
+        tenant,
+        receiptId,
+        bookingId,
+      );
 
       logger.info(
         `${tenant} -- sending receipt ${receiptId} to user ${user?.id}`,
@@ -915,11 +866,33 @@ class BookingController {
     }
   }
 
+  /**
+   * The booking a reprint is asked for: the one within the reach of the
+   * request (authorize spec §4.1), else 404. Answers the request itself
+   * and returns null where not.
+   */
+  static async _reprintable(request, response) {
+    const {
+      params: { tenant: tenantId, id: bookingId },
+    } = request;
+
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      scopeOf(request),
+    );
+    if (!booking) {
+      response.status(404).send({ message: "Booking not found." });
+      return null;
+    }
+
+    return booking;
+  }
+
   static async createReceipt(request, response) {
     try {
       const {
         params: { tenant: tenantId, id: bookingId },
-        user,
       } = request;
 
       if (!tenantId || !bookingId) {
@@ -927,32 +900,25 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      const booking = await BookingController._reprintable(request, response);
+      if (!booking) return;
 
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_BOOKINGS,
-          "updateAny",
-        )) || PermissionsService._isOwner(booking, user.id, tenantId);
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to create receipt.`,
+      const errors = BookingService.reprintErrors("receipt", [booking]);
+      if (errors.length > 0) {
+        logger.error(
+          `${tenantId} -- booking ${booking.id} cannot get a receipt: ${JSON.stringify(errors)}`,
         );
-        return response.sendStatus(403);
+        return response
+          .status(200)
+          .json({ success: false, data: null, errors });
       }
 
-      const result = await BookingService.createReceipt(tenantId, booking.id);
-
-      if (!result.success) {
-        return response.status(200).json({
-          success: false,
-          data: null,
-          errors: result.errors,
-        });
-      }
+      // A reprint is a further revision of the receipt; nothing is mailed.
+      await issueDocument({
+        tenantId,
+        bookingIds: [booking.id],
+        type: "receipt",
+      });
 
       const updatedBooking = await BookingManager.getBooking(
         booking.id,
@@ -968,6 +934,56 @@ class BookingController {
     }
   }
 
+  /**
+   * Reprints the cancellation document of a cancelled booking as a further
+   * revision, from the refund audit the cancellation left behind. Same
+   * right as the receipt reprint; a booking without a cancellation answers
+   * 409 `not_cancelled`. Nothing is mailed.
+   */
+  static async createCancellationReceipt(request, response) {
+    try {
+      const {
+        params: { tenant: tenantId, id: bookingId },
+      } = request;
+
+      if (!tenantId || !bookingId) {
+        logger.warn(`${tenantId} -- Missing required parameters.`);
+        return response.status(400).send("Missing required parameters.");
+      }
+
+      const booking = await BookingController._reprintable(request, response);
+      if (!booking) return;
+
+      if (!booking.cancellationRefund) {
+        const error = new ConflictError("not_cancelled", { bookingId });
+        return response.status(error.statusCode).json(error.toJSON());
+      }
+
+      await issueDocument({
+        tenantId,
+        bookingIds: [booking.id],
+        type: "cancellation",
+        options: {
+          alreadyPaid: booking.isPayed,
+          cancellationReason: booking.rejectionReason,
+          refundCalculation: booking.cancellationRefund,
+        },
+      });
+
+      const updatedBooking = await BookingManager.getBooking(
+        booking.id,
+        tenantId,
+      );
+
+      response
+        .status(200)
+        .json({ success: true, data: updatedBooking, errors: [] });
+    } catch (err) {
+      logger.error(err);
+      return response.status(500).send("Could not create cancellation receipt");
+    }
+  }
+
   static async getInvoice(request, response) {
     const {
       params: { tenant, id: bookingId, invoiceId },
@@ -980,30 +996,21 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to get invoice.`,
-        );
-        return response.sendStatus(403);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
       }
 
-      const invoice = await InvoiceService.getInvoice(tenant, invoiceId);
+      const invoice = await InvoiceService.getInvoice(
+        tenant,
+        invoiceId,
+        bookingId,
+      );
 
       logger.info(
         `${tenant} -- sending invoice ${invoiceId} to user ${user?.id}`,
@@ -1030,7 +1037,6 @@ class BookingController {
       const {
         params: { tenant: tenantId, id: bookingId },
         query: { sendEmail },
-        user,
       } = request;
 
       const shouldSendEmail = sendEmail !== "false";
@@ -1038,20 +1044,6 @@ class BookingController {
       if (!tenantId || !bookingId) {
         logger.warn(`${tenantId} -- Missing required parameters.`);
         return response.status(400).send("Missing required parameters.");
-      }
-
-      const hasPermission = await UserManager.hasPermission(
-        user.id,
-        tenantId,
-        RolePermission.MANAGE_BOOKINGS,
-        "updateAny",
-      );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenantId} -- User ${user?.id} is not allowed to create invoice.`,
-        );
-        return response.sendStatus(403);
       }
 
       const invoiceApp = await TenantManager.getTenantApp(tenantId, "invoice");
@@ -1066,34 +1058,22 @@ class BookingController {
         return response.status(404).send({ message: "Booking not found." });
       }
 
-      const { invoice, name, invoiceId, revision, timeCreated } =
-        await InvoiceService.createSingleInvoice(tenantId, bookingId);
-
-      booking.attachments.push({
+      const {
+        attachment: { name, invoiceId, revision },
+        file,
+      } = await issueDocument({
+        tenantId,
+        bookingIds: [booking.id],
         type: "invoice",
-        name,
-        invoiceId,
-        revision,
-        timeCreated,
       });
-      await BookingManager.storeBooking(booking);
 
       if (shouldSendEmail) {
-        const attachments = [
-          {
-            filename: name,
-            content: invoice.buffer,
-            contentType: "application/pdf",
-          },
-        ];
-
         try {
-          await MailController.sendInvoice(
-            booking.mail,
-            bookingId,
+          await mailService.notify("INVOICE", {
             tenantId,
-            attachments,
-          );
+            bookingIds: [booking.id],
+            attachments: [file],
+          });
         } catch (err) {
           logger.error("Error while sending invoice:", bookingId, err);
         }
@@ -1128,33 +1108,21 @@ class BookingController {
         return response.status(400).send("Missing required parameters.");
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenant);
-
-      const hasPermission =
-        (await UserManager.hasPermission(
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-          "readAny",
-        )) ||
-        PermissionsService._isOwner(
-          booking,
-          user.id,
-          tenant,
-          RolePermission.MANAGE_BOOKINGS,
-        );
-
-      if (!hasPermission) {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to get cancellation receipt.`,
-        );
-        return response.sendStatus(403);
+      // The booking within the reach of the request; none there is a 404.
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        scopeOf(request),
+      );
+      if (!booking) {
+        return BookingController._notFound(response, bookingId);
       }
 
       const cancellationReceipt =
         await CancellationReceiptService.getCancellation(
           tenant,
           cancellationReceiptId,
+          bookingId,
         );
 
       logger.info(

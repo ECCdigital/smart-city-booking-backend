@@ -1,54 +1,37 @@
 const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
-const PermissionService = require("../../../commons/services/permission-service");
 const UserService = require("../../../commons/services/user-service");
-const MembershipManager = require("../../../commons/data-managers/membership-manager");
+const { decide } = require("../../../commons/services/authorization");
+const ApiResponse = require("../../../commons/utilities/api-response");
+const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
   level: process.env.LOG_LEVEL,
 });
 
-class UserPermissions {
-  static async _allowCreate(userId) {
-    return !!(await PermissionService._isInstanceOwner(userId));
-  }
-
-  static async _allowRead(user, userId) {
-    const permissions = await UserManager.getUserPermissions(userId);
-    if (
-      (await PermissionService._isInstanceOwner(userId)) ||
-      permissions.tenants.some((p) => p.isOwner)
-    ) {
-      return true;
-    } else {
-      return PermissionService._isSelf(user, userId);
-    }
-  }
-
-  static async _allowUpdate(affectedUser, userId) {
-    return !!(
-      (await PermissionService._isInstanceOwner(userId)) ||
-      PermissionService._isSelf(affectedUser, userId)
-    );
-  }
-
-  static async _allowDelete(affectedUser, userId) {
-    return !!(await PermissionService._isInstanceOwner(userId));
-  }
-}
-
 /**
- * Web Controller for Events.
+ * Web Controller for the users of the instance. The right is the router's
+ * (`user.read`, `user.update`, `user.delete`, `user.changeId`: the instance
+ * owner; `user.updateSelf`: the signed-in user's own record); the one
+ * decision left to the adapter is the creation over the obsolete PUT.
  */
 class UserController {
   static async _findRawUserByIdOrKeycloak(userId, keycloakId = null) {
     return await UserManager.findRawUserByIdOrKeycloak(userId, keycloakId);
   }
 
+  /** The 404 of a user the manager did not find. */
+  static _notFound(response, id) {
+    return ApiResponse.fail(
+      response,
+      new NotFoundError("user_not_found", { id }),
+    );
+  }
+
   /**
-   * Retrieves a list of users that the current user is allowed to read.
+   * Retrieves the users of the instance.
    *
    * @param {Object} request - The request object.
    * @param {Object} response - The response object.
@@ -60,46 +43,10 @@ class UserController {
 
       const userObjects = await UserManager.getUsers();
 
-      const allowedUserObjects = [];
-      for (const userObject of userObjects) {
-        if (await UserPermissions._allowRead(userObject, user.id)) {
-          allowedUserObjects.push(userObject);
-        }
-      }
-
       logger.info(
-        `Instance -- sending ${allowedUserObjects.length} users to user ${user?.id}`,
+        `Instance -- sending ${userObjects.length} users to user ${user?.id}`,
       );
-      response.status(200).send(allowedUserObjects);
-    } catch (error) {
-      logger.error(error);
-      response.status(500).send("Could not get Users");
-    }
-  }
-
-  static async getUsersByTenant(request, response) {
-    try {
-      const user = request.user;
-      const tenantId = request.params.tenant;
-
-      if (
-        !(await PermissionService._allowReadAny(
-          user.id,
-          tenantId,
-          RolePermission.MANAGE_USERS,
-        ))
-      ) {
-        logger.warn(`User ${user?.id} not allowed to get tenant users`);
-        response.sendStatus(403);
-        return;
-      }
-      const tenantUsers =
-        await MembershipManager.getMembershipsByTenantID(tenantId);
-
-      logger.info(
-        `Instance -- sending ${tenantUsers.length} users to user ${user?.id}`,
-      );
-      response.status(200).send(tenantUsers);
+      response.status(200).send(userObjects);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get Users");
@@ -107,7 +54,7 @@ class UserController {
   }
 
   /**
-   * Retrieves a specific user that the current user is allowed to read.
+   * Retrieves a specific user.
    *
    * @param {Object} request - The request object.
    * @param {Object} response - The response object.
@@ -115,26 +62,22 @@ class UserController {
    */
   static async getUser(request, response) {
     try {
-      const tenantId = request.params.tenant;
       const user = request.user;
       const id = request.params.id;
 
-      if (id) {
-        if (await UserPermissions._allowRead(user, user.id, tenantId)) {
-          const userObject = await UserManager.getUser(id);
-          logger.info(
-            `${tenantId} -- Sending user ${userObject.id} to user ${user?.id}`,
-          );
-          response.status(200).send(userObject);
-        } else {
-          logger.warn(
-            `${tenantId} -- User ${user?.id} is not allowed to read user ${id}`,
-          );
-          response.sendStatus(403);
-        }
-      } else {
-        response.sendStatus(400);
+      if (!id) {
+        return response.sendStatus(400);
       }
+
+      const userObject = await UserManager.getUser(id);
+      if (!userObject) {
+        return UserController._notFound(response, id);
+      }
+
+      logger.info(
+        `Instance -- Sending user ${userObject.id} to user ${user?.id}`,
+      );
+      response.status(200).send(userObject);
     } catch (error) {
       logger.error(error);
       response.status(500).send("Could not get user");
@@ -142,18 +85,25 @@ class UserController {
   }
 
   /**
-   * @obsolete Use createUser or updateUser instead.
+   * @deprecated Use createUser or updateUser instead.
+   *
+   * The route carries `user.update`; an unknown id creates, which is the
+   * adapter's second decision (authorize spec §12).
+   *
    * @param request
    * @param response
+   * @param next
    * @returns {Promise<void>}
    */
-  static async storeUser(request, response) {
+  static async storeUser(request, response, next) {
     const userObject = new User(request.body);
 
     const isUpdate = !!(await UserManager.getUser(userObject.id));
 
     if (isUpdate) {
       await UserController.updateUser(request, response);
+    } else if (decide(request.principal, "user", "create") !== "any") {
+      return next(new ForbiddenError());
     } else {
       await UserController.createUser(request, response);
     }
@@ -169,18 +119,13 @@ class UserController {
   static async createUser(request, response) {
     try {
       const user = request.user;
-      if (await UserPermissions._allowCreate(user.id)) {
-        const userObject = new User(request.body);
-        userObject.setPassword(userObject.secret);
-        const newUser = await UserManager.createUser(userObject);
-        logger.info(
-          ` Instance -- created user ${userObject.id} by user ${user?.id}`,
-        );
-        response.status(200).send(newUser);
-      } else {
-        logger.warn(`Instance -- User ${user?.id} not allowed to create user`);
-        response.sendStatus(403);
-      }
+      const userObject = new User(request.body);
+      userObject.setPassword(userObject.secret);
+      const newUser = await UserManager.createUser(userObject);
+      logger.info(
+        ` Instance -- created user ${userObject.id} by user ${user?.id}`,
+      );
+      response.status(200).send(newUser);
     } catch (error) {
       logger.error(error);
       response.status(500).send("could not create user");
@@ -223,50 +168,39 @@ class UserController {
         newInfos.keycloakId = keycloakId;
       }
 
-      const hasUserUpdatePermission = await UserPermissions._allowUpdate(
-        newInfos,
-        user.id,
-      );
-
-      if (hasUserUpdatePermission) {
-        const existingUser = await UserManager.getUser(newInfos.id, true);
-        if (!existingUser) {
-          response.status(404).send("User not found");
-          return;
-        }
-
-        await UserManager.updateUser(newInfos);
-
-        if (
-          (Object.prototype.hasOwnProperty.call(newInfos, "firstName") ||
-            Object.prototype.hasOwnProperty.call(newInfos, "lastName")) &&
-          request.body.syncSelfBookingNames !== false
-        ) {
-          const firstName = Object.prototype.hasOwnProperty.call(
-            newInfos,
-            "firstName",
-          )
-            ? newInfos.firstName
-            : existingUser.firstName;
-          const lastName = Object.prototype.hasOwnProperty.call(
-            newInfos,
-            "lastName",
-          )
-            ? newInfos.lastName
-            : existingUser.lastName;
-          await UserService.syncSelfBookingNames(
-            newInfos.id,
-            firstName,
-            lastName,
-          );
-        }
-
-        logger.info(`updated user ${newInfos.id} by user ${user?.id}`);
-        response.sendStatus(200);
-      } else {
-        logger.warn(`User ${user?.id} not allowed to update user`);
-        response.sendStatus(403);
+      const existingUser = await UserManager.getUser(newInfos.id, true);
+      if (!existingUser) {
+        return UserController._notFound(response, newInfos.id);
       }
+
+      await UserManager.updateUser(newInfos);
+
+      if (
+        (Object.prototype.hasOwnProperty.call(newInfos, "firstName") ||
+          Object.prototype.hasOwnProperty.call(newInfos, "lastName")) &&
+        request.body.syncSelfBookingNames !== false
+      ) {
+        const firstName = Object.prototype.hasOwnProperty.call(
+          newInfos,
+          "firstName",
+        )
+          ? newInfos.firstName
+          : existingUser.firstName;
+        const lastName = Object.prototype.hasOwnProperty.call(
+          newInfos,
+          "lastName",
+        )
+          ? newInfos.lastName
+          : existingUser.lastName;
+        await UserService.syncSelfBookingNames(
+          newInfos.id,
+          firstName,
+          lastName,
+        );
+      }
+
+      logger.info(`updated user ${newInfos.id} by user ${user?.id}`);
+      response.sendStatus(200);
     } catch (error) {
       logger.error(error);
       response.status(500).send("could not update user");
@@ -286,19 +220,7 @@ class UserController {
         keycloakId,
       );
       if (!currentUser) {
-        response.status(404).send("User not found");
-        return;
-      }
-
-      const hasUserUpdatePermission = await UserPermissions._allowUpdate(
-        { id: currentUser.id },
-        actor.id,
-      );
-
-      if (!hasUserUpdatePermission) {
-        logger.warn(`User ${actor?.id} not allowed to change user id`);
-        response.sendStatus(403);
-        return;
+        return UserController._notFound(response, currentId);
       }
 
       const changeResult = await UserService.changeUserId({
@@ -329,45 +251,31 @@ class UserController {
    */
   static async removeUser(request, response) {
     try {
-      const tenantId = request.query.tenant || request.body?.tenantId;
       const user = request.user;
 
       const id = request.params.id;
       const keycloakId = request.query.keycloakId || request.body?.keycloakId;
-      if (id) {
-        const rawUser = await UserController._findRawUserByIdOrKeycloak(
-          id,
-          keycloakId,
-        );
-        if (!rawUser) {
-          response.sendStatus(404);
-          return;
-        }
-
-        const userObject = rawUser.toEntity();
-        const hasUserDeletePermission = await UserPermissions._allowDelete(
-          userObject,
-          user.id,
-        );
-
-        if (hasUserDeletePermission) {
-          await UserManager.deleteUser(userObject.id);
-          logger.info(
-            `${tenantId} -- removed user ${userObject.id} by user ${user?.id}`,
-          );
-          response.sendStatus(200);
-        } else {
-          logger.warn(
-            `${tenantId} -- User ${user?.id} not allowed to remove user`,
-          );
-          response.sendStatus(403);
-        }
-      } else {
+      if (!id) {
         logger.warn(
-          `${tenantId} -- Could not remove user by user ${user?.id}. Missing required parameters.`,
+          `Instance -- Could not remove user by user ${user?.id}. Missing required parameters.`,
         );
-        response.sendStatus(400);
+        return response.sendStatus(400);
       }
+
+      const rawUser = await UserController._findRawUserByIdOrKeycloak(
+        id,
+        keycloakId,
+      );
+      if (!rawUser) {
+        return UserController._notFound(response, id);
+      }
+
+      const userObject = rawUser.toEntity();
+      await UserManager.deleteUser(userObject.id);
+      logger.info(
+        `Instance -- removed user ${userObject.id} by user ${user?.id}`,
+      );
+      response.sendStatus(200);
     } catch (error) {
       logger.error(error);
       response.status(500).send("could not remove user");
@@ -434,7 +342,6 @@ class UserController {
   static async getUserIds(request, response) {
     try {
       const user = request.user;
-      const tenant = request.params.tenant;
       const filterRoles = !!request.query.roles
         ? request.query.roles.split(",")
         : [];
@@ -450,7 +357,7 @@ class UserController {
       });
 
       logger.info(
-        `${tenant} -- sending ${filteredUserObjects.length} user ids to user ${user?.id}`,
+        `Instance -- sending ${filteredUserObjects.length} user ids to user ${user?.id}`,
       );
       response.status(200).send(filteredUserObjects.map((user) => user.id));
     } catch (err) {

@@ -1,3 +1,16 @@
 # Ignore artifacts:
 build
 coverage
+
+# Local-only scratchpads and agent state — never part of the source tree.
+# Without these, a `format:write` rewrites throwaway files (and, through the
+# agent worktrees, whole second copies of the repo).
+.scratch
+.claude
+
+# Templates whose whitespace is output, not layout. Prettier cannot parse
+# Handlebars partials at all (`{{> snippet }}` is a hard error), and
+# reformatting the PDF partials changes the rendered text — it breaks
+# tests/pdf-service.test.js.
+*.hbs
+*.temp.html

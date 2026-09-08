@@ -23,6 +23,14 @@ Instance-level routes under `/api/tenants`.
 
 Returns a public list of tenants. **No authentication required.**
 
+Each tenant carries `accessApps[]`: the customer-service contact of every active access application that has one, and nothing else of the application (its credentials never leave). The storefront reads it for the emergency help of a locker compartment.
+
+```json
+"accessApps": [
+  { "id": "ifbs", "customerService": { "name": "…", "phone": "…", "email": "…" } }
+]
+```
+
 ### GET /api/tenants
 
 Returns tenants visible to the authenticated user. **Requires JWT.**
@@ -174,6 +182,20 @@ _Response:_
 - **booked** — Number of booked units
 - **remaining** — Number of remaining units
 
+## Bookings
+
+### PUT /api/:tenant/bookings
+
+Creates a booking on behalf of a customer (a manual booking) or updates one. On a create the form names the state the booking starts in as `status` - `requested`, `payment_due` or `confirmed`; `confirmed` on a priced booking needs `paymentMethod` and `timePaid` (`400 missing_payment_details` otherwise), and an explicit `status` wins over the flags sent with it. Any other `status` is `400 invalid_status`. Without a `status` the three flags decide, as before: none - a request; `isCommitted` - awaiting payment (confirmed for a free booking); `isCommitted` and `isPayed` - confirmed and paid. `isPayed` without `isCommitted` on a priced booking, or `isRejected`, is `400 invalid_status`: no state stands for it, nothing is written. The stored booking is then admitted to the lifecycle: the compartments held or the access granted, the receipt of a paid booking issued, the customer, the tenant and the supervisors mailed; where the hold fails, the booking is deleted again and the hold's error answered. On an update a `status` in the body is discarded, and the flags are the plan of transitions (`400 invalid_status_change` for flags no transition reaches); a body that carries none of `isCommitted`, `isPayed` and `isRejected` is the content change alone, the state stays.
+
+### POST /api/:tenant/bookings/:id/reinstate
+
+Reinstates a rejected or cancelled booking: back to `requested` from `rejected`, back to the state it was cancelled from otherwise, with price and positions of before; the refund audit is removed. The access is granted again or held. Answers `200 {success: true, data: null, errors: []}`; `409 invalid_transition` on a booking that is not rejected or cancelled, `404 booking_not_found`. **Requires JWT and booking update permission.** Before, the reinstatement was only reachable through the PUT by clearing `isRejected`.
+
+### DELETE /api/:tenant/bookings/:id
+
+Removes a booking for good: its access is taken back, its documents removed, then the booking. Not a cancellation - `POST /bookings/:id/reject` keeps the booking in the state "cancelled".
+
 ## Cancellation refunds
 
 Tenant owners configure `cancellationRefundTiers` through the existing tenant create/update API. An empty array means a full refund.
@@ -202,9 +224,17 @@ Returns per-booking calculations and aggregate amounts for a group booking. **Re
 
 ### POST /api/:tenant/group-bookings/:id/reject
 
-Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated.
+Cancels or rejects a group booking. Without an override, each booking uses its policy proposal; an optional `refundPercentage` applies to all bookings in the group. Optional `bankDetails` are rendered on the aggregated cancellation PDF when a refund document is generated. A group that is cancelled already, or whose members differ in state, answers `409 invalid_transition`; an unknown group `404`. The same applies to `POST /group-bookings/:id/commit` and `/pay`.
 
 Customer self-cancellations always use the current tenant policy when the verification link is released. Expected refund amounts are exposed via the public/hook preview endpoints and included in verify-rejection and booking-cancel mails. Rule-engine and workflow cancellations retain a full refund. Refunds are documented for manual processing; payment providers are not called automatically.
+
+### POST /api/:tenant/bookings/:id/cancellation-receipt
+
+Reprints the cancellation document of a cancelled booking as a further revision under the same number, from the stored refund audit. Same right as `POST /bookings/:id/receipt` (booking management `updateAny` or the owner); `409 not_cancelled` without a cancellation. Nothing is mailed.
+
+### POST /api/:tenant/group-bookings/:id/cancellation-receipt
+
+Reprints the one aggregated cancellation document of a cancelled group booking as a further revision, attached to every member. Same right as `POST /group-bookings/:id/receipt`; `409 not_cancelled` if a member is not cancelled.
 
 ## Other categories
 

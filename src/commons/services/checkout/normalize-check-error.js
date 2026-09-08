@@ -2,31 +2,16 @@ const {
   CHECKOUT_REASONS,
   REASON_BY_CHECK_TYPE,
 } = require("./checkout-reasons");
-const { CHECK_TYPES } = require("./item-checkout-service");
 
 /**
- * Maps a raw check error (thrown by ItemCheckoutService) to a more
- * specific reason code when possible, otherwise falls back to the
- * default reason for that checkType.
+ * Maps a raw check error (thrown by ItemCheckoutService) to its reason
+ * code: the reason the check named itself, otherwise the default reason
+ * for that checkType.
  */
 function resolveReason(rawErr) {
-  const { checkType, message } = rawErr;
+  const { checkType, reason } = rawErr;
 
-  if (
-    checkType === CHECK_TYPES.BOOKING_DURATION &&
-    typeof message === "string"
-  ) {
-    if (message.includes("mindestens"))
-      return CHECKOUT_REASONS.DURATION_TOO_SHORT;
-    if (message.includes("nicht überschreiten"))
-      return CHECKOUT_REASONS.DURATION_TOO_LONG;
-  } else if (
-    checkType === CHECK_TYPES.PERMISSION &&
-    typeof message === "string"
-  ) {
-    if (message.includes("nicht buchbar"))
-      return CHECKOUT_REASONS.BOOKABLE_NOT_BOOKABLE;
-  }
+  if (typeof reason === "string" && reason) return reason;
 
   return REASON_BY_CHECK_TYPE[checkType] || CHECKOUT_REASONS.UNKNOWN;
 }
@@ -42,7 +27,7 @@ function resolveReason(rawErr) {
  */
 function normalizeCheckError(err) {
   if (err && typeof err === "object" && err.checkType) {
-    const { checkType, message, available, ...rest } = err;
+    const { checkType, message, available, reason: _reason, ...rest } = err;
 
     return {
       reason: resolveReason(err),

@@ -1,24 +1,28 @@
 const { asyncRouter } = require("../../../middleware/async-router");
-const AuthenticationController = require("../../authentication/controllers/authentication-controller");
 const InstanceController = require("../controllers/instance-controller");
+const {
+  authorize,
+  publicRoute,
+} = require("../../../commons/services/authorization");
 
 const router = asyncRouter();
 
-router.get("/public", InstanceController.getPublicInstance);
+router.get(
+  "/public",
+  publicRoute("instance", "readPublic"),
+  InstanceController.getPublicInstance,
+);
 
 router.get(
   "/bookable-custom-fields",
+  publicRoute("instance", "readPublic"),
   InstanceController.getBookableCustomFields,
 );
 
-router.get(
-  "/",
-  AuthenticationController.isSignedIn,
-  InstanceController.getInstance,
-);
+router.get("/", authorize("instance", "read"), InstanceController.getInstance);
 router.put(
   "/",
-  AuthenticationController.isSignedIn,
+  authorize("instance", "update"),
   InstanceController.storeInstance,
 );
 

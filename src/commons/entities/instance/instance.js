@@ -1,5 +1,6 @@
 const { instanceSchemaDefinition } = require("../../schemas/instanceSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
+const { exportInstanceMedia } = require("../../services/media/instance-media");
 
 class Instance {
   /**
@@ -38,6 +39,18 @@ class Instance {
     delete this.allowedUsersToCreateTenant;
     delete this.allowAllUsersToCreateTenant;
     delete this.bookableCustomFields;
+  }
+
+  /**
+   * The instance as it goes out: every media reference enriched with the URL
+   * it resolves to, and the legacy read fields (`branding.logoUrl`, the `url`
+   * of each legal document) derived from them (§4.9). What is stored stays
+   * untouched — the derivation happens on the way out only.
+   *
+   * @returns {Object} The instance as it goes out.
+   */
+  exportWithMedia() {
+    return exportInstanceMedia(this);
   }
 
   /**

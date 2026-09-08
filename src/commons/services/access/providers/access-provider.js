@@ -1,16 +1,511 @@
+/**
+ * The seam `AccessService` talks to a locking system through. Every adapter
+ * - NUKI, Salto KS, iFBS, Pareva - extends this class, declares the methods
+ * it can honour in `capabilities`, and answers the result-bearing ones in
+ * the closed shapes declared below. The service branches on `capabilities`
+ * only, never on what an adapter happens to have as a method, and it never
+ * sees a raw provider answer: what an adapter cannot say in these shapes it
+ * does not say.
+ *
+ * `tests/access-provider-contract.test.js` runs every adapter against this
+ * contract.
+ */
+
+/**
+ * What an open did. A provider that opens synchronously answers `opened`
+ * with no process; one that only starts the open - iFBS hands the command
+ * to the box and confirms later - answers `pending` with the process to
+ * poll through {@link AccessProvider#getOpenProgress}.
+ *
+ * Invariant: `state === "pending"` exactly when `openProcessId !== null`.
+ *
+ * @typedef {Object} OpenOutcome
+ * @property {"opened"|"pending"} state
+ * @property {string|null} openProcessId
+ */
+
+/**
+ * The state of the lock as far as the provider knows it. `null` means the
+ * provider does not report this - not `false`. Nothing else: battery,
+ * alarms and usage windows are provider detail that stays behind the seam.
+ *
+ * @typedef {Object} LockStatus
+ * @property {boolean|null} open Whether the lock grants access right now
+ * @property {boolean|null} locked Whether the bolt is thrown
+ * @property {boolean|null} doorOpen Whether the door itself stands open,
+ *   where a sensor can tell
+ */
+
+/**
+ * How far a pending open has come. `confirmed` is `null` when the poll
+ * itself failed and the provider cannot say; `errorCode` and `errorMessage`
+ * then carry the provider's own reason.
+ *
+ * @typedef {Object} OpenProgress
+ * @property {boolean|null} confirmed
+ * @property {string|null} confirmedAt
+ * @property {string|number|null} errorCode
+ * @property {string|null} errorMessage
+ */
+
+/**
+ * The authorization a provider made for a booking at an access point: the
+ * handle to take it back by, the principal the provider keeps for it where
+ * it keeps one - a Salto guest - and the secret the person at the door
+ * types. The secret is one-way: it exists in clear only in this answer, the
+ * service encrypts it before storing and mails it once. Provider names
+ * never appear in it.
+ *
+ * A locker provider additionally names the compartment the grant is for,
+ * where it chooses one - iFBS' box number - so the person knows which box
+ * to look for even when the grant took a box other than the one held.
+ *
+ * @typedef {Object} Grant
+ * @property {string} authorizationId
+ * @property {string|null} externalPrincipalId
+ * @property {string|null} secret
+ * @property {string|null} [compartment] Locker providers only
+ * @property {Object|null} [metadata] What the provider said about the
+ *   compartment beyond its handle and number, for the platform to show and
+ *   never to act on - iFBS: `{ boxId, price }`. Locker providers only
+ */
+
+/**
+ * What taking a grant back did to its external principal: removed, not
+ * removed - the grant itself is gone, the principal is left for the cleanup
+ * job to retry - or `null` when there was no principal to remove.
+ *
+ * @typedef {Object} Revocation
+ * @property {true|false|null} principalRemoved
+ */
+
+/**
+ * The claim of a booking not yet paid on a compartment of a locker system,
+ * before the grant. A provider that holds compartments itself - iFBS keeps
+ * a box for two minutes and says which one - answers the id to confirm the
+ * hold by, when it lapses and the compartment; one that holds nothing on
+ * its side - Pareva, where the stored booking is the claim - answers an
+ * empty hold, all `null`.
+ *
+ * @typedef {Object} Hold
+ * @property {string|null} holdId The provider's handle of the hold
+ * @property {number|null} expiresAt When the provider drops the hold, epoch
+ *   ms; `null` where it does not lapse
+ * @property {string|null} compartment The compartment held, where the
+ *   provider chose one already
+ * @property {Object|null} [metadata] What the provider said about the
+ *   compartment beyond that, as at the {@link Grant}
+ */
+
+/**
+ * The booking an access point is operated for, as `AccessService` resolves
+ * it. Adapters read what they need from it and write nothing back.
+ *
+ * @typedef {Object} BookingContext
+ * @property {string} tenant
+ * @property {string} bookingId
+ * @property {number} timeBegin
+ * @property {number} timeEnd
+ * @property {number} [accessFrom] Start of the access window, buffer included
+ * @property {number} [accessTo] End of the access window, buffer included
+ * @property {Object} [booking] The booking itself
+ * @property {string} [externalBookingId] The provider's own id of the
+ *   booking, where the provider - iFBS - books on its side
+ * @property {string} [pin] A PIN the caller chose for the grant
+ * @property {Hold} [hold] The hold a grant consumes, where the provider
+ *   holds compartments
+ */
+
+/**
+ * An access point as the provider lists it - the shape the sync stores.
+ *
+ * @typedef {Object} ListedAccessPoint
+ * @property {string} id
+ * @property {"door"|"locker"} type
+ * @property {string} provider
+ * @property {string} externalId
+ * @property {string|null} locationId
+ * @property {string} label
+ * @property {string[]} capabilities The point's own capabilities, e.g.
+ *   `remote`, `authorization`
+ * @property {string[]} supportedModes The access point modes the lock
+ *   really supports
+ * @property {Object} metadata The provider's own record of the lock
+ */
+
+/**
+ * A webhook event as the provider reports it, normalized to what the
+ * service routes on.
+ *
+ * @typedef {Object} WebhookEvent
+ * @property {string} provider
+ * @property {string} externalId
+ * @property {string|null} eventType
+ * @property {number|string} timestamp
+ * @property {Object} payload The event as it came in
+ */
+
+const { AccessOpenError } = require("../../../../errors/AccessOpenError");
+const { NotFoundError } = require("../../../../errors/BaseError");
+
+/** A lock nobody could read: unknown on every count. */
+const UNKNOWN_LOCK_STATUS = Object.freeze({
+  open: null,
+  locked: null,
+  doorOpen: null,
+});
+
 class AccessProvider {
+  /**
+   * @param {Object} [options]
+   * @param {Object} [options.client] A ready API client used for every tenant
+   *   instead of one built from the tenant's application. Tests inject a fake
+   *   here; the registry constructs the provider without one.
+   */
+  constructor({ client = null } = {}) {
+    this._client = client;
+  }
+
+  /**
+   * The LockStatus of a lock the provider knows nothing about.
+   *
+   * @returns {LockStatus}
+   */
+  static get unknownLockStatus() {
+    return UNKNOWN_LOCK_STATUS;
+  }
+
+  /**
+   * @protected
+   * The active application of a provider in a tenant, looked up under the
+   * given application types in order.
+   *
+   * @param {Object|null} tenantData The tenant as `TenantManager` answers it
+   * @param {string} providerId The provider's id, e.g. `ifbs`
+   * @param {string[]} types Application types to look under, in order
+   * @returns {Object|null} The raw application, or `null` when the tenant
+   *   has none that is active
+   */
+  _findActiveApplication(tenantData, providerId, types) {
+    return AccessProvider.findActiveApplication(tenantData, providerId, types);
+  }
+
+  /**
+   * The active application of a provider in a tenant, looked up under the
+   * given application types in order - the one lookup the adapters and the
+   * service share.
+   *
+   * @param {Object|null} tenantData The tenant as `TenantManager` answers it
+   * @param {string} providerId The provider's id, e.g. `ifbs`
+   * @param {string[]} types Application types to look under, in order
+   * @returns {Object|null} The raw application, or `null` when the tenant
+   *   has none that is active
+   */
+  static findActiveApplication(tenantData, providerId, types) {
+    const applications = tenantData?.applications || [];
+
+    for (const type of types) {
+      const application = applications.find(
+        (a) => a.type === type && a.id === providerId && a.active,
+      );
+      if (application) {
+        return application;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * @protected
+   * The tenant's API client for an open attempt, whose failures are the
+   * guest's to see as a failure class: a tenant without an active
+   * application of this provider - the adapter's `_getClient` throws a
+   * `NotFoundError` for it - is a configuration failure, a tenant that
+   * cannot be read right now a temporary one.
+   *
+   * @param {string} tenant Tenant the access point belongs to
+   * @returns {Promise<Object>} The client `_getClient` builds
+   * @throws {AccessOpenError}
+   */
+  async _getClientForOpen(tenant) {
+    try {
+      return await this._getClient(tenant);
+    } catch (err) {
+      throw err instanceof NotFoundError
+        ? AccessOpenError.configuration(
+            `${this.constructor.name} is not set up for tenant '${tenant}': ${err.message}`,
+          )
+        : AccessOpenError.temporary(
+            `${this.constructor.name} could not read the application of tenant '${tenant}': ${err.message}`,
+          );
+    }
+  }
+
+  /**
+   * Opens the access point for the booking: pulls the latch where the lock
+   * has one, releases the lock where it has not, hands the command to the
+   * box where the provider is a locker system.
+   *
+   * @param {Object} accessPoint The access point to open
+   * @param {BookingContext} bookingContext The booking it is opened for
+   * @returns {Promise<OpenOutcome>} What the open did
+   * @throws {AccessOpenError} Only ever this: `configuration` when the
+   *   tenant, the lock or its setup are not as they should be, `temporary`
+   *   for everything the provider or the network did not manage this time
+   */
   async open(accessPoint, bookingContext) {
     throw new Error(`open() is not supported by ${this.constructor.name}`);
   }
 
+  /**
+   * Locks the access point again. Answers nothing: the state after a close
+   * is what the lock says it is, and the service reads it through
+   * {@link AccessProvider#getStatus}.
+   *
+   * @param {Object} accessPoint The access point to close
+   * @param {BookingContext} bookingContext The booking it is closed for
+   * @returns {Promise<void>}
+   * @throws {Error} The provider's own error when the close did not go
+   *   through
+   */
   async close(accessPoint, bookingContext) {
     throw new Error(`close() is not supported by ${this.constructor.name}`);
   }
 
+  /**
+   * Pulls the latch so the door physically opens, instead of only releasing
+   * the lock. Where a lock can pull its latch, {@link AccessProvider#open}
+   * does so by itself; this is the older way to the same end.
+   *
+   * @param {Object} accessPoint The access point to unlatch
+   * @param {BookingContext} bookingContext The booking it is unlatched for
+   * @returns {Promise<OpenOutcome>} What the unlatch did
+   * @throws {AccessOpenError} As of {@link AccessProvider#open}
+   */
+  async unlatch(accessPoint, bookingContext) {
+    throw new Error(`unlatch() is not supported by ${this.constructor.name}`);
+  }
+
+  /**
+   * The state of the lock right now.
+   *
+   * @param {Object} accessPoint The access point to read
+   * @param {BookingContext} bookingContext The booking it is read for
+   * @returns {Promise<LockStatus>} The state, `null` for whatever the
+   *   provider does not report
+   * @throws {Error} The provider's own error when the lock cannot be read
+   */
   async getStatus(accessPoint, bookingContext) {
     throw new Error(`getStatus() is not supported by ${this.constructor.name}`);
   }
 
+  /**
+   * How far a pending open has come - only providers whose open answers
+   * `pending` declare this.
+   *
+   * @param {Object} accessPoint The access point that was opened; carries
+   *   `tenantId`, which is how the provider finds the tenant here - there
+   *   is no booking context on a poll
+   * @param {string} openProcessId The process the open answered with
+   * @returns {Promise<OpenProgress>} The progress; a failed poll is answered,
+   *   not thrown, with `confirmed: null` and the provider's reason
+   * @throws {Error} Nothing of its own - a failed poll is an answer
+   */
+  async getOpenProgress(accessPoint, openProcessId) {
+    throw new Error(
+      `getOpenProgress() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Holds a compartment of a locker system for a booking that is not paid
+   * yet - optional capability `hold`, declared by locker providers only.
+   * Doors are never held.
+   *
+   * @param {Object} accessPoint The locker system to hold a compartment of
+   * @param {BookingContext} bookingContext The booking that claims it
+   * @returns {Promise<Hold>} The hold, empty where the provider holds
+   *   nothing on its side
+   * @throws {Error} The provider's own error when there is nothing left to
+   *   hold; the checkout then rolls the booking back
+   */
+  async hold(accessPoint, bookingContext) {
+    throw new Error(`hold() is not supported by ${this.constructor.name}`);
+  }
+
+  /**
+   * Renews a hold that is about to lapse, before the payment starts -
+   * declared together with `hold`. Where the provider holds nothing there
+   * is nothing to renew.
+   *
+   * @param {Object} accessPoint The locker system the hold is at
+   * @param {BookingContext} bookingContext The booking, with the `hold` to
+   *   renew
+   * @returns {Promise<Hold>} The renewed hold; the compartment may change
+   * @throws {Error} The provider's own error when the hold is lost and
+   *   nothing is left to hold
+   */
+  async refreshHold(accessPoint, bookingContext) {
+    throw new Error(
+      `refreshHold() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Grants the booking an authorization at the lock - a keypad code, a
+   * guest with a PIN, a compartment of a locker system - for its access
+   * window. A locker provider consumes the `hold` the context brings and
+   * takes a new one where it lapsed.
+   *
+   * @param {Object} accessPoint The access point to grant access to
+   * @param {BookingContext} bookingContext The booking that gets access;
+   *   `pin` is used as the secret when it brings one
+   * @returns {Promise<Grant>} The grant, with the secret in clear
+   * @throws {Error} The provider's own error; the service rethrows it and
+   *   the provisioning job tries again
+   */
+  async grantAuthorization(accessPoint, bookingContext) {
+    throw new Error(
+      `grantAuthorization() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Takes the grant back. Revoking is idempotent: a grant or principal the
+   * provider no longer has is nothing to do, not a failure, so a revoke
+   * that failed halfway can be repeated and only does what is left.
+   *
+   * @param {Object} accessPoint The access point the grant was made for;
+   *   carries `tenantId`, which is how the provider finds the tenant here
+   * @param {Grant} grant The grant as it was answered; its `secret` is not
+   *   needed and the service hands it back as `null`
+   * @returns {Promise<Revocation>} Whether the external principal is gone
+   * @throws {Error} The provider's own error when the grant itself could
+   *   not be taken back; a principal that could not be removed is answered
+   *   with `principalRemoved: false`, not thrown
+   */
+  async revokeAuthorization(accessPoint, grant) {
+    throw new Error(
+      `revokeAuthorization() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Every access point the provider has for the tenant.
+   *
+   * @param {string} tenant Tenant to list for
+   * @returns {Promise<ListedAccessPoint[]>} The access points
+   * @throws {Error} The provider's own error when the listing fails
+   */
+  async listAccessPoints(tenant) {
+    throw new Error(
+      `listAccessPoints() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * The access point modes the lock really supports right now, as
+   * {@link AccessProvider#listAccessPoints} would list them.
+   *
+   * @param {Object} accessPoint The access point to ask about
+   * @param {string} tenant Tenant the access point belongs to
+   * @returns {Promise<string[]|null>} The modes, or `null` when the provider
+   *   does not list the access point
+   * @throws {Error} The provider's own error when the lock cannot be read
+   */
+  async getSupportedModes(accessPoint, tenant) {
+    throw new Error(
+      `getSupportedModes() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Where the physical lock stands, as far as the provider knows it. Optional
+   * capability: only providers that declare `getLocation` are asked, and even
+   * they may answer `null`. The result is a prefill suggestion - it is never
+   * written to the access point by the provider.
+   *
+   * @param {Object} _accessPoint The access point to locate
+   * @param {string} _tenant Tenant the access point belongs to
+   * @returns {Promise<Object|null>} A `location` in the shape of
+   *   `accessPoint.location`, or `null` when the provider knows no location
+   * @throws {Error} The provider's own error when the lock cannot be read
+   */
+  async getLocation(_accessPoint, _tenant) {
+    throw new Error(
+      `getLocation() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Subscribes the tenant's account to events at the given URL.
+   *
+   * @param {string} tenant Tenant to subscribe for
+   * @param {string} callbackUrl Where the provider is to send events
+   * @returns {Promise<Object>} The provider's subscription record, whose
+   *   `id` is what {@link AccessProvider#unregisterWebhook} takes
+   * @throws {Error} The provider's own error when subscribing fails
+   */
+  async registerWebhook(tenant, callbackUrl) {
+    throw new Error(
+      `registerWebhook() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Ends a subscription. Without an id there is nothing to end.
+   *
+   * @param {string} tenant Tenant the subscription belongs to
+   * @param {string|null} id The subscription as
+   *   {@link AccessProvider#registerWebhook} answered it
+   * @returns {Promise<Object>} The provider's answer
+   * @throws {Error} The provider's own error when unsubscribing fails
+   */
+  async unregisterWebhook(tenant, id) {
+    throw new Error(
+      `unregisterWebhook() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Reads an incoming event into the shape the service routes on.
+   *
+   * @param {string|Object} _rawPayload The request body, raw or parsed
+   * @param {Object} _headers The request headers
+   * @returns {WebhookEvent} The event
+   * @throws {SyntaxError} A raw body that is not JSON
+   */
+  parseWebhook(_rawPayload, _headers) {
+    throw new Error(
+      `parseWebhook() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * Whether an incoming event really comes from the provider. Without a
+   * secret configured there is nothing to check against, and the event
+   * passes.
+   *
+   * @param {string|Object} _rawPayload The request body, raw or parsed
+   * @param {Object} _headers The request headers carrying the signature
+   * @param {string|null} _secret The shared secret of the subscription
+   * @returns {boolean} Whether the signature holds
+   * @throws {Error} Nothing of its own - a signature that does not hold is
+   *   `false`, not an error
+   */
+  verifyWebhookSignature(_rawPayload, _headers, _secret) {
+    throw new Error(
+      `verifyWebhookSignature() is not supported by ${this.constructor.name}`,
+    );
+  }
+
+  /**
+   * The methods this provider honours. The service asks nothing it does not
+   * find here.
+   *
+   * @returns {string[]}
+   */
   static get capabilities() {
     return [];
   }

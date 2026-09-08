@@ -187,19 +187,7 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-const conditionalAuth = (conditionFn) => {
-  return async (req, res, next) => {
-    const requiresAuth = await conditionFn(req);
-    if (requiresAuth) {
-      return requireAuth(req, res, next);
-    } else {
-      return optionalAuth(req, res, next);
-    }
-  };
-};
-
 module.exports = {
   requireAuth,
   optionalAuth,
-  conditionalAuth,
 };

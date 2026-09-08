@@ -1,6 +1,12 @@
 const { bookableSchemaDefinition } = require("../../schemas/bookableSchema");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const {
+  absoluteUrl,
+  enrichAttachment,
+  enrichMediaReferences,
+  mediaReferenceUrl,
+} = require("../../services/media/media-reference");
+const {
   validateBlockPeriods,
   validateBookingModeExclusivity,
 } = require("../../utilities/block-period-validation");
@@ -310,6 +316,28 @@ class Bookable {
     return this;
   }
 
+  /**
+   * The cover image of the bookable: the first reference of the image list —
+   * determined by position, never by a field of its own. An empty list means
+   * "no cover image"; a bookable the media import has not touched yet falls
+   * back to its legacy `imgUrl`.
+   *
+   * @returns {Object|null} The reference, or null when there is none.
+   */
+  get coverImage() {
+    return this.images?.[0] ?? this.imgUrl ?? null;
+  }
+
+  /**
+   * The address the cover image is served under — the derived read field every
+   * frontend and the HTML endpoint have always known as `imgUrl`.
+   *
+   * @returns {string} The URL, empty when there is no cover image.
+   */
+  get coverImageUrl() {
+    return mediaReferenceUrl(this.coverImage, this.tenantId) || "";
+  }
+
   get hasExternalPricing() {
     return (
       this.externalProviders?.some(
@@ -344,16 +372,27 @@ class Bookable {
 
   /**
    * Export public bookable information
+   * @param {Object} [options]
+   * @param {boolean} [options.absoluteMediaUrls] - Resolve media addresses to
+   *   absolute URLs, for consumers outside the platform's own host — the
+   *   HTML/JSON embed interfaces (§4.4 keeps everything else relative).
    * @returns {Object} Public bookable data
    */
-  exportPublic() {
+  exportPublic({ absoluteMediaUrls = false } = {}) {
+    const resolveUrl = (url) => (absoluteMediaUrls ? absoluteUrl(url) : url);
+
     return {
       id: this.id,
       tenantId: this.tenantId,
       type: this.type,
       title: this.title,
       description: this.description,
-      imgUrl: this.imgUrl,
+      images: enrichMediaReferences(this.images, this.tenantId).map(
+        (reference) => ({ ...reference, url: resolveUrl(reference.url) }),
+      ),
+      // Derived from the cover image, so storefront v4 and the HTML endpoint
+      // keep reading the single address they always read.
+      imgUrl: resolveUrl(this.coverImageUrl) || "",
       flags: this.flags,
       tags: this.tags,
       location: this.location,
@@ -383,10 +422,45 @@ class Bookable {
       relatedBookableIds: this.relatedBookableIds,
       checkoutBookableIds: this.checkoutBookableIds,
       eventId: this.eventId,
-      attachments: this.attachments,
+      attachments: (this.attachments || []).map((attachment) => {
+        const enriched = enrichAttachment(attachment, this.tenantId);
+
+        if (!enriched || !absoluteMediaUrls) {
+          return enriched;
+        }
+
+        return {
+          ...enriched,
+          url: resolveUrl(enriched.url),
+          reference: enriched.reference && {
+            ...enriched.reference,
+            url: resolveUrl(enriched.reference.url),
+          },
+        };
+      }),
       customFields: this.customFields,
       customFieldValues: this.customFieldValues,
       cancellationPolicy: this.cancellationPolicy,
+    };
+  }
+
+  /**
+   * The stored bookable with every media reference site resolved to the
+   * address it is served under — for the routes that return the raw entity
+   * rather than `exportPublic`, so their consumers never receive a media
+   * reference without its URL.
+   *
+   * @returns {Object} A plain copy with `images`, `imgUrl` and `attachments`
+   *   resolved; every other field exactly as stored.
+   */
+  withResolvedMediaUrls() {
+    return {
+      ...this,
+      images: enrichMediaReferences(this.images, this.tenantId),
+      imgUrl: this.coverImageUrl,
+      attachments: (this.attachments || []).map((attachment) =>
+        enrichAttachment(attachment, this.tenantId),
+      ),
     };
   }
 

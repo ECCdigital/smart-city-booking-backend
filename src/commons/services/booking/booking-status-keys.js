@@ -1,3 +1,8 @@
+const {
+  STATUS,
+  statusFromFlags,
+} = require("../booking-lifecycle/booking-state");
+
 /**
  * Stable i18n keys for resolved booking status (frontend).
  * Do not rename without coordinating with the frontend.
@@ -21,29 +26,29 @@ const BOOKING_STATUS_REASONS = {
 };
 
 /**
- * Maps a booking entity to a frontend i18n status key.
- * @param {{ isCommitted?: boolean, isPayed?: boolean, isRejected?: boolean, priceEur?: number }} booking
+ * Maps a booking to a frontend i18n status key, read off `booking.status`;
+ * a plain object that still speaks in flags is read the way the entity
+ * reads it.
+ * @param {{ status?: string, isCommitted?: boolean, isPayed?: boolean, isRejected?: boolean, priceEur?: number }} booking
  * @returns {string}
  */
 function resolveBookingStatusKey(booking) {
   const priceEur = Number(booking.priceEur) || 0;
-  const isCommitted = Boolean(booking.isCommitted);
-  const isPayed = Boolean(booking.isPayed);
-  const isRejected = Boolean(booking.isRejected);
+  const status = booking.status || statusFromFlags(booking, priceEur);
 
-  if (isRejected) {
-    return BOOKING_STATUS_I18N.REJECTED;
+  switch (status) {
+    case STATUS.REJECTED:
+    case STATUS.CANCELLED:
+      return BOOKING_STATUS_I18N.REJECTED;
+    case STATUS.REQUESTED:
+      return BOOKING_STATUS_I18N.AWAITING_APPROVAL;
+    case STATUS.PAYMENT_DUE:
+      return BOOKING_STATUS_I18N.PAYMENT_EXPECTED;
+    default:
+      return priceEur > 0
+        ? BOOKING_STATUS_I18N.PAID_COMPLETED
+        : BOOKING_STATUS_I18N.CONFIRMED_WITHOUT_PAYMENT;
   }
-  if (!isCommitted) {
-    return BOOKING_STATUS_I18N.AWAITING_APPROVAL;
-  }
-  if (isCommitted && !isPayed && priceEur > 0) {
-    return BOOKING_STATUS_I18N.PAYMENT_EXPECTED;
-  }
-  if (isCommitted && isPayed && priceEur > 0) {
-    return BOOKING_STATUS_I18N.PAID_COMPLETED;
-  }
-  return BOOKING_STATUS_I18N.CONFIRMED_WITHOUT_PAYMENT;
 }
 
 module.exports = {

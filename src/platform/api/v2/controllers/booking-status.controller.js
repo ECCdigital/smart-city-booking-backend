@@ -89,6 +89,7 @@ class BookingStatusControllerV2 {
       return {
         bookingId,
         success: true,
+        status: booking.status,
         statusKey: resolveBookingStatusKey(booking),
         paymentProvider: booking.paymentProvider ?? null,
         isCommitted: Boolean(booking.isCommitted),

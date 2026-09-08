@@ -14,10 +14,10 @@ const CouponManager = require("../data-managers/coupon-manager");
 const MembershipManager = require("../data-managers/membership-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
+const { notify } = require("../mail-service");
 
 class UserService {
   static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {
-    const MailController = require("../mail-service/mail-controller");
     const hook = user.addHook(USER_HOOK_TYPES.VERIFY, { nextUrl, verifyUrl });
     const createdUser = await UserManager.createUser(user);
 
@@ -29,12 +29,12 @@ class UserService {
       );
     }
 
-    await MailController.sendVerificationRequest(
-      createdUser.id,
-      hook.id,
+    await notify("VERIFICATION_REQUEST", {
+      to: createdUser.id,
+      hookId: hook.id,
       verifyUrl,
-    );
-    await MailController.sendUserCreated(createdUser.id);
+    });
+    await notify("USER_CREATED", { userId: createdUser.id });
   }
 
   /**
@@ -114,7 +114,6 @@ class UserService {
   }
 
   static async requestForgotPassword(email, resetUrl) {
-    const MailController = require("../mail-service/mail-controller");
     const user = await UserManager.getUser(email, true);
 
     if (!user || user.authType !== "local" || user.isSuspended) {
@@ -134,15 +133,29 @@ class UserService {
 
     const hook = userEntity.addForgotPasswordHook(resetUrl);
     await UserManager.updateUser(userEntity);
-    await MailController.sendForgotPasswordRequest(
-      userEntity.id,
-      hook.id,
+    await notify("FORGOT_PASSWORD_REQUEST", {
+      to: userEntity.id,
+      hookId: hook.id,
       resetUrl,
-    );
+    });
 
     logger.info(`Forgot password request sent to user ${userEntity.id}`);
 
     return { success: true };
+  }
+
+  /**
+   * The password change of a signed-in user: the new password stands
+   * behind a hook the user confirms from the password reset mail. Lived in
+   * `UserManager` until the mail-stack chain.
+   */
+  static async resetPassword(user, password) {
+    const userEntity = user instanceof User ? user : new User(user);
+
+    const hook = userEntity.addPasswordResetHook(password);
+    await UserManager.updateUser(userEntity);
+    await notify("PASSWORD_RESET", { to: userEntity.id, hookId: hook.id });
+    return hook;
   }
 
   static async resetPasswordWithToken(token, password, id) {

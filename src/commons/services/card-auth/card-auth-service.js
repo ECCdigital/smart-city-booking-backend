@@ -2,6 +2,7 @@ const axios = require("axios");
 const bunyan = require("bunyan");
 const InstanceManager = require("../../data-managers/instance-manager");
 const UserManager = require("../../data-managers/user-manager");
+const mailService = require("../../mail-service");
 
 const logger = bunyan.createLogger({
   name: "card-auth-service",
@@ -158,7 +159,6 @@ class CardAuthService {
       }
 
       const { USER_HOOK_TYPES } = require("../../entities/user/user");
-      const MailController = require("../../mail-service/mail-controller");
 
       const hook = existingEmailUser.addHook(USER_HOOK_TYPES.LINK_CARD, {
         appId,
@@ -168,8 +168,8 @@ class CardAuthService {
 
       await UserManager.updateUser(existingEmailUser);
 
-      await MailController.sendCardLinkRequest({
-        address: existingEmailUser.id,
+      await mailService.notify("CARD_LINK_REQUEST", {
+        to: existingEmailUser.id,
         firstName: existingEmailUser.firstName,
         hookId: hook.id,
         cardLabel: app.label,

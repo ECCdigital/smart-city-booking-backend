@@ -50,13 +50,13 @@ module.exports = { BookingService };
 
 ## Naming
 
-| Kind | Convention | Example |
-|------|------------|---------|
-| Files | kebab-case | `booking-controller.js` |
-| Classes | PascalCase | `BookingController` |
-| Functions/methods | camelCase | `resolveCheckoutId` |
-| Constants | UPPER_SNAKE or PascalCase enum | `BOOKING_HOOK_TYPES` |
-| Mongoose models | PascalCase singular | `Booking`, `Tenant` |
+| Kind              | Convention                     | Example                 |
+| ----------------- | ------------------------------ | ----------------------- |
+| Files             | kebab-case                     | `booking-controller.js` |
+| Classes           | PascalCase                     | `BookingController`     |
+| Functions/methods | camelCase                      | `resolveCheckoutId`     |
+| Constants         | UPPER_SNAKE or PascalCase enum | `BOOKING_HOOK_TYPES`    |
+| Mongoose models   | PascalCase singular            | `Booking`, `Tenant`     |
 
 ## Error handling
 

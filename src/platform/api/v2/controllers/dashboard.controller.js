@@ -1,6 +1,7 @@
 const bunyan = require("bunyan");
 const DashboardService = require("../../../../commons/services/dashboard/dashboard-service");
 const ApiResponse = require("../../../../commons/utilities/api-response");
+const { scopeOf } = require("../../../../commons/services/authorization");
 const { BaseError } = require("../../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
@@ -12,7 +13,7 @@ class DashboardControllerV2 {
   static async getInstanceSummary(req, res) {
     try {
       const data = await DashboardService.getInstanceSummary(
-        req.user.id,
+        scopeOf(req),
         req.query,
       );
       return ApiResponse.ok(res, { data });
@@ -24,7 +25,7 @@ class DashboardControllerV2 {
   static async getTenantSummary(req, res) {
     try {
       const data = await DashboardService.getTenantSummary(
-        req.user.id,
+        scopeOf(req),
         req.params.tenant,
         req.query,
       );

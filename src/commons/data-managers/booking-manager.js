@@ -7,6 +7,8 @@ const { Booking } = require("../entities/booking/booking");
 const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
 const { BookableManager } = require("./bookable-manager");
+const { NotFoundError } = require("../../errors/BaseError");
+const { ownCondition } = require("../services/authorization/reach");
 
 /**
  * Data Manager for Booking objects.
@@ -80,10 +82,15 @@ class BookingManager {
   /**
    * Get all bookings related to a tenant
    * @param {string} tenantId Identifier of the tenant
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getTenantBookings(tenantId) {
-    const rawBookings = await BookingModel.find({ tenantId: tenantId });
+  static async getTenantBookings(tenantId, scope) {
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      ...ownCondition("assignedUserId", scope),
+    });
     return BookingManager._toEntities(rawBookings);
   }
 
@@ -91,12 +98,15 @@ class BookingManager {
    * Get bookings by IDs
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookingIds Array of booking IDs
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getBookings(tenantId, bookingIds) {
+  static async getBookings(tenantId, bookingIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       id: { $in: bookingIds },
+      ...ownCondition("assignedUserId", scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -105,12 +115,15 @@ class BookingManager {
    * Get all bookings related to a bookable object
    * @param {string} tenantId Identifier of the tenant
    * @param {string} bookableId Bookable ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getRelatedBookings(tenantId, bookableId) {
+  static async getRelatedBookings(tenantId, bookableId, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": bookableId,
+      ...ownCondition("assignedUserId", scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -119,12 +132,15 @@ class BookingManager {
    * Get bookings related to multiple bookables
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookableIds Array of bookable IDs
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getRelatedBookingsBatch(tenantId, bookableIds) {
+  static async getRelatedBookingsBatch(tenantId, bookableIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": { $in: bookableIds },
+      ...ownCondition("assignedUserId", scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -148,12 +164,15 @@ class BookingManager {
    * Get a specific booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking|null>} Booking or null
    */
-  static async getBooking(id, tenantId) {
+  static async getBooking(id, tenantId, scope) {
     const rawBooking = await BookingModel.findOne({
       id: id,
       tenantId: tenantId,
+      ...ownCondition("assignedUserId", scope),
     });
 
     if (!rawBooking) {
@@ -210,6 +229,159 @@ class BookingManager {
     );
 
     return bookingEntity;
+  }
+
+  /**
+   * The conditional write of the booking lifecycle (spec part 2, section 5):
+   * writes the booking only where the stored one is in `expectStatus`, in one
+   * atomic operation, and answers the document as it was before - the
+   * snapshot an abort restores with {@link replaceBooking}. No match answers
+   * `null`; the caller reads the state and raises the guard error.
+   *
+   * @param {Booking|Object} booking The booking to store
+   * @param {string} expectStatus The state the stored booking must be in
+   * @param {{ unset?: string[] }} [options] Fields to remove from the
+   *   document with the write (`reinstate` drops the refund audit)
+   * @returns {Promise<Object|null>} The previous document, or null
+   */
+  static async storeBookingIfStatus(booking, expectStatus, options = {}) {
+    const bookingEntity =
+      booking instanceof Booking ? booking : new Booking(booking);
+
+    bookingEntity.validate();
+
+    const unsetFields = Array.isArray(options.unset) ? options.unset : [];
+    for (const field of unsetFields) {
+      delete bookingEntity[field];
+    }
+    const update =
+      unsetFields.length === 0
+        ? bookingEntity
+        : {
+            $set: bookingEntity,
+            $unset: Object.fromEntries(unsetFields.map((field) => [field, ""])),
+          };
+
+    return await BookingModel.findOneAndUpdate(
+      {
+        id: bookingEntity.id,
+        tenantId: bookingEntity.tenantId,
+        status: expectStatus,
+      },
+      update,
+      { upsert: false, new: false },
+    ).lean();
+  }
+
+  /**
+   * Puts a previous document back as a whole, as
+   * {@link storeBookingIfStatus} answered it: what the document did not
+   * carry is gone again, unlike a `$set` of it.
+   *
+   * @param {Object} document The document to put back
+   * @returns {Promise<void>}
+   */
+  static async replaceBooking(document) {
+    const fields = { ...document };
+    delete fields._id;
+    delete fields.__v;
+    await BookingModel.replaceOne(
+      { id: fields.id, tenantId: fields.tenantId },
+      fields,
+    );
+  }
+
+  /**
+   * Find the bookings whose attachments reference a medium. The usage proof is
+   * searched on demand (§4.7 of the media spec); a medium never carries a back
+   * reference. Booking documents are not found this way — they hang on their
+   * booking by `bookingId` and cascade with it.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} mediaId ID of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const docs = await BookingModel.find(
+      {
+        tenantId: tenantId,
+        "attachments.reference.mediaId": mediaId,
+      },
+      { id: 1, name: 1 },
+    ).lean();
+
+    return docs.map((doc) => ({ id: doc.id, title: doc.name || "" }));
+  }
+
+  /**
+   * Every booking of a tenant that carries attachments — the stock the media
+   * import walks when it converts stored addresses into media references.
+   *
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Booking[]>} Bookings with at least one attachment
+   */
+  static async getBookingsWithAttachments(tenantId) {
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      "attachments.0": { $exists: true },
+    });
+
+    return BookingManager._toEntities(rawBookings);
+  }
+
+  /**
+   * Bookings whose attachments name a file. Generated documents are attached
+   * under `title` (receipts, cancellations) or `name` (invoices), so both are
+   * matched — this is how the media import places a legacy booking document
+   * without guessing (§4.10). An aggregated document names several bookings.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} fileName File name from the legacy document tree
+   * @returns {Promise<Booking[]>} Bookings that name the file
+   */
+  static async getBookingsByAttachmentFileName(tenantId, fileName) {
+    if (!fileName) {
+      return [];
+    }
+
+    const rawBookings = await BookingModel.find({
+      tenantId: tenantId,
+      $or: [
+        { "attachments.title": fileName },
+        { "attachments.name": fileName },
+      ],
+    });
+
+    return BookingManager._toEntities(rawBookings);
+  }
+
+  /**
+   * Appends a document attachment to a booking with one atomic push. The
+   * attachment never travels in a whole-document write: that could lose it
+   * to the state write of a transition running next to it, or overwrite a
+   * parallel amendment.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {Object} attachment The attachment, in the shape of the schema
+   * @returns {Promise<Object>} The attachment
+   * @throws {NotFoundError} If the booking does not exist
+   */
+  static async addAttachment(tenantId, bookingId, attachment) {
+    const result = await BookingModel.updateOne(
+      { id: bookingId, tenantId },
+      { $push: { attachments: attachment } },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+
+    return attachment;
   }
 
   /**
@@ -347,27 +519,14 @@ class BookingManager {
   }
 
   /**
-   * Update payment status of a booking
-   * @param {Booking} booking Booking with updated payment info
-   * @returns {Promise<void>}
-   */
-  static async setBookingPayedStatus(booking) {
-    await BookingModel.updateOne(
-      { id: booking.id, tenantId: booking.tenantId },
-      {
-        isPayed: booking.isPayed,
-        paymentMethod: booking.paymentMethod,
-      },
-    );
-  }
-
-  /**
    * Get bookings for an event
    * @param {string} tenantId Tenant ID
    * @param {string} eventId Event ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Booking[]>} Event bookings
    */
-  static async getEventBookings(tenantId, eventId) {
+  static async getEventBookings(tenantId, eventId, scope) {
     const bookables = await BookableModel.find({
       tenantId: tenantId,
       eventId: eventId,
@@ -375,7 +534,11 @@ class BookingManager {
     });
 
     const bookableIds = bookables.map((b) => b.id);
-    return await BookingManager.getRelatedBookingsBatch(tenantId, bookableIds);
+    return await BookingManager.getRelatedBookingsBatch(
+      tenantId,
+      bookableIds,
+      scope,
+    );
   }
 
   static async getBookedSeatsCount(
@@ -473,6 +636,39 @@ class BookingManager {
       ...filter,
     });
     return BookingManager._toEntities(rawBookings);
+  }
+
+  /**
+   * Get committed, non-rejected bookings of a single user (the assigned user),
+   * narrowed down at the database level. Used by the access/booking queries to
+   * avoid loading the whole tenant.
+   *
+   * The price/payment validity (`isPayed` for priced bookings) is intentionally
+   * NOT enforced here - it depends on `priceEur` and is re-checked in memory via
+   * `Booking.isBookingValid()`.
+   *
+   * @param {string|null} tenantId Tenant ID, or null/undefined to search across all tenants
+   * @param {string} userId Assigned user ID
+   * @param {Object} [opts]
+   * @param {Object} [opts.timeFilter={}] Extra time conditions (e.g. on timeBegin/timeEnd)
+   * @param {Object} [opts.match={}] Extra MongoDB conditions (e.g. bookable/locker $or)
+   * @param {boolean} [opts.requireCommitted=true] When false, also returns uncommitted bookings
+   * @returns {Promise<Booking[]>} List of bookings
+   */
+  static async getUserBookingsFiltered(
+    tenantId,
+    userId,
+    { timeFilter = {}, match = {}, requireCommitted = true } = {},
+  ) {
+    const rawBookings = await BookingModel.find({
+      ...(tenantId ? { tenantId: tenantId } : {}),
+      assignedUserId: userId,
+      ...(requireCommitted ? { isCommitted: true } : {}),
+      isRejected: false,
+      ...timeFilter,
+      ...match,
+    });
+    return rawBookings.map((doc) => doc.toEntity());
   }
 }
 

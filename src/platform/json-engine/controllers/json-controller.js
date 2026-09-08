@@ -52,7 +52,9 @@ class JSONController {
     instance,
     { identity, userRoles, cancellationRefundTiers = [] } = {},
   ) {
-    const pub = bookable.exportPublic();
+    // Embedding websites live on foreign hosts, so every media address has to
+    // leave here absolute.
+    const pub = bookable.exportPublic({ absoluteMediaUrls: true });
     pub.checkoutUrl = await JSONController._checkoutUrl(
       bookable.id,
       tenantId,
@@ -303,7 +305,9 @@ class JSONController {
             Date.parse(b.information.startDate),
         );
 
-      const publicEvents = events.map((event) => event.exportPublic());
+      const publicEvents = events.map((event) =>
+        event.exportPublic({ absoluteMediaUrls: true }),
+      );
 
       for (const event of publicEvents) {
         const tickets = await BookableManager.getEventBookables(
@@ -358,7 +362,7 @@ class JSONController {
           event.id,
         );
 
-        const publicEvent = event.exportPublic();
+        const publicEvent = event.exportPublic({ absoluteMediaUrls: true });
         publicEvent.tickets = await Promise.all(
           tickets
             .filter((ticket) => ticket.isPublic)

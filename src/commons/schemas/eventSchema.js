@@ -1,6 +1,21 @@
+/**
+ * The reference sites of an event are typed as Mixed on purpose: the media
+ * spec (§4.8) pins them to the paths the usage search already reads
+ * (`information.teaserImage`, `eventOrganizer.contactPersonImage`), and those
+ * paths still hold plain URL strings until the media import (B7) converts
+ * them. A subdocument type would make every legacy event unreadable; the shape
+ * is checked in `Event.validate()` instead. The image list and the photo of
+ * every speaker (`images`, `eventOrganizer.speakers[].image`) carry references
+ * too and stay untyped arrays for exactly the same reason.
+ */
+const mediaReferenceSiteDefinition = { type: Object, default: null };
+
 const eventSchemaDefinition = {
   id: { type: String, required: true, unique: true },
   tenantId: { type: String, required: true },
+  // Attachments carry a media reference under `reference` plus their context
+  // fields, the same shape as a bookable attachment. Legacy entries are bare
+  // strings or objects with a raw `url` — hence the untyped array.
   attachments: { type: Array, default: [] },
   attendees: {
     publicEvent: { type: Boolean, default: true },
@@ -45,7 +60,7 @@ const eventSchemaDefinition = {
     contactPersonName: { type: String, default: "" },
     contactPersonPhoneNumber: { type: String, default: "" },
     contactPersonEmailAddress: { type: String, default: "" },
-    contactPersonImage: { type: String, default: "" },
+    contactPersonImage: mediaReferenceSiteDefinition,
     speakers: { type: Array, default: [] },
   },
   format: { type: Number, default: 0 },
@@ -54,7 +69,7 @@ const eventSchemaDefinition = {
     name: { type: String, default: "" },
     teaserText: { type: String, default: "" },
     description: { type: String, default: "" },
-    teaserImage: { type: String, default: null },
+    teaserImage: mediaReferenceSiteDefinition,
     startDate: { type: String, default: null },
     startTime: { type: String, default: null },
     endDate: { type: String, default: null },

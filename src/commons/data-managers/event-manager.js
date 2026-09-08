@@ -1,5 +1,6 @@
 const { Event } = require("../entities/event/event");
 const EventModel = require("./models/eventModel");
+const { ownCondition } = require("../services/authorization/reach");
 
 /**
  * Data Manager for Event objects.
@@ -8,11 +9,14 @@ class EventManager {
   /**
    * Get all events related to a tenant
    * @param {string} tenantId Identifier of the tenant
-   * @returns List of bookings
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
+   * @returns List of events
    */
-  static async getEvents(tenantId) {
+  static async getEvents(tenantId, scope) {
     const rawEvents = await EventModel.find({
       tenantId: tenantId,
+      ...ownCondition("ownerUserId", scope),
     });
     return rawEvents.map((doc) => doc.toEntity());
   }
@@ -22,10 +26,16 @@ class EventManager {
    *
    * @param {string} id Logical identifier of the event object
    * @param {string} tenantId Identifier of the tenant
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns A single event object
    */
-  static async getEvent(id, tenantId) {
-    const rawEvent = await EventModel.findOne({ id: id, tenantId: tenantId });
+  static async getEvent(id, tenantId, scope) {
+    const rawEvent = await EventModel.findOne({
+      id: id,
+      tenantId: tenantId,
+      ...ownCondition("ownerUserId", scope),
+    });
     if (!rawEvent) {
       return null;
     }
@@ -53,6 +63,41 @@ class EventManager {
     );
 
     return eventEntity;
+  }
+
+  /**
+   * Find the events that reference a medium — teaser image, contact person
+   * image, the photo of a speaker, the image list or one of the attachments.
+   * The usage proof is searched on demand (§4.7 of the media spec); a medium
+   * never carries a back reference.
+   *
+   * @param {string} tenantId Identifier of the tenant
+   * @param {string} mediaId Identifier of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const docs = await EventModel.find(
+      {
+        tenantId: tenantId,
+        $or: [
+          { "information.teaserImage.mediaId": mediaId },
+          { "eventOrganizer.contactPersonImage.mediaId": mediaId },
+          { "eventOrganizer.speakers.image.mediaId": mediaId },
+          { "images.mediaId": mediaId },
+          { "attachments.reference.mediaId": mediaId },
+        ],
+      },
+      { id: 1, "information.name": 1 },
+    ).lean();
+
+    return docs.map((doc) => ({
+      id: doc.id,
+      title: doc.information?.name || "",
+    }));
   }
 
   /**

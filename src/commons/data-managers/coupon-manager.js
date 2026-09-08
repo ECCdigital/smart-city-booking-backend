@@ -1,4 +1,5 @@
 const CouponModel = require("./models/couponModel");
+const { ownCondition } = require("../services/authorization/reach");
 
 /**
  * Data Manager for coupon objects.
@@ -29,7 +30,7 @@ class CouponManager {
    * @param couponID
    * @param tenantID
    */
-  static async getCoupon(couponID, tenantID) {
+  static async getCoupon(couponID, tenantID, scope) {
     if (!couponID || !tenantID) {
       throw new Error("couponID and tenantID are required.");
     }
@@ -37,6 +38,7 @@ class CouponManager {
     const rawCoupon = await CouponModel.findOne({
       id: couponID,
       tenantId: tenantID,
+      ...ownCondition("ownerUserId", scope),
     });
 
     if (!rawCoupon) {
@@ -50,13 +52,18 @@ class CouponManager {
    * Get all coupons related to a tenant.
    *
    * @param tenantID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    */
-  static async getCoupons(tenantID) {
+  static async getCoupons(tenantID, scope) {
     if (!tenantID) {
       throw new Error("tenantID is required.");
     }
 
-    const rawCoupons = await CouponModel.find({ tenantId: tenantID });
+    const rawCoupons = await CouponModel.find({
+      tenantId: tenantID,
+      ...ownCondition("ownerUserId", scope),
+    });
     return rawCoupons.map((doc) => doc.toEntity());
   }
 

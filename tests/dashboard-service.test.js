@@ -5,7 +5,6 @@ const DashboardService = require("../src/commons/services/dashboard/dashboard-se
 const DashboardManager = require("../src/commons/data-managers/dashboard-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
-const PermissionService = require("../src/commons/services/permission-service");
 const {
   DashboardCache,
 } = require("../src/commons/services/dashboard/dashboard-cache");
@@ -13,6 +12,11 @@ const {
   BOOKING_STATUS_I18N,
 } = require("../src/commons/services/booking/booking-status-keys");
 const { BadRequestError, ForbiddenError } = require("../src/errors/BaseError");
+
+/** The reaches the route markers hand on: `any` for the owners, `own` for a member. */
+const OWNER = { reach: "any", userId: "owner-1" };
+const ADMIN = { reach: "any", userId: "admin-1" };
+const MEMBER = { reach: "own", userId: "user-1" };
 
 function stubEmptyPeriodAggs(sandbox) {
   sandbox
@@ -150,7 +154,6 @@ describe("DashboardService summaries", function () {
   });
 
   it("builds instance summary across allowed tenants", async function () {
-    sandbox.stub(PermissionService, "_isInstanceOwner").resolves(true);
     sandbox.stub(TenantManager, "getTenants").resolves([
       { id: "demo", name: "Demo Stadt" },
       { id: "nord", name: "Nordstadt" },
@@ -206,7 +209,7 @@ describe("DashboardService summaries", function () {
     );
     stubEmptyPeriodAggs(sandbox);
 
-    const data = await DashboardService.getInstanceSummary("owner-1", {
+    const data = await DashboardService.getInstanceSummary(OWNER, {
       from: "2026-01-01T00:00:00.000Z",
       to: "2026-06-30T12:00:00.000Z",
       status: `${BOOKING_STATUS_I18N.PAID_COMPLETED},${BOOKING_STATUS_I18N.REJECTED}`,
@@ -237,20 +240,18 @@ describe("DashboardService summaries", function () {
   });
 
   it("denies instance summary when user has no allowed tenants", async function () {
-    sandbox.stub(PermissionService, "_isInstanceOwner").resolves(false);
     sandbox.stub(UserManager, "getUserPermissions").resolves({ tenants: [] });
     sandbox
       .stub(TenantManager, "getTenants")
       .resolves([{ id: "demo", name: "Demo" }]);
 
     await assert.rejects(
-      () => DashboardService.getInstanceSummary("user-1", {}),
+      () => DashboardService.getInstanceSummary(MEMBER, {}),
       ForbiddenError,
     );
   });
 
   it("builds tenant summary with byStatus, byPeriod, byBookable cap", async function () {
-    sandbox.stub(PermissionService, "_allowReadAny").resolves(true);
     sandbox
       .stub(TenantManager, "getTenant")
       .resolves({ id: "demo", name: "Demo Stadt" });
@@ -326,7 +327,7 @@ describe("DashboardService summaries", function () {
       ]),
     );
 
-    const data = await DashboardService.getTenantSummary("admin-1", "demo", {
+    const data = await DashboardService.getTenantSummary(ADMIN, "demo", {
       from: "2026-01-01T00:00:00.000Z",
       to: "2026-02-28T12:00:00.000Z",
       byBookableLimit: "1",
@@ -357,7 +358,6 @@ describe("DashboardService summaries", function () {
   });
 
   it("returns empty byPeriod when granularity is omitted", async function () {
-    sandbox.stub(PermissionService, "_allowReadAny").resolves(true);
     sandbox
       .stub(TenantManager, "getTenant")
       .resolves({ id: "demo", name: "Demo" });
@@ -391,14 +391,13 @@ describe("DashboardService summaries", function () {
       "aggregateBookingsByPeriod",
     );
 
-    const data = await DashboardService.getTenantSummary("admin-1", "demo", {});
+    const data = await DashboardService.getTenantSummary(ADMIN, "demo", {});
     assert.strictEqual(data.granularity, null);
     assert.deepStrictEqual(data.byPeriod, []);
     assert.strictEqual(bookingsPeriod.callCount, 0);
   });
 
   it("rejects when byPeriod would exceed 366 buckets", async function () {
-    sandbox.stub(PermissionService, "_allowReadAny").resolves(true);
     sandbox
       .stub(TenantManager, "getTenant")
       .resolves({ id: "demo", name: "Demo" });
@@ -408,7 +407,7 @@ describe("DashboardService summaries", function () {
 
     await assert.rejects(
       () =>
-        DashboardService.getTenantSummary("admin-1", "demo", {
+        DashboardService.getTenantSummary(ADMIN, "demo", {
           from: "2024-01-01T00:00:00.000Z",
           to: "2026-01-15T00:00:00.000Z",
           granularity: "day",
@@ -418,7 +417,6 @@ describe("DashboardService summaries", function () {
   });
 
   it("serves cached instance summary on second call", async function () {
-    sandbox.stub(PermissionService, "_isInstanceOwner").resolves(true);
     sandbox
       .stub(TenantManager, "getTenants")
       .resolves([{ id: "demo", name: "Demo" }]);
@@ -449,8 +447,8 @@ describe("DashboardService summaries", function () {
       .resolves(new Map([["demo", Date.parse("2026-01-01T00:00:00.000Z")]]));
     stubEmptyPeriodAggs(sandbox);
 
-    await DashboardService.getInstanceSummary("owner-1", {});
-    await DashboardService.getInstanceSummary("owner-1", {});
+    await DashboardService.getInstanceSummary(OWNER, {});
+    await DashboardService.getInstanceSummary(OWNER, {});
     assert.strictEqual(bookingsStub.callCount, 1);
   });
 });

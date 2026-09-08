@@ -1,9 +1,6 @@
 const { Bookable } = require("../entities/bookable/bookable");
 const { isRangeOverlap } = require("range-overlap");
-const {
-  getBookable,
-  getParentBookables,
-} = require("../data-managers/bookable-manager");
+const { BookableManager } = require("../data-managers/bookable-manager");
 
 /**
  *  Opening Hours Manager
@@ -49,8 +46,9 @@ class OpeningHoursManager {
     }
   }
   static async getRelatedOpeningHours(bookableId, tenant) {
-    let bookable = await getBookable(bookableId, tenant);
-    let relatedBookables = (await getParentBookables(bookableId, tenant)) || [];
+    let bookable = await BookableManager.getBookable(bookableId, tenant);
+    let relatedBookables =
+      (await BookableManager.getParentBookables(bookableId, tenant)) || [];
 
     relatedBookables.push(bookable);
 

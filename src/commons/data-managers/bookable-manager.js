@@ -8,6 +8,7 @@ const {
 } = require("../services/custom-field/custom-field-service");
 const InstanceModel = require("./models/instanceModel");
 const TenantModel = require("./models/tenantModel");
+const { ownCondition } = require("../services/authorization/reach");
 
 /**
  * Data Manager for Bookable objects.
@@ -72,11 +73,13 @@ class BookableManager {
   /**
    * Get all bookables for a tenant
    * @param {string} tenantId Tenant ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Bookable[]>} List of bookables
    */
-  static async getBookables(tenantId) {
+  static async getBookables(tenantId, scope) {
     const [rawBookables, defs] = await Promise.all([
-      BookableModel.find({ tenantId }),
+      BookableModel.find({ tenantId, ...ownCondition("ownerUserId", scope) }),
       this.getCustomFieldDefinitions(tenantId),
     ]);
     return this._toEntitiesWithCustomFields(rawBookables, defs);
@@ -86,11 +89,17 @@ class BookableManager {
    * Get a specific bookable
    * @param {string} id Bookable ID
    * @param {string} tenantId Tenant ID
+   * @param {{reach?: string, userId?: string}} [scope] The reach of the
+   *   request (authorize spec §4.1): under `own` only the user's own
    * @returns {Promise<Bookable|null>} Bookable or null
    */
-  static async getBookable(id, tenantId) {
+  static async getBookable(id, tenantId, scope) {
     const [rawBookable, defs] = await Promise.all([
-      BookableModel.findOne({ id, tenantId }),
+      BookableModel.findOne({
+        id,
+        tenantId,
+        ...ownCondition("ownerUserId", scope),
+      }),
       this.getCustomFieldDefinitions(tenantId),
     ]);
     return this._toEntityWithCustomFields(rawBookable, defs);
@@ -267,6 +276,7 @@ class BookableManager {
           connectToField: "id",
           as: "allRelatedBookables",
           maxDepth: 100,
+          restrictSearchWithMatch: { tenantId: tenantId },
         },
       },
     ];
@@ -286,10 +296,60 @@ class BookableManager {
 
     return Array.from(uniqueMap.values())
       .map((obj) => BookableModel.hydrate(obj))
-      .map((doc) => {
-        BookableModel.applyIfbsProvider(doc);
-        return doc.toEntity();
-      });
+      .map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get all bookables of a tenant that have at least one active access point
+   * configured. Used as the (small) seed set for resolving which bookings
+   * grant an access authorization.
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} Bookables with active access points
+   */
+  static async getBookablesWithAccessPoints(tenantId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      "accessPointDetails.active": true,
+      "accessPointDetails.accessPointIds.0": { $exists: true },
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Get all bookables of a tenant that expose a specific access point (by id)
+   * via their active access point configuration. Several bookables may
+   * reference the same access point, e.g. a main entrance shared by rooms.
+   * @param {string} tenantId Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<Bookable[]>} Bookables exposing the access point
+   */
+  static async getBookablesByAccessPointId(tenantId, accessPointId) {
+    const rawBookables = await BookableModel.find({
+      tenantId: tenantId,
+      "accessPointDetails.active": true,
+      "accessPointDetails.accessPointIds": accessPointId,
+    });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Remove an access point reference from every bookable of a tenant. Called
+   * when the access point itself is deleted, so no bookable is left pointing at
+   * an access point that no longer exists.
+   * @param {string} tenantId Tenant ID
+   * @param {string} accessPointId Access point ID
+   * @returns {Promise<void>}
+   */
+  static async detachAccessPoint(tenantId, accessPointId) {
+    await BookableModel.updateMany(
+      {
+        tenantId: tenantId,
+        "accessPointDetails.accessPointIds": accessPointId,
+      },
+      {
+        $pull: { "accessPointDetails.accessPointIds": accessPointId },
+      },
+    );
   }
 
   /**
@@ -356,6 +416,17 @@ class BookableManager {
   }
 
   /**
+   * Get all parent bookables (recursive lookup).
+   * Alias of {@link BookableManager.getAncestorBookables}.
+   * @param {string} id Bookable ID
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<Bookable[]>} List of parent bookables
+   */
+  static async getAllParentBookables(id, tenantId) {
+    return BookableManager.getAncestorBookables(id, tenantId);
+  }
+
+  /**
    * Store a bookable (create or update)
    * @param {Bookable|Object} bookable Bookable to store
    * @param {boolean} upsert Whether to create if not exists
@@ -404,6 +475,34 @@ class BookableManager {
    */
   static async removeBookable(id, tenantId) {
     await BookableModel.deleteOne({ id: id, tenantId: tenantId });
+  }
+
+  /**
+   * Find the bookables that reference a medium — its image list or one of its
+   * attachments. The usage proof is searched on demand (§4.7 of the media
+   * spec); a medium never carries a back reference.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} mediaId ID of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const docs = await BookableModel.find(
+      {
+        tenantId: tenantId,
+        $or: [
+          { "images.mediaId": mediaId },
+          { "attachments.reference.mediaId": mediaId },
+        ],
+      },
+      { id: 1, title: 1 },
+    ).lean();
+
+    return docs.map((doc) => ({ id: doc.id, title: doc.title || "" }));
   }
 
   /**

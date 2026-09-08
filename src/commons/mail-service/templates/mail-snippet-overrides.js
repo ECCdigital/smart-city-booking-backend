@@ -84,10 +84,7 @@ function isOverridableSnippetKey(name) {
   if (overridableSnippetSet.has(name)) {
     return true;
   }
-  if (
-    typeof name === "string" &&
-    name.endsWith(AFTER_SNIPPET_SUFFIX)
-  ) {
+  if (typeof name === "string" && name.endsWith(AFTER_SNIPPET_SUFFIX)) {
     const baseName = name.slice(0, -AFTER_SNIPPET_SUFFIX.length);
     return overridableSnippetSet.has(baseName);
   }

@@ -33,13 +33,14 @@ async function resolveCheckoutId(checkoutId, userID, tenantId) {
 }
 
 /**
- * Append mandatory checkout addons that are missing from the given items.
- * Matches the behaviour of BookingService.createBooking.
+ * Resolve the effective checkout items: copies of the given items with every
+ * mandatory addon present at its parent's amount. The one addon rule for the
+ * validate and checkout paths — pure, complete list, no caller mutation.
  * @param {Array<{bookableId: string, amount: number}>} bookableItems
  * @param {string} tenantId
  * @returns {Promise<Array<{bookableId: string, amount: number}>>}
  */
-async function withMandatoryAddons(bookableItems, tenantId) {
+async function resolveCheckoutItems(bookableItems, tenantId) {
   const bookableIds = bookableItems.map((item) => item.bookableId);
   const bookables = await Promise.all(
     bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
@@ -89,5 +90,5 @@ async function withMandatoryAddons(bookableItems, tenantId) {
 module.exports = {
   resolveCheckoutId,
   primaryEmailFromMail,
-  withMandatoryAddons,
+  resolveCheckoutItems,
 };

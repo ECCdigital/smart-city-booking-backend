@@ -3,10 +3,7 @@ const { RoleManager } = require("./role-manager");
 const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const { escapeRegex } = require("../utilities/regex-utils");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
@@ -251,20 +248,6 @@ class UserManager {
     }
   }
 
-  static async resetPassword(user, password) {
-    const MailController = require("../mail-service/mail-controller");
-    try {
-      const userEntity = user instanceof User ? user : new User(user);
-
-      const hook = userEntity.addPasswordResetHook(password);
-      await UserManager.updateUser(userEntity);
-      await MailController.sendPasswordResetRequest(userEntity.id, hook.id);
-      return hook;
-    } catch (err) {
-      throw err;
-    }
-  }
-
   static async getUserByHookID(hookID) {
     const rawUser = await UserModel.findOne({ "hooks.id": hookID });
 
@@ -273,29 +256,6 @@ class UserManager {
     }
 
     return rawUser.toEntity();
-  }
-
-  static async hasPermission(userId, tenantId, permissionName, accessLevel) {
-    if (!userId || !tenantId || !permissionName || !accessLevel) {
-      return false;
-    }
-    try {
-      const userPermissions = await UserManager.getUserPermissions(userId);
-
-      const userTenantPermissions = userPermissions.tenants.find(
-        (p) => p.tenantId === tenantId,
-      );
-
-      if (!userTenantPermissions || !userTenantPermissions[permissionName]) {
-        return false;
-      }
-      return (
-        userTenantPermissions.isOwner ||
-        userTenantPermissions[permissionName][accessLevel] === true
-      );
-    } catch (err) {
-      return false;
-    }
   }
 
   static async getUserPermissions(userId) {
@@ -326,6 +286,7 @@ class UserManager {
           manageBookables: {},
           manageBookings: {},
           manageCoupons: {},
+          manageMedia: {},
         };
         tenantPermissions.push(workingPermission);
       }
@@ -356,6 +317,7 @@ class UserManager {
             "resources",
             "tickets",
             "events",
+            "media",
           ]),
         ];
       }
@@ -391,6 +353,7 @@ function mergeRoleIntoPermission(workingPermission, role) {
     "manageBookables",
     "manageBookings",
     "manageCoupons",
+    "manageMedia",
   ];
   const actions = [
     "create",

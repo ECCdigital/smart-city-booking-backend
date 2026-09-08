@@ -7,21 +7,60 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const { BookableManager } = require("./bookable-manager");
+const MembershipManager = require("./membership-manager");
+const { ownCondition } = require("../services/authorization/reach");
 const {
   normalizeCancellationRefundTiers,
 } = require("../utilities/cancellation-refund-tiers");
+
+/**
+ * The per-year document counters at the tenant. They belong to the number
+ * draw (`incrementDocumentCounter`) alone: a whole-tenant write never
+ * carries them, so a stale copy of the tenant cannot roll a counter back.
+ */
+const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
 
 /**
  * Data Manager for Tenant objects.
  */
 class TenantManager {
   /**
-   * Get all tenants
+   * The tenants within a reach (authorize spec §4.1): all of them under
+   * `any` or for a caller without a reach, under `own` those of the user's
+   * active memberships - `owned` narrows them to the ones the user owns.
+   *
+   * @param {{reach?: string, userId?: string|null}} [scope]
+   * @param {Object} [options]
+   * @param {boolean} [options.owned=false] Only the tenants the user owns.
    * @returns {Promise<Tenant[]>} List of tenants
    */
-  static async getTenants() {
-    const rawTenants = await TenantModel.find();
+  static async getTenants(scope = {}, { owned = false } = {}) {
+    const rawTenants = await TenantModel.find(
+      await TenantManager._reachCondition(scope, owned),
+    );
     return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * The query condition of a reach: a tenant has no owner key of its own,
+   * "own" is the user's membership in it.
+   *
+   * @param {{reach?: string, userId?: string|null}} scope
+   * @param {boolean} owned
+   * @returns {Promise<Object>}
+   */
+  static async _reachCondition(scope, owned) {
+    // `ownCondition` holds the reach's rules (`public`, or `own` without a
+    // user, is a programming error) and names the user under `own` only.
+    const { userId } = ownCondition("userId", scope);
+    if (!userId) {
+      return {};
+    }
+    const memberships = await MembershipManager.getMembershipsByUserID(userId);
+    const ids = memberships
+      .filter((m) => m.status === "active" && (!owned || m.owner === true))
+      .map((m) => m.tenantId);
+    return { id: { $in: ids } };
   }
 
   /**
@@ -63,7 +102,13 @@ class TenantManager {
       tenantEntity.cancellationRefundTiers || [],
     );
     tenantEntity.validate();
-    await TenantModel.updateOne({ id: tenantEntity.id }, tenantEntity, {
+    const update = { ...tenantEntity };
+    if (existingTenant) {
+      for (const counter of DOCUMENT_COUNTERS) {
+        delete update[counter];
+      }
+    }
+    await TenantModel.updateOne({ id: tenantEntity.id }, update, {
       upsert: upsert,
       setDefaultsOnInsert: true,
     });
@@ -81,6 +126,32 @@ class TenantManager {
     CustomFieldCache.invalidateTenant(tenantEntity.id);
 
     return tenantEntity;
+  }
+
+  /**
+   * Draws the next value of a document counter for a year in one atomic
+   * increment at the tenant row, so two draws at the same moment can never
+   * answer the same value.
+   *
+   * @param {string} tenantId The tenant
+   * @param {"receiptCount"|"invoiceCount"|"cancellationCount"} counter
+   * @param {number} year The year the counter is kept for
+   * @returns {Promise<number|null>} The new value, or null without the tenant
+   */
+  static async incrementDocumentCounter(tenantId, counter, year) {
+    if (!DOCUMENT_COUNTERS.includes(counter)) {
+      throw new Error(`Unknown document counter: ${counter}`);
+    }
+
+    const tenant = await TenantModel.findOneAndUpdate(
+      { id: tenantId },
+      { $inc: { [`${counter}.${year}`]: 1 } },
+      { new: true },
+    )
+      .select(counter)
+      .lean();
+
+    return tenant ? tenant[counter][year] : null;
   }
 
   /**
@@ -144,6 +215,35 @@ class TenantManager {
     }
     const tenant = rawTenant.toEntity();
     return tenant.applications.find((app) => app.id === appId) || null;
+  }
+
+  /**
+   * Find the tenant that references a medium in one of its legal documents.
+   * The usage proof is searched on demand (§4.7 of the media spec); a medium
+   * never carries a back reference.
+   *
+   * Instance media run through the same proof with `tenantId: null`. A tenant
+   * document never references one, and searching across all tenants would be
+   * the wrong answer rather than a wider one — so that case answers empty.
+   *
+   * @param {string|null} tenantId Tenant of the medium
+   * @param {string} mediaId ID of the medium
+   * @returns {Promise<Array<{id: string, title: string}>>} Usage sites
+   */
+  static async getMediaUsage(tenantId, mediaId) {
+    if (!tenantId || !mediaId) {
+      return [];
+    }
+
+    const doc = await TenantModel.findOne(
+      {
+        id: tenantId,
+        "legalDocuments.reference.mediaId": mediaId,
+      },
+      { id: 1, name: 1 },
+    ).lean();
+
+    return doc ? [{ id: doc.id, title: doc.name || "" }] : [];
   }
 
   /**
