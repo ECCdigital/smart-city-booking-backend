@@ -9,6 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Dashboard `byBookable` keeps a title from the booking snapshot when the bookable was deleted, prefers the live title otherwise, and sets `bookableDeleted`
 - Dashboard `byPeriod` revenue aggregation: coerce epoch-ms fields with `$toLong` before `$toDate` so BSON int `timePaid` (legacy `0`) no longer raises ConversionFailure
 
 ### Added
