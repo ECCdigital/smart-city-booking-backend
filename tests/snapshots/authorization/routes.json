@@ -636,6 +636,13 @@
     "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
+  "GET /api/v2/dashboard/summary": {
+    "anonymous": 401,
+    "signedIn": "403 {\"success\":false,\"error\":\"Permission denied\"}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
   "POST /api/v2/:tenant/checkout/validate-group": {
     "anonymous": 200,
     "signedIn": 200,
@@ -728,6 +735,13 @@
     "instanceOwner": 200
   },
   "GET /api/v2/:tenant/media/:id/usage": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "GET /api/v2/:tenant/dashboard/summary": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": 200,

@@ -235,6 +235,12 @@ const TABLE = {
     export: { any: "manageBookings.readAny" },
   },
 
+  dashboard: {
+    // `GET /api/v2/:tenant/dashboard/summary`: the KPIs of one tenant,
+    // the booking reader's level - the answer counts bookings and revenue.
+    read: { any: "manageBookings.readAny" },
+  },
+
   accessScan: {
     // `/resolve-scan/:scanCode`
     resolve: { own: "signedIn" },
@@ -386,6 +392,14 @@ const TABLE = {
 
   // Tenant-independent access bookings, `?userId=` for the owner.
   accessBookings: {
+    read: { own: "signedIn", any: "instanceOwner" },
+  },
+
+  instanceDashboard: {
+    // `GET /api/v2/dashboard/summary`: the KPIs across tenants. Under `any`
+    // every tenant; under `own` the tenants the user owns or reads the
+    // bookings of (`manageBookings.readAny`), which the service reads off
+    // the memberships - none of them is a 403.
     read: { own: "signedIn", any: "instanceOwner" },
   },
 

@@ -7,8 +7,16 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Dashboard `byBookable` keeps a title from the booking snapshot when the bookable was deleted, prefers the live title otherwise, and sets `bookableDeleted`
+- Dashboard `byPeriod` revenue aggregation: coerce epoch-ms fields with `$toLong` before `$toDate` so BSON int `timePaid` (legacy `0`) no longer raises ConversionFailure
+
 ### Added
 
+- Dashboard `regularRevenueEur`: catalog/full gross (before user/role discounts and coupons) alongside invoice `revenueEur` on instance/tenant totals, `byTenant`, and `byPeriod`
+- Dashboard summary extensions: `activeEvents` totals, multi-value `status` (OR), optional `granularity` + Europe/Berlin `byPeriod` on Instance and Tenant summary (replaces `revenueByMonth`)
+- Admin Dashboard KPI API: `GET /api/v2/dashboard/summary` (cross-tenant) and `GET /api/v2/:tenant/dashboard/summary` (tenant detail with status, revenue-by-month, and by-bookable breakdowns); live aggregations with short in-process cache. Rights-table entries `dashboard.read` (`manageBookings.readAny`) and `instanceDashboard.read` (`own: signedIn` - the tenants the user owns or reads the bookings of, none of them is a 403; `any: instanceOwner` - every tenant)
 - `GET /api/tenants/public` carries `accessApps[]` - the customer-service contact (`name`, `phone`, `email`) of every active access application that has one, and nothing else of the application; it replaces the removed `/locker/:provider/customer-service-info` for the storefront. A tenant without such an application answers `[]`.
 - `POST /api/:tenant/bookings/:id/reinstate` reinstates a rejected or cancelled booking (glossary "Wiederherstellung") - the transition `reinstate` by the administration on a route of its own; before, only the admin PUT reached it by clearing `isRejected`. Right `booking.update`, answer and errors as `/pay` (`409 invalid_transition`, `404 booking_not_found`, a plain-text 500 when the transition aborts), no group variant. And a manual booking names the state it starts in: `PUT /api/:tenant/bookings` without an `id` takes `status` (`requested | payment_due | confirmed`), which wins over the flags sent with it; `confirmed` with a price needs `paymentMethod` and `timePaid` (`400 missing_payment_details`), any other state is `400 invalid_status`. OpenAPI: `src/docs/routes/bookings.yaml`.
 

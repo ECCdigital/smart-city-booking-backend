@@ -24,6 +24,7 @@ const BookingManager = require("../../src/commons/data-managers/booking-manager"
 const CatalogManager = require("../../src/commons/data-managers/catalog-manager");
 const ChallengeManager = require("../../src/commons/data-managers/challenge-manager");
 const CouponManager = require("../../src/commons/data-managers/coupon-manager");
+const DashboardManager = require("../../src/commons/data-managers/dashboard-manager");
 const {
   FileManager,
   NextcloudManager,
@@ -258,6 +259,21 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
   stubManager(CatalogManager, { one: catalog });
   stubManager(ChallengeManager, { one: challenge });
   stubManager(CouponManager, { one: coupon });
+  // The dashboard counts and aggregates by tenant id into maps; an empty
+  // map is a dashboard with nothing on it.
+  const emptyMap = async () => new Map();
+  stubManager(DashboardManager, {
+    one: () => new Map(),
+    skip: ["getStatusKeys", "isValidStatusKey"],
+    only: {
+      countUsers: async () => 0,
+      countActiveMembershipsByTenant: emptyMap,
+      countBookablesByTenant: emptyMap,
+      countEventsByTenant: emptyMap,
+      countActiveEventsByTenant: emptyMap,
+      aggregateByBookable: async () => [],
+    },
+  });
   stubManager(EventManager, {
     one: event,
     only: { getMediaUsage: async () => [] },
