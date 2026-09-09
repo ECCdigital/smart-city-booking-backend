@@ -30,6 +30,8 @@ const ERROR_CODES = {
   greaterEqualThan: "greater_equal_than",
   validate: "invalid_custom",
   maxLength: "max_length",
+  unknownField: "unknown_field",
+  duplicateId: "duplicate_id",
 };
 
 function isMongooseSubdocumentSchema(type) {

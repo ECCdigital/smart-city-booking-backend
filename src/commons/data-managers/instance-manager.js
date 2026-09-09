@@ -10,6 +10,9 @@ const { InstanceCache } = require("../services/instance/instance-cache");
 const { ThemeExportCache } = require("../services/catalog/theme-export-cache");
 const { BookableManager } = require("./bookable-manager");
 const { exportInstanceBranding } = require("../services/media/instance-media");
+const {
+  normalizeBackground,
+} = require("../services/hero-layout/hero-layout-schema");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
@@ -53,6 +56,8 @@ class InstanceManager {
     if (!rawInstance) {
       return null;
     }
+
+    await InstanceManager._applyBackground(instanceEntity, rawInstance);
 
     const previousCustomFields = rawInstance.bookableCustomFields || [];
 
@@ -174,6 +179,43 @@ class InstanceManager {
     ).lean();
 
     return raw ? [{ id: null, title: "instance" }] : [];
+  }
+
+  /**
+   * Settles the Background of the branding being saved (hero-layout spec,
+   * Shared contract). The write is a `$set` of the whole branding object, so a
+   * save that does not mention the Background would drop it — the stored one is
+   * carried along instead. A payload that names it has it normalised, and an
+   * explicit `null` stays null: the reset to the default Background, which is
+   * filled in on the way out.
+   *
+   * @param {Object} instanceEntity - The instance about to be written.
+   * @param {Object} rawInstance - The instance as it is stored.
+   * @returns {Promise<void>}
+   * @throws {ValidationError} When the Background does not hold up, with
+   *   `branding.background…` as the path of every fault.
+   */
+  static async _applyBackground(instanceEntity, rawInstance) {
+    const branding = instanceEntity.branding;
+
+    if (!branding || typeof branding !== "object") {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(branding, "background")) {
+      const stored = rawInstance.branding?.background;
+
+      if (stored !== undefined) {
+        branding.background = stored;
+      }
+
+      return;
+    }
+
+    branding.background = await normalizeBackground(
+      branding.background,
+      "branding.background",
+    );
   }
 
   /**

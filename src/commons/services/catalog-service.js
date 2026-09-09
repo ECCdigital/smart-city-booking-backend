@@ -6,6 +6,7 @@ const {
   isTenantListedInCatalog,
 } = require("../utilities/catalog-participation-utils");
 const { ThemeExportCache } = require("./catalog/theme-export-cache");
+const { exportBackground } = require("./hero-layout/hero-export");
 const {
   BadRequestError,
   ConflictError,
@@ -35,6 +36,19 @@ function exportBranding(branding) {
     faviconUrl: branding.faviconUrl ?? "",
     theme: branding.theme ?? null,
   };
+}
+
+/**
+ * The Background the Theme Bundle delivers. It sits inside the branding and
+ * follows its `active` flag, like the theme colours and the logo: a switched-off
+ * branding hands the storefront its default look, and the default Background is
+ * part of that.
+ *
+ * @param {?Object} branding - The instance branding.
+ * @returns {?Object} The stored Background, or null for the default.
+ */
+function activeBackground(branding) {
+  return branding?.active ? branding.background ?? null : null;
 }
 
 class CatalogService {
@@ -135,6 +149,7 @@ class CatalogService {
     return {
       ...exported,
       hero: catalog.hero ?? DEFAULT_HERO,
+      background: await exportBackground(activeBackground(branding)),
       visibility: catalog.visibility,
     };
   }
@@ -149,6 +164,7 @@ class CatalogService {
     return {
       ...exported,
       hero: catalog?.hero ?? DEFAULT_HERO,
+      background: await exportBackground(activeBackground(branding)),
       visibility: catalog?.visibility ?? "public",
     };
   }
