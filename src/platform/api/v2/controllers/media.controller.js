@@ -153,6 +153,8 @@ class MediaControllerV2 {
       size: media.size,
       checksum: media.checksum,
       originalFileName: media.originalFileName,
+      width: media.width ?? null,
+      height: media.height ?? null,
       title: media.title,
       altText: media.altText,
       tags: media.tags || [],

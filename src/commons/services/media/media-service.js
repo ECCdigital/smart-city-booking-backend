@@ -63,6 +63,20 @@ function normaliseBookingIds(bookingIds) {
 }
 
 /**
+ * The original dimensions a detected type carries: those of the decoded
+ * image, or none for a document and an image sharp cannot read.
+ *
+ * @param {Object} detected - Result of the type detection.
+ * @returns {{width: number|null, height: number|null}}
+ */
+function imageDimensions(detected) {
+  return {
+    width: detected.image?.width ?? null,
+    height: detected.image?.height ?? null,
+  };
+}
+
+/**
  * Rejects an upload above a byte limit.
  *
  * @param {number} size - Size of the upload in bytes.
@@ -166,6 +180,7 @@ class MediaService {
       size: data.length,
       checksum: crypto.createHash("sha256").update(data).digest("hex"),
       originalFileName: file.name,
+      ...imageDimensions(detected),
       title: metadata.title || file.name,
       altText: metadata.altText || "",
       tags: metadata.tags || [],
@@ -272,6 +287,7 @@ class MediaService {
       size: data.length,
       checksum: crypto.createHash("sha256").update(data).digest("hex"),
       originalFileName: file.name,
+      ...imageDimensions(detected),
       title: metadata.title || file.name,
       altText: "",
       tags: metadata.tags || [],

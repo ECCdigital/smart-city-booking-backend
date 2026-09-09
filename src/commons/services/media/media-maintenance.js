@@ -16,6 +16,10 @@ const {
 const { variantKey } = require("../storage/media-keys");
 const { BOOKING_DOCUMENT } = require("./booking-documents");
 const { LEGACY_ROOTS } = require("./legacy-path");
+const {
+  DECODABLE_IMAGE_MIME_TYPES,
+  detectStoredType,
+} = require("./media-file-type");
 const { listLegacyTree } = require("./media-import");
 const { MediaUsageService } = require("./media-usage");
 
@@ -97,6 +101,72 @@ async function regenerate({ dryRun = false, tenantId } = {}) {
         report.skippedOne();
         continue;
       }
+
+      report.processedOne();
+    } catch (error) {
+      report.failed(`media:${medium.id}`, error);
+    }
+  }
+
+  return report;
+}
+
+/**
+ * Gives the image stock from before 4.3 the original dimensions a fresh upload
+ * stores at once. Each medium is read once at its own provider and gets its two
+ * numbers written, nothing else — no byte, key or variant changes hands. Only
+ * images sharp can read are asked for: a document or an ICO has no dimensions
+ * and stays null. A medium that already carries its dimensions is skipped, so
+ * a second run reads nothing and reports the whole stock as skipped, the way
+ * `regenerate` does.
+ *
+ * @param {Object} [params]
+ * @param {boolean} [params.dryRun] - Whether to only rehearse.
+ * @param {string} [params.tenantId] - Restrict to one tenant.
+ * @returns {Promise<MigrationReport>}
+ */
+async function backfillDimensions({ dryRun = false, tenantId } = {}) {
+  const report = new MigrationReport("backfill-dimensions", dryRun);
+
+  report.note(
+    "documents and ICO images carry no dimensions and are not looked at",
+  );
+
+  const filter = {
+    kind: MEDIA_KIND.IMAGE,
+    mimeType: { $in: DECODABLE_IMAGE_MIME_TYPES },
+  };
+  if (tenantId !== undefined) {
+    filter.tenantId = tenantId ?? null;
+  }
+
+  const media = await MediaManager.getAllMedia(filter);
+
+  for (const medium of media) {
+    try {
+      if (medium.width != null && medium.height != null) {
+        report.skippedOne();
+        continue;
+      }
+
+      if (dryRun) {
+        report.processedOne();
+        continue;
+      }
+
+      const data = await MediaService.getBuffer(medium);
+      const detected = await detectStoredType(data, medium.originalFileName);
+
+      if (!detected.image) {
+        throw new Error(
+          `bytes do not decode as ${medium.mimeType}, no dimensions read`,
+        );
+      }
+
+      await MediaManager.setDimensions(medium.id, medium.tenantId, {
+        width: detected.image.width,
+        height: detected.image.height,
+      });
 
       report.processedOne();
     } catch (error) {
@@ -670,6 +740,7 @@ async function purgeLegacy({ dryRun = false } = {}) {
 }
 
 module.exports = {
+  backfillDimensions,
   cleanup,
   purgeImported,
   purgeLegacy,

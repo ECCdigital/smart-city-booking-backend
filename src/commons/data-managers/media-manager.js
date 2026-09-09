@@ -298,6 +298,32 @@ class MediaManager {
   }
 
   /**
+   * Write the original dimensions of a medium — a targeted update of the two
+   * numbers and nothing else, so the backfill running during operation never
+   * writes back the stale document it fetched at the start of its run.
+   *
+   * @param {string} mediaId - Unique ID of the medium.
+   * @param {string|null} tenantId - Tenant ID, null for instance media.
+   * @param {{width: number|null, height: number|null}} dimensions
+   * @returns {Promise<void>}
+   */
+  static async setDimensions(mediaId, tenantId, { width, height }) {
+    if (!mediaId) {
+      throw new Error("mediaId is required.");
+    }
+
+    const result = await MediaModel.updateOne(
+      { id: mediaId, tenantId: tenantId ?? null },
+      { $set: { width, height } },
+      { runValidators: true },
+    );
+
+    if (result.matchedCount === 0) {
+      throw new Error("Media not found for update.");
+    }
+  }
+
+  /**
    * Remove a medium from the database. Bytes are removed separately.
    *
    * @param {string} mediaId - Unique ID of the medium.

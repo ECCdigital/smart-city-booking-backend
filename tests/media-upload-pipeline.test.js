@@ -71,6 +71,25 @@ function pdf() {
   );
 }
 
+/**
+ * A minimal but well-formed ICO: the ICONDIR header `file-type` recognises,
+ * one directory entry, and a PNG payload behind it.
+ */
+function ico(payload) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(1, 4);
+
+  const entry = Buffer.alloc(16);
+  entry.writeUInt8(16, 0);
+  entry.writeUInt8(16, 1);
+  entry.writeUInt32LE(payload.length, 8);
+  entry.writeUInt32LE(header.length + 16, 12);
+
+  return Buffer.concat([header, entry, payload]);
+}
+
 function upload(data, name) {
   return {
     name,
@@ -340,6 +359,48 @@ describe("Media upload pipeline", function () {
 
       assert.deepStrictEqual(media.variants, []);
       assert.strictEqual(provider.put.callCount, 1);
+    });
+  });
+
+  describe("original dimensions", function () {
+    it("stores the dimensions of a raster original", async function () {
+      const media = await createMedia(await png(600, 400), "medium.png");
+
+      assert.strictEqual(media.width, 600);
+      assert.strictEqual(media.height, 400);
+    });
+
+    it("stores the intrinsic dimensions of an SVG", async function () {
+      const media = await createMedia(svg(120, 80), "logo.svg");
+
+      assert.strictEqual(media.width, 120);
+      assert.strictEqual(media.height, 80);
+    });
+
+    it("stores null for an ICO", async function () {
+      const media = await createMedia(ico(await png(16)), "favicon.ico");
+
+      assert.strictEqual(media.mimeType, "image/x-icon");
+      assert.strictEqual(media.width, null);
+      assert.strictEqual(media.height, null);
+    });
+
+    it("stores null for a document", async function () {
+      const media = await createMedia(pdf(), "invoice.pdf");
+
+      assert.strictEqual(media.width, null);
+      assert.strictEqual(media.height, null);
+    });
+
+    it("stores the dimensions of an imported raster image", async function () {
+      const media = await MediaService.importMedia({
+        tenantId: TENANT,
+        legacyPath: "/public/logos/logo.png",
+        file: upload(await png(300, 200), "logo.png"),
+      });
+
+      assert.strictEqual(media.width, 300);
+      assert.strictEqual(media.height, 200);
     });
   });
 

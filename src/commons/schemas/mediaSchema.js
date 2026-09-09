@@ -116,6 +116,12 @@ const mediaSchemaDefinition = {
   size: { type: Number, required: true },
   checksum: { type: String, default: "" },
   originalFileName: { type: String, required: true },
+  // The dimensions of the original as read at upload time — the numbers a
+  // layout sizes an image by. Null on documents and on images sharp cannot
+  // read (ICO), and on media from before 4.3 until `media-cli
+  // backfill-dimensions` has run.
+  width: { type: Number, default: null },
+  height: { type: Number, default: null },
 
   title: { type: String, default: "" },
   altText: { type: String, default: "" },

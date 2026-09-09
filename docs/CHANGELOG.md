@@ -14,6 +14,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- A medium carries the `width` and `height` of its original (nullable, in `GET /media` bodies too), read at upload; `null` for documents and ICO. Existing stock: `media-cli backfill-dimensions` (idempotent, `--dry-run`, `--tenant`), see [docs/migrations/v4.3-upgrade.md](migrations/v4.3-upgrade.md). No boot migration.
 - Dashboard `regularRevenueEur`: catalog/full gross (before user/role discounts and coupons) alongside invoice `revenueEur` on instance/tenant totals, `byTenant`, and `byPeriod`
 - Dashboard summary extensions: `activeEvents` totals, multi-value `status` (OR), optional `granularity` + Europe/Berlin `byPeriod` on Instance and Tenant summary (replaces `revenueByMonth`)
 - Admin Dashboard KPI API: `GET /api/v2/dashboard/summary` (cross-tenant) and `GET /api/v2/:tenant/dashboard/summary` (tenant detail with status, revenue-by-month, and by-bookable breakdowns); live aggregations with short in-process cache. Rights-table entries `dashboard.read` (`manageBookings.readAny`) and `instanceDashboard.read` (`own: signedIn` - the tenants the user owns or reads the bookings of, none of them is a 403; `any: instanceOwner` - every tenant)

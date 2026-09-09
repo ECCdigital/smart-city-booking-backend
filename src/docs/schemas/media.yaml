@@ -75,6 +75,19 @@ components:
         originalFileName:
           type: string
           example: beach.png
+        width:
+          type: integer
+          nullable: true
+          description: |
+            Width of the original in pixels, as read at upload time. Null on
+            documents, on ICO images, and on media uploaded before 4.3 until
+            `media-cli backfill-dimensions` has run.
+          example: 1920
+        height:
+          type: integer
+          nullable: true
+          description: Height of the original in pixels, null where `width` is
+          example: 1080
         title:
           type: string
           example: Beach
