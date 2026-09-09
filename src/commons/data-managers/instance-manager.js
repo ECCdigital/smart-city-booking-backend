@@ -7,6 +7,7 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const { InstanceCache } = require("../services/instance/instance-cache");
+const { ThemeExportCache } = require("../services/catalog/theme-export-cache");
 const { BookableManager } = require("./bookable-manager");
 const { exportInstanceBranding } = require("../services/media/instance-media");
 
@@ -71,6 +72,9 @@ class InstanceManager {
 
     CustomFieldCache.invalidateInstance();
     InstanceCache.invalidate();
+    // The branding travels in the Theme Bundle, so an instance write can
+    // change every exported bundle and its tag.
+    ThemeExportCache.invalidateAll();
 
     return updated.toEntity();
   }

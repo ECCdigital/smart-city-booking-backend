@@ -14,6 +14,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Added
 
+- The Theme Bundle (`GET /api/catalog/themes[/:slug]`) carries a strong `ETag` and `Cache-Control: no-cache` and answers a matching `If-None-Match` with `304`. It is served from a new in-process cache without TTL, invalidated whole by every instance and catalog write; media writes leave it. No purge endpoint (storefront ADR 0001).
 - Rich-text sanitiser for Hero Layout `richtext` Blocks: DOMPurify over one lazily created jsdom window with the frozen allowlist v1 of the Shared contract; `max_length` at 50 000 raw / 10 000 sanitised characters per locale. **Node 22 is the floor** (`engines.node >= 22`, CI on 22.x and 24.x)
 - A medium carries the `width` and `height` of its original (nullable, in `GET /media` bodies too), read at upload; `null` for documents and ICO. Existing stock: `media-cli backfill-dimensions` (idempotent, `--dry-run`, `--tenant`), see [docs/migrations/v4.3-upgrade.md](migrations/v4.3-upgrade.md). No boot migration.
 - Dashboard `regularRevenueEur`: catalog/full gross (before user/role discounts and coupons) alongside invoice `revenueEur` on instance/tenant totals, `byTenant`, and `byPeriod`

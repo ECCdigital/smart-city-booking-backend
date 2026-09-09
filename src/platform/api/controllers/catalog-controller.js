@@ -22,6 +22,26 @@ const logger = bunyan.createLogger({
 });
 
 /**
+ * Whether the client's `If-None-Match` names the tag of the answer. The
+ * header is a list of tags; a `W/` prefix is dropped before comparing, so a
+ * proxy that weakened the tag still revalidates, and `*` matches any tag.
+ *
+ * @param {?string} header - The raw `If-None-Match` header, if sent.
+ * @param {string} etag - The strong tag of the answer.
+ * @returns {boolean} True when the client already holds this body.
+ */
+function matchesEntityTag(header, etag) {
+  if (!header) {
+    return false;
+  }
+
+  return header
+    .split(",")
+    .map((candidate) => candidate.trim().replace(/^W\//, ""))
+    .some((candidate) => candidate === "*" || candidate === etag);
+}
+
+/**
  * The catalog handlers run on the async router: they throw the errors of
  * the errors module and the central error handler answers them. Nothing
  * here collapses an error into a body of its own.
@@ -123,6 +143,15 @@ class CatalogController {
     response.status(200).send(catalog);
   }
 
+  /**
+   * The Theme Bundle, revalidated by the client rather than purged by the
+   * backend (storefront ADR 0001): it carries the strong `ETag` of the
+   * export and `Cache-Control: no-cache`, so the storefront may keep the
+   * body but has to ask before using it, and a request whose
+   * `If-None-Match` names the current tag is answered 304 without one.
+   * The visibility of a slug catalog is decided per request, ahead of the
+   * cache, so a tag never stands in for a permission.
+   */
   static async getTheme(request, response) {
     const slug = request.params.slug;
 
@@ -131,11 +160,16 @@ class CatalogController {
       await assertCatalogSlugAccess(catalog, request.user?.id);
     }
 
-    const themeData = slug
-      ? await CatalogService.getThemeBySlug(slug)
-      : await CatalogService.getTheme();
+    const { body, etag } = await CatalogService.getThemeExport(slug);
 
-    response.status(200).send(themeData);
+    response.set("ETag", etag);
+    response.set("Cache-Control", "no-cache");
+
+    if (matchesEntityTag(request.get("If-None-Match"), etag)) {
+      return response.status(304).end();
+    }
+
+    response.status(200).send(body);
   }
 
   static async storeInstanceCatalog(request, response) {

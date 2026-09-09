@@ -5,6 +5,7 @@ const {
   getMemberTenantIds,
   isTenantListedInCatalog,
 } = require("../utilities/catalog-participation-utils");
+const { ThemeExportCache } = require("./catalog/theme-export-cache");
 const {
   BadRequestError,
   ConflictError,
@@ -152,6 +153,20 @@ class CatalogService {
     };
   }
 
+  /**
+   * The Theme Bundle with the tag it is revalidated against, from the theme
+   * export cache. The visibility of a slug catalog is decided by the caller
+   * before this runs: the cache holds the bundle, never the permission.
+   *
+   * @param {?string} [slug] - Slug catalog, or nothing for the instance.
+   * @returns {Promise<{body: Object, etag: string}>} Bundle and its tag.
+   */
+  static async getThemeExport(slug = null) {
+    return ThemeExportCache.remember(ThemeExportCache.keyFor(slug), () =>
+      slug ? CatalogService.getThemeBySlug(slug) : CatalogService.getTheme(),
+    );
+  }
+
   static async getBranding() {
     const branding = await InstanceManager.getBranding();
     return exportBranding(branding);
@@ -185,6 +200,8 @@ class CatalogService {
       });
     }
 
+    ThemeExportCache.invalidateAll();
+
     return updatedCatalog;
   }
 
@@ -208,6 +225,8 @@ class CatalogService {
     if (!newCatalog) {
       throw new Error("Failed to create instance catalog");
     }
+
+    ThemeExportCache.invalidateAll();
 
     return newCatalog;
   }
@@ -234,6 +253,8 @@ class CatalogService {
       throw new Error(`Failed to create catalog for tenant "${tenantId}"`);
     }
 
+    ThemeExportCache.invalidateAll();
+
     return newCatalog;
   }
 
@@ -250,6 +271,8 @@ class CatalogService {
     if (!updatedCatalog) {
       throw new NotFoundError("instance_catalog_not_found");
     }
+
+    ThemeExportCache.invalidateAll();
 
     return updatedCatalog;
   }
@@ -273,6 +296,8 @@ class CatalogService {
     if (!updatedCatalog) {
       throw new NotFoundError("catalog_not_found", { tenantId });
     }
+
+    ThemeExportCache.invalidateAll();
 
     return updatedCatalog;
   }
