@@ -29,6 +29,7 @@ const ERROR_CODES = {
   greaterThan: "greater_than",
   greaterEqualThan: "greater_equal_than",
   validate: "invalid_custom",
+  maxLength: "max_length",
 };
 
 function isMongooseSubdocumentSchema(type) {
@@ -198,5 +199,7 @@ class SchemaUtils {
     return true;
   }
 }
+
+SchemaUtils.ERROR_CODES = ERROR_CODES;
 
 module.exports = SchemaUtils;
