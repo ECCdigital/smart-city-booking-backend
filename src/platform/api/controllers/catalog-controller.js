@@ -6,12 +6,12 @@ const {
   BaseError,
   BadRequestError,
   ForbiddenError,
-  NotFoundError,
   UnauthorizedError,
 } = require("../../../errors/BaseError");
 const {
   authenticateIfNeeded,
 } = require("../../../commons/utilities/auth-utils");
+const ApiResponse = require("../../../commons/utilities/api-response");
 const {
   assertCatalogSlugAccess,
 } = require("../../../commons/utilities/catalog-participation-utils");
@@ -46,10 +46,6 @@ class CatalogController {
       null,
       request.user?.id,
     );
-
-    if (!bundle) {
-      throw new NotFoundError("catalog_bundle_not_found");
-    }
 
     // Wenn Offers deaktiviert sind, gibt das Bundle nur Branding + Modus zurück.
     // Visibility-Prüfung greift nur für den Offers-Modus.
@@ -106,7 +102,8 @@ class CatalogController {
 
     const catalog = await CatalogService.getCatalog(slug);
 
-    // A token that does not verify is the client's: 401, not a 500.
+    // Whatever fails on the token path is the client's 401, the contract of
+    // the auth middleware; only a typed error keeps its own status.
     let user;
     try {
       user = await authenticateIfNeeded(
@@ -147,17 +144,11 @@ class CatalogController {
     if (catalogData._id) {
       const updatedCatalog =
         await CatalogService.updateInstanceCatalog(catalogData);
-      response.status(200).send({
-        success: true,
-        content: updatedCatalog,
-      });
+      ApiResponse.ok(response, { content: updatedCatalog });
     } else {
       const createdCatalog =
         await CatalogService.createInstanceCatalog(catalogData);
-      response.status(201).send({
-        success: true,
-        content: createdCatalog,
-      });
+      ApiResponse.created(response, { content: createdCatalog });
     }
   }
 
@@ -187,20 +178,14 @@ class CatalogController {
           tenantId,
           catalogData,
         );
-        return response.status(200).send({
-          success: true,
-          content: updatedCatalog,
-        });
+        return ApiResponse.ok(response, { content: updatedCatalog });
       }
 
       const createdCatalog = await CatalogService.createTenantCatalog(
         tenantId,
         catalogData,
       );
-      return response.status(201).send({
-        success: true,
-        content: createdCatalog,
-      });
+      return ApiResponse.created(response, { content: createdCatalog });
     }
 
     if (scopeFor(request, "instanceCatalog", "store").reach !== "any") {
@@ -208,10 +193,7 @@ class CatalogController {
     }
 
     const updatedCatalog = await CatalogService.updateCatalog(catalogData);
-    response.status(200).send({
-      success: true,
-      content: updatedCatalog,
-    });
+    ApiResponse.ok(response, { content: updatedCatalog });
   }
 
   static async slugAvailability(request, response) {
@@ -223,10 +205,7 @@ class CatalogController {
 
     const available = await CatalogService.slugAvailable(slug);
 
-    response.status(200).send({
-      success: true,
-      available: available,
-    });
+    ApiResponse.ok(response, { available });
   }
 }
 
