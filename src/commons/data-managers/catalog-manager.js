@@ -43,6 +43,9 @@ class CatalogManager {
       catalogData,
       { new: true },
     );
+    if (!updatedCatalog) {
+      return null;
+    }
     return updatedCatalog.toEntity();
   }
 }

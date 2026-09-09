@@ -5,6 +5,11 @@ const {
   getMemberTenantIds,
   isTenantListedInCatalog,
 } = require("../utilities/catalog-participation-utils");
+const {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+} = require("../../errors/BaseError");
 
 const DEFAULT_HERO = Object.freeze({ title: "", subtitle: "" });
 
@@ -36,10 +41,7 @@ class CatalogService {
     const catalog = await CatalogManager.getInstanceCatalog();
 
     if (!catalog) {
-      throw {
-        code: 404,
-        message: "No Instance Catalog found",
-      };
+      throw new NotFoundError("instance_catalog_not_found");
     }
 
     return catalog;
@@ -54,10 +56,7 @@ class CatalogService {
       ]);
 
       if (!catalog) {
-        throw {
-          code: 404,
-          message: "No Instance Catalog found",
-        };
+        throw new NotFoundError("instance_catalog_not_found");
       }
 
       if (!portal.publicOffersEnabled) {
@@ -101,10 +100,7 @@ class CatalogService {
     const catalog = await CatalogManager.getCatalogByTenant(tenantId);
 
     if (!catalog) {
-      throw {
-        code: 404,
-        message: `No Catalog found for tenant ${tenantId}`,
-      };
+      throw new NotFoundError("catalog_not_found", { tenantId });
     }
 
     return catalog;
@@ -114,14 +110,11 @@ class CatalogService {
     const catalog = await CatalogManager.getCatalogBySlug(slug);
 
     if (!catalog) {
-      throw {
-        code: 404,
-        message: `Catalog with slug "${slug}" not found`,
-      };
+      throw new NotFoundError("catalog_not_found", { slug });
     }
 
     if (!catalog.active) {
-      throw new Error(`Catalog with slug "${slug}" is not active`);
+      throw new NotFoundError("catalog_not_active", { slug });
     }
 
     return catalog;
@@ -134,10 +127,7 @@ class CatalogService {
     ]);
 
     if (!catalog) {
-      throw {
-        code: 404,
-        message: `Catalog with slug "${slug}" not found`,
-      };
+      throw new NotFoundError("catalog_not_found", { slug });
     }
 
     const exported = exportBranding(branding);
@@ -182,7 +172,7 @@ class CatalogService {
 
   static async updateCatalog(catalog) {
     if (!catalog || !catalog.tenantId) {
-      throw new Error("Catalog data and tenant ID are required");
+      throw new BadRequestError("catalog_tenant_required");
     }
 
     const updatedCatalog = await CatalogManager.updateCatalog(catalog, {
@@ -190,9 +180,9 @@ class CatalogService {
     });
 
     if (!updatedCatalog) {
-      throw new Error(
-        `Failed to update catalog for tenant "${catalog.tenantId}"`,
-      );
+      throw new NotFoundError("catalog_not_found", {
+        tenantId: catalog.tenantId,
+      });
     }
 
     return updatedCatalog;
@@ -200,7 +190,7 @@ class CatalogService {
 
   static async createInstanceCatalog(catalog) {
     if (!catalog) {
-      throw new Error("Catalog data is required");
+      throw new BadRequestError("catalog_required");
     }
 
     const sanitizedCatalog = {
@@ -210,7 +200,7 @@ class CatalogService {
 
     const existingCatalog = await CatalogManager.getInstanceCatalog();
     if (existingCatalog) {
-      throw new Error("Instance catalog already exists");
+      throw new ConflictError("instance_catalog_exists");
     }
 
     const newCatalog = await CatalogManager.createCatalog(sanitizedCatalog);
@@ -224,7 +214,7 @@ class CatalogService {
 
   static async createTenantCatalog(tenantId, catalog) {
     if (!tenantId || !catalog) {
-      throw new Error("Tenant ID and catalog data are required");
+      throw new BadRequestError("catalog_tenant_required");
     }
 
     const sanitizedCatalog = {
@@ -235,7 +225,7 @@ class CatalogService {
 
     const existingCatalog = await CatalogManager.getCatalogByTenant(tenantId);
     if (existingCatalog) {
-      throw new Error(`Catalog already exists for tenant "${tenantId}"`);
+      throw new ConflictError("catalog_exists", { tenantId });
     }
 
     const newCatalog = await CatalogManager.createCatalog(sanitizedCatalog);
@@ -249,7 +239,7 @@ class CatalogService {
 
   static async updateInstanceCatalog(catalog) {
     if (!catalog) {
-      throw new Error("Catalog data is required");
+      throw new BadRequestError("catalog_required");
     }
 
     const updatedCatalog = await CatalogManager.updateCatalog(catalog, {
@@ -258,7 +248,7 @@ class CatalogService {
     });
 
     if (!updatedCatalog) {
-      throw new Error(`Failed to update instance catalog`);
+      throw new NotFoundError("instance_catalog_not_found");
     }
 
     return updatedCatalog;
@@ -266,7 +256,7 @@ class CatalogService {
 
   static async updateTenantCatalog(tenantId, catalog) {
     if (!tenantId || !catalog) {
-      throw new Error("Tenant ID and catalog data are required");
+      throw new BadRequestError("catalog_tenant_required");
     }
 
     const sanitizedCatalog = {
@@ -281,7 +271,7 @@ class CatalogService {
     );
 
     if (!updatedCatalog) {
-      throw new Error(`Failed to update catalog for tenant "${tenantId}"`);
+      throw new NotFoundError("catalog_not_found", { tenantId });
     }
 
     return updatedCatalog;

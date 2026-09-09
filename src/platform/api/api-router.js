@@ -5,7 +5,6 @@ const RoleController = require("./controllers/role-controller");
 const HolidayController = require("./controllers/holiday-controller");
 const InvitationController = require("./controllers/invitation-controller");
 const MembershipController = require("./controllers/membership-controller");
-const CatalogController = require("./controllers/catalog-controller");
 const RuleController = require("./controllers/rule-controller");
 const FileController = require("./controllers/file-controller");
 const MailTemplateController = require("./controllers/mail-template-controller");
@@ -251,51 +250,10 @@ router.get(
 // CATALOG
 // =======
 
-router.get(
-  "/catalog",
-  authorize("instanceCatalog", "read"),
-  CatalogController.getInstanceCatalog,
-);
-router.get(
-  "/catalog/public",
-  publicRoute("instanceCatalog", "readPublic"),
-  CatalogController.getPublicCatalog,
-);
-router.get(
-  "/catalog/mode",
-  publicRoute("instanceCatalog", "mode"),
-  CatalogController.getPortalMode,
-);
-router.get(
-  "/catalog/bundle",
-  publicRoute("instanceCatalog", "readPublic"),
-  CatalogController.getCatalogBundle,
-);
-router.put(
-  "/catalog",
-  authorize("instanceCatalog", "store"),
-  CatalogController.storeInstanceCatalog,
-);
-router.get(
-  "/catalog/themes/:slug",
-  publicRoute("instanceCatalog", "themes"),
-  CatalogController.getTheme,
-);
-router.get(
-  "/catalog/themes",
-  publicRoute("instanceCatalog", "themes"),
-  CatalogController.getTheme,
-);
-router.get(
-  "/catalog/availability/:slug",
-  authorize("instanceCatalog", "slugAvailability"),
-  CatalogController.slugAvailability,
-);
-router.get(
-  "/catalog/:slug",
-  publicRoute("instanceCatalog", "readPublic"),
-  CatalogController.getCatalogBySlug,
-);
+// On the async router (`routes/instance-catalog.routes.js`), mounted at the
+// root so the paths stay `/catalog...` and every error reaches the central
+// error handler. The order in the instance router is unchanged.
+router.use(require("./routes/instance-catalog.routes"));
 
 // FILES
 // =====

@@ -13,8 +13,11 @@ const {
 } = require("../../../commons/utilities/group-booking-permissions");
 
 class JSONController {
+  // The catalog access refusals are the typed errors of the errors module
+  // (`tenant_not_found`, `authentication_required`,
+  // `tenant_membership_required`); the embed API keeps its own body shape.
   static _sendCatalogAccessError(res, error) {
-    return res.status(error.code || 500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || "Internal server error",
     });
