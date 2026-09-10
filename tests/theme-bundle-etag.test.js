@@ -157,11 +157,15 @@ describe("every catalog write invalidates the theme export cache", function () {
    * a stale bundle for good. This suite is the guard: the first case fails
    * when a write is added, the rest pin what each of them does.
    */
+  // The instance catalog carries its Portal Name: the write refuses an
+  // empty one before it reaches the cache.
   const WRITES = {
-    createInstanceCatalog: () => CatalogService.createInstanceCatalog({}),
+    createInstanceCatalog: () =>
+      CatalogService.createInstanceCatalog({ name: "Portal" }),
     createTenantCatalog: () => CatalogService.createTenantCatalog("t1", {}),
     updateCatalog: () => CatalogService.updateCatalog({ tenantId: "t1" }),
-    updateInstanceCatalog: () => CatalogService.updateInstanceCatalog({}),
+    updateInstanceCatalog: () =>
+      CatalogService.updateInstanceCatalog({ name: "Portal" }),
     updateTenantCatalog: () => CatalogService.updateTenantCatalog("t1", {}),
   };
 

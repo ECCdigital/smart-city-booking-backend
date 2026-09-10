@@ -6,14 +6,21 @@ const {
   isTenantListedInCatalog,
 } = require("../utilities/catalog-participation-utils");
 const { ThemeExportCache } = require("./catalog/theme-export-cache");
-const { exportBackground } = require("./hero-layout/hero-export");
+const {
+  exportBackground,
+  exportHeroLayout,
+} = require("./hero-layout/hero-export");
+const { enrichHeroMediaReference } = require("./hero-layout/hero-media");
+const { portalNameOf } = require("./hero-layout/hero-default-layout");
+const SchemaUtils = require("../utilities/schemaUtils");
 const {
   BadRequestError,
   ConflictError,
   NotFoundError,
 } = require("../../errors/BaseError");
+const { ValidationError } = require("../../errors/ValidationError");
 
-const DEFAULT_HERO = Object.freeze({ title: "", subtitle: "" });
+const ERROR_CODES = SchemaUtils.ERROR_CODES;
 
 /**
  * Erstellt eine an Clients ausgelieferte Variante des Brandings.
@@ -49,6 +56,101 @@ function exportBranding(branding) {
  */
 function activeBackground(branding) {
   return branding?.active ? branding.background ?? null : null;
+}
+
+/**
+ * The logo the Theme Bundle delivers and the Default Hero Layout is derived
+ * with. Like `logoUrl` and the Background it follows `branding.active`: a
+ * switched-off branding hands the storefront its default look, without a
+ * logo.
+ *
+ * @param {?Object} branding - The instance branding, as `getBranding` reads it.
+ * @returns {?Object} The logo reference, or null.
+ */
+function activeLogo(branding) {
+  return branding?.active ? branding.logo ?? null : null;
+}
+
+/**
+ * The Theme Bundle of one Catalog (hero-layout spec, Shared contract): the
+ * exported branding and, on every bundle, the Portal Name, the Hero Layout
+ * (stored or the derived default), the Background and the logo, media
+ * references enriched. A slug catalog's `name` stands where the Portal Name
+ * does for the instance catalog.
+ *
+ * @param {?Object} catalog - The Catalog, or null for an instance without one.
+ * @param {?Object} branding - The instance branding.
+ * @returns {Promise<Object>} The bundle.
+ */
+async function exportTheme(catalog, branding) {
+  const name = catalog?.name ?? "";
+  const logo = activeLogo(branding);
+
+  const [heroLayout, background, exportedLogo] = await Promise.all([
+    exportHeroLayout(catalog?.heroLayout ?? null, { name, logo }),
+    exportBackground(activeBackground(branding)),
+    enrichHeroMediaReference(logo),
+  ]);
+
+  return {
+    ...exportBranding(branding),
+    name,
+    heroLayout,
+    background,
+    logo: exportedLogo,
+    visibility: catalog?.visibility ?? "public",
+  };
+}
+
+/**
+ * The detail a body earns for carrying `heroLayout`. It is not written
+ * through the catalog routes: ticket 07 opens it on the instance catalog,
+ * the tenant catalog never takes it.
+ *
+ * @param {Object} catalog - The catalog body being written.
+ * @returns {Array<{field: string, code: string}>} One detail, or none.
+ */
+function heroLayoutDetails(catalog) {
+  return Object.prototype.hasOwnProperty.call(catalog, "heroLayout")
+    ? [{ field: "heroLayout", code: ERROR_CODES.unknownField }]
+    : [];
+}
+
+/**
+ * Refuses what a tenant catalog write does not take.
+ *
+ * @param {Object} catalog - The catalog body being written.
+ * @throws {ValidationError} With the detail at its JSON path.
+ */
+function assertTenantCatalogWritable(catalog) {
+  const details = heroLayoutDetails(catalog);
+
+  if (details.length > 0) {
+    throw new ValidationError(details);
+  }
+}
+
+/**
+ * Refuses what an instance catalog write does not take. Its `name` is the
+ * Portal Name - browser title, Default Hero Layout title, auth pages - so an
+ * empty one is refused here; the mongoose `required` stays as it is so
+ * documents from before stay readable.
+ *
+ * @param {Object} catalog - The catalog body being written.
+ * @throws {ValidationError} One detail per fault, in body order.
+ */
+function assertInstanceCatalogWritable(catalog) {
+  const details = [];
+
+  if (!portalNameOf(catalog.name)) {
+    details.push({ field: "name", code: ERROR_CODES.required });
+  }
+
+  details.push(...heroLayoutDetails(catalog));
+
+  if (details.length > 0) {
+    throw new ValidationError(details);
+  }
 }
 
 class CatalogService {
@@ -145,13 +247,7 @@ class CatalogService {
       throw new NotFoundError("catalog_not_found", { slug });
     }
 
-    const exported = exportBranding(branding);
-    return {
-      ...exported,
-      hero: catalog.hero ?? DEFAULT_HERO,
-      background: await exportBackground(activeBackground(branding)),
-      visibility: catalog.visibility,
-    };
+    return exportTheme(catalog, branding);
   }
 
   static async getTheme() {
@@ -160,13 +256,7 @@ class CatalogService {
       InstanceManager.getBranding(),
     ]);
 
-    const exported = exportBranding(branding);
-    return {
-      ...exported,
-      hero: catalog?.hero ?? DEFAULT_HERO,
-      background: await exportBackground(activeBackground(branding)),
-      visibility: catalog?.visibility ?? "public",
-    };
+    return exportTheme(catalog, branding);
   }
 
   /**
@@ -206,6 +296,8 @@ class CatalogService {
       throw new BadRequestError("catalog_tenant_required");
     }
 
+    assertTenantCatalogWritable(catalog);
+
     const updatedCatalog = await CatalogManager.updateCatalog(catalog, {
       _id: catalog._id,
     });
@@ -225,6 +317,8 @@ class CatalogService {
     if (!catalog) {
       throw new BadRequestError("catalog_required");
     }
+
+    assertInstanceCatalogWritable(catalog);
 
     const sanitizedCatalog = {
       ...catalog,
@@ -251,6 +345,8 @@ class CatalogService {
     if (!tenantId || !catalog) {
       throw new BadRequestError("catalog_tenant_required");
     }
+
+    assertTenantCatalogWritable(catalog);
 
     const sanitizedCatalog = {
       ...catalog,
@@ -279,6 +375,8 @@ class CatalogService {
       throw new BadRequestError("catalog_required");
     }
 
+    assertInstanceCatalogWritable(catalog);
+
     const updatedCatalog = await CatalogManager.updateCatalog(catalog, {
       _id: catalog._id,
       type: "instance",
@@ -297,6 +395,8 @@ class CatalogService {
     if (!tenantId || !catalog) {
       throw new BadRequestError("catalog_tenant_required");
     }
+
+    assertTenantCatalogWritable(catalog);
 
     const sanitizedCatalog = {
       ...catalog,

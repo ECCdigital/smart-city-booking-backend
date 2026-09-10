@@ -56,12 +56,13 @@ const catalogSchemaDefinition = {
     enum: ["public", "private", "unlisted"],
     default: "public",
   },
-  hero: {
+  // The Hero Layout of the Shared contract (hero-layout spec), stored
+  // complete or not at all: `null` means the Default Hero Layout is derived
+  // at read time. Validated in the service layer, never here - the writes
+  // run `findOneAndUpdate` without `runValidators`.
+  heroLayout: {
     type: Object,
-    default: {
-      title: "",
-      subtitle: "",
-    },
+    default: null,
   },
 };
 
