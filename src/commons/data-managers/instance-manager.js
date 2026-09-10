@@ -44,6 +44,23 @@ const DOCUMENT_MEDIA_PATHS = Object.freeze([
   "termsAndConditions.reference.mediaId",
 ]);
 
+/**
+ * Mirrors one legacy pair in whichever direction carries a value. Absence, not
+ * emptiness, decides: an empty string is a value of its own, so clearing the
+ * current field clears its legacy twin instead of being overwritten by it.
+ *
+ * @param {Object} instance - The payload to sync, mutated in place.
+ * @param {string} currentField - The field the platform reads today.
+ * @param {string} legacyField - Its legacy twin.
+ */
+function mirrorLegacyPair(instance, currentField, legacyField) {
+  if (instance[currentField] !== undefined) {
+    instance[legacyField] = instance[currentField];
+  } else if (instance[legacyField] !== undefined) {
+    instance[currentField] = instance[legacyField];
+  }
+}
+
 class InstanceManager {
   static async getInstance() {
     const rawInstance = await InstanceModel.findOne();
@@ -55,10 +72,12 @@ class InstanceManager {
   }
 
   static async updateInstance(instance) {
-    const instanceEntity =
-      instance instanceof Instance ? instance : new Instance(instance);
+    // The mirror reads absence, so it has to see the payload as it arrived: a
+    // constructed entity carries the schema default `portalUrl: ""` and would
+    // make every deliberate clear look like an omission.
+    const synced = InstanceManager._syncLegacyFields(instance);
 
-    InstanceManager._syncLegacyFields(instanceEntity);
+    const instanceEntity = new Instance(synced);
 
     CustomFieldService.normalizeDefinitions(
       instanceEntity.bookableCustomFields || [],
@@ -80,6 +99,8 @@ class InstanceManager {
       { $set: instanceEntity },
       { new: true },
     );
+
+    await InstanceManager._removeEmptiedLegacyUrl(instanceEntity);
 
     const removedFieldIds = CustomFieldService.getRemovedFieldIds(
       previousCustomFields,
@@ -190,7 +211,8 @@ class InstanceManager {
         raw?.publicOffersEnabled ??
         raw?.enableCatalog ??
         DEFAULT_PORTAL.publicOffersEnabled,
-      portalUrl: raw?.portalUrl || raw?.catalogUrl || DEFAULT_PORTAL.portalUrl,
+      // `??`, not `||`: an emptied Portal-URL is an answer, not a gap to fill.
+      portalUrl: raw?.portalUrl ?? raw?.catalogUrl ?? DEFAULT_PORTAL.portalUrl,
     };
 
     InstanceCache.setPortal(portal);
@@ -315,27 +337,46 @@ class InstanceManager {
   }
 
   /**
-   * Hält Legacy-Felder (`enableCatalog`, `catalogUrl`) und neue Felder
-   * (`publicOffersEnabled`, `portalUrl`) bidirektional synchron, solange beide
-   * Felder parallel existieren.
+   * Removes the legacy `catalogUrl` once the mirror has emptied it.
+   *
+   * `catalogUrl` is not a schema path, so mongoose's strict mode drops it from
+   * a `$set` and from an `$unset` alike — the model cannot write that key at
+   * all. A cleared Portal-URL would therefore leave the stale legacy address
+   * in the document, from where it hydrates back into every later payload:
+   * the round trip that used to bring an emptied Portal-URL back. The key is
+   * dropped on the collection instead, and only when it was cleared, so an
+   * unrelated instance write leaves a legacy address alone.
+   *
+   * @param {Instance} instanceEntity - The instance just written.
+   * @returns {Promise<void>}
+   */
+  static async _removeEmptiedLegacyUrl(instanceEntity) {
+    if (instanceEntity.catalogUrl !== "") return;
+
+    await InstanceModel.collection.updateOne(
+      {},
+      { $unset: { catalogUrl: "" } },
+    );
+  }
+
+  /**
+   * Keeps the legacy fields (`enableCatalog`, `catalogUrl`) and the current
+   * ones (`publicOffersEnabled`, `portalUrl`) in sync while both pairs exist
+   * side by side. Answers a copy, so the payload it was handed is left as it
+   * arrived.
+   *
+   * @param {Object|Instance} instance - The payload or entity to sync.
+   * @returns {Object} The synced payload.
    */
   static _syncLegacyFields(instance) {
-    if (!instance) return;
+    if (!instance) return instance;
 
-    if (instance.publicOffersEnabled !== undefined) {
-      instance.enableCatalog = instance.publicOffersEnabled;
-    } else if (instance.enableCatalog !== undefined) {
-      instance.publicOffersEnabled = instance.enableCatalog;
-    }
+    const synced = { ...instance };
 
-    if (instance.portalUrl !== undefined && instance.portalUrl !== "") {
-      instance.catalogUrl = instance.portalUrl;
-    } else if (
-      instance.catalogUrl !== undefined &&
-      instance.catalogUrl !== ""
-    ) {
-      instance.portalUrl = instance.catalogUrl;
-    }
+    mirrorLegacyPair(synced, "publicOffersEnabled", "enableCatalog");
+    mirrorLegacyPair(synced, "portalUrl", "catalogUrl");
+
+    return synced;
   }
 }
 
