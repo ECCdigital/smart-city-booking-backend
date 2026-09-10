@@ -4,6 +4,7 @@ const bunyan = require("bunyan");
 const PermissionService = require("../../../commons/services/permission-service");
 const UserService = require("../../../commons/services/user-service");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
+const JwtHelper = require("../../../commons/utilities/jwt-helper");
 
 const logger = bunyan.createLogger({
   name: "user-controller.js",
@@ -421,6 +422,43 @@ class UserController {
     } catch (error) {
       logger.error(error);
       response.status(500).send("could not update user");
+    }
+  }
+
+  static async changeMyPassword(request, response) {
+    try {
+      const { currentPassword, newPassword } = request.body;
+      if (!currentPassword || !newPassword) {
+        return response
+          .status(400)
+          .send("Current and new password are required");
+      }
+      const password = String(newPassword);
+      if (
+        password.length < 8 ||
+        !/[A-Za-z]/.test(password) ||
+        !/\d/.test(password)
+      ) {
+        return response
+          .status(400)
+          .send(
+            "Password must be at least 8 characters and include a letter and a number",
+          );
+      }
+      const user = await UserManager.getUserBy({ id: request.user.id }, true);
+      if (!user) {
+        return response.sendStatus(404);
+      }
+      if (!user.verifyPassword(currentPassword)) {
+        return response.status(403).send("Current password is incorrect");
+      }
+      user.setPassword(newPassword);
+      await UserManager.updateUser(user);
+      await JwtHelper.revokeAllUserTokens(request.user.id, "password_changed");
+      return response.sendStatus(200);
+    } catch (error) {
+      logger.error(error);
+      return response.status(500).send("could not change password");
     }
   }
 

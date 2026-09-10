@@ -360,6 +360,9 @@ $RECYCLE.BIN/
 /temp
 /local
 
+# Local-only migrations (e.g. dev mail config) — run locally, never committed
+migrations/scripts/*.local.js
+
 # End of https://www.toptal.com/developers/gitignore/api/macos,windows,visualstudiocode,intellij,node,git
 test.js
 
