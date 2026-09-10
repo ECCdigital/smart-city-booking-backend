@@ -309,12 +309,29 @@ describe("the Hero editor endpoints", function () {
       expect(res.body.background.image).to.deep.equal(enriched(IMAGE_MEDIA_ID));
     });
 
-    it("says isDefault false while only the Background is stored", async function () {
+    it("says isDefault true while only the Background is stored", async function () {
       stored({ heroLayout: null, background: COLOR_BACKGROUND });
 
       const res = await readEditor();
 
-      expect(res.body.isDefault).to.equal(false);
+      expect(res.body.isDefault).to.equal(true);
+    });
+
+    it("says isDefault false for a stored layout whatever the Background is", async function () {
+      stored({ heroLayout: MINIMAL_LAYOUT_STORED, background: null });
+      const derived = await readEditor();
+
+      stored({
+        heroLayout: MINIMAL_LAYOUT_STORED,
+        background: COLOR_BACKGROUND,
+      });
+      const withBackground = await readEditor();
+
+      expect(derived.body.isDefault).to.equal(false);
+      // The answered Background is the derived default here, and the flag is
+      // still false: it follows the stored layout, nothing of the Background.
+      expect(derived.body.background).to.deep.equal(VARIANT_BACKGROUND);
+      expect(withBackground.body.isDefault).to.equal(false);
     });
 
     it("answers a missing instance catalog with 404", async function () {

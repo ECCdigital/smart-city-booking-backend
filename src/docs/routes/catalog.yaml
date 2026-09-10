@@ -16,10 +16,11 @@
       or the default `poly` variant, every media reference enriched with its
       URL and the dimensions of the original.
 
-      `isDefault` says whether both objects are derived rather than stored —
-      the state the editor's reset to default lands on. Both are read as they are
-      stored, not as `GET /api/catalog/themes` delivers them, which hides a
-      stored Background behind `branding.active`.
+      `isDefault` says whether the Hero Layout is derived rather than stored —
+      the state the editor's reset to default lands on. It is about the layout
+      alone: a stored Background does not clear it. Both objects are read as
+      they are stored, not as `GET /api/catalog/themes` delivers them, which
+      hides a stored Background behind `branding.active`.
 
       Requires `instanceCatalog.read`, the right of `GET /api/catalog`.
     security:
@@ -38,8 +39,8 @@
                     isDefault:
                       type: boolean
                       description: |
-                        True while neither the Hero Layout nor the Background is
-                        stored.
+                        True while no Hero Layout is stored, whatever the
+                        Background is.
       "401":
         description: Not authenticated
       "403":

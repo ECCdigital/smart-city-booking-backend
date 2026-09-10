@@ -446,9 +446,13 @@ class CatalogService {
 
   /**
    * What the Hero Editor reads (hero-layout spec §4): the Hero Layout, the
-   * Background and the Portal Name in export form, and whether the two objects
-   * are derived rather than stored — the state the editor's reset to default
-   * lands on.
+   * Background and the Portal Name in export form, and whether the layout is
+   * derived rather than stored — the state the editor's reset to default lands
+   * on.
+   *
+   * `isDefault` is about the layout alone. The Background is saved beside the
+   * layout and has its own reset, so a stored Background leaves the flag — and
+   * with it the admin UI's default-layout chip — untouched.
    *
    * The two objects the editor writes back are read as they are stored, not as
    * the Theme Bundle delivers them: the bundle hides a stored Background behind
@@ -476,7 +480,7 @@ class CatalogService {
         name: catalog.name,
         logo: activeLogo(branding),
       })),
-      isDefault: heroLayout === null && background === null,
+      isDefault: heroLayout === null,
     };
   }
 
