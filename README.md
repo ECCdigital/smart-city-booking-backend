@@ -64,7 +64,7 @@ That guide covers version alignment, environment wiring (`FRONTEND_URL` = Admin 
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v22+ (v22 or v24 LTS)
+- [Node.js](https://nodejs.org/) v22.22.2+ or v24.15+ (LTS)
 - [npm](https://www.npmjs.com/) v10+
 - [MongoDB](https://www.mongodb.com/) v6+
 

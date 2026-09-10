@@ -91,19 +91,27 @@ describe("catalog routes: errors reach the central error handler", function () {
     });
   });
 
+  // The body is valid, so the service's own normaliser lets it through and the
+  // manager below it is what refuses: this pins the propagation, not the
+  // validation. An empty `name` would be refused by the normaliser first and
+  // the test would pass without the manager ever being called.
   it("answers a ValidationError from below the controller with 400 and details[]", async function () {
     CatalogManager.updateCatalog.rejects(
-      new ValidationError([{ field: "name", code: "required" }]),
+      new ValidationError([{ field: "slug", code: "invalid_format" }]),
     );
 
-    const res = await put("/catalog", ADMIN, { _id: FIXTURE_ID, name: "" });
+    const res = await put("/catalog", ADMIN, {
+      _id: FIXTURE_ID,
+      name: "Stadtportal",
+    });
 
+    expect(CatalogManager.updateCatalog.calledOnce).to.equal(true);
     expect(res.status).to.equal(400);
     expect(res.body).to.deep.equal({
       error: "ValidationError",
       message: "validation_failed",
       statusCode: 400,
-      details: [{ field: "name", code: "required" }],
+      details: [{ field: "slug", code: "invalid_format" }],
     });
   });
 

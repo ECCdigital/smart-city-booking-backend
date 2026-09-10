@@ -510,9 +510,17 @@ class CatalogService {
       throw new NotFoundError("instance_catalog_not_found");
     }
 
-    await InstanceManager.updateBackground(background);
-
-    ThemeExportCache.invalidateAll();
+    // The catalog is written by now, so the cached bundles are stale whatever
+    // the Background write does next. The cache carries no TTL and only a
+    // write empties it, so a failed Background would otherwise leave the old
+    // bundle and its tag standing for the life of the process - the split the
+    // spec accepts is between the two documents, not between the data and
+    // what the storefront reads.
+    try {
+      await InstanceManager.updateBackground(background);
+    } finally {
+      ThemeExportCache.invalidateAll();
+    }
 
     const branding = await InstanceManager.getBranding();
 

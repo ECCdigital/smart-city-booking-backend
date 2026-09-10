@@ -171,6 +171,10 @@ describe("the Hero editor endpoints", function () {
       async (data) => new Catalog({ ...fixtureCatalog, ...data }),
     );
     InstanceManager.updateBackground.resetHistory();
+    // Behaviour, not just history: a case that makes the Background write
+    // fail would otherwise leave the rejection standing for the rest of the
+    // suite, the way `updateCatalog` above is re-armed every time.
+    InstanceManager.updateBackground.resolves();
     ThemeExportCache.invalidateAll.resetHistory();
     MediaManager.getMedia.callsFake(async (mediaId, tenantId) =>
       tenantId == null ? instanceImage(mediaId) : null,
@@ -366,6 +370,23 @@ describe("the Hero editor endpoints", function () {
         InstanceManager.updateBackground,
         ThemeExportCache.invalidateAll,
       );
+      expect(ThemeExportCache.invalidateAll.callCount).to.equal(1);
+    });
+
+    // The catalog is already written when the Background write fails, so the
+    // cached bundles no longer match the stored layout. Leaving them would
+    // serve the old Hero under its old tag for the life of the process, and
+    // the cache has no TTL to age it out.
+    it("flushes the cache even when the Background write fails", async function () {
+      InstanceManager.updateBackground.rejects(new Error("mongo is down"));
+
+      const res = await save({
+        heroLayout: MINIMAL_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(res.status).to.equal(500);
+      sinon.assert.calledOnce(CatalogManager.updateCatalog);
       expect(ThemeExportCache.invalidateAll.callCount).to.equal(1);
     });
 

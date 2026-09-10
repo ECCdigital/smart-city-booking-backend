@@ -12,8 +12,16 @@ const NodeCache = require("node-cache");
  * an invalidation empties it whole rather than by key, because a tenant catalog's
  * slug can change in the same write and rebuilding an export is cheap.
  *
- * The media write path is deliberately not an invalidation trigger: media
- * ids are immutable and a medium's own fields do not travel in the bundle.
+ * The media write path is deliberately not an invalidation trigger. Media ids
+ * are immutable, and the two fields of a medium that do travel in the bundle -
+ * the `width` and `height` an enriched reference carries - are written at
+ * upload, before any Hero Layout can name the medium; the save that names it
+ * flushes this cache itself. The one write that changes them afterwards is
+ * `media-cli backfill-dimensions`, and that runs in its own process, where
+ * flushing this cache would empty an empty one. A bundle an instance cached
+ * before the backfill therefore keeps `width`/`height: null` until the next
+ * catalog or instance write, or a restart - called out in the 4.3 upgrade
+ * notes, because no in-process trigger can cover it.
  */
 
 // No TTL and no sweep: `invalidateAll()` is the only thing that ends an entry.
