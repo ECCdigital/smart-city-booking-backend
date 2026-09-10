@@ -21,12 +21,18 @@ const {
   PORTAL_NAME,
 } = require("./fixtures/hero-layout/default-layout");
 const {
+  ACCEPTANCE_LAYOUT,
+  CREST_MEDIA_ID,
+} = require("./fixtures/hero-layout/acceptance-layout");
+const {
   COLOR_BACKGROUND,
   IMAGE_BACKGROUND,
   IMAGE_MEDIA_ID,
   VARIANT_BACKGROUND,
 } = require("./fixtures/hero-layout/backgrounds");
 const {
+  FILLED_BLOCK_DEFAULTS,
+  GLAS_PANEL,
   LAYOUT_MEDIA_ID,
   MINIMAL_LAYOUT,
   MINIMAL_LAYOUT_STORED,
@@ -235,6 +241,66 @@ describe("the Hero editor endpoints", function () {
   const writtenBackground = () =>
     InstanceManager.updateBackground.firstCall.args[0];
 
+  /**
+   * A layout as it was stored before the Panel became an object: complete
+   * otherwise, the two legacy words where a Panel stands today.
+   */
+  const legacyPanelLayout = () => ({
+    ...MINIMAL_LAYOUT_STORED,
+    blocks: MINIMAL_LAYOUT_STORED.blocks.map((block, index) => ({
+      ...block,
+      panel: index === 1 ? "translucent" : "none",
+    })),
+  });
+
+  /**
+   * A layout as it was stored before the amendment: the legacy Panel words,
+   * and none of the fields the amendment added — no `align`, no `offset`, no
+   * `layer`, and no `size` on the rich-text Block.
+   */
+  const preAmendmentLayout = () => ({
+    ...legacyPanelLayout(),
+    blocks: legacyPanelLayout().blocks.map((block) => {
+      const added = ["align", "offset", "layer"];
+
+      if (block.type === "richtext") {
+        added.push("size");
+      }
+
+      return Object.fromEntries(
+        Object.entries(block).filter(([key]) => !added.includes(key)),
+      );
+    }),
+  });
+
+  /** What a pre-amendment layout is delivered as: the same layout, complete. */
+  const PRE_AMENDMENT_EXPORTED = Object.freeze({
+    ...MINIMAL_LAYOUT_STORED,
+    blocks: MINIMAL_LAYOUT_STORED.blocks.map((block, index) => ({
+      ...block,
+      panel: index === 1 ? GLAS_PANEL : null,
+      ...(block.type === "image" ? { image: enriched(LAYOUT_MEDIA_ID) } : {}),
+    })),
+  });
+
+  /**
+   * A Block placed away from where its Zone alone would put it: centred in
+   * its own box, half a rem down, and painting in front of what it overlaps.
+   */
+  const PLACED_BLOCK = Object.freeze({
+    ...MINIMAL_TEXT_BLOCK,
+    align: "center",
+    offset: { x: -1.5, y: 0.5 },
+    layer: "front",
+  });
+
+  /** The placement of the Blocks a layout carries. */
+  const placementOf = (layout) =>
+    layout.blocks.map(({ align, offset, layer }) => ({ align, offset, layer }));
+
+  /** The Panels of the layout an answer carries. */
+  const panelsOf = (body) => body.heroLayout.blocks.map((block) => block.panel);
+
   /** The `field`/`code` pairs of a refusal. */
   const codesOf = (body) =>
     body.details.map(({ field, code }) => ({ field, code }));
@@ -293,6 +359,39 @@ describe("the Hero editor endpoints", function () {
         "r1",
         "i1",
       ]);
+    });
+
+    it("delivers the placement of a stored Block as it stands", async function () {
+      stored({ heroLayout: layoutOf(PLACED_BLOCK) });
+
+      const res = await readEditor();
+
+      expect(res.status).to.equal(200);
+      expect(placementOf(res.body.heroLayout)).to.deep.equal([
+        { align: "center", offset: { x: -1.5, y: 0.5 }, layer: "front" },
+      ]);
+    });
+
+    it("normalises a stored legacy Panel on the way out", async function () {
+      // Written before the Panel became an object and never migrated: the
+      // editor is answered the objects the contract names, never a word.
+      stored({ heroLayout: legacyPanelLayout() });
+
+      const res = await readEditor();
+
+      expect(res.status).to.equal(200);
+      expect(panelsOf(res.body)).to.deep.equal([null, GLAS_PANEL, null]);
+    });
+
+    it("fills the fields the amendment added into a layout stored before it", async function () {
+      // Stored before the amendment and never migrated: the editor is handed
+      // the layout in the shape the contract names today, defaults and all.
+      stored({ heroLayout: preAmendmentLayout() });
+
+      const res = await readEditor();
+
+      expect(res.status).to.equal(200);
+      expect(res.body.heroLayout).to.deep.equal(PRE_AMENDMENT_EXPORTED);
     });
 
     it("enriches the media references of the layout and the Background", async function () {
@@ -377,6 +476,46 @@ describe("the Hero editor endpoints", function () {
       expect(res.body.heroLayout.blocks[2].image).to.deep.equal(
         enriched(LAYOUT_MEDIA_ID),
       );
+    });
+
+    it("stores the alignment, offset and layer of a Block", async function () {
+      const res = await save({
+        heroLayout: layoutOf(PLACED_BLOCK),
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(writtenLayout().blocks[0]).to.deep.equal({
+        ...PLACED_BLOCK,
+        ...FILLED_BLOCK_DEFAULTS,
+        align: "center",
+        offset: { x: -1.5, y: 0.5 },
+        layer: "front",
+        size: "md",
+        color: "default",
+        weight: "normal",
+        shadow: false,
+      });
+      expect(placementOf(res.body.heroLayout)).to.deep.equal(
+        placementOf(writtenLayout()),
+      );
+    });
+
+    it("stores the two legacy Panel words normalised", async function () {
+      const res = await save({
+        heroLayout: layoutOf(
+          { ...MINIMAL_TEXT_BLOCK, panel: "none" },
+          { ...MINIMAL_TEXT_BLOCK, id: "t2", panel: "translucent" },
+        ),
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(writtenLayout().blocks.map((block) => block.panel)).to.deep.equal([
+        null,
+        GLAS_PANEL,
+      ]);
+      expect(panelsOf(res.body)).to.deep.equal([null, GLAS_PANEL]);
     });
 
     it("writes the catalog, then the instance, then flushes the cache once", async function () {
@@ -476,6 +615,82 @@ describe("the Hero editor endpoints", function () {
     });
   });
 
+  describe("the Theme Bundle of a layout stored before the amendment", function () {
+    it("delivers it complete, without a migration", async function () {
+      stored({ heroLayout: preAmendmentLayout() });
+
+      const bundle = await get("/catalog/themes", ADMIN);
+
+      expect(bundle.status).to.equal(200);
+      expect(bundle.body.heroLayout).to.deep.equal(PRE_AMENDMENT_EXPORTED);
+    });
+  });
+
+  describe("the acceptance fixture of the Shared contract", function () {
+    // The Bad Belzig Hero is the amendment's own walk: it names every field
+    // the amendment added, and it is written the way the contract writes it -
+    // every default filled - so what a save stores and what a read answers can
+    // be compared to the fixture key by key rather than only value by value.
+    it("goes in through PUT and comes back out of GET byte-identically", async function () {
+      const saved = await save({
+        heroLayout: ACCEPTANCE_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(saved.status).to.equal(200);
+      expect(JSON.stringify(writtenLayout())).to.equal(
+        JSON.stringify(ACCEPTANCE_LAYOUT),
+      );
+
+      stored({ heroLayout: writtenLayout(), background: writtenBackground() });
+      const read = await readEditor();
+
+      expect(read.status).to.equal(200);
+      expect(JSON.stringify(read.body.heroLayout)).to.equal(
+        JSON.stringify(saved.body.heroLayout),
+      );
+      expect(read.body.heroLayout.blocks[0].image).to.deep.equal(
+        enriched(CREST_MEDIA_ID),
+      );
+    });
+
+    it("keeps the classes of its two headline lines, unrepaired", async function () {
+      const saved = await save({
+        heroLayout: ACCEPTANCE_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+
+      // The class pass reads `hero-size-*` and `hero-color-*` on a span as
+      // the vocabulary it keeps, so the stored HTML is the HTML that was
+      // sent - character for character, both lines.
+      expect(writtenLayout().blocks[1].html).to.deep.equal(
+        ACCEPTANCE_LAYOUT.blocks[1].html,
+      );
+      expect(saved.body.heroLayout.blocks[1].html).to.deep.equal(
+        ACCEPTANCE_LAYOUT.blocks[1].html,
+      );
+    });
+
+    it("changes the Theme Bundle tag and goes out with the crest enriched", async function () {
+      stored();
+      const before = await get("/catalog/themes", ADMIN);
+
+      await save({
+        heroLayout: ACCEPTANCE_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+
+      stored({ heroLayout: writtenLayout(), background: writtenBackground() });
+      const bundle = await get("/catalog/themes", ADMIN);
+
+      expect(bundle.status).to.equal(200);
+      expect(bundle.headers.etag).to.not.equal(before.headers.etag);
+      expect(bundle.body.heroLayout.blocks[0].image).to.deep.equal(
+        enriched(CREST_MEDIA_ID),
+      );
+    });
+  });
+
   describe("POST /api/catalog/hero-layout/preview", function () {
     it("answers the export form without writing anything", async function () {
       const res = await preview({
@@ -506,6 +721,33 @@ describe("the Hero editor endpoints", function () {
       });
 
       expect(previewed.body).to.deep.equal(saved.body);
+    });
+
+    it("answers the placement of a Block without storing it", async function () {
+      const res = await preview({
+        heroLayout: layoutOf(PLACED_BLOCK),
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(placementOf(res.body.heroLayout)).to.deep.equal([
+        { align: "center", offset: { x: -1.5, y: 0.5 }, layer: "front" },
+      ]);
+      expect(CatalogManager.updateCatalog.called).to.equal(false);
+    });
+
+    it("answers the two legacy Panel words normalised", async function () {
+      const res = await preview({
+        heroLayout: layoutOf(
+          { ...MINIMAL_TEXT_BLOCK, panel: "none" },
+          { ...MINIMAL_TEXT_BLOCK, id: "t2", panel: "translucent" },
+        ),
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(panelsOf(res.body)).to.deep.equal([null, GLAS_PANEL]);
+      expect(CatalogManager.updateCatalog.called).to.equal(false);
     });
 
     it("answers the derived defaults for both nulls", async function () {

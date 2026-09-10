@@ -17,8 +17,21 @@
 const LAYOUT_MEDIA_ID = "66f1c2aa-0000-4000-8000-000000000003";
 
 /**
+ * The „Glas“ preset: the four defaults of a Panel, written out. `panel: {}`
+ * normalises to exactly this, and the admin's „Glas“ chip writes all four
+ * back at once.
+ */
+const GLAS_PANEL = Object.freeze({
+  color: "white",
+  opacity: 60,
+  radius: "md",
+  blur: true,
+});
+
+/**
  * The crowded-layout example of the contract: every common field named, both
- * locales filled, and HTML that survives the allowlist untouched.
+ * locales filled, and HTML that survives the allowlist untouched. Its Panel is
+ * the „Glas“ preset written out, the form the storefront copies from here.
  */
 const CROWDED_RICHTEXT_BLOCK = Object.freeze({
   id: "k3Qm7aZp",
@@ -27,13 +40,17 @@ const CROWDED_RICHTEXT_BLOCK = Object.freeze({
   outerSpacing: "md",
   innerSpacing: "sm",
   width: "md",
-  panel: "translucent",
+  align: "auto",
+  panel: { ...GLAS_PANEL },
+  offset: { x: 0, y: 0 },
+  layer: "back",
   homeOnly: true,
   hideOnMobile: false,
   html: {
     de: '<p><strong>Öffnungszeiten:</strong> Mo–Fr 8–18 Uhr. <a href="mailto:info@example.org">Kontakt</a></p>',
     en: '<p><strong>Opening hours:</strong> Mon–Fri 8am–6pm. <a href="mailto:info@example.org">Contact</a></p>',
   },
+  size: "md",
   color: "white",
   shadow: true,
 });
@@ -69,7 +86,10 @@ const FILLED_BLOCK_DEFAULTS = Object.freeze({
   outerSpacing: "none",
   innerSpacing: "none",
   width: "auto",
-  panel: "none",
+  align: "auto",
+  panel: null,
+  offset: { x: 0, y: 0 },
+  layer: "back",
   homeOnly: false,
   hideOnMobile: false,
 });
@@ -99,6 +119,7 @@ const MINIMAL_LAYOUT_STORED = Object.freeze({
     {
       ...MINIMAL_RICHTEXT_BLOCK,
       ...FILLED_BLOCK_DEFAULTS,
+      size: "md",
       color: "default",
       shadow: false,
     },
@@ -239,6 +260,18 @@ const INVALID_LAYOUTS = Object.freeze([
     expected: [{ field: "heroLayout.blocks[0].size", code: "invalid_enum" }],
   },
   {
+    name: "an unknown rich-text size",
+    input: layoutOf({ ...MINIMAL_RICHTEXT_BLOCK, size: "3xl" }),
+    expected: [{ field: "heroLayout.blocks[0].size", code: "invalid_enum" }],
+  },
+  {
+    // Rich text gained a size of its own with the amendment and nothing else:
+    // `weight` stayed a field of the text Block.
+    name: "a text weight on a rich-text Block",
+    input: layoutOf({ ...MINIMAL_RICHTEXT_BLOCK, weight: "bold" }),
+    expected: [{ field: "heroLayout.blocks[0].weight", code: "unknown_field" }],
+  },
+  {
     name: "an unknown spacing",
     input: layoutOf({ ...MINIMAL_TEXT_BLOCK, outerSpacing: "tiny" }),
     expected: [
@@ -250,6 +283,98 @@ const INVALID_LAYOUTS = Object.freeze([
     input: layoutOf({ ...MINIMAL_IMAGE_BLOCK, maxHeight: "2xl" }),
     expected: [
       { field: "heroLayout.blocks[0].maxHeight", code: "invalid_enum" },
+    ],
+  },
+  {
+    name: "a Panel that is neither null, an object nor a legacy word",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: 3 }),
+    expected: [{ field: "heroLayout.blocks[0].panel", code: "invalid_format" }],
+  },
+  {
+    name: "a Panel word the contract never had",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: "frosted" }),
+    expected: [{ field: "heroLayout.blocks[0].panel", code: "invalid_format" }],
+  },
+  {
+    // `default` is the text vocabulary; a Panel is a surface and has none.
+    name: "a Panel colour outside the Panel vocabulary",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: { color: "default" } }),
+    expected: [
+      { field: "heroLayout.blocks[0].panel.color", code: "invalid_format" },
+    ],
+  },
+  {
+    name: "a Panel opacity over the hundred",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: { opacity: 101 } }),
+    expected: [
+      { field: "heroLayout.blocks[0].panel.opacity", code: "invalid_format" },
+    ],
+  },
+  {
+    name: "a Panel opacity as a string",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: { opacity: "60" } }),
+    expected: [
+      { field: "heroLayout.blocks[0].panel.opacity", code: "invalid_format" },
+    ],
+  },
+  {
+    name: "a Panel radius outside its five steps",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: { radius: "xl" } }),
+    expected: [
+      { field: "heroLayout.blocks[0].panel.radius", code: "invalid_enum" },
+    ],
+  },
+  {
+    name: "a Panel blur that is no boolean",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: { blur: "yes" } }),
+    expected: [
+      { field: "heroLayout.blocks[0].panel.blur", code: "invalid_format" },
+    ],
+  },
+  {
+    name: "an unknown key inside a Panel",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, panel: { glow: 1 } }),
+    expected: [
+      { field: "heroLayout.blocks[0].panel.glow", code: "unknown_field" },
+    ],
+  },
+  {
+    // On an image Block: `align` is a common field, not a text-only one.
+    name: "an alignment the contract does not name",
+    input: layoutOf({ ...MINIMAL_IMAGE_BLOCK, align: "justify" }),
+    expected: [{ field: "heroLayout.blocks[0].align", code: "invalid_enum" }],
+  },
+  {
+    name: "a layer the contract does not name",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, layer: "top" }),
+    expected: [{ field: "heroLayout.blocks[0].layer", code: "invalid_enum" }],
+  },
+  {
+    name: "an offset off the half-rem grid",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, offset: { x: 0.25 } }),
+    expected: [
+      { field: "heroLayout.blocks[0].offset.x", code: "invalid_format" },
+    ],
+  },
+  {
+    name: "an offset past the three rem",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, offset: { y: 3.5 } }),
+    expected: [
+      { field: "heroLayout.blocks[0].offset.y", code: "invalid_format" },
+    ],
+  },
+  {
+    name: "an offset given as a number rather than two axes",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, offset: 1 }),
+    expected: [
+      { field: "heroLayout.blocks[0].offset", code: "invalid_format" },
+    ],
+  },
+  {
+    name: "an unknown key inside an offset",
+    input: layoutOf({ ...MINIMAL_TEXT_BLOCK, offset: { z: 1 } }),
+    expected: [
+      { field: "heroLayout.blocks[0].offset.z", code: "unknown_field" },
     ],
   },
   {
@@ -327,6 +452,24 @@ const INVALID_LAYOUTS = Object.freeze([
     expected: [{ field: "heroLayout.blocks[0].image", code: "invalid_custom" }],
   },
   {
+    // The common fields are read in the order the field table names them,
+    // whatever order they arrive in: alignment, Panel, offset, layer.
+    name: "several faults among the new Block fields, in document order",
+    input: layoutOf({
+      ...MINIMAL_TEXT_BLOCK,
+      layer: "top",
+      offset: { y: 0.75 },
+      panel: { radius: "xl" },
+      align: "justify",
+    }),
+    expected: [
+      { field: "heroLayout.blocks[0].align", code: "invalid_enum" },
+      { field: "heroLayout.blocks[0].panel.radius", code: "invalid_enum" },
+      { field: "heroLayout.blocks[0].offset.y", code: "invalid_format" },
+      { field: "heroLayout.blocks[0].layer", code: "invalid_enum" },
+    ],
+  },
+  {
     name: "several faults at once, in document order",
     input: {
       version: 1,
@@ -345,6 +488,7 @@ const INVALID_LAYOUTS = Object.freeze([
 
 module.exports = {
   CROWDED_RICHTEXT_BLOCK,
+  GLAS_PANEL,
   FILLED_BLOCK_DEFAULTS,
   INVALID_LAYOUTS,
   LAYOUT_MEDIA_ID,

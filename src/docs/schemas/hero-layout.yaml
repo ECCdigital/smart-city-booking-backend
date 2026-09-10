@@ -52,6 +52,62 @@ components:
           nullable: true
           readOnly: true
 
+    HeroPanel:
+      type: object
+      description: |
+        The surface a Block paints behind itself. Every key has a default, so
+        `{}` is stored as the „Glas“ preset
+        `{ "color": "white", "opacity": 60, "radius": "md", "blur": true }`.
+        Mode-independent: an author who wants a dark Panel picks one.
+      properties:
+        color:
+          type: string
+          description: |
+            `white`, `black`, `primary`, `secondary` or `#rrggbb`. Panel-only
+            vocabulary: `black` is new here and a Panel has no `default`.
+          default: white
+          example: black
+        opacity:
+          type: integer
+          description: |
+            Alpha of the fill colour alone; blur and radius untouched. `0` is
+            allowed — pure frosting with `blur: true`.
+          minimum: 0
+          maximum: 100
+          default: 60
+        radius:
+          type: string
+          enum: [none, sm, md, lg, full]
+          default: md
+        blur:
+          type: boolean
+          description: |
+            Backdrop blur of what lies behind, fixed 16 px, no steps.
+          default: true
+
+    HeroOffset:
+      type: object
+      description: |
+        How far a Block is pushed out of the place its Zone gives it, in rem —
+        a pure translation. Positive `x` moves it right, positive `y` down;
+        `x` is ignored below the `md` viewport. Each axis is a rem number
+        from −3 to 3 on the 0.5 grid; anything else is `invalid_format` with
+        `params.format: "offset_step"`.
+      properties:
+        x:
+          type: number
+          minimum: -3
+          maximum: 3
+          multipleOf: 0.5
+          default: 0
+        y:
+          type: number
+          minimum: -3
+          maximum: 3
+          multipleOf: 0.5
+          default: 0
+          example: 0.5
+
     HeroBlock:
       type: object
       description: |
@@ -90,10 +146,37 @@ components:
           type: string
           enum: [auto, sm, md, lg, full]
           default: auto
-        panel:
+        align:
           type: string
-          enum: [none, translucent]
-          default: none
+          description: |
+            How the Block's content sits inside its own box: the lines of a
+            text or rich-text Block, the image of an image Block. `auto`
+            follows the Zone column.
+          enum: [auto, left, center, right]
+          default: auto
+        panel:
+          allOf:
+            - $ref: "#/components/schemas/HeroPanel"
+          nullable: true
+          description: |
+            The Panel of the Block; `null` is no Panel. The legacy strings
+            `"none"` and `"translucent"` are still taken on input and
+            normalised to `null` and the „Glas“ preset — they are never
+            delivered.
+          default: null
+        offset:
+          allOf:
+            - $ref: "#/components/schemas/HeroOffset"
+          description: |
+            The displacement of the Block; the default leaves it where its
+            Zone puts it.
+        layer:
+          type: string
+          description: |
+            `front` paints the Block above the Blocks it overlaps; among
+            equals the document order decides.
+          enum: [back, front]
+          default: back
         homeOnly:
           type: boolean
           default: false
@@ -106,7 +189,9 @@ components:
           description: "`text` Blocks: required, at most 200 characters per locale."
         size:
           type: string
-          description: "`text` Blocks only."
+          description: |
+            `text` and `richtext` Blocks. On a rich-text Block it is what a
+            run of words inherits when it carries no size class of its own.
           enum: [xs, sm, md, lg, xl, 2xl]
           default: md
         weight:
@@ -118,10 +203,14 @@ components:
           allOf:
             - $ref: "#/components/schemas/HeroLocalizedString"
           description: |
-            `richtext` Blocks: required. Sanitised on save with the frozen
-            allowlist (`p br strong em u a ul ol li`, `https:`/`mailto:` links
-            only) rather than refused. At most 50 000 characters raw and
-            10 000 after sanitising, per locale.
+            `richtext` Blocks: required. Sanitised on save rather than
+            refused, in two steps: the frozen allowlist
+            (`p br strong em u a ul ol li span`, `https:`/`mailto:` links
+            only), then the class pass, which keeps `hero-align-*` on a `p`,
+            `hero-size-*`, `hero-color-*` and a lower-cased
+            `data-color="#rrggbb"` on a `span`, and drops every other class or
+            `data-color`. At most 50 000 characters raw and 10 000 after
+            sanitising, per locale.
         color:
           type: string
           description: |

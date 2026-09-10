@@ -153,6 +153,40 @@ describe("the derived Default Hero Layout", function () {
     expect(layout).to.deep.equal(DEFAULT_HERO_LAYOUT);
   });
 
+  it("carries no Panel on any of its three Blocks", function () {
+    const layout = defaultHeroLayout({
+      name: PORTAL_NAME,
+      logo: BRANDING_LOGO,
+    });
+
+    expect(layout.blocks.map((block) => block.panel)).to.deep.equal([
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it("places all three Blocks at the alignment, offset and layer of a Hero that was never edited", function () {
+    const layout = defaultHeroLayout({
+      name: PORTAL_NAME,
+      logo: BRANDING_LOGO,
+    });
+
+    expect(
+      layout.blocks.map(({ align, offset, layer }) => ({
+        align,
+        offset,
+        layer,
+      })),
+    ).to.deep.equal(
+      Array.from({ length: 3 }, () => ({
+        align: "auto",
+        offset: { x: 0, y: 0 },
+        layer: "back",
+      })),
+    );
+  });
+
   it("stacks the logo Block first, then the title, then the slogan", function () {
     const layout = defaultHeroLayout({
       name: PORTAL_NAME,

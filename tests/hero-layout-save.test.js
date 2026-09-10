@@ -16,6 +16,7 @@ const sinon = require("sinon");
 const {
   CROWDED_RICHTEXT_BLOCK,
   FILLED_BLOCK_DEFAULTS,
+  GLAS_PANEL,
   INVALID_LAYOUTS,
   LAYOUT_MEDIA_ID,
   MINIMAL_IMAGE_BLOCK,
@@ -25,6 +26,9 @@ const {
   MINIMAL_TEXT_BLOCK,
   layoutOf,
 } = require("./fixtures/hero-layout/layouts");
+const {
+  ACCEPTANCE_LAYOUT,
+} = require("./fixtures/hero-layout/acceptance-layout");
 const {
   DEFAULT_HERO_LAYOUT,
 } = require("./fixtures/hero-layout/default-layout");
@@ -103,6 +107,45 @@ async function refusalOf(input) {
 const codesOf = (details) =>
   details.map(({ field, code }) => ({ field, code }));
 
+/**
+ * A layout in the form it was stored in before the Panel became an object:
+ * complete otherwise, the two legacy words where a Panel stands today.
+ */
+const LEGACY_PANEL_WORDS = ["none", "translucent", "none"];
+const LEGACY_LAYOUT = Object.freeze({
+  ...MINIMAL_LAYOUT_STORED,
+  blocks: MINIMAL_LAYOUT_STORED.blocks.map((block, index) => ({
+    ...block,
+    panel: LEGACY_PANEL_WORDS[index],
+  })),
+});
+
+/**
+ * A layout in the form it was stored in before a Block had an alignment, an
+ * offset, a layer, and a rich text a size of its own: complete otherwise.
+ */
+const withoutBlockStyling = (layout) => ({
+  ...layout,
+  blocks: layout.blocks.map((block) => {
+    const added = ["align", "offset", "layer"];
+
+    if (block.type === "richtext") {
+      added.push("size");
+    }
+
+    return Object.fromEntries(
+      Object.entries(block).filter(([key]) => !added.includes(key)),
+    );
+  }),
+});
+
+/**
+ * The coat of arms of the Shared contract's acceptance fixture: the one Block
+ * that carries an alignment, an offset and a layer away from their defaults,
+ * and the reason `align` is a common field rather than a text-only one.
+ */
+const [CREST_BLOCK] = ACCEPTANCE_LAYOUT.blocks;
+
 /** The single Block of a normalised one-Block layout. */
 async function blockOf(input) {
   const layout = await normalizeHeroLayout(layoutOf(input));
@@ -122,6 +165,12 @@ describe("Hero Layout normalisation", function () {
   it("round-trips the Default Hero Layout of the Shared contract unchanged", async function () {
     expect(await normalizeHeroLayout(DEFAULT_HERO_LAYOUT)).to.deep.equal(
       DEFAULT_HERO_LAYOUT,
+    );
+  });
+
+  it("round-trips the acceptance fixture of the Shared contract unchanged", async function () {
+    expect(await normalizeHeroLayout(ACCEPTANCE_LAYOUT)).to.deep.equal(
+      ACCEPTANCE_LAYOUT,
     );
   });
 
@@ -145,7 +194,8 @@ describe("Hero Layout normalisation", function () {
       MINIMAL_RICHTEXT_BLOCK,
       MINIMAL_IMAGE_BLOCK,
     ]) {
-      expect(await blockOf(block), block.type).to.include(
+      // Deep: the common defaults now carry the offset object.
+      expect(await blockOf(block), block.type).to.deep.include(
         FILLED_BLOCK_DEFAULTS,
       );
     }
@@ -161,10 +211,40 @@ describe("Hero Layout normalisation", function () {
   });
 
   it("fills the content defaults of a rich-text Block", async function () {
-    const block = await blockOf(MINIMAL_RICHTEXT_BLOCK);
+    expect(await blockOf(MINIMAL_RICHTEXT_BLOCK)).to.include({
+      size: "md",
+      color: "default",
+      shadow: false,
+    });
+  });
 
-    expect(block).to.include({ color: "default", shadow: false });
-    expect(block).to.not.have.property("size");
+  ["xs", "sm", "md", "lg", "xl", "2xl"].forEach(function (size) {
+    it(`takes ${size} on a rich-text Block`, async function () {
+      // The size a run of words inherits when it carries no class of its own.
+      expect(await blockOf({ ...MINIMAL_RICHTEXT_BLOCK, size })).to.include({
+        size,
+      });
+    });
+  });
+
+  it("names the six steps a rich-text size is measured against", async function () {
+    const details = await refusalOf(
+      layoutOf({ ...MINIMAL_RICHTEXT_BLOCK, size: "3xl" }),
+    );
+
+    expect(details).to.deep.equal([
+      {
+        field: "heroLayout.blocks[0].size",
+        code: "invalid_enum",
+        params: { allowed: ["xs", "sm", "md", "lg", "xl", "2xl"] },
+      },
+    ]);
+  });
+
+  it("keeps the size of a text Block where it was", async function () {
+    expect(await blockOf({ ...MINIMAL_TEXT_BLOCK, size: "2xl" })).to.include({
+      size: "2xl",
+    });
   });
 
   it("fills the content defaults of an image Block", async function () {
@@ -228,6 +308,16 @@ describe("Hero Layout normalisation", function () {
       source: "media",
       mediaId: LAYOUT_MEDIA_ID,
     });
+  });
+
+  it("fills the four new Block fields into a layout stored before them", async function () {
+    // Stored before the amendment and never migrated: what comes back is
+    // complete and says what it said, because every new field defaults.
+    const stored = withoutBlockStyling(MINIMAL_LAYOUT_STORED);
+
+    expect(await normalizeHeroLayout(stored)).to.deep.equal(
+      MINIMAL_LAYOUT_STORED,
+    );
   });
 
   it("normalises what it already normalised", async function () {
@@ -320,6 +410,63 @@ describe("Hero Layout normalisation", function () {
   });
 });
 
+/**
+ * The field tables of the amended contract, written out rather than read off
+ * the normaliser: a table this file and the spec agree on is what tells a
+ * fixture that lost a key from one the normaliser never fills.
+ */
+const COMMON_BLOCK_FIELDS = [
+  "id",
+  "type",
+  "zone",
+  "outerSpacing",
+  "innerSpacing",
+  "width",
+  "align",
+  "panel",
+  "offset",
+  "layer",
+  "homeOnly",
+  "hideOnMobile",
+];
+
+const CONTENT_BLOCK_FIELDS = {
+  text: ["text", "size", "color", "weight", "shadow"],
+  richtext: ["html", "size", "color", "shadow"],
+  image: ["image", "alt", "maxHeight", "invertInDarkMode"],
+};
+
+const PANEL_FIELDS = ["color", "opacity", "radius", "blur"];
+const OFFSET_FIELDS = ["x", "y"];
+
+const keysOf = (object) => Object.keys(object).sort();
+
+describe("the Blocks of the Shared contract's fixtures", function () {
+  const FIXTURES = {
+    "the Default Hero Layout": DEFAULT_HERO_LAYOUT,
+    "the acceptance fixture": ACCEPTANCE_LAYOUT,
+    "the crowded-layout example": layoutOf(CROWDED_RICHTEXT_BLOCK),
+    "a stored minimal layout": MINIMAL_LAYOUT_STORED,
+  };
+
+  Object.entries(FIXTURES).forEach(function ([name, layout]) {
+    it(`carries every field of the tables and no other in ${name}`, function () {
+      for (const block of layout.blocks) {
+        expect(keysOf(block)).to.deep.equal(
+          [...COMMON_BLOCK_FIELDS, ...CONTENT_BLOCK_FIELDS[block.type]].sort(),
+          `Block ${block.id}`,
+        );
+
+        if (block.panel) {
+          expect(keysOf(block.panel)).to.deep.equal([...PANEL_FIELDS].sort());
+        }
+
+        expect(keysOf(block.offset)).to.deep.equal([...OFFSET_FIELDS].sort());
+      }
+    });
+  });
+});
+
 describe("the colours of a Hero Layout Block", function () {
   afterEach(function () {
     sinon.restore();
@@ -363,6 +510,310 @@ describe("the colours of a Hero Layout Block", function () {
     expect(codesOf(refused.errors)).to.deep.equal([
       { field: "background.light", code: "invalid_format" },
     ]);
+  });
+});
+
+describe("the Panel of a Hero Layout Block", function () {
+  beforeEach(function () {
+    stubInstanceMedia();
+  });
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  /** The Panel of a Block that carries the given one. */
+  const panelOf = async (panel) =>
+    (await blockOf({ ...MINIMAL_TEXT_BLOCK, panel })).panel;
+
+  it("fills the four Glas defaults for an empty Panel", async function () {
+    expect(await panelOf({})).to.deep.equal(GLAS_PANEL);
+  });
+
+  it("leaves the other three at their defaults for each key given alone", async function () {
+    const given = {
+      color: "black",
+      opacity: 0,
+      radius: "full",
+      blur: false,
+    };
+
+    for (const [key, value] of Object.entries(given)) {
+      expect(await panelOf({ [key]: value }), key).to.deep.equal({
+        ...GLAS_PANEL,
+        [key]: value,
+      });
+    }
+  });
+
+  it("stores no Panel for null and for a Block that names none", async function () {
+    expect(await panelOf(null)).to.equal(null);
+    expect((await blockOf(MINIMAL_TEXT_BLOCK)).panel).to.equal(null);
+  });
+
+  it("normalises a Panel it already normalised", async function () {
+    const once = await panelOf({ opacity: 20 });
+
+    expect(await panelOf(once)).to.deep.equal(once);
+  });
+
+  it("normalises the legacy word none away", async function () {
+    expect(await panelOf("none")).to.equal(null);
+  });
+
+  it("normalises the legacy word translucent into the Glas Panel", async function () {
+    expect(await panelOf("translucent")).to.deep.equal(GLAS_PANEL);
+  });
+
+  /** The details a Block with the given Panel is refused with. */
+  const refusedPanel = (panel) =>
+    refusalOf(layoutOf({ ...MINIMAL_TEXT_BLOCK, panel }));
+
+  ["white", "black", "primary", "secondary", "#1a2b3c"].forEach(
+    function (color) {
+      it(`takes ${color} as a Panel colour`, async function () {
+        expect(await panelOf({ color })).to.include({ color });
+      });
+    },
+  );
+
+  it("leaves black out of the text vocabulary", async function () {
+    // The two vocabularies are not one: `black` is the Panel's, `default` the
+    // text's, and neither crosses over.
+    const details = await refusalOf(
+      layoutOf({ ...MINIMAL_TEXT_BLOCK, color: "black" }),
+    );
+
+    expect(codesOf(details)).to.deep.equal([
+      { field: "heroLayout.blocks[0].color", code: "invalid_format" },
+    ]);
+  });
+
+  it("takes both ends of the opacity, nought included", async function () {
+    // A Panel at nought with `blur: true` is pure frosting: no fault and no
+    // warning, by contract.
+    for (const opacity of [0, 100]) {
+      expect(await panelOf({ opacity }), `${opacity}`).to.include({ opacity });
+    }
+  });
+
+  it("refuses an opacity below nought as a percentage", async function () {
+    expect(await refusedPanel({ opacity: -1 })).to.deep.equal([
+      {
+        field: "heroLayout.blocks[0].panel.opacity",
+        code: "invalid_format",
+        params: { format: "percentage" },
+      },
+    ]);
+  });
+
+  it("names the five steps it measured a radius against", async function () {
+    const details = await refusedPanel({ radius: "xl" });
+
+    expect(details[0].params).to.deep.equal({
+      allowed: ["none", "sm", "md", "lg", "full"],
+    });
+  });
+
+  it("names the format of a bad colour, a bad blur and a Panel that is no object", async function () {
+    const formats = await Promise.all(
+      [{ color: "greenish" }, { blur: "yes" }, 3].map(async (panel) => {
+        const [detail] = await refusedPanel(panel);
+        return detail.params.format;
+      }),
+    );
+
+    expect(formats).to.deep.equal(["color", "boolean", "object"]);
+  });
+
+  it("names every fault of one Panel at its own path", async function () {
+    const details = await refusedPanel({
+      color: "default",
+      opacity: 101,
+      radius: "xl",
+      blur: "yes",
+      glow: 1,
+    });
+
+    expect(codesOf(details)).to.deep.equal([
+      { field: "heroLayout.blocks[0].panel.color", code: "invalid_format" },
+      { field: "heroLayout.blocks[0].panel.opacity", code: "invalid_format" },
+      { field: "heroLayout.blocks[0].panel.radius", code: "invalid_enum" },
+      { field: "heroLayout.blocks[0].panel.blur", code: "invalid_format" },
+      { field: "heroLayout.blocks[0].panel.glow", code: "unknown_field" },
+    ]);
+  });
+});
+
+describe("the placement of a Hero Layout Block", function () {
+  beforeEach(function () {
+    stubInstanceMedia();
+  });
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("fills align on every Block type", async function () {
+    for (const block of [
+      MINIMAL_TEXT_BLOCK,
+      MINIMAL_RICHTEXT_BLOCK,
+      MINIMAL_IMAGE_BLOCK,
+    ]) {
+      expect(await blockOf(block), block.type).to.include({ align: "auto" });
+    }
+  });
+
+  ["auto", "left", "center", "right"].forEach(function (align) {
+    it(`takes ${align} on a text, a rich-text and an image Block`, async function () {
+      for (const block of [
+        MINIMAL_TEXT_BLOCK,
+        MINIMAL_RICHTEXT_BLOCK,
+        MINIMAL_IMAGE_BLOCK,
+      ]) {
+        expect(await blockOf({ ...block, align }), block.type).to.include({
+          align,
+        });
+      }
+    });
+  });
+
+  it("names the four alignments it measured against", async function () {
+    // On an image Block: `align` is a common field, so the fault reads the
+    // same wherever it is raised.
+    const details = await refusalOf(
+      layoutOf({ ...MINIMAL_IMAGE_BLOCK, align: "justify" }),
+    );
+
+    expect(details).to.deep.equal([
+      {
+        field: "heroLayout.blocks[0].align",
+        code: "invalid_enum",
+        params: { allowed: ["auto", "left", "center", "right"] },
+      },
+    ]);
+  });
+
+  it("fills layer on every Block type", async function () {
+    for (const block of [
+      MINIMAL_TEXT_BLOCK,
+      MINIMAL_RICHTEXT_BLOCK,
+      MINIMAL_IMAGE_BLOCK,
+    ]) {
+      expect(await blockOf(block), block.type).to.include({ layer: "back" });
+    }
+  });
+
+  ["back", "front"].forEach(function (layer) {
+    it(`takes ${layer} as a layer`, async function () {
+      expect(await blockOf({ ...MINIMAL_TEXT_BLOCK, layer })).to.include({
+        layer,
+      });
+    });
+  });
+
+  it("names the two layers it measured against", async function () {
+    const details = await refusalOf(
+      layoutOf({ ...MINIMAL_TEXT_BLOCK, layer: "top" }),
+    );
+
+    expect(details).to.deep.equal([
+      {
+        field: "heroLayout.blocks[0].layer",
+        code: "invalid_enum",
+        params: { allowed: ["back", "front"] },
+      },
+    ]);
+  });
+
+  /** The offset of a Block that carries the given one. */
+  const offsetOf = async (offset) =>
+    (await blockOf({ ...MINIMAL_TEXT_BLOCK, offset })).offset;
+
+  /** The details a Block with the given offset is refused with. */
+  const refusedOffset = (offset) =>
+    refusalOf(layoutOf({ ...MINIMAL_TEXT_BLOCK, offset }));
+
+  it("fills offset on every Block type", async function () {
+    for (const block of [
+      MINIMAL_TEXT_BLOCK,
+      MINIMAL_RICHTEXT_BLOCK,
+      MINIMAL_IMAGE_BLOCK,
+    ]) {
+      expect((await blockOf(block)).offset, block.type).to.deep.equal({
+        x: 0,
+        y: 0,
+      });
+    }
+  });
+
+  [-3, -0.5, 0, 2.5, 3].forEach(function (rem) {
+    it(`takes ${rem} rem on both axes`, async function () {
+      expect(await offsetOf({ x: rem, y: rem })).to.deep.equal({
+        x: rem,
+        y: rem,
+      });
+    });
+  });
+
+  it("leaves the other axis at nought for an offset on one alone", async function () {
+    expect(await offsetOf({ y: 1.5 })).to.deep.equal({ x: 0, y: 1.5 });
+    expect(await offsetOf({ x: -2 })).to.deep.equal({ x: -2, y: 0 });
+  });
+
+  it("fills both axes for an offset given as an empty object", async function () {
+    expect(await offsetOf({})).to.deep.equal({ x: 0, y: 0 });
+  });
+
+  [3.5, -4, 0.25, "1", NaN, Infinity].forEach(function (rem) {
+    it(`refuses ${String(rem)} as a step off the grid`, async function () {
+      expect(await refusedOffset({ x: rem })).to.deep.equal([
+        {
+          field: "heroLayout.blocks[0].offset.x",
+          code: "invalid_format",
+          params: { format: "offset_step" },
+        },
+      ]);
+    });
+  });
+
+  it("names the axis that is off the grid", async function () {
+    expect(codesOf(await refusedOffset({ x: 0.5, y: 0.75 }))).to.deep.equal([
+      { field: "heroLayout.blocks[0].offset.y", code: "invalid_format" },
+    ]);
+  });
+
+  it("names both axes when both are off the grid", async function () {
+    expect(codesOf(await refusedOffset({ x: 4, y: -4 }))).to.deep.equal([
+      { field: "heroLayout.blocks[0].offset.x", code: "invalid_format" },
+      { field: "heroLayout.blocks[0].offset.y", code: "invalid_format" },
+    ]);
+  });
+
+  it("refuses an offset that is no object as a whole", async function () {
+    expect(await refusedOffset(0.5)).to.deep.equal([
+      {
+        field: "heroLayout.blocks[0].offset",
+        code: "invalid_format",
+        params: { format: "object" },
+      },
+    ]);
+  });
+
+  it("refuses an unknown key inside an offset", async function () {
+    expect(codesOf(await refusedOffset({ x: 1, z: 1 }))).to.deep.equal([
+      { field: "heroLayout.blocks[0].offset.z", code: "unknown_field" },
+    ]);
+  });
+
+  it("stores the crest of the acceptance fixture unchanged", async function () {
+    expect(await blockOf(CREST_BLOCK)).to.deep.equal(CREST_BLOCK);
+  });
+
+  it("normalises an offset it already normalised", async function () {
+    const once = await offsetOf({ x: -1.5, y: 3 });
+
+    expect(await offsetOf(once)).to.deep.equal(once);
   });
 });
 
@@ -434,6 +885,41 @@ describe("rich text on the way into a Hero Layout", function () {
     });
 
     expect(block.html.de).to.equal("<p><a>Rechtliches</a></p>");
+  });
+
+  it("stores the class-passed HTML of a rich-text Block", async function () {
+    const block = await blockOf({
+      ...MINIMAL_RICHTEXT_BLOCK,
+      html: {
+        de:
+          '<p class="hero-align-center promo">' +
+          '<span class="hero-size-lg hero-color-primary">Gro\u00df</span>' +
+          '<span class="hero-size-huge"> Rest</span>' +
+          "</p>",
+        en:
+          '<p><span data-color="#FF0000" style="color:#FF0000">Red</span>' +
+          '<span data-color="red"> Bad</span></p>',
+      },
+    });
+
+    expect(block.html).to.deep.equal({
+      de:
+        '<p class="hero-align-center">' +
+        '<span class="hero-size-lg hero-color-primary">Gro\u00df</span> Rest' +
+        "</p>",
+      en: '<p><span data-color="#ff0000">Red</span> Bad</p>',
+    });
+  });
+
+  it("stores a text that only junk classes pushed over the stored cap", async function () {
+    const text = "a".repeat(5000);
+
+    const block = await blockOf({
+      ...MINIMAL_RICHTEXT_BLOCK,
+      html: { de: '<p class="' + "promo ".repeat(1000).trim() + '">' + text },
+    });
+
+    expect(block.html.de).to.equal("<p>" + text + "</p>");
   });
 
   it("measures the raw cap before sanitising and the stored cap after", async function () {
@@ -737,6 +1223,13 @@ describe("catalog routes: saving a Hero Layout", function () {
     expect(written().heroLayout).to.deep.equal(DEFAULT_HERO_LAYOUT);
   });
 
+  it("stores the crest of the acceptance fixture unchanged", async function () {
+    const res = await storeLayout(layoutOf(CREST_BLOCK));
+
+    expect(res.status).to.equal(200);
+    expect(written().heroLayout.blocks[0]).to.deep.equal(CREST_BLOCK);
+  });
+
   it("stores the crowded rich-text Block of the contract unchanged", async function () {
     const res = await storeLayout(layoutOf(CROWDED_RICHTEXT_BLOCK));
 
@@ -836,6 +1329,55 @@ describe("catalog routes: saving a Hero Layout", function () {
 
     expect(after.body.heroLayout.blocks[0].text).to.deep.equal({ de: "Neu" });
     expect(after.headers.etag).to.not.equal(before.headers.etag);
+  });
+
+  it("normalises the two legacy Panel words on the way in", async function () {
+    const res = await storeLayout(
+      layoutOf(
+        { ...MINIMAL_TEXT_BLOCK, panel: "none" },
+        { ...MINIMAL_TEXT_BLOCK, id: "t2", panel: "translucent" },
+      ),
+    );
+
+    expect(res.status).to.equal(200);
+    expect(
+      written().heroLayout.blocks.map((block) => block.panel),
+    ).to.deep.equal([null, GLAS_PANEL]);
+  });
+
+  it("delivers a stored legacy Panel normalised in the Theme Bundle", async function () {
+    // A layout written before the Panel became an object, never migrated: the
+    // export translates the two words, so a storefront that no longer knows
+    // them never meets one.
+    CatalogManager.getInstanceCatalog.callsFake(
+      async () => new Catalog({ ...fixtureCatalog, heroLayout: LEGACY_LAYOUT }),
+    );
+
+    const bundle = await get("/catalog/themes", ADMIN);
+
+    expect(bundle.status).to.equal(200);
+    expect(
+      bundle.body.heroLayout.blocks.map((block) => block.panel),
+    ).to.deep.equal([null, GLAS_PANEL, null]);
+  });
+
+  it("delivers the placement of a stored Block in the Theme Bundle", async function () {
+    CatalogManager.getInstanceCatalog.callsFake(
+      async () =>
+        new Catalog({
+          ...fixtureCatalog,
+          heroLayout: { ...MINIMAL_LAYOUT_STORED, blocks: [CREST_BLOCK] },
+        }),
+    );
+
+    const bundle = await get("/catalog/themes", ADMIN);
+
+    expect(bundle.status).to.equal(200);
+    expect(bundle.body.heroLayout.blocks[0]).to.deep.include({
+      align: "center",
+      offset: { x: 0, y: 0.5 },
+      layer: "front",
+    });
   });
 
   it("returns the stored layout as it is on GET /api/catalog", async function () {

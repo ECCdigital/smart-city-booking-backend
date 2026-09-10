@@ -1,12 +1,19 @@
-const { DEFAULT_BACKGROUND } = require("./hero-layout-schema");
+const {
+  BLOCK_DEFAULTS,
+  DEFAULT_BACKGROUND,
+  DEFAULT_TEXT_SIZE,
+  exportPanel,
+} = require("./hero-layout-schema");
 const { defaultHeroLayout } = require("./hero-default-layout");
 const { enrichHeroMediaReference } = require("./hero-media");
 
 /**
  * The export form of the Hero Layout objects — what the Theme Bundle and the
- * editor routes deliver, as opposed to what is stored. Two things happen here:
- * a missing object becomes the default the backend derives, and every media
- * reference is enriched with its URL and dimensions.
+ * editor routes deliver, as opposed to what is stored. Four things happen
+ * here: a missing object becomes the default the backend derives, every media
+ * reference is enriched with its URL and dimensions, a Panel that is still one
+ * of the two legacy words becomes the object the contract names, and a Block
+ * stored before the amendment gains the fields it does not carry yet.
  */
 
 /**
@@ -31,18 +38,49 @@ async function exportBackground(background) {
 }
 
 /**
- * One Block as it goes out: an image Block with its reference enriched, any
- * other Block as it is.
+ * The defaults of a Block of the given type. They are read off
+ * `BLOCK_DEFAULTS` rather than written out again, so what the export fills in
+ * and what the normaliser stores cannot drift apart. `size` is beside them
+ * because it is the one field the amendment gave to a family rather than to
+ * every Block.
+ *
+ * @param {string} type - The Block's `type`.
+ * @returns {Object} What a Block of that type carries when it names nothing.
+ */
+function blockDefaults(type) {
+  const common = { ...BLOCK_DEFAULTS, offset: { ...BLOCK_DEFAULTS.offset } };
+
+  return type === "richtext" ? { ...common, size: DEFAULT_TEXT_SIZE } : common;
+}
+
+/**
+ * One Block as it goes out: every field of the amended contract on it, its
+ * Panel in the contract's form, and an image Block with its reference
+ * enriched.
+ *
+ * A Block stored before the amendment carries neither the fields it added nor
+ * an object where the Panel is — it still holds one of the two legacy words.
+ * Both are answered here rather than in a migration, so the dev databases stay
+ * as they are and what the storefront and the editor read is complete either
+ * way. Only a key that carries nothing is filled - `??=` fills an absent key
+ * and an explicit `null`, so a stored value the author chose is never
+ * overwritten with its default.
  *
  * @param {Object} block - The stored Block.
  * @returns {Promise<Object>} The Block as it goes out.
  */
 async function exportBlock(block) {
-  if (block.type !== "image") {
-    return { ...block };
+  const exported = { ...block, panel: exportPanel(block.panel) };
+
+  for (const [key, value] of Object.entries(blockDefaults(block.type))) {
+    exported[key] ??= value;
   }
 
-  return { ...block, image: await enrichHeroMediaReference(block.image) };
+  if (exported.type !== "image") {
+    return exported;
+  }
+
+  return { ...exported, image: await enrichHeroMediaReference(block.image) };
 }
 
 /**

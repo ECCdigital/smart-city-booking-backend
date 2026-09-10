@@ -6,7 +6,7 @@ const {
   HERO_RICHTEXT_ALLOWLIST,
   HERO_RICHTEXT_MAX_RAW_LENGTH,
   HERO_RICHTEXT_MAX_SANITIZED_LENGTH,
-  loadHeroRichTextPurifier,
+  loadHeroRichTextRuntime,
   sanitizeHeroRichText,
 } = require("../src/commons/services/hero-layout/hero-richtext-sanitizer");
 const { ValidationError } = require("../src/errors/ValidationError");
@@ -39,11 +39,17 @@ describe("hero-richtext-sanitizer", function () {
         "ul",
         "ol",
         "li",
+        "span",
       ]);
       assert.deepStrictEqual(HERO_RICHTEXT_ALLOWLIST.ALLOWED_ATTR, [
         "href",
         "target",
         "rel",
+        "class",
+        "data-color",
+      ]);
+      assert.deepStrictEqual(HERO_RICHTEXT_ALLOWLIST.ADD_URI_SAFE_ATTR, [
+        "data-color",
       ]);
       assert.strictEqual(
         HERO_RICHTEXT_ALLOWLIST.ALLOWED_URI_REGEXP.source,
@@ -54,6 +60,7 @@ describe("hero-richtext-sanitizer", function () {
       assert.strictEqual(HERO_RICHTEXT_ALLOWLIST.ALLOW_ARIA_ATTR, false);
       assert.strictEqual(HERO_RICHTEXT_ALLOWLIST.KEEP_CONTENT, true);
       assert.deepStrictEqual(Object.keys(HERO_RICHTEXT_ALLOWLIST).sort(), [
+        "ADD_URI_SAFE_ATTR",
         "ALLOWED_ATTR",
         "ALLOWED_TAGS",
         "ALLOWED_URI_REGEXP",
@@ -61,6 +68,26 @@ describe("hero-richtext-sanitizer", function () {
         "ALLOW_DATA_ATTR",
         "KEEP_CONTENT",
       ]);
+    });
+
+    // `data-color` reaches the class pass only because ADD_URI_SAFE_ATTR keeps
+    // it out of ALLOWED_URI_REGEXP, which no hex value passes. Pinned against
+    // a copy of the frozen config that lacks that one key.
+    it("carries data-color through only because of ADD_URI_SAFE_ATTR", async function () {
+      const { purifier } = await loadHeroRichTextRuntime();
+      const html = '<span data-color="#ff0000">t</span>';
+
+      assert.strictEqual(
+        purifier.sanitize(html, HERO_RICHTEXT_ALLOWLIST),
+        html,
+      );
+      assert.strictEqual(
+        purifier.sanitize(html, {
+          ...HERO_RICHTEXT_ALLOWLIST,
+          ADD_URI_SAFE_ATTR: [],
+        }),
+        "<span>t</span>",
+      );
     });
   });
 
@@ -161,6 +188,135 @@ describe("hero-richtext-sanitizer", function () {
     });
   });
 
+  describe("class pass", function () {
+    it("keeps the class vocabulary of the Shared contract unchanged", async function () {
+      const html =
+        '<p class="hero-align-center">' +
+        '<span class="hero-size-lg hero-color-primary">groß</span> ' +
+        '<span class="hero-size-2xl" data-color="#ff0000">bunt</span>' +
+        "</p>";
+
+      assert.strictEqual(await sanitizeHeroRichText(html, FIELD), html);
+    });
+
+    it("stores a custom colour lower-cased", async function () {
+      const result = await sanitizeHeroRichText(
+        '<p><span data-color="#FF0000">rot</span></p>',
+        FIELD,
+      );
+
+      assert.strictEqual(
+        result,
+        '<p><span data-color="#ff0000">rot</span></p>',
+      );
+    });
+
+    it("drops a token outside the vocabulary and keeps the text", async function () {
+      const result = await sanitizeHeroRichText(
+        '<p class="hero-align-auto promo">' +
+          '<span class="hero-size-huge">a</span>' +
+          '<span class="hero-color-black">b</span>' +
+          '<span class="promo">c</span>' +
+          "</p>",
+        FIELD,
+      );
+
+      assert.strictEqual(result, "<p>abc</p>");
+    });
+
+    it("stores the class and the data-color of a span without its style", async function () {
+      const result = await sanitizeHeroRichText(
+        '<p><span class="hero-size-lg" data-color="#ff0000" style="color:#ff0000">t</span></p>',
+        FIELD,
+      );
+
+      assert.strictEqual(
+        result,
+        '<p><span class="hero-size-lg" data-color="#ff0000">t</span></p>',
+      );
+    });
+
+    it("drops class and data-color on every element but p and span", async function () {
+      const result = await sanitizeHeroRichText(
+        '<p><a href="https://example.org/" class="hero-color-primary" data-color="#ff0000">l</a>' +
+          '<strong class="hero-size-lg">b</strong></p>' +
+          '<ul class="hero-align-center"><li class="promo" data-color="#ff0000">i</li></ul>',
+        FIELD,
+      );
+
+      assert.strictEqual(
+        result,
+        '<p><a href="https://example.org/">l</a><strong>b</strong></p>' +
+          "<ul><li>i</li></ul>",
+      );
+    });
+
+    it("unwraps a bare span between two nested marks", async function () {
+      const outer = await sanitizeHeroRichText(
+        '<p><span class="hero-color-primary"><span class="promo">t</span></span></p>',
+        FIELD,
+      );
+      const inner = await sanitizeHeroRichText(
+        '<p><span class="promo"><span class="hero-size-lg">t</span></span></p>',
+        FIELD,
+      );
+
+      assert.strictEqual(
+        outer,
+        '<p><span class="hero-color-primary">t</span></p>',
+      );
+      assert.strictEqual(inner, '<p><span class="hero-size-lg">t</span></p>');
+    });
+
+    it("keeps the first token of a group in document order", async function () {
+      const result = await sanitizeHeroRichText(
+        '<p class="hero-align-right hero-align-center">' +
+          '<span class="hero-size-lg hero-size-sm hero-color-white hero-color-primary">t</span>' +
+          "</p>",
+        FIELD,
+      );
+
+      assert.strictEqual(
+        result,
+        '<p class="hero-align-right">' +
+          '<span class="hero-size-lg hero-color-white">t</span>' +
+          "</p>",
+      );
+    });
+
+    it("keeps a hero-color token and drops the data-color beside it", async function () {
+      const result = await sanitizeHeroRichText(
+        '<p><span class="hero-color-primary" data-color="#ff0000">t</span></p>',
+        FIELD,
+      );
+
+      assert.strictEqual(
+        result,
+        '<p><span class="hero-color-primary">t</span></p>',
+      );
+    });
+
+    it("keeps a custom colour beside a size token", async function () {
+      const html =
+        '<p><span class="hero-size-lg" data-color="#ff0000">t</span></p>';
+
+      assert.strictEqual(await sanitizeHeroRichText(html, FIELD), html);
+    });
+
+    it("drops a data-color that is no #rrggbb and keeps the text", async function () {
+      for (const value of ["red", "#FFF", "#GGGGGG", "#ff00", "rgb(1,2,3)"]) {
+        assert.strictEqual(
+          await sanitizeHeroRichText(
+            '<p><span data-color="' + value + '">Text</span></p>',
+            FIELD,
+          ),
+          "<p>Text</p>",
+          value,
+        );
+      }
+    });
+  });
+
   describe("length caps", function () {
     it("caps the raw input at 50 000 characters", function () {
       assert.strictEqual(HERO_RICHTEXT_MAX_RAW_LENGTH, 50000);
@@ -206,7 +362,25 @@ describe("hero-richtext-sanitizer", function () {
 
     it("measures the cap after sanitising, so stripped markup does not count", async function () {
       const text = "a".repeat(HERO_RICHTEXT_MAX_SANITIZED_LENGTH - 7);
-      const raw = "<span>".repeat(3000) + "<p>" + text + "</p>";
+      const raw =
+        '<img src="https://example.org/a.png">'.repeat(300) +
+        "<p>" +
+        text +
+        "</p>";
+      assert.ok(raw.length > HERO_RICHTEXT_MAX_SANITIZED_LENGTH);
+      assert.ok(raw.length <= HERO_RICHTEXT_MAX_RAW_LENGTH);
+
+      const result = await sanitizeHeroRichText(raw, FIELD);
+
+      assert.strictEqual(result, "<p>" + text + "</p>");
+    });
+
+    // The order of the contract: the class pass stands before the cap, so a
+    // text that was only over it because of junk classes is stored, not
+    // refused for markup that goes anyway.
+    it("measures the cap after the class pass, so junk classes do not count", async function () {
+      const text = "a".repeat(5000);
+      const raw = '<p class="' + "promo ".repeat(1000).trim() + '">' + text;
       assert.ok(raw.length > HERO_RICHTEXT_MAX_SANITIZED_LENGTH);
       assert.ok(raw.length <= HERO_RICHTEXT_MAX_RAW_LENGTH);
 
@@ -245,9 +419,9 @@ describe("hero-richtext-sanitizer", function () {
     });
 
     it("creates the jsdom window once and reuses the purifier across calls", async function () {
-      const first = await loadHeroRichTextPurifier();
+      const { purifier: first } = await loadHeroRichTextRuntime();
       await sanitizeHeroRichText("<p>a</p>", FIELD);
-      const second = await loadHeroRichTextPurifier();
+      const { purifier: second } = await loadHeroRichTextRuntime();
 
       assert.strictEqual(first, second);
       assert.strictEqual(typeof first.sanitize, "function");
