@@ -369,6 +369,20 @@ class CompanyService {
       "create",
       `Unternehmen „${company.name}" registriert`,
     );
+
+    CompanyStatusMail.sendCompanyAwaitingVerification({
+      companyName: company.name,
+      companyId: company.id,
+      contactName: `${firstName} ${lastName}`.trim(),
+      contactEmail: email,
+    }).catch((error) =>
+      AuditLogService.record(
+        tenantId,
+        "error",
+        `Freigabebenachrichtigung an die KielRegion konnte nicht gesendet werden: ${error?.message || error}`,
+      ),
+    );
+
     return company;
   }
 
