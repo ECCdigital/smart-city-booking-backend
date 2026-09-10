@@ -1,0 +1,562 @@
+/**
+ * The Hero editor endpoints (hero-layout ticket 08): the three routes the
+ * Hero Editor of the admin UI talks to. `GET /api/catalog/hero-layout` reads
+ * the layout, the Background and the Portal Name in export form and says
+ * whether they are derived; `PUT` validates both objects, writes the catalog
+ * and then the instance and flushes the theme export cache once; `POST
+ * /hero-layout/preview` runs the same normaliser and enrichment and writes
+ * nothing.
+ *
+ * No database: the catalog and instance writes run over stubbed managers, the
+ * media lookups over a stubbed MediaManager, and the routes over the
+ * lifecycle harness and the fixture world.
+ */
+
+const { expect } = require("chai");
+const sinon = require("sinon");
+
+const {
+  DEFAULT_HERO_LAYOUT,
+  LOGO_MEDIA_ID,
+  PORTAL_NAME,
+} = require("./fixtures/hero-layout/default-layout");
+const {
+  COLOR_BACKGROUND,
+  IMAGE_BACKGROUND,
+  IMAGE_MEDIA_ID,
+  VARIANT_BACKGROUND,
+} = require("./fixtures/hero-layout/backgrounds");
+const {
+  LAYOUT_MEDIA_ID,
+  MINIMAL_LAYOUT,
+  MINIMAL_LAYOUT_STORED,
+  MINIMAL_TEXT_BLOCK,
+  layoutOf,
+} = require("./fixtures/hero-layout/layouts");
+const {
+  installHarness,
+  bookable,
+  TENANT,
+  ADMIN,
+  OWNER,
+} = require("./helpers/booking-lifecycle-harness");
+const { installRouteWorld, FIXTURE_ID } = require("./helpers/route-world");
+const CatalogManager = require("../src/commons/data-managers/catalog-manager");
+const InstanceManager = require("../src/commons/data-managers/instance-manager");
+const InstanceModel = require("../src/commons/data-managers/models/instanceModel");
+const MediaManager = require("../src/commons/data-managers/media-manager");
+const { Catalog } = require("../src/commons/entities/catalog/catalog");
+const { Media } = require("../src/commons/entities/media/media");
+const {
+  InstanceCache,
+} = require("../src/commons/services/instance/instance-cache");
+const {
+  ThemeExportCache,
+} = require("../src/commons/services/catalog/theme-export-cache");
+
+/** The Portal Name of the fixture catalog. */
+const CATALOG_NAME = "Katalog";
+
+/** A stored instance medium, public image by default. */
+function instanceImage(id, overrides = {}) {
+  return new Media({
+    id,
+    tenantId: null,
+    kind: "image",
+    visibility: "public",
+    mimeType: "image/png",
+    size: 1000,
+    originalFileName: "bild.png",
+    width: 1200,
+    height: 800,
+    ...overrides,
+  });
+}
+
+/** The export form of a media reference: the pair plus its derived keys. */
+const enriched = (mediaId) => ({
+  source: "media",
+  mediaId,
+  url: `/api/v2/instance/media/${mediaId}/file`,
+  width: 1200,
+  height: 800,
+});
+
+/** The branding logo as `getBranding` hands it out. */
+const BRANDING_LOGO = Object.freeze({
+  source: "media",
+  mediaId: LOGO_MEDIA_ID,
+  url: `/api/v2/instance/media/${LOGO_MEDIA_ID}/file`,
+});
+
+describe("the Background write of a Hero save", function () {
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("sets the Background inside the branding and touches nothing else", async function () {
+    const updateOne = sinon
+      .stub(InstanceModel, "updateOne")
+      .resolves({ matchedCount: 1 });
+    const invalidate = sinon.stub(InstanceCache, "invalidate");
+
+    await InstanceManager.updateBackground(COLOR_BACKGROUND);
+
+    expect(updateOne.firstCall.args).to.deep.equal([
+      {},
+      { $set: { "branding.background": COLOR_BACKGROUND } },
+    ]);
+    expect(invalidate.calledOnce).to.equal(true);
+  });
+
+  it("stores null as the reset to the default Background", async function () {
+    const updateOne = sinon
+      .stub(InstanceModel, "updateOne")
+      .resolves({ matchedCount: 1 });
+    sinon.stub(InstanceCache, "invalidate");
+
+    await InstanceManager.updateBackground(null);
+
+    expect(updateOne.firstCall.args[1]).to.deep.equal({
+      $set: { "branding.background": null },
+    });
+  });
+
+  it("says so when there is no instance to write, rather than passing", async function () {
+    sinon.stub(InstanceModel, "updateOne").resolves({ matchedCount: 0 });
+    const invalidate = sinon.stub(InstanceCache, "invalidate");
+
+    let refusal;
+    try {
+      await InstanceManager.updateBackground(COLOR_BACKGROUND);
+    } catch (error) {
+      refusal = error;
+    }
+
+    expect(refusal?.code).to.equal("instance_not_found");
+    expect(invalidate.called).to.equal(false);
+  });
+});
+
+describe("the Hero editor endpoints", function () {
+  this.timeout(20000);
+
+  let h;
+  let fixtureCatalog;
+
+  before(async function () {
+    h = await installHarness({
+      bookables: {
+        [FIXTURE_ID]: bookable({
+          id: FIXTURE_ID,
+          title: "Fixture",
+          ownerUserId: OWNER,
+        }),
+      },
+    });
+    installRouteWorld({
+      tenantId: TENANT,
+      tenant: h.tenant,
+      ownerUserId: OWNER,
+      bookables: h.bookables,
+    });
+    fixtureCatalog = await CatalogManager.getInstanceCatalog();
+    sinon.spy(ThemeExportCache, "invalidateAll");
+  });
+
+  beforeEach(function () {
+    CatalogManager.updateCatalog.resetHistory();
+    // The manager answers the catalog as it stands after the write.
+    CatalogManager.updateCatalog.callsFake(
+      async (data) => new Catalog({ ...fixtureCatalog, ...data }),
+    );
+    InstanceManager.updateBackground.resetHistory();
+    ThemeExportCache.invalidateAll.resetHistory();
+    MediaManager.getMedia.callsFake(async (mediaId, tenantId) =>
+      tenantId == null ? instanceImage(mediaId) : null,
+    );
+  });
+
+  afterEach(function () {
+    CatalogManager.getInstanceCatalog.callsFake(async () => fixtureCatalog);
+    InstanceManager.getBranding.callsFake(async () => ({ active: false }));
+    ThemeExportCache.invalidateAll();
+  });
+
+  after(async function () {
+    ThemeExportCache.invalidateAll.restore();
+    sinon.restore();
+    await h.close();
+  });
+
+  const get = (path, userId) =>
+    userId
+      ? h.api().get(`/api${path}`).set(h.as(userId))
+      : h.api().get(`/api${path}`);
+  const put = (path, userId, body) =>
+    userId
+      ? h.api().put(`/api${path}`).set(h.as(userId)).send(body)
+      : h.api().put(`/api${path}`).send(body);
+  const post = (path, userId, body) =>
+    userId
+      ? h.api().post(`/api${path}`).set(h.as(userId)).send(body)
+      : h.api().post(`/api${path}`).send(body);
+
+  const readEditor = () => get("/catalog/hero-layout", ADMIN);
+  const save = (body) => put("/catalog/hero-layout", ADMIN, body);
+  const preview = (body) => post("/catalog/hero-layout/preview", ADMIN, body);
+
+  /** Puts a stored layout and a stored Background behind the routes. */
+  function stored({
+    heroLayout = null,
+    background = null,
+    logo = null,
+    active = true,
+  } = {}) {
+    CatalogManager.getInstanceCatalog.callsFake(
+      async () => new Catalog({ ...fixtureCatalog, heroLayout }),
+    );
+    InstanceManager.getBranding.callsFake(async () => ({
+      active,
+      logo,
+      background,
+    }));
+  }
+
+  /** What the write handed the catalog manager. */
+  const writtenLayout = () =>
+    CatalogManager.updateCatalog.firstCall.args[0].heroLayout;
+
+  /** What the write handed the instance manager. */
+  const writtenBackground = () =>
+    InstanceManager.updateBackground.firstCall.args[0];
+
+  /** The `field`/`code` pairs of a refusal. */
+  const codesOf = (body) =>
+    body.details.map(({ field, code }) => ({ field, code }));
+
+  describe("GET /api/catalog/hero-layout", function () {
+    it("answers the derived defaults with isDefault true on a fresh instance", async function () {
+      stored({ heroLayout: null, background: null });
+
+      const res = await readEditor();
+
+      expect(res.status).to.equal(200);
+      expect(res.body.isDefault).to.equal(true);
+      expect(res.body.name).to.equal(CATALOG_NAME);
+      expect(res.body.background).to.deep.equal(VARIANT_BACKGROUND);
+      expect(res.body.heroLayout.blocks.map((b) => b.id)).to.deep.equal([
+        "default-title",
+        "default-subtitle",
+      ]);
+    });
+
+    it("derives the Default Hero Layout with the branding logo, enriched", async function () {
+      stored({ logo: BRANDING_LOGO });
+
+      const res = await readEditor();
+
+      expect(res.body.heroLayout.blocks[0].id).to.equal("default-logo");
+      expect(res.body.heroLayout.blocks[0].image).to.deep.equal(
+        enriched(LOGO_MEDIA_ID),
+      );
+    });
+
+    it("leaves the logo Block out while the branding is off, as the bundle does", async function () {
+      stored({ logo: BRANDING_LOGO, active: false });
+
+      const res = await readEditor();
+
+      expect(res.body.heroLayout.blocks.map((b) => b.id)).to.deep.equal([
+        "default-title",
+        "default-subtitle",
+      ]);
+    });
+
+    it("answers the stored objects with isDefault false after a save", async function () {
+      stored({
+        heroLayout: MINIMAL_LAYOUT_STORED,
+        background: COLOR_BACKGROUND,
+      });
+
+      const res = await readEditor();
+
+      expect(res.status).to.equal(200);
+      expect(res.body.isDefault).to.equal(false);
+      expect(res.body.background).to.deep.equal(COLOR_BACKGROUND);
+      expect(res.body.heroLayout.blocks.map((b) => b.id)).to.deep.equal([
+        "t1",
+        "r1",
+        "i1",
+      ]);
+    });
+
+    it("enriches the media references of the layout and the Background", async function () {
+      stored({
+        heroLayout: MINIMAL_LAYOUT_STORED,
+        background: IMAGE_BACKGROUND,
+      });
+
+      const res = await readEditor();
+
+      expect(res.body.heroLayout.blocks[2].image).to.deep.equal(
+        enriched(LAYOUT_MEDIA_ID),
+      );
+      expect(res.body.background.image).to.deep.equal(enriched(IMAGE_MEDIA_ID));
+    });
+
+    it("says isDefault false while only the Background is stored", async function () {
+      stored({ heroLayout: null, background: COLOR_BACKGROUND });
+
+      const res = await readEditor();
+
+      expect(res.body.isDefault).to.equal(false);
+    });
+
+    it("answers a missing instance catalog with 404", async function () {
+      CatalogManager.getInstanceCatalog.resolves(null);
+
+      const res = await readEditor();
+
+      expect(res.status).to.equal(404);
+      expect(res.body.code).to.equal("instance_catalog_not_found");
+    });
+
+    it("carries no envelope: the export object is the body", async function () {
+      stored();
+
+      const res = await readEditor();
+
+      expect(Object.keys(res.body).sort()).to.deep.equal([
+        "background",
+        "heroLayout",
+        "isDefault",
+        "name",
+      ]);
+    });
+  });
+
+  describe("PUT /api/catalog/hero-layout", function () {
+    it("stores both objects normalised and answers the export form", async function () {
+      const res = await save({
+        heroLayout: MINIMAL_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(writtenLayout()).to.deep.equal(MINIMAL_LAYOUT_STORED);
+      expect(writtenBackground()).to.deep.equal(COLOR_BACKGROUND);
+      expect(Object.keys(res.body).sort()).to.deep.equal([
+        "background",
+        "heroLayout",
+        "name",
+      ]);
+      expect(res.body.name).to.equal(CATALOG_NAME);
+      expect(res.body.background).to.deep.equal(COLOR_BACKGROUND);
+      expect(res.body.heroLayout.blocks[2].image).to.deep.equal(
+        enriched(LAYOUT_MEDIA_ID),
+      );
+    });
+
+    it("writes the catalog, then the instance, then flushes the cache once", async function () {
+      await save({ heroLayout: MINIMAL_LAYOUT, background: COLOR_BACKGROUND });
+
+      sinon.assert.callOrder(
+        CatalogManager.updateCatalog,
+        InstanceManager.updateBackground,
+        ThemeExportCache.invalidateAll,
+      );
+      expect(ThemeExportCache.invalidateAll.callCount).to.equal(1);
+    });
+
+    it("changes the Theme Bundle ETag", async function () {
+      stored();
+      const before = await get("/catalog/themes", ADMIN);
+
+      await save({ heroLayout: MINIMAL_LAYOUT, background: COLOR_BACKGROUND });
+
+      stored({
+        heroLayout: writtenLayout(),
+        background: writtenBackground(),
+      });
+      const after = await get("/catalog/themes", ADMIN);
+
+      expect(after.headers.etag).to.not.equal(before.headers.etag);
+      expect(after.body.background).to.deep.equal(COLOR_BACKGROUND);
+    });
+
+    it("takes null for both and answers the derived defaults", async function () {
+      const res = await save({ heroLayout: null, background: null });
+
+      expect(res.status).to.equal(200);
+      expect(writtenLayout()).to.equal(null);
+      expect(writtenBackground()).to.equal(null);
+      expect(res.body.background).to.deep.equal(VARIANT_BACKGROUND);
+      expect(res.body.heroLayout.blocks.map((b) => b.id)).to.deep.equal([
+        "default-title",
+        "default-subtitle",
+      ]);
+    });
+
+    it("writes nothing and names every fault of both objects", async function () {
+      const res = await save({
+        heroLayout: layoutOf({ ...MINIMAL_TEXT_BLOCK, zone: "middle" }),
+        background: { version: 1, type: "color", light: "#fff", glow: 1 },
+      });
+
+      expect(res.status).to.equal(400);
+      expect(res.body.error).to.equal("ValidationError");
+      expect(codesOf(res.body)).to.deep.equal([
+        { field: "heroLayout.blocks[0].zone", code: "invalid_enum" },
+        { field: "background.light", code: "invalid_format" },
+        { field: "background.glow", code: "unknown_field" },
+      ]);
+      expect(CatalogManager.updateCatalog.called).to.equal(false);
+      expect(InstanceManager.updateBackground.called).to.equal(false);
+      expect(ThemeExportCache.invalidateAll.called).to.equal(false);
+    });
+
+    it("refuses a body that names neither object", async function () {
+      const res = await save({});
+
+      expect(res.status).to.equal(400);
+      expect(codesOf(res.body)).to.deep.equal([
+        { field: "heroLayout", code: "required" },
+        { field: "background", code: "required" },
+      ]);
+      expect(CatalogManager.updateCatalog.called).to.equal(false);
+    });
+
+    it("answers a missing instance catalog with 404 and leaves the instance alone", async function () {
+      CatalogManager.updateCatalog.resolves(null);
+
+      const res = await save({ heroLayout: null, background: null });
+
+      expect(res.status).to.equal(404);
+      expect(res.body.code).to.equal("instance_catalog_not_found");
+      expect(InstanceManager.updateBackground.called).to.equal(false);
+    });
+  });
+
+  describe("POST /api/catalog/hero-layout/preview", function () {
+    it("answers the export form without writing anything", async function () {
+      const res = await preview({
+        heroLayout: MINIMAL_LAYOUT,
+        background: IMAGE_BACKGROUND,
+        name: "Vorschau",
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.name).to.equal("Vorschau");
+      expect(res.body.heroLayout.blocks[2].image).to.deep.equal(
+        enriched(LAYOUT_MEDIA_ID),
+      );
+      expect(res.body.background.image).to.deep.equal(enriched(IMAGE_MEDIA_ID));
+      expect(CatalogManager.updateCatalog.called).to.equal(false);
+      expect(InstanceManager.updateBackground.called).to.equal(false);
+      expect(ThemeExportCache.invalidateAll.called).to.equal(false);
+    });
+
+    it("answers the same layout a save would store", async function () {
+      const saved = await save({
+        heroLayout: MINIMAL_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+      const previewed = await preview({
+        heroLayout: MINIMAL_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+
+      expect(previewed.body).to.deep.equal(saved.body);
+    });
+
+    it("answers the derived defaults for both nulls", async function () {
+      stored({ logo: BRANDING_LOGO });
+
+      const res = await preview({
+        heroLayout: null,
+        background: null,
+        name: PORTAL_NAME,
+      });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.background).to.deep.equal(VARIANT_BACKGROUND);
+      expect(res.body.heroLayout).to.deep.equal({
+        ...DEFAULT_HERO_LAYOUT,
+        blocks: DEFAULT_HERO_LAYOUT.blocks.map((block) =>
+          block.type === "image"
+            ? { ...block, image: enriched(LOGO_MEDIA_ID) }
+            : block,
+        ),
+      });
+    });
+
+    it("reads the Portal Name of the catalog when the body names none", async function () {
+      stored();
+
+      const res = await preview({ heroLayout: null, background: null });
+
+      expect(res.body.name).to.equal(CATALOG_NAME);
+      expect(res.body.heroLayout.blocks[0].text).to.deep.equal({
+        de: CATALOG_NAME,
+      });
+    });
+
+    it("answers invalid input with 400 and JSON paths", async function () {
+      const res = await preview({
+        heroLayout: layoutOf({ ...MINIMAL_TEXT_BLOCK, size: "3xl" }),
+        background: { version: 2, type: "variant" },
+      });
+
+      expect(res.status).to.equal(400);
+      expect(codesOf(res.body)).to.deep.equal([
+        { field: "heroLayout.blocks[0].size", code: "invalid_enum" },
+        { field: "background.version", code: "invalid_enum" },
+        { field: "background.variant", code: "required" },
+      ]);
+    });
+
+    it("leaves the Theme Bundle tag alone", async function () {
+      stored();
+      const before = await get("/catalog/themes", ADMIN);
+
+      await preview({
+        heroLayout: MINIMAL_LAYOUT,
+        background: COLOR_BACKGROUND,
+      });
+
+      const after = await get("/catalog/themes", ADMIN);
+
+      expect(after.headers.etag).to.equal(before.headers.etag);
+    });
+  });
+
+  describe("the rights of the three routes", function () {
+    const ROUTES = [
+      ["get", "/catalog/hero-layout"],
+      ["put", "/catalog/hero-layout"],
+      ["post", "/catalog/hero-layout/preview"],
+    ];
+
+    const call = (method, path, userId) =>
+      method === "get"
+        ? get(path, userId)
+        : method === "put"
+          ? put(path, userId, {})
+          : post(path, userId, {});
+
+    for (const [method, path] of ROUTES) {
+      it(`refuses the anonymous on ${method.toUpperCase()} ${path}`, async function () {
+        const res = await call(method, path, null);
+
+        expect(res.status).to.equal(401);
+      });
+
+      it(`refuses the tenant owner on ${method.toUpperCase()} ${path}`, async function () {
+        const res = await call(method, path, OWNER);
+
+        expect(res.status).to.equal(403);
+      });
+    }
+  });
+});

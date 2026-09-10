@@ -167,6 +167,10 @@ describe("every catalog write invalidates the theme export cache", function () {
     updateInstanceCatalog: () =>
       CatalogService.updateInstanceCatalog({ name: "Portal" }),
     updateTenantCatalog: () => CatalogService.updateTenantCatalog("t1", {}),
+    // The Hero Editor's save writes the Catalog and the instance and
+    // invalidates once for both.
+    updateHeroLayout: () =>
+      CatalogService.updateHeroLayout({ heroLayout: null, background: null }),
   };
 
   beforeEach(function () {
@@ -175,6 +179,8 @@ describe("every catalog write invalidates the theme export cache", function () {
     sinon.stub(CatalogManager, "getCatalogByTenant").resolves(null);
     sinon.stub(CatalogManager, "createCatalog").resolves({ id: "c1" });
     sinon.stub(CatalogManager, "updateCatalog").resolves({ id: "c1" });
+    sinon.stub(InstanceManager, "updateBackground").resolves();
+    sinon.stub(InstanceManager, "getBranding").resolves({ active: false });
   });
 
   afterEach(function () {

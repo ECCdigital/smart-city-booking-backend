@@ -12,7 +12,14 @@ const {
 } = require("./hero-layout/hero-export");
 const { enrichHeroMediaReference } = require("./hero-layout/hero-media");
 const { normalizeHeroLayout } = require("./hero-layout/hero-layout-schema");
-const { HeroValidationErrors } = require("./hero-layout/hero-validation");
+const {
+  exportHeroEditorState,
+  normalizeHeroEditorBody,
+} = require("./hero-layout/hero-editor");
+const {
+  HeroValidationErrors,
+  carries,
+} = require("./hero-layout/hero-validation");
 const { portalNameOf } = require("./hero-layout/hero-default-layout");
 const SchemaUtils = require("../utilities/schemaUtils");
 const {
@@ -105,19 +112,6 @@ async function exportTheme(catalog, branding) {
 }
 
 /**
- * Whether a body names the key at all - `heroLayout: null` is the reset to the
- * Default Hero Layout and has to be told apart from a body that leaves the
- * stored layout alone.
- *
- * @param {Object} body - The catalog body being written.
- * @param {string} key - The key looked for.
- * @returns {boolean}
- */
-function carries(body, key) {
-  return Object.prototype.hasOwnProperty.call(body, key);
-}
-
-/**
  * Refuses what a tenant catalog write does not take. The Hero Layout lives on
  * the instance catalog; a tenant catalog joins it only with a future
  * slug-catalog effort.
@@ -169,6 +163,24 @@ async function normalizeInstanceCatalogWrite(catalog) {
   errors.throwIfAny();
 
   return carriesHeroLayout ? { ...catalog, heroLayout } : catalog;
+}
+
+/**
+ * The Portal Name a preview is rendered with: the one the body carries, or the
+ * stored one. An instance without a catalog previews with none — the preview
+ * writes nothing, so there is nothing to refuse.
+ *
+ * @param {Object} body - The preview body.
+ * @returns {Promise<string>} The Portal Name.
+ */
+async function previewPortalName(body) {
+  if (typeof body?.name === "string") {
+    return body.name;
+  }
+
+  const catalog = await CatalogManager.getInstanceCatalog();
+
+  return catalog?.name ?? "";
 }
 
 class CatalogService {
@@ -430,6 +442,115 @@ class CatalogService {
     ThemeExportCache.invalidateAll();
 
     return updatedCatalog;
+  }
+
+  /**
+   * What the Hero Editor reads (hero-layout spec §4): the Hero Layout, the
+   * Background and the Portal Name in export form, and whether the two objects
+   * are derived rather than stored — the state the editor's reset to default
+   * lands on.
+   *
+   * The two objects the editor writes back are read as they are stored, not as
+   * the Theme Bundle delivers them: the bundle hides a stored Background behind
+   * `branding.active`, and an editor that showed the default there would offer
+   * to overwrite what is stored. The logo is only an input to the derived
+   * default and follows `branding.active` as it does everywhere else, so a
+   * saved default never paints a logo the header does not show.
+   *
+   * @returns {Promise<Object>} `{ heroLayout, background, name, isDefault }`.
+   * @throws {NotFoundError} Without an instance catalog to edit.
+   */
+  static async getHeroLayout() {
+    const [catalog, branding] = await Promise.all([
+      CatalogService.getInstanceCatalog(),
+      InstanceManager.getBranding(),
+    ]);
+
+    const heroLayout = catalog.heroLayout ?? null;
+    const background = branding?.background ?? null;
+
+    return {
+      ...(await exportHeroEditorState({
+        heroLayout,
+        background,
+        name: catalog.name,
+        logo: activeLogo(branding),
+      })),
+      isDefault: heroLayout === null && background === null,
+    };
+  }
+
+  /**
+   * The Hero Editor's save (hero-layout spec §4). Both objects are validated
+   * before anything is written, then the Catalog takes the layout, then the
+   * instance takes the Background, then the theme export cache is flushed once
+   * for both. There is no transaction: only an infrastructure failure between
+   * the two writes can split them, and saving again heals it.
+   *
+   * The Portal Name is not written here — it belongs to the general settings —
+   * but it is answered, because the derived default layout is built from it.
+   *
+   * @param {Object} body - `{ heroLayout, background }`, `null` each resetting
+   *   to the derived default.
+   * @returns {Promise<Object>} `{ heroLayout, background, name }` in export form.
+   * @throws {ValidationError} With one detail per fault of either object.
+   * @throws {NotFoundError} Without an instance catalog to write.
+   */
+  static async updateHeroLayout(body) {
+    const { heroLayout, background } = await normalizeHeroEditorBody(body);
+
+    // Only the layout is written, and only onto the one instance catalog:
+    // everything else on that document belongs to the general settings.
+    const catalog = await CatalogManager.updateCatalog(
+      { heroLayout },
+      { type: "instance" },
+    );
+
+    if (!catalog) {
+      throw new NotFoundError("instance_catalog_not_found");
+    }
+
+    await InstanceManager.updateBackground(background);
+
+    ThemeExportCache.invalidateAll();
+
+    const branding = await InstanceManager.getBranding();
+
+    return exportHeroEditorState({
+      heroLayout,
+      background,
+      name: catalog.name,
+      logo: activeLogo(branding),
+    });
+  }
+
+  /**
+   * What the Live Preview and the editor's reset to default read (hero-layout
+   * spec §4): the same normaliser, sanitiser and enrichment as the save, and
+   * the same answer, without writing anything and without flushing anything.
+   *
+   * The `name` of the body is the Portal Name the derived default layout is
+   * built from, so the editor can preview a name it has not saved yet; a body
+   * that names none falls back to the stored one.
+   *
+   * @param {Object} body - `{ heroLayout, background, name }`.
+   * @returns {Promise<Object>} `{ heroLayout, background, name }` in export form.
+   * @throws {ValidationError} With one detail per fault of either object.
+   */
+  static async previewHeroLayout(body) {
+    const { heroLayout, background } = await normalizeHeroEditorBody(body);
+
+    const [branding, name] = await Promise.all([
+      InstanceManager.getBranding(),
+      previewPortalName(body),
+    ]);
+
+    return exportHeroEditorState({
+      heroLayout,
+      background,
+      name,
+      logo: activeLogo(branding),
+    });
   }
 
   static async slugAvailable(slug) {

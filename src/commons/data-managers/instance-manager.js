@@ -13,6 +13,7 @@ const { exportInstanceBranding } = require("../services/media/instance-media");
 const {
   normalizeBackground,
 } = require("../services/hero-layout/hero-layout-schema");
+const { NotFoundError } = require("../../errors/BaseError");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
@@ -82,6 +83,38 @@ class InstanceManager {
     ThemeExportCache.invalidateAll();
 
     return updated.toEntity();
+  }
+
+  /**
+   * Writes the Background of the branding, and nothing else (hero-layout spec
+   * §4). The Hero Editor saves the layout and the Background together, and the
+   * Background is one key inside the branding: a round trip through
+   * `updateInstance` would rewrite the whole instance to change it. `null` is
+   * the reset to the default Background, stored as null and filled in on the
+   * way out.
+   *
+   * The branding is cached, so the cache is dropped here; the theme export
+   * cache is the caller's, which writes the Catalog in the same save and
+   * flushes once for both.
+   *
+   * @param {?Object} background - The Background in its stored form, already
+   *   normalised, or null.
+   * @returns {Promise<void>}
+   * @throws {NotFoundError} When there is no instance to write. The Hero is
+   *   saved in two writes, and one of them landing silently is the split the
+   *   caller cannot heal: it has to be told.
+   */
+  static async updateBackground(background) {
+    const result = await InstanceModel.updateOne(
+      {},
+      { $set: { "branding.background": background } },
+    );
+
+    if (result?.matchedCount === 0) {
+      throw new NotFoundError("instance_not_found");
+    }
+
+    InstanceCache.invalidate();
   }
 
   static async reassignOwnerUserId(previousUserId, newUserId, session = null) {

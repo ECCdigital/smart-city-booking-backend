@@ -13,6 +13,19 @@ const { ValidationError } = require("../../../errors/ValidationError");
  */
 
 /**
+ * Whether a body names a key at all. The Hero reads `null` as "use the derived
+ * default", so a key that carries null and a key that is not there mean
+ * different things and are told apart before either is read.
+ *
+ * @param {Object} body - The body being read.
+ * @param {string} key - The key looked for.
+ * @returns {boolean} Whether the key is there, whatever its value.
+ */
+function carries(body, key) {
+  return Object.prototype.hasOwnProperty.call(body, key);
+}
+
+/**
  * The path of a key below an object path — `background` + `light` reads
  * `background.light`.
  *
@@ -101,6 +114,7 @@ class HeroValidationErrors {
 
 module.exports = {
   HeroValidationErrors,
+  carries,
   childPath,
   elementPath,
 };

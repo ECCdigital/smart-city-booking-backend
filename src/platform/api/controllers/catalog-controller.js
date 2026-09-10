@@ -172,6 +172,37 @@ class CatalogController {
     response.status(200).send(body);
   }
 
+  /**
+   * The three routes of the Hero Editor (hero-layout spec §4). Each answers one
+   * Hero - the layout, the Background and the Portal Name together - as the
+   * export object itself, not the `{ success, content }` envelope of the
+   * catalog stores: the editor reads a Hero, not a write receipt.
+   *
+   * `instanceCatalog.read` for the read, `instanceCatalog.store` for the save
+   * and the preview, the rights of `GET` and `PUT /api/catalog`.
+   */
+
+  /** The stored Hero, or the derived defaults, with `isDefault`. */
+  static async getHeroLayout(request, response) {
+    const hero = await CatalogService.getHeroLayout();
+
+    response.status(200).send(hero);
+  }
+
+  /** Saves both objects of the body, and answers the Hero as it was stored. */
+  static async storeHeroLayout(request, response) {
+    const hero = await CatalogService.updateHeroLayout(request.body);
+
+    response.status(200).send(hero);
+  }
+
+  /** Answers what the save would produce, without writing anything. */
+  static async previewHeroLayout(request, response) {
+    const hero = await CatalogService.previewHeroLayout(request.body);
+
+    response.status(200).send(hero);
+  }
+
   static async storeInstanceCatalog(request, response) {
     const catalogData = request.body;
 

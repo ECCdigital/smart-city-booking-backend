@@ -41,6 +41,24 @@ router.put(
   authorize("instanceCatalog", "store"),
   CatalogController.storeInstanceCatalog,
 );
+// The Hero Editor: the layout and the Background of the instance, read and
+// written as one object, and previewed without a write. Fixed paths, so they
+// stand ahead of `/catalog/:slug` like every other one.
+router.get(
+  "/catalog/hero-layout",
+  authorize("instanceCatalog", "read"),
+  CatalogController.getHeroLayout,
+);
+router.put(
+  "/catalog/hero-layout",
+  authorize("instanceCatalog", "store"),
+  CatalogController.storeHeroLayout,
+);
+router.post(
+  "/catalog/hero-layout/preview",
+  authorize("instanceCatalog", "store"),
+  CatalogController.previewHeroLayout,
+);
 router.get(
   "/catalog/themes/:slug",
   publicRoute("instanceCatalog", "themes"),

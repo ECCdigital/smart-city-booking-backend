@@ -1,0 +1,332 @@
+# swagger/schemas/hero-layout.yaml
+#
+# The Hero Layout and the Background of the Shared contract (hero-layout
+# spec). Both are stored complete: the backend fills every default on save,
+# refuses unknown keys at any depth, and answers a fault as a
+# `HeroValidationError` whose `details[].field` is a JSON path into the
+# request body.
+
+components:
+  schemas:
+    HeroLocalizedString:
+      type: object
+      description: |
+        A text per locale. `de` is required, an empty `en` counts as absent and
+        consumers fall back to `de`.
+      required: [de]
+      properties:
+        de:
+          type: string
+        en:
+          type: string
+      example:
+        de: Willkommen
+        en: Welcome
+
+    HeroMediaReference:
+      type: object
+      description: |
+        A Media Library image of the instance: public, `kind: image`,
+        `source: "media"`. On input the pair `source`/`mediaId` is all that is
+        read — the derived keys `url`, `width` and `height` are stripped
+        silently, so an exported reference round-trips. On output they are
+        filled from the medium; `width`/`height` are `null` until
+        `media-cli backfill-dimensions` has run.
+      required: [source, mediaId]
+      properties:
+        source:
+          type: string
+          enum: [media]
+        mediaId:
+          type: string
+        url:
+          type: string
+          readOnly: true
+          example: /api/v2/instance/media/66f1c2aa.../file
+        width:
+          type: integer
+          nullable: true
+          readOnly: true
+        height:
+          type: integer
+          nullable: true
+          readOnly: true
+
+    HeroBlock:
+      type: object
+      description: |
+        One placed piece of content. `id`, `type`, `zone` and the content field
+        of the type are required, every other key has a default. Ids match
+        `^[A-Za-z0-9_-]{1,64}$` and are unique inside the layout.
+      required: [id, type, zone]
+      properties:
+        id:
+          type: string
+          example: k3Qm7aZp
+        type:
+          type: string
+          enum: [text, richtext, image]
+        zone:
+          type: string
+          enum:
+            - top-left
+            - top-center
+            - top-right
+            - middle-left
+            - middle-center
+            - middle-right
+            - bottom-left
+            - bottom-center
+            - bottom-right
+        outerSpacing:
+          type: string
+          enum: [none, xs, sm, md, lg, xl]
+          default: none
+        innerSpacing:
+          type: string
+          enum: [none, xs, sm, md, lg, xl]
+          default: none
+        width:
+          type: string
+          enum: [auto, sm, md, lg, full]
+          default: auto
+        panel:
+          type: string
+          enum: [none, translucent]
+          default: none
+        homeOnly:
+          type: boolean
+          default: false
+        hideOnMobile:
+          type: boolean
+          default: false
+        text:
+          allOf:
+            - $ref: "#/components/schemas/HeroLocalizedString"
+          description: "`text` Blocks: required, at most 200 characters per locale."
+        size:
+          type: string
+          description: "`text` Blocks only."
+          enum: [xs, sm, md, lg, xl, 2xl]
+          default: md
+        weight:
+          type: string
+          description: "`text` Blocks only."
+          enum: [normal, bold]
+          default: normal
+        html:
+          allOf:
+            - $ref: "#/components/schemas/HeroLocalizedString"
+          description: |
+            `richtext` Blocks: required. Sanitised on save with the frozen
+            allowlist (`p br strong em u a ul ol li`, `https:`/`mailto:` links
+            only) rather than refused. At most 50 000 characters raw and
+            10 000 after sanitising, per locale.
+        color:
+          type: string
+          description: |
+            `text` and `richtext` Blocks: a token or `#rrggbb`.
+          default: default
+          example: primary
+        shadow:
+          type: boolean
+          description: "`text` and `richtext` Blocks: the readability toggle."
+          default: false
+        image:
+          allOf:
+            - $ref: "#/components/schemas/HeroMediaReference"
+          description: "`image` Blocks: required."
+        alt:
+          allOf:
+            - $ref: "#/components/schemas/HeroLocalizedString"
+          description: "`image` Blocks: required, at most 200 characters per locale."
+        maxHeight:
+          type: string
+          description: "`image` Blocks only."
+          enum: [xs, sm, md, lg, xl]
+          default: md
+        invertInDarkMode:
+          type: boolean
+          description: "`image` Blocks only."
+          default: false
+
+    HeroLayout:
+      type: object
+      description: |
+        The Hero of the catalog layout. `null` on the Catalog means the backend
+        derives the Default Hero Layout at read time.
+      required: [version, blocks]
+      properties:
+        version:
+          type: integer
+          enum: [1]
+        height:
+          type: string
+          description: Home page from the `md` viewport up.
+          enum: [sm, md, lg, xl]
+          default: lg
+        mobileHeight:
+          type: string
+          enum: [sm, md, lg, xl]
+          default: lg
+        compactHeight:
+          type: string
+          description: The Compact Hero of the sub-pages, on every viewport.
+          enum: [sm, md, lg, xl]
+          default: sm
+        blocks:
+          type: array
+          maxItems: 12
+          description: Array order is the stacking order in a Zone.
+          items:
+            $ref: "#/components/schemas/HeroBlock"
+
+    HeroBackground:
+      type: object
+      description: |
+        What the Hero paints behind its Blocks; instance-wide, the auth pages
+        use the same object. Discriminated on `type`. `null` on the instance
+        means the default `poly` variant.
+      required: [version, type]
+      properties:
+        version:
+          type: integer
+          enum: [1]
+        type:
+          type: string
+          enum: [variant, color, image]
+        variant:
+          type: string
+          description: "`variant` backgrounds: required."
+          enum: [mesh, aurora, poly, grid, minimal]
+        orbs:
+          type: boolean
+          default: true
+        noise:
+          type: boolean
+          default: true
+        intensity:
+          type: string
+          enum: [subtle, normal, strong]
+          default: normal
+        light:
+          type: string
+          description: "`color` backgrounds: required, `#rrggbb`."
+          example: "#f3f4f6"
+        dark:
+          type: string
+          description: "`color` backgrounds: falls back to `light`."
+          example: "#111827"
+        image:
+          allOf:
+            - $ref: "#/components/schemas/HeroMediaReference"
+          description: "`image` backgrounds: required."
+        focalPoint:
+          type: object
+          description: Percentages, `image` backgrounds only.
+          properties:
+            x:
+              type: integer
+              minimum: 0
+              maximum: 100
+              default: 50
+            y:
+              type: integer
+              minimum: 0
+              maximum: 100
+              default: 50
+        overlay:
+          type: object
+          description: |
+            `image` backgrounds: `light` is required and defaults to
+            `#000000` at 40 %, `dark` falls back to it. The overlay colour at
+            full opacity is the placeholder painted before the image loads.
+          properties:
+            light:
+              $ref: "#/components/schemas/HeroOverlay"
+            dark:
+              $ref: "#/components/schemas/HeroOverlay"
+
+    HeroOverlay:
+      type: object
+      required: [color]
+      properties:
+        color:
+          type: string
+          example: "#000000"
+        opacity:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 40
+
+    HeroEditorState:
+      type: object
+      description: |
+        Both objects in export form — the derived defaults where nothing is
+        stored, every media reference enriched — next to the Portal Name the
+        default layout is derived from.
+      required: [heroLayout, background, name]
+      properties:
+        heroLayout:
+          $ref: "#/components/schemas/HeroLayout"
+        background:
+          $ref: "#/components/schemas/HeroBackground"
+        name:
+          type: string
+          description: The Portal Name, the instance catalog's `name`.
+          example: Stadt Musterstadt
+
+    HeroEditorWrite:
+      type: object
+      description: |
+        Both objects as the editor sends them. Both keys are required;
+        `null` each resets to the derived default.
+      required: [heroLayout, background]
+      properties:
+        heroLayout:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/HeroLayout"
+        background:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/HeroBackground"
+
+    HeroValidationError:
+      type: object
+      description: |
+        One detail per fault, in the order the fields stand in the body.
+      properties:
+        error:
+          type: string
+          example: ValidationError
+        message:
+          type: string
+          example: validation_failed
+        statusCode:
+          type: integer
+          example: 400
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: JSON path into the request body.
+                example: heroLayout.blocks[2].zone
+              code:
+                type: string
+                enum:
+                  - required
+                  - unknown_field
+                  - invalid_enum
+                  - invalid_format
+                  - duplicate_id
+                  - max_items
+                  - max_length
+                  - invalid_custom
+              params:
+                type: object
+                additionalProperties: true
