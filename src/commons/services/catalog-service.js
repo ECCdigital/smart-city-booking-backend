@@ -11,6 +11,8 @@ const {
   exportHeroLayout,
 } = require("./hero-layout/hero-export");
 const { enrichHeroMediaReference } = require("./hero-layout/hero-media");
+const { normalizeHeroLayout } = require("./hero-layout/hero-layout-schema");
+const { HeroValidationErrors } = require("./hero-layout/hero-validation");
 const { portalNameOf } = require("./hero-layout/hero-default-layout");
 const SchemaUtils = require("../utilities/schemaUtils");
 const {
@@ -103,54 +105,70 @@ async function exportTheme(catalog, branding) {
 }
 
 /**
- * The detail a body earns for carrying `heroLayout`. It is not written
- * through the catalog routes: ticket 07 opens it on the instance catalog,
- * the tenant catalog never takes it.
+ * Whether a body names the key at all - `heroLayout: null` is the reset to the
+ * Default Hero Layout and has to be told apart from a body that leaves the
+ * stored layout alone.
  *
- * @param {Object} catalog - The catalog body being written.
- * @returns {Array<{field: string, code: string}>} One detail, or none.
+ * @param {Object} body - The catalog body being written.
+ * @param {string} key - The key looked for.
+ * @returns {boolean}
  */
-function heroLayoutDetails(catalog) {
-  return Object.prototype.hasOwnProperty.call(catalog, "heroLayout")
-    ? [{ field: "heroLayout", code: ERROR_CODES.unknownField }]
-    : [];
+function carries(body, key) {
+  return Object.prototype.hasOwnProperty.call(body, key);
 }
 
 /**
- * Refuses what a tenant catalog write does not take.
+ * Refuses what a tenant catalog write does not take. The Hero Layout lives on
+ * the instance catalog; a tenant catalog joins it only with a future
+ * slug-catalog effort.
  *
  * @param {Object} catalog - The catalog body being written.
  * @throws {ValidationError} With the detail at its JSON path.
  */
 function assertTenantCatalogWritable(catalog) {
-  const details = heroLayoutDetails(catalog);
-
-  if (details.length > 0) {
-    throw new ValidationError(details);
+  if (carries(catalog, "heroLayout")) {
+    throw new ValidationError([
+      { field: "heroLayout", code: ERROR_CODES.unknownField },
+    ]);
   }
 }
 
 /**
- * Refuses what an instance catalog write does not take. Its `name` is the
- * Portal Name - browser title, Default Hero Layout title, auth pages - so an
- * empty one is refused here; the mongoose `required` stays as it is so
- * documents from before stay readable.
+ * Reads the instance catalog body into the form it is stored in. Its `name` is
+ * the Portal Name - browser title, Default Hero Layout title, auth pages - so
+ * an empty one is refused here; the mongoose `required` stays as it is so
+ * documents from before stay readable. A body that names `heroLayout` has it normalised into
+ * its stored form, with `null` resetting to the Default Hero Layout; a body
+ * that does not name it leaves the stored layout alone.
+ *
+ * The faults of both are answered together, in body order, so an admin who
+ * saves a nameless catalog with a broken Block sees both at once.
  *
  * @param {Object} catalog - The catalog body being written.
- * @throws {ValidationError} One detail per fault, in body order.
+ * @returns {Promise<Object>} The body as it is stored.
+ * @throws {ValidationError} One detail per fault, JSON paths as fields.
  */
-function assertInstanceCatalogWritable(catalog) {
-  const details = [];
+async function normalizeInstanceCatalogWrite(catalog) {
+  const errors = new HeroValidationErrors();
 
   if (!portalNameOf(catalog.name)) {
-    details.push({ field: "name", code: ERROR_CODES.required });
+    errors.add("name", ERROR_CODES.required);
   }
 
-  details.push(...heroLayoutDetails(catalog));
+  const carriesHeroLayout = carries(catalog, "heroLayout");
+  let heroLayout;
 
-  if (details.length > 0) {
-    throw new ValidationError(details);
+  if (carriesHeroLayout) {
+    try {
+      heroLayout = await normalizeHeroLayout(catalog.heroLayout);
+    } catch (error) {
+      errors.absorb(error);
+    }
   }
+
+  errors.throwIfAny();
+
+  return carriesHeroLayout ? { ...catalog, heroLayout } : catalog;
 }
 
 class CatalogService {
@@ -318,10 +336,8 @@ class CatalogService {
       throw new BadRequestError("catalog_required");
     }
 
-    assertInstanceCatalogWritable(catalog);
-
     const sanitizedCatalog = {
-      ...catalog,
+      ...(await normalizeInstanceCatalogWrite(catalog)),
       type: "instance",
     };
 
@@ -375,12 +391,10 @@ class CatalogService {
       throw new BadRequestError("catalog_required");
     }
 
-    assertInstanceCatalogWritable(catalog);
-
-    const updatedCatalog = await CatalogManager.updateCatalog(catalog, {
-      _id: catalog._id,
-      type: "instance",
-    });
+    const updatedCatalog = await CatalogManager.updateCatalog(
+      await normalizeInstanceCatalogWrite(catalog),
+      { _id: catalog._id, type: "instance" },
+    );
 
     if (!updatedCatalog) {
       throw new NotFoundError("instance_catalog_not_found");

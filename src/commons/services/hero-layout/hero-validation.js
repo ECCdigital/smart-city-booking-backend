@@ -2,8 +2,8 @@ const { ValidationError } = require("../../../errors/ValidationError");
 
 /**
  * The error side of the Hero Layout normalisers. Everything the Hero validates
- * — the Background here, the layout and its Blocks in the tickets that follow —
- * answers in the one shape of the Shared contract: a `ValidationError` whose
+ * — the Background, the layout and its Blocks — answers in the one shape of
+ * the Shared contract: a `ValidationError` whose
  * `details[].field` is a JSON path into the request body, so the editor can put
  * the message at the control that carries the fault.
  *
@@ -22,6 +22,18 @@ const { ValidationError } = require("../../../errors/ValidationError");
  */
 function childPath(base, key) {
   return `${base}.${key}`;
+}
+
+/**
+ * The path of one entry of an array — `heroLayout.blocks` + 2 reads
+ * `heroLayout.blocks[2]`.
+ *
+ * @param {string} base - Path of the array.
+ * @param {number} index - Position in it.
+ * @returns {string} The JSON path of the entry.
+ */
+function elementPath(base, index) {
+  return `${base}[${index}]`;
 }
 
 /**
@@ -52,6 +64,23 @@ class HeroValidationErrors {
   }
 
   /**
+   * Folds the details of a `ValidationError` that was thrown somewhere below
+   * into this run — the rich-text sanitiser answers its two length rules that
+   * way, and they belong next to the faults of the fields around them.
+   *
+   * @param {Error} error - What was thrown.
+   * @throws {Error} Anything that is no `ValidationError`: only the shape of
+   *   the contract can be folded in.
+   */
+  absorb(error) {
+    if (!(error instanceof ValidationError)) {
+      throw error;
+    }
+
+    this.details.push(...error.errors);
+  }
+
+  /**
    * @returns {boolean} Whether anything was recorded.
    */
   hasErrors() {
@@ -73,4 +102,5 @@ class HeroValidationErrors {
 module.exports = {
   HeroValidationErrors,
   childPath,
+  elementPath,
 };

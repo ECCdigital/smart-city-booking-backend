@@ -5,7 +5,9 @@
  * backend derives the Default Hero Layout of the Shared contract when
  * nothing is stored, the Theme Bundle carries `name`, `heroLayout` and
  * `logo`, the instance catalog PUT requires the Portal Name, and both
- * catalog PUTs refuse a `heroLayout` key until ticket 07 opens the path.
+ * catalog PUTs refuse a `heroLayout` key on a tenant catalog. What the
+ * instance catalog PUT makes of a `heroLayout` it is given is ticket 07's
+ * `hero-layout-save.test.js`.
  *
  * No database: the media lookups run over a stubbed MediaManager, the
  * catalog reads and writes over stubbed managers, and the routes over the
@@ -67,7 +69,7 @@ const LOGO_BLOCK = blockOf("default-logo");
 const TITLE_BLOCK = blockOf("default-title");
 const SLOGAN_BLOCK = blockOf("default-subtitle");
 
-/** A stored Hero Layout, as ticket 07 will write one. */
+/** A stored Hero Layout, as the instance catalog PUT writes one. */
 const STORED_LAYOUT = Object.freeze({
   version: 1,
   height: "md",
@@ -577,37 +579,6 @@ describe("the catalog writes: Portal Name and heroLayout", function () {
     expect(CatalogManager.updateCatalog.calledOnce).to.equal(true);
   });
 
-  it("refuses a heroLayout key on the instance catalog until ticket 07", async function () {
-    for (const heroLayout of [null, STORED_LAYOUT]) {
-      const details = await refusalOf(() =>
-        CatalogService.updateInstanceCatalog({
-          _id: "c1",
-          name: "Portal",
-          heroLayout,
-        }),
-      );
-
-      expect(details).to.deep.equal([
-        { field: "heroLayout", code: "unknown_field" },
-      ]);
-    }
-  });
-
-  it("names both faults of one instance catalog body, name first", async function () {
-    const details = await refusalOf(() =>
-      CatalogService.updateInstanceCatalog({
-        _id: "c1",
-        name: "",
-        heroLayout: null,
-      }),
-    );
-
-    expect(details).to.deep.equal([
-      { field: "name", code: "required" },
-      { field: "heroLayout", code: "unknown_field" },
-    ]);
-  });
-
   it("refuses a heroLayout key on every tenant catalog write", async function () {
     const writes = {
       createTenantCatalog: (body) =>
@@ -715,19 +686,6 @@ describe("catalog routes: heroLayout as stored, Portal Name and the ETag", funct
       statusCode: 400,
       details: [{ field: "name", code: "required" }],
     });
-  });
-
-  it("answers a heroLayout key on the instance catalog PUT with 400 unknown_field", async function () {
-    const res = await put("/catalog", ADMIN, {
-      _id: FIXTURE_ID,
-      name: "Katalog",
-      heroLayout: null,
-    });
-
-    expect(res.status).to.equal(400);
-    expect(res.body.details).to.deep.equal([
-      { field: "heroLayout", code: "unknown_field" },
-    ]);
   });
 
   it("answers a heroLayout key on the tenant catalog PUT with 400 unknown_field", async function () {

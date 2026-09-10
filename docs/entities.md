@@ -790,7 +790,7 @@ Example:
 }
 ```
 
-`heroLayout` holds the Hero Layout of the storefront's catalog page (see the hero-layout spec); `null` means the backend derives the Default Hero Layout — the branding logo, the catalog's `name` as title, and the default slogan — at read time. For the instance catalog `name` is the Portal Name and is required.
+`heroLayout` holds the Hero Layout of the storefront's catalog page (see the hero-layout spec); `null` means the backend derives the Default Hero Layout — the branding logo, the catalog's `name` as title, and the default slogan — at read time. It is written through the instance catalog PUT only, normalised complete with every default filled, and `heroLayout: null` resets to the default; a tenant catalog PUT refuses the key with `unknown_field`. For the instance catalog `name` is the Portal Name and is required.
 
 Visual theme (colors, logo, Hero Background) is configured on **Instance.branding**, not on the catalog document.
 

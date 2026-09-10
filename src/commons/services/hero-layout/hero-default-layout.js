@@ -1,4 +1,9 @@
 const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
+const {
+  BLOCK_DEFAULTS,
+  HERO_LAYOUT_DEFAULTS,
+  HERO_LAYOUT_VERSION,
+} = require("./hero-layout-schema");
 
 /**
  * The Default Hero Layout (hero-layout spec, Shared contract): what the
@@ -14,18 +19,6 @@ const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
  * Name is non-empty. There is no fallback title - a Catalog without a name
  * shows the slogan alone.
  */
-
-const HERO_LAYOUT_VERSION = 1;
-
-// The common fields of the contract's Blocks, at their defaults.
-const BLOCK_DEFAULTS = Object.freeze({
-  outerSpacing: "none",
-  innerSpacing: "none",
-  width: "auto",
-  panel: "none",
-  homeOnly: false,
-  hideOnMobile: false,
-});
 
 // The slogan every Default Hero Layout ends with. It replaced the removed
 // `hero.subtitle`.
@@ -132,9 +125,7 @@ function defaultHeroLayout({ name, logo }) {
 
   return {
     version: HERO_LAYOUT_VERSION,
-    height: "lg",
-    mobileHeight: "lg",
-    compactHeight: "sm",
+    ...HERO_LAYOUT_DEFAULTS,
     blocks,
   };
 }
