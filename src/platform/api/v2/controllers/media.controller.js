@@ -410,6 +410,20 @@ class MediaControllerV2 {
       });
     }
 
+    // The branding and the Hero are painted for anonymous visitors, so a
+    // medium one of them shows cannot turn internal: the page would simply
+    // stop loading it. Refused with the usage proof of those sites, the same
+    // body a blocked deletion answers.
+    if (updates.visibility === MEDIA_VISIBILITY.INTERN && media.isPublic()) {
+      const publicUsage = await MediaUsageService.findPublicUsage({
+        mediaId: media.id,
+      });
+
+      if (publicUsage.length > 0) {
+        throw new MediaInUseError(publicUsage);
+      }
+    }
+
     Object.assign(media, updates);
     media.validate();
 

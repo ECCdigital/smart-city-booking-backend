@@ -4,6 +4,8 @@ const sinon = require("sinon");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const BookingModel = require("../src/commons/data-managers/models/bookingModel");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
+const CatalogManager = require("../src/commons/data-managers/catalog-manager");
+const CatalogModel = require("../src/commons/data-managers/models/catalogModel");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const EventModel = require("../src/commons/data-managers/models/eventModel");
 const InstanceManager = require("../src/commons/data-managers/instance-manager");
@@ -30,6 +32,7 @@ const {
 const TENANT = "tenant1";
 const MEDIA = "media-1";
 const BOOKING = "booking-1";
+const CATALOG = "catalog-1";
 
 /**
  * A `find(filter, projection).lean()` that answers with the given documents.
@@ -145,25 +148,116 @@ describe("media usage proof", function () {
 
       assert.deepStrictEqual(await InstanceManager.getMediaUsage(MEDIA), []);
     });
+
+    it("finds the branding alone, without the legal documents", async function () {
+      sandbox
+        .stub(InstanceModel, "findOne")
+        .returns({ lean: async () => ({ _id: "instance" }) });
+
+      const sites = await InstanceManager.getBrandingMediaUsage(MEDIA);
+
+      assert.deepStrictEqual(sites, [{ id: null, title: "instance" }]);
+      assert.deepStrictEqual(InstanceModel.findOne.firstCall.args[0], {
+        $or: [
+          { "branding.logo.mediaId": MEDIA },
+          { "branding.favicon.mediaId": MEDIA },
+        ],
+      });
+    });
+
+    it("finds the Background on the branding", async function () {
+      sandbox
+        .stub(InstanceModel, "findOne")
+        .returns({ lean: async () => ({ _id: "instance" }) });
+
+      assert.strictEqual(await InstanceManager.hasBackgroundMedia(MEDIA), true);
+      assert.deepStrictEqual(InstanceModel.findOne.firstCall.args[0], {
+        "branding.background.image.mediaId": MEDIA,
+      });
+    });
+
+    it("reports a Background that holds another medium as unused", async function () {
+      sandbox
+        .stub(InstanceModel, "findOne")
+        .returns({ lean: async () => null });
+
+      assert.strictEqual(
+        await InstanceManager.hasBackgroundMedia(MEDIA),
+        false,
+      );
+    });
+
+    it("finds the image Blocks of the stored Hero Layout", async function () {
+      sandbox
+        .stub(CatalogModel, "findOne")
+        .returns({ lean: async () => ({ _id: CATALOG }) });
+
+      assert.strictEqual(await CatalogManager.hasHeroLayoutMedia(MEDIA), true);
+      assert.deepStrictEqual(CatalogModel.findOne.firstCall.args[0], {
+        type: "instance",
+        "heroLayout.blocks.image.mediaId": MEDIA,
+      });
+    });
+
+    it("reports a Hero Layout that holds another medium as unused", async function () {
+      sandbox.stub(CatalogModel, "findOne").returns({ lean: async () => null });
+
+      assert.strictEqual(await CatalogManager.hasHeroLayoutMedia(MEDIA), false);
+    });
+
+    it("names the Hero's site after the instance catalog and its Portal Name", async function () {
+      sandbox
+        .stub(CatalogModel, "findOne")
+        .returns({ lean: async () => ({ _id: CATALOG, name: "Stadtportal" }) });
+
+      assert.deepStrictEqual(await CatalogManager.getHeroSite(), {
+        id: CATALOG,
+        title: "Stadtportal",
+      });
+      assert.deepStrictEqual(CatalogModel.findOne.firstCall.args[0], {
+        type: "instance",
+      });
+    });
+
+    it("has no Hero site while the instance has no catalog", async function () {
+      sandbox.stub(CatalogModel, "findOne").returns({ lean: async () => null });
+
+      assert.strictEqual(await CatalogManager.getHeroSite(), null);
+    });
   });
 
   describe("MediaUsageService", function () {
+    /**
+     * Every usage site stubbed as unused; each test opens the one it is about.
+     */
+    function stubUnused() {
+      sandbox.stub(BookableManager, "getMediaUsage").resolves([]);
+      sandbox.stub(EventManager, "getMediaUsage").resolves([]);
+      sandbox.stub(BookingManager, "getMediaUsage").resolves([]);
+      sandbox.stub(InstanceManager, "getMediaUsage").resolves([]);
+      sandbox.stub(InstanceManager, "getBrandingMediaUsage").resolves([]);
+      sandbox.stub(InstanceManager, "hasBackgroundMedia").resolves(false);
+      sandbox.stub(TenantManager, "getMediaUsage").resolves([]);
+      sandbox.stub(CatalogManager, "hasHeroLayoutMedia").resolves(false);
+      sandbox
+        .stub(CatalogManager, "getHeroSite")
+        .resolves({ id: CATALOG, title: "Stadtportal" });
+    }
+
     it("labels every finding with its entity type", async function () {
-      sandbox
-        .stub(BookableManager, "getMediaUsage")
-        .resolves([{ id: "bookable-1", title: "Meeting room 1" }]);
-      sandbox
-        .stub(EventManager, "getMediaUsage")
-        .resolves([{ id: "event-1", title: "Summer party" }]);
-      sandbox
-        .stub(BookingManager, "getMediaUsage")
-        .resolves([{ id: BOOKING, title: "Jane Doe" }]);
-      sandbox
-        .stub(InstanceManager, "getMediaUsage")
-        .resolves([{ id: null, title: "instance" }]);
-      sandbox
-        .stub(TenantManager, "getMediaUsage")
-        .resolves([{ id: TENANT, title: "Stadt" }]);
+      stubUnused();
+      BookableManager.getMediaUsage.resolves([
+        { id: "bookable-1", title: "Meeting room 1" },
+      ]);
+      EventManager.getMediaUsage.resolves([
+        { id: "event-1", title: "Summer party" },
+      ]);
+      BookingManager.getMediaUsage.resolves([
+        { id: BOOKING, title: "Jane Doe" },
+      ]);
+      InstanceManager.getMediaUsage.resolves([{ id: null, title: "instance" }]);
+      TenantManager.getMediaUsage.resolves([{ id: TENANT, title: "Stadt" }]);
+      CatalogManager.hasHeroLayoutMedia.resolves(true);
 
       const usage = await MediaUsageService.findUsage({
         tenantId: TENANT,
@@ -176,15 +270,12 @@ describe("media usage proof", function () {
         { type: "booking", id: BOOKING, title: "Jane Doe" },
         { type: "instance", id: null, title: "instance" },
         { type: "tenant", id: TENANT, title: "Stadt" },
+        { type: "hero", id: CATALOG, title: "Stadtportal" },
       ]);
     });
 
     it("answers an empty proof for an unused medium", async function () {
-      sandbox.stub(BookableManager, "getMediaUsage").resolves([]);
-      sandbox.stub(EventManager, "getMediaUsage").resolves([]);
-      sandbox.stub(BookingManager, "getMediaUsage").resolves([]);
-      sandbox.stub(InstanceManager, "getMediaUsage").resolves([]);
-      sandbox.stub(TenantManager, "getMediaUsage").resolves([]);
+      stubUnused();
 
       const usage = await MediaUsageService.findUsage({
         tenantId: TENANT,
@@ -192,6 +283,123 @@ describe("media usage proof", function () {
       });
 
       assert.deepStrictEqual(usage, []);
+    });
+
+    it("reports a medium in an image Block as one hero site", async function () {
+      stubUnused();
+      CatalogManager.hasHeroLayoutMedia.resolves(true);
+
+      const usage = await MediaUsageService.findUsage({
+        tenantId: TENANT,
+        mediaId: MEDIA,
+      });
+
+      assert.deepStrictEqual(usage, [
+        { type: "hero", id: CATALOG, title: "Stadtportal" },
+      ]);
+    });
+
+    it("reports a medium in the Background as the same hero site", async function () {
+      stubUnused();
+      InstanceManager.hasBackgroundMedia.resolves(true);
+
+      const usage = await MediaUsageService.findUsage({
+        tenantId: TENANT,
+        mediaId: MEDIA,
+      });
+
+      assert.deepStrictEqual(usage, [
+        { type: "hero", id: CATALOG, title: "Stadtportal" },
+      ]);
+    });
+
+    it("reports a medium in both a Block and the Background once", async function () {
+      stubUnused();
+      CatalogManager.hasHeroLayoutMedia.resolves(true);
+      InstanceManager.hasBackgroundMedia.resolves(true);
+
+      const usage = await MediaUsageService.findUsage({
+        tenantId: TENANT,
+        mediaId: MEDIA,
+      });
+
+      // One entry, not two: the Blocks and the Background are one place to an
+      // admin, so the Hero reports as a single site.
+      assert.deepStrictEqual(usage, [
+        { type: "hero", id: CATALOG, title: "Stadtportal" },
+      ]);
+    });
+
+    it("reports the Background of an instance without a catalog without an id", async function () {
+      stubUnused();
+      InstanceManager.hasBackgroundMedia.resolves(true);
+      CatalogManager.getHeroSite.resolves(null);
+
+      const usage = await MediaUsageService.findUsage({
+        tenantId: TENANT,
+        mediaId: MEDIA,
+      });
+
+      // Nothing to name the site after, but the finding still blocks the
+      // deletion — a Hero that went unreported would not.
+      assert.deepStrictEqual(usage, [{ type: "hero", id: null, title: "" }]);
+    });
+
+    it("searches the Hero for a tenant medium too", async function () {
+      stubUnused();
+      CatalogManager.hasHeroLayoutMedia.resolves(true);
+
+      const usage = await MediaUsageService.findUsage({
+        tenantId: TENANT,
+        mediaId: MEDIA,
+      });
+
+      // The Hero belongs to the instance, so neither lookup is narrowed by the
+      // tenant of the medium: a tenant medium that somehow sits in it is found
+      // and blocks the deletion.
+      assert.deepStrictEqual(usage, [
+        { type: "hero", id: CATALOG, title: "Stadtportal" },
+      ]);
+      assert.deepStrictEqual(
+        InstanceManager.hasBackgroundMedia.firstCall.args,
+        [MEDIA],
+      );
+      assert.deepStrictEqual(CatalogManager.hasHeroLayoutMedia.firstCall.args, [
+        MEDIA,
+      ]);
+    });
+
+    describe("the sites an anonymous visitor sees", function () {
+      it("are the branding and the Hero, not the legal documents", async function () {
+        stubUnused();
+        InstanceManager.getBrandingMediaUsage.resolves([
+          { id: null, title: "instance" },
+        ]);
+        CatalogManager.hasHeroLayoutMedia.resolves(true);
+
+        const usage = await MediaUsageService.findPublicUsage({
+          mediaId: MEDIA,
+        });
+
+        assert.deepStrictEqual(usage, [
+          { type: "instance", id: null, title: "instance" },
+          { type: "hero", id: CATALOG, title: "Stadtportal" },
+        ]);
+        assert.strictEqual(InstanceManager.getMediaUsage.called, false);
+      });
+
+      it("are empty for a medium nothing public references", async function () {
+        stubUnused();
+        InstanceManager.getMediaUsage.resolves([
+          { id: null, title: "instance" },
+        ]);
+
+        const usage = await MediaUsageService.findPublicUsage({
+          mediaId: MEDIA,
+        });
+
+        assert.deepStrictEqual(usage, []);
+      });
     });
   });
 });

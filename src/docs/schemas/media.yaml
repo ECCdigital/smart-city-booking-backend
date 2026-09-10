@@ -183,11 +183,16 @@ components:
 
     MediaUsageSite:
       type: object
-      description: One entity that references the medium.
+      description: |
+        One entity that references the medium. `hero` covers both places the
+        Hero holds an image — an image Block of the instance catalog's Hero
+        Layout and the Background of the branding — as one site, carrying the
+        id of the instance catalog; `null` while the instance has no catalog,
+        which only a Background can reach.
       properties:
         type:
           type: string
-          enum: [bookable, event, booking, instance, tenant]
+          enum: [bookable, event, booking, instance, tenant, hero]
           example: bookable
         id:
           type: string

@@ -1,4 +1,5 @@
 const BookingManager = require("../../data-managers/booking-manager");
+const CatalogManager = require("../../data-managers/catalog-manager");
 const EventManager = require("../../data-managers/event-manager");
 const InstanceManager = require("../../data-managers/instance-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
@@ -14,6 +15,7 @@ const USAGE_TYPE = Object.freeze({
   BOOKING: "booking",
   INSTANCE: "instance",
   TENANT: "tenant",
+  HERO: "hero",
 });
 
 /**
@@ -30,6 +32,34 @@ function labelled(type, sites) {
     id: id ?? null,
     title: title ?? "",
   }));
+}
+
+/**
+ * The Hero as a usage site: the image Blocks of the instance catalog's Hero
+ * Layout and the Background of the instance branding. The two sit in different
+ * documents but are one place to an admin — the Hero editor — so they report
+ * as one entry, carrying the id of the instance catalog.
+ *
+ * @param {string} mediaId - Id of the medium.
+ * @returns {Promise<Array<{id: string|null, title: string}>>} The one site, or
+ *   none.
+ */
+async function heroSites(mediaId) {
+  const [inLayout, inBackground] = await Promise.all([
+    CatalogManager.hasHeroLayoutMedia(mediaId),
+    InstanceManager.hasBackgroundMedia(mediaId),
+  ]);
+
+  if (!inLayout && !inBackground) {
+    return [];
+  }
+
+  // An instance can hold a Background before it has a catalog to edit it on.
+  // A site without an id still blocks the deletion, which is what the finding
+  // is for; a Hero that goes unreported would not.
+  const site = await CatalogManager.getHeroSite();
+
+  return [site ?? { id: null, title: "" }];
 }
 
 /**
@@ -59,13 +89,15 @@ class MediaUsageService {
       return [];
     }
 
-    const [bookables, events, bookings, instance, tenant] = await Promise.all([
-      BookableManager.getMediaUsage(tenantId, mediaId),
-      EventManager.getMediaUsage(tenantId, mediaId),
-      BookingManager.getMediaUsage(tenantId, mediaId),
-      InstanceManager.getMediaUsage(mediaId),
-      TenantManager.getMediaUsage(tenantId, mediaId),
-    ]);
+    const [bookables, events, bookings, instance, tenant, hero] =
+      await Promise.all([
+        BookableManager.getMediaUsage(tenantId, mediaId),
+        EventManager.getMediaUsage(tenantId, mediaId),
+        BookingManager.getMediaUsage(tenantId, mediaId),
+        InstanceManager.getMediaUsage(mediaId),
+        TenantManager.getMediaUsage(tenantId, mediaId),
+        heroSites(mediaId),
+      ]);
 
     return [
       ...labelled(USAGE_TYPE.BOOKABLE, bookables),
@@ -73,6 +105,38 @@ class MediaUsageService {
       ...labelled(USAGE_TYPE.BOOKING, bookings),
       ...labelled(USAGE_TYPE.INSTANCE, instance),
       ...labelled(USAGE_TYPE.TENANT, tenant),
+      ...labelled(USAGE_TYPE.HERO, hero),
+    ];
+  }
+
+  /**
+   * The usage sites of a medium that anonymous visitors see: the branding and
+   * the Hero. They are what keeps a medium from turning internal — the pages
+   * they paint are served to whoever asks, so an internal medium behind one
+   * would simply stop loading.
+   *
+   * Everything else is left out on purpose. The legal documents of the
+   * instance may hold an internal medium, and the public entities of a tenant
+   * are guarded at their own save, where the entity's visibility is known.
+   *
+   * @param {Object} params
+   * @param {string} params.mediaId - Id of the medium.
+   * @returns {Promise<Array<{type: string, id: string|null, title: string}>>}
+   *   One entry per usage site, empty when nothing public holds the medium.
+   */
+  static async findPublicUsage({ mediaId }) {
+    if (!mediaId) {
+      return [];
+    }
+
+    const [branding, hero] = await Promise.all([
+      InstanceManager.getBrandingMediaUsage(mediaId),
+      heroSites(mediaId),
+    ]);
+
+    return [
+      ...labelled(USAGE_TYPE.INSTANCE, branding),
+      ...labelled(USAGE_TYPE.HERO, hero),
     ];
   }
 }

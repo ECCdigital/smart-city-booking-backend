@@ -31,6 +31,19 @@ const DEFAULT_PORTAL = Object.freeze({
   portalUrl: "",
 });
 
+// Where the instance holds a media reference (§4.9 of the media spec). The two
+// halves are searched together for the usage proof and apart wherever only the
+// publicly served sites count.
+const BRANDING_MEDIA_PATHS = Object.freeze([
+  "branding.logo.mediaId",
+  "branding.favicon.mediaId",
+]);
+const DOCUMENT_MEDIA_PATHS = Object.freeze([
+  "dataProtection.reference.mediaId",
+  "legalNotice.reference.mediaId",
+  "termsAndConditions.reference.mediaId",
+]);
+
 class InstanceManager {
   static async getInstance() {
     const rawInstance = await InstanceModel.findOne();
@@ -194,24 +207,74 @@ class InstanceManager {
    * @returns {Promise<Array<{id: null, title: string}>>} Usage sites
    */
   static async getMediaUsage(mediaId) {
+    return InstanceManager._findMediaUsage(mediaId, [
+      ...BRANDING_MEDIA_PATHS,
+      ...DOCUMENT_MEDIA_PATHS,
+    ]);
+  }
+
+  /**
+   * Whether the branding references a medium — the half of the instance sites
+   * that is served to anonymous visitors. The legal documents are left out on
+   * purpose: they may hold an internal medium, so they are no reason to keep
+   * one public.
+   *
+   * @param {string} mediaId - Id of the medium.
+   * @returns {Promise<Array<{id: null, title: string}>>} Usage sites
+   */
+  static async getBrandingMediaUsage(mediaId) {
+    return InstanceManager._findMediaUsage(mediaId, BRANDING_MEDIA_PATHS);
+  }
+
+  /**
+   * The instance as a usage site of a medium, searched over the given
+   * reference paths.
+   *
+   * @param {string} mediaId - Id of the medium.
+   * @param {string[]} paths - Dotted paths of the reference sites to search.
+   * @returns {Promise<Array<{id: null, title: string}>>} Usage sites
+   */
+  static async _findMediaUsage(mediaId, paths) {
     if (!mediaId) {
       return [];
     }
 
-    const raw = await InstanceModel.findOne(
-      {
-        $or: [
-          { "branding.logo.mediaId": mediaId },
-          { "branding.favicon.mediaId": mediaId },
-          { "dataProtection.reference.mediaId": mediaId },
-          { "legalNotice.reference.mediaId": mediaId },
-          { "termsAndConditions.reference.mediaId": mediaId },
-        ],
-      },
-      { _id: 1 },
-    ).lean();
+    const found = await InstanceManager._exists({
+      $or: paths.map((path) => ({ [path]: mediaId })),
+    });
 
-    return raw ? [{ id: null, title: "instance" }] : [];
+    return found ? [{ id: null, title: "instance" }] : [];
+  }
+
+  /**
+   * Whether the instance matches a filter, read as narrowly as the question
+   * deserves — the instance is a singleton, so a hit is the whole answer.
+   *
+   * @param {Object} filter - A mongoose filter over the instance.
+   * @returns {Promise<boolean>}
+   */
+  static async _exists(filter) {
+    const raw = await InstanceModel.findOne(filter, { _id: 1 }).lean();
+
+    return Boolean(raw);
+  }
+
+  /**
+   * Whether the Hero Background of the branding is this medium. It reports as
+   * a Hero site, not as an instance one (hero-layout spec §6), so the answer
+   * is the bare fact and the Hero turns it into the site.
+   *
+   * @param {string} mediaId - Id of the medium.
+   * @returns {Promise<boolean>}
+   */
+  static async hasBackgroundMedia(mediaId) {
+    if (!mediaId) {
+      return false;
+    }
+
+    return InstanceManager._exists({
+      "branding.background.image.mediaId": mediaId,
+    });
   }
 
   /**

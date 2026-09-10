@@ -175,6 +175,10 @@
       uploads. The metadata of a booking document follows the update rights of
       its booking instead, and a `visibility` sent for one is ignored — access
       to a booking document follows the booking alone.
+
+      `visibility: "intern"` is refused while the medium is shown to anonymous
+      visitors — the instance branding, an image Block of the Hero Layout or
+      the Hero Background.
     security:
       - bearerAuth: []
     parameters:
@@ -205,6 +209,15 @@
         description: No media update permission, or no access to the booking
       "404":
         description: No such medium in this tenant
+      "409":
+        description: |
+          `visibility: "intern"` on a medium anonymous visitors are shown. The
+          body is the usage proof of those sites alone — branding and `hero` —
+          in the shape of `GET /media/{id}/usage`.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaUsage"
 
   delete:
     tags:
@@ -498,6 +511,10 @@
     description: |
       Only title, alt text, tags and visibility can change — the file of a
       medium is immutable.
+
+      `visibility: "intern"` is refused while the medium is shown to anonymous
+      visitors — the instance branding, an image Block of the Hero Layout or
+      the Hero Background.
     security:
       - bearerAuth: []
     parameters:
@@ -527,6 +544,15 @@
         description: Not the instance owner
       "404":
         description: No such instance medium
+      "409":
+        description: |
+          `visibility: "intern"` on a medium anonymous visitors are shown. The
+          body is the usage proof of those sites alone — branding and `hero` —
+          in the shape of `GET /media/{id}/usage`.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaUsage"
 
   delete:
     tags:
@@ -534,7 +560,8 @@
     summary: Delete an instance medium
     description: |
       Blocked while the medium is in use — the usage proof of the instance
-      covers branding and the legal documents. Deleting is final.
+      covers branding, the legal documents and the Hero (an image Block of the
+      Hero Layout or the Background). Deleting is final.
     security:
       - bearerAuth: []
     parameters:
