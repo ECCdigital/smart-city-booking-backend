@@ -13,7 +13,7 @@ Both frontends consume this API. Changes to endpoints, auth, or response shapes 
 
 ## Stack
 
-- **Runtime:** Node.js 20+ (22 LTS recommended)
+- **Runtime:** Node.js 22+ (22 or 24 LTS)
 - **Framework:** Express 4
 - **Database:** MongoDB 6+ via Mongoose 8
 - **Auth:** JWT (access + refresh tokens), Passport strategies

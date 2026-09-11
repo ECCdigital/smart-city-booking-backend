@@ -501,14 +501,35 @@
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
-    "instanceOwner": 500
+    "instanceOwner": 400
+  },
+  "GET /api/catalog/hero-layout": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 200
+  },
+  "PUT /api/catalog/hero-layout": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400
+  },
+  "POST /api/catalog/hero-layout/preview": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400
   },
   "GET /api/catalog/themes/:slug": {
-    "anonymous": 500,
-    "signedIn": 500,
-    "roleHolder": 500,
-    "tenantOwner": 500,
-    "instanceOwner": 500
+    "anonymous": 404,
+    "signedIn": 404,
+    "roleHolder": 404,
+    "tenantOwner": 404,
+    "instanceOwner": 404
   },
   "GET /api/catalog/themes": {
     "anonymous": 200,

@@ -75,6 +75,19 @@ components:
         originalFileName:
           type: string
           example: beach.png
+        width:
+          type: integer
+          nullable: true
+          description: |
+            Width of the original in pixels, as read at upload time. Null on
+            documents, on ICO images, and on media uploaded before 4.3 until
+            `media-cli backfill-dimensions` has run.
+          example: 1920
+        height:
+          type: integer
+          nullable: true
+          description: Height of the original in pixels, null where `width` is
+          example: 1080
         title:
           type: string
           example: Beach
@@ -170,11 +183,16 @@ components:
 
     MediaUsageSite:
       type: object
-      description: One entity that references the medium.
+      description: |
+        One entity that references the medium. `hero` covers both places the
+        Hero holds an image — an image Block of the instance catalog's Hero
+        Layout and the Background of the branding — as one site, carrying the
+        id of the instance catalog; `null` while the instance has no catalog,
+        which only a Background can reach.
       properties:
         type:
           type: string
-          enum: [bookable, event, booking, instance, tenant]
+          enum: [bookable, event, booking, instance, tenant, hero]
           example: bookable
         id:
           type: string

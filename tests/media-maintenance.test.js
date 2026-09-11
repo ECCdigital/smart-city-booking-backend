@@ -1,5 +1,6 @@
 const assert = require("assert");
 const crypto = require("node:crypto");
+const sharp = require("sharp");
 const sinon = require("sinon");
 
 const MediaManager = require("../src/commons/data-managers/media-manager");
@@ -14,6 +15,7 @@ const {
   MediaUsageService,
 } = require("../src/commons/services/media/media-usage");
 const {
+  backfillDimensions,
   cleanup,
   purgeImported,
   purgeLegacy,
@@ -193,6 +195,156 @@ describe("media maintenance", () => {
 
       assert.strictEqual(report.processed, 1);
       assert.strictEqual(regenerateVariants.callCount, 0);
+    });
+  });
+
+  describe("backfill-dimensions", () => {
+    let setDimensions;
+    let storeMedia;
+
+    async function pngBytes(width, height) {
+      return await sharp({
+        create: {
+          width,
+          height,
+          channels: 3,
+          background: { r: 1, g: 2, b: 3 },
+        },
+      })
+        .png()
+        .toBuffer();
+    }
+
+    function svgBytes(width, height) {
+      return Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}"/></svg>`,
+      );
+    }
+
+    beforeEach(() => {
+      provider.put = sandbox.stub().resolves();
+      provider.getBuffer = sandbox.stub().rejects(new Error("no bytes"));
+      setDimensions = sandbox.stub(MediaManager, "setDimensions").resolves();
+      storeMedia = sandbox.stub(MediaManager, "storeMedia").resolves();
+    });
+
+    it("reads a raster original once and writes its two numbers, nothing else", async () => {
+      MediaManager.getAllMedia.resolves([
+        imageMedium({ mimeType: "image/png", width: null, height: null }),
+      ]);
+      provider.getBuffer.resolves(await pngBytes(640, 480));
+
+      const report = await backfillDimensions();
+
+      assert.strictEqual(report.processed, 1);
+      assert.strictEqual(report.errors.length, 0);
+      assert.strictEqual(provider.getBuffer.callCount, 1);
+      assert.deepStrictEqual(provider.getBuffer.firstCall.args[0], {
+        key: `${TENANT}/media/media-1/original.png`,
+      });
+      assert.deepStrictEqual(setDimensions.firstCall.args, [
+        "media-1",
+        TENANT,
+        { width: 640, height: 480 },
+      ]);
+      // No file bytes, no storage key and no variant are touched.
+      assert.strictEqual(provider.put.callCount, 0);
+      assert.strictEqual(storeMedia.callCount, 0);
+    });
+
+    it("reads the intrinsic dimensions of an SVG", async () => {
+      MediaManager.getAllMedia.resolves([
+        imageMedium({
+          mimeType: "image/svg+xml",
+          originalFileName: "logo.svg",
+          storage: {
+            provider: "nextcloud",
+            key: `${TENANT}/media/media-1/original.svg`,
+          },
+        }),
+      ]);
+      provider.getBuffer.resolves(svgBytes(120, 80));
+
+      const report = await backfillDimensions();
+
+      assert.strictEqual(report.processed, 1);
+      assert.deepStrictEqual(setDimensions.firstCall.args[2], {
+        width: 120,
+        height: 80,
+      });
+    });
+
+    it("asks the database only for images sharp can read", async () => {
+      await backfillDimensions();
+
+      const filter = MediaManager.getAllMedia.firstCall.args[0];
+      assert.strictEqual(filter.kind, "image");
+      assert.ok(filter.mimeType.$in.includes("image/png"));
+      assert.ok(filter.mimeType.$in.includes("image/svg+xml"));
+      assert.ok(!filter.mimeType.$in.includes("image/x-icon"));
+      assert.strictEqual(filter.tenantId, undefined);
+    });
+
+    it("restricts the run to one tenant", async () => {
+      await backfillDimensions({ tenantId: TENANT });
+
+      assert.strictEqual(
+        MediaManager.getAllMedia.firstCall.args[0].tenantId,
+        TENANT,
+      );
+    });
+
+    it("skips a medium that already carries dimensions, so a second run reads nothing", async () => {
+      MediaManager.getAllMedia.resolves([
+        imageMedium({ mimeType: "image/png", width: 640, height: 480 }),
+      ]);
+
+      const report = await backfillDimensions();
+
+      assert.strictEqual(report.processed, 0);
+      assert.strictEqual(report.skipped, 1);
+      assert.strictEqual(provider.getBuffer.callCount, 0);
+      assert.strictEqual(setDimensions.callCount, 0);
+    });
+
+    it("reads and writes nothing in a dry run", async () => {
+      MediaManager.getAllMedia.resolves([
+        imageMedium({ mimeType: "image/png", width: null, height: null }),
+      ]);
+
+      const report = await backfillDimensions({ dryRun: true });
+
+      assert.strictEqual(report.dryRun, true);
+      assert.strictEqual(report.processed, 1);
+      assert.strictEqual(provider.getBuffer.callCount, 0);
+      assert.strictEqual(setDimensions.callCount, 0);
+    });
+
+    it("reports a medium whose bytes do not decode and keeps going", async () => {
+      MediaManager.getAllMedia.resolves([
+        imageMedium({ id: "media-1", mimeType: "image/png" }),
+        imageMedium({
+          id: "media-2",
+          mimeType: "image/png",
+          storage: {
+            provider: "nextcloud",
+            key: `${TENANT}/media/media-2/original.png`,
+          },
+        }),
+      ]);
+      provider.getBuffer.callsFake(async ({ key }) =>
+        key.includes("media-2")
+          ? await pngBytes(10, 20)
+          : Buffer.from("not an image"),
+      );
+
+      const report = await backfillDimensions();
+
+      assert.strictEqual(report.processed, 1);
+      assert.strictEqual(report.errors.length, 1);
+      assert.strictEqual(report.errors[0].subject, "media:media-1");
+      assert.strictEqual(setDimensions.callCount, 1);
+      assert.strictEqual(setDimensions.firstCall.args[0], "media-2");
     });
   });
 

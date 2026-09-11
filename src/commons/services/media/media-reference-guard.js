@@ -6,6 +6,24 @@ const {
 } = require("../../../errors/BaseError");
 const { collectMediaIds } = require("./media-reference");
 const {
+  MEDIA_KIND,
+  MEDIA_REFERENCE_SOURCE,
+} = require("../../schemas/mediaSchema");
+const SchemaUtils = require("../../utilities/schemaUtils");
+const { ValidationError } = require("../../../errors/ValidationError");
+
+/**
+ * Why a media reference may not carry the Hero. Travels to the admin UI as
+ * `params.reason` of an `invalid_custom` detail, so the editor can name the
+ * rule that was broken.
+ */
+const HERO_MEDIA_REFUSAL = Object.freeze({
+  EXTERNAL: "external",
+  NOT_INSTANCE: "not_instance",
+  NOT_PUBLIC: "not_public",
+  NOT_IMAGE: "not_image",
+});
+const {
   instanceBrandingReferences,
   instanceDocumentReferences,
 } = require("./instance-media");
@@ -237,6 +255,77 @@ class MediaReferenceGuard {
       requirePublic: false,
     });
   }
+
+  /**
+   * Why a media reference may not carry the Hero: it has to point at a public
+   * image of the instance library, never at a foreign address, a tenant
+   * medium, an internal one or a document. The Hero is painted for anonymous
+   * visitors, and the instance library is the only scope the instance catalog
+   * reaches.
+   *
+   * An id the instance scope cannot find reads as `not_instance`: a tenant
+   * medium and one that does not exist look the same from here, and both are
+   * equally out of reach.
+   *
+   * @param {Object} reference - The stored reference, `{ source, mediaId }`.
+   * @returns {Promise<?string>} The reason it is refused, or null when it may
+   *   be stored.
+   */
+  static async heroLayoutRefusal(reference) {
+    if (reference?.source !== MEDIA_REFERENCE_SOURCE.MEDIA) {
+      return HERO_MEDIA_REFUSAL.EXTERNAL;
+    }
+
+    const media = await MediaManager.getMedia(reference.mediaId, null);
+
+    if (!media) {
+      return HERO_MEDIA_REFUSAL.NOT_INSTANCE;
+    }
+
+    if (!media.isPublic()) {
+      return HERO_MEDIA_REFUSAL.NOT_PUBLIC;
+    }
+
+    if (media.kind !== MEDIA_KIND.IMAGE) {
+      return HERO_MEDIA_REFUSAL.NOT_IMAGE;
+    }
+
+    return null;
+  }
+
+  /**
+   * Checks every image a Hero Layout or a Background points at. Unlike the
+   * other reference sites this answers a `ValidationError`, not a
+   * `BadRequestError`: the Hero editor puts the message at the field that
+   * carries the fault, so every refusal needs the JSON path it happened at.
+   *
+   * @param {Array<{field: string, reference: Object}>} references - Each
+   *   reference with its JSON path in the request body.
+   * @returns {Promise<void>}
+   * @throws {ValidationError} One `invalid_custom` detail per refused
+   *   reference, `params.reason` naming which rule it broke.
+   */
+  static async assertHeroLayoutStorable(references) {
+    const details = [];
+
+    for (const { field, reference } of references) {
+      const reason = await MediaReferenceGuard.heroLayoutRefusal(reference);
+
+      if (reason) {
+        details.push({
+          field,
+          code: SchemaUtils.ERROR_CODES.validate,
+          params: { reason },
+        });
+      }
+    }
+
+    if (details.length > 0) {
+      throw new ValidationError(details);
+    }
+  }
 }
+
+MediaReferenceGuard.HERO_MEDIA_REFUSAL = HERO_MEDIA_REFUSAL;
 
 module.exports = MediaReferenceGuard;

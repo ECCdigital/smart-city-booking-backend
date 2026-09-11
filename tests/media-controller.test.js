@@ -162,8 +162,10 @@ describe("MediaControllerV2", function () {
   let permissions;
 
   // The usage proof is searched over the entities, which no unit test holds —
-  // tests that care about it set this list.
+  // tests that care about it set these lists. `publicUsage` is the half of it
+  // that anonymous visitors see, the one a switch to `intern` trips over.
   let usage;
+  let publicUsage;
 
   /**
    * The principal of a request, built from the same three sources the tests
@@ -249,6 +251,7 @@ describe("MediaControllerV2", function () {
     membership = null;
     permissions = { tenants: [], instanceOwner: false };
     usage = [];
+    publicUsage = [];
 
     sandbox.stub(storage, "getStorageProvider").returns(provider);
     sandbox
@@ -263,6 +266,9 @@ describe("MediaControllerV2", function () {
     sandbox
       .stub(MediaUsageService, "findUsage")
       .callsFake(async () => usage.map((site) => ({ ...site })));
+    sandbox
+      .stub(MediaUsageService, "findPublicUsage")
+      .callsFake(async () => publicUsage.map((site) => ({ ...site })));
   });
 
   afterEach(function () {
@@ -714,6 +720,93 @@ describe("MediaControllerV2", function () {
         stored.storage.key,
         `${TENANT}/media/media-1/original.png`,
       );
+    });
+
+    it("refuses to turn a medium the Hero shows internal", async function () {
+      grant({ manageMedia: { updateAny: true } });
+      publicUsage = [{ type: "hero", id: "catalog-1", title: "Stadtportal" }];
+
+      let conflict;
+      await assert.rejects(
+        () =>
+          MediaControllerV2.updateMedia(
+            createRequest({
+              user: OWNER,
+              params: { id: "media-1" },
+              body: { visibility: "intern" },
+            }),
+            createResponse(),
+          ),
+        (error) => {
+          conflict = error;
+          return error.statusCode === 409;
+        },
+      );
+
+      assert.strictEqual(conflict.code, "media_in_use");
+      assert.deepStrictEqual(conflict.toJSON(), publicUsage);
+      assert.strictEqual(MediaManager.storeMedia.called, false);
+      assert.deepStrictEqual(
+        MediaUsageService.findPublicUsage.firstCall.args[0],
+        { mediaId: "media-1" },
+      );
+    });
+
+    it("lets a medium only a legal document holds go internal", async function () {
+      grant({ manageMedia: { updateAny: true } });
+      // The full proof names the instance; the public half does not, because a
+      // legal document may hold an internal medium.
+      usage = [{ type: "instance", id: null, title: "instance" }];
+      const res = createResponse();
+
+      await MediaControllerV2.updateMedia(
+        createRequest({
+          user: OWNER,
+          params: { id: "media-1" },
+          body: { visibility: "intern" },
+        }),
+        res,
+      );
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.body.visibility, "intern");
+    });
+
+    it("leaves a medium that is already internal alone", async function () {
+      grant({ manageMedia: { updateAny: true } });
+      MediaManager.getMedia.resolves(mediaFixture({ visibility: "intern" }));
+      publicUsage = [{ type: "hero", id: "catalog-1", title: "Stadtportal" }];
+      const res = createResponse();
+
+      await MediaControllerV2.updateMedia(
+        createRequest({
+          user: OWNER,
+          params: { id: "media-1" },
+          body: { visibility: "intern", title: "New title" },
+        }),
+        res,
+      );
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(MediaUsageService.findPublicUsage.called, false);
+    });
+
+    it("lets a medium the Hero shows go public again", async function () {
+      grant({ manageMedia: { updateAny: true } });
+      publicUsage = [{ type: "hero", id: "catalog-1", title: "Stadtportal" }];
+      const res = createResponse();
+
+      await MediaControllerV2.updateMedia(
+        createRequest({
+          user: OWNER,
+          params: { id: "media-1" },
+          body: { visibility: "public" },
+        }),
+        res,
+      );
+
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(MediaUsageService.findPublicUsage.called, false);
     });
 
     it("rejects a request without any updatable field", async function () {
@@ -1365,6 +1458,29 @@ describe("MediaControllerV2", function () {
       );
 
       assert.deepStrictEqual(res.body, []);
+    });
+
+    it("blocks the deletion of a medium the Hero holds", async function () {
+      grant({ manageMedia: { deleteAny: true } });
+      usage = [{ type: "hero", id: "catalog-1", title: "Stadtportal" }];
+      const removeMedia = sandbox.stub(MediaManager, "removeMedia");
+
+      let conflict;
+      await assert.rejects(
+        () =>
+          MediaControllerV2.deleteMedia(
+            createRequest({ user: OWNER, params: { id: "media-1" } }),
+            createResponse(),
+          ),
+        (error) => {
+          conflict = error;
+          return error.statusCode === 409;
+        },
+      );
+
+      assert.strictEqual(conflict.code, "media_in_use");
+      assert.deepStrictEqual(conflict.toJSON(), usage);
+      assert.strictEqual(removeMedia.called, false);
     });
 
     it("blocks the deletion of a medium in use with the same body", async function () {

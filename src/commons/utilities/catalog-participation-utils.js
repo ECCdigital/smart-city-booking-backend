@@ -1,5 +1,10 @@
 const MembershipManager = require("../data-managers/membership-manager");
 const TenantManager = require("../data-managers/tenant-manager");
+const {
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} = require("../../errors/BaseError");
 
 async function getMemberTenantIds(userId) {
   if (!userId) {
@@ -33,7 +38,7 @@ function isTenantListedInCatalog(tenant, catalog, memberTenantIds) {
 async function enforceTenantCatalogAccess(tenantId, userId) {
   const tenant = await TenantManager.getTenant(tenantId);
   if (!tenant) {
-    throw { code: 404, message: "Tenant not found" };
+    throw new NotFoundError("tenant_not_found", { tenantId });
   }
 
   if (!tenant.catalogParticipation?.restricted) {
@@ -41,18 +46,12 @@ async function enforceTenantCatalogAccess(tenantId, userId) {
   }
 
   if (!userId) {
-    throw {
-      code: 401,
-      message: "Authentication required to access this catalog.",
-    };
+    throw new UnauthorizedError("authentication_required", { tenantId });
   }
 
   const memberTenantIds = await getMemberTenantIds(userId);
   if (!hasRestrictedCatalogAccess(tenant, memberTenantIds)) {
-    throw {
-      code: 403,
-      message: "Tenant membership required to access this catalog.",
-    };
+    throw new ForbiddenError("tenant_membership_required", { tenantId });
   }
 
   return tenant;

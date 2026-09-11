@@ -35,6 +35,11 @@ const ALLOWED_TYPES = [
 
 const ALLOWED_MIME_TYPES = ALLOWED_TYPES.map((type) => type.mimeType);
 
+// The image types sharp reads — the ones that have dimensions and variants.
+const DECODABLE_IMAGE_MIME_TYPES = ALLOWED_TYPES.filter(
+  (type) => type.sharpFormats.length > 0,
+).map((type) => type.mimeType);
+
 // The first bytes are enough for every magic number in the allowlist and for
 // the XML prologue of an SVG.
 const SNIFF_BYTES = 4096;
@@ -200,6 +205,7 @@ async function detectStoredType(data, fileName) {
 
 module.exports = {
   ALLOWED_MIME_TYPES,
+  DECODABLE_IMAGE_MIME_TYPES,
   ICO_MIME_TYPE,
   SVG_MIME_TYPE,
   detectStoredType,

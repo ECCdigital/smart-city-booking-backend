@@ -256,7 +256,13 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
     skip: ["filterConcurrentBookings"],
     only: { getMediaUsage: async () => [] },
   });
-  stubManager(CatalogManager, { one: catalog });
+  stubManager(CatalogManager, {
+    one: catalog,
+    only: {
+      getHeroSite: async () => null,
+      hasHeroLayoutMedia: async () => false,
+    },
+  });
   stubManager(ChallengeManager, { one: challenge });
   stubManager(CouponManager, { one: coupon });
   // The dashboard counts and aggregates by tenant id into maps; an empty
@@ -286,6 +292,8 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
       getBranding: async () => ({ active: false }),
       getPortalConfig: async () => ({ publicOffersEnabled: false }),
       getMediaUsage: async () => [],
+      getBrandingMediaUsage: async () => [],
+      hasBackgroundMedia: async () => false,
     },
   });
   for (const Manager of [FileManager, NextcloudManager]) {

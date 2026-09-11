@@ -786,16 +786,15 @@ Example:
   "excludedTenantIds": [],
   "active": true,
   "visibility": "public",
-  "hero": {
-    "title": "Welcome",
-    "subtitle": "Book city resources online"
-  }
+  "heroLayout": null
 }
 ```
 
-Visual theme (colors, logo) is configured on **Instance.branding**, not on the catalog document.
+`heroLayout` holds the Hero Layout of the storefront's catalog page (see the hero-layout spec); `null` means the backend derives the Default Hero Layout — the branding logo, the catalog's `name` as title, and the default slogan — at read time. It is written through the instance catalog PUT and through the Hero Editor's own `PUT /api/catalog/hero-layout`, which saves it together with the Background of the branding; both normalise it complete with every default filled, and `heroLayout: null` resets to the default. A tenant catalog PUT refuses the key with `unknown_field`. For the instance catalog `name` is the Portal Name and is required.
 
-For aggregate catalogs, `type` is set to `"aggregate"` and several tenant IDs are combined; for instance-wide catalogs `type` is `"instance"` and `tenantId`/`name`/`slug` are omitted.
+Visual theme (colors, logo, Hero Background) is configured on **Instance.branding**, not on the catalog document.
+
+For aggregate catalogs, `type` is set to `"aggregate"` and several tenant IDs are combined; for instance-wide catalogs `type` is `"instance"`, `tenantId`/`slug` are omitted and `name` is the Portal Name.
 
 ### Challenge
 

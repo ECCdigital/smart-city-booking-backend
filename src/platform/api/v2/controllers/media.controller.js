@@ -153,6 +153,8 @@ class MediaControllerV2 {
       size: media.size,
       checksum: media.checksum,
       originalFileName: media.originalFileName,
+      width: media.width ?? null,
+      height: media.height ?? null,
       title: media.title,
       altText: media.altText,
       tags: media.tags || [],
@@ -406,6 +408,20 @@ class MediaControllerV2 {
       throw new BadRequestError("no_updatable_fields", {
         allowed: PATCHABLE_FIELDS,
       });
+    }
+
+    // The branding and the Hero are painted for anonymous visitors, so a
+    // medium one of them shows cannot turn internal: the page would simply
+    // stop loading it. Refused with the usage proof of those sites, the same
+    // body a blocked deletion answers.
+    if (updates.visibility === MEDIA_VISIBILITY.INTERN && media.isPublic()) {
+      const publicUsage = await MediaUsageService.findPublicUsage({
+        mediaId: media.id,
+      });
+
+      if (publicUsage.length > 0) {
+        throw new MediaInUseError(publicUsage);
+      }
     }
 
     Object.assign(media, updates);

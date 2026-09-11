@@ -16,7 +16,7 @@ For API-only setup, see the [README Quick Start](../README.md#quick-start). For 
 
 **Prerequisites (local npm path):**
 
-- [Node.js](https://nodejs.org/) v20+ (recommended: v22 LTS)
+- [Node.js](https://nodejs.org/) v22+ (v22 or v24 LTS)
 - [npm](https://www.npmjs.com/) v10+
 - [MongoDB](https://www.mongodb.com/) v6+
 

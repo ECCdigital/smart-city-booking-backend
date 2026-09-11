@@ -12,6 +12,7 @@ const { hideBin } = require("yargs/helpers");
 
 const dbm = require("../commons/utilities/database-manager");
 const {
+  backfillDimensions,
   cleanup,
   purgeImported,
   purgeLegacy,
@@ -121,6 +122,21 @@ yargs(hideBin(process.argv))
     (argv) =>
       run(
         () => regenerate({ dryRun: argv.dryRun, tenantId: argv.tenant }),
+        argv,
+      ),
+  )
+  .command(
+    "backfill-dimensions",
+    "Store the original width and height of images uploaded before 4.3",
+    (builder) =>
+      builder.options(dryRunOption).option("tenant", {
+        type: "string",
+        describe: "Restrict to one tenant",
+      }),
+    (argv) =>
+      run(
+        () =>
+          backfillDimensions({ dryRun: argv.dryRun, tenantId: argv.tenant }),
         argv,
       ),
   )
