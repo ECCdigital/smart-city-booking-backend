@@ -398,6 +398,52 @@ describe("hero-richtext-sanitizer", function () {
     });
   });
 
+  // jsdom walks and serialises a tree recursively, so markup nested thousands
+  // of levels deep, though well under the raw cap, overflows the call stack
+  // inside `sanitize()` or the class pass. Where exactly depends on the stack
+  // at the time of the call, not on the input alone. The contract knows no
+  // depth; it knows that no such tree fits the sanitised cap, so the parser
+  // giving up is answered as the measurement it stands in for, never as a 500.
+  describe("nesting depth", function () {
+    async function assertRefusedAsMaxLength(raw) {
+      assert.ok(raw.length <= HERO_RICHTEXT_MAX_RAW_LENGTH);
+
+      const error = await rejection(sanitizeHeroRichText(raw, FIELD));
+
+      assert.ok(error instanceof ValidationError, String(error));
+      assert.deepStrictEqual(error.errors, [
+        {
+          field: FIELD,
+          code: "max_length",
+          params: {
+            max: HERO_RICHTEXT_MAX_SANITIZED_LENGTH,
+            actual: raw.length,
+          },
+        },
+      ]);
+    }
+
+    it("refuses a list nested thousands of levels deep as max_length, not with a RangeError", async function () {
+      // Under the pre-amendment allowlist as much as today: 24 001 characters.
+      await assertRefusedAsMaxLength("<ul><li>".repeat(3000));
+    });
+
+    it("refuses a span nested thousands of levels deep the same way", async function () {
+      // `span` is an allowed tag since the class pass; 36 000 characters.
+      await assertRefusedAsMaxLength("<span>".repeat(6000));
+    });
+
+    it("accepts the deepest tree that fits the sanitised cap", async function () {
+      // Seven characters is the least a kept level costs, so no stored rich
+      // text is deeper than this — the guarantee the refusal above rests on.
+      const depth = Math.floor(HERO_RICHTEXT_MAX_SANITIZED_LENGTH / 7);
+      const raw = "<u>".repeat(depth) + "x" + "</u>".repeat(depth);
+      assert.ok(raw.length <= HERO_RICHTEXT_MAX_SANITIZED_LENGTH);
+
+      assert.strictEqual(await sanitizeHeroRichText(raw, FIELD), raw);
+    });
+  });
+
   describe("purifier lifecycle", function () {
     it("does not load jsdom when the module is required", function () {
       const script =

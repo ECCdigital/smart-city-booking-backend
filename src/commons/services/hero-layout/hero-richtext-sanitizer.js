@@ -104,7 +104,9 @@ function loadHeroRichTextRuntime() {
  * @throws {ValidationError} `max_length` when the raw input exceeds
  *   50 000 characters or the sanitised result exceeds 10 000. `params.max`
  *   is the cap that was hit, `params.actual` the length measured at that
- *   stage (raw, or after sanitising).
+ *   stage (raw, or after sanitising). A tree too deep for the parser to
+ *   walk is refused against the sanitised cap with the raw length, the one
+ *   measurement there is; see `sanitizeDeepTree`.
  */
 async function sanitizeHeroRichText(html, field) {
   if (html.length > HERO_RICHTEXT_MAX_RAW_LENGTH) {
@@ -112,9 +114,14 @@ async function sanitizeHeroRichText(html, field) {
   }
 
   const { purifier, window } = await loadHeroRichTextRuntime();
-  const sanitized = applyHeroClassPass(
-    purifier.sanitize(html, HERO_RICHTEXT_ALLOWLIST),
-    window,
+  const sanitized = sanitizeDeepTree(
+    () =>
+      applyHeroClassPass(
+        purifier.sanitize(html, HERO_RICHTEXT_ALLOWLIST),
+        window,
+      ),
+    field,
+    html,
   );
 
   if (sanitized.length > HERO_RICHTEXT_MAX_SANITIZED_LENGTH) {
@@ -126,6 +133,44 @@ async function sanitizeHeroRichText(html, field) {
   }
 
   return sanitized;
+}
+
+/**
+ * Runs both passes over one tree and turns the parser giving up on its depth
+ * into the contract's answer.
+ *
+ * jsdom walks and serialises a tree recursively, so markup nested thousands
+ * of levels deep — well under the raw cap, `"<ul><li>".repeat(3000)` is
+ * 24 001 characters — overflows the call stack inside `sanitize()` or the
+ * class pass. Where exactly depends on the stack at the time of the call, so
+ * there is no depth to cap in the contract, and the contract names none. It
+ * does not need to: a kept level costs at least seven characters, so any tree
+ * deep enough to break the parser would have exceeded the sanitised cap had
+ * sanitising finished, and every tree that fits the cap (≤ 1 428 levels) is
+ * far below where the parser fails. The overflow is therefore refused as the
+ * measurement it stands in for, `max_length` against the sanitised cap, and
+ * never surfaces as a 500. Anything but a stack overflow is rethrown.
+ *
+ * @param {Function} passes - Both passes over the tree, run once.
+ * @param {string} field - JSON path of the locale string, for the error.
+ * @param {string} html - The raw input, whose length is what can be reported.
+ * @returns {string} The sanitised HTML.
+ * @throws {ValidationError} `max_length` when the parser overflowed.
+ */
+function sanitizeDeepTree(passes, field, html) {
+  try {
+    return passes();
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw maxLengthError(
+        field,
+        HERO_RICHTEXT_MAX_SANITIZED_LENGTH,
+        html.length,
+      );
+    }
+
+    throw error;
+  }
 }
 
 /**

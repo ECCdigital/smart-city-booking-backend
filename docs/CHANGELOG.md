@@ -9,6 +9,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Hero rich text nested thousands of levels deep, though under the 50 000 character raw cap, overflowed the sanitiser's call stack inside jsdom and answered `500`; it is refused as `400 max_length` against the sanitised cap now — no such tree fits that cap, and none that fits comes near the parser's limit
 - An emptied Portal-URL was silently restored: `PUT /api/instances` with `portalUrl: ""` mirrored the legacy `catalogUrl` back over it, so the admin reported a successful save and showed the old address again on the next load. The mirror now carries a value across only where the other side is absent, not merely empty; clearing the Portal-URL removes the stale `catalogUrl` from the document with it, and `getPortalConfig` answers a stored empty Portal-URL instead of falling back to `catalogUrl`
 - Dashboard `byBookable` keeps a title from the booking snapshot when the bookable was deleted, prefers the live title otherwise, and sets `bookableDeleted`
 - Dashboard `byPeriod` revenue aggregation: coerce epoch-ms fields with `$toLong` before `$toDate` so BSON int `timePaid` (legacy `0`) no longer raises ConversionFailure
