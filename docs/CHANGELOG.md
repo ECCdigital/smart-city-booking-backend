@@ -7,49 +7,9 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
-## [4.2.6] — 2026-08-25
-
-### Added
-
-- Custom field definitions support `usageOptions.showInMail` (checkout fields only, enforced on write): flagged fields render as `Label: Wert` lines in the booking-details block of all booking mails; empty values show as "nicht angegeben"
-- Mail-visible custom field values render type-aware via `CustomFieldService.formatValueForDisplay`: booleans as "Ja"/"Nein", selects as the option caption (raw value if the option was deleted), numbers as strings
-- Migration `25-08-2026-customfield-show-in-mail` backfills `usageOptions.showInMail: false` on existing custom field definitions (instance, tenant, bookable) so all fields stay opt-in
-
 ### Fixed
 
-- Admin booking update no longer applies the assignee's bookable booking discounts when recomputing prices (same as manual create; Admin-entered list prices from `priceCategories` are kept)
-
-## [4.2.5] — 2026-08-10
-
-### Fixed
-
-- Admin manual booking create never hard-fails on checkout rules (including capacity/overlap), matching admin update; use validate endpoints for informational availability
-
-## [4.2.4] — 2026-08-10
-
-### Fixed
-
-- Manual/admin booking create no longer applies the creating user's bookable booking discounts (list price is kept; Admin UI does not send `bookWithoutDiscount`)
-- Admin booking update never hard-fails on checkout rules (including capacity/overlap); prices are still recomputed from edited `_bookableUsed.priceCategories`. Use validate endpoints with `excludeBookingIds` for informational availability while editing
-
-## [4.2.3] — 2026-07-31
-
-### Added
-
-- Tenant setting `mailBookingPeriodFormat` (`default`, `fromTo`, `timeFirst`, `long`, `compact`) to control how booking periods are rendered in email booking details
-
-## [4.2.2] — 2026-07-29
-
-### Added
-
-- Booking mails support an optional editable closing snippet (`mailSnippets["{type}__after"]`) rendered after buttons, QR code, and the system footer
-- Tenant setting `mailShowSupportFooter` (default `true`) to hide the automatic support-contact footer in booking mails
-
-### Fixed
-
-- **DEV-845:** Group cancellation refund preview lists bookings chronologically by `timeBegin` (with dates in the payload); `createGroupBooking` also sorts attempts by start time before creating
-- Mail snippets inherit the tenant mail theme font; hardcoded `font-family` values are stripped at render time so booking details match header/footer typography
-- Normalize double-quoted font names in mail HTML (`"Segoe UI"` → `'Segoe UI'`) so inline theme styles are not truncated
+- Public event ticket pagination now caps large offsets before querying MongoDB
 
 ## [4.2.1] — 2026-07-22
 

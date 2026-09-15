@@ -285,9 +285,7 @@ describe("BookingService cancellation refunds", function () {
     ];
     sinon.stub(TenantManager, "getTenant").resolves({
       id: "tenant-1",
-      cancellationRefundTiers: [
-        { daysBeforeStart: 0, refundPercentage: 100 },
-      ],
+      cancellationRefundTiers: [{ daysBeforeStart: 0, refundPercentage: 100 }],
     });
     sinon.stub(GroupBookingManager, "getGroupBooking").resolves({
       id: "group-1",

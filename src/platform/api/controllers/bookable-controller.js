@@ -11,6 +11,8 @@ const {
 } = require("../../../commons/utilities/opening-hours-manager");
 const BookableService = require("../../../commons/services/bookable-service");
 const bunyan = require("bunyan");
+const { NotFoundError } = require("../../../errors/BaseError");
+const ApiResponse = require("../../../commons/utilities/api-response");
 
 const logger = bunyan.createLogger({
   name: "bookable-controller.js",
@@ -317,6 +319,10 @@ class BookableController {
         tenant,
       );
 
+      if (!existingBookable) {
+        throw new NotFoundError("bookable_not_found");
+      }
+
       if (!existingBookable?.isPublic && bookable.isPublic) {
         if (
           (await BookableManager.checkPublicBookableCount(
@@ -347,6 +353,10 @@ class BookableController {
         response.sendStatus(403);
       }
     } catch (err) {
+      if (err instanceof NotFoundError) {
+        return ApiResponse.notFound(response, err.code);
+      }
+
       logger.error(err);
       response.status(500).send("Could not update bookable");
     }

@@ -50,8 +50,6 @@ function createBookable(overrides = {}) {
 
 describe("json-controller groupBookingAllowed", () => {
   let getBookableStub;
-  let getInstanceStub;
-  let externalPriceStub;
   let getMembershipStub;
   let getTenantStub;
 
@@ -60,10 +58,8 @@ describe("json-controller groupBookingAllowed", () => {
       id: "tenant-1",
       catalogParticipation: { restricted: false },
     });
-    getInstanceStub = sinon.stub(InstanceManager, "getInstance").resolves(null);
-    externalPriceStub = sinon
-      .stub(ExternalPriceService, "resolve")
-      .resolves(null);
+    sinon.stub(InstanceManager, "getInstance").resolves(null);
+    sinon.stub(ExternalPriceService, "resolve").resolves(null);
     getMembershipStub = sinon.stub(
       MembershipManager,
       "getMembershipByTenantAndUserID",
