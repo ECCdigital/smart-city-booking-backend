@@ -12,6 +12,8 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { NotFoundError } = require("../../../errors/BaseError");
 const ApiResponse = require("../../../commons/utilities/api-response");
 
+const MAX_PUBLIC_TICKET_OFFSET = 10000;
+
 const logger = bunyan.createLogger({
   name: "event-controller.js",
   level: process.env.LOG_LEVEL,
@@ -34,7 +36,7 @@ class EventController {
       const requestedOffset = Number.parseInt(request.query.offset, 10);
       const requestedLimit = Number.parseInt(request.query.limit, 10);
       const offset = Number.isInteger(requestedOffset)
-        ? Math.max(requestedOffset, 0)
+        ? Math.min(Math.max(requestedOffset, 0), MAX_PUBLIC_TICKET_OFFSET)
         : 0;
       const limit = Number.isInteger(requestedLimit)
         ? Math.min(Math.max(requestedLimit, 1), 50)

@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Public event ticket pagination now caps large offsets before querying MongoDB
+
 ## [4.2.1] — 2026-07-22
 
 ### Added

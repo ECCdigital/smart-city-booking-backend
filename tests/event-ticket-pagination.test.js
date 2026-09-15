@@ -48,6 +48,32 @@ describe("EventController.getPublicEventTickets", () => {
     });
   });
 
+  it("caps the public ticket offset before querying the database", async () => {
+    sinon.stub(EventManager, "getEvent").resolves({ isPublic: true });
+    const pageStub = sinon
+      .stub(BookableManager, "getPublicEventBookablesPage")
+      .resolves({ tickets: [], total: 10001 });
+    const response = responseStub();
+
+    await EventController.getPublicEventTickets(
+      {
+        params: { tenant: "tenant-1", id: "event-1" },
+        query: { offset: "10001" },
+      },
+      response,
+    );
+
+    assert.deepStrictEqual(pageStub.firstCall.args, [
+      "tenant-1",
+      "event-1",
+      { offset: 10000, limit: 10 },
+    ]);
+    assert.strictEqual(
+      response.send.firstCall.args[0].pagination.offset,
+      10000,
+    );
+  });
+
   it("does not expose tickets for a non-public event", async () => {
     sinon.stub(EventManager, "getEvent").resolves({ isPublic: false });
     const pageStub = sinon.stub(BookableManager, "getPublicEventBookablesPage");
