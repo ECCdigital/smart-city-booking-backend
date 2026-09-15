@@ -55,6 +55,7 @@ class CheckoutControllerV2 {
       amount,
       couponCode,
       bookWithoutDiscount,
+      excludeBookingIds,
     } = req.body;
 
     const { checkoutId, generated } = await resolveCheckoutId(
@@ -94,6 +95,7 @@ class CheckoutControllerV2 {
       couponCode,
       bookWithoutDiscount,
       checkoutId,
+      excludeBookingIds,
     });
 
     try {

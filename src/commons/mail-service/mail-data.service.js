@@ -1,8 +1,13 @@
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
+const TenantManager = require("../data-managers/tenant-manager");
 const QRCode = require("qrcode");
+const {
+  CustomFieldService,
+} = require("../services/custom-field/custom-field-service");
 const { renderSnippet } = require("./templates/template-loader");
+const Formatters = require("../utilities/formatters");
 
 class MailDataService {
   static buildCancellationMailContext(
@@ -92,14 +97,34 @@ class MailDataService {
 
   static async generateBookingDetails(bookingId, tenantId) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const tenant = await TenantManager.getTenant(tenantId);
     const bookables = await this.getPopulatedBookables(bookingId, tenantId);
     const bookingItems = this.buildBookingItems(booking, bookables);
     const coupon = this.buildCouponInfo(booking);
+    const bookingPeriod = Formatters.formatBookingPeriod(
+      booking.timeBegin,
+      booking.timeEnd,
+      tenant.mailBookingPeriodFormat,
+    );
+
+    // Order follows the merge order of the definitions (instance → tenant →
+    // bookable); a null displayValue renders as "nicht angegeben".
+    const mailCustomFields = (booking.customFields || [])
+      .filter((field) => field.usageOptions?.showInMail === true)
+      .map((field) => ({
+        caption: field.caption,
+        displayValue: CustomFieldService.formatValueForDisplay(
+          field,
+          field.value,
+        ),
+      }));
 
     return renderSnippet("booking-details", {
       booking,
       bookingItems,
       coupon,
+      bookingPeriod,
+      mailCustomFields,
     });
   }
 
@@ -109,6 +134,7 @@ class MailDataService {
     addRejectionLink = false,
   ) {
     const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const tenant = await TenantManager.getTenant(tenantId);
     const bookables = await this.getPopulatedBookables(bookingId, tenantId);
 
     const bookingItems = booking.bookableItems.map((item) => {
@@ -118,12 +144,18 @@ class MailDataService {
 
     const { rejectionUrl, cancellationContactHint } =
       this.buildCancellationMailContext(booking, tenantId, addRejectionLink);
+    const bookingPeriod = Formatters.formatBookingPeriod(
+      booking.timeBegin,
+      booking.timeEnd,
+      tenant.mailBookingPeriodFormat,
+    );
 
     return renderSnippet("short-booking-details", {
       booking,
       bookingItems,
       rejectionUrl,
       cancellationContactHint,
+      bookingPeriod,
     });
   }
 

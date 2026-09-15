@@ -158,6 +158,19 @@ class MailerService {
   }
 
   /**
+   * Font stacks previously used double quotes (e.g. "Segoe UI") inside HTML
+   * style="..." attributes, which truncates the attribute. Normalize to single
+   * quotes so theme typography applies consistently.
+   */
+  static sanitizeMailHtmlFonts(html) {
+    if (typeof html !== "string" || html.length === 0) return html;
+    return html.replace(
+      /"(Segoe UI|Times New Roman|Work Sans|Helvetica Neue|Courier New)"/g,
+      "'$1'",
+    );
+  }
+
+  /**
    * Read a template from file and replace dynamic attributes.
    *
    * @param emailTemplate The HTML file containing the mail template.
@@ -177,7 +190,7 @@ class MailerService {
       templateCache.set(emailTemplate, compiledTemplate);
     }
 
-    return compiledTemplate(model);
+    return MailerService.sanitizeMailHtmlFonts(compiledTemplate(model));
   }
 
   /**

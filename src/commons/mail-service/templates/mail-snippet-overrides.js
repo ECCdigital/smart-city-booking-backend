@@ -72,12 +72,32 @@ const OVERRIDE_TEMPLATE_VARIABLES = Object.freeze([
   },
 ]);
 
+const AFTER_SNIPPET_SUFFIX = "__after";
+
 const overridableSnippetSet = new Set(OVERRIDABLE_SNIPPETS);
+
+function afterSnippetKey(snippetName) {
+  return `${snippetName}${AFTER_SNIPPET_SUFFIX}`;
+}
+
+function isOverridableSnippetKey(name) {
+  if (overridableSnippetSet.has(name)) {
+    return true;
+  }
+  if (
+    typeof name === "string" &&
+    name.endsWith(AFTER_SNIPPET_SUFFIX)
+  ) {
+    const baseName = name.slice(0, -AFTER_SNIPPET_SUFFIX.length);
+    return overridableSnippetSet.has(baseName);
+  }
+  return false;
+}
 
 const subjectTemplateCache = new Map();
 
 function getSnippetOverride(tenant, snippetName) {
-  if (!overridableSnippetSet.has(snippetName)) {
+  if (!isOverridableSnippetKey(snippetName)) {
     return null;
   }
 
@@ -133,7 +153,7 @@ function validateMailSnippets(mailSnippets = {}) {
   }
 
   Object.entries(mailSnippets).forEach(([name, source]) => {
-    if (!overridableSnippetSet.has(name)) {
+    if (!isOverridableSnippetKey(name)) {
       throw new Error(`Unsupported mail snippet override: ${name}`);
     }
 
@@ -179,6 +199,9 @@ module.exports = {
   OVERRIDABLE_SNIPPETS,
   OVERRIDE_TEMPLATE_VARIABLES,
   MAX_SUBJECT_OVERRIDE_LENGTH,
+  AFTER_SNIPPET_SUFFIX,
+  afterSnippetKey,
+  isOverridableSnippetKey,
   getSnippetOverride,
   getSubjectOverride,
   renderSubjectOverride,

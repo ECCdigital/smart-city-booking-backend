@@ -53,6 +53,7 @@ class ItemCheckoutService {
    * @param {string || null} couponCode The coupon code
    * @param {boolean} bookWithoutDiscount When true, booking discounts are ignored and the full price applies.
    * @param {string} checkoutId The ID of the checkout process, used for correlating logs and operations. Optional.
+   * @param {string|string[]|null} [excludeBookingIds] Booking IDs to ignore in capacity checks (e.g. the booking being edited).
    * @param {Map} externalCache An optional Map instance for caching data across multiple service instances, particularly useful for external provider data. If not provided, a new Map will be created for each instance.
    *                                Defaults to `false` (discounts are applied when configured).
    */
@@ -66,6 +67,7 @@ class ItemCheckoutService {
     couponCode,
     bookWithoutDiscount,
     checkoutId,
+    excludeBookingIds,
     externalCache,
   }) {
     this.user = user;
@@ -78,6 +80,11 @@ class ItemCheckoutService {
     this.originBookable = null;
     this.bookWithoutDiscount = bookWithoutDiscount ?? false;
     this.checkoutId = checkoutId;
+    this.excludeBookingIds = Array.isArray(excludeBookingIds)
+      ? excludeBookingIds.filter(Boolean)
+      : excludeBookingIds
+        ? [excludeBookingIds]
+        : [];
     this.externalCache = externalCache || new Map();
     this._cache = new Map();
     this._availabilityProvider = null;
@@ -163,6 +170,7 @@ class ItemCheckoutService {
     this.couponCode = null;
     this.originBookable = null;
     this.bookWithoutDiscount = null;
+    this.excludeBookingIds = [];
     this._availabilityProvider = null;
     this._cache.clear();
   }
@@ -184,6 +192,7 @@ class ItemCheckoutService {
       timeBegin: this.timeBegin,
       timeEnd: this.timeEnd,
       userId: this.user,
+      excludeBookingIds: this.excludeBookingIds,
     };
   }
 
@@ -263,6 +272,7 @@ class ItemCheckoutService {
       bookable,
       this.timeBegin,
       this.timeEnd,
+      this.excludeBookingIds,
     );
 
     return {
@@ -289,6 +299,7 @@ class ItemCheckoutService {
         childBookable,
         this.timeBegin,
         this.timeEnd,
+        this.excludeBookingIds,
       );
       amountBooked += result.amountBooked;
     }
@@ -822,6 +833,8 @@ class ManualItemCheckoutService extends ItemCheckoutService {
     amount,
     couponCode,
     bookWithoutDiscount,
+    excludeBookingIds,
+    capacityChecksOnly = false,
   }) {
     super({
       user,
@@ -832,7 +845,9 @@ class ManualItemCheckoutService extends ItemCheckoutService {
       amount,
       couponCode,
       bookWithoutDiscount,
+      excludeBookingIds,
     });
+    this.capacityChecksOnly = Boolean(capacityChecksOnly);
   }
 
   async init(originBookable) {
@@ -845,6 +860,19 @@ class ManualItemCheckoutService extends ItemCheckoutService {
       this.originBookable = await super.getBookable();
     }
     this.externalProviders = await this._resolveExternalProviders();
+  }
+
+  /**
+   * Admin manual create/update sets capacityChecksOnly so saves never hard-fail
+   * on checkout rules (including capacity/overlap). Informational availability
+   * is via validate endpoints (with excludeBookingIds when editing).
+   */
+  async checkAll(stopOnFirstError = true) {
+    if (this.capacityChecksOnly) {
+      return true;
+    }
+
+    return super.checkAll(stopOnFirstError);
   }
 }
 

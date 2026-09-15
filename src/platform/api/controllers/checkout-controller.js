@@ -31,6 +31,7 @@ class CheckoutController {
       amount,
       couponCode,
       bookWithoutDiscount,
+      excludeBookingIds,
     } = request.body;
 
     if (!bookableId || !amount) {
@@ -61,6 +62,7 @@ class CheckoutController {
         couponCode,
         bookWithoutDiscount,
         checkoutId,
+        excludeBookingIds,
       });
 
       await itemCheckoutService.init();

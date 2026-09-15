@@ -64,11 +64,39 @@ function assertTimeRangeForOrigin(originBookable, timeBegin, timeEnd) {
 }
 
 /**
+ * @param {string|string[]|null|undefined} excludeBookingIds
+ * @returns {Set<string>}
+ */
+function toExcludeBookingIdSet(excludeBookingIds) {
+  if (!excludeBookingIds) {
+    return new Set();
+  }
+  const ids = Array.isArray(excludeBookingIds)
+    ? excludeBookingIds
+    : [excludeBookingIds];
+  return new Set(ids.filter(Boolean).map(String));
+}
+
+/**
+ * @param {import("../../entities/booking/booking").Booking[]} bookings
+ * @param {string|string[]|null|undefined} excludeBookingIds
+ * @returns {import("../../entities/booking/booking").Booking[]}
+ */
+function filterExcludedBookings(bookings, excludeBookingIds) {
+  const excludeSet = toExcludeBookingIdSet(excludeBookingIds);
+  if (excludeSet.size === 0) {
+    return bookings;
+  }
+  return bookings.filter((booking) => !excludeSet.has(String(booking.id)));
+}
+
+/**
  * @param {import("./providers/availability-data-provider").AvailabilityDataProvider} provider
  * @param {import("../../entities/bookable/bookable").Bookable} originBookable
  * @param {import("../../entities/bookable/bookable").Bookable} bookable
  * @param {number} timeBegin
  * @param {number} timeEnd
+ * @param {string|string[]|null|undefined} [excludeBookingIds]
  * @returns {Promise<{ amountBooked: number, bookings: import("../../entities/booking/booking").Booking[] }>}
  */
 async function getBookedAmountForBookableWindow(
@@ -77,16 +105,18 @@ async function getBookedAmountForBookableWindow(
   bookable,
   timeBegin,
   timeEnd,
+  excludeBookingIds,
 ) {
   assertTimeRangeForOrigin(originBookable, timeBegin, timeEnd);
 
-  const bookings = await getBookingsForCapacityCheck(
+  const rawBookings = await getBookingsForCapacityCheck(
     provider,
     bookable,
     timeBegin,
     timeEnd,
     { useTimeOverlap: isTimeRelatedBookable(originBookable) },
   );
+  const bookings = filterExcludedBookings(rawBookings, excludeBookingIds);
 
   return {
     amountBooked: sumBookedAmount(bookings, bookable.id),
@@ -133,6 +163,7 @@ async function runAvailabilityCheck({
   amount,
   timeBegin,
   timeEnd,
+  excludeBookingIds,
 }) {
   const { amountBooked, bookings } = await getBookedAmountForBookableWindow(
     provider,
@@ -140,6 +171,7 @@ async function runAvailabilityCheck({
     originBookable,
     timeBegin,
     timeEnd,
+    excludeBookingIds,
   );
 
   const capacityResult = evaluateOriginCapacity({
@@ -183,6 +215,7 @@ async function runParentAvailabilityCheck({
   amount,
   timeBegin,
   timeEnd,
+  excludeBookingIds,
 }) {
   const parentBookables = await resolve(provider.getParentBookables());
   const parentAmount = [];
@@ -195,6 +228,7 @@ async function runParentAvailabilityCheck({
         parentBookable,
         timeBegin,
         timeEnd,
+        excludeBookingIds,
       );
 
     const isTicketChild = originBookable.type === "ticket";
@@ -212,6 +246,7 @@ async function runParentAvailabilityCheck({
           childBookable,
           timeBegin,
           timeEnd,
+          excludeBookingIds,
         );
         childTicketAmountBooked += amountBooked;
       }
@@ -262,6 +297,7 @@ async function runChildBookingsCheck({
   amount,
   timeBegin,
   timeEnd,
+  excludeBookingIds,
 }) {
   const relatedBookables = await resolve(provider.getRelatedBookables());
   const childAmount = [];
@@ -277,6 +313,7 @@ async function runChildBookingsCheck({
       childBookable,
       timeBegin,
       timeEnd,
+      excludeBookingIds,
     );
 
     const isAvailable = evaluateChildCapacity({

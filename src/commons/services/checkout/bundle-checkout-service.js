@@ -537,6 +537,11 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
    * @param {Object} [cancellationPolicy] - Admin override for the booking's
    *   cancellation policy. When provided, it replaces the value aggregated
    *   from the underlying bookables.
+   * @param {string|string[]|null} [excludeBookingIds] Booking IDs ignored in
+   *   capacity checks (e.g. validate while editing an existing booking).
+   * @param {boolean} [capacityChecksOnly] When true, item checkAll is a no-op
+   *   so admin manual create/update never hard-fail. Use validate endpoints for
+   *   informational availability.
    */
   constructor({
     user,
@@ -570,6 +575,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     lockerInfo,
     customFieldValues,
     cancellationPolicy,
+    excludeBookingIds,
+    capacityChecksOnly = false,
   }) {
     super({
       user,
@@ -604,6 +611,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
     this.rejectionReason = rejectionReason || "";
     this.lockerInfo = lockerInfo || null;
     this.cancellationPolicyOverride = cancellationPolicy;
+    this.excludeBookingIds = excludeBookingIds;
+    this.capacityChecksOnly = Boolean(capacityChecksOnly);
   }
 
   async createItemCheckoutService(bookableItem) {
@@ -616,6 +625,8 @@ class ManualBundleCheckoutService extends BundleCheckoutService {
       amount: bookableItem.amount,
       couponCode: await this._itemCouponCode(),
       bookWithoutDiscount: this.bookWithoutDiscount,
+      excludeBookingIds: this.excludeBookingIds,
+      capacityChecksOnly: this.capacityChecksOnly,
     });
 
     await itemCheckoutService.init(bookableItem._bookableUsed);

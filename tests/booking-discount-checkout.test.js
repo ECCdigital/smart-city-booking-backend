@@ -154,3 +154,110 @@ describe("ItemCheckoutService booking discount pricing", function () {
     assert.strictEqual(await service.userPriceEur(), 100);
   });
 });
+
+describe("BookingService.createBooking — manual create ignores booking discounts", function () {
+  const ADMIN_ID = "admin@stadt.de";
+  const CUSTOMER_MAIL = "kunde@example.com";
+  const LIST_PRICE = 100;
+  const TIME_BEGIN = Date.UTC(2026, 5, 20, 10, 0, 0);
+  const TIME_END = Date.UTC(2026, 5, 20, 11, 0, 0);
+
+  let BookingService;
+  let BookingManager;
+  let BookableManager;
+  let TenantManager;
+  let EventManager;
+  let OpeningHoursManager;
+  let LockerService;
+  let WorkflowService;
+
+  before(function () {
+    BookingService = require("../src/commons/services/checkout/booking-service");
+    BookingManager = require("../src/commons/data-managers/booking-manager");
+    ({
+      BookableManager,
+    } = require("../src/commons/data-managers/bookable-manager"));
+    TenantManager = require("../src/commons/data-managers/tenant-manager");
+    EventManager = require("../src/commons/data-managers/event-manager");
+    OpeningHoursManager = require("../src/commons/utilities/opening-hours-manager");
+    LockerService = require("../src/commons/services/locker/locker-service");
+    WorkflowService = require("../src/commons/services/workflow/workflow-service");
+  });
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("does not apply the creating admin's booking discount on manual create", async function () {
+    const bookable = discountBookable({
+      isBookable: true,
+      isScheduleRelated: true,
+      amount: 5,
+      permittedUsers: [],
+      permittedRoles: [],
+      priceValueAddedTax: 0,
+      preparationLeadTimeMinutes: null,
+      serviceHours: [],
+      bookingDiscounts: {
+        users: [{ userId: ADMIN_ID, discountPercent: 100 }],
+        roles: [],
+      },
+    });
+
+    sinon.stub(BookingManager, "getBooking").resolves({ id: null });
+    const storeBooking = sinon
+      .stub(BookingManager, "storeBooking")
+      .callsFake(async (value) => value);
+    sinon.stub(BookingManager, "getConcurrentBookings").resolves([]);
+    sinon.stub(BookingManager, "getRelatedBookings").resolves([]);
+    sinon.stub(BookingManager, "getEventBookings").resolves([]);
+    sinon.stub(BookableManager, "getBookable").resolves(bookable);
+    sinon.stub(BookableManager, "getAncestorBookables").resolves([]);
+    sinon.stub(BookableManager, "getRelatedBookables").resolves([]);
+    sinon.stub(BookableManager, "getCustomFieldDefinitions").resolves({
+      instanceFields: [],
+      tenantFields: [],
+    });
+    sinon
+      .stub(MembershipManager, "getMembershipByTenantAndUserID")
+      .resolves({ userId: ADMIN_ID, roles: [] });
+    sinon
+      .stub(MembershipManager, "getMembershipsByTenantAndRoles")
+      .resolves([]);
+    sinon.stub(TenantManager, "getTenant").resolves(null);
+    sinon.stub(EventManager, "getEvent").resolves(null);
+    sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
+    sinon.stub(LockerService, "getInstance").returns({
+      getAvailableLocker: sinon.stub().resolves([]),
+      handleCreate: sinon.stub().resolves(),
+      handlePreReserve: sinon.stub().resolves(),
+    });
+    sinon.stub(CouponService, "incrementCouponUsage").resolves();
+    sinon.stub(WorkflowService, "handleWorkflowEvent").resolves();
+
+    await BookingService.createBooking({
+      tenantId: TENANT_ID,
+      user: { id: ADMIN_ID },
+      simulate: false,
+      manualBooking: true,
+      bookingAttempt: {
+        timeBegin: TIME_BEGIN,
+        timeEnd: TIME_END,
+        bookableItems: [
+          { bookableId: bookable.id, amount: 1, _bookableUsed: bookable },
+        ],
+        name: "Kunde",
+        mail: CUSTOMER_MAIL,
+        paymentProvider: "invoice",
+        isCommitted: false,
+        isPayed: false,
+        isRejected: false,
+      },
+    });
+
+    const stored = storeBooking.firstCall.args[0];
+    assert.strictEqual(stored.bookableItems[0].regularPriceEur, LIST_PRICE);
+    assert.strictEqual(stored.bookableItems[0].userPriceEur, LIST_PRICE);
+    assert.strictEqual(stored.priceEur, LIST_PRICE);
+  });
+});

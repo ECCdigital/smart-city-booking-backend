@@ -281,10 +281,15 @@ class BookingService {
         isRejected: Boolean(isRejected),
         attachmentStatus,
         paymentProvider,
-        bookWithoutDiscount,
+        // Manual/admin create must not apply the creating user's booking discounts
+        // (Admin UI shows list prices; discounts belong to self-service checkout).
+        bookWithoutDiscount: true,
         checkoutId: providedCheckoutId,
         customFieldValues,
         cancellationPolicy,
+        // Same as admin update: never hard-fail on checkout rules. Informational
+        // availability is via validate endpoints.
+        capacityChecksOnly: true,
       });
     } else {
       const filteredAddons = await validateMandatoryAddons(bookableItems);
@@ -481,6 +486,10 @@ class BookingService {
       throw new BadRequestError("missing_booking_attempts");
     }
 
+    const sortedBookingAttempts = [...bookingAttempts].sort(
+      (a, b) => Number(a.timeBegin) - Number(b.timeBegin),
+    );
+
     // Check invoice payment permission
     if (paymentProvider?.toLowerCase() === "invoice" && !manualBooking) {
       const isPermitted = await PaymentUtils.checkInvoicePermission(
@@ -501,7 +510,7 @@ class BookingService {
 
     const allBookings = [];
 
-    for (const bookingAttempt of bookingAttempts) {
+    for (const bookingAttempt of sortedBookingAttempts) {
       bookingAttempt.mail = contactData.mail;
       bookingAttempt.name = contactData.name;
       bookingAttempt.company = contactData.company;
@@ -666,9 +675,14 @@ class BookingService {
         paymentMethod: updatedBooking.paymentMethod,
         attachments: oldBooking.attachments,
         lockerInfo: oldBooking.lockerInfo,
+        // Same as manual create: admin-entered list prices must not be overwritten
+        // by the assignee's (or admin's) bookingDiscounts.
+        bookWithoutDiscount: true,
         checkoutId,
         customFieldValues: updatedBooking.customFieldValues,
         cancellationPolicy: updatedBooking.cancellationPolicy,
+        excludeBookingIds: [oldBooking.id],
+        capacityChecksOnly: true,
       });
 
       let booking = await bundleCheckoutService.prepareBooking({
@@ -1161,9 +1175,13 @@ class BookingService {
       });
     }
 
+    bookings.sort((a, b) => Number(a.timeBegin) - Number(b.timeBegin));
+
     const cancelledAt = Date.now();
     const previewBookings = bookings.map((booking) => ({
       bookingId: booking.id,
+      timeBegin: booking.timeBegin,
+      timeEnd: booking.timeEnd,
       ...CancellationRefundService.calculate({
         tenant,
         booking,

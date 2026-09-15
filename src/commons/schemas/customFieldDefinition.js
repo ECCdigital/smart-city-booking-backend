@@ -40,6 +40,11 @@ const usageOptionsSchema = new Schema(
       enum: ["none", "badge", "belowDescription", "moreInfo"],
       default: "none",
     },
+
+    // Whether the value entered during checkout is shown in the booking-details
+    // block of all booking mails. Only meaningful for context "checkout";
+    // normalizeUsageOptions clears it otherwise.
+    showInMail: { type: Boolean, default: false },
   },
   { _id: false },
 );

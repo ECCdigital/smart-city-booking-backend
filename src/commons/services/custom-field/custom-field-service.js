@@ -4,6 +4,7 @@ class CustomFieldService {
    * detail-display settings stay consistent.
    * - A field is only filterable when it has a catalogFilterType.
    * - When not filterable, catalog filter settings are cleared.
+   * - showInMail only exists on checkout fields; it is cleared otherwise.
    * @param {Object} definition Custom field definition
    * @returns {Object} The (mutated) definition
    */
@@ -31,6 +32,9 @@ class CustomFieldService {
     if (!allowedDetailPositions.includes(usage.detailDisplayPosition)) {
       usage.detailDisplayPosition = "none";
     }
+
+    usage.showInMail =
+      usage.context === "checkout" && usage.showInMail === true;
 
     return definition;
   }
@@ -121,6 +125,45 @@ class CustomFieldService {
     }));
   }
 
+  /**
+   * Raw value of a select option, which may be a plain string or a
+   * {caption, value} object.
+   * @param {string|Object} option
+   * @returns {*}
+   */
+  static optionValue(option) {
+    return typeof option === "string" ? option : option.value;
+  }
+
+  /**
+   * Format a resolved custom field value for human-readable display.
+   * Returns null when the value counts as "not filled in".
+   * @param {Object} definition Custom field definition
+   * @param {*} value Raw value entered during checkout
+   * @returns {string|null}
+   */
+  static formatValueForDisplay(definition, value) {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+
+    switch (definition?.inputType) {
+      case "boolean":
+        return value === true ? "Ja" : "Nein";
+      case "select": {
+        const option = (definition.options || []).find(
+          (o) => this.optionValue(o) === value,
+        );
+        if (option === undefined || typeof option === "string") {
+          return String(value);
+        }
+        return option.caption != null ? String(option.caption) : String(value);
+      }
+      default:
+        return String(value);
+    }
+  }
+
   static validateValues(mergedDefinitions, customFieldValues = []) {
     const errors = [];
     const defMap = new Map(mergedDefinitions.map((d) => [d.id, d]));
@@ -146,9 +189,7 @@ class CustomFieldService {
       }
 
       if (def.inputType === "select" && value != null) {
-        const validValues = def.options.map((o) =>
-          typeof o === "string" ? o : o.value,
-        );
+        const validValues = def.options.map((o) => this.optionValue(o));
         if (!validValues.includes(value)) {
           errors.push(`${def.caption}: invalid option "${value}"`);
         }
