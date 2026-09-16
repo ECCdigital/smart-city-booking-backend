@@ -450,17 +450,32 @@ class Bookable {
    * rather than `exportPublic`, so their consumers never receive a media
    * reference without its URL.
    *
+   * The addresses are absolute (`BACKEND_URL`): before the media library the
+   * stored `imgUrl` and attachment links carried the host of the platform,
+   * and third-party integrations built on `/bookables/public` read them from
+   * outside, where a relative address resolves against the wrong host.
+   *
    * @returns {Object} A plain copy with `images`, `imgUrl` and `attachments`
    *   resolved; every other field exactly as stored.
    */
   withResolvedMediaUrls() {
+    const absolute = (reference) =>
+      reference ? { ...reference, url: absoluteUrl(reference.url) } : reference;
+
     return {
       ...this,
-      images: enrichMediaReferences(this.images, this.tenantId),
-      imgUrl: this.coverImageUrl,
-      attachments: (this.attachments || []).map((attachment) =>
-        enrichAttachment(attachment, this.tenantId),
-      ),
+      images: enrichMediaReferences(this.images, this.tenantId).map(absolute),
+      imgUrl: absoluteUrl(this.coverImageUrl) || "",
+      attachments: (this.attachments || []).map((attachment) => {
+        const enriched = enrichAttachment(attachment, this.tenantId);
+        return enriched
+          ? {
+              ...enriched,
+              reference: absolute(enriched.reference),
+              url: absoluteUrl(enriched.url),
+            }
+          : enriched;
+      }),
     };
   }
 

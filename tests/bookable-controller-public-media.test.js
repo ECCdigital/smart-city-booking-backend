@@ -42,12 +42,25 @@ function mediaBookable() {
   });
 }
 
+const BACKEND_URL = "https://booking.example.org";
+
 describe("BookableController public routes resolve media references", () => {
+  let backendUrl;
+
+  before(() => {
+    backendUrl = process.env.BACKEND_URL;
+    process.env.BACKEND_URL = `${BACKEND_URL}/`;
+  });
+
+  after(() => {
+    process.env.BACKEND_URL = backendUrl;
+  });
+
   afterEach(() => {
     sinon.restore();
   });
 
-  it("getPublicBookable serves imgUrl and image urls for media references", async () => {
+  it("getPublicBookable serves absolute imgUrl and image urls for media references", async () => {
     sinon.stub(BookableManager, "getBookable").resolves(mediaBookable());
 
     const response = createMockResponse();
@@ -59,11 +72,11 @@ describe("BookableController public routes resolve media references", () => {
     assert.strictEqual(response.statusCode, 200);
     assert.strictEqual(
       response.body.imgUrl,
-      "/api/v2/tenant-1/media/media-1/file",
+      `${BACKEND_URL}/api/v2/tenant-1/media/media-1/file`,
     );
     assert.strictEqual(
       response.body.images[0].url,
-      "/api/v2/tenant-1/media/media-1/file",
+      `${BACKEND_URL}/api/v2/tenant-1/media/media-1/file`,
     );
     assert.strictEqual(
       response.body.images[1].url,
@@ -71,7 +84,11 @@ describe("BookableController public routes resolve media references", () => {
     );
     assert.strictEqual(
       response.body.attachments[0].url,
-      "/api/v2/tenant-1/media/media-2/file",
+      `${BACKEND_URL}/api/v2/tenant-1/media/media-2/file`,
+    );
+    assert.strictEqual(
+      response.body.attachments[0].reference.url,
+      `${BACKEND_URL}/api/v2/tenant-1/media/media-2/file`,
     );
     // The raw stored fields stay untouched for other consumers.
     assert.strictEqual(response.body.title, "Week");
@@ -89,11 +106,11 @@ describe("BookableController public routes resolve media references", () => {
     assert.strictEqual(response.statusCode, 200);
     assert.strictEqual(
       response.body[0].imgUrl,
-      "/api/v2/tenant-1/media/media-1/file",
+      `${BACKEND_URL}/api/v2/tenant-1/media/media-1/file`,
     );
     assert.strictEqual(
       response.body[0].images[0].url,
-      "/api/v2/tenant-1/media/media-1/file",
+      `${BACKEND_URL}/api/v2/tenant-1/media/media-1/file`,
     );
   });
 });
