@@ -140,7 +140,7 @@ Eine Aktion, die ein Client an diesem AccessPoint anbieten darf: `open`, `close`
 _Avoid_: Feature, Fähigkeit, Provider-Capability (das sind die Deklarationen der Provider-Klasse, nicht die des AccessPoints)
 
 **Salto-Guest**:
-Ein Site-User bei Salto KS mit Rolle `site_guest`, den die Plattform pro Buchung anlegt: ohne E-Mail, ohne Einladung, nur mit technischem Alias (`Booking <id> – <Bookable>`) und Ablaufzeitpunkt. Trägt den Salto-generierten PIN einer Buchung; wird beim Revoke aktiv gelöscht, `expires_at` ist nur Sicherheitsnetz. Keine Personendaten des Gastes.
+Ein Site-User bei Salto KS mit Rolle `site_guest`, den die Plattform für den Keypad-Zugang einer Buchung anlegt: ohne E-Mail, ohne Einladung, nur mit technischem Alias und Ablaufzeitpunkt. Trägt den Salto-generierten PIN und ist der externe Principal des Grants, zu dem er gehört; wird beim Revoke aktiv gelöscht, `expires_at` ist nur Sicherheitsnetz. Belegt einen Seat der Subscription, den erst das Löschen freigibt — nicht der Ablauf. Keine Personendaten des Gastes.
 _Avoid_: Salto-User (der Begriff meint auch Admins), Nutzer pro Buchung, Gastkonto
 
 **Access Group (eines AccessPoints)**:
@@ -156,7 +156,7 @@ Die Wahl `accept` oder `production` in der Salto-Konfiguration eines Tenants. AP
 _Avoid_: apiBaseUrl (als Konfig-Feld), Freitext-URL
 
 **Salto-OTP**:
-Der zeitbasierte Einmalcode (Saltos „ClayCode"), den Salto KS für Remote-Open an einem IQ mit `otp_enabled` verlangt und den die Plattform selbst berechnet: erste 5 Zeichen von `MD5(UTC "YYYYmmDDHHMMSS" + IQ-Secret + IQ-PIN)`, 3 Minuten gültig, innerhalb des Fensters mehrfach nutzbar (Formel am Türbeweis 2026-08-25 belegt). Nie von einem Menschen eingegeben, nie von Salto zugeschickt. Einmal eingeschaltetes `otp_enabled` ist irreversibel; nur IQs ohne `otp_enabled` brauchen keinen OTP. Nach abgelehntem OTP kein neu berechneter Retry (Gefahr `otp_blocked`, ~20 min Account-Sperre) — maximal ein OTP pro Öffnungsversuch. Nicht zu verwechseln mit dem Keypad-PIN eines Salto-Guests.
+Der zeitbasierte Einmalcode (Saltos „ClayCode"), den Salto KS für Remote-Open an einem IQ mit `otp_enabled` verlangt und den die Plattform selbst berechnet: erste 5 Zeichen von `MD5(UTC "YYYYmmDDHHMMSS" + IQ-Secret + IQ-PIN)`, 3 Minuten gültig, innerhalb des Fensters mehrfach nutzbar (Formel am Türbeweis 2026-08-25 belegt). Nie von einem Menschen eingegeben, nie von Salto zugeschickt. `otp_enabled` wird beim Einbuchen des IQ gesetzt und ist einmal eingeschaltet irreversibel — wir können es nirgends umschalten; nur IQs ohne `otp_enabled` brauchen keinen OTP, und das sind Altbestände, nichts Beschaffbares. Nach abgelehntem OTP kein neu berechneter Retry (Gefahr `otp_blocked`, ~20 min Account-Sperre) — maximal ein OTP pro Öffnungsversuch. Nicht zu verwechseln mit dem Keypad-PIN eines Salto-Guests.
 _Avoid_: TOTP, SMS-Code, PIN (unqualifiziert), Einmalpasswort
 
 **IQ-Aktivierung**:
