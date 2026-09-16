@@ -293,6 +293,60 @@ _Avoid_: Transport (als Sprechbegriff), useInstanceMail (das ist das Feld), Mail
 Der vom Instanz-Owner gepflegte Name des Rechteinhabers, den öffentliche Oberflächen neben dem ©-Zeichen und dem laufenden Jahr ausspielen — nur der Inhaber, nie Jahr oder Zeichen, die setzt die Ausspielstelle selbst. Reiner Text ohne Link und Formatierung; leer heißt „kein Inhaber", die Ausspielstelle zeigt dann nur Zeichen und Jahr. Instanzweit und unabhängig vom Branding-Schalter; kein Rechts-Dokument, kein Portal-Name.
 _Avoid_: Copyright-Zeile (das ist die gerenderte Ausgabe mit Jahr), Rechts-Dokument (das sind Impressum, AGB, Datenschutz), Portal-Name (Anzeigename, nicht Rechteinhaber)
 
+### Mandanten-Aufsicht
+
+**Instanz-Owner**:
+Ein Nutzer, der auf der Instanz als Owner geführt ist; betreibt die Plattform, erfüllt jede Rechteprüfung und ist der Einzige, der die Aufsichtsstufe eines Mandanten setzt und Angebote freigibt oder ablehnt. Nicht zu verwechseln mit dem Tenant-Owner, der seinen Mandanten führt und abgelehnte Angebote erneut einreichen kann.
+_Avoid_: Admin (unqualifiziert), Superadmin, Plattform-Betreiber (als Modellbegriff), Instance-Owner (Schreibweise)
+
+**Aufsichtsstufe (eines Mandanten)**:
+Das vom Instanz-Owner ausdrücklich manuell gesetzte, jederzeit umkehrbare Maß, wie weit ein Mandant ohne dessen Zutun öffentlich auftreten darf: _frei_ (arbeitet wie bisher, ganz ohne Freigaben), _beaufsichtigt_ (tritt öffentlich auf, aber jedes Angebot braucht einen freigegebenen Prüfstatus) oder _gesperrt_ (nichts ist öffentlich, auch nicht per Direktlink; im Admin-Bereich darf alles vorbereitet werden). Ein zweites, vom Mandanten unabhängiges Tor neben dessen eigener Katalog-Teilnahme; sie schränkt nie Rechte innerhalb des Mandanten ein und wirkt nur auf Neues, bestehende Buchungen bleiben.
+_Avoid_: Status (das ist die Membership), Vertrauensstufe, Freigabe (unqualifiziert — es gibt zwei Tore), aktiv/inaktiv, verified
+
+**Startstufe (neuer Mandanten)**:
+Die vom Instanz-Owner festgelegte Aufsichtsstufe für jede Selbst-Anlage, gemeinsam für Freigabeliste und offene Anlage: _frei_, _beaufsichtigt_ oder _gesperrt_, standardmäßig _frei_. Gilt ausschließlich bei der Anlage und verändert bestehende Mandanten nicht; vom Instanz-Owner selbst angelegte Mandanten starten immer _frei_.
+_Avoid_: Default-Status, Modus, Anlage-Modus
+
+**Selbst-Anlage (eines Mandanten)**:
+Das Anlegen eines Mandanten durch einen Nutzer, der nicht Instanz-Owner ist — über den Instanz-Schalter „alle dürfen anlegen" oder die Freigabeliste. Erzeugt den Mandanten in der Startstufe und macht den Anlegenden zum Tenant-Owner.
+_Avoid_: Self-Service, Registrierung (das ist das Nutzerkonto), Onboarding (das ist der Weg danach)
+
+**Prüfstatus (eines Angebots)**:
+Der Stand der Prüfung eines Angebots durch den Instanz-Owner: _ausstehend_, _freigegeben_ oder _abgelehnt_, wahlweise mit Begründung; entsteht beim ersten Veröffentlichungswunsch oder ausdrücklichen Einreichen, gilt für Buchungsobjekte und Events gleichermaßen und erlaubt unter Aufsicht nur freigegebene Angebote, auch per Direktlink. Bleibt bei Änderungen, Stufenwechseln und dem Ablauf eines Events erhalten, ist im freien Mandanten ohne Wirkung und wird beim ausdrücklichen Rückzug einer Freigabe durch den Instanz-Owner zu _abgelehnt_.
+_Avoid_: Review, Moderation, approved (als Feldname im Gespräch), isPublic (das ist der Wunsch des Mandanten, nicht die Entscheidung)
+
+**Veröffentlichungswunsch (eines Angebots)**:
+Die vom Mandanten getroffene Wahl, ein Angebot öffentlich in Listen und Katalogen auszuspielen, unabhängig von der Entscheidung des Instanz-Owners. Bleibt auch bei Ablehnung bestehen; ohne Veröffentlichungswunsch kann ein Buchungsobjekt oder Event per Direktlink erreichbar und buchbar sein, bei beaufsichtigten Mandanten aber nur mit freigegebenem Prüfstatus und bei gesperrten Mandanten nie.
+_Avoid_: isPublic (als Sprechbegriff), Freigabe (das ist die Entscheidung des Instanz-Owners), öffentlich (als tatsächliche Sichtbarkeit)
+
+**Erneutes Einreichen (eines Angebots)**:
+Die ausdrückliche Bitte des Tenant-Owners um eine neue Prüfung eines abgelehnten Angebots, auch ohne Veröffentlichungswunsch; setzt den Prüfstatus auf _ausstehend_. Weder Bearbeiten noch Aus- und Einschalten des Veröffentlichungswunsches gilt als erneutes Einreichen; dabei bleibt der Prüfstatus erhalten.
+_Avoid_: Wiederveröffentlichung, Status-Reset, Freigabe beantragen (unqualifiziert)
+
+**Aktive Prüfliste**:
+Alle Angebote beaufsichtigter Mandanten mit ausstehendem Prüfstatus, unabhängig vom Veröffentlichungswunsch. Ausstehende Prüfstatus freier oder gesperrter Mandanten bleiben erhalten, gehören aber nicht zur aktiven Prüfliste.
+_Avoid_: Alle ausstehenden Angebote, Freigabeliste (das ist die Berechtigung zur Selbst-Anlage)
+
+**Aufsichtshistorie**:
+Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneuten Einreichungen sowie Prüfentscheidungen eines Mandanten und seiner Angebote, jeweils mit Zeitpunkt, handelnder Person oder System, vorherigem und neuem Stand sowie optionaler Begründung. Instanz-Owner sehen die gesamte Aufsichtshistorie, Tenant-Owner die ihres Mandanten und seiner Angebote.
+_Avoid_: Audit-Log, Änderungsverlauf (unqualifiziert), Prüfstatus (das ist der aktuelle Stand)
+
+**Angebot**:
+Sammelbegriff für Buchungsobjekte und Events eines Mandanten, unabhängig davon, ob sie öffentlich ausgespielt oder nur per Direktlink angeboten werden. Bei beaufsichtigten Mandanten benötigen beide Wege einen freigegebenen Prüfstatus; bei freien Mandanten ist keine Freigabe nötig.
+_Avoid_: Ressource, Objekt (unqualifiziert), Listing
+
+**Raumgeber**:
+Ein Verein oder eine Privatperson, die Räume bereitstellt und dafür einen eigenen Mandanten führt — im Ehrenamts-Szenario der typische Selbst-Anleger.
+_Avoid_: Anbieter, Vermieter, Host
+
+**Raumsuchender**:
+Ein Ehrenamtlicher, der über das mandantenübergreifende Storefront Räume für Veranstaltungen sucht und bucht. Kein eigener Nutzertyp, sondern ein gewöhnlicher Buchender.
+_Avoid_: Kunde (das ist die Buchungsrolle), Mieter
+
+**Bereitschafts-Check (eines Mandanten)**:
+Die unverbindliche Auskunft über fehlende Angaben in der aktuellen Einrichtung eines Mandanten — dieselbe Liste für den Tenant-Owner beim Onboarding und für den Instanz-Owner vor dem Anheben der Aufsichtsstufe. Sie beschreibt die Vorbereitung auf den öffentlichen Auftritt, garantiert aber keine tatsächliche Buchbarkeit oder Funktionsfähigkeit von Zahlung und Mailversand.
+_Avoid_: Readiness, Checkliste (als Modellbegriff), Validierung
+
 ### Rechte
 
 **Reichweite**:
