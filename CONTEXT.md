@@ -287,6 +287,12 @@ _Avoid_: Snippet (das ist die Speicherform), Template (unqualifiziert), Override
 Der Weg, über den eine Mitteilung zugestellt wird: der _Mandanten-Versand_ über die vollständige Mail-Konfiguration des Mandanten oder der _Instanz-Versand_ über die der Plattform. Ein Mandant ohne vollständige Konfiguration versendet über die Instanz; die Wahl trifft der Versand, nie die Mitteilung.
 _Avoid_: Transport (als Sprechbegriff), useInstanceMail (das ist das Feld), Mailer, SMTP (das ist nur eine Form)
 
+### Instanz-Auftritt
+
+**Copyright-Vermerk (der Instanz)**:
+Der vom Instanz-Owner gepflegte Name des Rechteinhabers, den öffentliche Oberflächen neben dem ©-Zeichen und dem laufenden Jahr ausspielen — nur der Inhaber, nie Jahr oder Zeichen, die setzt die Ausspielstelle selbst. Reiner Text ohne Link und Formatierung; leer heißt „kein Inhaber", die Ausspielstelle zeigt dann nur Zeichen und Jahr. Instanzweit und unabhängig vom Branding-Schalter; kein Rechts-Dokument, kein Portal-Name.
+_Avoid_: Copyright-Zeile (das ist die gerenderte Ausgabe mit Jahr), Rechts-Dokument (das sind Impressum, AGB, Datenschutz), Portal-Name (Anzeigename, nicht Rechteinhaber)
+
 ### Rechte
 
 **Reichweite**:
