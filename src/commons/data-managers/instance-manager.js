@@ -77,6 +77,12 @@ class InstanceManager {
     // make every deliberate clear look like an omission.
     const synced = InstanceManager._syncLegacyFields(instance);
 
+    // The Copyright-Vermerk is stored as validated: trimmed before the length
+    // check, and only when it is a string so a wrong type is reported as such.
+    if (typeof synced.copyright === "string") {
+      synced.copyright = synced.copyright.trim();
+    }
+
     const instanceEntity = new Instance(synced);
 
     CustomFieldService.normalizeDefinitions(

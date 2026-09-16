@@ -27,6 +27,21 @@ const instanceSchemaDefinition = {
   mailEnabled: { type: Boolean, default: false },
   contactAddress: { type: String, default: "" },
   contactUrl: { type: String, default: "" },
+  // The Copyright-Vermerk: the rights holder alone, no year, no sign — the
+  // rendering surface adds both. `""` means none is set. The validator runs
+  // before the empty check and returns SchemaUtils code-map keys, so `""`
+  // and an absent field pass while `null` is refused as a type error.
+  copyright: {
+    type: String,
+    default: "",
+    validate: (value) => {
+      if (value === undefined || value === "") return true;
+      if (typeof value !== "string") return "type_string";
+      if (value.length > 200) return "maxLength";
+      if (/[\r\n]/.test(value)) return "format";
+      return true;
+    },
+  },
   // The legal documents carry a media reference in `reference` (§4.9); the
   // legacy `{ source, url, fileName }` form stays as the derived read field
   // until the vue-app picks media itself. They stay untyped objects for the
