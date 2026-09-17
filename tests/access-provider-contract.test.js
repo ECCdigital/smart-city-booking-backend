@@ -57,6 +57,11 @@ const {
 
 const ALL_MODES = Object.values(AccessPointMode);
 
+// The Öffnungsart vocabulary of the seam, as the spec states it: the words an
+// outcome may name and where the choice may have come from.
+const OPEN_ACTIONS = ["unlock", "unlatch", "lock_n_go", "lock_n_go_unlatch"];
+const OPEN_ACTION_ORIGINS = ["configured", "device_type", "fallback"];
+
 /**
  * The declared parameters of a method, read from its source: `Function.length`
  * stops counting at the first parameter with a default value, so it cannot
@@ -90,6 +95,9 @@ const IMPLEMENTATIONS = [
     name: "nuki",
     Provider: NukiAccessProvider,
     secretBearing: true,
+    // The Öffnungsart is a Nuki notion: only this adapter fills the three
+    // optional fields of an OpenOutcome.
+    namesOpenAction: true,
     accessPoint: {
       id: "door-1",
       tenantId: TENANT,
@@ -368,10 +376,18 @@ for (const implementation of IMPLEMENTATIONS) {
     when("open")("answers an open with an OpenOutcome", async function () {
       const outcome = await provider.open(accessPoint, bookingContext);
 
-      assert.deepStrictEqual(Object.keys(outcome).sort(), [
-        "openProcessId",
-        "state",
-      ]);
+      assert.deepStrictEqual(
+        Object.keys(outcome).sort(),
+        implementation.namesOpenAction
+          ? [
+              "nukiAction",
+              "openAction",
+              "openActionOrigin",
+              "openProcessId",
+              "state",
+            ]
+          : ["openProcessId", "state"],
+      );
       assert.ok(["opened", "pending"].includes(outcome.state));
       assert.strictEqual(
         outcome.state === "pending",
@@ -381,6 +397,21 @@ for (const implementation of IMPLEMENTATIONS) {
         assert.strictEqual(typeof outcome.openProcessId, "string");
       }
     });
+
+    when("open")(
+      "names the Öffnungsart it carried out, where its access points have one",
+      async function () {
+        if (!implementation.namesOpenAction) {
+          this.skip();
+        }
+
+        const outcome = await provider.open(accessPoint, bookingContext);
+
+        assert.ok(OPEN_ACTIONS.includes(outcome.openAction));
+        assert.ok(OPEN_ACTION_ORIGINS.includes(outcome.openActionOrigin));
+        assert.strictEqual(typeof outcome.nukiAction, "number");
+      },
+    );
 
     when("unlatch")(
       "answers an unlatch with an OpenOutcome",
@@ -621,6 +652,18 @@ for (const implementation of IMPLEMENTATIONS) {
             assert.ok(
               ["configuration", "temporary"].includes(error.failureClass),
             );
+            // A failed open says which Öffnungsart went out, so the audit
+            // records it for a failure as it does for a success - and says
+            // nothing where the provider has no such notion.
+            if (implementation.namesOpenAction) {
+              assert.ok(OPEN_ACTIONS.includes(error.openAction));
+              assert.ok(OPEN_ACTION_ORIGINS.includes(error.openActionOrigin));
+              assert.strictEqual(typeof error.nukiAction, "number");
+            } else {
+              assert.ok(!("openAction" in error));
+              assert.ok(!("openActionOrigin" in error));
+              assert.ok(!("nukiAction" in error));
+            }
             return true;
           },
         );
