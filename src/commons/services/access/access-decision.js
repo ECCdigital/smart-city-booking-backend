@@ -27,8 +27,10 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  *   its rules (`validationRules`: the configured rules, `[]` for none, `null`
  *   where nobody can see them)
  * @property {Object} bookingContext What the booking adds to it -
- *   `accessBuffer`, `isProvisioned`, `revokedAt`, `grant`. A compartment of a
- *   locker system is one entry of its own, under the compartment's id
+ *   `accessBuffer`, `accessFrom`, `accessTo` (the door's buffered window in
+ *   epoch ms; where absent it is the booking period widened by the buffer),
+ *   `isProvisioned`, `revokedAt`, `grant`. A compartment of a locker system
+ *   is one entry of its own, under the compartment's id
  *
  * {@link decide} answers the booking layer: the role the person acts in, which
  * access points they may operate, the prioritized reasons against it, and what
@@ -55,10 +57,20 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  *   operated now: close, status, open-status
  * @property {string[]} remoteOperableAccessPointIds The operable ones whose
  *   mode allows an open through the API - the set open/unlatch check against
+ * @property {string[]} overriddenAccessPointIds The operable ones that are
+ *   operable only through the admin override: past their window and commanded
+ *   by the manage permission. Never among the remote operable ones - a lock
+ *   left open is closed and read, not opened again
  * @property {boolean} evidenceWaived Whether the evidence rules do not apply
  *   to this person - only to the management at somebody else's booking
  * @property {Object<string, string[]>} demandedEvidence The rule types each
  *   access point demands of this person, by access point id
+ * @property {{ from: number, to: number }|null} accessWindow The booking's
+ *   access window envelope in epoch ms: the earliest `accessFrom` and the
+ *   latest `accessTo` over its access points, so a client can tell an
+ *   upcoming booking from an active or a past one at the same bounds this
+ *   decision gates on. `null` where the booking has no access points - the
+ *   per-door windows stay the truth of each row
  */
 
 /**
@@ -70,8 +82,8 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  * @param {Object} [options]
  * @param {string|null} [options.userId=null] The acting person
  * @param {boolean} [options.canManage=false] Whether that person may manage
- *   the bookings of the tenant. Replaces ownership; it never bypasses the
- *   booking conditions
+ *   the bookings of the tenant. Replaces ownership, and after a door's window
+ *   grants the admin override at it; it never bypasses the booking conditions
  * @param {number} [options.now=Date.now()] The point in time, in ms
  * @returns {Decision} The decision
  */
@@ -98,6 +110,7 @@ function decide(
 
   const operableAccessPointIds = [];
   const remoteOperableAccessPointIds = [];
+  const overriddenAccessPointIds = [];
   const demandedEvidence = {};
 
   let anyInWindow = false;
@@ -105,13 +118,18 @@ function decide(
   let anyUnprovisioned = false;
   let anyAuthorizationUsable = false;
   let anyRemoteCapable = false;
+  let accessWindow = null;
 
   for (const { accessPoint, bookingContext } of accessPoints) {
     const id = String(accessPoint.id);
-    const beforeMs = bookingContext.accessBuffer?.beforeMs ?? 0;
-    const afterMs = bookingContext.accessBuffer?.afterMs ?? 0;
-    const inWindow =
-      booking.timeBegin - beforeMs <= now && booking.timeEnd + afterMs >= now;
+    const { accessFrom, accessTo } = windowOf(booking, bookingContext);
+    const inWindow = accessFrom <= now && accessTo >= now;
+
+    // The envelope: the earliest start and the latest end over all doors.
+    accessWindow = {
+      from: Math.min(accessWindow?.from ?? accessFrom, accessFrom),
+      to: Math.max(accessWindow?.to ?? accessTo, accessTo),
+    };
 
     demandedEvidence[id] = evidenceWaived
       ? []
@@ -152,13 +170,29 @@ function decide(
     }
     const lockedForWantOfGrant = grantIsTheOnlyWayIn && !authorizationUsable;
 
-    if (!isValid || !inWindow || !hasRole || lockedForWantOfGrant) {
+    // The admin override: whoever may manage the bookings may close and read
+    // a door after its window has ended, so a lock left open can be brought
+    // back to a known state. It hangs on the permission, not on the role -
+    // the booker with the permission has it at their own booking too. Never
+    // before the window: a lock standing open before a booking starts is not
+    // this booking's business. It lifts nothing but the window.
+    const overridden = canManage && now > accessTo;
+
+    if (
+      !isValid ||
+      !(inWindow || overridden) ||
+      !hasRole ||
+      lockedForWantOfGrant
+    ) {
       continue;
     }
 
     operableAccessPointIds.push(id);
-    if (supportsRemote(accessPoint.mode)) {
+    if (inWindow && supportsRemote(accessPoint.mode)) {
       remoteOperableAccessPointIds.push(id);
+    }
+    if (!inWindow) {
+      overriddenAccessPointIds.push(id);
     }
   }
 
@@ -189,8 +223,26 @@ function decide(
     primaryBlockingReason: prioritized[0] ?? null,
     operableAccessPointIds,
     remoteOperableAccessPointIds,
+    overriddenAccessPointIds,
     evidenceWaived,
     demandedEvidence,
+    accessWindow,
+  };
+}
+
+/**
+ * The buffered window of one door, in epoch ms. The resolver states it on the
+ * booking context (`accessFrom` / `accessTo`, the same values the access-point
+ * projection hands out); a context that carries only the buffer gets the
+ * booking period widened by it, which is the same arithmetic.
+ */
+function windowOf(booking, bookingContext) {
+  const beforeMs = bookingContext.accessBuffer?.beforeMs ?? 0;
+  const afterMs = bookingContext.accessBuffer?.afterMs ?? 0;
+
+  return {
+    accessFrom: bookingContext.accessFrom ?? booking.timeBegin - beforeMs,
+    accessTo: bookingContext.accessTo ?? booking.timeEnd + afterMs,
   };
 }
 

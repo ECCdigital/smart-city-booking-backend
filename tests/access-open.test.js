@@ -18,11 +18,13 @@ const {
   AccessPointMode,
 } = require("../src/commons/entities/access/access-point");
 const { ForbiddenError } = require("../src/errors/BaseError");
+const { LockBusyError } = require("../src/errors/LockBusyError");
 
 const MINUTE = 60 * 1000;
 const TEST_PROVIDER = "test-open-provider";
 
 let providerOpen = async () => ({ state: "opened", openProcessId: null });
+let providerClose = async () => {};
 let providerUnlatch = async () => ({ state: "opened", openProcessId: null });
 let providerStatus = async () => ({
   open: false,
@@ -35,7 +37,9 @@ class TestOpenProvider extends AccessProvider {
     return providerOpen(accessPoint, context);
   }
 
-  async close() {}
+  async close(accessPoint, context) {
+    return providerClose(accessPoint, context);
+  }
 
   async unlatch(accessPoint, context) {
     return providerUnlatch(accessPoint, context);
@@ -352,7 +356,35 @@ describe("AccessService.open", () => {
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       action: "open",
       result: "failure",
+      errorCode: null,
       accessRole: "booker",
+    });
+  });
+
+  it("audits a busy lock as a failure with the Lock Busy code and rethrows", async () => {
+    stubResolvedDoor(sandbox, createBooking());
+    providerOpen.rejects(
+      new LockBusyError(
+        "nuki",
+        "open",
+        "Nuki reports smartlock 'lock-1' busy with its previous action",
+      ),
+    );
+
+    let error;
+    try {
+      await AccessService.open("tenant-1", "booking-1", "door-1", "user-1");
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).to.be.instanceOf(LockBusyError);
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "open",
+      result: "failure",
+      errorCode: "lock_busy",
+      errorMessage:
+        "Nuki reports smartlock 'lock-1' busy with its previous action",
     });
   });
 
@@ -722,6 +754,7 @@ describe("AccessService close, unlatch and status with validation rules", () => 
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    providerClose = sandbox.stub().resolves();
     providerUnlatch = sandbox
       .stub()
       .resolves({ state: "pending", openProcessId: "77" });
@@ -755,19 +788,66 @@ describe("AccessService close, unlatch and status with validation rules", () => 
     });
   });
 
-  it("audits close and status without an access role", async () => {
-    await AccessService.close("tenant-1", "booking-1", "door-1", "user-1");
-    await AccessService.getStatus("tenant-1", "booking-1", "door-1");
+  it("audits a close refused by a busy lock as a failure with the Lock Busy code and rethrows", async () => {
+    providerClose = sandbox
+      .stub()
+      .rejects(
+        new LockBusyError(
+          "nuki",
+          "close",
+          "Nuki reports smartlock 'lock-1' busy with its previous action",
+        ),
+      );
 
-    // Closing takes no permission and a status question has no booker: there
-    // is no capacity to record, and the empty cell says exactly that.
+    let error;
+    try {
+      await AccessService.close("tenant-1", "booking-1", "door-1", "user-1");
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).to.be.instanceOf(LockBusyError);
+    expect(providerStatus.called).to.be.false;
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       action: "close",
-      accessRole: null,
+      result: "failure",
+      errorCode: "lock_busy",
+      errorMessage:
+        "Nuki reports smartlock 'lock-1' busy with its previous action",
+    });
+  });
+
+  it("audits close and status in the capacity they were commanded in, naming the user", async () => {
+    await AccessService.close("tenant-1", "booking-1", "door-1", "user-1");
+    await AccessService.getStatus("tenant-1", "booking-1", "door-1", "user-1");
+
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "close",
+      accessRole: "booker",
+      windowOverridden: false,
     });
     expect(AccessLogService.log.secondCall.args[0]).to.include({
       action: "status",
+      accessRole: "booker",
+      windowOverridden: false,
+    });
+    expect(AccessLogService.log.secondCall.args[0].actor).to.deep.equal({
+      userId: "user-1",
+      source: "user",
+    });
+  });
+
+  it("audits a status read nobody asked for as the system's", async () => {
+    await AccessService.getStatus("tenant-1", "booking-1", "door-1");
+
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "status",
       accessRole: null,
+      windowOverridden: false,
+    });
+    expect(AccessLogService.log.firstCall.args[0].actor).to.deep.equal({
+      userId: null,
+      source: "system",
     });
   });
 
@@ -935,6 +1015,234 @@ describe("AccessService close, unlatch and status with validation rules", () => 
   });
 });
 
+describe("AccessService admin override after the access window", () => {
+  let sandbox;
+
+  /** The booking ended an hour ago; the door carries no buffer. */
+  function pastBooking() {
+    const now = Date.now();
+    return createBooking({
+      timeBegin: now - 120 * MINUTE,
+      timeEnd: now - 60 * MINUTE,
+    });
+  }
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    providerOpen = sandbox
+      .stub()
+      .resolves({ state: "opened", openProcessId: null });
+    providerClose = sandbox.stub().resolves();
+    providerStatus = sandbox
+      .stub()
+      .resolves({ open: true, locked: false, doorOpen: null });
+    sandbox.stub(AccessLogService, "log").resolves();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("lets a manager close, read the status and poll the open after the window", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+
+    for (const action of ["close", "status", "open-status"]) {
+      expect(
+        await AccessService.canOperate(
+          "manager-9",
+          "tenant-1",
+          "booking-1",
+          "door-1",
+          true,
+        ),
+        action,
+      ).to.be.true;
+    }
+  });
+
+  it("refuses a manager before the window opens", async () => {
+    const now = Date.now();
+    stubResolvedDoor(
+      sandbox,
+      createBooking({
+        timeBegin: now + 60 * MINUTE,
+        timeEnd: now + 120 * MINUTE,
+      }),
+    );
+
+    expect(
+      await AccessService.canOperate(
+        "manager-9",
+        "tenant-1",
+        "booking-1",
+        "door-1",
+        true,
+      ),
+    ).to.be.false;
+  });
+
+  it("refuses the booker after the window as before", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+
+    expect(
+      await AccessService.canOperate(
+        "user-1",
+        "tenant-1",
+        "booking-1",
+        "door-1",
+        false,
+      ),
+    ).to.be.false;
+  });
+
+  it("refuses a manager the open after the window, with the window as the reason", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+
+    const outcome = await AccessService.open(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "manager-9",
+      { hasManagePermission: true },
+    );
+
+    expect(outcome.success).to.be.false;
+    expect(outcome.blockingReasons).to.include(
+      ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW,
+    );
+    expect(providerOpen.called).to.be.false;
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "open",
+      result: "denied",
+      accessRole: "manager",
+      windowOverridden: false,
+    });
+  });
+
+  it("marks a manager's close after the window as overridden, in their capacity", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+
+    const result = await AccessService.close(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "manager-9",
+      { hasManagePermission: true },
+    );
+
+    expect(result.statusSource).to.equal("provider_status");
+    expect(providerClose.calledOnce).to.be.true;
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "close",
+      result: "success",
+      accessRole: "manager",
+      windowOverridden: true,
+    });
+  });
+
+  it("marks a failed overridden close as overridden too", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+    providerClose = sandbox.stub().rejects(new Error("lock unreachable"));
+
+    let error;
+    try {
+      await AccessService.close(
+        "tenant-1",
+        "booking-1",
+        "door-1",
+        "manager-9",
+        { hasManagePermission: true },
+      );
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).to.be.an("error");
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "close",
+      result: "failure",
+      accessRole: "manager",
+      windowOverridden: true,
+    });
+  });
+
+  it("names the manager as the actor of an overridden status read", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+
+    const status = await AccessService.getStatus(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "manager-9",
+      { hasManagePermission: true },
+    );
+
+    expect(status).to.deep.include({ open: true, locked: false });
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "status",
+      result: "success",
+      accessRole: "manager",
+      windowOverridden: true,
+    });
+    expect(AccessLogService.log.firstCall.args[0].actor).to.deep.equal({
+      userId: "manager-9",
+      source: "user",
+    });
+  });
+
+  it("names the manager as the actor of an overridden open-status read", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+
+    await AccessService.getOpenStatus(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      null,
+      "manager-9",
+      { hasManagePermission: true },
+    );
+
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "status",
+      result: "success",
+      accessRole: "manager",
+      windowOverridden: true,
+    });
+    expect(AccessLogService.log.firstCall.args[0].actor).to.deep.equal({
+      userId: "manager-9",
+      source: "user",
+    });
+  });
+
+  it("grants the override to the booker who may manage the bookings, in their own capacity", async () => {
+    stubResolvedDoor(sandbox, pastBooking());
+
+    await AccessService.close("tenant-1", "booking-1", "door-1", "user-1", {
+      hasManagePermission: true,
+    });
+
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "close",
+      accessRole: "booker",
+      windowOverridden: true,
+    });
+  });
+
+  it("records no override on a close inside the window", async () => {
+    stubResolvedDoor(sandbox, createBooking());
+
+    await AccessService.close("tenant-1", "booking-1", "door-1", "manager-9", {
+      hasManagePermission: true,
+    });
+
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "close",
+      accessRole: "manager",
+      windowOverridden: false,
+    });
+  });
+});
+
 describe("AccessController.open", () => {
   let sandbox;
   let request;
@@ -1080,6 +1388,22 @@ describe("AccessController.open", () => {
 
     expect(response.status.calledWith(500)).to.be.true;
   });
+
+  it("answers a busy lock with HTTP 423 and the Lock Busy body, no retry hint", async () => {
+    sandbox
+      .stub(AccessService, "open")
+      .rejects(new LockBusyError("nuki", "open", "busy"));
+
+    await AccessController.open(request, response);
+
+    expect(response.status.calledOnceWith(423)).to.be.true;
+    expect(response.json.firstCall.args[0]).to.deep.equal({
+      error: "LockBusyError",
+      code: "lock_busy",
+      statusCode: 423,
+      params: { provider: "nuki", action: "open" },
+    });
+  });
 });
 
 describe("AccessController.unlatch", () => {
@@ -1152,5 +1476,135 @@ describe("AccessController.unlatch", () => {
     await AccessController.unlatch(request, response);
 
     expect(response.sendStatus.calledWith(403)).to.be.true;
+  });
+});
+
+describe("AccessController.close", () => {
+  let sandbox;
+  let request;
+  let response;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    request = {
+      params: { tenant: "tenant-1", accessPointId: "door-1" },
+      query: { bookingId: "booking-1" },
+      body: {},
+      user: { id: "user-1" },
+      reach: "own",
+      principal: { userId: "user-1" },
+    };
+    response = {
+      status: sandbox.stub().returnsThis(),
+      json: sandbox.stub(),
+      sendStatus: sandbox.stub(),
+    };
+    sandbox.stub(AccessService, "canOperate").resolves(true);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("answers a busy lock with HTTP 423 and the Lock Busy body, no retry hint", async () => {
+    sandbox
+      .stub(AccessService, "close")
+      .rejects(new LockBusyError("nuki", "close", "busy"));
+
+    await AccessController.close(request, response);
+
+    expect(response.status.calledOnceWith(423)).to.be.true;
+    expect(response.json.firstCall.args[0]).to.deep.equal({
+      error: "LockBusyError",
+      code: "lock_busy",
+      statusCode: 423,
+      params: { provider: "nuki", action: "close" },
+    });
+  });
+
+  it("answers 500 on any other close failure", async () => {
+    sandbox.stub(AccessService, "close").rejects(new Error("boom"));
+
+    await AccessController.close(request, response);
+
+    expect(response.status.calledWith(500)).to.be.true;
+  });
+
+  it("hands the user and their manage permission to the close, so the audit knows the capacity", async () => {
+    request.reach = "tenant";
+    request.principal = { userId: "manager-9", reach: "tenant" };
+    request.user = { id: "manager-9" };
+    sandbox.stub(AccessController, "_canManage").returns(true);
+    const close = sandbox.stub(AccessService, "close").resolves({});
+
+    await AccessController.close(request, response);
+
+    expect(close.firstCall.args).to.deep.equal([
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "manager-9",
+      { hasManagePermission: true },
+    ]);
+  });
+});
+
+describe("AccessController status reads", () => {
+  let sandbox;
+  let request;
+  let response;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    request = {
+      params: { tenant: "tenant-1", accessPointId: "door-1" },
+      query: { bookingId: "booking-1", openProcessId: "77" },
+      body: {},
+      user: { id: "manager-9" },
+      reach: "tenant",
+      principal: { userId: "manager-9", reach: "tenant" },
+    };
+    response = {
+      status: sandbox.stub().returnsThis(),
+      json: sandbox.stub(),
+      sendStatus: sandbox.stub(),
+    };
+    sandbox.stub(AccessService, "canOperate").resolves(true);
+    sandbox.stub(AccessController, "_canManage").returns(true);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("hands the user and their manage permission to the status read", async () => {
+    const getStatus = sandbox.stub(AccessService, "getStatus").resolves({});
+
+    await AccessController.getStatus(request, response);
+
+    expect(getStatus.firstCall.args).to.deep.equal([
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "manager-9",
+      { hasManagePermission: true },
+    ]);
+  });
+
+  it("hands the user and their manage permission to the open-status read", async () => {
+    const getOpenStatus = sandbox
+      .stub(AccessService, "getOpenStatus")
+      .resolves({});
+
+    await AccessController.getOpenStatus(request, response);
+
+    expect(getOpenStatus.firstCall.args).to.deep.equal([
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "77",
+      "manager-9",
+      { hasManagePermission: true },
+    ]);
   });
 });

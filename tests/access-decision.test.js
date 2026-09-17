@@ -459,6 +459,114 @@ describe("Access decision: decide", () => {
       },
     },
     {
+      name: "lets a manager close and read a door after its window, through the override, but not open it",
+      booking: booking(),
+      accessPoints: [door()],
+      person: MANAGER,
+      now: 250 * MINUTE,
+      expected: {
+        accessRole: "manager",
+        canOperate: true,
+        canOperateRemote: false,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW],
+        primaryBlockingReason: ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW,
+        operableAccessPointIds: ["door-1"],
+        remoteOperableAccessPointIds: [],
+        overriddenAccessPointIds: ["door-1"],
+      },
+    },
+    {
+      name: "grants the override on the permission alone, at the booker's own booking too",
+      booking: booking(),
+      accessPoints: [door()],
+      person: OWNER_WHO_MAY_MANAGE,
+      now: 250 * MINUTE,
+      expected: {
+        accessRole: "booker",
+        canOperate: true,
+        canOperateRemote: false,
+        operableAccessPointIds: ["door-1"],
+        remoteOperableAccessPointIds: [],
+        overriddenAccessPointIds: ["door-1"],
+      },
+    },
+    {
+      name: "gives a manager nothing before the window opens - that is not this booking's business",
+      booking: booking(),
+      accessPoints: [door()],
+      person: MANAGER,
+      now: 80 * MINUTE,
+      expected: {
+        canOperate: false,
+        canOperateRemote: false,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW],
+        operableAccessPointIds: [],
+        remoteOperableAccessPointIds: [],
+        overriddenAccessPointIds: [],
+      },
+    },
+    {
+      name: "gives the booker nothing after the window - the override hangs on the permission",
+      booking: booking(),
+      accessPoints: [door()],
+      person: OWNER,
+      now: 250 * MINUTE,
+      expected: {
+        canOperate: false,
+        canOperateRemote: false,
+        blockingReasons: [ACCESS_BLOCKING_REASONS.OUTSIDE_ACCESS_WINDOW],
+        operableAccessPointIds: [],
+        overriddenAccessPointIds: [],
+      },
+    },
+    {
+      name: "does not lift the booking validity for the override",
+      booking: booking({ isRejected: true }),
+      accessPoints: [door()],
+      person: MANAGER,
+      now: 250 * MINUTE,
+      expected: {
+        canOperate: false,
+        operableAccessPointIds: [],
+        overriddenAccessPointIds: [],
+      },
+    },
+    {
+      name: "does not lift the grant requirement for the override",
+      booking: booking(),
+      accessPoints: [
+        door({ mode: AccessPointMode.AUTHORIZATION }, { isProvisioned: false }),
+      ],
+      person: MANAGER,
+      now: 250 * MINUTE,
+      expected: {
+        canOperate: false,
+        operableAccessPointIds: [],
+        overriddenAccessPointIds: [],
+      },
+    },
+    {
+      name: "overrides per door: a door still in its window is opened, one past it only closed",
+      booking: booking(),
+      accessPoints: [
+        door(
+          { id: "door-1" },
+          { accessBuffer: { beforeMs: 0, afterMs: 60 * MINUTE } },
+        ),
+        door({ id: "door-2" }),
+      ],
+      person: MANAGER,
+      now: 250 * MINUTE,
+      expected: {
+        canOperate: true,
+        canOperateRemote: true,
+        blockingReasons: [],
+        operableAccessPointIds: ["door-1", "door-2"],
+        remoteOperableAccessPointIds: ["door-1"],
+        overriddenAccessPointIds: ["door-2"],
+      },
+    },
+    {
       name: "makes a manager of nobody in particular who may manage the bookings",
       booking: booking(),
       accessPoints: [door()],
@@ -550,8 +658,64 @@ describe("Access decision: decide", () => {
       primaryBlockingReason: null,
       operableAccessPointIds: ["door-1"],
       remoteOperableAccessPointIds: ["door-1"],
+      overriddenAccessPointIds: [],
       evidenceWaived: false,
       demandedEvidence: { "door-1": ["qrScan"] },
+      // The booking runs 100 to 200 minutes, the door carries no buffer.
+      accessWindow: { from: 6_000_000, to: 12_000_000 },
+    });
+  });
+
+  describe("access window envelope", () => {
+    it("spans the earliest start and the latest end over doors with different buffers", () => {
+      const decision = decide(
+        booking(),
+        [
+          door(
+            { id: "door-a" },
+            {
+              accessBuffer: { beforeMs: 15 * MINUTE, afterMs: 5 * MINUTE },
+              accessFrom: 85 * MINUTE,
+              accessTo: 205 * MINUTE,
+            },
+          ),
+          door(
+            { id: "door-b" },
+            {
+              accessBuffer: { beforeMs: 5 * MINUTE, afterMs: 30 * MINUTE },
+              accessFrom: 95 * MINUTE,
+              accessTo: 230 * MINUTE,
+            },
+          ),
+        ],
+        { ...OWNER, now: NOW },
+      );
+
+      // door-a opens first (85 min), door-b closes last (230 min).
+      expect(decision.accessWindow).to.deep.equal({
+        from: 5_100_000,
+        to: 13_800_000,
+      });
+    });
+
+    it("is null for a booking without access points", () => {
+      const decision = decide(booking(), [], { ...OWNER, now: NOW });
+
+      expect(decision.accessWindow).to.be.null;
+    });
+
+    it("is stated even where the person may not operate, so clients can tell upcoming from past", () => {
+      const decision = decide(
+        booking(),
+        [door({ id: "door-a" }, { accessFrom: 85 * MINUTE })],
+        { ...OWNER, now: 300 * MINUTE },
+      );
+
+      expect(decision.canOperate).to.be.false;
+      expect(decision.accessWindow).to.deep.equal({
+        from: 5_100_000,
+        to: 12_000_000,
+      });
     });
   });
 
