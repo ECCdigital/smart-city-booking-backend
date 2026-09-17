@@ -54,6 +54,7 @@ const {
 } = require("../src/commons/entities/access/access-point");
 const { AccessOpenError } = require("../src/errors/AccessOpenError");
 const { LockBusyError } = require("../src/errors/LockBusyError");
+const { ValidationError } = require("../src/errors/ValidationError");
 
 const {
   FakeNukiApiClient,
@@ -597,6 +598,186 @@ describe("access provider dialects: the adapters as they answer", () => {
         doorSensorState: null,
         state: null,
       });
+    });
+  });
+
+  /**
+   * The save-time check of the Öffnungsart (spec § 3.3). The vocabulary and
+   * the device-type table are the provider's, so it is the provider that
+   * refuses a value before it is stored - the controller only asks.
+   */
+  describe("NUKI validateAccessPoint: the Öffnungsart a save would leave behind", () => {
+    let provider;
+
+    beforeEach(() => {
+      provider = new NukiAccessProvider({ client: clients.nuki });
+    });
+
+    function nukiDoor(openAction) {
+      return openAction === undefined
+        ? { ...NUKI_DOOR, config: {} }
+        : { ...NUKI_DOOR, config: { openAction } };
+    }
+
+    function listedSmartlock(type) {
+      return { ...NUKI_DOOR, metadata: nukiSmartlock({ type }) };
+    }
+
+    it("declares the check as a capability, so the save path asks for it", () => {
+      expect(NukiAccessProvider.capabilities).to.include("validateAccessPoint");
+    });
+
+    it("lets an access point without an Öffnungsart through", () => {
+      expect(() =>
+        provider.validateAccessPoint(nukiDoor(), listedSmartlock(2)),
+      ).to.not.throw();
+    });
+
+    it("reads an explicit `null` as a missing key, as the open does", () => {
+      expect(() =>
+        provider.validateAccessPoint(nukiDoor(null), listedSmartlock(2)),
+      ).to.not.throw();
+    });
+
+    it("lets `auto` through at a device that can do nothing else", () => {
+      expect(() =>
+        provider.validateAccessPoint(nukiDoor("auto"), listedSmartlock(2)),
+      ).to.not.throw();
+    });
+
+    it("refuses an Öffnungsart the device type cannot carry out", () => {
+      const refuse = () =>
+        provider.validateAccessPoint(nukiDoor("unlatch"), listedSmartlock(2));
+
+      expect(refuse).to.throw(ValidationError);
+      try {
+        refuse();
+      } catch (err) {
+        expect(err.statusCode).to.equal(400);
+        expect(err.errors).to.deep.equal([
+          {
+            field: "config.openAction",
+            code: "unsupported_open_action",
+            params: {
+              openAction: "unlatch",
+              deviceType: 2,
+              supportedOpenActions: ["auto"],
+            },
+          },
+        ]);
+      }
+    });
+
+    it("refuses a latch at a box, which has no door to open", () => {
+      let refused;
+      try {
+        provider.validateAccessPoint(nukiDoor("unlatch"), listedSmartlock(1));
+      } catch (err) {
+        refused = err;
+      }
+
+      expect(refused.errors[0].params).to.deep.equal({
+        openAction: "unlatch",
+        deviceType: 1,
+        supportedOpenActions: ["auto", "unlock"],
+      });
+    });
+
+    it("lets a box unlock", () => {
+      expect(() =>
+        provider.validateAccessPoint(nukiDoor("unlock"), listedSmartlock(1)),
+      ).to.not.throw();
+    });
+
+    for (const openAction of [
+      "unlock",
+      "unlatch",
+      "lock_n_go",
+      "lock_n_go_unlatch",
+    ]) {
+      it(`lets a smart lock do ${openAction}`, () => {
+        expect(() =>
+          provider.validateAccessPoint(
+            nukiDoor(openAction),
+            listedSmartlock(4),
+          ),
+        ).to.not.throw();
+      });
+    }
+
+    it("calls an unknown word unknown, even where the device could do nothing anyway", () => {
+      let refused;
+      try {
+        provider.validateAccessPoint(nukiDoor("flip"), listedSmartlock(2));
+      } catch (err) {
+        refused = err;
+      }
+
+      expect(refused.errors[0].code).to.equal("unknown_open_action");
+    });
+
+    it("refuses an unknown word even when Nuki does not list the lock", () => {
+      let refused;
+      try {
+        provider.validateAccessPoint(nukiDoor("flip"), null);
+      } catch (err) {
+        refused = err;
+      }
+
+      expect(refused.errors[0].code).to.equal("unknown_open_action");
+    });
+
+    it("lets an Öffnungsart through when Nuki does not list the lock", () => {
+      expect(() =>
+        provider.validateAccessPoint(nukiDoor("lock_n_go"), null),
+      ).to.not.throw();
+    });
+
+    it("lets an Öffnungsart through when the device type is unknown", () => {
+      expect(() =>
+        provider.validateAccessPoint(
+          nukiDoor("lock_n_go_unlatch"),
+          listedSmartlock(undefined),
+        ),
+      ).to.not.throw();
+    });
+
+    it("reads the device type off `config.deviceType` where the lock has no `type`", () => {
+      const listed = {
+        ...NUKI_DOOR,
+        metadata: {
+          ...nukiSmartlock({ type: undefined }),
+          config: { deviceType: 2 },
+        },
+      };
+
+      let refused;
+      try {
+        provider.validateAccessPoint(nukiDoor("unlock"), listed);
+      } catch (err) {
+        refused = err;
+      }
+
+      expect(refused.errors[0].params.deviceType).to.equal(2);
+    });
+
+    it("refuses an Öffnungsart that is not a word of the vocabulary", () => {
+      const refuse = () =>
+        provider.validateAccessPoint(nukiDoor("flip"), listedSmartlock(4));
+
+      expect(refuse).to.throw(ValidationError);
+      try {
+        refuse();
+      } catch (err) {
+        expect(err.statusCode).to.equal(400);
+        expect(err.errors).to.deep.equal([
+          {
+            field: "config.openAction",
+            code: "unknown_open_action",
+            params: { openAction: "flip" },
+          },
+        ]);
+      }
     });
   });
 

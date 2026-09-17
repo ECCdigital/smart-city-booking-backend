@@ -4,6 +4,7 @@ const sinon = require("sinon");
 
 const { AccessPoint } = require("../src/commons/entities/access/access-point");
 const { ValidationError } = require("../src/errors/ValidationError");
+const { BaseError, NotFoundError } = require("../src/errors/BaseError");
 const { TEST_GEO_RULE } = require("./helpers/test-validation-rule");
 
 function createAccessPoint(overrides = {}) {
@@ -15,6 +16,29 @@ function createAccessPoint(overrides = {}) {
     label: "Haupteingang",
     ...overrides,
   });
+}
+
+function listedAccessPoint(supportedModes) {
+  return {
+    id: "lock-1",
+    provider: "nuki",
+    externalId: "lock-1",
+    supportedModes,
+  };
+}
+
+/**
+ * A lock as Nuki lists it: the device type sits in the provider's raw
+ * `metadata`. No `supportedModes`, so the mode check passes and the
+ * Öffnungsart is the only thing under test.
+ */
+function listedNukiLock(type) {
+  return {
+    id: "lock-1",
+    provider: "nuki",
+    externalId: "lock-1",
+    metadata: { type },
+  };
 }
 
 /**
@@ -143,14 +167,14 @@ describe("AccessPointController", () => {
 
   describe("storeAccessPoint", () => {
     let storeAccessPoint;
-    let getSupportedModes;
+    let findListedAccessPoint;
 
     beforeEach(() => {
       storeAccessPoint = sandbox
         .stub(AccessPointManager, "storeAccessPoint")
         .callsFake(async (accessPoint) => accessPoint);
-      getSupportedModes = sandbox
-        .stub(AccessInfoService, "getSupportedModes")
+      findListedAccessPoint = sandbox
+        .stub(AccessInfoService, "findListedAccessPoint")
         .resolves(null);
     });
 
@@ -427,7 +451,7 @@ describe("AccessPointController", () => {
 
     describe("mode support", () => {
       it("refuses a mode the provider does not report as supported", async () => {
-        getSupportedModes.resolves(["authorization"]);
+        findListedAccessPoint.resolves(listedAccessPoint(["authorization"]));
         request.body = {
           provider: "nuki",
           externalId: "lock-1",
@@ -450,7 +474,9 @@ describe("AccessPointController", () => {
       });
 
       it("accepts a mode the provider reports as supported", async () => {
-        getSupportedModes.resolves(["remote", "authorization", "both"]);
+        findListedAccessPoint.resolves(
+          listedAccessPoint(["remote", "authorization", "both"]),
+        );
         request.body = {
           provider: "nuki",
           externalId: "lock-1",
@@ -463,8 +489,8 @@ describe("AccessPointController", () => {
         expect(storeAccessPoint.calledOnce).to.be.true;
       });
 
-      it("does not refuse when the provider reports no supported modes", async () => {
-        getSupportedModes.resolves(null);
+      it("does not refuse when the provider does not list the access point", async () => {
+        findListedAccessPoint.resolves(null);
         request.body = {
           provider: "nuki",
           externalId: "lock-1",
@@ -486,7 +512,7 @@ describe("AccessPointController", () => {
 
         await AccessPointController.storeAccessPoint(request, response, next);
 
-        const [accessPoint, tenantId] = getSupportedModes.firstCall.args;
+        const [accessPoint, tenantId] = findListedAccessPoint.firstCall.args;
         expect(tenantId).to.equal("tenant-1");
         expect(accessPoint).to.include({
           provider: "salto-ks",
@@ -499,7 +525,7 @@ describe("AccessPointController", () => {
         sandbox
           .stub(AccessPointManager, "getAccessPoint")
           .resolves(createAccessPoint({ mode: "remote" }));
-        getSupportedModes.resolves(["authorization"]);
+        findListedAccessPoint.resolves(listedAccessPoint(["authorization"]));
         request.body = {
           id: "point-1",
           provider: "salto-ks",
@@ -508,7 +534,7 @@ describe("AccessPointController", () => {
 
         await AccessPointController.storeAccessPoint(request, response, next);
 
-        const [accessPoint, tenantId] = getSupportedModes.firstCall.args;
+        const [accessPoint, tenantId] = findListedAccessPoint.firstCall.args;
         expect(tenantId).to.equal("tenant-1");
         expect(accessPoint).to.include({
           provider: "salto-ks",
@@ -523,7 +549,9 @@ describe("AccessPointController", () => {
         sandbox
           .stub(AccessPointManager, "getAccessPoint")
           .resolves(createAccessPoint({ mode: "remote" }));
-        getSupportedModes.resolves(["remote", "authorization", "both"]);
+        findListedAccessPoint.resolves(
+          listedAccessPoint(["remote", "authorization", "both"]),
+        );
         request.body = {
           id: "point-1",
           provider: "salto-ks",
@@ -546,18 +574,331 @@ describe("AccessPointController", () => {
         await AccessPointController.storeAccessPoint(request, response, next);
 
         expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
-        expect(getSupportedModes.called).to.be.false;
+        expect(findListedAccessPoint.called).to.be.false;
       });
 
-      it("hands provider errors to the error handler", async () => {
-        const failure = new Error("Nuki API Error");
-        getSupportedModes.rejects(failure);
+      it("does not refuse when the listed entry names no supported modes", async () => {
+        findListedAccessPoint.resolves(listedAccessPoint(undefined));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          mode: "remote",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+    });
+
+    /**
+     * The Öffnungsart the save would leave behind, refused by the provider
+     * that owns the vocabulary (spec § 3.1/§ 3.3). The controller asks every
+     * provider that declares `validateAccessPoint` and names none of them.
+     */
+    describe("open action support", () => {
+      it("refuses an open action that is not one of the provider's", async () => {
+        findListedAccessPoint.resolves(listedNukiLock(4));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          config: { openAction: "flip" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors).to.deep.equal([
+          {
+            field: "config.openAction",
+            code: "unknown_open_action",
+            params: { openAction: "flip" },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("refuses an open action the device cannot carry out", async () => {
+        findListedAccessPoint.resolves(listedNukiLock(2));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          config: { openAction: "lock_n_go" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors).to.deep.equal([
+          {
+            field: "config.openAction",
+            code: "unsupported_open_action",
+            params: {
+              openAction: "lock_n_go",
+              deviceType: 2,
+              supportedOpenActions: ["auto"],
+            },
+          },
+        ]);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("stores an open action the device can carry out, as it was sent", async () => {
+        findListedAccessPoint.resolves(listedNukiLock(4));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          config: { openAction: "unlatch" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [created] = storeAccessPoint.firstCall.args;
+        expect(created.config).to.deep.equal({ openAction: "unlatch" });
+      });
+
+      it("stores an explicit `auto` rather than normalising it away", async () => {
+        findListedAccessPoint.resolves(listedNukiLock(2));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          config: { openAction: "auto" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [created] = storeAccessPoint.firstCall.args;
+        expect(created.config).to.deep.equal({ openAction: "auto" });
+      });
+
+      it("lets an open action through when the provider does not list the lock", async () => {
+        findListedAccessPoint.resolves(null);
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          config: { openAction: "lock_n_go_unlatch" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      it("asks the provider about its listing only once, for both checks", async () => {
+        findListedAccessPoint.resolves(listedNukiLock(2));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          config: { openAction: "unlock" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(findListedAccessPoint.calledOnce).to.be.true;
+        expect(next.firstCall.args[0]).to.be.instanceOf(ValidationError);
+      });
+
+      it("leaves the config of a provider without the check alone", async () => {
+        findListedAccessPoint.resolves({
+          id: "lock-9",
+          provider: "salto-ks",
+          externalId: "lock-9",
+          metadata: { type: 2 },
+        });
+        request.body = {
+          provider: "salto-ks",
+          externalId: "lock-9",
+          config: { openAction: "flip" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [created] = storeAccessPoint.firstCall.args;
+        expect(created.config).to.deep.equal({ openAction: "flip" });
+      });
+
+      it("judges an update by the open action the request would leave behind", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint({ config: { openAction: "auto" } }));
+        findListedAccessPoint.resolves(listedNukiLock(1));
+        request.body = {
+          id: "point-1",
+          config: { openAction: "unlatch" },
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors[0]).to.deep.equal({
+          field: "config.openAction",
+          code: "unsupported_open_action",
+          params: {
+            openAction: "unlatch",
+            deviceType: 1,
+            supportedOpenActions: ["auto", "unlock"],
+          },
+        });
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("judges an update against the hardware it is being pointed at", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint({ config: { openAction: "unlatch" } }));
+        findListedAccessPoint.resolves(listedNukiLock(2));
+        request.body = { id: "point-1", externalId: "lock-42" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.errors[0].code).to.equal("unsupported_open_action");
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("keeps the open action when the update leaves it doable", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint({ config: { openAction: "unlatch" } }));
+        findListedAccessPoint.resolves(listedNukiLock(4));
+        request.body = { id: "point-1", label: "Nebeneingang" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.called).to.be.false;
+        const [updated] = storeAccessPoint.firstCall.args;
+        expect(updated.config).to.deep.equal({ openAction: "unlatch" });
+      });
+    });
+
+    /**
+     * The provider is asked for its listing once per save and its failure
+     * is answered as such (spec § 3.4): a rejected token is a 502, everything
+     * else a 503, both naming the provider. Nothing is stored either way.
+     */
+    describe("provider listing", () => {
+      function providerHttpError(status) {
+        const failure = new Error(`Request failed with status code ${status}`);
+        failure.response = { status };
+        return failure;
+      }
+
+      it("asks the provider once per create", async () => {
+        request.body = { provider: "nuki", externalId: "lock-1" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(findListedAccessPoint.calledOnce).to.be.true;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      it("asks the provider once per update", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint());
+        request.body = { id: "point-1", label: "Nebeneingang" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(findListedAccessPoint.calledOnce).to.be.true;
+        expect(storeAccessPoint.calledOnce).to.be.true;
+      });
+
+      [401, 403].forEach((status) => {
+        it(`answers 502 access_provider_rejected when the provider rejects the token with ${status}`, async () => {
+          findListedAccessPoint.rejects(providerHttpError(status));
+          request.body = { provider: "nuki", externalId: "lock-1" };
+
+          await AccessPointController.storeAccessPoint(request, response, next);
+
+          const error = next.firstCall.args[0];
+          expect(error).to.be.instanceOf(BaseError);
+          expect(error.statusCode).to.equal(502);
+          expect(error.code).to.equal("access_provider_rejected");
+          expect(error.params).to.deep.equal({ provider: "nuki" });
+          expect(storeAccessPoint.called).to.be.false;
+        });
+      });
+
+      it("answers 503 access_provider_unreachable when the provider cannot be reached", async () => {
+        const failure = new Error("connect ECONNREFUSED");
+        failure.code = "ECONNREFUSED";
+        findListedAccessPoint.rejects(failure);
+        request.body = { provider: "salto-ks", externalId: "lock-9" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(BaseError);
+        expect(error.statusCode).to.equal(503);
+        expect(error.code).to.equal("access_provider_unreachable");
+        expect(error.params).to.deep.equal({ provider: "salto-ks" });
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("answers 503 access_provider_unreachable when the provider fails with a 5xx", async () => {
+        findListedAccessPoint.rejects(providerHttpError(502));
+        request.body = { provider: "nuki", externalId: "lock-1" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error.statusCode).to.equal(503);
+        expect(error.code).to.equal("access_provider_unreachable");
+        expect(error.params).to.deep.equal({ provider: "nuki" });
+      });
+
+      it("answers 503 on an update as well, storing nothing", async () => {
+        sandbox
+          .stub(AccessPointManager, "getAccessPoint")
+          .resolves(createAccessPoint());
+        findListedAccessPoint.rejects(new Error("timeout of 10000ms exceeded"));
+        request.body = { id: "point-1", label: "Nebeneingang" };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        expect(next.firstCall.args[0].statusCode).to.equal(503);
+        expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("hands a not-found through, a tenant without the provider's application is not an unreachable provider", async () => {
+        const failure = new NotFoundError("nuki_application_not_found", {
+          tenant: "tenant-1",
+        });
+        findListedAccessPoint.rejects(failure);
         request.body = { provider: "nuki", externalId: "lock-1" };
 
         await AccessPointController.storeAccessPoint(request, response, next);
 
         expect(next.calledOnceWithExactly(failure)).to.be.true;
         expect(storeAccessPoint.called).to.be.false;
+      });
+
+      it("keeps the mode check a 400 unsupported_mode, not a provider failure", async () => {
+        findListedAccessPoint.resolves(listedAccessPoint(["authorization"]));
+        request.body = {
+          provider: "nuki",
+          externalId: "lock-1",
+          mode: "remote",
+        };
+
+        await AccessPointController.storeAccessPoint(request, response, next);
+
+        const error = next.firstCall.args[0];
+        expect(error).to.be.instanceOf(ValidationError);
+        expect(error.statusCode).to.equal(400);
+        expect(error.errors[0].code).to.equal("unsupported_mode");
       });
     });
 

@@ -11,6 +11,7 @@ const AccessEvidenceService = require("../../../commons/services/access/access-e
 const AccessInfoService = require("../../../commons/services/access/access-info-service");
 const AccessService = require("../../../commons/services/access/access-service");
 const { ValidationError } = require("../../../errors/ValidationError");
+const { BaseError, NotFoundError } = require("../../../errors/BaseError");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("access-point-controller.js");
@@ -145,7 +146,13 @@ class AccessPointController {
     });
 
     AccessPointController._assertRulePreconditions(accessPoint);
-    await AccessPointController._assertModeSupported(accessPoint, tenantId);
+    const listedAccessPoint =
+      await AccessPointController._fetchListedAccessPoint(
+        accessPoint,
+        tenantId,
+      );
+    AccessPointController._assertModeSupported(accessPoint, listedAccessPoint);
+    AccessInfoService.validateAccessPoint(accessPoint, listedAccessPoint);
 
     const createdAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
@@ -175,7 +182,13 @@ class AccessPointController {
     );
 
     AccessPointController._assertRulePreconditions(accessPoint);
-    await AccessPointController._assertModeSupported(accessPoint, tenantId);
+    const listedAccessPoint =
+      await AccessPointController._fetchListedAccessPoint(
+        accessPoint,
+        tenantId,
+      );
+    AccessPointController._assertModeSupported(accessPoint, listedAccessPoint);
+    AccessInfoService.validateAccessPoint(accessPoint, listedAccessPoint);
 
     const updatedAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
@@ -362,6 +375,56 @@ class AccessPointController {
   }
 
   /**
+   * The provider's listed entry for the access point as the write would
+   * leave it - fetched once per save and handed to every check that reads
+   * it, so a save costs one provider round trip. A provider that cannot be
+   * asked is answered as such instead of a 500: an HTTP 401 or 403 from the
+   * provider means its token was rejected (`502 access_provider_rejected`),
+   * everything else - network, timeout, 5xx - that it cannot be reached
+   * (`503 access_provider_unreachable`). Both name the provider; neither
+   * stores anything. The status codes are the only provider-neutral
+   * distinction there is, so this holds for every provider alike.
+   *
+   * A `NotFoundError` passes through untouched: every provider raises one
+   * (`<provider>_application_not_found`) when the tenant has no application
+   * for it, and that is the platform refusing to call at all - a `404`, not
+   * a provider that cannot be reached, and no amount of retrying will make
+   * it reachable. Anything else the provider raises is translated.
+   *
+   * @param {AccessPoint} accessPoint The access point as it would be stored
+   * @param {string} tenantId Tenant the access point belongs to
+   * @returns {Promise<Object|null>} The listed entry, or `null` when the
+   *   provider does not list the access point
+   * @throws {BaseError} `access_provider_rejected` (502) or
+   *   `access_provider_unreachable` (503)
+   */
+  static async _fetchListedAccessPoint(accessPoint, tenantId) {
+    try {
+      return await AccessInfoService.findListedAccessPoint(
+        accessPoint,
+        tenantId,
+      );
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        throw err;
+      }
+
+      const status = err?.response?.status;
+      const params = { provider: accessPoint.provider };
+
+      logger.warn(
+        `${tenantId} -- Provider ${accessPoint.provider} did not list its access points: ${err?.message || err}`,
+      );
+
+      if (status === 401 || status === 403) {
+        throw new BaseError("access_provider_rejected", 502, params);
+      }
+
+      throw new BaseError("access_provider_unreachable", 503, params);
+    }
+  }
+
+  /**
    * Refuse a `mode` the hardware cannot do, e.g. `remote` on an access point
    * that only knows authorizations. This is where the mode is written, so this
    * is where an administrator is told - rather than at the door, where the same
@@ -373,14 +436,14 @@ class AccessPointController {
    * through: an unknown capability is not a missing one.
    *
    * @param {AccessPoint} accessPoint The access point as it would be stored
-   * @param {string} tenantId Tenant the access point belongs to
+   * @param {Object|null} listedAccessPoint The provider's listed entry for
+   *   it (see `_fetchListedAccessPoint`), `null` when the provider does not
+   *   list it
    * @throws {ValidationError} If the lock does not support the mode
    */
-  static async _assertModeSupported(accessPoint, tenantId) {
-    const supportedModes = await AccessInfoService.getSupportedModes(
-      accessPoint,
-      tenantId,
-    );
+  static _assertModeSupported(accessPoint, listedAccessPoint) {
+    const supportedModes =
+      AccessInfoService.supportedModesOf(listedAccessPoint);
 
     if (!supportedModes || supportedModes.includes(accessPoint.mode)) {
       return;

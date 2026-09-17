@@ -297,6 +297,27 @@ for (const implementation of IMPLEMENTATIONS) {
       }
     });
 
+    /**
+     * `validateAccessPoint` is the optional say a provider has in what an
+     * administrator may store for it (spec § 3.1). An adapter that does not
+     * declare it still inherits the base implementation, which refuses
+     * nothing - so the save path may call it on any provider, and only the
+     * ones that declare it are asked.
+     */
+    it("refuses nothing at save time unless it declares validateAccessPoint", function () {
+      if (declares("validateAccessPoint")) {
+        return this.skip();
+      }
+
+      assert.strictEqual(typeof provider.validateAccessPoint, "function");
+      assert.doesNotThrow(() =>
+        provider.validateAccessPoint(
+          { ...accessPoint, config: { openAction: "not-an-open-action" } },
+          { ...accessPoint, metadata: { type: 2 } },
+        ),
+      );
+    });
+
     when("listAccessPoints")(
       "lists the access points of the tenant in the shared shape",
       async function () {
