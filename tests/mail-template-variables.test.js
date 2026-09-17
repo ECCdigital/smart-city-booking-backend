@@ -173,3 +173,256 @@ describe("Mail-Vorlage: save validation refuses an unknown helper", () => {
     ).to.not.throw();
   });
 });
+
+/*
+ * The seven new Mail-Variablen, filled by the booking state (spec 2.4):
+ * rendered over `compose` against the fixture store with a probe snippet
+ * of this file's own. The wrappers stay as the snapshots of
+ * `mail-characterization.test.js` pin them; the variables come on top.
+ *
+ * Handlebars HTML-escapes a variable in `{{ }}`: `=` becomes `&#x3D;` and
+ * `&` becomes `&amp;`, in the URLs below as in the wrapper links of the
+ * snapshots. A mail client reads them back as the plain address.
+ */
+
+const sinon = require("sinon");
+const { compose } = require("../src/commons/mail-service");
+const {
+  TENANT,
+  GROUP,
+  GROUP_MEMBER_IDS,
+  SUPERVISOR,
+  FRONTEND_URL,
+  BACKEND_URL,
+  NOW,
+  tenant,
+  booking,
+  installMailStackStore,
+} = require("./helpers/mail-stack-fixtures");
+
+/** Every new variable between brackets, one per line, for an exact assertion. */
+const PROBE_SNIPPET = [
+  "bookingId=[{{bookingId}}]",
+  "groupBookingId=[{{groupBookingId}}]",
+  "isAggregated=[{{#if isAggregated}}yes{{else}}no{{/if}}]",
+  "tenantId=[{{tenantId}}]",
+  "bookingStatusUrl=[{{bookingStatusUrl}}]",
+  "cancellationUrl=[{{cancellationUrl}}]",
+  "paymentUrl=[{{paymentUrl}}]",
+].join("\n");
+
+/** The fixture tenant with one snippet replaced by this file's own source. */
+function tenantWithSnippet(snippetName, source, overrides = {}) {
+  const base = tenant(overrides);
+  return {
+    ...base,
+    mailSnippets: { ...base.mailSnippets, [snippetName]: source },
+  };
+}
+
+describe("Mail-Variable: filled by the booking state over compose", function () {
+  let env;
+
+  beforeEach(function () {
+    env = {
+      FRONTEND_URL: process.env.FRONTEND_URL,
+      BACKEND_URL: process.env.BACKEND_URL,
+    };
+    process.env.FRONTEND_URL = FRONTEND_URL;
+    process.env.BACKEND_URL = BACKEND_URL;
+    sinon.useFakeTimers({ now: NOW, toFake: ["Date"] });
+  });
+
+  afterEach(function () {
+    sinon.restore();
+    process.env.FRONTEND_URL = env.FRONTEND_URL;
+    process.env.BACKEND_URL = env.BACKEND_URL;
+  });
+
+  const single = (id = "B-1") => ({ tenantId: TENANT, bookingIds: [id] });
+  const group = () => ({
+    tenantId: TENANT,
+    bookingIds: GROUP_MEMBER_IDS,
+    groupBookingId: GROUP,
+  });
+
+  it("tracer: a status button in the booking confirmation links the tenant's real status page with the encoded customer name", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet(
+        "booking-confirmation",
+        '<a class="status" href="{{bookingStatusUrl}}?name={{urlEncode customerName}}">Status</a>',
+      ),
+    });
+
+    const [mail] = await compose("BOOKING_CONFIRMATION", single());
+
+    expect(mail.html).to.include(
+      '<a class="status" href="https://buchung.example.test/booking/status/stadthalle?id&#x3D;B-1&amp;name&#x3D;Erika%20Musterfrau?name=Erika%20Musterfrau">Status</a>',
+    );
+  });
+
+  it("a single notice: bookingId, tenantId, bookingStatusUrl and cancellationUrl filled, groupBookingId and paymentUrl empty, isAggregated false", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("booking-confirmation", PROBE_SNIPPET),
+    });
+
+    const [mail] = await compose("BOOKING_CONFIRMATION", single());
+
+    expect(mail.html).to.include(
+      [
+        "bookingId=[B-1]",
+        "groupBookingId=[]",
+        "isAggregated=[no]",
+        "tenantId=[stadthalle]",
+        "bookingStatusUrl=[https://buchung.example.test/booking/status/stadthalle?id&#x3D;B-1&amp;name&#x3D;Erika%20Musterfrau]",
+        "cancellationUrl=[https://buchung.example.test/booking/request-reject/stadthalle?id&#x3D;B-1]",
+        "paymentUrl=[]",
+      ].join("\n"),
+    );
+  });
+
+  it("bookingStatusUrl is empty without the tenant's public status view", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("booking-confirmation", PROBE_SNIPPET, {
+        enablePublicStatusView: false,
+      }),
+    });
+
+    const [mail] = await compose("BOOKING_CONFIRMATION", single());
+
+    expect(mail.html).to.include("bookingStatusUrl=[]");
+    expect(mail.html).to.include("bookingId=[B-1]");
+  });
+
+  it("cancellationUrl is empty when the customer may not cancel", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("booking-confirmation", PROBE_SNIPPET),
+      bookings: [
+        booking({
+          cancellationPolicy: { userCancellable: false, contactHint: "" },
+        }),
+      ],
+    });
+
+    const [mail] = await compose("BOOKING_CONFIRMATION", single());
+
+    expect(mail.html).to.include("cancellationUrl=[]");
+  });
+
+  it("cancellationUrl is empty when the booking is no longer live", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("booking-confirmation", PROBE_SNIPPET),
+      bookings: [booking({ status: "rejected" })],
+    });
+
+    const [mail] = await compose("BOOKING_CONFIRMATION", single());
+
+    expect(mail.html).to.include("cancellationUrl=[]");
+    expect(mail.html).to.include("bookingId=[B-1]");
+  });
+
+  it("cancellationUrl is filled for a requested booking the customer may cancel", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("booking-request-confirmation", PROBE_SNIPPET),
+      bookings: [booking({ id: "B-req", status: "requested" })],
+    });
+
+    const [mail] = await compose(
+      "BOOKING_REQUEST_CONFIRMATION",
+      single("B-req"),
+    );
+
+    expect(mail.html).to.include(
+      "cancellationUrl=[https://buchung.example.test/booking/request-reject/stadthalle?id&#x3D;B-req]",
+    );
+  });
+
+  it("a Sammelmitteilung empties bookingId, bookingStatusUrl and cancellationUrl and fills groupBookingId and isAggregated", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("booking-confirmation", PROBE_SNIPPET),
+    });
+
+    const [mail] = await compose("BOOKING_CONFIRMATION", group());
+
+    expect(mail.html).to.include(
+      [
+        "bookingId=[]",
+        "groupBookingId=[G-stadthalle]",
+        "isAggregated=[yes]",
+        "tenantId=[stadthalle]",
+        "bookingStatusUrl=[]",
+        "cancellationUrl=[]",
+        "paymentUrl=[]",
+      ].join("\n"),
+    );
+  });
+
+  it("paymentUrl is the payment link of PAYMENT_LINK_AFTER_APPROVAL", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("payment-link-after-approval", PROBE_SNIPPET),
+    });
+
+    const [mail] = await compose("PAYMENT_LINK_AFTER_APPROVAL", {
+      ...single(),
+      paymentUrl:
+        "https://buchung.example.test/payment/redirection?ids=B-1&tenant=stadthalle&aggregated=false",
+    });
+
+    expect(mail.html).to.include(
+      "paymentUrl=[https://buchung.example.test/payment/redirection?ids&#x3D;B-1&amp;tenant&#x3D;stadthalle&amp;aggregated&#x3D;false]",
+    );
+  });
+
+  it("paymentUrl of a group is the one link for all members", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("payment-link-after-approval", PROBE_SNIPPET),
+    });
+
+    const [mail] = await compose("PAYMENT_LINK_AFTER_APPROVAL", {
+      ...group(),
+      paymentUrl:
+        "https://buchung.example.test/payment/redirection?ids=G-1,G-2,G-3&tenant=stadthalle&aggregated=true",
+    });
+
+    expect(mail.html).to.include(
+      "paymentUrl=[https://buchung.example.test/payment/redirection?ids&#x3D;G-1,G-2,G-3&amp;tenant&#x3D;stadthalle&amp;aggregated&#x3D;true]",
+    );
+    expect(mail.html).to.include("groupBookingId=[G-stadthalle]");
+  });
+
+  it("tenantId is filled in the single and in the aggregated notice", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet("invoice", "tenant=[{{tenantId}}]"),
+    });
+
+    const [singleMail] = await compose("INVOICE", single());
+    const [groupMail] = await compose("INVOICE", group());
+
+    expect(singleMail.html).to.include("tenant=[stadthalle]");
+    expect(groupMail.html).to.include("tenant=[stadthalle]");
+  });
+
+  it("a tenant mail (SUPERVISOR_BOOKING_NOTIFICATION) fills the variables too, regardless of its rejection link and QR code", async function () {
+    installMailStackStore({
+      tenant: tenantWithSnippet(
+        "supervisor-booking-notification",
+        PROBE_SNIPPET,
+      ),
+    });
+
+    const [mail] = await compose("SUPERVISOR_BOOKING_NOTIFICATION", single());
+
+    expect(mail.to).to.equal(SUPERVISOR);
+    expect(mail.html).to.include(
+      [
+        "bookingId=[B-1]",
+        "groupBookingId=[]",
+        "isAggregated=[no]",
+        "tenantId=[stadthalle]",
+        "bookingStatusUrl=[https://buchung.example.test/booking/status/stadthalle?id&#x3D;B-1&amp;name&#x3D;Erika%20Musterfrau]",
+        "cancellationUrl=[https://buchung.example.test/booking/request-reject/stadthalle?id&#x3D;B-1]",
+        "paymentUrl=[]",
+      ].join("\n"),
+    );
+  });
+});
