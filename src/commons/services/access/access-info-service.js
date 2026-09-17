@@ -43,33 +43,30 @@ class AccessInfoService {
   }
 
   /**
-   * The access modes the provider reports for an access point - what the
-   * hardware can do, as opposed to the `mode` an administrator configured
-   * for it.
+   * The entry the provider lists for an access point - the one the admin UI
+   * picks from, with the provider's raw `metadata` on it.
    *
    * The provider's access point is resolved by `externalId` against what the
    * provider lists for the tenant, matched against the `id` of a listed entry
    * as well as its `externalId`: providers name their access points either
-   * way. The listing is used rather than the provider's own
-   * `getSupportedModes` capability - which asks about a single access point
-   * and is what the provisioning path uses - because an access point the
-   * provider does not know has to come back as "no answer" here, not as the
-   * error a direct lookup would raise. Same question and same argument order
-   * as that capability, so the two differ only in whom they ask.
+   * way. The listing is used rather than the provider's per-point
+   * capabilities - which ask about a single access point and are what the
+   * provisioning path uses - because an access point the provider does not
+   * know has to come back as "no answer" here, not as the error a direct
+   * lookup would raise.
    *
-   * Everything unknown is answered with `null` rather than an empty list, so a
-   * caller can tell "this access point cannot do that" from "the provider does
-   * not say". A provider that cannot list its access points, an access point
-   * without an `externalId`, one the provider does not list and one listed
-   * without `supportedModes` all end up here.
+   * Everything unknown is answered with `null`: a provider that cannot list
+   * its access points, an access point without an `externalId` and one the
+   * provider does not list. A provider that fails to answer is not an
+   * unlisted access point - its error passes through untouched.
    *
    * @param {Object} accessPoint The access point, read for `provider` and
    *   `externalId`
    * @param {string} tenantId Tenant the access point belongs to
-   * @returns {Promise<string[]|null>} The modes the provider reports, or
-   *   `null` when it reports none
+   * @returns {Promise<Object|null>} The listed entry, or `null` when the
+   *   provider does not list the access point
    */
-  static async getSupportedModes(accessPoint, tenantId) {
+  static async findListedAccessPoint(accessPoint, tenantId) {
     const capabilities = getAccessProviderCapabilities(accessPoint.provider);
 
     if (
@@ -84,15 +81,52 @@ class AccessInfoService {
       accessPoint.provider,
     );
     const externalId = String(accessPoint.externalId);
-    const providerAccessPoint = (providerAccessPoints || []).find(
-      (candidate) =>
-        String(candidate.id) === externalId ||
-        String(candidate.externalId) === externalId,
-    );
 
-    return Array.isArray(providerAccessPoint?.supportedModes)
-      ? providerAccessPoint.supportedModes
+    return (
+      (providerAccessPoints || []).find(
+        (candidate) =>
+          String(candidate.id) === externalId ||
+          String(candidate.externalId) === externalId,
+      ) || null
+    );
+  }
+
+  /**
+   * The access modes a listed entry reports - the one place that decides
+   * what counts as an answer. Answered with `null` rather than an empty
+   * list wherever the provider does not say, so a caller can tell "this
+   * access point cannot do that" from "the provider does not say": an
+   * unlisted access point (`null` entry) and one listed without
+   * `supportedModes` both end up here.
+   *
+   * @param {Object|null} listedAccessPoint An entry of `listAccessPoints`,
+   *   `null` when the provider does not list the access point
+   * @returns {string[]|null} The modes the entry reports, or `null` when it
+   *   reports none
+   */
+  static supportedModesOf(listedAccessPoint) {
+    return Array.isArray(listedAccessPoint?.supportedModes)
+      ? listedAccessPoint.supportedModes
       : null;
+  }
+
+  /**
+   * The access modes the provider reports for an access point - what the
+   * hardware can do, as opposed to the `mode` an administrator configured
+   * for it. Read off the listed entry (see `findListedAccessPoint`), so the
+   * same question and argument order as the provider's own
+   * `getSupportedModes` capability, differing only in whom they ask.
+   *
+   * @param {Object} accessPoint The access point, read for `provider` and
+   *   `externalId`
+   * @param {string} tenantId Tenant the access point belongs to
+   * @returns {Promise<string[]|null>} The modes the provider reports, or
+   *   `null` when it reports none
+   */
+  static async getSupportedModes(accessPoint, tenantId) {
+    return AccessInfoService.supportedModesOf(
+      await AccessInfoService.findListedAccessPoint(accessPoint, tenantId),
+    );
   }
 
   static async testConnection(provider, config, context = {}) {
