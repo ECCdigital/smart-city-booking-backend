@@ -7,6 +7,8 @@ const {
   NukiApiClient,
   NUKI_ACTIONS,
   NUKI_AUTH_TYPES,
+  NUKI_OPEN_ACTIONS,
+  ALL_NUKI_OPEN_ACTIONS,
 } = require("../clients/nuki-api-client");
 const {
   deriveSupportedModes,
@@ -14,11 +16,15 @@ const {
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { LockBusyError } = require("../../../../errors/LockBusyError");
 const { NotFoundError } = require("../../../../errors/BaseError");
+const { ValidationError } = require("../../../../errors/ValidationError");
 
 require("../clients");
 
 const APP_TYPE = "access";
 const PROVIDER_ID = "nuki";
+
+// Where the Öffnungsart sits on the access point, as the API names it.
+const OPEN_ACTION_FIELD = "config.openAction";
 
 // Nuki creates an authorization asynchronously: the create answers 204 and
 // the authorization turns up in the listing a moment later. This is how
@@ -407,6 +413,66 @@ class NukiAccessProvider extends AccessProvider {
   }
 
   /**
+   * Refuse an Öffnungsart the lock cannot carry out, where the access point
+   * is written - rather than at the door, where the same mismatch would
+   * only surface as an open that Nuki rejects.
+   *
+   * @param {Object} accessPoint The access point as it would be stored
+   * @param {Object|null} listedAccessPoint The smartlock as
+   *   `listAccessPoints` lists it, `null` when Nuki does not list it
+   * @returns {void}
+   * @throws {ValidationError} `unknown_open_action` for a word that is not
+   *   an Öffnungsart, `unsupported_open_action` for one this device type
+   *   cannot do
+   */
+  validateAccessPoint(accessPoint, listedAccessPoint) {
+    const openAction = accessPoint?.config?.openAction;
+
+    // A missing key reads as `auto`, and `auto` is the platform's own
+    // choice at open time - neither is a promise about this device.
+    if (openAction === undefined || openAction === NUKI_OPEN_ACTIONS.AUTO) {
+      return;
+    }
+
+    if (!ALL_NUKI_OPEN_ACTIONS.includes(openAction)) {
+      throw new ValidationError([
+        {
+          field: OPEN_ACTION_FIELD,
+          code: "unknown_open_action",
+          params: { openAction: openAction },
+        },
+      ]);
+    }
+
+    // A lock Nuki does not list is a lock nobody can ask about. The
+    // device-type table likewise answers all five for a type it does not
+    // know: an unknown capability is not a missing one.
+    if (!listedAccessPoint) {
+      return;
+    }
+
+    const smartlock = listedAccessPoint.metadata;
+    const supportedOpenActions =
+      NukiApiClient.supportedOpenActionsForSmartlock(smartlock);
+
+    if (supportedOpenActions.includes(openAction)) {
+      return;
+    }
+
+    throw new ValidationError([
+      {
+        field: OPEN_ACTION_FIELD,
+        code: "unsupported_open_action",
+        params: {
+          openAction: openAction,
+          deviceType: NukiApiClient.deviceTypeOfSmartlock(smartlock),
+          supportedOpenActions: supportedOpenActions,
+        },
+      },
+    ]);
+  }
+
+  /**
    * Position of the smartlock, read from the same `/smartlock` data the sync
    * already uses. Nuki knows coordinates but no address, so the prefill is
    * coordinates only.
@@ -531,6 +597,7 @@ class NukiAccessProvider extends AccessProvider {
       "revokeAuthorization",
       "listAccessPoints",
       "getSupportedModes",
+      "validateAccessPoint",
       "getLocation",
       "registerWebhook",
       "unregisterWebhook",

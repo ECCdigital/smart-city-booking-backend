@@ -61,6 +61,19 @@
       other hardware is judged by the new one. A provider that reports no
       supported modes does not restrict the mode.
 
+      `config.openAction` - the Öffnungsart of a Nuki access point - is checked
+      against the same listing: a word outside
+      `auto | unlock | unlatch | lock_n_go | lock_n_go_unlatch` is answered with
+      an `unknown_open_action` validation error carrying the offending
+      `openAction`, one the device type cannot carry out (`lock_n_go` at an
+      opener, say) with an `unsupported_open_action` validation error carrying
+      `openAction`, the Nuki `deviceType` (0-5) and the `supportedOpenActions`
+      of that device type. Both name `config.openAction` as their field. Like
+      the mode, this is checked against the state this request would leave
+      behind. A missing key means `auto` and is never refused, `auto` is stored
+      as sent rather than normalised away, and an access point the provider
+      does not list is not restricted.
+
       The provider's listing is fetched once per save. A provider that cannot
       be asked is answered as such and nothing is stored: an HTTP 401 or 403
       from the provider (token rejected) is a `502 access_provider_rejected`,
@@ -454,6 +467,25 @@ components:
           description: End of the booking period, in epoch milliseconds
           example: 1700003600000
 
+    AccessPointOpenAction:
+      type: string
+      enum: [auto, unlock, unlatch, lock_n_go, lock_n_go_unlatch]
+      description: |
+        Öffnungsart: what the door does when the access point is opened.
+        Provider `nuki` only - every other provider ignores the key.
+
+        `auto` lets the platform choose by device type, as it always has:
+        pull the latch where there is one, unlock where there is not, open
+        the door at an opener. `unlock` throws the bolt back and leaves the
+        door shut, `unlatch` additionally pulls the latch, `lock_n_go`
+        unlocks, waits and locks again, `lock_n_go_unlatch` does that and
+        pulls the latch.
+
+        A missing key means `auto`; an explicit `auto` is stored as sent. An
+        explicit value is refused on write unless the device can carry it
+        out, so a stored one is always doable.
+      example: unlatch
+
     ManagedAccessPoint:
       type: object
       description: |
@@ -501,6 +533,9 @@ components:
         config:
           type: object
           description: Provider-specific configuration
+          properties:
+            openAction:
+              $ref: "#/components/schemas/AccessPointOpenAction"
           additionalProperties: true
         location:
           allOf:
@@ -541,6 +576,9 @@ components:
           enum: [remote, authorization, both]
         config:
           type: object
+          properties:
+            openAction:
+              $ref: "#/components/schemas/AccessPointOpenAction"
           additionalProperties: true
         location:
           allOf:

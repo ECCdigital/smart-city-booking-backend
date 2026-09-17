@@ -254,9 +254,22 @@ class NukiApiClient extends BaseAccessApiClient {
    * @returns {boolean} True if the lock has a latch to pull
    */
   static canUnlatchSmartlock(smartlock) {
-    const type = smartlock?.type ?? smartlock?.config?.deviceType ?? null;
+    return NUKI_LATCH_TYPES.includes(
+      NukiApiClient.deviceTypeOfSmartlock(smartlock),
+    );
+  }
 
-    return NUKI_LATCH_TYPES.includes(type);
+  /**
+   * The device type of a lock as the Nuki Web API numbers it (0-5): `type`
+   * is the documented field, `config.deviceType` the fallback for the
+   * records that carry it there. `null` where the lock names neither - an
+   * unknown type, not a type of its own.
+   *
+   * @param {Object} smartlock A smartlock as returned by the Nuki API
+   * @returns {number|null} The device type, `null` when the lock does not say
+   */
+  static deviceTypeOfSmartlock(smartlock) {
+    return smartlock?.type ?? smartlock?.config?.deviceType ?? null;
   }
 
   /**
@@ -272,7 +285,7 @@ class NukiApiClient extends BaseAccessApiClient {
    * @returns {string[]} The supported open actions, `auto` always among them
    */
   static supportedOpenActionsForSmartlock(smartlock) {
-    const type = smartlock?.type ?? smartlock?.config?.deviceType ?? null;
+    const type = NukiApiClient.deviceTypeOfSmartlock(smartlock);
 
     return [
       ...(NUKI_OPEN_ACTIONS_BY_DEVICE_TYPE[type] ?? ALL_NUKI_OPEN_ACTIONS),

@@ -152,6 +152,7 @@ class AccessPointController {
         tenantId,
       );
     AccessPointController._assertModeSupported(accessPoint, listedAccessPoint);
+    AccessInfoService.validateAccessPoint(accessPoint, listedAccessPoint);
 
     const createdAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
@@ -187,6 +188,7 @@ class AccessPointController {
         tenantId,
       );
     AccessPointController._assertModeSupported(accessPoint, listedAccessPoint);
+    AccessInfoService.validateAccessPoint(accessPoint, listedAccessPoint);
 
     const updatedAccessPoint = await AccessPointManager.storeAccessPoint(
       accessPoint,
