@@ -17,6 +17,7 @@ const Handlebars = require("handlebars");
 const QRCode = require("qrcode");
 const MailerService = require("./mail-service");
 const { renderSnippet } = require("./templates/template-loader");
+const { bookingStatusUrl, cancellationUrl } = require("./mail-links");
 const {
   getSnippetOverride,
   getSubjectOverride,
@@ -80,16 +81,6 @@ function customerContactHtml(booking) {
   }
 
   return lines.join("<br />");
-}
-
-/** The public status page of a booking - the QR code's address. */
-function bookingStatusUrl(booking, tenantId) {
-  return `${process.env.FRONTEND_URL}/booking/status/${tenantId}?id=${booking.id}&name=${encodeURIComponent(booking.name)}`;
-}
-
-/** The customer's cancellation request of a booking. */
-function cancellationUrl(booking, tenantId) {
-  return `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${booking.id}`;
 }
 
 /**

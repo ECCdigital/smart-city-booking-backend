@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const Handlebars = require("handlebars");
-const { MAIL_HELPER_NAMES } = require("../mail-service");
+const { MAIL_HELPER_NAMES } = require("./mail-helpers");
+const { bookingStatusUrl, cancellationUrl } = require("../mail-links");
 const { BadRequestError } = require("../../../errors/BaseError");
 
 const MAX_SNIPPET_OVERRIDE_LENGTH = 50 * 1024;
@@ -23,6 +24,14 @@ const OVERRIDABLE_SNIPPETS = Object.freeze([
 const BOOKING_CANCEL_SNIPPETS = Object.freeze(["booking-cancel"]);
 const SAMPLE_BOOKING_ID = "BK-987654";
 const SAMPLE_CUSTOMER_NAME = "Max Mustermann";
+const SAMPLE_BOOKING = Object.freeze({
+  id: SAMPLE_BOOKING_ID,
+  name: SAMPLE_CUSTOMER_NAME,
+});
+const SAMPLE_GROUP_BOOKING_IDS = Object.freeze([
+  SAMPLE_BOOKING_ID,
+  "BK-987655",
+]);
 
 /**
  * The Variablenkatalog (glossary): the one list of Mail-Variablen the admin
@@ -34,14 +43,14 @@ const SAMPLE_CUSTOMER_NAME = "Max Mustermann";
  * `requires` names the precondition the editor warns about.
  *
  * The catalog is per tenant: the sample URLs carry the real `FRONTEND_URL`
- * and the tenant's id, with the paths `render.js` fills at send time.
+ * and the tenant's id, built by `mail-links.js` as `render.js` builds them
+ * at send time.
  *
  * @param {{tenantId: string}} scope
  * @returns {Array<Object>} A fresh array; every call builds the entries anew
  */
 function templateVariableCatalog({ tenantId }) {
   const frontendUrl = process.env.FRONTEND_URL;
-  const bookingIds = [SAMPLE_BOOKING_ID, "BK-987655"];
 
   return [
     {
@@ -109,7 +118,7 @@ function templateVariableCatalog({ tenantId }) {
     {
       name: "cancellationFeeEur",
       label: "Einbehalt",
-      description: "Einbehaltener Betrag (Stornogebühr) als Zahl",
+      description: "Einbehaltener Betrag als Zahl",
       kind: "number",
       expr: "{{priceFormatted cancellationFeeEur}}",
       sample: 60,
@@ -190,7 +199,7 @@ function templateVariableCatalog({ tenantId }) {
       description:
         "Öffentliche Status-Seite der Buchung; leer ohne öffentliche Status-Seite oder in einer Sammelmitteilung, darum in einem {{#if bookingStatusUrl}}...{{/if}}-Block einsetzen",
       kind: "url",
-      sample: `${frontendUrl}/booking/status/${tenantId}?id=${SAMPLE_BOOKING_ID}&name=${encodeURIComponent(SAMPLE_CUSTOMER_NAME)}`,
+      sample: bookingStatusUrl(SAMPLE_BOOKING, tenantId),
       sampleAggregated: "",
       requires: {
         text: "leer, wenn die öffentliche Status-Seite deaktiviert ist",
@@ -206,7 +215,7 @@ function templateVariableCatalog({ tenantId }) {
       description:
         "Storno-Anfrage des Kunden; leer, wenn die Buchung nicht vom Kunden stornierbar oder nicht mehr live ist, oder in einer Sammelmitteilung, darum in einem {{#if cancellationUrl}}...{{/if}}-Block einsetzen",
       kind: "url",
-      sample: `${frontendUrl}/booking/request-reject/${tenantId}?id=${SAMPLE_BOOKING_ID}`,
+      sample: cancellationUrl(SAMPLE_BOOKING, tenantId),
       sampleAggregated: "",
       requires: {
         text: "leer, wenn die Buchung nicht vom Kunden stornierbar ist oder nicht mehr läuft",
@@ -219,7 +228,7 @@ function templateVariableCatalog({ tenantId }) {
         "Link zur Zahlung; bei einer Gruppe ein Link für alle Buchungen. Nur im Zahlungslink-Snippet gefüllt, darum in einem {{#if paymentUrl}}...{{/if}}-Block einsetzen",
       kind: "url",
       sample: `${frontendUrl}/payment/redirection?ids=${SAMPLE_BOOKING_ID}&tenant=${tenantId}&aggregated=false`,
-      sampleAggregated: `${frontendUrl}/payment/redirection?ids=${bookingIds.join(",")}&tenant=${tenantId}&aggregated=true`,
+      sampleAggregated: `${frontendUrl}/payment/redirection?ids=${SAMPLE_GROUP_BOOKING_IDS.join(",")}&tenant=${tenantId}&aggregated=true`,
       snippets: Object.freeze(["payment-link-after-approval"]),
     },
   ];
@@ -230,14 +239,14 @@ const AFTER_SNIPPET_SUFFIX = "__after";
 // Every helper a template may call: the platform's own plus the Handlebars
 // built-ins. Compiling with `knownHelpersOnly` turns a typo into a save-time
 // error instead of a runtime failure when the notice is sent.
-const HANDLEBARS_BUILTIN_HELPERS = [
+const HANDLEBARS_BUILTIN_HELPERS = Object.freeze([
   "if",
   "each",
   "unless",
   "with",
   "lookup",
   "log",
-];
+]);
 const KNOWN_HELPERS = Object.freeze(
   Object.fromEntries(
     [...MAIL_HELPER_NAMES, ...HANDLEBARS_BUILTIN_HELPERS].map((name) => [
@@ -248,7 +257,7 @@ const KNOWN_HELPERS = Object.freeze(
 );
 const UNKNOWN_HELPER_PATTERN = /unknown helper (\S+)/;
 
-function compileForValidation(kind, name, source) {
+function compileForValidation(overrideKind, name, source) {
   try {
     Handlebars.precompile(source, {
       knownHelpers: KNOWN_HELPERS,
@@ -258,8 +267,7 @@ function compileForValidation(kind, name, source) {
     const helper = UNKNOWN_HELPER_PATTERN.exec(error?.message)?.[1];
     if (!helper) throw error;
     throw new BadRequestError(
-      `Mail ${kind} override ${name} uses unknown helper "${helper}".`,
-      { snippet: name, helper },
+      `Mail ${overrideKind} override ${name} uses unknown helper "${helper}".`,
     );
   }
 }

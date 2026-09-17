@@ -56,7 +56,7 @@
   {
     "name": "cancellationFeeEur",
     "label": "Einbehalt",
-    "description": "Einbehaltener Betrag (Stornogebühr) als Zahl",
+    "description": "Einbehaltener Betrag als Zahl",
     "kind": "number",
     "expr": "{{priceFormatted cancellationFeeEur}}",
     "sample": 60,
