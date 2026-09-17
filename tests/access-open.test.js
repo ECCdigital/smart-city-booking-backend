@@ -25,7 +25,6 @@ const TEST_PROVIDER = "test-open-provider";
 
 let providerOpen = async () => ({ state: "opened", openProcessId: null });
 let providerClose = async () => {};
-let providerUnlatch = async () => ({ state: "opened", openProcessId: null });
 let providerStatus = async () => ({
   open: false,
   locked: true,
@@ -41,16 +40,12 @@ class TestOpenProvider extends AccessProvider {
     return providerClose(accessPoint, context);
   }
 
-  async unlatch(accessPoint, context) {
-    return providerUnlatch(accessPoint, context);
-  }
-
   async getStatus(accessPoint, context) {
     return providerStatus(accessPoint, context);
   }
 
   static get capabilities() {
-    return ["open", "close", "unlatch", "getStatus"];
+    return ["open", "close", "getStatus"];
   }
 }
 
@@ -638,7 +633,7 @@ describe("AccessService.open with validation rules", () => {
   });
 });
 
-describe("AccessService open and unlatch at a door that only takes a code", () => {
+describe("AccessService open at a door that only takes a code", () => {
   let sandbox;
 
   const GRANTED = {
@@ -649,7 +644,6 @@ describe("AccessService open and unlatch at a door that only takes a code", () =
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     providerOpen = sandbox.stub().resolves({ state: "opened" });
-    providerUnlatch = sandbox.stub().resolves({ state: "opened" });
     sandbox.stub(AccessLogService, "log").resolves();
   });
 
@@ -664,37 +658,34 @@ describe("AccessService open and unlatch at a door that only takes a code", () =
     });
   }
 
-  for (const action of ["open", "unlatch"]) {
-    it(`refuses a remote ${action} to the booker, since the door has no remote way in`, async () => {
-      stubCodeDoor(GRANTED);
+  it("refuses a remote open to the booker, since the door has no remote way in", async () => {
+    stubCodeDoor(GRANTED);
 
-      const outcome = await AccessService[action](
-        "tenant-1",
-        "booking-1",
-        "door-1",
-        "user-1",
-        { channel: "remote" },
-      );
+    const outcome = await AccessService.open(
+      "tenant-1",
+      "booking-1",
+      "door-1",
+      "user-1",
+      { channel: "remote" },
+    );
 
-      expect(outcome).to.deep.equal({
-        success: false,
-        blockingReasons: [ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS],
-      });
-      expect(providerOpen.called).to.be.false;
-      expect(providerUnlatch.called).to.be.false;
-
-      const logged = AccessLogService.log.firstCall.args[0];
-      expect(logged).to.include({
-        action,
-        result: "denied",
-        accessRole: "booker",
-        channel: "remote",
-      });
-      expect(logged.blockingReasons).to.deep.equal([
-        ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
-      ]);
+    expect(outcome).to.deep.equal({
+      success: false,
+      blockingReasons: [ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS],
     });
-  }
+    expect(providerOpen.called).to.be.false;
+
+    const logged = AccessLogService.log.firstCall.args[0];
+    expect(logged).to.include({
+      action: "open",
+      result: "denied",
+      accessRole: "booker",
+      channel: "remote",
+    });
+    expect(logged.blockingReasons).to.deep.equal([
+      ACCESS_BLOCKING_REASONS.NO_REMOTE_ACCESS,
+    ]);
+  });
 
   it("refuses the management the same way - there is no door to open remotely", async () => {
     stubCodeDoor(GRANTED);
@@ -749,15 +740,12 @@ describe("AccessService open and unlatch at a door that only takes a code", () =
   });
 });
 
-describe("AccessService close, unlatch and status with validation rules", () => {
+describe("AccessService close and status with validation rules", () => {
   let sandbox;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     providerClose = sandbox.stub().resolves();
-    providerUnlatch = sandbox
-      .stub()
-      .resolves({ state: "pending", openProcessId: "77" });
     providerStatus = sandbox
       .stub()
       .resolves({ open: false, locked: true, doorOpen: null });
@@ -885,88 +873,6 @@ describe("AccessService close, unlatch and status with validation rules", () => 
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       action: "close",
       result: "success",
-    });
-  });
-
-  it("refuses to unlatch without the evidence the door asks for", async () => {
-    const outcome = await AccessService.unlatch(
-      "tenant-1",
-      "booking-1",
-      "door-1",
-      "user-1",
-    );
-
-    expect(outcome).to.deep.equal({
-      success: false,
-      blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING],
-    });
-    expect(providerUnlatch.called).to.be.false;
-    expect(AccessLogService.log.firstCall.args[0]).to.include({
-      action: "unlatch",
-      result: "denied",
-    });
-  });
-
-  it("unlatches once the evidence is there, and answers like an open", async () => {
-    const outcome = await AccessService.unlatch(
-      "tenant-1",
-      "booking-1",
-      "door-1",
-      "user-1",
-      { evidence: [{ type: "qrScan", scanCode: "current-code" }] },
-    );
-
-    expect(outcome).to.deep.equal({
-      success: true,
-      data: { openProcessId: "77" },
-    });
-    expect(AccessLogService.log.firstCall.args[0]).to.include({
-      action: "unlatch",
-      result: "success",
-      evidenceBypassed: false,
-    });
-    expect(
-      AccessLogService.log.firstCall.args[0].payload.validatedEvidence,
-    ).to.deep.equal(["qrScan"]);
-  });
-
-  it("refuses the unlatch to a booker who may manage the bookings", async () => {
-    const outcome = await AccessService.unlatch(
-      "tenant-1",
-      "booking-1",
-      "door-1",
-      "user-1",
-      { hasManagePermission: true },
-    );
-
-    expect(outcome).to.deep.equal({
-      success: false,
-      blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING],
-    });
-    expect(providerUnlatch.called).to.be.false;
-    expect(AccessLogService.log.firstCall.args[0]).to.include({
-      action: "unlatch",
-      result: "denied",
-      accessRole: "booker",
-      evidenceBypassed: false,
-    });
-  });
-
-  it("lets a manager unlatch a booking that is not theirs without evidence", async () => {
-    const outcome = await AccessService.unlatch(
-      "tenant-1",
-      "booking-1",
-      "door-1",
-      "manager-9",
-      { hasManagePermission: true },
-    );
-
-    expect(outcome.success).to.be.true;
-    expect(AccessLogService.log.firstCall.args[0]).to.include({
-      action: "unlatch",
-      result: "success",
-      accessRole: "manager",
-      evidenceBypassed: true,
     });
   });
 
@@ -1403,79 +1309,6 @@ describe("AccessController.open", () => {
       statusCode: 423,
       params: { provider: "nuki", action: "open" },
     });
-  });
-});
-
-describe("AccessController.unlatch", () => {
-  let sandbox;
-  let request;
-  let response;
-
-  beforeEach(() => {
-    sandbox = sinon.createSandbox();
-
-    // The reach of `booking.operate` the route decided: `own` is the booker,
-    // `any` the manager (authorize spec §5).
-    request = {
-      params: { tenant: "tenant-1", accessPointId: "door-1" },
-      query: { bookingId: "booking-1" },
-      body: {},
-      user: { id: "user-1" },
-      reach: "own",
-      principal: { userId: "user-1" },
-    };
-    response = {
-      status: sandbox.stub().returnsThis(),
-      json: sandbox.stub(),
-      sendStatus: sandbox.stub(),
-    };
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  it("hands the evidence, the channel and the permission to the service", async () => {
-    const unlatch = sandbox
-      .stub(AccessService, "unlatch")
-      .resolves({ success: true, data: { openProcessId: null } });
-    request.body = {
-      evidence: [{ type: "qrScan", scanCode: "current-code" }],
-      channel: "qrScan",
-    };
-
-    await AccessController.unlatch(request, response);
-
-    expect(unlatch.firstCall.args[4]).to.deep.include({
-      evidence: [{ type: "qrScan", scanCode: "current-code" }],
-      channel: "qrScan",
-      hasManagePermission: false,
-    });
-  });
-
-  it("answers a denial with HTTP 200 and the blocking reasons", async () => {
-    sandbox.stub(AccessService, "unlatch").resolves({
-      success: false,
-      blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING],
-    });
-
-    await AccessController.unlatch(request, response);
-
-    expect(response.status.calledWith(200)).to.be.true;
-    expect(response.json.firstCall.args[0]).to.deep.equal({
-      success: false,
-      data: { blockingReasons: [ACCESS_BLOCKING_REASONS.EVIDENCE_MISSING] },
-    });
-  });
-
-  it("answers 403 when the access point is not part of the booking", async () => {
-    sandbox
-      .stub(AccessService, "unlatch")
-      .rejects(new ForbiddenError("access_point_not_in_booking"));
-
-    await AccessController.unlatch(request, response);
-
-    expect(response.sendStatus.calledWith(403)).to.be.true;
   });
 });
 

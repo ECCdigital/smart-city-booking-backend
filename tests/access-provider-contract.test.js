@@ -270,6 +270,11 @@ for (const implementation of IMPLEMENTATIONS) {
       sinon.restore();
     });
 
+    it("declares no unlatch: which action opens the door is the access point's Öffnungsart, never the client's choice", function () {
+      assert.ok(!declares("unlatch"));
+      assert.strictEqual(provider.unlatch, undefined);
+    });
+
     it("declares its capabilities, and each one is a method it has", function () {
       assert.ok(Array.isArray(capabilities) && capabilities.length > 0);
       for (const capability of capabilities) {
@@ -389,22 +394,6 @@ for (const implementation of IMPLEMENTATIONS) {
         assert.ok(OPEN_ACTIONS.includes(outcome.openAction));
         assert.ok(OPEN_ACTION_ORIGINS.includes(outcome.openActionOrigin));
         assert.strictEqual(typeof outcome.nukiAction, "number");
-      },
-    );
-
-    when("unlatch")(
-      "answers an unlatch with an OpenOutcome",
-      async function () {
-        const outcome = await provider.unlatch(accessPoint, bookingContext);
-
-        assert.deepStrictEqual(Object.keys(outcome).sort(), [
-          "openProcessId",
-          "state",
-        ]);
-        assert.strictEqual(
-          outcome.state === "pending",
-          outcome.openProcessId !== null,
-        );
       },
     );
 
@@ -643,21 +632,6 @@ for (const implementation of IMPLEMENTATIONS) {
               assert.ok(!("openActionOrigin" in error));
               assert.ok(!("nukiAction" in error));
             }
-            return true;
-          },
-        );
-      },
-    );
-
-    when("unlatch")(
-      "fails an unlatch on a broken client with an AccessOpenError, never a raw error",
-      async function () {
-        const broken = implementation.createBroken();
-
-        await assert.rejects(
-          () => broken.unlatch(accessPoint, bookingContext),
-          (error) => {
-            assert.ok(error instanceof AccessOpenError);
             return true;
           },
         );

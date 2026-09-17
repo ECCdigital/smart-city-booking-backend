@@ -69,10 +69,6 @@ class InMemoryAccessProvider extends AccessProvider {
     return { state: "opened", openProcessId: null };
   }
 
-  async unlatch(accessPoint, bookingContext) {
-    return this.open(accessPoint, bookingContext);
-  }
-
   async close(accessPoint, _bookingContext) {
     const lock = this._lock(accessPoint);
     lock.locked = true;
@@ -166,7 +162,6 @@ class InMemoryAccessProvider extends AccessProvider {
     return [
       "open",
       "close",
-      "unlatch",
       "getStatus",
       "grantAuthorization",
       "revokeAuthorization",

@@ -11,10 +11,10 @@ require("./providers/register-access-providers");
  * else a provider declares - authorizations, webhooks, listing - is management
  * business and says nothing about what the person at the door can do.
  *
- * `unlatch` is deliberately absent: pulling the latch is decided behind
- * `open`, per lock, so a client never picks that action itself.
- * `getOpenProgress` likewise: a client polls exactly when the open answer
- * carries an `openProcessId`, so that answer already says it.
+ * Which action Nuki carries out on `open` is the access point's Öffnungsart;
+ * a client never picks it, so there is no capability for it.
+ * `getOpenProgress` is absent too: a client polls exactly when the open
+ * answer carries an `openProcessId`, so that answer already says it.
  */
 const UI_CAPABILITIES = Object.freeze(["open", "close", "getStatus"]);
 

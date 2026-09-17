@@ -137,6 +137,12 @@ describe("authorization on the access, catalog and calendar routes", function ()
     );
   });
 
+  it("answers 404 on the retired unlatch route: the open action is the access point's Öffnungsart", async function () {
+    const path = `/access/${FIXTURE_ID}/unlatch`;
+    expect((await call("post", path, ROLE_HOLDER)).status).to.equal(404);
+    expect((await call("post", path, CUSTOMER)).status).to.equal(404);
+  });
+
   it("keeps the scan resolver behind a login and nothing more", async function () {
     expect((await get("/access/resolve-scan/scan-fx")).status).to.equal(401);
     expect(

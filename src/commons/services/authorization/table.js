@@ -147,7 +147,7 @@ const TABLE = {
     delete: { any: "manageBookings.deleteAny" },
     // The refund preview of the customer's cancellation.
     cancel: { own: "signedIn", any: "manageBookings.updateAny" },
-    // Access: open, unlatch, close, status, access points, eligibility.
+    // Access: open, close, status, access points, eligibility.
     operate: { own: "signedIn", any: "manageBookings.updateAny" },
   },
 

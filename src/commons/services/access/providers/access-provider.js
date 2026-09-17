@@ -288,20 +288,6 @@ class AccessProvider {
   }
 
   /**
-   * Pulls the latch so the door physically opens, instead of only releasing
-   * the lock. Where a lock can pull its latch, {@link AccessProvider#open}
-   * does so by itself; this is the older way to the same end.
-   *
-   * @param {Object} accessPoint The access point to unlatch
-   * @param {BookingContext} bookingContext The booking it is unlatched for
-   * @returns {Promise<OpenOutcome>} What the unlatch did
-   * @throws {AccessOpenError} As of {@link AccessProvider#open}
-   */
-  async unlatch(accessPoint, bookingContext) {
-    throw new Error(`unlatch() is not supported by ${this.constructor.name}`);
-  }
-
-  /**
    * The state of the lock right now.
    *
    * @param {Object} accessPoint The access point to read

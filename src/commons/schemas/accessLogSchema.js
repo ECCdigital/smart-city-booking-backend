@@ -30,6 +30,8 @@ const accessLogSchemaDefinition = {
     type: String,
     enum: [
       "open",
+      // Legacy, not written anymore: the unlatch route is gone, rows written
+      // before it went stay readable and filterable.
       "unlatch",
       "close",
       "hold",

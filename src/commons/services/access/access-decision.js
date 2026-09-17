@@ -56,7 +56,7 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
  * @property {string[]} operableAccessPointIds Access points that may be
  *   operated now: close, status, open-status
  * @property {string[]} remoteOperableAccessPointIds The operable ones whose
- *   mode allows an open through the API - the set open/unlatch check against
+ *   mode allows an open through the API - the set open checks against
  * @property {string[]} overriddenAccessPointIds The operable ones that are
  *   operable only through the admin override: past their window and commanded
  *   by the manage permission. Never among the remote operable ones - a lock

@@ -65,7 +65,6 @@ describe("Nuki provider on a smartlock busy with its previous action", () => {
 
   for (const [action, run] of [
     ["open", () => provider.open(accessPoint, bookingContext)],
-    ["unlatch", () => provider.unlatch(accessPoint, bookingContext)],
     ["close", () => provider.close(accessPoint, bookingContext)],
   ]) {
     it(`answers a Nuki 423 on ${action} with Lock Busy`, async () => {

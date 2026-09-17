@@ -45,7 +45,7 @@ describe("planAccessPointMigration", () => {
             id: "point-a",
             label: "Haupteingang",
             mode: "authorization",
-            config: { unlatch: true },
+            config: { openAction: "lock_n_go" },
             locationId: "site-1",
           }),
         ]),
@@ -54,7 +54,7 @@ describe("planAccessPointMigration", () => {
             id: "point-b",
             label: "Nebeneingang",
             mode: "remote",
-            config: { unlatch: false },
+            config: { openAction: "unlock" },
             locationId: "site-2",
           }),
         ]),
@@ -67,7 +67,9 @@ describe("planAccessPointMigration", () => {
         mode: "authorization",
         providerLocationId: "site-1",
       });
-      expect(plan.accessPoints[0].config).to.deep.equal({ unlatch: true });
+      expect(plan.accessPoints[0].config).to.deep.equal({
+        openAction: "lock_n_go",
+      });
     });
 
     it("never merges across tenants", () => {

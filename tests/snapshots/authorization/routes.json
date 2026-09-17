@@ -1525,13 +1525,6 @@
     "tenantOwner": 403,
     "instanceOwner": 403
   },
-  "POST /api/:tenant/access/:accessPointId/unlatch": {
-    "anonymous": 401,
-    "signedIn": 403,
-    "roleHolder": 403,
-    "tenantOwner": 403,
-    "instanceOwner": 403
-  },
   "POST /api/:tenant/access/:accessPointId/close": {
     "anonymous": 401,
     "signedIn": 403,

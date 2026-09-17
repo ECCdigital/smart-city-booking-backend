@@ -178,10 +178,10 @@ describe("Access point projection", () => {
       expect(view.capabilities).to.deep.equal(["open", "getStatus"]);
     });
 
-    it("leaves unlatch out, because pulling the latch happens behind open", () => {
+    it("offers a Nuki door open, close and status - which action opens it is the access point's Öffnungsart, never the client's choice", () => {
       const view = projectAccessPoint(storedDoor());
 
-      expect(view.capabilities).to.not.include("unlatch");
+      expect(view.capabilities).to.deep.equal(["open", "close", "getStatus"]);
     });
 
     it("is empty for a provider this server does not know", () => {
