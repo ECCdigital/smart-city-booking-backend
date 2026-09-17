@@ -1,5 +1,7 @@
 const crypto = require("crypto");
 const Handlebars = require("handlebars");
+const { MAIL_HELPER_NAMES } = require("../mail-service");
+const { BadRequestError } = require("../../../errors/BaseError");
 
 const MAX_SNIPPET_OVERRIDE_LENGTH = 50 * 1024;
 const MAX_SUBJECT_OVERRIDE_LENGTH = 500;
@@ -73,6 +75,43 @@ const OVERRIDE_TEMPLATE_VARIABLES = Object.freeze([
 ]);
 
 const AFTER_SNIPPET_SUFFIX = "__after";
+
+// Every helper a template may call: the platform's own plus the Handlebars
+// built-ins. Compiling with `knownHelpersOnly` turns a typo into a save-time
+// error instead of a runtime failure when the notice is sent.
+const HANDLEBARS_BUILTIN_HELPERS = [
+  "if",
+  "each",
+  "unless",
+  "with",
+  "lookup",
+  "log",
+];
+const KNOWN_HELPERS = Object.freeze(
+  Object.fromEntries(
+    [...MAIL_HELPER_NAMES, ...HANDLEBARS_BUILTIN_HELPERS].map((name) => [
+      name,
+      true,
+    ]),
+  ),
+);
+const UNKNOWN_HELPER_PATTERN = /unknown helper (\S+)/;
+
+function compileForValidation(kind, name, source) {
+  try {
+    Handlebars.precompile(source, {
+      knownHelpers: KNOWN_HELPERS,
+      knownHelpersOnly: true,
+    });
+  } catch (error) {
+    const helper = UNKNOWN_HELPER_PATTERN.exec(error?.message)?.[1];
+    if (!helper) throw error;
+    throw new BadRequestError(
+      `Mail ${kind} override ${name} uses unknown helper "${helper}".`,
+      { snippet: name, helper },
+    );
+  }
+}
 
 const overridableSnippetSet = new Set(OVERRIDABLE_SNIPPETS);
 
@@ -162,7 +201,7 @@ function validateMailSnippets(mailSnippets = {}) {
       throw new Error(`Mail snippet override ${name} is too large.`);
     }
 
-    Handlebars.precompile(source);
+    compileForValidation("snippet", name, source);
   });
 }
 
@@ -188,7 +227,7 @@ function validateMailSubjects(mailSubjects = {}) {
       throw new Error(`Mail subject override ${name} is too large.`);
     }
 
-    Handlebars.precompile(source);
+    compileForValidation("subject", name, source);
   });
 }
 

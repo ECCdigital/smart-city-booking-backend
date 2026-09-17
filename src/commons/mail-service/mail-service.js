@@ -53,6 +53,26 @@ Handlebars.registerHelper("gt", function (a, b, options) {
   return a > b ? options.fn(this) : options.inverse(this);
 });
 
+// A text value made safe for a query string. Only a scalar encodes; null,
+// undefined, objects, SafeStrings and the `options` object of a call without
+// an argument render as "". Returns a plain string so `{{ }}` still
+// HTML-escapes the result, which is right inside an attribute.
+Handlebars.registerHelper("urlEncode", (value) => {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return encodeURIComponent(String(value));
+});
+
+// The helpers a mail template may call; the save validation of
+// `templates/mail-snippet-overrides.js` refuses every other name.
+const MAIL_HELPER_NAMES = Object.freeze([
+  "formatDateTime",
+  "formatDate",
+  "priceFormatted",
+  "sanitizeString",
+  "gt",
+  "urlEncode",
+]);
+
 Handlebars.registerPartial(
   "contactSnippet",
   `
@@ -375,3 +395,4 @@ class MailerService {
 }
 
 module.exports = MailerService;
+module.exports.MAIL_HELPER_NAMES = MAIL_HELPER_NAMES;
