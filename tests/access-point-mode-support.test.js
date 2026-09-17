@@ -192,3 +192,88 @@ describe("AccessInfoService.getSupportedModes", () => {
     expect(caught).to.equal(failure);
   });
 });
+
+describe("AccessInfoService.findListedAccessPoint", () => {
+  let sandbox;
+  let listAccessPoints;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    listAccessPoints = sandbox.stub(
+      getAccessProvider("nuki"),
+      "listAccessPoints",
+    );
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("answers the entry the provider lists for the access point", async () => {
+    const listed = createProviderAccessPoint({
+      supportedModes: ["remote", "authorization"],
+      metadata: { type: 0 },
+    });
+    listAccessPoints.resolves([
+      createProviderAccessPoint({ id: "other-point", externalId: "other" }),
+      listed,
+    ]);
+
+    const found = await AccessInfoService.findListedAccessPoint(
+      createAccessPoint(),
+      "tenant-1",
+    );
+
+    expect(found).to.equal(listed);
+    expect(listAccessPoints.calledOnceWithExactly("tenant-1")).to.be.true;
+  });
+
+  it("answers null for an access point the provider does not list", async () => {
+    listAccessPoints.resolves([
+      createProviderAccessPoint({ id: "other-point", externalId: "other" }),
+    ]);
+
+    const found = await AccessInfoService.findListedAccessPoint(
+      createAccessPoint(),
+      "tenant-1",
+    );
+
+    expect(found).to.be.null;
+  });
+
+  it("answers null without asking for an access point without an externalId", async () => {
+    const found = await AccessInfoService.findListedAccessPoint(
+      createAccessPoint({ externalId: "" }),
+      "tenant-1",
+    );
+
+    expect(found).to.be.null;
+    expect(listAccessPoints.called).to.be.false;
+  });
+
+  it("answers null for a provider that cannot list its access points", async () => {
+    const found = await AccessInfoService.findListedAccessPoint(
+      createAccessPoint({ provider: BLIND_PROVIDER }),
+      "tenant-1",
+    );
+
+    expect(found).to.be.null;
+  });
+
+  it("lets provider errors through, a broken provider is not an unlisted access point", async () => {
+    const failure = new Error("Nuki API Error");
+    listAccessPoints.rejects(failure);
+    let caught = null;
+
+    try {
+      await AccessInfoService.findListedAccessPoint(
+        createAccessPoint(),
+        "tenant-1",
+      );
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).to.equal(failure);
+  });
+});
