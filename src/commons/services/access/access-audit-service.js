@@ -3,6 +3,7 @@ const AccessLogManager = require("../../data-managers/access-log-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const PdfService = require("../../pdf-service/pdf-service");
 const { ACCESS_BLOCKING_REASONS } = require("./access-blocking-reasons");
+const { OPEN_ACTIONS, OPEN_ACTION_ORIGINS } = require("./access-open-action");
 
 const logger = bunyan.createLogger({
   name: "access-audit-service.js",
@@ -60,6 +61,24 @@ const CHANNEL_LABELS = Object.freeze({
 const ACCESS_ROLE_LABELS = Object.freeze({
   booker: "Buchender",
   manager: "Verwaltung",
+});
+
+// German wording for the Öffnungsart an open sent to the lock, keyed by the
+// shared vocabulary; `tests/access-audit-export.test.js` holds the map
+// complete. A provider's raw action number is not a column - it stays in the
+// payload and reaches the export in „Details" only.
+const OPEN_ACTION_LABELS = Object.freeze({
+  [OPEN_ACTIONS.UNLOCK]: "Aufschließen",
+  [OPEN_ACTIONS.UNLATCH]: "Falle ziehen",
+  [OPEN_ACTIONS.LOCK_N_GO]: "Lock'n'Go",
+  [OPEN_ACTIONS.LOCK_N_GO_UNLATCH]: "Lock'n'Go mit Falle ziehen",
+});
+
+// German wording for where that Öffnungsart came from.
+const OPEN_ACTION_ORIGIN_LABELS = Object.freeze({
+  [OPEN_ACTION_ORIGINS.CONFIGURED]: "eingestellt",
+  [OPEN_ACTION_ORIGINS.DEVICE_TYPE]: "nach Gerätetyp",
+  [OPEN_ACTION_ORIGINS.FALLBACK]: "Rückfall",
 });
 
 /**
@@ -132,6 +151,14 @@ class AccessAuditService {
       // export must not claim a fact that was never recorded.
       evidenceBypassed: AccessAuditService._formatFlag(log.evidenceBypassed),
       accessRole: AccessAuditService._formatAccessRole(log.accessRole),
+      openAction: AccessAuditService._formatLabelled(
+        log.openAction,
+        OPEN_ACTION_LABELS,
+      ),
+      openActionOrigin: AccessAuditService._formatLabelled(
+        log.openActionOrigin,
+        OPEN_ACTION_ORIGIN_LABELS,
+      ),
       accessPointId: log.accessPointId || "",
       accessPointType: log.accessPointType || "",
       provider: log.provider || "",
@@ -179,6 +206,21 @@ class AccessAuditService {
   static _formatAccessRole(accessRole) {
     if (!accessRole) return "";
     return ACCESS_ROLE_LABELS[accessRole] || accessRole;
+  }
+
+  /**
+   * A recorded vocabulary value, spelled out. Blank where nothing was
+   * recorded - a row from before the field, or a provider that names no
+   * Öffnungsart - and written out raw where the log records a value the map
+   * has no wording for, as `_formatAccessRole` does.
+   *
+   * @param {string|null|undefined} value - as stored on the log entry
+   * @param {Object<string, string>} labels - the German wording per value
+   * @returns {string} the wording, or "" where none was recorded
+   */
+  static _formatLabelled(value, labels) {
+    if (!value) return "";
+    return labels[value] || value;
   }
 
   static _formatChannel(channel) {
@@ -248,6 +290,14 @@ class AccessAuditService {
     return CHANNEL_LABELS;
   }
 
+  static get OPEN_ACTION_LABELS() {
+    return OPEN_ACTION_LABELS;
+  }
+
+  static get OPEN_ACTION_ORIGIN_LABELS() {
+    return OPEN_ACTION_ORIGIN_LABELS;
+  }
+
   static get COLUMN_LABELS() {
     return {
       timestampFormatted: "Zeitpunkt",
@@ -260,6 +310,10 @@ class AccessAuditService {
       channel: "Kanal",
       evidenceBypassed: "Evidence-Bypass",
       accessRole: "Zugriffsrolle",
+      // Next to the capacity: how the door was opened and who decided that
+      // is read with the result, on a failure row as much as on a success.
+      openAction: "Öffnungsart",
+      openActionOrigin: "Herkunft der Öffnungsart",
       accessPointId: "Access-Point-ID",
       accessPointType: "Typ",
       provider: "Anbieter",
