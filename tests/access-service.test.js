@@ -570,6 +570,33 @@ describe("One access point shape on both ways", () => {
     expect(listed.validationRuleTypes).to.deep.equal([]);
   });
 
+  it("hands out the decision it listed the points by, beside them", async () => {
+    const { points, accessEligibility } =
+      await AccessService.getByBookingWithEligibility("tenant-1", "booking-1", {
+        userId: "booker-1",
+      });
+
+    expect(points).to.deep.equal(
+      await AccessService.getByBooking("tenant-1", "booking-1", {
+        userId: "booker-1",
+      }),
+    );
+    expect(accessEligibility).to.include({
+      accessRole: "booker",
+      canView: true,
+      canOperate: false,
+      primaryBlockingReason: "outside_access_window",
+    });
+    expect(accessEligibility.accessWindow).to.deep.equal({
+      from: 1000,
+      to: 2000,
+    });
+    expect(accessEligibility.overriddenAccessPointIds).to.deep.equal([]);
+    expect(accessEligibility.demandedEvidence).to.deep.equal({
+      "door-1": ["qrScan"],
+    });
+  });
+
   it("adds the booking context only where there is a booking", async () => {
     const scanned = await AccessScanService.resolveScanCode(
       "tenant-1",

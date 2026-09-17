@@ -9,6 +9,7 @@ const AccessScanService = require("../../../commons/services/access/access-scan-
 const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError } = require("../../../errors/BaseError");
 const { AccessOpenError } = require("../../../errors/AccessOpenError");
+const { LockBusyError } = require("../../../errors/LockBusyError");
 
 const logger = bunyan.createLogger({
   name: "access-controller.js",
@@ -92,6 +93,16 @@ class AccessController {
         return response.sendStatus(403);
       }
 
+      if (err instanceof LockBusyError) {
+        // A state of the lock, not a decision of the platform: goes out as
+        // a real 423 so the client waits out its cooldown instead of
+        // reading it as a refusal or an unreachable door.
+        logger.info(
+          `${tenant} -- ${action} of access-point ${accessPointId} (booking ${bookingId}) refused, lock busy: ${err.message}`,
+        );
+        return ApiResponse.fail(response, err);
+      }
+
       if (err instanceof AccessOpenError) {
         // The guest is told only the failure class - temporary ("try again in
         // a few minutes") or configuration ("contact the administration").
@@ -166,13 +177,14 @@ class AccessController {
       const { tenant, accessPointId } = request.params;
       const { bookingId } = request.query;
       const user = request.user;
+      const hasManagePermission = AccessController._canManage(request);
 
       const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
-        AccessController._canManage(request),
+        hasManagePermission,
       );
       if (!allowed) return response.sendStatus(403);
 
@@ -181,6 +193,7 @@ class AccessController {
         bookingId,
         accessPointId,
         user.id,
+        { hasManagePermission },
       );
 
       logger.info(
@@ -188,6 +201,15 @@ class AccessController {
       );
       return ApiResponse.ok(response, { data: result });
     } catch (err) {
+      if (err instanceof LockBusyError) {
+        // See _renderOpen: the lock is busy, the client waits out its
+        // cooldown - a real 423, not a close failure.
+        logger.info(
+          `${request.params.tenant} -- close of access-point ${request.params.accessPointId} (booking ${request.query.bookingId}) refused, lock busy: ${err.message}`,
+        );
+        return ApiResponse.fail(response, err);
+      }
+
       logger.error(err);
       return ApiResponse.error(response, "Could not close access point");
     }
@@ -201,13 +223,14 @@ class AccessController {
       const { tenant, accessPointId } = request.params;
       const { openProcessId, bookingId } = request.query;
       const user = request.user;
+      const hasManagePermission = AccessController._canManage(request);
 
       const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
-        AccessController._canManage(request),
+        hasManagePermission,
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -217,6 +240,8 @@ class AccessController {
         bookingId,
         accessPointId,
         openProcessId,
+        user.id,
+        { hasManagePermission },
       );
 
       return ApiResponse.ok(response, { data: status });
@@ -234,13 +259,14 @@ class AccessController {
       const { tenant, accessPointId } = request.params;
       const { bookingId } = request.query;
       const user = request.user;
+      const hasManagePermission = AccessController._canManage(request);
 
       const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
-        AccessController._canManage(request),
+        hasManagePermission,
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -249,6 +275,8 @@ class AccessController {
         tenant,
         bookingId,
         accessPointId,
+        user.id,
+        { hasManagePermission },
       );
       return ApiResponse.ok(response, { data: status });
     } catch (err) {
@@ -283,12 +311,16 @@ class AccessController {
       );
       if (!allowed) return response.sendStatus(403);
 
-      const points = await AccessService.getByBooking(tenant, bookingId, {
-        userId: user.id,
-        hasManagePermission,
-      });
+      // The decision the points were projected by travels beside them, so
+      // the storefront's booking details can operate the doors without a
+      // second round trip. Consumers reading only `data` see no change.
+      const { points, accessEligibility } =
+        await AccessService.getByBookingWithEligibility(tenant, bookingId, {
+          userId: user.id,
+          hasManagePermission,
+        });
 
-      return ApiResponse.ok(response, { data: points });
+      return ApiResponse.ok(response, { data: points, accessEligibility });
     } catch (err) {
       logger.error(err);
       return ApiResponse.error(response, "Could not get access points");

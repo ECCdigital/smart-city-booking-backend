@@ -63,8 +63,8 @@ const accessLogSchemaDefinition = {
     // is not. It says why `evidenceBypassed` reads the way it does - a `false`
     // there on its own could mean "no manage permission" just as well as
     // "their own booking". Empty where there is no capacity to record: a
-    // refused user with no standing at the booking, and closing, status,
-    // scans and provisioning.
+    // refused user with no standing at the booking, a status read nobody
+    // asked for, scans and provisioning.
     type: String,
     enum: ["booker", "manager", null],
     default: null,
@@ -74,6 +74,15 @@ const accessLogSchemaDefinition = {
     // only where it means something - the access point did require evidence
     // and the management was let through without it, on a booking that is
     // not their own.
+    type: Boolean,
+    default: false,
+  },
+  windowOverridden: {
+    // The admin override (`access-decision.js`, `overriddenAccessPointIds`):
+    // true only where it means something - the door was past its access
+    // window and was closed or read by the manage permission. Written on
+    // every row of such a command, success or failure; an open is never
+    // overridden.
     type: Boolean,
     default: false,
   },

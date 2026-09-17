@@ -23,6 +23,7 @@ class AccessLogService {
       channel: entry.channel ?? null,
       accessRole: entry.accessRole ?? null,
       evidenceBypassed: entry.evidenceBypassed === true,
+      windowOverridden: entry.windowOverridden === true,
       payload: entry.payload || {},
       errorCode: entry.errorCode || null,
       errorMessage: entry.errorMessage || null,

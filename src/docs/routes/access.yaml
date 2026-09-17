@@ -327,7 +327,9 @@
     description: |
       Returns all access points linked to the given booking, in the same
       projection a resolved scan code answers with, plus the fields the booking
-      adds.
+      adds. Beside them, `accessEligibility` carries the decision the points
+      were listed by - what the asking person may do at them right now - so a
+      client can operate the doors without a second round trip.
 
       Listing does not require the booking to be within its access window -
       what a booking opens should be readable at any time - but it does require
@@ -340,7 +342,7 @@
       - $ref: "#/components/parameters/BookingIdQueryParam"
     responses:
       "200":
-        description: The access points of the booking
+        description: The access points of the booking and the decision about them
         content:
           application/json:
             schema:
@@ -353,6 +355,8 @@
                   type: array
                   items:
                     $ref: "#/components/schemas/AccessPoint"
+                accessEligibility:
+                  $ref: "#/components/schemas/AccessEligibility"
       "401":
         description: Not authenticated
       "403":
@@ -525,6 +529,118 @@ components:
                 - temporary
                 - configuration
               example: temporary
+
+    AccessEligibility:
+      type: object
+      description: |
+        The access decision about a booking for the asking person, at the
+        moment of the request. It is the same decision the open, close and
+        status routes gate on, and the one `GET /access/bookings` hands out as
+        `accessEligibility` when asked to.
+      properties:
+        accessRole:
+          type: string
+          nullable: true
+          enum: [booker, manager]
+          description: |
+            The capacity the person acts in at the booking: `booker` where the
+            booking is theirs, `manager` where they may manage one that is not,
+            `null` where they have no standing.
+          example: booker
+        canView:
+          type: boolean
+          description: Whether the booking's access points may be listed
+        canOperate:
+          type: boolean
+          description: Whether any access point may be operated now
+        canOperateRemote:
+          type: boolean
+          description: Whether any of those may be opened through the API
+        canUseAuthorization:
+          type: boolean
+          description: |
+            Whether a granted, unrevoked authorization (keypad code, key card)
+            is usable at any door
+        blockingReasons:
+          type: array
+          description: |
+            Prioritized reasons against operating, most relevant first, from
+            the vocabulary of the open denial. Some are hints rather than
+            locks: a door that can be opened remotely stays operable while its
+            grant is missing or revoked; one that only takes a code does not.
+          items:
+            type: string
+            enum:
+              - rejected
+              - not_committed
+              - payment_required
+              - authorization_revoked
+              - outside_access_window
+              - not_provisioned
+              - no_remote_access
+          example: ["outside_access_window"]
+        primaryBlockingReason:
+          type: string
+          nullable: true
+          description: The first of the blocking reasons, `null` where there is none
+          example: outside_access_window
+        operableAccessPointIds:
+          type: array
+          description: |
+            Access points that may be operated now: close, status, open-status
+          items:
+            type: string
+        remoteOperableAccessPointIds:
+          type: array
+          description: |
+            The operable ones whose mode allows an open through the API - the
+            set open and unlatch check against
+          items:
+            type: string
+        overriddenAccessPointIds:
+          type: array
+          description: |
+            The operable ones that are operable only through the admin
+            override: past their window and commanded by the manage
+            permission. Never among the remote operable ones - a lock left
+            open is closed and read, not opened again.
+          items:
+            type: string
+        evidenceWaived:
+          type: boolean
+          description: |
+            Whether the evidence rules do not apply to this person - only to
+            the management at somebody else's booking
+        demandedEvidence:
+          type: object
+          description: |
+            The rule types each access point demands of this person, by access
+            point id
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              enum: [qrScan]
+          example: { "door-1": ["qrScan"] }
+        accessWindow:
+          type: object
+          nullable: true
+          description: |
+            The booking's access window envelope in epoch ms: the earliest
+            `accessFrom` and the latest `accessTo` over its access points, so
+            a client can tell an upcoming booking from an active or a past one
+            at the same bounds this decision gates on. `null` where the
+            booking has no access points - the per-door windows stay the truth
+            of each row.
+          properties:
+            from:
+              type: integer
+              format: int64
+              example: 1717243200000
+            to:
+              type: integer
+              format: int64
+              example: 1717250400000
 
     ErrorResponse:
       type: object

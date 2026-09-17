@@ -207,6 +207,7 @@ class AccessService {
         bookingId,
         action,
         result: "failure",
+        errorCode: err.code ?? null,
         errorMessage: err.message,
         channel,
         accessRole: decision.accessRole,
@@ -272,18 +273,24 @@ class AccessService {
    * is. A state that cannot be read is reported as unknown - the close itself
    * did go through.
    *
+   * Whether the user may close at all is the caller's question
+   * ({@link canOperate}); what is decided here is the capacity the close is
+   * audited in, and whether it went through the admin override.
+   *
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId Access point ID
    * @param {string} userId Acting user
+   * @param {Object} [options]
+   * @param {boolean} [options.hasManagePermission=false] Whether the user may
+   *   manage the bookings of the tenant - what grants the admin override
+   *   after the door's window
    * @returns {Promise<Object>} The status after closing
    */
-  static async close(tenant, bookingId, accessPointId, userId) {
-    const { accessPoint, bookingContext } = await this._resolve(
-      tenant,
-      bookingId,
-      accessPointId,
-    );
+  static async close(tenant, bookingId, accessPointId, userId, options = {}) {
+    const resolved = await this._resolve(tenant, bookingId, accessPointId);
+    const { accessPoint, bookingContext } = resolved;
+    const capacity = this._capacityAt(resolved, userId, options);
 
     try {
       const provider = getAccessProvider(accessPoint.provider);
@@ -296,6 +303,7 @@ class AccessService {
         bookingId,
         action: "close",
         result: "success",
+        ...capacity,
       });
       return this._readStatusAfterClose(provider, accessPoint, bookingContext);
     } catch (err) {
@@ -306,10 +314,45 @@ class AccessService {
         bookingId,
         action: "close",
         result: "failure",
+        errorCode: err.code ?? null,
         errorMessage: err.message,
+        ...capacity,
       });
       throw err;
     }
+  }
+
+  /**
+   * @private
+   * The capacity a close or a status read is audited in: the role the user
+   * acts in at the booking, and whether the door was past its window and
+   * commanded through the admin override. Decided for this one door, the
+   * same way the caller's {@link canOperate} decided it.
+   *
+   * @param {{ accessPoint: Object, bookingContext: Object, booking: Object }}
+   *   resolved The door as the resolver hands it over
+   * @param {string|null} userId Acting user, `null` where nobody asked
+   * @param {Object} options
+   * @param {boolean} [options.hasManagePermission=false] Whether the user may
+   *   manage the bookings of the tenant
+   * @returns {{ accessRole: "booker"|"manager"|null, windowOverridden: boolean }}
+   */
+  static _capacityAt(
+    { accessPoint, bookingContext, booking },
+    userId,
+    options,
+  ) {
+    const decision = decide(booking, [{ accessPoint, bookingContext }], {
+      userId,
+      canManage: options.hasManagePermission === true,
+    });
+
+    return {
+      accessRole: decision.accessRole,
+      windowOverridden: decision.overriddenAccessPointIds.includes(
+        String(accessPoint.id),
+      ),
+    };
   }
 
   /**
@@ -354,15 +397,24 @@ class AccessService {
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId Access point ID
    * @param {string|null} openProcessId The process an open answered with
+   * @param {string|null} [userId=null] The user asking; the audit names them
+   *   as the actor, and the system where nobody asked
+   * @param {Object} [options]
+   * @param {boolean} [options.hasManagePermission=false] As of {@link close}
    * @returns {Promise<Object>} The status of the open attempt, as of
    *   {@link _toOpenStatusResponse}
    */
-  static async getOpenStatus(tenant, bookingId, accessPointId, openProcessId) {
-    const { accessPoint, bookingContext } = await this._resolve(
-      tenant,
-      bookingId,
-      accessPointId,
-    );
+  static async getOpenStatus(
+    tenant,
+    bookingId,
+    accessPointId,
+    openProcessId,
+    userId = null,
+    options = {},
+  ) {
+    const resolved = await this._resolve(tenant, bookingId, accessPointId);
+    const { accessPoint, bookingContext } = resolved;
+    const capacity = this._capacityAt(resolved, userId, options);
     const provider = getAccessProvider(accessPoint.provider);
     const canReportProgress =
       provider.constructor.capabilities.includes("getOpenProgress");
@@ -403,12 +455,13 @@ class AccessService {
 
     await this._log({
       tenantId: tenant,
+      userId,
       accessPoint,
       bookingId,
       action: "status",
       result: "success",
       payload,
-      actor: { source: "system" },
+      ...capacity,
     });
 
     return response;
@@ -420,14 +473,22 @@ class AccessService {
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId Access point ID
+   * @param {string|null} [userId=null] The user asking; the audit names them
+   *   as the actor, and the system where nobody asked
+   * @param {Object} [options]
+   * @param {boolean} [options.hasManagePermission=false] As of {@link close}
    * @returns {Promise<Object>} The status of the access point
    */
-  static async getStatus(tenant, bookingId, accessPointId) {
-    const { accessPoint, bookingContext } = await this._resolve(
-      tenant,
-      bookingId,
-      accessPointId,
-    );
+  static async getStatus(
+    tenant,
+    bookingId,
+    accessPointId,
+    userId = null,
+    options = {},
+  ) {
+    const resolved = await this._resolve(tenant, bookingId, accessPointId);
+    const { accessPoint, bookingContext } = resolved;
+    const capacity = this._capacityAt(resolved, userId, options);
 
     const provider = getAccessProvider(accessPoint.provider);
     const lockStatus = await this._readLockStatus(
@@ -438,12 +499,13 @@ class AccessService {
 
     await this._log({
       tenantId: tenant,
+      userId,
       accessPoint,
       bookingId,
       action: "status",
       result: "success",
       payload: lockStatus,
-      actor: { source: "system" },
+      ...capacity,
     });
 
     return this._toStatusResponse(lockStatus, "provider_status");
@@ -537,7 +599,32 @@ class AccessService {
    *   what the door demands, exactly as the open path decides it.
    * @returns {Promise<Object[]>} The access points of the booking
    */
-  static async getByBooking(
+  static async getByBooking(tenant, bookingId, options = {}) {
+    const { points } = await this.getByBookingWithEligibility(
+      tenant,
+      bookingId,
+      options,
+    );
+
+    return points;
+  }
+
+  /**
+   * The access points of a booking together with the decision they were
+   * projected by - the same decision `decide()` returns, so a client that
+   * lists the doors of a booking can operate them without a second round
+   * trip. The points are exactly what `getByBooking` answers.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {Object} [options] As for `getByBooking`
+   * @param {string|null} [options.userId=null] Acting user
+   * @param {boolean} [options.hasManagePermission=false] Whether the user may
+   *   manage the bookings of the tenant
+   * @returns {Promise<{ points: Object[], accessEligibility: import("./access-decision").Decision }>}
+   *   The access points of the booking and the decision about them
+   */
+  static async getByBookingWithEligibility(
     tenant,
     bookingId,
     { userId = null, hasManagePermission = false } = {},
@@ -552,9 +639,11 @@ class AccessService {
       canManage: hasManagePermission,
     });
 
-    return entries.map(({ accessPoint, bookingContext }) =>
+    const points = entries.map(({ accessPoint, bookingContext }) =>
       projectAccessPoint(accessPoint, { decision, bookingContext }),
     );
+
+    return { points, accessEligibility: decision };
   }
 
   /**
@@ -1258,7 +1347,10 @@ class AccessService {
    * The booking must always be active (committed, paid if priced, not rejected
    * and within its time window) - this applies to everyone, including users
    * with the manage-bookings permission. The permission only replaces the
-   * ownership requirement, it does not bypass the booking conditions.
+   * ownership requirement, it does not bypass the booking conditions. The one
+   * exception is the admin override: after the door's window the permission
+   * still allows close, status and open-status (`decide`,
+   * `overriddenAccessPointIds`), never an open.
    */
   static async canOperate(
     userId,
@@ -3004,11 +3096,13 @@ class AccessService {
     result = "pending",
     blockingReasons = [],
     payload = {},
+    errorCode = null,
     errorMessage = null,
     actor = null,
     channel = null,
     accessRole = null,
     evidenceBypassed = false,
+    windowOverridden = false,
   }) {
     logger.info(
       `${tenantId} -- ${action} ${result} on access-point ${accessPoint.id} (booking ${bookingId})`,
@@ -3029,7 +3123,9 @@ class AccessService {
         channel,
         accessRole,
         evidenceBypassed,
+        windowOverridden,
         payload,
+        errorCode,
         errorMessage,
       });
     } catch (err) {

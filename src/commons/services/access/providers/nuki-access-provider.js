@@ -12,6 +12,7 @@ const {
   deriveSupportedModes,
 } = require("../../../entities/access/access-point");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
+const { LockBusyError } = require("../../../../errors/LockBusyError");
 const { NotFoundError } = require("../../../../errors/BaseError");
 
 require("../clients");
@@ -88,8 +89,11 @@ class NukiAccessProvider extends AccessProvider {
    * cannot pull its latch is asked to unlock right away, so nobody waits out a
    * failed action in front of the door.
    *
-   * Nuki carries the action out before it answers, so the outcome is
-   * always `opened` and there is no process to poll.
+   * Nuki's 204 means the action was received, not that it was carried out:
+   * the lock turns afterwards, and there is no process to poll for it. The
+   * outcome is therefore always `opened` - "command accepted" - and whether
+   * the door did open is what the client's follow-up status reads (its
+   * confirmation burst) learn from the lock.
    *
    * @param {Object} accessPoint The access point to open
    * @param {Object} bookingContext The booking the door is opened for
@@ -101,7 +105,7 @@ class NukiAccessProvider extends AccessProvider {
       ? NUKI_ACTIONS.UNLATCH
       : NUKI_ACTIONS.UNLOCK;
 
-    return this._executeOpenAction(client, accessPoint, action);
+    return this._executeOpenAction(client, accessPoint, action, "open");
   }
 
   /**
@@ -132,7 +136,12 @@ class NukiAccessProvider extends AccessProvider {
 
   async close(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
-    await client.executeAction(accessPoint.externalId, NUKI_ACTIONS.LOCK);
+
+    try {
+      await client.executeAction(accessPoint.externalId, NUKI_ACTIONS.LOCK);
+    } catch (err) {
+      throw this._mapActionError(err, accessPoint, "close");
+    }
   }
 
   /**
@@ -147,7 +156,12 @@ class NukiAccessProvider extends AccessProvider {
   async unlatch(accessPoint, bookingContext) {
     const client = await this._getClientForOpen(bookingContext.tenant);
 
-    return this._executeOpenAction(client, accessPoint, NUKI_ACTIONS.UNLATCH);
+    return this._executeOpenAction(
+      client,
+      accessPoint,
+      NUKI_ACTIONS.UNLATCH,
+      "unlatch",
+    );
   }
 
   /**
@@ -160,17 +174,44 @@ class NukiAccessProvider extends AccessProvider {
    * @param {Object} client The tenant's Nuki API client
    * @param {Object} accessPoint The access point being opened
    * @param {number} action The Nuki action to send
+   * @param {"open"|"unlatch"} command The command of the access API this
+   *   action carries out, named in the error when the lock is busy
    * @returns {Promise<import("./access-provider").OpenOutcome>}
-   * @throws {AccessOpenError}
+   * @throws {LockBusyError|AccessOpenError}
    */
-  async _executeOpenAction(client, accessPoint, action) {
+  async _executeOpenAction(client, accessPoint, action, command) {
     try {
       await client.executeAction(accessPoint.externalId, action);
     } catch (err) {
-      throw this._mapOpenError(err, accessPoint);
+      throw this._mapActionError(err, accessPoint, command);
     }
 
     return { state: "opened", openProcessId: null };
+  }
+
+  /**
+   * @private
+   * The one thing every action shares: a Nuki 423 means the smartlock is
+   * still busy with its previous action, and that is Lock Busy whichever
+   * way the door was asked to turn. Everything else stays what it was per
+   * action - an open failure is told by its class, a close failure is
+   * rethrown as Nuki reported it.
+   *
+   * @param {Error} err What the Nuki API client threw
+   * @param {Object} accessPoint The access point the action was sent to
+   * @param {"open"|"unlatch"|"close"} action The command that failed
+   * @returns {Error} The error to throw in its place
+   */
+  _mapActionError(err, accessPoint, action) {
+    if (err?.response?.status === 423) {
+      return new LockBusyError(
+        PROVIDER_ID,
+        action,
+        `Nuki reports smartlock '${accessPoint.externalId}' busy with its previous action`,
+      );
+    }
+
+    return action === "close" ? err : this._mapOpenError(err, accessPoint);
   }
 
   /** @private */
