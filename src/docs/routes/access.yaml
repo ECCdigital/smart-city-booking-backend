@@ -107,6 +107,16 @@
       "403":
         description: |
           The booking does not exist or does not include the access point.
+      "423":
+        description: |
+          Lock Busy: the smartlock is still carrying out its previous action
+          (Nuki HTTP 423). Not a refusal and not an unreachable lock; the
+          client waits out its Cooldown and confirms the state by reading the
+          status. No Retry-After.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockBusy"
       "500":
         description: Could not open access point
         content:
@@ -166,6 +176,16 @@
       "403":
         description: |
           The booking does not exist or does not include the access point.
+      "423":
+        description: |
+          Lock Busy: the smartlock is still carrying out its previous action
+          (Nuki HTTP 423). Not a refusal and not an unreachable lock; the
+          client waits out its Cooldown and confirms the state by reading the
+          status. No Retry-After.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockBusy"
       "500":
         description: Could not unlatch access point
         content:
@@ -217,6 +237,16 @@
         description: Not authenticated
       "403":
         description: Forbidden
+      "423":
+        description: |
+          Lock Busy: the smartlock is still carrying out its previous action
+          (Nuki HTTP 423). Not a refusal and not an unreachable lock; the
+          client waits out its Cooldown and confirms the state by reading the
+          status. No Retry-After.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockBusy"
       "500":
         description: Could not close access point
         content:
@@ -530,6 +560,28 @@ components:
                 - configuration
               example: temporary
 
+    LockBusy:
+      type: object
+      description: The body of a 423 answer (`LockBusyError.toJSON()`).
+      properties:
+        error:
+          type: string
+          example: LockBusyError
+        code:
+          type: string
+          example: lock_busy
+        statusCode:
+          type: integer
+          example: 423
+        params:
+          type: object
+          properties:
+            provider:
+              type: string
+              example: nuki
+            action:
+              type: string
+              enum: [open, unlatch, close]
     AccessEligibility:
       type: object
       description: |

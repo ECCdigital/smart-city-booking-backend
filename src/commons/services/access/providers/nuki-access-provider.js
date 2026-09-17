@@ -199,19 +199,20 @@ class NukiAccessProvider extends AccessProvider {
    *
    * @param {Error} err What the Nuki API client threw
    * @param {Object} accessPoint The access point the action was sent to
-   * @param {"open"|"unlatch"|"close"} action The command that failed
+   * @param {"open"|"unlatch"|"close"} command The platform command that
+   *   failed (not the Nuki numeric action)
    * @returns {Error} The error to throw in its place
    */
-  _mapActionError(err, accessPoint, action) {
+  _mapActionError(err, accessPoint, command) {
     if (err?.response?.status === 423) {
       return new LockBusyError(
         PROVIDER_ID,
-        action,
+        command,
         `Nuki reports smartlock '${accessPoint.externalId}' busy with its previous action`,
       );
     }
 
-    return action === "close" ? err : this._mapOpenError(err, accessPoint);
+    return command === "close" ? err : this._mapOpenError(err, accessPoint);
   }
 
   /** @private */

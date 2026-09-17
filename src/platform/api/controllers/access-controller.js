@@ -38,6 +38,22 @@ class AccessController {
   }
 
   /**
+   * Lock Busy is a state of the lock, not a decision of the platform: it
+   * goes out as a real 423 so the client waits out its Cooldown instead of
+   * reading it as a refusal or an unreachable door. Shared by open, unlatch
+   * and close.
+   */
+  static _renderLockBusy(
+    response,
+    err,
+    { tenant, action, accessPointId, bookingId },
+  ) {
+    logger.info(
+      `${tenant} -- ${action} of access-point ${accessPointId} (booking ${bookingId}) refused, lock busy: ${err.message}`,
+    );
+    return ApiResponse.fail(response, err);
+  }
+  /**
    * @private
    * Renders one of the two ways through a door. Both are decided by the
    * service, both are refused the same way, so both are rendered here: a
@@ -94,13 +110,12 @@ class AccessController {
       }
 
       if (err instanceof LockBusyError) {
-        // A state of the lock, not a decision of the platform: goes out as
-        // a real 423 so the client waits out its cooldown instead of
-        // reading it as a refusal or an unreachable door.
-        logger.info(
-          `${tenant} -- ${action} of access-point ${accessPointId} (booking ${bookingId}) refused, lock busy: ${err.message}`,
-        );
-        return ApiResponse.fail(response, err);
+        return this._renderLockBusy(response, err, {
+          tenant,
+          action,
+          accessPointId,
+          bookingId,
+        });
       }
 
       if (err instanceof AccessOpenError) {
@@ -202,12 +217,12 @@ class AccessController {
       return ApiResponse.ok(response, { data: result });
     } catch (err) {
       if (err instanceof LockBusyError) {
-        // See _renderOpen: the lock is busy, the client waits out its
-        // cooldown - a real 423, not a close failure.
-        logger.info(
-          `${request.params.tenant} -- close of access-point ${request.params.accessPointId} (booking ${request.query.bookingId}) refused, lock busy: ${err.message}`,
-        );
-        return ApiResponse.fail(response, err);
+        return this._renderLockBusy(response, err, {
+          tenant: request.params.tenant,
+          action: "close",
+          accessPointId: request.params.accessPointId,
+          bookingId: request.query.bookingId,
+        });
       }
 
       logger.error(err);

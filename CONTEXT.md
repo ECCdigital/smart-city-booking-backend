@@ -112,6 +112,14 @@ _Avoid_: Herkunft, Origin, Surface, Kanal (das ist etwas anderes), Rolle (das si
 Das Übergehen der Validierungsregeln eines AccessPoints. Steht ausschließlich der Zugriffsrolle _Verwaltung_ zu, weil dort niemand an der Tür steht, der etwas nachweisen könnte; wer als Buchender öffnet, erbringt Evidence wie jeder andere Nutzer. Nicht zu verwechseln mit der davon getrennten Fähigkeit, fremde Buchungen überhaupt zu erreichen.
 _Avoid_: Admin-Override, Skip, Bypass (unqualifiziert — es gibt zwei)
 
+**Fenster-Override** (Storefront-Glossar: „Admin Override“):
+Das Recht der Zugriffsrolle _Verwaltung_, einen AccessPoint nach Ende seines Zugangsfensters noch zu schließen und seinen Status zu lesen, damit ein offen gebliebenes Schloss in einen bekannten Zustand kommt. Erlaubt nie ein Öffnen, gilt nie vor dem Fensterbeginn und hebt nichts als das Fenster auf: Buchung und Grant müssen gültig bleiben. Jede so ausgeführte Handlung trägt im Audit `windowOverridden`; die Zugangsentscheidung führt solche AccessPoints in `overriddenAccessPointIds`.
+_Avoid_: Admin-Override (unqualifiziert — das ist die zweite Bedeutung neben dem Evidence-Bypass), Notzugang, Master-Key
+
+**Lock Busy**:
+Die Weigerung des Providers, einen Befehl anzunehmen, weil das Schloss den vorigen noch ausführt (Nuki: HTTP 423). Kein unerreichbares Schloss, kein Rate-Limit und keine Zugangsentscheidung: geht als echtes 423 mit `code: "lock_busy"` hinaus, im Audit ein Fehlschlag mit `errorCode: "lock_busy"`; der Client wartet seine Cooldown ab.
+_Avoid_: 423 (als Sprechbegriff), Busy-Error, Unreachable
+
 **Zugangsentscheidung**:
 Die eine Antwort auf „Darf diese Person die AccessPoints dieser Buchung jetzt bedienen?“: die Zugriffsrolle, welche AccessPoints bedienbar und welche davon aus der Ferne zu öffnen sind, die priorisierten Gründe dagegen und was je AccessPoint an Evidence verlangt wird. Wird aus Buchung, AccessPoints und Zeitpunkt berechnet, nie aus dem Kanal. Die Evidence-Prüfung ist ihr zweiter Schritt, kein eigener Begriff.
 _Avoid_: Eligibility (Altname der HTTP-Form), Berechtigungsprüfung, Access-Check
