@@ -26,19 +26,24 @@ function nukiHttpError(status, data = {}) {
 }
 
 // What a lock action leaves the lock in (`state.state` codes of the Nuki
-// Web API): lock -> locked, unlock -> unlocked, unlatch -> unlatched.
+// Web API): lock -> locked, unlock -> unlocked, unlatch -> unlatched, both
+// Lock'n'Go variants -> unlocked (lock'n'go). Every action the fake
+// receives is recorded in `actions`, whatever the device type of the lock.
 const STATE_AFTER_ACTION = Object.freeze({
   [NUKI_ACTIONS.LOCK]: 1,
   [NUKI_ACTIONS.UNLOCK]: 3,
   [NUKI_ACTIONS.UNLATCH]: 5,
   [NUKI_ACTIONS.LOCK_N_GO]: 6,
+  [NUKI_ACTIONS.LOCK_N_GO_UNLATCH]: 6,
 });
 
 class FakeNukiApiClient extends NukiApiClient {
   /**
    * @param {Object} [options]
    * @param {Object[]} [options.smartlocks] Smartlocks of the account, in the
-   *   shape `GET /smartlock` lists them (`smartlockId`, `type`, `state`, ...)
+   *   shape `GET /smartlock` lists them (`smartlockId`, `type`, `state`, ...).
+   *   `type` is the Nuki device type (`NUKI_DEVICE_TYPES`); it decides the
+   *   `supportedOpenActions` the listing reports for the lock
    * @param {number} [options.authorizationListingsUntilVisible=0] How many
    *   listings of a smartlock's authorizations still miss a freshly created
    *   one: Nuki creates authorizations asynchronously and answers the

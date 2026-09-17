@@ -250,6 +250,59 @@ describe("access provider dialects: the adapters as they answer", () => {
       ]);
     });
 
+    it("lists every smartlock with the Öffnungsarten its device type can carry out", async () => {
+      provider = new NukiAccessProvider({
+        client: new FakeNukiApiClient({
+          smartlocks: [
+            nukiSmartlock({ smartlockId: 1, name: "Smart Lock 1/2", type: 0 }),
+            nukiSmartlock({ smartlockId: 2, name: "Box", type: 1 }),
+            nukiSmartlock({ smartlockId: 3, name: "Opener", type: 2 }),
+            nukiSmartlock({ smartlockId: 4, name: "Smart Door", type: 3 }),
+            nukiSmartlock({ smartlockId: 5, name: "Smart Lock 3/4", type: 4 }),
+            nukiSmartlock({ smartlockId: 6, name: "Gen 5", type: 5 }),
+            nukiSmartlock({ smartlockId: 7, name: "Unknown", type: undefined }),
+          ],
+        }),
+      });
+
+      const points = await provider.listAccessPoints("tenant-1");
+
+      const allFive = [
+        "auto",
+        "unlock",
+        "unlatch",
+        "lock_n_go",
+        "lock_n_go_unlatch",
+      ];
+      expect(
+        points.map(({ label, supportedOpenActions }) => ({
+          label,
+          supportedOpenActions,
+        })),
+      ).to.deep.equal([
+        { label: "Smart Lock 1/2", supportedOpenActions: allFive },
+        { label: "Box", supportedOpenActions: ["auto", "unlock"] },
+        { label: "Opener", supportedOpenActions: ["auto"] },
+        { label: "Smart Door", supportedOpenActions: allFive },
+        { label: "Smart Lock 3/4", supportedOpenActions: allFive },
+        { label: "Gen 5", supportedOpenActions: allFive },
+        { label: "Unknown", supportedOpenActions: allFive },
+      ]);
+      expect(points[0].supportedModes).to.deep.equal([
+        AccessPointMode.REMOTE,
+        AccessPointMode.AUTHORIZATION,
+        AccessPointMode.BOTH,
+      ]);
+    });
+
+    it("sends Lock'n'Go with unlatch as Nuki action 5 and the fake records it", async () => {
+      await clients.nuki.executeAction("1001", NUKI_ACTIONS.LOCK_N_GO_UNLATCH);
+
+      expect(clients.nuki.actions).to.deep.equal([
+        { smartlockId: "1001", action: 5 },
+      ]);
+    });
+
     it("answers the status as a LockStatus read off the smartlock state", async () => {
       const status = await provider.getStatus(NUKI_DOOR, doorContext());
 

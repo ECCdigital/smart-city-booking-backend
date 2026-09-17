@@ -6,6 +6,8 @@ const {
   NukiApiClient,
   NUKI_ACTIONS,
   NUKI_DEVICE_TYPES,
+  NUKI_OPEN_ACTIONS,
+  NUKI_OPEN_ACTION_NUMBERS,
 } = require("../src/commons/services/access/clients/nuki-api-client");
 
 describe("Nuki open pulls the latch where the lock has one", () => {
@@ -121,6 +123,85 @@ describe("Nuki open pulls the latch where the lock has one", () => {
         .to.be.false;
       expect(NukiApiClient.canUnlatchSmartlock({})).to.be.false;
       expect(NukiApiClient.canUnlatchSmartlock(null)).to.be.false;
+    });
+  });
+
+  describe("the Öffnungsart vocabulary the client exports", () => {
+    it("names the five open actions and maps the explicit ones to Nuki's action numbers", () => {
+      expect(NUKI_OPEN_ACTIONS).to.deep.equal({
+        AUTO: "auto",
+        UNLOCK: "unlock",
+        UNLATCH: "unlatch",
+        LOCK_N_GO: "lock_n_go",
+        LOCK_N_GO_UNLATCH: "lock_n_go_unlatch",
+      });
+      expect(NUKI_OPEN_ACTION_NUMBERS).to.deep.equal({
+        unlock: 1,
+        unlatch: 3,
+        lock_n_go: 4,
+        lock_n_go_unlatch: 5,
+      });
+      expect(NUKI_ACTIONS.LOCK_N_GO_UNLATCH).to.equal(5);
+    });
+  });
+
+  describe("NukiApiClient.supportedOpenActionsForSmartlock", () => {
+    const ALL_FIVE = [
+      "auto",
+      "unlock",
+      "unlatch",
+      "lock_n_go",
+      "lock_n_go_unlatch",
+    ];
+
+    it("lets a Smart Lock 1/2, a Smart Door, a Smart Lock 3/4 and a Gen 5 do all five", () => {
+      for (const type of [
+        NUKI_DEVICE_TYPES.SMART_LOCK_1_2,
+        NUKI_DEVICE_TYPES.SMART_DOOR,
+        NUKI_DEVICE_TYPES.SMART_LOCK_3_4,
+        NUKI_DEVICE_TYPES.SMART_LOCK_ULTRA,
+      ]) {
+        expect(
+          NukiApiClient.supportedOpenActionsForSmartlock({ type }),
+          `type ${type}`,
+        ).to.deep.equal(ALL_FIVE);
+      }
+    });
+
+    it("lets a Box only unlock: it has no door and no latch", () => {
+      expect(
+        NukiApiClient.supportedOpenActionsForSmartlock({
+          type: NUKI_DEVICE_TYPES.BOX,
+        }),
+      ).to.deep.equal(["auto", "unlock"]);
+    });
+
+    it("lets an Opener do nothing but auto: it buzzes the door, it does not unlock or unlatch", () => {
+      expect(
+        NukiApiClient.supportedOpenActionsForSmartlock({
+          type: NUKI_DEVICE_TYPES.OPENER,
+        }),
+      ).to.deep.equal(["auto"]);
+    });
+
+    it("reads the device type out of the config when the smartlock names it there", () => {
+      expect(
+        NukiApiClient.supportedOpenActionsForSmartlock({
+          config: { deviceType: NUKI_DEVICE_TYPES.OPENER },
+        }),
+      ).to.deep.equal(["auto"]);
+    });
+
+    it("answers all five for an unknown or missing device type: an unknown capability is not a missing one", () => {
+      expect(
+        NukiApiClient.supportedOpenActionsForSmartlock({ type: 42 }),
+      ).to.deep.equal(ALL_FIVE);
+      expect(NukiApiClient.supportedOpenActionsForSmartlock({})).to.deep.equal(
+        ALL_FIVE,
+      );
+      expect(
+        NukiApiClient.supportedOpenActionsForSmartlock(null),
+      ).to.deep.equal(ALL_FIVE);
     });
   });
 });
