@@ -1,6 +1,12 @@
 const TenantApplication = require("./tenantApplication");
 const SecurityUtils = require("../../utilities/security-utils");
 
+/**
+ * An access application of a tenant: the provider's credentials plus
+ * `customerService`, the Provider Support Contact (name, phone, email) the
+ * tenant tells its customers to turn to with door or box problems. Every
+ * provider may carry one; the tenant's public export hands it out.
+ */
 class AccessApplication extends TenantApplication {
   constructor(params) {
     super({ type: "access", ...params });
@@ -9,6 +15,7 @@ class AccessApplication extends TenantApplication {
     this.webhookSubscriptionId = params.webhookSubscriptionId || null;
     this.webhookRegisteredAt = params.webhookRegisteredAt || null;
     this.webhookRegistrationError = params.webhookRegistrationError || null;
+    this.customerService = params.customerService || null;
   }
 
   decrypt() {}
@@ -23,6 +30,7 @@ class AccessApplication extends TenantApplication {
       webhookSubscriptionId: { type: String, default: null },
       webhookRegisteredAt: { type: Number, default: null },
       webhookRegistrationError: { type: String, default: null },
+      customerService: { type: Object, default: null },
     };
   }
 }
@@ -163,8 +171,7 @@ function isEncrypted(value) {
 
 /**
  * The iFBS bike box API of a tenant: one server, one API key, and the
- * secret phrase the booking checksums are made with. `customerService` is
- * what the tenant tells its customers about the boxes. Configured as a
+ * secret phrase the booking checksums are made with. Configured as a
  * locker application until the locker fold migrated it.
  */
 class IfbsAccessApplication extends AccessApplication {
@@ -174,7 +181,6 @@ class IfbsAccessApplication extends AccessApplication {
     this.apiKeyID = params.apiKeyID || "";
     this.apiKey = params.apiKey || null;
     this.secretPhrase = params.secretPhrase || "";
-    this.customerService = params.customerService || null;
   }
 
   decrypt() {
@@ -202,7 +208,6 @@ class IfbsAccessApplication extends AccessApplication {
       apiKeyID: { type: String, default: "" },
       apiKey: { type: Object, default: null },
       secretPhrase: { type: Object, default: "" },
-      customerService: { type: Object, default: null },
     };
   }
 }
