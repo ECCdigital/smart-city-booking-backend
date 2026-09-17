@@ -233,6 +233,7 @@ async function composeBookingNotice(type, mailType, ctx) {
     mailType,
     ...loaded,
     aggregated: Boolean(groupBookingId),
+    groupBookingId,
     recipients,
     attachments,
     templateData: mailType.templateData

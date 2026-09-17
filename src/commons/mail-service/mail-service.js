@@ -7,51 +7,7 @@ const { retry } = require("../utilities/retry");
 const { embedMediaImages } = require("../services/media/mail-media");
 const { createSmtpTransport } = require("./transports/smtp-transport");
 const { createGraphTransport } = require("./transports/graph-transport");
-
-const dateTimeFormatter = new Intl.DateTimeFormat("de-DE", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Berlin",
-});
-
-const dateFormatter = new Intl.DateTimeFormat("de-DE", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-
-const currencyFormatter = new Intl.NumberFormat("de-DE", {
-  style: "currency",
-  currency: "EUR",
-});
-
-Handlebars.registerHelper("formatDateTime", (value) => {
-  if (!value) return "–";
-  return dateTimeFormatter.format(new Date(value));
-});
-
-Handlebars.registerHelper("formatDate", (value) => {
-  if (!value) return "–";
-  return dateFormatter.format(new Date(value));
-});
-
-Handlebars.registerHelper("priceFormatted", (value) => {
-  if (typeof value !== "number") return "–";
-  return currencyFormatter.format(value);
-});
-
-Handlebars.registerHelper("sanitizeString", function (value) {
-  if (typeof value === "string" && value.trim() !== "") {
-    return value.replace(/<[^>]*>?/gm, "");
-  }
-  return value;
-});
-Handlebars.registerHelper("gt", function (a, b, options) {
-  return a > b ? options.fn(this) : options.inverse(this);
-});
+const { MAIL_HELPER_NAMES } = require("./templates/mail-helpers");
 
 Handlebars.registerPartial(
   "contactSnippet",
@@ -375,3 +331,4 @@ class MailerService {
 }
 
 module.exports = MailerService;
+module.exports.MAIL_HELPER_NAMES = MAIL_HELPER_NAMES;

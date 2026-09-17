@@ -283,6 +283,14 @@ _Avoid_: Fehler-Mail, Admin-Benachrichtigung, Alert
 Die vom Mandanten änderbaren Teile einer Mitteilungsart: Textkörper, Nachtext und Betreff. Was nicht dazugehört — Buchungsdetails, Anhänge, Rahmen — bestimmt die Plattform. Nicht jede Mitteilungsart hat eine.
 _Avoid_: Snippet (das ist die Speicherform), Template (unqualifiziert), Override
 
+**Mail-Variable (einer Mail-Vorlage)**:
+Ein benannter Wert, den der Mandant an beliebiger Stelle seiner Mail-Vorlage einsetzt und den die Plattform beim Entstehen der Mitteilung füllt — ein Text (Name des Mandanten, Datum), ein Rohwert (Buchungs-ID), ein Link (Status-Seite, Storno-Link) oder ein HTML-Block (Kundenkontakt). Welche es gibt und wo eine gilt, sagt der _Variablenkatalog_ der Plattform, nicht die Vorlage. Eine Mail-Variable, deren Voraussetzung fehlt, ist leer, kein Fehler. In einer Sammelmitteilung sind die buchungsbezogenen Variablen leer; die Gruppe hat ihre eigenen (Gruppennummer, Zahlungslink für die Gruppe), und ein Kennzeichen sagt der Vorlage, dass sie für eine Gruppe spricht.
+_Avoid_: Platzhalter (unqualifiziert), Template-Variable, Handlebars-Variable (das ist die Technik), Chip (das ist die Darstellung im Editor)
+
+**Variablenkatalog**:
+Die Liste der Plattform, welche Mail-Variablen es gibt, was sie bedeuten, welcher Art sie sind (Text, Zahl, Kennzeichen, Link, HTML-Block), welchen Beispielwert die Vorschau zeigt (auch für die Sammelmitteilung), in welcher Mail-Vorlage sie gelten und unter welcher Voraussetzung eine gefüllt ist, damit der Editor davor warnen kann. Der Editor liest ihn und rät nichts; es gibt genau einen.
+_Avoid_: templateVariables (das ist das Feld), SNIPPET_VARIABLES (das ist die alte Kopie im Editor), Variablenliste
+
 **Versandweg**:
 Der Weg, über den eine Mitteilung zugestellt wird: der _Mandanten-Versand_ über die vollständige Mail-Konfiguration des Mandanten oder der _Instanz-Versand_ über die der Plattform. Ein Mandant ohne vollständige Konfiguration versendet über die Instanz; die Wahl trifft der Versand, nie die Mitteilung.
 _Avoid_: Transport (als Sprechbegriff), useInstanceMail (das ist das Feld), Mailer, SMTP (das ist nur eine Form)

@@ -17,6 +17,7 @@ const Handlebars = require("handlebars");
 const QRCode = require("qrcode");
 const MailerService = require("./mail-service");
 const { renderSnippet } = require("./templates/template-loader");
+const { bookingStatusUrl, cancellationUrl } = require("./mail-links");
 const {
   getSnippetOverride,
   getSubjectOverride,
@@ -27,6 +28,9 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const Formatters = require("../utilities/formatters");
+const {
+  LIVE_STATUSES,
+} = require("../services/booking-lifecycle/booking-state");
 
 const overrideDateFormatter = new Intl.DateTimeFormat("de-DE", {
   day: "2-digit",
@@ -79,15 +83,43 @@ function customerContactHtml(booking) {
   return lines.join("<br />");
 }
 
-/** The variables a tenant's override may use (`OVERRIDE_TEMPLATE_VARIABLES`). */
-function overrideVariables({ tenant, booking, extra = {} }) {
+/**
+ * The variables a tenant's override may use (the variable catalog,
+ * glossary "Mail-Variable"). The booking-bound ones follow the booking
+ * state, not the mail type: a conditional variable without its
+ * precondition is empty, and an aggregated notice (glossary
+ * "Sammelmitteilung") carries the group's id instead of a booking's.
+ */
+function overrideVariables({
+  tenant,
+  tenantId,
+  booking,
+  aggregated = false,
+  groupBookingId = null,
+  paymentUrl = null,
+  extra = {},
+}) {
   const contact = customerContactHtml(booking);
+  const single = !aggregated && booking ? booking : null;
+  const statusView = Boolean(single && tenant?.enablePublicStatusView);
+  const cancellable = Boolean(
+    single &&
+      single.cancellationPolicy?.userCancellable === true &&
+      LIVE_STATUSES.includes(single.status),
+  );
   return {
     tenantName: tenant?.name ?? "",
     supportEmail: tenant?.mail ?? "",
     customerName: booking?.name ?? "",
     customerContact: contact ? new Handlebars.SafeString(contact) : "",
     currentDate: overrideDateFormatter.format(new Date()),
+    bookingId: single ? single.id : "",
+    groupBookingId: aggregated ? groupBookingId ?? "" : "",
+    isAggregated: Boolean(aggregated),
+    tenantId: tenantId ?? "",
+    bookingStatusUrl: statusView ? bookingStatusUrl(single, tenantId) : "",
+    cancellationUrl: cancellable ? cancellationUrl(single, tenantId) : "",
+    paymentUrl: paymentUrl ?? "",
     ...extra,
   };
 }
@@ -103,7 +135,7 @@ function cancellationContext(booking, tenantId, addRejectionLink) {
 
   if (booking.cancellationPolicy?.userCancellable === true) {
     return {
-      rejectionUrl: `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${booking.id}`,
+      rejectionUrl: cancellationUrl(booking, tenantId),
       cancellationContactHint: null,
     };
   }
@@ -220,7 +252,7 @@ function renderShortBookingDetails({
 
 /** The QR code of the public status view: its paragraph and its image. */
 async function qrCode(booking, tenantId) {
-  const qrUrl = `${process.env.FRONTEND_URL}/booking/status/${tenantId}?id=${booking.id}&name=${encodeURIComponent(booking.name)}`;
+  const qrUrl = bookingStatusUrl(booking, tenantId);
   return {
     content: renderSnippet("qr-code", { qrUrl }),
     attachment: {
@@ -247,6 +279,7 @@ async function qrCode(booking, tenantId) {
  * @param {Object[]} loaded.bookables The bookables of every position
  * @param {Map<string, Object>} loaded.events The events of the tickets, by id
  * @param {boolean} loaded.aggregated One notice for a group
+ * @param {string|null} [loaded.groupBookingId] The group's id of an aggregated notice
  * @param {string[]} loaded.recipients
  * @param {Object[]} loaded.attachments Nodemailer attachments, loaded, before the QR code
  * @param {Object} [loaded.templateData] The type's own template variables
@@ -262,6 +295,7 @@ async function render(
     bookables,
     events,
     aggregated,
+    groupBookingId = null,
     recipients,
     attachments,
     templateData = {},
@@ -275,11 +309,19 @@ async function render(
   const includeQRCode = !aggregated && resolve(mailType.includeQRCode, ctx);
   const sendBCC = resolve(mailType.sendBCC, ctx);
   const addRejectionLink = resolve(mailType.addRejectionLink, ctx);
-  // The payment link is the wrapper's, not a variable of the overrides.
+  // The payment link is the wrapper's and, on top, a variable of the overrides.
   const { paymentUrl = null, ...extra } = templateData;
   const { cancelReason = null, rejectionReason = null } = extra;
 
-  const variables = overrideVariables({ tenant, booking, extra });
+  const variables = overrideVariables({
+    tenant,
+    tenantId,
+    booking,
+    aggregated,
+    groupBookingId,
+    paymentUrl,
+    extra,
+  });
   const message = renderSnippet(mailType.templateName, variables, {
     overrideSource: getSnippetOverride(tenant, mailType.templateName),
   });
