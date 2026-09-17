@@ -4,7 +4,7 @@ const {
 } = require("../../../commons/mail-service/templates/default-mail-snippets");
 const {
   OVERRIDABLE_SNIPPETS,
-  OVERRIDE_TEMPLATE_VARIABLES,
+  templateVariableCatalog,
 } = require("../../../commons/mail-service/templates/mail-snippet-overrides");
 
 const logger = bunyan.createLogger({
@@ -22,7 +22,9 @@ class MailTemplateController {
       response.status(200).send({
         mailSnippets: DEFAULT_MAIL_SNIPPETS,
         overridableSnippets: OVERRIDABLE_SNIPPETS,
-        templateVariables: OVERRIDE_TEMPLATE_VARIABLES,
+        templateVariables: templateVariableCatalog({
+          tenantId: request.params.tenant,
+        }),
       });
     } catch (error) {
       logger.error(error);

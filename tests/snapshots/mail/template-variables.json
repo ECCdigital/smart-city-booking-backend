@@ -1,0 +1,166 @@
+[
+  {
+    "name": "tenantName",
+    "label": "Mandant",
+    "description": "Name des Mandanten",
+    "kind": "text",
+    "sample": "Beispiel-Mandant"
+  },
+  {
+    "name": "supportEmail",
+    "label": "Support-E-Mail",
+    "description": "Support-E-Mail-Adresse des Mandanten",
+    "kind": "text",
+    "sample": "support@beispiel.de"
+  },
+  {
+    "name": "customerName",
+    "label": "Kundenname",
+    "description": "Name des Kunden aus der Buchung",
+    "kind": "text",
+    "sample": "Max Mustermann"
+  },
+  {
+    "name": "customerContact",
+    "label": "Kundenkontakt",
+    "description": "Kontaktdaten des Kunden als HTML-Block (Name, Firma, E-Mail, Telefon, Adresse)",
+    "kind": "html",
+    "expr": "{{{customerContact}}}",
+    "sample": "<strong>Name:</strong> Max Mustermann<br /><strong>Firma:</strong> Beispiel GmbH<br /><strong>E-Mail:</strong> max.mustermann@beispiel.de<br /><strong>Telefon:</strong> 0123 4567890<br /><strong>Adresse:</strong> Musterstraße 1, 12345 Musterstadt"
+  },
+  {
+    "name": "currentDate",
+    "label": "Aktuelles Datum",
+    "description": "Aktuelles Versanddatum im Format TT.MM.JJJJ",
+    "kind": "text",
+    "sample": "24.05.2026"
+  },
+  {
+    "name": "hasRefundPreview",
+    "label": "Erstattung vorhanden",
+    "description": "Wahr, wenn die Buchung einen Erstattungsbetrag größer 0 € hat",
+    "kind": "flag",
+    "expr": "{{#if hasRefundPreview}}...{{/if}}",
+    "sample": true,
+    "snippets": ["booking-cancel"]
+  },
+  {
+    "name": "refundAmountEur",
+    "label": "Erstattungsbetrag",
+    "description": "Erstattungsbetrag als Zahl (mit Helper priceFormatted nutzbar)",
+    "kind": "number",
+    "expr": "{{priceFormatted refundAmountEur}}",
+    "sample": 60,
+    "snippets": ["booking-cancel"]
+  },
+  {
+    "name": "cancellationFeeEur",
+    "label": "Einbehalt",
+    "description": "Einbehaltener Betrag (Stornogebühr) als Zahl",
+    "kind": "number",
+    "expr": "{{priceFormatted cancellationFeeEur}}",
+    "sample": 60,
+    "snippets": ["booking-cancel"]
+  },
+  {
+    "name": "originalAmountEur",
+    "label": "Ursprungsbetrag",
+    "description": "Ursprungsbetrag der Buchung als Zahl",
+    "kind": "number",
+    "expr": "{{priceFormatted originalAmountEur}}",
+    "sample": 120,
+    "snippets": ["booking-cancel"]
+  },
+  {
+    "name": "refundPercentage",
+    "label": "Erstattungsprozent",
+    "description": "Angewandter Erstattungsprozentsatz (0–100)",
+    "kind": "number",
+    "sample": 50,
+    "snippets": ["booking-cancel"]
+  },
+  {
+    "name": "hasCancellationFee",
+    "label": "Einbehalt vorhanden",
+    "description": "Wahr, wenn ein Einbehalt größer 0 € anfällt",
+    "kind": "flag",
+    "expr": "{{#if hasCancellationFee}}...{{/if}}",
+    "sample": true,
+    "snippets": ["booking-cancel"]
+  },
+  {
+    "name": "daysBeforeStart",
+    "label": "Tage bis Beginn",
+    "description": "Kalendertage bis zum Buchungsbeginn zum Berechnungszeitpunkt",
+    "kind": "number",
+    "sample": 10,
+    "snippets": ["booking-cancel"]
+  },
+  {
+    "name": "bookingId",
+    "label": "Buchungsnummer",
+    "description": "Nummer der Buchung; leer in einer Sammelmitteilung",
+    "kind": "text",
+    "sample": "BK-987654",
+    "sampleAggregated": ""
+  },
+  {
+    "name": "groupBookingId",
+    "label": "Gruppennummer",
+    "description": "Nummer der Buchungsgruppe; nur in einer Sammelmitteilung gefüllt",
+    "kind": "text",
+    "sample": "",
+    "sampleAggregated": "GB-123456"
+  },
+  {
+    "name": "isAggregated",
+    "label": "Sammelmitteilung",
+    "description": "Wahr, wenn die Mitteilung eine Buchungsgruppe betrifft; für einen Block, der nur dann erscheint",
+    "kind": "flag",
+    "expr": "{{#if isAggregated}}...{{/if}}",
+    "sample": false,
+    "sampleAggregated": true
+  },
+  {
+    "name": "tenantId",
+    "label": "Mandanten-Kennung",
+    "description": "Technische Kennung des Mandanten, für eigene Links",
+    "kind": "text",
+    "sample": "tenant-1"
+  },
+  {
+    "name": "bookingStatusUrl",
+    "label": "Link zur Status-Seite",
+    "description": "Öffentliche Status-Seite der Buchung; leer ohne öffentliche Status-Seite oder in einer Sammelmitteilung, darum in einem {{#if bookingStatusUrl}}...{{/if}}-Block einsetzen",
+    "kind": "url",
+    "sample": "https://buchung.example.test/booking/status/tenant-1?id=BK-987654&name=Max%20Mustermann",
+    "sampleAggregated": "",
+    "requires": {
+      "text": "leer, wenn die öffentliche Status-Seite deaktiviert ist",
+      "tenantSetting": {
+        "key": "enablePublicStatusView",
+        "label": "Öffentliche Status-Seite"
+      }
+    }
+  },
+  {
+    "name": "cancellationUrl",
+    "label": "Storno-Link",
+    "description": "Storno-Anfrage des Kunden; leer, wenn die Buchung nicht vom Kunden stornierbar oder nicht mehr live ist, oder in einer Sammelmitteilung, darum in einem {{#if cancellationUrl}}...{{/if}}-Block einsetzen",
+    "kind": "url",
+    "sample": "https://buchung.example.test/booking/request-reject/tenant-1?id=BK-987654",
+    "sampleAggregated": "",
+    "requires": {
+      "text": "leer, wenn die Buchung nicht vom Kunden stornierbar ist oder nicht mehr läuft"
+    }
+  },
+  {
+    "name": "paymentUrl",
+    "label": "Zahlungslink",
+    "description": "Link zur Zahlung; bei einer Gruppe ein Link für alle Buchungen. Nur im Zahlungslink-Snippet gefüllt, darum in einem {{#if paymentUrl}}...{{/if}}-Block einsetzen",
+    "kind": "url",
+    "sample": "https://buchung.example.test/payment/redirection?ids=BK-987654&tenant=tenant-1&aggregated=false",
+    "sampleAggregated": "https://buchung.example.test/payment/redirection?ids=BK-987654,BK-987655&tenant=tenant-1&aggregated=true",
+    "snippets": ["payment-link-after-approval"]
+  }
+]

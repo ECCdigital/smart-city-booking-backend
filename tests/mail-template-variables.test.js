@@ -426,3 +426,170 @@ describe("Mail-Variable: filled by the booking state over compose", function () 
     );
   });
 });
+
+/*
+ * The Variablenkatalog (glossary): the one list the admin UI reads, served
+ * per tenant by `GET /api/tenants/:tenant/mail/templates/default` in
+ * `templateVariables` (spec 2.1-2.3). As a unit over
+ * `templateVariableCatalog`, and over the lifecycle harness with a snapshot.
+ */
+
+const {
+  templateVariableCatalog,
+} = require("../src/commons/mail-service/templates/mail-snippet-overrides");
+const prettier = require("prettier");
+const { expectSnapshot } = require("./helpers/snapshot");
+const {
+  installHarness,
+  TENANT: HARNESS_TENANT,
+  OWNER,
+} = require("./helpers/booking-lifecycle-harness");
+const { installRouteWorld } = require("./helpers/route-world");
+
+/** The 19 entries of spec 2.3, in picker order. */
+const CATALOG_ORDER = [
+  "tenantName",
+  "supportEmail",
+  "customerName",
+  "customerContact",
+  "currentDate",
+  "hasRefundPreview",
+  "refundAmountEur",
+  "cancellationFeeEur",
+  "originalAmountEur",
+  "refundPercentage",
+  "hasCancellationFee",
+  "daysBeforeStart",
+  "bookingId",
+  "groupBookingId",
+  "isAggregated",
+  "tenantId",
+  "bookingStatusUrl",
+  "cancellationUrl",
+  "paymentUrl",
+];
+
+describe("Variablenkatalog: templateVariableCatalog", function () {
+  const catalog = () => templateVariableCatalog({ tenantId: "stadthalle" });
+
+  it("lists the 19 entries in the order of the spec", function () {
+    expect(catalog().map((entry) => entry.name)).to.deep.equal(CATALOG_ORDER);
+  });
+
+  it("gives every entry name, label, description, kind and sample", function () {
+    const KINDS = ["text", "number", "flag", "url", "html"];
+    catalog().forEach((entry) => {
+      ["name", "label", "description"].forEach((field) => {
+        expect(entry[field], `${entry.name}.${field}`)
+          .to.be.a("string")
+          .and.not.equal("");
+      });
+      expect(KINDS, `${entry.name}.kind`).to.include(entry.kind);
+      expect(entry, entry.name).to.have.property("sample");
+    });
+  });
+
+  it("carries a non-empty requires.text wherever requires is present", function () {
+    const conditional = catalog().filter((entry) => entry.requires);
+    expect(conditional.map((entry) => entry.name)).to.deep.equal([
+      "bookingStatusUrl",
+      "cancellationUrl",
+    ]);
+    conditional.forEach((entry) => {
+      expect(entry.requires.text, entry.name)
+        .to.be.a("string")
+        .and.not.equal("");
+    });
+    const status = catalog().find((entry) => entry.name === "bookingStatusUrl");
+    expect(status.requires.tenantSetting).to.deep.equal({
+      key: "enablePublicStatusView",
+      label: "Öffentliche Status-Seite",
+    });
+  });
+
+  it("marks the booking-bound entries with an empty aggregated sample", function () {
+    const byName = Object.fromEntries(catalog().map((e) => [e.name, e]));
+    ["bookingId", "bookingStatusUrl", "cancellationUrl"].forEach((name) => {
+      expect(byName[name].sampleAggregated, name).to.equal("");
+    });
+    expect(byName.groupBookingId.sample).to.equal("");
+    expect(byName.groupBookingId.sampleAggregated).to.equal("GB-123456");
+    expect(byName.isAggregated.sample).to.equal(false);
+    expect(byName.isAggregated.sampleAggregated).to.equal(true);
+  });
+
+  it("scopes the cancellation and payment variables to their snippets", function () {
+    const byName = Object.fromEntries(catalog().map((e) => [e.name, e]));
+    CATALOG_ORDER.slice(5, 12).forEach((name) => {
+      expect(byName[name].snippets, name).to.deep.equal(["booking-cancel"]);
+    });
+    expect(byName.paymentUrl.snippets).to.deep.equal([
+      "payment-link-after-approval",
+    ]);
+    expect(byName.tenantName).to.not.have.property("snippets");
+  });
+});
+
+describe("Variablenkatalog: GET /api/tenants/:tenant/mail/templates/default", function () {
+  this.timeout(20000);
+
+  let h;
+  let frontendUrl;
+
+  before(async function () {
+    frontendUrl = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = FRONTEND_URL;
+    h = await installHarness();
+    installRouteWorld({
+      tenantId: HARNESS_TENANT,
+      tenant: h.tenant,
+      ownerUserId: OWNER,
+      bookables: h.bookables,
+    });
+  });
+
+  after(async function () {
+    sinon.restore();
+    process.env.FRONTEND_URL = frontendUrl;
+    await h.close();
+  });
+
+  const getDefaults = () =>
+    h
+      .api()
+      .get(`/api/tenants/${HARNESS_TENANT}/mail/templates/default`)
+      .set(h.as(OWNER));
+
+  it("serves the catalog of the tenant, pinned by snapshot", async function () {
+    const res = await getDefaults();
+
+    expect(res.status).to.equal(200);
+    // Shaped as `format:write` would leave the file, so the snapshot is
+    // committed as it is recorded.
+    const json = await prettier.format(
+      JSON.stringify(res.body.templateVariables, null, 2),
+      { parser: "json" },
+    );
+    expectSnapshot("mail/template-variables.json", json);
+  });
+
+  it("samples every url entry with FRONTEND_URL and the tenantId of the route", async function () {
+    const res = await getDefaults();
+
+    const urls = res.body.templateVariables.filter((e) => e.kind === "url");
+    expect(urls.map((e) => e.name)).to.deep.equal([
+      "bookingStatusUrl",
+      "cancellationUrl",
+      "paymentUrl",
+    ]);
+    urls.forEach((entry) => {
+      expect(entry.sample, entry.name).to.match(
+        new RegExp(`^${FRONTEND_URL}/`),
+      );
+      expect(entry.sample, entry.name).to.include(HARNESS_TENANT);
+    });
+    expect(
+      res.body.templateVariables.find((e) => e.name === "tenantId").sample,
+    ).to.equal(HARNESS_TENANT);
+  });
+});

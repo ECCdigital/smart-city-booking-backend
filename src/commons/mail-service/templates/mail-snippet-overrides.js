@@ -20,59 +20,210 @@ const OVERRIDABLE_SNIPPETS = Object.freeze([
   "supervisor-booking-notification",
 ]);
 
-const OVERRIDE_TEMPLATE_VARIABLES = Object.freeze([
-  {
-    name: "tenantName",
-    description: "Name des Mandanten",
-  },
-  {
-    name: "supportEmail",
-    description: "Support-E-Mail-Adresse des Mandanten",
-  },
-  {
-    name: "customerName",
-    description: "Name des Kunden aus der Buchung",
-  },
-  {
-    name: "customerContact",
-    description:
-      "Kontaktdaten des Kunden als HTML-Block (Name, Firma, E-Mail, Telefon, Adresse)",
-  },
-  {
-    name: "currentDate",
-    description: "Aktuelles Versanddatum im Format TT.MM.JJJJ",
-  },
-  {
-    name: "hasRefundPreview",
-    description:
-      "Wahr, wenn die Buchung einen Erstattungsbetrag größer 0 € hat",
-  },
-  {
-    name: "refundAmountEur",
-    description:
-      "Erstattungsbetrag als Zahl (mit Helper priceFormatted nutzbar)",
-  },
-  {
-    name: "cancellationFeeEur",
-    description: "Einbehaltener Betrag als Zahl",
-  },
-  {
-    name: "originalAmountEur",
-    description: "Ursprungsbetrag der Buchung als Zahl",
-  },
-  {
-    name: "refundPercentage",
-    description: "Angewandter Erstattungsprozentsatz (0–100)",
-  },
-  {
-    name: "hasCancellationFee",
-    description: "Wahr, wenn ein Einbehalt größer 0 € anfällt",
-  },
-  {
-    name: "daysBeforeStart",
-    description: "Kalendertage bis zum Buchungsbeginn zum Berechnungszeitpunkt",
-  },
-]);
+const BOOKING_CANCEL_SNIPPETS = Object.freeze(["booking-cancel"]);
+const SAMPLE_BOOKING_ID = "BK-987654";
+const SAMPLE_CUSTOMER_NAME = "Max Mustermann";
+
+/**
+ * The Variablenkatalog (glossary): the one list of Mail-Variablen the admin
+ * UI reads for its picker and preview, in picker order. `label`,
+ * `description` and `requires.text` are German strings; `expr` is the
+ * ready-made expression where `{{name}}` is not the whole story; `sample`
+ * (and `sampleAggregated` for the aggregated preview) feed the client-side
+ * preview; `snippets` restricts an entry to the snippets it applies to;
+ * `requires` names the precondition the editor warns about.
+ *
+ * The catalog is per tenant: the sample URLs carry the real `FRONTEND_URL`
+ * and the tenant's id, with the paths `render.js` fills at send time.
+ *
+ * @param {{tenantId: string}} scope
+ * @returns {Array<Object>} A fresh array; every call builds the entries anew
+ */
+function templateVariableCatalog({ tenantId }) {
+  const frontendUrl = process.env.FRONTEND_URL;
+  const bookingIds = [SAMPLE_BOOKING_ID, "BK-987655"];
+
+  return [
+    {
+      name: "tenantName",
+      label: "Mandant",
+      description: "Name des Mandanten",
+      kind: "text",
+      sample: "Beispiel-Mandant",
+    },
+    {
+      name: "supportEmail",
+      label: "Support-E-Mail",
+      description: "Support-E-Mail-Adresse des Mandanten",
+      kind: "text",
+      sample: "support@beispiel.de",
+    },
+    {
+      name: "customerName",
+      label: "Kundenname",
+      description: "Name des Kunden aus der Buchung",
+      kind: "text",
+      sample: SAMPLE_CUSTOMER_NAME,
+    },
+    {
+      name: "customerContact",
+      label: "Kundenkontakt",
+      description:
+        "Kontaktdaten des Kunden als HTML-Block (Name, Firma, E-Mail, Telefon, Adresse)",
+      kind: "html",
+      expr: "{{{customerContact}}}",
+      sample:
+        "<strong>Name:</strong> Max Mustermann<br />" +
+        "<strong>Firma:</strong> Beispiel GmbH<br />" +
+        "<strong>E-Mail:</strong> max.mustermann@beispiel.de<br />" +
+        "<strong>Telefon:</strong> 0123 4567890<br />" +
+        "<strong>Adresse:</strong> Musterstraße 1, 12345 Musterstadt",
+    },
+    {
+      name: "currentDate",
+      label: "Aktuelles Datum",
+      description: "Aktuelles Versanddatum im Format TT.MM.JJJJ",
+      kind: "text",
+      sample: "24.05.2026",
+    },
+    {
+      name: "hasRefundPreview",
+      label: "Erstattung vorhanden",
+      description:
+        "Wahr, wenn die Buchung einen Erstattungsbetrag größer 0 € hat",
+      kind: "flag",
+      expr: "{{#if hasRefundPreview}}...{{/if}}",
+      sample: true,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "refundAmountEur",
+      label: "Erstattungsbetrag",
+      description:
+        "Erstattungsbetrag als Zahl (mit Helper priceFormatted nutzbar)",
+      kind: "number",
+      expr: "{{priceFormatted refundAmountEur}}",
+      sample: 60,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "cancellationFeeEur",
+      label: "Einbehalt",
+      description: "Einbehaltener Betrag (Stornogebühr) als Zahl",
+      kind: "number",
+      expr: "{{priceFormatted cancellationFeeEur}}",
+      sample: 60,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "originalAmountEur",
+      label: "Ursprungsbetrag",
+      description: "Ursprungsbetrag der Buchung als Zahl",
+      kind: "number",
+      expr: "{{priceFormatted originalAmountEur}}",
+      sample: 120,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "refundPercentage",
+      label: "Erstattungsprozent",
+      description: "Angewandter Erstattungsprozentsatz (0–100)",
+      kind: "number",
+      sample: 50,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "hasCancellationFee",
+      label: "Einbehalt vorhanden",
+      description: "Wahr, wenn ein Einbehalt größer 0 € anfällt",
+      kind: "flag",
+      expr: "{{#if hasCancellationFee}}...{{/if}}",
+      sample: true,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "daysBeforeStart",
+      label: "Tage bis Beginn",
+      description:
+        "Kalendertage bis zum Buchungsbeginn zum Berechnungszeitpunkt",
+      kind: "number",
+      sample: 10,
+      snippets: BOOKING_CANCEL_SNIPPETS,
+    },
+    {
+      name: "bookingId",
+      label: "Buchungsnummer",
+      description: "Nummer der Buchung; leer in einer Sammelmitteilung",
+      kind: "text",
+      sample: SAMPLE_BOOKING_ID,
+      sampleAggregated: "",
+    },
+    {
+      name: "groupBookingId",
+      label: "Gruppennummer",
+      description:
+        "Nummer der Buchungsgruppe; nur in einer Sammelmitteilung gefüllt",
+      kind: "text",
+      sample: "",
+      sampleAggregated: "GB-123456",
+    },
+    {
+      name: "isAggregated",
+      label: "Sammelmitteilung",
+      description:
+        "Wahr, wenn die Mitteilung eine Buchungsgruppe betrifft; für einen Block, der nur dann erscheint",
+      kind: "flag",
+      expr: "{{#if isAggregated}}...{{/if}}",
+      sample: false,
+      sampleAggregated: true,
+    },
+    {
+      name: "tenantId",
+      label: "Mandanten-Kennung",
+      description: "Technische Kennung des Mandanten, für eigene Links",
+      kind: "text",
+      sample: tenantId,
+    },
+    {
+      name: "bookingStatusUrl",
+      label: "Link zur Status-Seite",
+      description:
+        "Öffentliche Status-Seite der Buchung; leer ohne öffentliche Status-Seite oder in einer Sammelmitteilung, darum in einem {{#if bookingStatusUrl}}...{{/if}}-Block einsetzen",
+      kind: "url",
+      sample: `${frontendUrl}/booking/status/${tenantId}?id=${SAMPLE_BOOKING_ID}&name=${encodeURIComponent(SAMPLE_CUSTOMER_NAME)}`,
+      sampleAggregated: "",
+      requires: {
+        text: "leer, wenn die öffentliche Status-Seite deaktiviert ist",
+        tenantSetting: {
+          key: "enablePublicStatusView",
+          label: "Öffentliche Status-Seite",
+        },
+      },
+    },
+    {
+      name: "cancellationUrl",
+      label: "Storno-Link",
+      description:
+        "Storno-Anfrage des Kunden; leer, wenn die Buchung nicht vom Kunden stornierbar oder nicht mehr live ist, oder in einer Sammelmitteilung, darum in einem {{#if cancellationUrl}}...{{/if}}-Block einsetzen",
+      kind: "url",
+      sample: `${frontendUrl}/booking/request-reject/${tenantId}?id=${SAMPLE_BOOKING_ID}`,
+      sampleAggregated: "",
+      requires: {
+        text: "leer, wenn die Buchung nicht vom Kunden stornierbar ist oder nicht mehr läuft",
+      },
+    },
+    {
+      name: "paymentUrl",
+      label: "Zahlungslink",
+      description:
+        "Link zur Zahlung; bei einer Gruppe ein Link für alle Buchungen. Nur im Zahlungslink-Snippet gefüllt, darum in einem {{#if paymentUrl}}...{{/if}}-Block einsetzen",
+      kind: "url",
+      sample: `${frontendUrl}/payment/redirection?ids=${SAMPLE_BOOKING_ID}&tenant=${tenantId}&aggregated=false`,
+      sampleAggregated: `${frontendUrl}/payment/redirection?ids=${bookingIds.join(",")}&tenant=${tenantId}&aggregated=true`,
+      snippets: Object.freeze(["payment-link-after-approval"]),
+    },
+  ];
+}
 
 const AFTER_SNIPPET_SUFFIX = "__after";
 
@@ -233,7 +384,7 @@ function validateMailSubjects(mailSubjects = {}) {
 
 module.exports = {
   OVERRIDABLE_SNIPPETS,
-  OVERRIDE_TEMPLATE_VARIABLES,
+  templateVariableCatalog,
   MAX_SUBJECT_OVERRIDE_LENGTH,
   AFTER_SNIPPET_SUFFIX,
   afterSnippetKey,

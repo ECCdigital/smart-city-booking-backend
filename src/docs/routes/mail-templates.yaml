@@ -1,0 +1,57 @@
+# swagger/routes/mail-templates.yaml
+#
+# The default mail templates of a tenant and the Variablenkatalog the admin
+# UI's mail editor reads (mail-template-variables spec, section 2). Only this
+# read route exists; the overrides themselves travel with the tenant
+# (`mailSnippets`, `mailSubjects` on `PUT /api/tenants`).
+
+/api/tenants/{tenant}/mail/templates/default:
+  get:
+    tags:
+      - Tenants
+    summary: Default mail snippets, overridable keys and the variable catalog
+    description: |
+      Answers the platform's default snippets, the snippet keys a tenant may
+      override, and the catalog of mail variables every snippet and subject
+      may use. The catalog is the one list the admin UI reads for its picker
+      and preview — it keeps no copy of its own, so a backend without the
+      catalog form below leaves the picker empty. The sample URLs carry the
+      instance's `FRONTEND_URL` and the tenant of the route.
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema:
+          type: string
+        example: tenant1
+    responses:
+      "200":
+        description: The defaults and the catalog.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mailSnippets:
+                  type: object
+                  description: The default source per snippet key.
+                  additionalProperties:
+                    type: string
+                overridableSnippets:
+                  type: array
+                  description: The snippet keys a tenant may override.
+                  items:
+                    type: string
+                templateVariables:
+                  type: array
+                  description: |
+                    The variable catalog, in picker order. Order matters:
+                    the admin UI shows the entries as they come.
+                  items:
+                    $ref: "#/components/schemas/MailTemplateVariable"
+      "403":
+        description: The caller does not own the tenant.
+      "500":
+        description: Could not get default mail templates

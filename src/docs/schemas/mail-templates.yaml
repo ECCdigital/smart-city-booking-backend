@@ -1,0 +1,86 @@
+# swagger/schemas/mail-templates.yaml
+#
+# One entry of the Variablenkatalog (glossary): a mail variable the tenant may
+# set in any field of a mail template. The editor reads the kind from `kind`
+# and guesses nothing from the name; `label`, `description` and
+# `requires.text` are German strings for the picker.
+
+components:
+  schemas:
+    MailTemplateVariable:
+      type: object
+      required: [name, label, description, kind, sample]
+      properties:
+        name:
+          type: string
+          description: The Handlebars name of the variable.
+          example: bookingStatusUrl
+        label:
+          type: string
+          description: The display name in the picker.
+          example: Link zur Status-Seite
+        description:
+          type: string
+          description: |
+            One or two sentences for the picker. A URL variable names the
+            `{{#if name}}…{{/if}}` pattern; a booking-bound variable says it is
+            empty in an aggregated notice.
+        kind:
+          type: string
+          enum: [text, number, flag, url, html]
+          description: |
+            What the value is: plain text, a number (usually rendered with
+            `priceFormatted`), a flag for an `{{#if}}` block, a ready-made
+            URL, or an HTML block that needs `{{{ }}}`.
+        expr:
+          type: string
+          description: |
+            The ready-made expression for a text field, where `{{name}}` is
+            not the whole story. Absent means `{{name}}`.
+          example: "{{#if bookingStatusUrl}}...{{/if}}"
+        sample:
+          description: The sample value the client-side preview renders.
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        sampleAggregated:
+          description: |
+            The sample value when the preview shows an aggregated notice.
+            Absent means the same as `sample`; `""` means empty there.
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        snippets:
+          type: array
+          description: |
+            The snippet keys the variable applies to. Absent means every
+            overridable snippet. An `__after` key counts as its base key.
+          items:
+            type: string
+          example: [booking-cancel]
+        requires:
+          type: object
+          description: |
+            The precondition the variable is filled under; without it the
+            variable is empty, never an error. The editor shows `text` and,
+            when `tenantSetting` is present, checks the named tenant flag
+            live to warn before the variable is inserted.
+          required: [text]
+          properties:
+            text:
+              type: string
+              example: leer, wenn die öffentliche Status-Seite deaktiviert ist
+            tenantSetting:
+              type: object
+              required: [key, label]
+              properties:
+                key:
+                  type: string
+                  description: The boolean tenant setting the editor checks.
+                  example: enablePublicStatusView
+                label:
+                  type: string
+                  description: The display name of that setting.
+                  example: Öffentliche Status-Seite
