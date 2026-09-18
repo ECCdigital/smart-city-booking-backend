@@ -37,6 +37,7 @@ const ParevaApiClient = require("../src/commons/services/access/clients/pareva-a
 const {
   NUKI_ACTIONS,
   NUKI_AUTH_TYPES,
+  NUKI_DEVICE_TYPES,
 } = require("../src/commons/services/access/clients/nuki-api-client");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const {
@@ -241,13 +242,50 @@ describe("access provider dialects: the adapters as they answer", () => {
       sinon.restore();
     });
 
-    it("answers an open as opened, with no process to poll", async () => {
+    it("answers an open as opened, with no process to poll, and names the Öffnungsart", async () => {
       const outcome = await provider.open(NUKI_DOOR, doorContext());
 
-      expect(outcome).to.deep.equal({ state: "opened", openProcessId: null });
+      expect(outcome).to.deep.equal({
+        state: "opened",
+        openProcessId: null,
+        openAction: "unlatch",
+        openActionOrigin: "device_type",
+        nukiAction: NUKI_ACTIONS.UNLATCH,
+      });
       expect(clients.nuki.actions).to.deep.equal([
         { smartlockId: "1001", action: NUKI_ACTIONS.UNLATCH },
       ]);
+    });
+
+    it("carries out the Öffnungsart the access point names, without reading the lock first", async () => {
+      const outcome = await provider.open(
+        { ...NUKI_DOOR, config: { openAction: "lock_n_go_unlatch" } },
+        doorContext(),
+      );
+
+      expect(outcome.openAction).to.equal("lock_n_go_unlatch");
+      expect(outcome.openActionOrigin).to.equal("configured");
+      expect(clients.nuki.actions).to.deep.equal([
+        { smartlockId: "1001", action: NUKI_ACTIONS.LOCK_N_GO_UNLATCH },
+      ]);
+    });
+
+    it("opens an Opener with action 3, which opens the door where action 1 only arms Ring-to-Open", async () => {
+      provider = new NukiAccessProvider({
+        client: new FakeNukiApiClient({
+          smartlocks: [
+            nukiSmartlock({
+              smartlockId: 1001,
+              type: NUKI_DEVICE_TYPES.OPENER,
+            }),
+          ],
+        }),
+      });
+
+      const outcome = await provider.open(NUKI_DOOR, doorContext());
+
+      expect(outcome.nukiAction).to.equal(NUKI_ACTIONS.UNLATCH);
+      expect(outcome.openActionOrigin).to.equal("device_type");
     });
 
     it("lists every smartlock with the Öffnungsarten its device type can carry out", async () => {
@@ -1522,6 +1560,9 @@ describe("access provider dialects: what AccessService makes of them", () => {
       expect(loggedPayload("open").payload).to.deep.equal({
         state: "opened",
         openProcessId: null,
+        openAction: "unlatch",
+        openActionOrigin: "device_type",
+        nukiAction: NUKI_ACTIONS.UNLATCH,
         validatedEvidence: [],
       });
     });

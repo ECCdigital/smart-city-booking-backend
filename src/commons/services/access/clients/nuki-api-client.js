@@ -45,15 +45,6 @@ const NUKI_DEVICE_TYPES = Object.freeze({
 
 const NUKI_NON_REMOTE_TYPES = Object.freeze([NUKI_DEVICE_TYPES.BOX]);
 
-// Device types mounted on a door with a latch. An opener buzzes a door open
-// and a box has no door at all, so neither has a latch to pull.
-const NUKI_LATCH_TYPES = Object.freeze([
-  NUKI_DEVICE_TYPES.SMART_LOCK_1_2,
-  NUKI_DEVICE_TYPES.SMART_DOOR,
-  NUKI_DEVICE_TYPES.SMART_LOCK_3_4,
-  NUKI_DEVICE_TYPES.SMART_LOCK_ULTRA,
-]);
-
 const ALL_NUKI_OPEN_ACTIONS = Object.freeze(Object.values(NUKI_OPEN_ACTIONS));
 
 // Which Öffnungsarten a device type can carry out. A lock on a door does all
@@ -69,6 +60,19 @@ const NUKI_OPEN_ACTIONS_BY_DEVICE_TYPE = Object.freeze({
   [NUKI_DEVICE_TYPES.SMART_DOOR]: ALL_NUKI_OPEN_ACTIONS,
   [NUKI_DEVICE_TYPES.SMART_LOCK_3_4]: ALL_NUKI_OPEN_ACTIONS,
   [NUKI_DEVICE_TYPES.SMART_LOCK_ULTRA]: ALL_NUKI_OPEN_ACTIONS,
+});
+
+// What `auto` opens a device type with: every device that sits at a door
+// opens it - a lock pulls its latch, an opener buzzes the door, both of which
+// are action 3 (action 1 only releases the bolt, and at an opener it merely
+// arms Ring-to-Open). A box has no door to open, so it unlocks.
+const NUKI_AUTO_OPEN_ACTION_BY_DEVICE_TYPE = Object.freeze({
+  [NUKI_DEVICE_TYPES.SMART_LOCK_1_2]: NUKI_OPEN_ACTIONS.UNLATCH,
+  [NUKI_DEVICE_TYPES.BOX]: NUKI_OPEN_ACTIONS.UNLOCK,
+  [NUKI_DEVICE_TYPES.OPENER]: NUKI_OPEN_ACTIONS.UNLATCH,
+  [NUKI_DEVICE_TYPES.SMART_DOOR]: NUKI_OPEN_ACTIONS.UNLATCH,
+  [NUKI_DEVICE_TYPES.SMART_LOCK_3_4]: NUKI_OPEN_ACTIONS.UNLATCH,
+  [NUKI_DEVICE_TYPES.SMART_LOCK_ULTRA]: NUKI_OPEN_ACTIONS.UNLATCH,
 });
 
 // Nuki smart lock states (state.state) as defined by the Nuki Web API.
@@ -99,6 +103,17 @@ const NUKI_DOOR_STATES = Object.freeze({
 });
 
 const DEFAULT_NUKI_API_BASE_URL = "https://api.nuki.io";
+
+/**
+ * The device type of a smartlock, as the Nuki Web API reports it: `type` is
+ * its field, `config.deviceType` the older place to find it.
+ *
+ * @param {Object} smartlock A smartlock as returned by the Nuki API
+ * @returns {number|null} The device type, or `null` where the lock names none
+ */
+function deviceTypeOf(smartlock) {
+  return smartlock?.type ?? smartlock?.config?.deviceType ?? null;
+}
 
 const logger = bunyan.createLogger({
   name: "nuki-api-client.js",
@@ -223,7 +238,7 @@ class NukiApiClient extends BaseAccessApiClient {
 
   static getCapabilitiesForSmartlock(smartlock) {
     const config = smartlock?.config || {};
-    const type = smartlock?.type ?? config.deviceType ?? null;
+    const type = deviceTypeOf(smartlock);
     const capabilities = [];
 
     if (
@@ -241,25 +256,6 @@ class NukiApiClient extends BaseAccessApiClient {
   }
 
   /**
-   * Whether this lock can pull the latch, i.e. whether an unlatch would
-   * physically open the door rather than only release the lock. The device
-   * type decides it, from the same `/smartlock` data the modes are derived
-   * from.
-   *
-   * A lock whose type is missing or unknown is answered with `false`: the
-   * question is what this lock can do, and a lock that does not say cannot be
-   * asked to do more than unlock.
-   *
-   * @param {Object} smartlock A smartlock as returned by the Nuki API
-   * @returns {boolean} True if the lock has a latch to pull
-   */
-  static canUnlatchSmartlock(smartlock) {
-    const type = smartlock?.type ?? smartlock?.config?.deviceType ?? null;
-
-    return NUKI_LATCH_TYPES.includes(type);
-  }
-
-  /**
    * The Öffnungsarten this lock can carry out, by device type - the single
    * source of that capability, read by the provider listing. The device
    * type comes from `smartlock.type`, falling back to `config.deviceType`.
@@ -272,11 +268,28 @@ class NukiApiClient extends BaseAccessApiClient {
    * @returns {string[]} The supported open actions, `auto` always among them
    */
   static supportedOpenActionsForSmartlock(smartlock) {
-    const type = smartlock?.type ?? smartlock?.config?.deviceType ?? null;
-
     return [
-      ...(NUKI_OPEN_ACTIONS_BY_DEVICE_TYPE[type] ?? ALL_NUKI_OPEN_ACTIONS),
+      ...(NUKI_OPEN_ACTIONS_BY_DEVICE_TYPE[deviceTypeOf(smartlock)] ??
+        ALL_NUKI_OPEN_ACTIONS),
     ];
+  }
+
+  /**
+   * The Öffnungsart `auto` carries out at this lock, by device type - what
+   * the platform means by "open it the way this device opens".
+   *
+   * A lock whose type is missing or unknown is answered with `null`: there
+   * is no device to read the intent off, and the caller says what to do
+   * without one.
+   *
+   * @param {Object} smartlock A smartlock as returned by the Nuki API
+   * @returns {string|null} `unlatch` or `unlock`, or `null` for a device
+   *   type this client does not know
+   */
+  static autoOpenActionForSmartlock(smartlock) {
+    return (
+      NUKI_AUTO_OPEN_ACTION_BY_DEVICE_TYPE[deviceTypeOf(smartlock)] ?? null
+    );
   }
 
   /**

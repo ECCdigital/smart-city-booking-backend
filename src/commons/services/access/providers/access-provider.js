@@ -19,9 +19,19 @@
  *
  * Invariant: `state === "pending"` exactly when `openProcessId !== null`.
  *
+ * A provider whose access points carry an Öffnungsart - Nuki - additionally
+ * names the one it carried out, so the audit records what went out; the
+ * others leave the three fields out altogether.
+ *
  * @typedef {Object} OpenOutcome
  * @property {"opened"|"pending"} state
  * @property {string|null} openProcessId
+ * @property {"unlock"|"unlatch"|"lock_n_go"|"lock_n_go_unlatch"} [openAction]
+ *   The Öffnungsart the lock was sent
+ * @property {"configured"|"device_type"|"fallback"} [openActionOrigin] Where
+ *   that choice came from: the access point's setting, the device type the
+ *   provider read, or the fallback after a lookup that failed
+ * @property {number} [nukiAction] The raw Nuki action number sent
  */
 
 /**

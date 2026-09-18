@@ -7,6 +7,8 @@ const {
   NukiApiClient,
   NUKI_ACTIONS,
   NUKI_AUTH_TYPES,
+  NUKI_OPEN_ACTIONS,
+  NUKI_OPEN_ACTION_NUMBERS,
 } = require("../clients/nuki-api-client");
 const {
   deriveSupportedModes,
@@ -32,6 +34,45 @@ const AUTHORIZATION_NAME_MAX_LENGTH = 32;
 // with 12.
 const KEYPAD_DIGITS = "123456789";
 const KEYPAD_CODE = /^(?!12)[1-9]{6}$/;
+
+// Where the Öffnungsart that was sent came from: the access point says it,
+// the device type decides it, or the device could not be read and the open
+// fell back to unlocking.
+const OPEN_ACTION_ORIGINS = Object.freeze({
+  CONFIGURED: "configured",
+  DEVICE_TYPE: "device_type",
+  FALLBACK: "fallback",
+});
+
+// The Öffnungsart a lock nobody could read is opened with: unlocking is the
+// one action every Nuki device takes, so the door opens the way it always
+// did instead of not opening at all.
+const FALLBACK_OPEN_ACTION = NUKI_OPEN_ACTIONS.UNLOCK;
+
+/**
+ * The Öffnungsart an open carries out: the word the platform records, where
+ * the choice came from, and the action number that goes to the lock.
+ *
+ * @typedef {Object} OpenActionChoice
+ * @property {"unlock"|"unlatch"|"lock_n_go"|"lock_n_go_unlatch"} openAction
+ * @property {"configured"|"device_type"|"fallback"} openActionOrigin
+ * @property {number} nukiAction
+ */
+
+/**
+ * An Öffnungsart with the Nuki action that carries it out.
+ *
+ * @param {string} openAction The Öffnungsart to send
+ * @param {string} openActionOrigin Where the choice came from
+ * @returns {OpenActionChoice}
+ */
+function openActionChoice(openAction, openActionOrigin) {
+  return {
+    openAction,
+    openActionOrigin,
+    nukiAction: NUKI_OPEN_ACTION_NUMBERS[openAction],
+  };
+}
 
 const logger = bunyan.createLogger({
   name: "nuki-access-provider.js",
@@ -79,59 +120,120 @@ class NukiAccessProvider extends AccessProvider {
   }
 
   /**
-   * Opens the access point: pulls the latch where the lock has one, releases
-   * the lock where it has not. For the person at the door that is the
-   * difference between "the door is open" and "it is unlocked, now push".
+   * Opens the access point with its Öffnungsart: the access point names one
+   * in `config.openAction`, and where it does not - a missing key reads as
+   * `auto` - the device type decides, as it always did. What the person at
+   * the door gets out of it is the difference between "the door is open" and
+   * "it is unlocked, now push".
    *
-   * The decision is made here and per lock, never by the client: `unlatch` is
-   * guarded like `open`, but a client that could choose the action could also
-   * choose the weaker route. There is no falling back either - a lock that
-   * cannot pull its latch is asked to unlock right away, so nobody waits out a
-   * failed action in front of the door.
+   * The choice is the access point's, never the caller's: a client that could
+   * name the action could also name the weaker one. A configured Öffnungsart
+   * is carried out as it stands - no second attempt with unlock, and no live
+   * lookup of the device either, which saves a Nuki request per open. Only
+   * `auto` falls back, and only to unlocking, so nobody waits out a failed
+   * lookup in front of the door.
    *
    * Nuki's 204 means the action was received, not that it was carried out:
    * the lock turns afterwards, and there is no process to poll for it. The
    * outcome is therefore always `opened` - "command accepted" - and whether
    * the door did open is what the client's follow-up status reads (its
-   * confirmation burst) learn from the lock.
+   * confirmation burst) learn from the lock. It names the Öffnungsart that
+   * went out, where it came from and the raw Nuki action, for the service to
+   * record.
    *
    * @param {Object} accessPoint The access point to open
    * @param {Object} bookingContext The booking the door is opened for
    * @returns {Promise<import("./access-provider").OpenOutcome>}
+   * @throws {AccessOpenError} `configuration` when `config.openAction` is
+   *   not an Öffnungsart this provider knows
    */
   async open(accessPoint, bookingContext) {
     const client = await this._getClientForOpen(bookingContext.tenant);
-    const action = (await this._hasLatch(client, accessPoint))
-      ? NUKI_ACTIONS.UNLATCH
-      : NUKI_ACTIONS.UNLOCK;
+    const choice = await this._chooseOpenAction(client, accessPoint);
 
-    return this._executeOpenAction(client, accessPoint, action, "open");
+    // Outcome and failure both name the Öffnungsart that went out - it is
+    // worth recording either way, and only this method knows it.
+    try {
+      const outcome = await this._executeOpenAction(
+        client,
+        accessPoint,
+        choice.nukiAction,
+        "open",
+      );
+
+      return { ...outcome, ...choice };
+    } catch (err) {
+      throw Object.assign(err, choice);
+    }
   }
 
   /**
    * @private
-   * Whether this lock has a latch to pull, read from the smartlock itself:
-   * the provider declares `unlatch` for every Nuki access point, but an opener
-   * or a box has no latch.
-   *
-   * A lookup that fails is answered with "no latch": the door then opens the
-   * way it always did instead of not opening at all.
+   * The Öffnungsart this open carries out. An access point that names one is
+   * taken at its word; `auto` and a missing key ask the lock what it is.
    *
    * @param {Object} client The tenant's Nuki API client
    * @param {Object} accessPoint The access point being opened
-   * @returns {Promise<boolean>} True if this lock has a latch to pull
+   * @returns {Promise<OpenActionChoice>}
+   * @throws {AccessOpenError} `configuration` for a value the Öffnungsart
+   *   vocabulary does not have: reading it as `auto` would open the door
+   *   another way than the administration set, without anybody noticing
    */
-  async _hasLatch(client, accessPoint) {
+  async _chooseOpenAction(client, accessPoint) {
+    const configured =
+      accessPoint?.config?.openAction ?? NUKI_OPEN_ACTIONS.AUTO;
+
+    if (configured === NUKI_OPEN_ACTIONS.AUTO) {
+      return this._openActionForDevice(client, accessPoint);
+    }
+
+    // An own key, not one off the prototype chain: `constructor` and
+    // `toString` are words a hand-written config can carry, and a plain
+    // lookup would answer them with a function to send to the lock.
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        NUKI_OPEN_ACTION_NUMBERS,
+        configured,
+      )
+    ) {
+      throw AccessOpenError.configuration(
+        `'${configured}' is not an open action of access point '${accessPoint.id}': config.openAction takes ${Object.keys(
+          NUKI_OPEN_ACTION_NUMBERS,
+        ).join(", ")} or auto`,
+      );
+    }
+
+    return openActionChoice(configured, OPEN_ACTION_ORIGINS.CONFIGURED);
+  }
+
+  /**
+   * @private
+   * What `auto` means at this lock, read from the smartlock itself: a lock on
+   * a door and an opener open the door, a box unlocks.
+   *
+   * A lookup that fails, and a device type Nuki does not name, are answered
+   * with unlocking: the door then opens the way it always did instead of not
+   * opening at all.
+   *
+   * @param {Object} client The tenant's Nuki API client
+   * @param {Object} accessPoint The access point being opened
+   * @returns {Promise<OpenActionChoice>}
+   */
+  async _openActionForDevice(client, accessPoint) {
+    let openAction = null;
+
     try {
       const smartlock = await client.getSmartlock(accessPoint.externalId);
-
-      return NukiApiClient.canUnlatchSmartlock(smartlock);
+      openAction = NukiApiClient.autoOpenActionForSmartlock(smartlock);
     } catch (err) {
       logger.warn(
-        `Could not read smartlock ${accessPoint.externalId} to decide on its latch, unlocking instead: ${err.message}`,
+        `Could not read smartlock ${accessPoint.externalId} to decide on its open action, unlocking instead: ${err.message}`,
       );
-      return false;
     }
+
+    return openAction
+      ? openActionChoice(openAction, OPEN_ACTION_ORIGINS.DEVICE_TYPE)
+      : openActionChoice(FALLBACK_OPEN_ACTION, OPEN_ACTION_ORIGINS.FALLBACK);
   }
 
   async close(accessPoint, bookingContext) {
@@ -223,6 +325,16 @@ class NukiAccessProvider extends AccessProvider {
     if (status === 404) {
       return AccessOpenError.configuration(
         `Nuki does not know smartlock '${accessPoint.externalId}': ${detail}`,
+      );
+    }
+
+    // Nuki refuses an action the device cannot carry out with a 400 - a lock
+    // without a latch asked to unlatch, a US device that has none. Trying the
+    // weaker action after it would open the door another way than the
+    // administration set, so this is the access point's setup to correct.
+    if (status === 400) {
+      return AccessOpenError.configuration(
+        `Nuki refused the action on smartlock '${accessPoint.externalId}' - the device cannot carry out this open action: ${detail}`,
       );
     }
 
