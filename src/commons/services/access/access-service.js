@@ -472,11 +472,30 @@ class AccessService {
     const capacity = this._capacityAt(resolved, userId, options);
 
     const provider = getAccessProvider(accessPoint.provider);
-    const lockStatus = await this._readLockStatus(
-      provider,
-      accessPoint,
-      bookingContext,
-    );
+
+    let lockStatus;
+    try {
+      lockStatus = await this._readLockStatus(
+        provider,
+        accessPoint,
+        bookingContext,
+      );
+    } catch (err) {
+      // A lock that cannot be read is audited like a command that failed:
+      // the guest asked, the provider could not answer.
+      await this._log({
+        tenantId: tenant,
+        userId,
+        accessPoint,
+        bookingId,
+        action: "status",
+        result: "failure",
+        errorCode: err.code ?? null,
+        errorMessage: err.message,
+        ...capacity,
+      });
+      throw err;
+    }
 
     await this._log({
       tenantId: tenant,

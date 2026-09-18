@@ -19,6 +19,7 @@ const {
 } = require("../src/commons/entities/access/access-point");
 const { ForbiddenError } = require("../src/errors/BaseError");
 const { LockBusyError } = require("../src/errors/LockBusyError");
+const { LockUnreachableError } = require("../src/errors/LockUnreachableError");
 
 const MINUTE = 60 * 1000;
 const TEST_PROVIDER = "test-open-provider";
@@ -876,6 +877,36 @@ describe("AccessService close and status with validation rules", () => {
     });
   });
 
+  it("audits a status read of a lock the provider cannot reach as a failure and rethrows", async () => {
+    providerStatus = sandbox
+      .stub()
+      .rejects(new LockUnreachableError("nuki", "status", "offline"));
+
+    let thrown;
+    try {
+      await AccessService.getStatus(
+        "tenant-1",
+        "booking-1",
+        "door-1",
+        "user-1",
+      );
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).to.be.instanceOf(LockUnreachableError);
+    expect(AccessLogService.log.firstCall.args[0]).to.include({
+      action: "status",
+      result: "failure",
+      errorCode: "lock_unreachable",
+      errorMessage: "offline",
+    });
+    expect(AccessLogService.log.firstCall.args[0].actor).to.deep.equal({
+      userId: "user-1",
+      source: "user",
+    });
+  });
+
   it("reports the status without evidence, in named fields only", async () => {
     const status = await AccessService.getStatus(
       "tenant-1",
@@ -1310,6 +1341,22 @@ describe("AccessController.open", () => {
       params: { provider: "nuki", action: "open" },
     });
   });
+  it("answers a lock the provider cannot reach with HTTP 503 and the Lock Unreachable body", async () => {
+    sandbox
+      .stub(AccessService, "open")
+      .rejects(new LockUnreachableError("nuki", "open", "offline"));
+
+    const { open } = AccessController;
+    await open(request, response);
+
+    expect(response.status.calledOnceWith(503)).to.be.true;
+    expect(response.json.firstCall.args[0]).to.deep.equal({
+      error: "LockUnreachableError",
+      code: "lock_unreachable",
+      statusCode: 503,
+      params: { provider: "nuki", action: "open" },
+    });
+  });
 });
 
 describe("AccessController.close", () => {
@@ -1344,13 +1391,32 @@ describe("AccessController.close", () => {
       .stub(AccessService, "close")
       .rejects(new LockBusyError("nuki", "close", "busy"));
 
-    await AccessController.close(request, response);
+    // Called the way the router does: as a detached handler, without `this`.
+    const { close } = AccessController;
+    await close(request, response);
 
     expect(response.status.calledOnceWith(423)).to.be.true;
     expect(response.json.firstCall.args[0]).to.deep.equal({
       error: "LockBusyError",
       code: "lock_busy",
       statusCode: 423,
+      params: { provider: "nuki", action: "close" },
+    });
+  });
+
+  it("answers a lock the provider cannot reach with HTTP 503 and the Lock Unreachable body", async () => {
+    sandbox
+      .stub(AccessService, "close")
+      .rejects(new LockUnreachableError("nuki", "close", "offline"));
+
+    const { close } = AccessController;
+    await close(request, response);
+
+    expect(response.status.calledOnceWith(503)).to.be.true;
+    expect(response.json.firstCall.args[0]).to.deep.equal({
+      error: "LockUnreachableError",
+      code: "lock_unreachable",
+      statusCode: 503,
       params: { provider: "nuki", action: "close" },
     });
   });
@@ -1422,6 +1488,31 @@ describe("AccessController status reads", () => {
       "manager-9",
       { hasManagePermission: true },
     ]);
+  });
+
+  it("answers a status read of a lock the provider cannot reach with HTTP 503 and the Lock Unreachable body", async () => {
+    sandbox
+      .stub(AccessService, "getStatus")
+      .rejects(new LockUnreachableError("nuki", "status", "offline"));
+
+    const { getStatus } = AccessController;
+    await getStatus(request, response);
+
+    expect(response.status.calledOnceWith(503)).to.be.true;
+    expect(response.json.firstCall.args[0]).to.deep.equal({
+      error: "LockUnreachableError",
+      code: "lock_unreachable",
+      statusCode: 503,
+      params: { provider: "nuki", action: "status" },
+    });
+  });
+
+  it("answers 500 on any other status failure", async () => {
+    sandbox.stub(AccessService, "getStatus").rejects(new Error("boom"));
+
+    await AccessController.getStatus(request, response);
+
+    expect(response.status.calledWith(500)).to.be.true;
   });
 
   it("hands the user and their manage permission to the open-status read", async () => {
