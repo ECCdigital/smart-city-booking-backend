@@ -282,6 +282,40 @@ describe("AccessAuditService export", () => {
       expect(filters.result).to.equal("denied");
       expect(filters.action).to.equal("scan");
     });
+
+    it("reads a single day in both bounds as that whole day in Berlin time", async () => {
+      await AccessAuditService.getAuditEntries("tenant-1", {
+        from: "2026-09-17",
+        to: "2026-09-17",
+      });
+
+      const filters = query.firstCall.args[1];
+      // 17.09.2026 00:00 CEST is 16.09.2026 22:00 UTC
+      expect(filters.from).to.equal(Date.UTC(2026, 8, 16, 22, 0, 0));
+      expect(filters.to).to.equal(Date.UTC(2026, 8, 17, 21, 59, 59, 999));
+    });
+
+    it("keeps exact timestamps and epoch values as given", async () => {
+      await AccessAuditService.getAuditEntries("tenant-1", {
+        from: "2026-09-17T08:00:00.000Z",
+        to: String(Date.UTC(2026, 8, 17, 9, 0, 0)),
+      });
+
+      const filters = query.firstCall.args[1];
+      expect(filters.from).to.equal(Date.UTC(2026, 8, 17, 8, 0, 0));
+      expect(filters.to).to.equal(Date.UTC(2026, 8, 17, 9, 0, 0));
+    });
+
+    it("drops an unreadable date rather than filtering on it", async () => {
+      await AccessAuditService.getAuditEntries("tenant-1", {
+        from: "2026-13-45",
+        to: "gestern",
+      });
+
+      const filters = query.firstCall.args[1];
+      expect(filters).to.not.have.property("from");
+      expect(filters).to.not.have.property("to");
+    });
   });
 
   describe("toCsv", () => {
