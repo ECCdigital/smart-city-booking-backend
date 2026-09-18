@@ -256,6 +256,20 @@ class NukiApiClient extends BaseAccessApiClient {
   }
 
   /**
+   * The device type of a lock as the Nuki Web API numbers it (0-5): `type`
+   * is the documented field, `config.deviceType` the fallback for the
+   * records that carry it there. `null` where the lock names neither - an
+   * unknown type, not a type of its own. Public for the provider, which
+   * names it in the save-time refusal of an Öffnungsart.
+   *
+   * @param {Object} smartlock A smartlock as returned by the Nuki API
+   * @returns {number|null} The device type, `null` when the lock does not say
+   */
+  static deviceTypeOfSmartlock(smartlock) {
+    return deviceTypeOf(smartlock);
+  }
+
+  /**
    * The Öffnungsarten this lock can carry out, by device type - the single
    * source of that capability, read by the provider listing. The device
    * type comes from `smartlock.type`, falling back to `config.deviceType`.

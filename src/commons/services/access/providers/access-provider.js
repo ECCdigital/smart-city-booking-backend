@@ -435,6 +435,28 @@ class AccessProvider {
   }
 
   /**
+   * Refuse an access point the provider cannot honour, before it is stored.
+   * Optional capability: only providers that declare `validateAccessPoint`
+   * are asked, and this base implementation checks nothing - a provider
+   * that has no say in what an administrator configures lets every access
+   * point through.
+   *
+   * It is handed the provider's listed entry for the access point instead
+   * of fetching one, so a save costs one provider round trip however many
+   * checks read it. A `null` entry - a provider that does not list, an
+   * access point without an `externalId`, a lock the provider does not know
+   * - is the pass-through case: what cannot be asked about is not refused.
+   *
+   * @param {Object} _accessPoint The access point as it would be stored
+   * @param {ListedAccessPoint|null} _listedAccessPoint The provider's listed
+   *   entry for it, `null` when the provider does not list it
+   * @returns {void}
+   * @throws {ValidationError} What the provider will not store, field by
+   *   field; nothing else
+   */
+  validateAccessPoint(_accessPoint, _listedAccessPoint) {}
+
+  /**
    * Where the physical lock stands, as far as the provider knows it. Optional
    * capability: only providers that declare `getLocation` are asked, and even
    * they may answer `null`. The result is a prefill suggestion - it is never

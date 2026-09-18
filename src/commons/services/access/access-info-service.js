@@ -11,6 +11,7 @@ require("./providers/register-access-providers");
 
 const APP_TYPE = "access";
 const LIST_ACCESS_POINTS_CAPABILITY = "listAccessPoints";
+const VALIDATE_ACCESS_POINT_CAPABILITY = "validateAccessPoint";
 
 class AccessInfoService {
   /**
@@ -126,6 +127,35 @@ class AccessInfoService {
   static async getSupportedModes(accessPoint, tenantId) {
     return AccessInfoService.supportedModesOf(
       await AccessInfoService.findListedAccessPoint(accessPoint, tenantId),
+    );
+  }
+
+  /**
+   * Let the provider refuse an access point it cannot honour, before it is
+   * stored - a `config.openAction` the Nuki device cannot carry out, say.
+   * Optional capability: a provider that does not declare
+   * `validateAccessPoint` has no say and the access point passes.
+   *
+   * The provider's listed entry is handed in rather than fetched (see
+   * `findListedAccessPoint`), so a save costs one provider round trip
+   * however many checks read it.
+   *
+   * @param {Object} accessPoint The access point as it would be stored
+   * @param {Object|null} listedAccessPoint The provider's listed entry for
+   *   it, `null` when the provider does not list it
+   * @returns {void}
+   * @throws {ValidationError} What the provider will not store
+   */
+  static validateAccessPoint(accessPoint, listedAccessPoint) {
+    const capabilities = getAccessProviderCapabilities(accessPoint.provider);
+
+    if (!capabilities.includes(VALIDATE_ACCESS_POINT_CAPABILITY)) {
+      return;
+    }
+
+    getAccessProvider(accessPoint.provider).validateAccessPoint(
+      accessPoint,
+      listedAccessPoint,
     );
   }
 
