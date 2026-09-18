@@ -1,6 +1,7 @@
 const axios = require("axios");
 const bunyan = require("bunyan");
 const BaseAccessApiClient = require("./base-access-api-client");
+const { OPEN_ACTIONS } = require("../access-open-action");
 
 const NUKI_ACTIONS = Object.freeze({
   UNLOCK: 1,
@@ -10,15 +11,13 @@ const NUKI_ACTIONS = Object.freeze({
   LOCK_N_GO_UNLATCH: 5,
 });
 
-// The Öffnungsart of a Nuki access point (`config.openAction`): the word the
-// API and the admin UI use. `auto` is the platform's per-device choice and
-// has no Nuki action number of its own; a missing key reads as `auto`.
+// The Öffnungsart of a Nuki access point (`config.openAction`): the words the
+// platform records (`access-open-action.js`) plus `auto`, the per-device
+// choice, which has no Nuki action number of its own; a missing key reads as
+// `auto`.
 const NUKI_OPEN_ACTIONS = Object.freeze({
   AUTO: "auto",
-  UNLOCK: "unlock",
-  UNLATCH: "unlatch",
-  LOCK_N_GO: "lock_n_go",
-  LOCK_N_GO_UNLATCH: "lock_n_go_unlatch",
+  ...OPEN_ACTIONS,
 });
 
 // Öffnungsart word -> the Nuki action the provider sends for it.

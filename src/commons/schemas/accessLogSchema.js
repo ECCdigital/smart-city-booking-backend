@@ -1,5 +1,9 @@
 const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
+const {
+  OPEN_ACTIONS,
+  OPEN_ACTION_ORIGINS,
+} = require("../services/access/access-open-action");
 
 const accessLogActorSchemaDefinition = {
   userId: { type: String, default: null },
@@ -85,6 +89,23 @@ const accessLogSchemaDefinition = {
     // overridden.
     type: Boolean,
     default: false,
+  },
+  openAction: {
+    // The Öffnungsart (`access-open-action.js`) that actually went to the
+    // lock on an open, whichever provider sent it. Empty where the provider
+    // names none, and on rows written before the field existed: blank means
+    // "not recorded", as with `evidenceBypassed`. A provider's raw action
+    // number (Nuki: `payload.nukiAction`) stays in the payload.
+    type: String,
+    enum: [...Object.values(OPEN_ACTIONS), null],
+    default: null,
+  },
+  openActionOrigin: {
+    // Where that Öffnungsart came from: set on the access point, decided by
+    // the device type, or the fallback after a device that could not be read.
+    type: String,
+    enum: [...Object.values(OPEN_ACTION_ORIGINS), null],
+    default: null,
   },
   payload: { type: Object, default: {} },
   errorCode: { type: String, default: null },

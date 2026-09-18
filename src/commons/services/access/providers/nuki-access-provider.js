@@ -14,6 +14,7 @@ const {
 const {
   deriveSupportedModes,
 } = require("../../../entities/access/access-point");
+const { OPEN_ACTION_ORIGINS } = require("../access-open-action");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { LockBusyError } = require("../../../../errors/LockBusyError");
 const { NotFoundError } = require("../../../../errors/BaseError");
@@ -39,15 +40,6 @@ const AUTHORIZATION_NAME_MAX_LENGTH = 32;
 // with 12.
 const KEYPAD_DIGITS = "123456789";
 const KEYPAD_CODE = /^(?!12)[1-9]{6}$/;
-
-// Where the Öffnungsart that was sent came from: the access point says it,
-// the device type decides it, or the device could not be read and the open
-// fell back to unlocking.
-const OPEN_ACTION_ORIGINS = Object.freeze({
-  CONFIGURED: "configured",
-  DEVICE_TYPE: "device_type",
-  FALLBACK: "fallback",
-});
 
 // The Öffnungsart a lock nobody could read is opened with: unlocking is the
 // one action every Nuki device takes, so the door opens the way it always

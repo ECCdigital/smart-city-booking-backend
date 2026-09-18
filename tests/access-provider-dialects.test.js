@@ -53,6 +53,7 @@ const {
   AccessPointMode,
 } = require("../src/commons/entities/access/access-point");
 const { AccessOpenError } = require("../src/errors/AccessOpenError");
+const { LockBusyError } = require("../src/errors/LockBusyError");
 const { ValidationError } = require("../src/errors/ValidationError");
 
 const {
@@ -1717,6 +1718,19 @@ describe("access provider dialects: what AccessService makes of them", () => {
     });
   }
 
+  /**
+   * Lets the fake Nuki account answer everything as before and fail only the
+   * lock action with the given error, so the provider gets as far as choosing
+   * the Öffnungsart and the failure carries it.
+   */
+  function failNukiAction(error) {
+    const request = clients.nuki._request.bind(clients.nuki);
+    clients.nuki._request = async (method, path, data) => {
+      if (method === "post" && /\/action$/.test(path)) throw error;
+      return request(method, path, data);
+    };
+  }
+
   function loggedPayload(action) {
     return AccessLogService.log.args
       .map(([entry]) => entry)
@@ -1738,11 +1752,17 @@ describe("access provider dialects: what AccessService makes of them", () => {
         success: true,
         data: { openProcessId: null },
       });
+      // The Öffnungsart and where it came from are fields of the row, for
+      // every provider; only Nuki's raw action number is Nuki's business and
+      // stays in the payload.
+      expect(loggedPayload("open")).to.include({
+        result: "success",
+        openAction: "unlatch",
+        openActionOrigin: "device_type",
+      });
       expect(loggedPayload("open").payload).to.deep.equal({
         state: "opened",
         openProcessId: null,
-        openAction: "unlatch",
-        openActionOrigin: "device_type",
         nukiAction: NUKI_ACTIONS.UNLATCH,
         validatedEvidence: [],
       });
@@ -1761,6 +1781,12 @@ describe("access provider dialects: what AccessService makes of them", () => {
       expect(outcome).to.deep.equal({
         success: true,
         data: { openProcessId: "1" },
+      });
+      // iFBS names no Öffnungsart: the row says so with null, not by
+      // leaving the fields out.
+      expect(loggedPayload("open")).to.include({
+        openAction: null,
+        openActionOrigin: null,
       });
       expect(loggedPayload("open").payload).to.deep.equal({
         state: "pending",
@@ -1820,6 +1846,69 @@ describe("access provider dialects: what AccessService makes of them", () => {
       expect(loggedPayload("open").errorMessage).to.include(
         "Request failed with status code 500",
       );
+    });
+
+    it("audits a Lock Busy failure with the Öffnungsart that was attempted", async () => {
+      failNukiAction(nukiHttpError(423));
+      stubBooking(createBooking(), [REMOTE_NUKI_DOOR]);
+
+      await assert.rejects(
+        AccessService.open(TENANT, "booking-1", "door-1", "user-1"),
+        LockBusyError,
+      );
+
+      // A failure row says which action went out, so that "the lock was busy
+      // pulling its latch" and "the lock was busy unlocking" can be told
+      // apart afterwards - and it carries a payload for the first time.
+      expect(loggedPayload("open")).to.include({
+        result: "failure",
+        errorCode: "lock_busy",
+        openAction: "unlatch",
+        openActionOrigin: "device_type",
+      });
+      expect(loggedPayload("open").payload).to.deep.equal({
+        nukiAction: NUKI_ACTIONS.UNLATCH,
+      });
+    });
+
+    it("audits a Nuki 400 on a configured Öffnungsart as a configuration failure with the action", async () => {
+      failNukiAction(nukiHttpError(400));
+      stubBooking(createBooking(), [
+        { ...REMOTE_NUKI_DOOR, config: { openAction: "lock_n_go_unlatch" } },
+      ]);
+
+      await rejectsOpen(
+        AccessService.open(TENANT, "booking-1", "door-1", "user-1"),
+        "configuration",
+      );
+
+      expect(loggedPayload("open")).to.include({
+        result: "failure",
+        openAction: "lock_n_go_unlatch",
+        openActionOrigin: "configured",
+      });
+      expect(loggedPayload("open").payload).to.deep.equal({
+        nukiAction: NUKI_ACTIONS.LOCK_N_GO_UNLATCH,
+      });
+    });
+
+    it("audits a failure before the action choice with the Öffnungsart unset and an empty payload", async () => {
+      stubBooking(createBooking(), [
+        { ...REMOTE_NUKI_DOOR, config: { openAction: "sesame" } },
+      ]);
+
+      await rejectsOpen(
+        AccessService.open(TENANT, "booking-1", "door-1", "user-1"),
+        "configuration",
+      );
+
+      // Nothing was chosen, so nothing is claimed: null, not a guess.
+      expect(loggedPayload("open")).to.include({
+        result: "failure",
+        openAction: null,
+        openActionOrigin: null,
+      });
+      expect(loggedPayload("open").payload).to.deep.equal({});
     });
 
     it("rethrows Salto's classified AccessOpenError after auditing the failure", async () => {

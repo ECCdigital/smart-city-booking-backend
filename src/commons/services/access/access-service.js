@@ -178,6 +178,9 @@ class AccessService {
       const provider = getAccessProvider(accessPoint.provider);
       const outcome = await provider[action](accessPoint, bookingContext);
 
+      // The Öffnungsart and its origin are fields of the row, whichever
+      // provider opened; the rest of the outcome is the payload as before.
+      const { openAction, openActionOrigin, ...outcomePayload } = outcome;
       await this._log({
         tenantId: tenant,
         userId,
@@ -185,8 +188,10 @@ class AccessService {
         bookingId,
         action,
         result: "success",
+        openAction,
+        openActionOrigin,
         payload: {
-          ...outcome,
+          ...outcomePayload,
           validatedEvidence: evidenceOutcome.validatedEvidence,
         },
         channel,
@@ -200,6 +205,9 @@ class AccessService {
         data: { openProcessId: outcome.openProcessId },
       };
     } catch (err) {
+      // A failure from the action itself names the Öffnungsart that went
+      // out (Nuki puts it on the error); one raised before the choice names
+      // none, and the row says so with null rather than a guess.
       await this._log({
         tenantId: tenant,
         userId,
@@ -207,6 +215,10 @@ class AccessService {
         bookingId,
         action,
         result: "failure",
+        openAction: err.openAction,
+        openActionOrigin: err.openActionOrigin,
+        payload:
+          err.nukiAction !== undefined ? { nukiAction: err.nukiAction } : {},
         errorCode: err.code ?? null,
         errorMessage: err.message,
         channel,
@@ -3103,6 +3115,8 @@ class AccessService {
     accessRole = null,
     evidenceBypassed = false,
     windowOverridden = false,
+    openAction = null,
+    openActionOrigin = null,
   }) {
     logger.info(
       `${tenantId} -- ${action} ${result} on access-point ${accessPoint.id} (booking ${bookingId})`,
@@ -3124,6 +3138,8 @@ class AccessService {
         accessRole,
         evidenceBypassed,
         windowOverridden,
+        openAction,
+        openActionOrigin,
         payload,
         errorCode,
         errorMessage,

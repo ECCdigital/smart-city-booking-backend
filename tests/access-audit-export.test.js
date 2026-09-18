@@ -10,6 +10,13 @@ const PdfService = require("../src/commons/pdf-service/pdf-service");
 const {
   ACCESS_BLOCKING_REASONS,
 } = require("../src/commons/services/access/access-blocking-reasons");
+const {
+  OPEN_ACTIONS,
+  OPEN_ACTION_ORIGINS,
+} = require("../src/commons/services/access/access-open-action");
+const {
+  accessLogSchemaDefinition,
+} = require("../src/commons/schemas/accessLogSchema");
 
 function createLog(overrides = {}) {
   return {
@@ -34,6 +41,31 @@ function createLog(overrides = {}) {
     ...overrides,
   };
 }
+
+describe("accessLogSchema Öffnungsart fields", () => {
+  it("records the open action and its origin top-level, unset as null", () => {
+    // Blank on an old row means "not recorded", like `evidenceBypassed`.
+    expect(accessLogSchemaDefinition.openAction.default).to.equal(null);
+    expect(accessLogSchemaDefinition.openAction.enum).to.deep.equal([
+      "unlock",
+      "unlatch",
+      "lock_n_go",
+      "lock_n_go_unlatch",
+      null,
+    ]);
+    expect(accessLogSchemaDefinition.openActionOrigin.default).to.equal(null);
+    expect(accessLogSchemaDefinition.openActionOrigin.enum).to.deep.equal([
+      "configured",
+      "device_type",
+      "fallback",
+      null,
+    ]);
+  });
+
+  it("keeps the retired unlatch action readable", () => {
+    expect(accessLogSchemaDefinition.action.enum).to.include("unlatch");
+  });
+});
 
 describe("AccessAuditService export", () => {
   let sandbox;
@@ -91,6 +123,67 @@ describe("AccessAuditService export", () => {
       // The capacity, not the permission: this is what makes the bypass next
       // to it readable.
       expect(entry.accessRole).to.equal("Verwaltung");
+    });
+
+    it("spells out the Öffnungsart and where it came from, and keeps the raw Nuki number to the details", async () => {
+      query.resolves([
+        createLog({
+          openAction: "unlatch",
+          openActionOrigin: "device_type",
+          payload: { state: "opened", openProcessId: null, nukiAction: 3 },
+        }),
+      ]);
+
+      const [entry] = await AccessAuditService.getAuditEntries("tenant-1");
+
+      expect(entry.openAction).to.equal("Falle ziehen");
+      expect(entry.openActionOrigin).to.equal("nach Gerätetyp");
+      expect(entry.details).to.include('"nukiAction":3');
+    });
+
+    it("names every Öffnungsart and every origin of the shared vocabulary", () => {
+      // An enum value without wording would reach a compliance export as a
+      // raw code; the schema enum and the label maps move together.
+      expect(
+        Object.keys(AccessAuditService.OPEN_ACTION_LABELS),
+      ).to.have.members(Object.values(OPEN_ACTIONS));
+      expect(AccessAuditService.OPEN_ACTION_LABELS).to.deep.equal({
+        unlock: "Aufschließen",
+        unlatch: "Falle ziehen",
+        lock_n_go: "Lock'n'Go",
+        lock_n_go_unlatch: "Lock'n'Go mit Falle ziehen",
+      });
+      expect(
+        Object.keys(AccessAuditService.OPEN_ACTION_ORIGIN_LABELS),
+      ).to.have.members(Object.values(OPEN_ACTION_ORIGINS));
+      expect(AccessAuditService.OPEN_ACTION_ORIGIN_LABELS).to.deep.equal({
+        configured: "eingestellt",
+        device_type: "nach Gerätetyp",
+        fallback: "Rückfall",
+      });
+    });
+
+    it("leaves the Öffnungsart empty where none was recorded", async () => {
+      const before = createLog();
+      delete before.openAction;
+      delete before.openActionOrigin;
+      query.resolves([
+        before,
+        createLog({
+          provider: "ifbs",
+          openAction: null,
+          openActionOrigin: null,
+        }),
+      ]);
+
+      const [old, ifbs] = await AccessAuditService.getAuditEntries("tenant-1");
+
+      // Not "Aufschließen": a row from before the field, and a provider
+      // that names no Öffnungsart, both recorded nothing.
+      expect(old.openAction).to.equal("");
+      expect(old.openActionOrigin).to.equal("");
+      expect(ifbs.openAction).to.equal("");
+      expect(ifbs.openActionOrigin).to.equal("");
     });
 
     it("names every blocking reason of the shared vocabulary", () => {
@@ -238,6 +331,35 @@ describe("AccessAuditService export", () => {
       expect(
         cells.indexOf("Zugriffsrolle") - cells.indexOf("Evidence-Bypass"),
       ).to.equal(1);
+    });
+
+    it("has the two Öffnungsart columns directly after the capacity, and no column for the Nuki number", async () => {
+      query.resolves([
+        createLog({
+          openAction: "lock_n_go_unlatch",
+          openActionOrigin: "configured",
+          payload: { nukiAction: 5 },
+        }),
+      ]);
+
+      const entries = await AccessAuditService.getAuditEntries("tenant-1");
+      const csv = AccessAuditService.toCsv(entries);
+      const [header, row] = csv.replace("\uFEFF", "").split("\r\n");
+
+      const cells = header.split(";");
+      const values = row.split(";");
+      const cellFor = (label) => values[cells.indexOf(label)];
+
+      expect(cells.indexOf("Öffnungsart")).to.equal(
+        cells.indexOf("Zugriffsrolle") + 1,
+      );
+      expect(cells.indexOf("Herkunft der Öffnungsart")).to.equal(
+        cells.indexOf("Zugriffsrolle") + 2,
+      );
+      expect(cellFor("Öffnungsart")).to.equal("Lock'n'Go mit Falle ziehen");
+      expect(cellFor("Herkunft der Öffnungsart")).to.equal("eingestellt");
+      expect(cells).to.not.include("nukiAction");
+      expect(cellFor("Details")).to.include("nukiAction");
     });
 
     it("keeps the existing columns", () => {
