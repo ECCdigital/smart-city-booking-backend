@@ -7,6 +7,26 @@ const NUKI_ACTIONS = Object.freeze({
   LOCK: 2,
   UNLATCH: 3,
   LOCK_N_GO: 4,
+  LOCK_N_GO_UNLATCH: 5,
+});
+
+// The Öffnungsart of a Nuki access point (`config.openAction`): the word the
+// API and the admin UI use. `auto` is the platform's per-device choice and
+// has no Nuki action number of its own; a missing key reads as `auto`.
+const NUKI_OPEN_ACTIONS = Object.freeze({
+  AUTO: "auto",
+  UNLOCK: "unlock",
+  UNLATCH: "unlatch",
+  LOCK_N_GO: "lock_n_go",
+  LOCK_N_GO_UNLATCH: "lock_n_go_unlatch",
+});
+
+// Öffnungsart word -> the Nuki action the provider sends for it.
+const NUKI_OPEN_ACTION_NUMBERS = Object.freeze({
+  [NUKI_OPEN_ACTIONS.UNLOCK]: NUKI_ACTIONS.UNLOCK,
+  [NUKI_OPEN_ACTIONS.UNLATCH]: NUKI_ACTIONS.UNLATCH,
+  [NUKI_OPEN_ACTIONS.LOCK_N_GO]: NUKI_ACTIONS.LOCK_N_GO,
+  [NUKI_OPEN_ACTIONS.LOCK_N_GO_UNLATCH]: NUKI_ACTIONS.LOCK_N_GO_UNLATCH,
 });
 
 // `type` of a smartlock authorization as the Web API numbers it.
@@ -33,6 +53,23 @@ const NUKI_LATCH_TYPES = Object.freeze([
   NUKI_DEVICE_TYPES.SMART_LOCK_3_4,
   NUKI_DEVICE_TYPES.SMART_LOCK_ULTRA,
 ]);
+
+const ALL_NUKI_OPEN_ACTIONS = Object.freeze(Object.values(NUKI_OPEN_ACTIONS));
+
+// Which Öffnungsarten a device type can carry out. A lock on a door does all
+// of them; a box has no door, so it can only unlock; an opener buzzes the
+// door and knows neither unlock nor latch, so only `auto` is left.
+const NUKI_OPEN_ACTIONS_BY_DEVICE_TYPE = Object.freeze({
+  [NUKI_DEVICE_TYPES.SMART_LOCK_1_2]: ALL_NUKI_OPEN_ACTIONS,
+  [NUKI_DEVICE_TYPES.BOX]: Object.freeze([
+    NUKI_OPEN_ACTIONS.AUTO,
+    NUKI_OPEN_ACTIONS.UNLOCK,
+  ]),
+  [NUKI_DEVICE_TYPES.OPENER]: Object.freeze([NUKI_OPEN_ACTIONS.AUTO]),
+  [NUKI_DEVICE_TYPES.SMART_DOOR]: ALL_NUKI_OPEN_ACTIONS,
+  [NUKI_DEVICE_TYPES.SMART_LOCK_3_4]: ALL_NUKI_OPEN_ACTIONS,
+  [NUKI_DEVICE_TYPES.SMART_LOCK_ULTRA]: ALL_NUKI_OPEN_ACTIONS,
+});
 
 // Nuki smart lock states (state.state) as defined by the Nuki Web API.
 const NUKI_LOCK_STATES = Object.freeze({
@@ -223,6 +260,26 @@ class NukiApiClient extends BaseAccessApiClient {
   }
 
   /**
+   * The Öffnungsarten this lock can carry out, by device type - the single
+   * source of that capability, read by the provider listing. The device
+   * type comes from `smartlock.type`, falling back to `config.deviceType`.
+   *
+   * A lock whose type is missing or unknown is answered with all five: an
+   * unknown capability is not a missing one, and the device itself refuses
+   * an action it cannot do.
+   *
+   * @param {Object} smartlock A smartlock as returned by the Nuki API
+   * @returns {string[]} The supported open actions, `auto` always among them
+   */
+  static supportedOpenActionsForSmartlock(smartlock) {
+    const type = smartlock?.type ?? smartlock?.config?.deviceType ?? null;
+
+    return [
+      ...(NUKI_OPEN_ACTIONS_BY_DEVICE_TYPE[type] ?? ALL_NUKI_OPEN_ACTIONS),
+    ];
+  }
+
+  /**
    * Read the position of a smartlock out of its `config`. Nuki keeps latitude
    * and longitude on every smartlock but has no address for it, so the result
    * carries coordinates only. Locks that were never positioned report 0/0,
@@ -310,6 +367,9 @@ class NukiApiClient extends BaseAccessApiClient {
 module.exports = {
   NukiApiClient,
   NUKI_ACTIONS,
+  NUKI_OPEN_ACTIONS,
+  NUKI_OPEN_ACTION_NUMBERS,
+  ALL_NUKI_OPEN_ACTIONS,
   NUKI_DEVICE_TYPES,
   NUKI_NON_REMOTE_TYPES,
   NUKI_LOCK_STATES,

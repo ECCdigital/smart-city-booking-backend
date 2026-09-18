@@ -130,6 +130,10 @@
  *   `remote`, `authorization`
  * @property {string[]} supportedModes The access point modes the lock
  *   really supports
+ * @property {string[]} [supportedOpenActions] The Öffnungsarten the lock can
+ *   carry out (`auto | unlock | unlatch | lock_n_go | lock_n_go_unlatch`).
+ *   Nuki lists them by device type; a provider without the notion leaves
+ *   the field out
  * @property {Object} metadata The provider's own record of the lock
  */
 

@@ -291,7 +291,8 @@ for (const implementation of IMPLEMENTATIONS) {
 
         assert.ok(Array.isArray(points) && points.length > 0);
         for (const point of points) {
-          assert.deepStrictEqual(Object.keys(point).sort(), [
+          const { supportedOpenActions, ...shared } = point;
+          assert.deepStrictEqual(Object.keys(shared).sort(), [
             "capabilities",
             "externalId",
             "id",
@@ -302,6 +303,22 @@ for (const implementation of IMPLEMENTATIONS) {
             "supportedModes",
             "type",
           ]);
+          // The Öffnungsart is Nuki's alone: only Nuki says which open
+          // actions a lock can carry out, every other provider leaves the
+          // field out rather than answering an empty list.
+          if (implementation.name === "nuki") {
+            assert.ok(
+              Array.isArray(supportedOpenActions) &&
+                supportedOpenActions.length > 0 &&
+                supportedOpenActions.every((a) => typeof a === "string"),
+              "nuki lists supportedOpenActions",
+            );
+          } else {
+            assert.ok(
+              !("supportedOpenActions" in point),
+              `${implementation.name} leaves supportedOpenActions out`,
+            );
+          }
           assert.strictEqual(typeof point.id, "string");
           assert.strictEqual(typeof point.externalId, "string");
           assert.strictEqual(point.provider, implementation.name);

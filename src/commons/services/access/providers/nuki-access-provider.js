@@ -391,6 +391,8 @@ class NukiAccessProvider extends AccessProvider {
         label: smartlock.name || smartlock.label || "",
         capabilities,
         supportedModes: deriveSupportedModes(capabilities),
+        supportedOpenActions:
+          NukiApiClient.supportedOpenActionsForSmartlock(smartlock),
         metadata: smartlock,
       };
     });

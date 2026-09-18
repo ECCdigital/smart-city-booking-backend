@@ -1,5 +1,47 @@
 # swagger/routes/access-apps.yaml
 
+/api/{tenant}/access-apps/{provider}/access-points:
+  get:
+    tags:
+      - Access Apps
+    summary: List the access points the provider knows for the tenant
+    description: |
+      The locks, doors or locker systems of the tenant's access application
+      at `provider`, live from the provider's API, in the shared shape the
+      access point sync stores. This is what the admin UI's access point
+      picker renders when an access point is created from the provider's
+      inventory.
+
+      `supportedModes` says which access point modes the hardware really
+      supports. `supportedOpenActions` says which Öffnungsarten (open
+      actions) the lock can carry out; only Nuki reports it, by device type
+      (a Smart Lock or Smart Door all five, a Box `auto` and `unlock`, an
+      Opener `auto` alone, an unknown device type all five). Providers
+      without the notion leave the field out.
+
+      Requires `accessApp.read` in the tenant. A provider that does not list
+      access points (Pareva) answers 500.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/AccessProviderParam"
+    responses:
+      "200":
+        description: The access points of the provider
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/ListedAccessPoint"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not allowed to read the tenant's access applications
+      "500":
+        description: Could not get access points
+
 /api/{tenant}/access-apps/salto-ks/iqs:
   get:
     tags:
@@ -158,6 +200,75 @@
 
 components:
   schemas:
+    ListedAccessPoint:
+      type: object
+      description: |
+        An access point as its provider lists it - the shape the access point
+        sync stores. `metadata` is the provider's own record of the lock.
+      required:
+        - id
+        - type
+        - provider
+        - externalId
+        - label
+        - capabilities
+        - supportedModes
+        - metadata
+      properties:
+        id:
+          type: string
+          description: The provider's id of the access point
+        type:
+          type: string
+          enum:
+            - door
+            - locker
+        provider:
+          type: string
+          description: The access provider, e.g. `nuki`, `salto-ks`, `ifbs`
+        externalId:
+          type: string
+          description: The id the provider addresses the lock by
+        locationId:
+          type: string
+          nullable: true
+          description: The provider's grouping of the lock (account, site, city)
+        label:
+          type: string
+          description: The name the lock carries at the provider
+        capabilities:
+          type: array
+          description: The point's own capabilities, e.g. `remote`, `authorization`
+          items:
+            type: string
+        supportedModes:
+          type: array
+          description: The access point modes the hardware really supports
+          items:
+            type: string
+            enum:
+              - remote
+              - authorization
+              - both
+        supportedOpenActions:
+          type: array
+          description: |
+            The Öffnungsarten (open actions) the lock can carry out. Reported
+            by Nuki only, by device type; other providers leave the field
+            out. `auto` is always among them.
+          items:
+            type: string
+            enum:
+              - auto
+              - unlock
+              - unlatch
+              - lock_n_go
+              - lock_n_go_unlatch
+        metadata:
+          type: object
+          additionalProperties: true
+          description: The provider's own record of the lock
+
     SaltoKsIq:
       type: object
       description: One IQ of the site - live Salto flags plus the local state
@@ -212,6 +323,14 @@ components:
             - activated
 
   parameters:
+    AccessProviderParam:
+      name: provider
+      in: path
+      required: true
+      description: The access provider id, e.g. `nuki`, `salto-ks`, `ifbs`
+      schema:
+        type: string
+
     SaltoKsIqIdParam:
       name: iqId
       in: path
