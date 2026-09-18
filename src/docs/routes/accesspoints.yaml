@@ -61,6 +61,12 @@
       other hardware is judged by the new one. A provider that reports no
       supported modes does not restrict the mode.
 
+      The provider's listing is fetched once per save. A provider that cannot
+      be asked is answered as such and nothing is stored: an HTTP 401 or 403
+      from the provider (token rejected) is a `502 access_provider_rejected`,
+      a network error, timeout or 5xx a `503 access_provider_unreachable`,
+      both with `params.provider`. The checks themselves stay `400`.
+
       An `id` the tenant does not know is answered with 404 instead of being
       created, so ids always come from the server.
     security:
@@ -98,6 +104,23 @@
         description: Not a tenant owner
       "404":
         description: The tenant has no access point with the submitted `id`
+      "502":
+        description: |
+          The provider rejected the request for its listing (HTTP 401 or 403
+          from the provider, i.e. its token is invalid or refused). Nothing
+          was stored.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessProviderRejected"
+      "503":
+        description: |
+          The provider could not be reached for its listing (network error,
+          timeout or a 5xx from the provider). Nothing was stored.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessProviderUnreachable"
 
 /api/{tenant}/accesspoints/{id}:
   get:
@@ -592,6 +615,52 @@ components:
           example: qrScan
       required:
         - type
+
+    AccessProviderRejected:
+      type: object
+      description: |
+        The body of a 502 answer: the access provider rejected the platform's
+        request for its listing while an access point was saved.
+      properties:
+        error:
+          type: string
+          example: BaseError
+        code:
+          type: string
+          example: access_provider_rejected
+        statusCode:
+          type: integer
+          example: 502
+        params:
+          type: object
+          properties:
+            provider:
+              type: string
+              description: The access provider that rejected the request
+              example: nuki
+
+    AccessProviderUnreachable:
+      type: object
+      description: |
+        The body of a 503 answer: the access provider could not be reached
+        for its listing while an access point was saved.
+      properties:
+        error:
+          type: string
+          example: BaseError
+        code:
+          type: string
+          example: access_provider_unreachable
+        statusCode:
+          type: integer
+          example: 503
+        params:
+          type: object
+          properties:
+            provider:
+              type: string
+              description: The access provider that could not be reached
+              example: nuki
 
     ValidationErrorResponse:
       type: object
