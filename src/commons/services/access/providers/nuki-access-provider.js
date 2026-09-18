@@ -10,6 +10,7 @@ const {
   NUKI_OPEN_ACTIONS,
   ALL_NUKI_OPEN_ACTIONS,
   NUKI_OPEN_ACTION_NUMBERS,
+  isReachable,
 } = require("../clients/nuki-api-client");
 const {
   deriveSupportedModes,
@@ -17,6 +18,9 @@ const {
 const { OPEN_ACTION_ORIGINS } = require("../access-open-action");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { LockBusyError } = require("../../../../errors/LockBusyError");
+const {
+  LockUnreachableError,
+} = require("../../../../errors/LockUnreachableError");
 const { NotFoundError } = require("../../../../errors/BaseError");
 const { ValidationError } = require("../../../../errors/ValidationError");
 
@@ -239,7 +243,7 @@ class NukiAccessProvider extends AccessProvider {
     try {
       await client.executeAction(accessPoint.externalId, NUKI_ACTIONS.LOCK);
     } catch (err) {
-      throw this._mapActionError(err, accessPoint, "close");
+      throw await this._mapActionError(client, err, accessPoint, "close");
     }
   }
 
@@ -262,7 +266,7 @@ class NukiAccessProvider extends AccessProvider {
     try {
       await client.executeAction(accessPoint.externalId, action);
     } catch (err) {
-      throw this._mapActionError(err, accessPoint, command);
+      throw await this._mapActionError(client, err, accessPoint, command);
     }
 
     return { state: "opened", openProcessId: null };
@@ -270,20 +274,29 @@ class NukiAccessProvider extends AccessProvider {
 
   /**
    * @private
-   * The one thing every action shares: a Nuki 423 means the smartlock is
-   * still busy with its previous action, and that is Lock Busy whichever
-   * way the door was asked to turn. Everything else stays what it was per
+   * The one thing every action shares: a Nuki 423 means the smartlock did
+   * not take the command - because it is still busy with its previous
+   * action, or because Nuki cannot reach it at all. Nuki answers both the
+   * same, so the smartlock is read once more to tell them apart: offline
+   * is Lock Unreachable, anything else Lock Busy, whichever way the door
+   * was asked to turn. A read that fails itself leaves it at Lock Busy -
+   * what the 423 said on its own. Everything else stays what it was per
    * action - an open failure is told by its class, a close failure is
    * rethrown as Nuki reported it.
    *
+   * @param {Object} client The tenant's Nuki API client
    * @param {Error} err What the Nuki API client threw
    * @param {Object} accessPoint The access point the action was sent to
    * @param {"open"|"close"} command The platform command that failed (not
    *   the Nuki numeric action)
-   * @returns {Error} The error to throw in its place
+   * @returns {Promise<Error>} The error to throw in its place
    */
-  _mapActionError(err, accessPoint, command) {
+  async _mapActionError(client, err, accessPoint, command) {
     if (err?.response?.status === 423) {
+      if (!(await this._isReachable(client, accessPoint))) {
+        return this._unreachable(accessPoint, command);
+      }
+
       return new LockBusyError(
         PROVIDER_ID,
         command,
@@ -292,6 +305,32 @@ class NukiAccessProvider extends AccessProvider {
     }
 
     return command === "close" ? err : this._mapOpenError(err, accessPoint);
+  }
+
+  /**
+   * @private
+   * Whether Nuki says it can reach the smartlock. A smartlock that cannot
+   * be read counts as reachable: the caller has a Nuki answer in hand
+   * already and this read only sharpens it.
+   */
+  async _isReachable(client, accessPoint) {
+    try {
+      return isReachable(await client.getSmartlock(accessPoint.externalId));
+    } catch (readErr) {
+      logger.warn(
+        `Could not read smartlock ${accessPoint.externalId} to tell busy from offline: ${readErr.message}`,
+      );
+      return true;
+    }
+  }
+
+  /** @private */
+  _unreachable(accessPoint, command) {
+    return new LockUnreachableError(
+      PROVIDER_ID,
+      command,
+      `Nuki cannot reach smartlock '${accessPoint.externalId}' (serverState offline)`,
+    );
   }
 
   /** @private */
@@ -332,13 +371,22 @@ class NukiAccessProvider extends AccessProvider {
    * access (unlocked, unlatched, lock'n'go), `locked` whether the bolt is
    * thrown, `doorOpen` what the door sensor says where there is one.
    *
+   * Nuki keeps answering with the last state it heard while the lock is
+   * offline. That is not the lock's state, so an offline lock is refused
+   * as Lock Unreachable rather than reported as it last stood.
+   *
    * @param {Object} accessPoint The access point to read
    * @param {Object} bookingContext The booking it is read for
    * @returns {Promise<import("./access-provider").LockStatus>}
+   * @throws {LockUnreachableError} When Nuki cannot reach the lock
    */
   async getStatus(accessPoint, bookingContext) {
     const client = await this._getClient(bookingContext.tenant);
     const state = await client.getSmartlockState(accessPoint.externalId);
+
+    if (!state.reachable) {
+      throw this._unreachable(accessPoint, "status");
+    }
 
     return { open: state.open, locked: state.locked, doorOpen: state.doorOpen };
   }

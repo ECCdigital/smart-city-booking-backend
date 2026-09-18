@@ -1,4 +1,5 @@
 const bunyan = require("bunyan");
+const { DateTime } = require("luxon");
 const AccessLogManager = require("../../data-managers/access-log-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const PdfService = require("../../pdf-service/pdf-service");
@@ -11,6 +12,11 @@ const logger = bunyan.createLogger({
 });
 
 const DEFAULT_EXPORT_LIMIT = 50000;
+
+// Time zone the export prints timestamps in; day-only filter bounds are read
+// in the same zone so a filtered day matches the day the rows show.
+const EXPORT_TIME_ZONE = "Europe/Berlin";
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 // Keys that may carry sensitive secrets (PINs, codes, tokens). They are
 // redacted before the payload is rendered into a compliance export. The match
@@ -99,20 +105,32 @@ class AccessAuditService {
   /**
    * Normalize raw query params into the manager filter shape.
    * Accepts ISO date strings or epoch ms for `from` / `to`.
+   *
+   * A date without a time (`2026-09-17`, what the admin UI's date pickers
+   * send) is a calendar day in the export's time zone: `from` starts at its
+   * midnight, `to` runs to its last millisecond. Otherwise the same day in
+   * both fields is a zero-width range and exports nothing.
    */
   static _normalizeFilters(params = {}) {
     const filters = {};
 
-    const parseTime = (value) => {
+    const parseTime = (value, { endOfDay = false } = {}) => {
       if (value == null || value === "") return undefined;
       const asNumber = Number(value);
       if (Number.isFinite(asNumber)) return asNumber;
+      if (DATE_ONLY_PATTERN.test(String(value).trim())) {
+        const day = DateTime.fromISO(String(value).trim(), {
+          zone: EXPORT_TIME_ZONE,
+        });
+        if (!day.isValid) return undefined;
+        return endOfDay ? day.endOf("day").toMillis() : day.toMillis();
+      }
       const parsed = Date.parse(value);
       return Number.isNaN(parsed) ? undefined : parsed;
     };
 
     const from = parseTime(params.from);
-    const to = parseTime(params.to);
+    const to = parseTime(params.to, { endOfDay: true });
     if (from !== undefined) filters.from = from;
     if (to !== undefined) filters.to = to;
 
@@ -237,7 +255,7 @@ class AccessAuditService {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
-      timeZone: "Europe/Berlin",
+      timeZone: EXPORT_TIME_ZONE,
     });
     return formatter.format(new Date(value));
   }

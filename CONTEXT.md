@@ -120,6 +120,10 @@ _Avoid_: Admin-Override (unqualifiziert — das ist die zweite Bedeutung neben d
 Die Weigerung des Providers, einen Befehl anzunehmen, weil das Schloss den vorigen noch ausführt (Nuki: HTTP 423). Kein unerreichbares Schloss, kein Rate-Limit und keine Zugangsentscheidung: geht als echtes 423 mit `code: "lock_busy"` hinaus, im Audit ein Fehlschlag mit `errorCode: "lock_busy"`; der Client wartet seine Cooldown ab.
 _Avoid_: 423 (als Sprechbegriff), Busy-Error, Unreachable
 
+**Lock Unreachable**:
+Der Provider erreicht das Schloss gerade nicht (Nuki: `serverState` offline). Kein Lock Busy — nichts wurde verstanden, nichts wird ausgeführt — und keine Zugangsentscheidung: die Verbindung vor Ort fehlt. Der letzte dem Provider bekannte Zustand ist dann nicht der Status des Schlosses; eine Statusabfrage schlägt fehl, statt ihn als aktuell auszugeben. Geht als echtes 503 mit `code: "lock_unreachable"` hinaus, im Audit ein Fehlschlag mit `errorCode: "lock_unreachable"`. Nuki antwortet auf Befehle an ein beschäftigtes und an ein unerreichbares Schloss gleich (423); der Provider liest das Schloss nach, um beides zu trennen.
+_Avoid_: Offline-Error, Nicht erreichbar (als API-Begriff), Status unbekannt (das ist die Storefront-Anzeige, wenn gar keine Antwort kam)
+
 **Zugangsentscheidung**:
 Die eine Antwort auf „Darf diese Person die AccessPoints dieser Buchung jetzt bedienen?“: die Zugriffsrolle, welche AccessPoints bedienbar und welche davon aus der Ferne zu öffnen sind, die priorisierten Gründe dagegen und was je AccessPoint an Evidence verlangt wird. Wird aus Buchung, AccessPoints und Zeitpunkt berechnet, nie aus dem Kanal. Die Evidence-Prüfung ist ihr zweiter Schritt, kein eigener Begriff.
 _Avoid_: Eligibility (Altname der HTTP-Form), Berechtigungsprüfung, Access-Check
@@ -173,7 +177,11 @@ _Avoid_: OTP-Einrichtung, Remote-Freischaltung, IQ-Setup, App-Aktivierung (verbo
 
 **Berechtigungsweg (eines Salto-AccessPoints)**:
 Ob ein Gast per Salto-Guest-PIN am Keypad, per Remote-Open aus der Mobile-Key-Seite oder mit beidem hineinkommt. Ergibt sich aus dem Schlosstyp: nur Keypad-Schlösser kennen den PIN-Weg, Remote-Open steht jeder online am IQ hängenden Tür offen. Beim Remote-Open provisioniert die Plattform bei Salto nichts — die Buchung ist die Berechtigung, der System-User öffnet.
-_Avoid_: Zugangsart, Öffnungsart, Modus (das ist die Admin-Einstellung `remote | authorization | both`, die den Berechtigungsweg wählt)
+_Avoid_: Zugangsart, Öffnungsart (das ist, was die Tür beim Öffnen tut), Modus (das ist die Admin-Einstellung `remote | authorization | both`, die den Berechtigungsweg wählt)
+
+**Öffnungsart (eines Nuki-AccessPoints)**:
+Was die Tür beim Öffnen tut: aufschließen (das Schloss gibt frei, die Person drückt), Falle ziehen (die Tür geht auf), Lock'n'Go (aufschließen, nach kurzer Zeit wieder abschließen) oder Lock'n'Go mit Falle ziehen (die Tür geht auf und schließt sich nach kurzer Zeit wieder ab). Die Wartezeit ist Gerätekonfiguration bei Nuki, nicht Teil der Öffnungsart. Vom Admin je AccessPoint gewählt; ohne Wahl („automatisch") entscheidet der Gerätetyp. Ein Opener kennt nur automatisch — er öffnet die Tür, sonst nichts. Gilt für jedes Öffnen gleich, egal über welchen Kanal. Das Audit hält je Öffnen die tatsächlich ausgeführte Öffnungsart und ihre Herkunft fest: eingestellt, nach Gerätetyp oder Rückfall auf Aufschließen.
+_Avoid_: Open Mode, Unlatch-Flag, Aktion (das ist die Nuki-Nummer, die die Öffnungsart auslöst), Modus (das ist `mode`, der Berechtigungsweg remote/authorization/both)
 
 **Öffnungsergebnis**:
 Die Antwort eines Providers auf ein Öffnen: entweder sofort geöffnet oder ausstehend mit einem Öffnungsvorgang, dessen Fortschritt nachgefragt wird. Kennt keine weiteren Zustände.

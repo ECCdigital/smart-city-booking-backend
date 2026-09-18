@@ -10,6 +10,9 @@ const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError } = require("../../../errors/BaseError");
 const { AccessOpenError } = require("../../../errors/AccessOpenError");
 const { LockBusyError } = require("../../../errors/LockBusyError");
+const {
+  LockUnreachableError,
+} = require("../../../errors/LockUnreachableError");
 
 const logger = bunyan.createLogger({
   name: "access-controller.js",
@@ -38,21 +41,28 @@ class AccessController {
   }
 
   /**
-   * Lock Busy is a state of the lock, not a decision of the platform: it
-   * goes out as a real 423 so the client waits out its Cooldown instead of
-   * reading it as a refusal or an unreachable door. Shared by open and
-   * close.
+   * Lock Busy and Lock Unreachable are states of the lock, not decisions of
+   * the platform: they go out with their own status - a real 423 so the
+   * client waits out its Cooldown instead of reading it as a refusal, a 503
+   * so it says the lock is unreachable instead of offering to turn it.
+   * Shared by open, close and the status read.
    */
-  static _renderLockBusy(
+  static _renderLockState(
     response,
     err,
     { tenant, action, accessPointId, bookingId },
   ) {
     logger.info(
-      `${tenant} -- ${action} of access-point ${accessPointId} (booking ${bookingId}) refused, lock busy: ${err.message}`,
+      `${tenant} -- ${action} of access-point ${accessPointId} (booking ${bookingId}) refused, ${err.code}: ${err.message}`,
     );
     return ApiResponse.fail(response, err);
   }
+
+  /** @private Whether {@link _renderLockState} is the way to answer `err`. */
+  static _isLockState(err) {
+    return err instanceof LockBusyError || err instanceof LockUnreachableError;
+  }
+
   /**
    * @private
    * Renders the way through a door as the service decided it: a refusal is
@@ -109,8 +119,8 @@ class AccessController {
         return response.sendStatus(403);
       }
 
-      if (err instanceof LockBusyError) {
-        return this._renderLockBusy(response, err, {
+      if (AccessController._isLockState(err)) {
+        return AccessController._renderLockState(response, err, {
           tenant,
           action,
           accessPointId,
@@ -201,8 +211,8 @@ class AccessController {
       );
       return ApiResponse.ok(response, { data: result });
     } catch (err) {
-      if (err instanceof LockBusyError) {
-        return this._renderLockBusy(response, err, {
+      if (AccessController._isLockState(err)) {
+        return AccessController._renderLockState(response, err, {
           tenant: request.params.tenant,
           action: "close",
           accessPointId: request.params.accessPointId,
@@ -280,6 +290,15 @@ class AccessController {
       );
       return ApiResponse.ok(response, { data: status });
     } catch (err) {
+      if (AccessController._isLockState(err)) {
+        return AccessController._renderLockState(response, err, {
+          tenant: request.params.tenant,
+          action: "status",
+          accessPointId: request.params.accessPointId,
+          bookingId: request.query.bookingId,
+        });
+      }
+
       logger.error(err);
       return ApiResponse.error(response, "Could not get access point status");
     }

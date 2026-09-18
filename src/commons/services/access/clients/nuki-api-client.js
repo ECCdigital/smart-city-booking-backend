@@ -101,6 +101,28 @@ const NUKI_DOOR_STATES = Object.freeze({
   5: "calibrating",
 });
 
+// Whether Nuki can reach the device right now (`serverState`). Nuki keeps
+// serving the last `state` it heard from the lock while it is offline, so
+// `state.state` alone never says whether the lock can be read.
+const NUKI_SERVER_STATES = Object.freeze({
+  OK: 0,
+  UNREGISTERED: 1,
+  AUTH_UUID_INVALID: 2,
+  AUTH_INVALID: 3,
+  OFFLINE: 4,
+});
+
+/**
+ * Whether Nuki says it can reach the smartlock. A smartlock that names no
+ * `serverState` is taken as reachable - the field is Nuki's to withhold.
+ *
+ * @param {Object} smartlock A smartlock as returned by the Nuki API
+ * @returns {boolean}
+ */
+function isReachable(smartlock) {
+  return smartlock?.serverState !== NUKI_SERVER_STATES.OFFLINE;
+}
+
 const DEFAULT_NUKI_API_BASE_URL = "https://api.nuki.io";
 
 /**
@@ -178,6 +200,7 @@ class NukiApiClient extends BaseAccessApiClient {
       smartlockId: String(smartlock.smartlockId || smartlock.id || smartlockId),
       name: smartlock.name || smartlock.label || "",
       serverState: smartlock.serverState,
+      reachable: isReachable(smartlock),
       locked,
       open,
       lockState,
@@ -401,6 +424,8 @@ module.exports = {
   NUKI_LOCK_STATES,
   NUKI_DOOR_STATES,
   NUKI_OPEN_LOCK_STATES,
+  NUKI_SERVER_STATES,
+  isReachable,
   DEFAULT_NUKI_API_BASE_URL,
   NUKI_AUTH_TYPES,
 };

@@ -117,6 +117,16 @@
           application/json:
             schema:
               $ref: "#/components/schemas/LockBusy"
+      "503":
+        description: |
+          Lock Unreachable: the provider cannot reach the lock right now (Nuki
+          `serverState` offline). Nothing was carried out. Not Lock Busy: the
+          client says the lock is unreachable rather than waiting out a
+          Cooldown.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockUnreachable"
       "500":
         description: Could not open access point
         content:
@@ -178,6 +188,16 @@
           application/json:
             schema:
               $ref: "#/components/schemas/LockBusy"
+      "503":
+        description: |
+          Lock Unreachable: the provider cannot reach the lock right now (Nuki
+          `serverState` offline). Nothing was carried out. Not Lock Busy: the
+          client says the lock is unreachable rather than waiting out a
+          Cooldown.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockUnreachable"
       "500":
         description: Could not close access point
         content:
@@ -222,6 +242,15 @@
         description: Not authenticated
       "403":
         description: Forbidden
+      "503":
+        description: |
+          Lock Unreachable: the provider cannot reach the lock right now (Nuki
+          `serverState` offline). The provider's last known state of the lock
+          is not answered as the status - it is stale by definition.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockUnreachable"
       "500":
         description: Could not get access point status
         content:
@@ -513,6 +542,28 @@ components:
             action:
               type: string
               enum: [open, close]
+    LockUnreachable:
+      type: object
+      description: The body of a 503 answer (`LockUnreachableError.toJSON()`).
+      properties:
+        error:
+          type: string
+          example: LockUnreachableError
+        code:
+          type: string
+          example: lock_unreachable
+        statusCode:
+          type: integer
+          example: 503
+        params:
+          type: object
+          properties:
+            provider:
+              type: string
+              example: nuki
+            action:
+              type: string
+              enum: [open, close, status]
     AccessEligibility:
       type: object
       description: |
