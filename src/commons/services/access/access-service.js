@@ -77,43 +77,12 @@ class AccessService {
   }
 
   /**
-   * Unlatches an access point linked to a booking, i.e. pulls the latch so the
-   * door physically opens instead of only releasing the lock.
-   *
-   * Behind the same guard as {@link open} - the decision and the evidence -
-   * because it opens the same door. Where a lock can pull its latch, `open` does so by
-   * itself, so this is the older way to the same end and no client needs it.
-   *
-   * @param {string} tenant Tenant ID
-   * @param {string} bookingId Booking ID
-   * @param {string} accessPointId Access point ID
-   * @param {string} userId Acting user
-   * @param {Object} [options] As of {@link open}
-   * @returns {Promise<{ success: true, data: { openProcessId: string|null } }
-   *   | { success: false, blockingReasons: string[] }>} As of {@link open}
-   * @throws {ForbiddenError} The booking does not exist or does not include
-   *   the access point.
-   */
-  static async unlatch(tenant, bookingId, accessPointId, userId, options = {}) {
-    return this._openGuarded(
-      "unlatch",
-      tenant,
-      bookingId,
-      accessPointId,
-      userId,
-      options,
-    );
-  }
-
-  /**
    * @private
    * The guarded way through a door: the decision, then the evidence, then the
    * provider - and an audit entry whichever of the three has the last word.
-   * Both actions that open an access point run through here, so neither can
-   * end up with the weaker check.
    *
-   * @param {"open"|"unlatch"} action What to ask the provider for, which is
-   *   also what the audit entry is filed under
+   * @param {"open"} action What to ask the provider for, which is also what
+   *   the audit entry is filed under
    * @param {string} tenant Tenant ID
    * @param {string} bookingId Booking ID
    * @param {string} accessPointId Access point ID
@@ -236,7 +205,7 @@ class AccessService {
    * audit entry is written in one place.
    *
    * @param {Object} refusal
-   * @param {"open"|"unlatch"} refusal.action What was refused
+   * @param {"open"} refusal.action What was refused
    * @param {string} refusal.tenant Tenant ID
    * @param {string} refusal.userId Acting user
    * @param {Object} refusal.accessPoint The access point that stays shut

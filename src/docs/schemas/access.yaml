@@ -133,9 +133,10 @@ components:
         capabilities:
           type: array
           description: >
-            The actions a client may offer for this access point. `unlatch` is
-            deliberately absent - pulling the latch is decided behind `/open`,
-            per lock.
+            The actions a client may offer for this access point. Which action
+            Nuki carries out on `/open` is the access point's Öffnungsart
+            (`config.openAction`); a client never picks it, so there is no
+            capability for it.
           items:
             type: string
             enum: [open, close, getStatus]

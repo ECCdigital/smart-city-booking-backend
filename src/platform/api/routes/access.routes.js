@@ -27,12 +27,6 @@ router.post(
 );
 
 router.post(
-  "/:accessPointId/unlatch",
-  authorize("booking", "operate"),
-  AccessController.unlatch,
-);
-
-router.post(
   "/:accessPointId/close",
   authorize("booking", "operate"),
   AccessController.close,

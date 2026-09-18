@@ -124,75 +124,6 @@
             schema:
               $ref: "#/components/schemas/ErrorResponse"
 
-/api/{tenant}/access/{accessPointId}/unlatch:
-  post:
-    tags:
-      - Access
-    summary: Unlatch an access point
-    deprecated: true
-    description: |
-      Pulls the latch of a specific access point so the door physically opens,
-      instead of only releasing the lock. Requires a provider and device that
-      support unlatching (e.g. a Nuki Smart Lock mounted on a door with a
-      latch).
-
-      Guarded exactly like `/open` - the same booking checks, the same
-      validation rules, the same audit entries - because it opens the same
-      door.
-
-      No client needs this route: where a lock can pull its latch, `/open` does
-      so by itself, per lock and behind the server.
-    security:
-      - bearerAuth: []
-    parameters:
-      - $ref: "#/components/parameters/TenantParam"
-      - name: accessPointId
-        in: path
-        required: true
-        description: Unique identifier of the access point to unlatch
-        schema:
-          type: string
-      - $ref: "#/components/parameters/BookingIdQueryParam"
-    requestBody:
-      required: false
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/OpenRequest"
-    responses:
-      "200":
-        description: |
-          The attempt was processed. `success: true` carries the started open,
-          `success: false` the reasons why the attempt was refused.
-        content:
-          application/json:
-            schema:
-              oneOf:
-                - $ref: "#/components/schemas/OpenSuccess"
-                - $ref: "#/components/schemas/OpenDenied"
-                - $ref: "#/components/schemas/OpenFailed"
-      "401":
-        description: Not authenticated
-      "403":
-        description: |
-          The booking does not exist or does not include the access point.
-      "423":
-        description: |
-          Lock Busy: the smartlock is still carrying out its previous action
-          (Nuki HTTP 423). Not a refusal and not an unreachable lock; the
-          client waits out its Cooldown and confirms the state by reading the
-          status. No Retry-After.
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LockBusy"
-      "500":
-        description: Could not unlatch access point
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ErrorResponse"
-
 /api/{tenant}/access/{accessPointId}/close:
   post:
     tags:
@@ -581,7 +512,7 @@ components:
               example: nuki
             action:
               type: string
-              enum: [open, unlatch, close]
+              enum: [open, close]
     AccessEligibility:
       type: object
       description: |
@@ -646,7 +577,7 @@ components:
           type: array
           description: |
             The operable ones whose mode allows an open through the API - the
-            set open and unlatch check against
+            set open checks against
           items:
             type: string
         overriddenAccessPointIds:

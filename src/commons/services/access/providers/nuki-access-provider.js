@@ -244,26 +244,6 @@ class NukiAccessProvider extends AccessProvider {
   }
 
   /**
-   * Pulls the latch so the door physically opens, instead of only releasing
-   * the lock (unlock). Requires a Nuki actor that is mounted on a door with
-   * a latch (i.e. not an Opener/Box).
-   *
-   * @param {Object} accessPoint The access point to unlatch
-   * @param {Object} bookingContext The booking the door is unlatched for
-   * @returns {Promise<import("./access-provider").OpenOutcome>}
-   */
-  async unlatch(accessPoint, bookingContext) {
-    const client = await this._getClientForOpen(bookingContext.tenant);
-
-    return this._executeOpenAction(
-      client,
-      accessPoint,
-      NUKI_ACTIONS.UNLATCH,
-      "unlatch",
-    );
-  }
-
-  /**
    * @private
    * Sends the action that opens the door and turns whatever Nuki answers
    * into the failure class the guest may see: a smartlock Nuki does not
@@ -273,8 +253,8 @@ class NukiAccessProvider extends AccessProvider {
    * @param {Object} client The tenant's Nuki API client
    * @param {Object} accessPoint The access point being opened
    * @param {number} action The Nuki action to send
-   * @param {"open"|"unlatch"} command The command of the access API this
-   *   action carries out, named in the error when the lock is busy
+   * @param {"open"} command The command of the access API this action
+   *   carries out, named in the error when the lock is busy
    * @returns {Promise<import("./access-provider").OpenOutcome>}
    * @throws {LockBusyError|AccessOpenError}
    */
@@ -298,8 +278,8 @@ class NukiAccessProvider extends AccessProvider {
    *
    * @param {Error} err What the Nuki API client threw
    * @param {Object} accessPoint The access point the action was sent to
-   * @param {"open"|"unlatch"|"close"} command The platform command that
-   *   failed (not the Nuki numeric action)
+   * @param {"open"|"close"} command The platform command that failed (not
+   *   the Nuki numeric action)
    * @returns {Error} The error to throw in its place
    */
   _mapActionError(err, accessPoint, command) {
@@ -325,8 +305,8 @@ class NukiAccessProvider extends AccessProvider {
       );
     }
 
-    // Nuki refuses an action the device cannot carry out with a 400 - a lock
-    // without a latch asked to unlatch, a US device that has none. Trying the
+    // Nuki refuses an action the device cannot carry out with a 400 - an
+    // Öffnungsart that pulls a latch the device has not got. Trying the
     // weaker action after it would open the door another way than the
     // administration set, so this is the access point's setup to correct.
     if (status === 400) {
@@ -695,7 +675,6 @@ class NukiAccessProvider extends AccessProvider {
     return [
       "open",
       "close",
-      "unlatch",
       "getStatus",
       "grantAuthorization",
       "revokeAuthorization",

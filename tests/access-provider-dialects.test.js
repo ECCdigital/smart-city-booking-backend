@@ -1,7 +1,7 @@
 /**
  * Characterization of the access provider seam: how NUKI, Salto KS, iFBS
  * and Pareva answer, and what `AccessService` makes of it. The
- * result-bearing methods - open, unlatch, close, getStatus, getOpenProgress,
+ * result-bearing methods - open, close, getStatus, getOpenProgress,
  * hold, grantAuthorization, revokeAuthorization - answer in the typed shapes
  * of `access-provider.js`
  * and every open failure is an `AccessOpenError`; the expectations on those

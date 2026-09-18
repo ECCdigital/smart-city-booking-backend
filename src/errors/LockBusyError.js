@@ -11,7 +11,7 @@ const { BaseError } = require("./BaseError");
 class LockBusyError extends BaseError {
   /**
    * @param {string} provider The provider that reported the busy lock
-   * @param {"open"|"unlatch"|"close"} action The command that was refused
+   * @param {"open"|"close"} action The command that was refused
    * @param {string} [message] Full detail for the audit log
    */
   constructor(provider, action, message) {

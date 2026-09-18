@@ -40,8 +40,8 @@ class AccessController {
   /**
    * Lock Busy is a state of the lock, not a decision of the platform: it
    * goes out as a real 423 so the client waits out its Cooldown instead of
-   * reading it as a refusal or an unreachable door. Shared by open, unlatch
-   * and close.
+   * reading it as a refusal or an unreachable door. Shared by open and
+   * close.
    */
   static _renderLockBusy(
     response,
@@ -55,15 +55,15 @@ class AccessController {
   }
   /**
    * @private
-   * Renders one of the two ways through a door. Both are decided by the
-   * service, both are refused the same way, so both are rendered here: a
-   * refusal is a soft failure on HTTP 200 with its reasons, an access point
-   * outside the booking is a 403.
+   * Renders the way through a door as the service decided it: a refusal is
+   * a soft failure on HTTP 200 with its reasons, an access point outside the
+   * booking is a 403.
    *
    * @param {Object} request Express request
    * @param {Object} response Express response
    * @param {Object} options
-   * @param {"open"|"unlatch"} options.action Which way to take
+   * @param {"open"} options.action The service method to call, which is also
+   *   what the audit entry is filed under
    * @param {string} options.errorMessage What to say when nothing else fits
    * @returns {Promise<Object>} The Express response
    */
@@ -167,21 +167,6 @@ class AccessController {
       logger.error(err);
       return ApiResponse.error(response, "Could not resolve scan code");
     }
-  }
-
-  /**
-   * POST /:tenant/access/:accessPointId/unlatch
-   *
-   * Opens a door by pulling its latch. Rendered exactly like {@link open},
-   * because it is guarded exactly like it: a door that asks for evidence asks
-   * for it here too. Where a lock can pull its latch, `open` does so by itself
-   * - no client needs this route.
-   */
-  static async unlatch(request, response) {
-    return AccessController._renderOpen(request, response, {
-      action: "unlatch",
-      errorMessage: "Could not unlatch access point",
-    });
   }
 
   /**
