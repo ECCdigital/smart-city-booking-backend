@@ -291,6 +291,23 @@ describe("SupervisionService.changeTenantLevel", function () {
       expect(history.called).to.be.false;
     });
 
+    it("keeps the change when the pending offers cannot be read", async function () {
+      BookableManager.getOffersByReviewStatus.callsFake(async () => {
+        throw new Error("mongo down");
+      });
+
+      const result = await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "supervised",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(result.supervisionLevel).to.equal("supervised");
+      expect(history.calledOnce).to.be.true;
+      expect(queueRows()).to.have.length(0);
+    });
+
     it("never writes a review", async function () {
       const updateBookable = sinon.stub(BookableManager, "updateReview");
       const updateEvent = sinon.stub(EventManager, "updateReview");
