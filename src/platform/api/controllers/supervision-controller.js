@@ -1,5 +1,6 @@
 const SupervisionService = require("../../../commons/services/supervision/supervision-service");
 const ReviewService = require("../../../commons/services/supervision/review-service");
+const ReviewQueueService = require("../../../commons/services/supervision/review-queue-service");
 const SupervisionHistoryManager = require("../../../commons/data-managers/supervision-history-manager");
 const {
   OFFER_TYPE_VALUES,
@@ -23,7 +24,8 @@ function optionalEnum(value, allowed, code) {
 
 /**
  * Web controller of the tenant supervision (glossary "Mandanten-Aufsicht",
- * spec §6.2): the level change, the history and the review of an offer. The right is the
+ * spec §6.2): the level change, the history, the review of an offer and the active
+ * review queue. The right is the
  * router's; a handler hands the tenant the route names on and never
  * branches over rights. The instance router is a plain express router, so
  * every handler passes its error to `next` for the central error handler.
@@ -73,6 +75,29 @@ class SupervisionController {
       const result = await SupervisionHistoryManager.list({
         tenantId: req.query.tenantId || undefined,
         ...SupervisionController._historyFilters(req.query),
+      });
+      return res.status(200).json(result);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * `GET /api/instances/review-queue` - the active review queue (glossary
+   * "Aktive Prüfliste"), longest waiting first, paginated
+   * (`?page=&pageSize=&tenantId=&offerType=`).
+   */
+  static async getReviewQueue(req, res, next) {
+    try {
+      const result = await ReviewQueueService.listActiveReviewQueue({
+        tenantId: req.query.tenantId || undefined,
+        offerType: optionalEnum(
+          req.query.offerType,
+          OFFER_TYPE_VALUES,
+          "invalid_offer_type",
+        ),
+        page: req.query.page,
+        pageSize: req.query.pageSize,
       });
       return res.status(200).json(result);
     } catch (err) {

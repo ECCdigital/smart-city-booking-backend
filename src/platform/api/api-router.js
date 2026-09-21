@@ -55,6 +55,11 @@ router.get(
   authorize("instance", "supervisionHistory"),
   SupervisionController.getInstanceHistory,
 );
+router.get(
+  "/instances/review-queue",
+  authorize("instance", "reviewQueue"),
+  SupervisionController.getReviewQueue,
+);
 
 // RULES
 // =====

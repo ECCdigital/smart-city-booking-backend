@@ -93,6 +93,43 @@ describe("BookableManager: the review", function () {
     expect(offers[0]).to.be.instanceOf(Bookable);
   });
 
+  it("reads the pending offers of a set of tenants as projected plain rows", async function () {
+    const rows = [
+      {
+        id: "b1",
+        tenantId: "t1",
+        title: "Saal",
+        type: "room",
+        isPublic: false,
+        review: pending,
+      },
+    ];
+    const lean = sinon.stub().resolves(rows);
+    const sort = sinon.stub().returns({ lean });
+    const find = sinon.stub(BookableModel, "find").returns({ sort });
+
+    const offers = await BookableManager.getPendingReviewOffers(["t1", "t2"]);
+
+    expect(find.firstCall.args[0]).to.deep.equal({
+      tenantId: { $in: ["t1", "t2"] },
+      "review.status": "pending",
+    });
+    expect(find.firstCall.args[1]).to.deep.equal({
+      _id: 0,
+      id: 1,
+      tenantId: 1,
+      title: 1,
+      type: 1,
+      isPublic: 1,
+      review: 1,
+    });
+    expect(sort.firstCall.args[0]).to.deep.equal({
+      "review.submittedAt": 1,
+      id: 1,
+    });
+    expect(offers).to.deep.equal(rows);
+  });
+
   describe("storeBookable", function () {
     let updateOne;
 

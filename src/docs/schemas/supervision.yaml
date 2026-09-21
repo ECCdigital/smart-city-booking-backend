@@ -163,3 +163,52 @@ components:
           type: integer
         pageSize:
           type: integer
+
+    ReviewQueueRow:
+      type: object
+      properties:
+        tenantId:
+          type: string
+        tenantName:
+          type: string
+          nullable: true
+        offerType:
+          type: string
+          enum: [bookable, event]
+        offerId:
+          type: string
+        title:
+          type: string
+          nullable: true
+          description: The bookable's `title`, the event's `information.name`
+        submittedAt:
+          type: string
+          format: date-time
+          description: The current submission - a resubmission renews it
+        isPublic:
+          type: boolean
+          description: The publication wish; no filter of the queue
+        adminPath:
+          type: string
+          nullable: true
+          description: |
+            The offer's editor in the Admin UI, relative to its base URL and
+            to be opened in the tenant `tenantId`:
+            `/<rooms|resources|tickets|event-locations>/edit?id=<offerId>`
+            for a bookable (by its `type`), `/events/edit?id=<offerId>` for
+            an event. `null` for a bookable of a type without an editor.
+          example: /rooms/edit?id=b-123
+
+    ReviewQueuePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewQueueRow"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer

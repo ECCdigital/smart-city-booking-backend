@@ -91,6 +91,41 @@ describe("EventManager: the review", function () {
     expect(offers[0]).to.be.instanceOf(Event);
   });
 
+  it("reads the pending offers of a set of tenants as projected plain rows, whatever their dates", async function () {
+    const rows = [
+      {
+        id: "e1",
+        tenantId: "t1",
+        information: { name: "Konzert" },
+        isPublic: false,
+        review: pending,
+      },
+    ];
+    const lean = sinon.stub().resolves(rows);
+    const sort = sinon.stub().returns({ lean });
+    const find = sinon.stub(EventModel, "find").returns({ sort });
+
+    const offers = await EventManager.getPendingReviewOffers(["t1", "t2"]);
+
+    expect(find.firstCall.args[0]).to.deep.equal({
+      tenantId: { $in: ["t1", "t2"] },
+      "review.status": "pending",
+    });
+    expect(find.firstCall.args[1]).to.deep.equal({
+      _id: 0,
+      id: 1,
+      tenantId: 1,
+      "information.name": 1,
+      isPublic: 1,
+      review: 1,
+    });
+    expect(sort.firstCall.args[0]).to.deep.equal({
+      "review.submittedAt": 1,
+      id: 1,
+    });
+    expect(offers).to.deep.equal(rows);
+  });
+
   describe("storeEvent", function () {
     const store = async (existing) => {
       sinon.stub(EventModel, "exists").resolves(existing);
