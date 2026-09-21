@@ -18,7 +18,15 @@ const RateLimitEventManager = require("../src/commons/data-managers/rate-limit-e
 const SupervisionHistoryManager = require("../src/commons/data-managers/supervision-history-manager");
 const SupervisionNotificationManager = require("../src/commons/data-managers/supervision-notification-manager");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
+const SupervisionNotificationService = require("../src/commons/services/supervision/supervision-notification-service");
 const { User } = require("../src/commons/entities/user/user");
+const {
+  installInMemoryMailTransport,
+} = require("./helpers/in-memory-mail-transport");
+const {
+  installSupervisionOutboxStore,
+} = require("./helpers/supervision-outbox-store");
+const { instance: mailInstance } = require("./helpers/mail-stack-fixtures");
 const {
   TooManyRequestsError,
   ConflictError,
@@ -151,6 +159,32 @@ describe("TenantCreationService under contention", function () {
     for (let i = fulfilled.length; i < 3; i += 1) await createAs(USER);
     expect(tenants.size).to.equal(3);
     await rejects(createAs(USER), TooManyRequestsError);
+  });
+
+  it("a self-creation mails every instance owner and confirms the actual initial level to the creator", async function () {
+    inMemoryRateLimitStore();
+    InstanceManager.getInstance.restore();
+    sinon.stub(InstanceManager, "getInstance").resolves(
+      mailInstance({
+        tenantInitialSupervisionLevel: "supervised",
+        ownerUserIds: ["anna@plattform.example.test"],
+      }),
+    );
+    sinon
+      .stub(UserManager, "getUsersById")
+      .callsFake(async (ids) => ids.map((id) => ({ id })));
+    const sent = installInMemoryMailTransport();
+    const outbox = installSupervisionOutboxStore();
+
+    await createAs(USER);
+    await SupervisionNotificationService.whenIdle();
+
+    expect(sent.map((mail) => mail.to)).to.deep.equal([
+      "anna@plattform.example.test",
+      USER,
+    ]);
+    expect(sent[1].html).to.include("beaufsichtigt");
+    expect(outbox.map((row) => row.status)).to.deep.equal(["sent"]);
   });
 
   it("frees the slot of a failed creation for the next attempt and leaves nothing behind", async function () {

@@ -24,7 +24,7 @@ const MAX_ERROR_LENGTH = 500;
 /** The secrets of the instance's no-reply account, never to be stored. */
 const SECRET_FIELDS = ["noreplyPassword", "noreplyGraphClientSecret"];
 
-/** The dispatches under way, so a test (or a shutdown) can wait for them. */
+/** The dispatches under way; `whenIdle` lets a test wait for them. */
 const inFlight = new Set();
 
 /**
@@ -55,7 +55,13 @@ function noticesOf(row) {
   }
 }
 
-/** The message of an error, without the instance's secrets, bounded. */
+/** The delivery of one mail of a row: which notice, to whom. */
+const deliveryKey = (mailType, to) => `${mailType} ${to}`;
+
+/**
+ * The message of an error - never the error itself - with the secrets of
+ * the instance's no-reply account masked, bounded.
+ */
 function safeMessage(error, instance) {
   let message = String(error?.message ?? error);
   for (const field of SECRET_FIELDS) {
@@ -123,6 +129,7 @@ class SupervisionNotificationService {
    * @param {string} notificationId
    * @returns {Promise<Object|null>} The row after the dispatch; null when
    *   there was nothing to do - unknown, already sent, or being dispatched
+   *   (also by a later dispatch, where this one outlived its lease)
    */
   static async dispatch(notificationId) {
     const row = await SupervisionNotificationManager.claimForDispatch(
@@ -140,16 +147,24 @@ class SupervisionNotificationService {
         throw new Error("mail_disabled: the instance's mail is switched off");
       }
 
+      const deliveries = row.deliveries ?? [];
       const delivered = new Set(
-        (row.deliveries ?? []).map(({ mailType, to }) => `${mailType} ${to}`),
+        deliveries.map(({ mailType, to }) => deliveryKey(mailType, to)),
       );
       const errors = [];
-      let addressed = 0;
 
       for (const { mailType, ctx } of noticesOf(row)) {
-        for (const mail of await compose(mailType, ctx)) {
-          addressed += 1;
-          if (delivered.has(`${mailType} ${mail.to}`)) {
+        const mails = await compose(mailType, ctx);
+        // Every notice of the occasion needs somebody: a self-creation
+        // confirmed to the creator alone has not told the instance owners.
+        if (
+          mails.length === 0 &&
+          !deliveries.some((delivery) => delivery.mailType === mailType)
+        ) {
+          errors.push(`no_recipients: nobody to tell for ${mailType}`);
+        }
+        for (const mail of mails) {
+          if (delivered.has(deliveryKey(mailType, mail.to))) {
             continue;
           }
           try {
@@ -173,17 +188,20 @@ class SupervisionNotificationService {
       if (errors.length > 0) {
         throw new Error(errors.join("; "));
       }
-      if (addressed === 0 && delivered.size === 0) {
-        throw new Error("no_recipients: nobody to tell");
-      }
-      return await SupervisionNotificationManager.markSent(row.id, new Date());
+      return await SupervisionNotificationManager.markSent(row.id, {
+        lease: row.dispatchingSince,
+        sentAt: new Date(),
+      });
     } catch (error) {
       const lastError = safeMessage(error, instance);
       logger.warn(
         { notificationId: row.id, type: row.type, tenantId: row.tenantId },
         `supervision notification not sent: ${lastError}`,
       );
-      return SupervisionNotificationManager.markFailed(row.id, lastError);
+      return SupervisionNotificationManager.markFailed(row.id, {
+        lease: row.dispatchingSince,
+        lastError,
+      });
     }
   }
 

@@ -189,6 +189,24 @@ describe("supervision notices: from the action to the mail", function () {
     });
   }
 
+  it("a resubmission after a rejection, without a wish to be published, tells the instance owner again", async function () {
+    given();
+    bookables[0].isPublic = false;
+    await submit("bookable", "room");
+    await decide("bookable", "room", "reject", "Unvollständig");
+    await idle();
+    sent.length = 0;
+
+    await submit("bookable", "room");
+    await idle();
+
+    expect(mails()).to.deep.equal([
+      [INSTANCE_OWNER, "Neues Angebot zur Prüfung: Stadthalle Musterstadt"],
+    ]);
+    expect(sent[0].html).to.include("ohne");
+    expect(rows).to.have.length(3);
+  });
+
   for (const level of ["free", "blocked"]) {
     it(`a submission at a ${level} tenant records no occasion and sends no review mail`, async function () {
       given({ level });

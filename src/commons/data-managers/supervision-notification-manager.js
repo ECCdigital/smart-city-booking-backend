@@ -91,10 +91,14 @@ class SupervisionNotificationManager {
     );
   }
 
-  /** Every mail of the row went out: `sent`, the lease given back. */
-  static async markSent(id, sentAt) {
+  /**
+   * Every mail of the row went out: `sent`, the lease given back. Only the
+   * dispatch that holds the lease (`lease`, the claimed row's
+   * `dispatchingSince`) writes; one that outlived its lease answers null.
+   */
+  static async markSent(id, { lease, sentAt }) {
     return SupervisionNotificationModel.findOneAndUpdate(
-      { id },
+      { id, dispatchingSince: lease },
       {
         $set: {
           status: NOTIFICATION_STATUS.SENT,
@@ -108,14 +112,17 @@ class SupervisionNotificationManager {
   }
 
   /**
-   * The dispatch failed: `failed` with the reason, the lease given back.
+   * The dispatch failed: `failed` with the reason, the lease given back -
+   * by the dispatch that holds the lease only, as `markSent`.
    *
    * @param {string} id
-   * @param {string} lastError The message, free of credentials
+   * @param {Object} outcome
+   * @param {Date} outcome.lease The claimed row's `dispatchingSince`
+   * @param {string} outcome.lastError The message, secrets masked
    */
-  static async markFailed(id, lastError) {
+  static async markFailed(id, { lease, lastError }) {
     return SupervisionNotificationModel.findOneAndUpdate(
-      { id },
+      { id, dispatchingSince: lease },
       {
         $set: {
           status: NOTIFICATION_STATUS.FAILED,

@@ -77,7 +77,10 @@ function installSupervisionOutboxStore() {
     });
   sinon
     .stub(SupervisionNotificationManager, "markSent")
-    .callsFake(async (id, sentAt) => {
+    .callsFake(async (id, { lease, sentAt }) => {
+      if (find(id).dispatchingSince?.getTime() !== lease?.getTime()) {
+        return null;
+      }
       Object.assign(find(id), {
         status: "sent",
         sentAt,
@@ -88,7 +91,10 @@ function installSupervisionOutboxStore() {
     });
   sinon
     .stub(SupervisionNotificationManager, "markFailed")
-    .callsFake(async (id, lastError) => {
+    .callsFake(async (id, { lease, lastError }) => {
+      if (find(id).dispatchingSince?.getTime() !== lease?.getTime()) {
+        return null;
+      }
       Object.assign(find(id), {
         status: "failed",
         lastError,

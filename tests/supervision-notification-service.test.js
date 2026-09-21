@@ -11,6 +11,7 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 
 const SupervisionNotificationService = require("../src/commons/services/supervision/supervision-notification-service");
+const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const MailerService = require("../src/commons/mail-service/mail-service");
@@ -302,6 +303,26 @@ describe("supervision notification sender", function () {
       await occasion(selfCreated({ supervisionLevel: "free" }));
 
       expect(sent[2].html).to.include("<strong>Aufsichtsstufe:</strong> frei");
+    });
+
+    it("is not sent while no instance owner could be told, though the creator has the confirmation", async function () {
+      given({ instanceOwners: [] });
+
+      const row = await occasion(selfCreated());
+
+      expect(sent.map((mail) => mail.to)).to.deep.equal([CREATOR]);
+      expect(rows[0].status).to.equal("failed");
+      expect(rows[0].lastError).to.match(/^no_recipients/);
+
+      const current = await InstanceManager.getInstance();
+      current.ownerUserIds = [INSTANCE_OWNER_A];
+      await SupervisionNotificationService.retry(row.id);
+
+      expect(sent.map((mail) => mail.to)).to.deep.equal([
+        CREATOR,
+        INSTANCE_OWNER_A,
+      ]);
+      expect(rows[0].status).to.equal("sent");
     });
 
     it("never dispatches a repeated occasion of the same dedupe key", async function () {

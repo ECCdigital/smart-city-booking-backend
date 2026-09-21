@@ -12,6 +12,9 @@ const {
   REVIEW_STATUS,
   OFFER_TYPES,
 } = require("../services/supervision/supervision-constants");
+const {
+  REVIEW_ACTIONS,
+} = require("../services/supervision/review-transitions");
 const { adminDashboardUrl, adminInstanceTenantsUrl } = require("./mail-links");
 
 const LEVEL_LABELS = Object.freeze({
@@ -41,9 +44,9 @@ const OFFER_TYPE_LABELS = Object.freeze({
 });
 
 const DECISION_LABELS = Object.freeze({
-  approve: "Freigabe",
-  reject: "Ablehnung",
-  withdraw: "Freigaberückzug",
+  [REVIEW_ACTIONS.APPROVE]: "Freigabe",
+  [REVIEW_ACTIONS.REJECT]: "Ablehnung",
+  [REVIEW_ACTIONS.WITHDRAW]: "Freigaberückzug",
 });
 
 const levelLabel = (level) => LEVEL_LABELS[level] ?? String(level ?? "–");
