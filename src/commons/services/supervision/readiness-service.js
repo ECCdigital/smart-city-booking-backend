@@ -113,9 +113,9 @@ const eventRef = (event) =>
  */
 function relevantOffers({ bookables, events, now }) {
   return {
-    bookables: (bookables || []).filter(
-      (bookable) => bookable.isPublic === true,
-    ),
+    bookables: (bookables || [])
+      .filter((bookable) => bookable.isPublic === true)
+      .map(asBookable),
     events: (events || [])
       .filter((event) => event.isPublic === true)
       .map(asEvent)
