@@ -68,6 +68,29 @@ describe("EventManager: the review", function () {
     ).to.equal(null);
   });
 
+  it("lists the tenant's offers at one review status, longest waiting first", async function () {
+    const sort = sinon.stub().resolves([
+      {
+        toEntity: () =>
+          new Event({ id: "b1", tenantId: "t1", review: pending }),
+      },
+    ]);
+    const find = sinon.stub(EventModel, "find").returns({ sort });
+
+    const offers = await EventManager.getOffersByReviewStatus("t1", "pending");
+
+    expect(find.firstCall.args[0]).to.deep.equal({
+      tenantId: "t1",
+      "review.status": "pending",
+    });
+    expect(sort.firstCall.args[0]).to.deep.equal({
+      "review.submittedAt": 1,
+      id: 1,
+    });
+    expect(offers.map((offer) => offer.id)).to.deep.equal(["b1"]);
+    expect(offers[0]).to.be.instanceOf(Event);
+  });
+
   describe("storeEvent", function () {
     const store = async (existing) => {
       sinon.stub(EventModel, "exists").resolves(existing);

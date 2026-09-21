@@ -68,6 +68,10 @@ describe("ReviewService", function () {
         offer.review = review;
         return structuredClone(offer);
       },
+      listByReviewStatus: async (tenantId, status) =>
+        Object.values(tenantId === "t1" ? offers : {})
+          .filter((offer) => (offer.review.status ?? null) === status)
+          .map((offer) => structuredClone(offer)),
     });
     sinon.stub(TenantManager, "getTenant").callsFake(async () => tenant);
     history = sinon

@@ -5,6 +5,7 @@
  * starts at (§2 "Startstufe").
  */
 
+const bunyan = require("bunyan");
 const TenantManager = require("../../data-managers/tenant-manager");
 const SupervisionHistoryManager = require("../../data-managers/supervision-history-manager");
 const SupervisionNotificationManager = require("../../data-managers/supervision-notification-manager");
@@ -12,17 +13,24 @@ const {
   SUPERVISION_LEVELS,
   effectiveLevelOf,
   SUPERVISION_LEVEL_VALUES,
+  REVIEW_STATUS,
   HISTORY_EVENT_TYPES,
   HISTORY_ACTOR_TYPES,
   HISTORY_ORIGINS,
   NOTIFICATION_TYPES,
 } = require("./supervision-constants");
 const { normalizeReason } = require("./reason");
+const ReviewService = require("./review-service");
 const {
   BadRequestError,
   NotFoundError,
   ConflictError,
 } = require("../../../errors/BaseError");
+
+const logger = bunyan.createLogger({
+  name: "supervision-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class SupervisionService {
   /**
@@ -115,6 +123,33 @@ class SupervisionService {
       },
       createdAt: now,
     });
+
+    // The offers already pending enter the active review queue with the
+    // switch to `supervised` (spec §8): one occasion for all of them, none
+    // without any. A switch away announces nothing, and no switch ever
+    // touches a review (§2).
+    // The offers are read after the write: a submission racing the switch
+    // is announced twice at worst, never lost. A failure here never undoes
+    // or fails the change that already happened (§8) - it is logged.
+    if (level === SUPERVISION_LEVELS.SUPERVISED) {
+      try {
+        await ReviewService.recordQueueEntry({
+          tenantId,
+          tenantName: tenant.name,
+          cause: HISTORY_EVENT_TYPES.TENANT_LEVEL_CHANGED,
+          entries: await ReviewService.listOffersByReviewStatus(
+            tenantId,
+            REVIEW_STATUS.PENDING,
+          ),
+          now,
+        });
+      } catch (error) {
+        logger.error(
+          { err: error, tenantId },
+          "could not record the queue entry of the pending offers after the switch to supervised",
+        );
+      }
+    }
 
     return {
       supervisionLevel: updated.supervisionLevel,

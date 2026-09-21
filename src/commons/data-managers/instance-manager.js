@@ -13,7 +13,11 @@ const { exportInstanceBranding } = require("../services/media/instance-media");
 const {
   normalizeBackground,
 } = require("../services/hero-layout/hero-layout-schema");
-const { NotFoundError } = require("../../errors/BaseError");
+const {
+  SUPERVISION_LEVELS,
+  SUPERVISION_LEVEL_VALUES,
+} = require("../services/supervision/supervision-constants");
+const { NotFoundError, BadRequestError } = require("../../errors/BaseError");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
@@ -83,6 +87,20 @@ class InstanceManager {
       synced.copyright = synced.copyright.trim();
     }
 
+    // The Startstufe is one of the three levels or not named at all; an
+    // unknown value is refused before anything is read or written.
+    const initialLevel = synced.tenantInitialSupervisionLevel;
+    if (
+      initialLevel !== undefined &&
+      !SUPERVISION_LEVEL_VALUES.includes(initialLevel)
+    ) {
+      throw new BadRequestError("invalid_supervision_level", {
+        field: "tenantInitialSupervisionLevel",
+        level: initialLevel,
+        allowed: SUPERVISION_LEVEL_VALUES,
+      });
+    }
+
     const instanceEntity = new Instance(synced);
 
     CustomFieldService.normalizeDefinitions(
@@ -97,6 +115,13 @@ class InstanceManager {
     }
 
     await InstanceManager._applyBackground(instanceEntity, rawInstance);
+
+    // A write that does not name the Startstufe keeps the stored one: a
+    // client from before the field must not reset it to the default.
+    if (initialLevel === undefined) {
+      instanceEntity.tenantInitialSupervisionLevel =
+        rawInstance.tenantInitialSupervisionLevel ?? SUPERVISION_LEVELS.FREE;
+    }
 
     const previousCustomFields = rawInstance.bookableCustomFields || [];
 

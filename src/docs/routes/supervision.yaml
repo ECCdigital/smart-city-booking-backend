@@ -246,6 +246,18 @@
       effective is a no-op: nothing is written, the stored change time is
       answered. A change writes one history row (`tenant.levelChanged`) and
       records one notification occasion for the tenant owners.
+
+      All three levels are accepted in every direction, and only by this
+      request: nothing promotes or suggests a level automatically. No change
+      writes the review of an offer. Under `supervised` every offer of the
+      tenant that is not `approved` leaves the public lists, the direct link
+      and the new self-booking at once; back to `free` it returns unchanged.
+      A switch to `supervised` also records one `review.queueEntered`
+      occasion listing every offer of the tenant that is `pending` at that
+      moment - bookables and events, `payload: { tenantName, cause:
+      "tenant.levelChanged", offers: [{ offerType, offerId, title,
+      submittedAt, isPublic }] }` - and none when no offer is pending; a
+      switch away from `supervised` records none.
     security:
       - bearerAuth: []
     parameters:

@@ -1,0 +1,82 @@
+# swagger/routes/instance.yaml
+#
+# The instance, as far as the tenant supervision reads and writes it: the
+# initial supervision level (glossary "Startstufe") a self-created tenant
+# starts at. The other instance fields travel with the same routes and are
+# not described here.
+
+/api/instances/public:
+  get:
+    tags:
+      - Instance
+    summary: The public instance
+    description: |
+      The instance without its private data (mail transport, owners, the
+      tenant creation permissions, instance custom fields). Carries
+      `tenantInitialSupervisionLevel`, so a frontend can tell a user what a
+      new tenant starts at before it is created.
+    responses:
+      "200":
+        description: The public instance.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tenantInitialSupervisionLevel:
+                  $ref: "#/components/schemas/TenantInitialSupervisionLevel"
+
+/api/instances:
+  get:
+    tags:
+      - Instance
+    summary: The instance
+    description: The whole instance. Instance owner only.
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: The instance, `tenantInitialSupervisionLevel` included.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tenantInitialSupervisionLevel:
+                  $ref: "#/components/schemas/TenantInitialSupervisionLevel"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+  put:
+    tags:
+      - Instance
+    summary: Store the instance
+    description: |
+      Stores the instance. Instance owner only. `tenantInitialSupervisionLevel`
+      is validated against the three levels; a body that does not name it
+      keeps the stored one. Changing it is never retroactive: no existing
+      tenant changes its level, and nothing promotes a tenant automatically.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              tenantInitialSupervisionLevel:
+                $ref: "#/components/schemas/TenantInitialSupervisionLevel"
+    responses:
+      "200":
+        description: The stored instance.
+      "400":
+        description: |
+          `invalid_supervision_level` with `params: { field, level, allowed }`
+          for a `tenantInitialSupervisionLevel` outside the vocabulary
+          (`null` and `""` included); `validation_failed` for the other fields.
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner

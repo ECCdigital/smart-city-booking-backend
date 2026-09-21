@@ -135,6 +135,29 @@ describe("supervision routes", function () {
       expect(level).to.equal("free");
     });
 
+    it("switches between all three levels in every direction", async function () {
+      const LEVELS = ["free", "supervised", "blocked"];
+      for (const from of LEVELS) {
+        for (const to of LEVELS.filter((other) => other !== from)) {
+          level = from;
+          SupervisionHistoryManager.insert.resetHistory();
+
+          const res = await call(
+            "put",
+            `/tenants/${TENANT}/supervision`,
+            ADMIN,
+            { level: to },
+          );
+
+          expect(res.status, `${from} -> ${to}`).to.equal(200);
+          expect(res.body.supervisionLevel).to.equal(to);
+          expect(SupervisionHistoryManager.insert.firstCall.args[0]).to.include(
+            { eventType: "tenant.levelChanged", from, to },
+          );
+        }
+      }
+    });
+
     it("refuses an unknown level with 400", async function () {
       const res = await call("put", `/tenants/${TENANT}/supervision`, ADMIN, {
         level: "banned",
@@ -196,6 +219,68 @@ describe("supervision routes", function () {
       ).to.equal(403);
     });
 
+    it("shows the initial level and every level change with its reason", async function () {
+      // What the creation and the changes wrote is what the history lists.
+      const rows = [
+        {
+          id: "h0",
+          tenantId: TENANT,
+          eventType: "tenant.created",
+          from: null,
+          to: "supervised",
+          reason: null,
+        },
+      ];
+      SupervisionHistoryManager.insert.callsFake(async (row) => {
+        rows.push({ id: `h${rows.length}`, ...row });
+      });
+      SupervisionHistoryManager.list.callsFake(async () => ({
+        items: [...rows].reverse(),
+        total: rows.length,
+        page: 1,
+        pageSize: 50,
+      }));
+      level = "supervised";
+      try {
+        await call("put", `/tenants/${TENANT}/supervision`, ADMIN, {
+          level: "free",
+          reason: "  Bewährt  ",
+        });
+        await call("put", `/tenants/${TENANT}/supervision`, ADMIN, {
+          level: "blocked",
+        });
+
+        for (const userId of [OWNER, ADMIN]) {
+          const res = await call(
+            "get",
+            `/tenants/${TENANT}/supervision/history`,
+            userId,
+          );
+          expect(res.status).to.equal(200);
+          expect(
+            res.body.items.map((row) => [
+              row.eventType,
+              row.from,
+              row.to,
+              row.reason,
+            ]),
+          ).to.deep.equal([
+            ["tenant.levelChanged", "free", "blocked", null],
+            ["tenant.levelChanged", "supervised", "free", "Bewährt"],
+            ["tenant.created", null, "supervised", null],
+          ]);
+        }
+      } finally {
+        SupervisionHistoryManager.insert.callsFake(async () => ({}));
+        SupervisionHistoryManager.list.callsFake(async () => ({
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 50,
+        }));
+      }
+    });
+
     it("refuses an unknown offer type in the filter", async function () {
       const res = await call(
         "get",
@@ -245,12 +330,18 @@ describe("supervision routes", function () {
   });
 
   describe("the tenant DTOs and writes", function () {
-    it("filters the admin list by level", async function () {
-      const res = await call("get", "/tenants?supervisionLevel=blocked", ADMIN);
-      expect(res.status).to.equal(200);
-      expect(TenantManager.getTenants.lastCall.args[1]).to.include({
-        supervisionLevel: "blocked",
-      });
+    it("filters the admin list by each of the three levels", async function () {
+      for (const wanted of ["free", "supervised", "blocked"]) {
+        const res = await call(
+          "get",
+          `/tenants?supervisionLevel=${wanted}`,
+          ADMIN,
+        );
+        expect(res.status).to.equal(200);
+        expect(TenantManager.getTenants.lastCall.args[1]).to.include({
+          supervisionLevel: wanted,
+        });
+      }
     });
 
     it("refuses an unknown level in the list filter", async function () {

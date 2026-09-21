@@ -499,6 +499,25 @@ class BookableManager {
   }
 
   /**
+   * The bookables of a tenant at one review status (glossary
+   * "Prüfstatus"), whatever their publication wish - the offers a level
+   * change or the review queue asks for. Longest waiting first.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string|null} status One of `REVIEW_STATUS`; null matches a
+   *   bookable without a review as well
+   * @returns {Promise<Bookable[]>} The bookables, by `review.submittedAt`
+   *   ascending, then by id
+   */
+  static async getOffersByReviewStatus(tenantId, status) {
+    const rawBookables = await BookableModel.find({
+      tenantId,
+      "review.status": status ?? null,
+    }).sort({ "review.submittedAt": 1, id: 1 });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Remove a bookable
    * @param {string} id Bookable ID
    * @param {string} tenantId Tenant ID

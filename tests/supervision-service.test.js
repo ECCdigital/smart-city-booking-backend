@@ -11,6 +11,10 @@ const sinon = require("sinon");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const SupervisionHistoryManager = require("../src/commons/data-managers/supervision-history-manager");
 const SupervisionNotificationManager = require("../src/commons/data-managers/supervision-notification-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+const EventManager = require("../src/commons/data-managers/event-manager");
 const SupervisionService = require("../src/commons/services/supervision/supervision-service");
 const {
   BadRequestError,
@@ -34,9 +38,25 @@ describe("SupervisionService.changeTenantLevel", function () {
   let history;
   let outbox;
   let tenant;
+  /** The offers of the tenant, by type; the manager fakes filter them. */
+  let bookables;
+  let events;
+
+  const byStatus = (offers) => async (tenantId, status) =>
+    tenantId === "t1"
+      ? offers.filter((offer) => offer.review.status === status)
+      : [];
 
   beforeEach(function () {
     tenant = { id: "t1", name: "Verein", supervisionLevel: "free" };
+    bookables = [];
+    events = [];
+    sinon
+      .stub(BookableManager, "getOffersByReviewStatus")
+      .callsFake((...args) => byStatus(bookables)(...args));
+    sinon
+      .stub(EventManager, "getOffersByReviewStatus")
+      .callsFake((...args) => byStatus(events)(...args));
     sinon.stub(TenantManager, "getTenant").callsFake(async () => tenant);
     sinon
       .stub(TenantManager, "updateSupervisionLevel")
@@ -115,6 +135,195 @@ describe("SupervisionService.changeTenantLevel", function () {
 
     expect(result.supervisionLevel).to.equal("supervised");
     expect(history.firstCall.args[0].reason).to.equal(null);
+  });
+
+  describe("the queue entry of the offers already pending", function () {
+    const SUBMITTED = new Date("2026-09-10T08:00:00.000Z");
+    const LATER = new Date("2026-09-12T08:00:00.000Z");
+    const review = (status, submittedAt = null) => ({
+      status,
+      submittedAt,
+      decidedAt: null,
+      decidedBy: null,
+      reason: null,
+    });
+    const queueRows = () =>
+      outbox
+        .getCalls()
+        .map((call) => call.args[0])
+        .filter((row) => row.type === "review.queueEntered");
+
+    beforeEach(function () {
+      bookables = [
+        {
+          id: "b1",
+          title: "Saal",
+          isPublic: true,
+          review: review("pending", SUBMITTED),
+        },
+        { id: "b2", title: "Halle", isPublic: true, review: review(null) },
+        {
+          id: "b3",
+          title: "Platz",
+          isPublic: true,
+          review: review("rejected", SUBMITTED),
+        },
+        {
+          id: "b4",
+          title: "Raum",
+          isPublic: true,
+          review: review("approved", SUBMITTED),
+        },
+      ];
+      events = [
+        {
+          id: "e1",
+          information: { name: "Konzert" },
+          isPublic: false,
+          review: review("pending", LATER),
+        },
+      ];
+    });
+
+    it("a switch to supervised announces every pending offer of both types in one occasion", async function () {
+      await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "supervised",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(queueRows()).to.have.length(1);
+      const [row] = queueRows();
+      expect(row.tenantId).to.equal("t1");
+      expect(row.createdAt).to.equal(NOW);
+      expect(row.payload).to.deep.equal({
+        tenantName: "Verein",
+        cause: "tenant.levelChanged",
+        offers: [
+          {
+            offerType: "bookable",
+            offerId: "b1",
+            title: "Saal",
+            submittedAt: SUBMITTED,
+            isPublic: true,
+          },
+          {
+            offerType: "event",
+            offerId: "e1",
+            title: "Konzert",
+            submittedAt: LATER,
+            isPublic: false,
+          },
+        ],
+      });
+      // The level change keeps its own occasion.
+      expect(outbox.callCount).to.equal(2);
+    });
+
+    it("comes from blocked as well", async function () {
+      tenant.supervisionLevel = "blocked";
+
+      await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "supervised",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(queueRows()).to.have.length(1);
+    });
+
+    it("records none when the tenant has no pending offer", async function () {
+      bookables = bookables.filter((b) => b.review.status !== "pending");
+      events = [];
+
+      await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "supervised",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(queueRows()).to.have.length(0);
+      expect(outbox.callCount).to.equal(1);
+    });
+
+    it("a switch away from supervised records none", async function () {
+      for (const level of ["free", "blocked"]) {
+        tenant = { ...tenant, supervisionLevel: "supervised" };
+        outbox.resetHistory();
+
+        await SupervisionService.changeTenantLevel({
+          tenantId: "t1",
+          level,
+          actorUserId: "owner@example.test",
+          now: NOW,
+        });
+
+        expect(queueRows()).to.have.length(0);
+        expect(outbox.callCount).to.equal(1);
+      }
+    });
+
+    it("a switch between free and blocked records none", async function () {
+      await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "blocked",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(queueRows()).to.have.length(0);
+    });
+
+    it("a repeated switch to supervised records nothing", async function () {
+      tenant.supervisionLevel = "supervised";
+
+      await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "supervised",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(outbox.called).to.be.false;
+      expect(history.called).to.be.false;
+    });
+
+    it("keeps the change when the pending offers cannot be read", async function () {
+      BookableManager.getOffersByReviewStatus.callsFake(async () => {
+        throw new Error("mongo down");
+      });
+
+      const result = await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "supervised",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(result.supervisionLevel).to.equal("supervised");
+      expect(history.calledOnce).to.be.true;
+      expect(queueRows()).to.have.length(0);
+    });
+
+    it("never writes a review", async function () {
+      const updateBookable = sinon.stub(BookableManager, "updateReview");
+      const updateEvent = sinon.stub(EventManager, "updateReview");
+
+      for (const level of ["supervised", "blocked", "free"]) {
+        await SupervisionService.changeTenantLevel({
+          tenantId: "t1",
+          level,
+          actorUserId: "owner@example.test",
+          now: NOW,
+        });
+      }
+
+      expect(updateBookable.called).to.be.false;
+      expect(updateEvent.called).to.be.false;
+    });
   });
 
   it("is a no-op when the level is already effective", async function () {
