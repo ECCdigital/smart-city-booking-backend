@@ -36,6 +36,18 @@ components:
         type: string
 
   schemas:
+    TenantInitialSupervisionLevel:
+      type: string
+      enum: [free, supervised, blocked]
+      default: free
+      description: |
+        The initial supervision level of the instance (glossary
+        "Startstufe"): the level every self-created tenant starts at, over
+        the allow-list (`allowedUsersToCreateTenant`) and the open creation
+        (`allowAllUsersToCreateTenant`) alike. Read by the server at the
+        moment of the creation, never taken from a creation body; a tenant
+        the instance owner creates always starts `free`. An instance
+        without the field reads as `free`.
     OfferReview:
       type: object
       description: |
