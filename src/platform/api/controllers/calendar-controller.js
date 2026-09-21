@@ -9,6 +9,7 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
   listableOffers,
   reachableOffers,
+  withoutTicketsOfUnreachableEvents,
 } = require("../../../commons/services/supervision/public-offer-gate");
 const { NotFoundError, BadRequestError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
@@ -43,6 +44,11 @@ class CalendarController {
     } else {
       bookables = listableOffers(tenantRecord, bookables);
     }
+    // A ticket goes out with its event only.
+    bookables = await withoutTicketsOfUnreachableEvents(
+      tenantRecord,
+      bookables,
+    );
 
     for (const bookable of bookables) {
       const relatedBookables = await BookableManager.getRelatedBookables(

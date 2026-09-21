@@ -27,7 +27,11 @@ const {
   assertOfferReachable,
   listableOffers,
   reachableOffers,
+  withoutTicketsOfUnreachableEvents,
 } = require("../../../commons/services/supervision/public-offer-gate");
+const {
+  isOfferReachable,
+} = require("../../../commons/services/supervision/offer-gate");
 const {
   OFFER_TYPES,
 } = require("../../../commons/services/supervision/supervision-constants");
@@ -52,9 +56,12 @@ class BookableController {
       // List-type delivery (tenant supervision spec §5.1): what asks to be
       // listed and passes the tenant's supervision.
       const tenantRecord = await TenantManager.getTenant(tenant);
-      const bookables = listableOffers(
+      const bookables = await withoutTicketsOfUnreachableEvents(
         tenantRecord,
-        await BookableManager.getBookables(tenant),
+        listableOffers(
+          tenantRecord,
+          await BookableManager.getBookables(tenant),
+        ),
       );
 
       if (request.query.populate === "true") {
@@ -167,7 +174,7 @@ class BookableController {
 
   /**
    * What a public bookable carries as `_populated`: its event and the
-   * related bookables the public may reach (tenant supervision spec §5.2:
+   * related bookables, as far as the public may reach them (tenant supervision spec §5.2:
    * no leak over embedded objects), each without its review.
    *
    * @param {Bookable} bookable
@@ -179,8 +186,14 @@ class BookableController {
       bookable.id,
       bookable.tenantId,
     );
+    const event = await EventManager.getEvent(
+      bookable.eventId,
+      bookable.tenantId,
+    );
+    const eventShown =
+      event && isOfferReachable({ tenant: tenantRecord, offer: event });
     return {
-      event: await EventManager.getEvent(bookable.eventId, bookable.tenantId),
+      event: eventShown ? event.withoutReview() : null,
       relatedBookables: reachableOffers(tenantRecord, related).map(
         (relatedBookable) => relatedBookable.withResolvedMediaUrls(),
       ),

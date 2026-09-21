@@ -69,13 +69,21 @@ function isOfferListable({ tenant, offer }) {
 /**
  * Whether an offer is reachable by a known direct link and bookable in a
  * new self-booking: its detail, prices, opening hours, availability, block
- * periods, occupancy and the media it needs.
+ * periods, occupancy and the media it needs. A ticket hangs on its event:
+ * whoever holds the event passes it, and both have to pass.
  *
- * @param {{tenant: Object|null, offer: Object}} params
+ * @param {Object} params
+ * @param {Object|null} params.tenant
+ * @param {Object} params.offer
+ * @param {Object|null} [params.event] The event of a ticket, if it has one
  * @returns {boolean}
  */
-function isOfferReachable({ tenant, offer }) {
-  return isTenantPubliclyVisible(tenant) && offerPassesReview(tenant, offer);
+function isOfferReachable({ tenant, offer, event = null }) {
+  return (
+    isTenantPubliclyVisible(tenant) &&
+    offerPassesReview(tenant, offer) &&
+    (!event || offerPassesReview(tenant, event))
+  );
 }
 
 /**

@@ -15,12 +15,13 @@
  *       expectedStatus` (null matches "none yet"), or null when the status
  *       moved underneath - the write never touches another field
  *
- * Bookables are registered here; events register theirs with
- * `registerOfferAdapter(OFFER_TYPES.EVENT, …)` (ticket 06).
+ * Bookables and events are registered at the end of this file. An event
+ * has no `title` of its own: its adapter answers `information.name`.
  */
 
 const TenantManager = require("../../data-managers/tenant-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
+const EventManager = require("../../data-managers/event-manager");
 const SupervisionHistoryManager = require("../../data-managers/supervision-history-manager");
 const SupervisionNotificationManager = require("../../data-managers/supervision-notification-manager");
 const {
@@ -306,6 +307,29 @@ ReviewService.registerOfferAdapter(OFFER_TYPES.BOOKABLE, {
       expectedStatus,
       review,
     }),
+});
+
+/** An event as the review service reads an offer. */
+const eventAsOffer = (event) =>
+  event && {
+    id: event.id,
+    title: event.information?.name ?? null,
+    isPublic: event.isPublic,
+    review: event.review,
+  };
+
+ReviewService.registerOfferAdapter(OFFER_TYPES.EVENT, {
+  load: async (tenantId, offerId) =>
+    eventAsOffer(await EventManager.getEvent(offerId, tenantId)),
+  updateReview: async ({ tenantId, offerId, expectedStatus, review }) =>
+    eventAsOffer(
+      await EventManager.updateReview({
+        tenantId,
+        id: offerId,
+        expectedStatus,
+        review,
+      }),
+    ),
 });
 
 module.exports = ReviewService;

@@ -105,8 +105,16 @@ const TABLE = {
   },
 
   event: {
-    // Stays public on purpose (§7.2): no public projection in this card.
-    read: { public: true, any: "manageBookables.readAny" },
+    // `GET /events`, `/events/:id`: the public projection is the events
+    // the supervision's offer gate lets out, without their review; whoever
+    // may read events reads them whole whatever the gate says - under
+    // `own` the events of their own - so the admin UI prepares an event
+    // before it is listed or approved.
+    read: {
+      public: true,
+      own: "manageBookables.readOwn",
+      any: "manageBookables.readAny",
+    },
     create: { any: "manageBookables.create" },
     update: {
       own: "manageBookables.updateOwn",
@@ -122,6 +130,9 @@ const TABLE = {
     },
     // `_meta/tags`, `count/check`: signed in, nothing further (as today).
     meta: { own: "signedIn" },
+    // The review of the tenant supervision (spec §6.2), as for a bookable.
+    reviewSubmit: { own: "tenantOwner", any: "instanceOwner" },
+    reviewDecide: { any: "instanceOwner" },
   },
 
   booking: {

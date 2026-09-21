@@ -12,6 +12,9 @@ const {
   isOfferListable,
 } = require("../../../commons/services/supervision/offer-gate");
 const {
+  withoutTicketsOfUnreachableEvents,
+} = require("../../../commons/services/supervision/public-offer-gate");
+const {
   GroupBookingPermissions,
 } = require("../../../commons/utilities/group-booking-permissions");
 
@@ -98,8 +101,9 @@ class JSONController {
 
       // List-type delivery of the supervision (spec §5.1): listed is what
       // asks for it and passes the tenant's review.
-      bookables = bookables.filter((offer) =>
-        isOfferListable({ tenant, offer }),
+      bookables = await withoutTicketsOfUnreachableEvents(
+        tenant,
+        bookables.filter((offer) => isOfferListable({ tenant, offer })),
       );
 
       bookables = bookables.filter((bookable) => {
@@ -295,7 +299,8 @@ class JSONController {
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
-      events = events.filter((event) => event.isPublic);
+      // List-type delivery of the supervision (spec §5.1).
+      events = events.filter((offer) => isOfferListable({ tenant, offer }));
 
       if (ids) {
         const idsArray = ids.split(",");
@@ -369,7 +374,8 @@ class JSONController {
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
-      if (event?.id && event.isPublic === true) {
+      // The embed interface shows what is listed, its detail included.
+      if (event?.id && isOfferListable({ tenant, offer: event })) {
         const tickets = await BookableManager.getEventBookables(
           tenantId,
           event.id,

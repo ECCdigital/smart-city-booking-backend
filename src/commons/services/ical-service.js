@@ -4,6 +4,7 @@ const TenantManager = require("../data-managers/tenant-manager");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const { DateTime } = require("luxon");
+const { isOfferListable } = require("./supervision/offer-gate");
 
 class ICalService {
   static async getEventCal(
@@ -14,7 +15,12 @@ class ICalService {
     const event = await EventManager.getEvent(eventID, tenantID);
     const tenant = await TenantManager.getTenant(tenantID);
 
-    if (!event || (!includePrivate && !event.isPublic)) {
+    // The public calendar is list-type delivery of the supervision (spec
+    // §5.1); `includePrivate` is the management reach the controller checked.
+    if (
+      !event ||
+      (!includePrivate && !isOfferListable({ tenant, offer: event }))
+    ) {
       throw new Error(`Event with ID ${eventID} not found`);
     }
 
@@ -46,7 +52,9 @@ class ICalService {
     const toDate = to ? new Date(Number(to)) : null;
 
     const filteredEvents = events.filter((event) => {
-      if (!includePrivate && !event.isPublic) return false;
+      if (!includePrivate && !isOfferListable({ tenant, offer: event })) {
+        return false;
+      }
       if (!includePast && event.isPast()) return false;
       if (eventIDs?.length > 0 && !eventIDs.includes(event.id)) return false;
 
