@@ -63,7 +63,30 @@ const NOTIFICATION_STATUS = Object.freeze({
 
 const values = (enumeration) => Object.freeze(Object.values(enumeration));
 
+/**
+ * The tenant fields the supervision owns: set server-side on creation,
+ * changed only by `PUT /tenants/:tenant/supervision`, never taken from a
+ * tenant write (spec §3).
+ */
+const SUPERVISION_FIELDS = Object.freeze([
+  "supervisionLevel",
+  "supervisionChangedAt",
+]);
+
+/**
+ * The effective level of a tenant: what is stored, or `free` for a tenant
+ * from before the supervision.
+ *
+ * @param {Object|null} tenant
+ * @returns {string}
+ */
+function effectiveLevelOf(tenant) {
+  return tenant?.supervisionLevel ?? SUPERVISION_LEVELS.FREE;
+}
+
 module.exports = {
+  SUPERVISION_FIELDS,
+  effectiveLevelOf,
   SUPERVISION_LEVELS,
   SUPERVISION_LEVEL_VALUES: values(SUPERVISION_LEVELS),
   REVIEW_STATUS,

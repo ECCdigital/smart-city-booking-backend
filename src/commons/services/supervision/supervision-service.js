@@ -10,6 +10,7 @@ const SupervisionHistoryManager = require("../../data-managers/supervision-histo
 const SupervisionNotificationManager = require("../../data-managers/supervision-notification-manager");
 const {
   SUPERVISION_LEVELS,
+  effectiveLevelOf,
   SUPERVISION_LEVEL_VALUES,
   HISTORY_EVENT_TYPES,
   HISTORY_ACTOR_TYPES,
@@ -21,11 +22,6 @@ const {
   NotFoundError,
   ConflictError,
 } = require("../../../errors/BaseError");
-
-/** The stored level of a tenant, `free` for one from before the supervision. */
-function levelOf(tenant) {
-  return tenant.supervisionLevel ?? SUPERVISION_LEVELS.FREE;
-}
 
 /** A reason as it is stored: a trimmed string, or null for none. */
 function normalizeReason(reason) {
@@ -81,7 +77,7 @@ class SupervisionService {
       throw new NotFoundError("tenant_not_found", { id: tenantId });
     }
 
-    const from = levelOf(tenant);
+    const from = effectiveLevelOf(tenant);
     if (from === level) {
       return {
         supervisionLevel: from,

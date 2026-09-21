@@ -57,16 +57,9 @@ const Formatters = require("../../../commons/utilities/formatters");
 const InstanceManager = require("../../../commons/data-managers/instance-manager");
 const SupervisionService = require("../../../commons/services/supervision/supervision-service");
 const {
+  SUPERVISION_FIELDS,
   SUPERVISION_LEVEL_VALUES,
 } = require("../../../commons/services/supervision/supervision-constants");
-
-/**
- * The supervision fields a tenant write may not bring (tenant supervision
- * spec §3): the level is set server-side on creation and changed only by
- * `PUT /tenants/:tenant/supervision`. Applies to the creation, the update
- * and the obsolete `PUT /tenants` alike.
- */
-const SUPERVISION_FIELDS = ["supervisionLevel", "supervisionChangedAt"];
 
 function withoutSupervisionFields(body) {
   const stripped = { ...body };
@@ -175,7 +168,7 @@ class TenantController {
   static async getTenants(request, response) {
     try {
       const publicTenants = request.query.publicTenants === "true";
-      const { supervisionLevel } = request.query;
+      const supervisionLevel = request.query.supervisionLevel || undefined;
       if (
         supervisionLevel !== undefined &&
         !SUPERVISION_LEVEL_VALUES.includes(supervisionLevel)

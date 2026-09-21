@@ -14,18 +14,10 @@
  * the one extension point below, `offerPassesReview`.
  */
 
-const { SUPERVISION_LEVELS } = require("./supervision-constants");
-
-/**
- * The effective level of a tenant: what is stored, or `free` for a tenant
- * that predates the supervision.
- *
- * @param {Object|null} tenant
- * @returns {string}
- */
-function levelOf(tenant) {
-  return tenant?.supervisionLevel ?? SUPERVISION_LEVELS.FREE;
-}
+const {
+  SUPERVISION_LEVELS,
+  effectiveLevelOf,
+} = require("./supervision-constants");
 
 /**
  * Whether a tenant appears in public tenant lists and lets any offer out.
@@ -37,7 +29,7 @@ function isTenantPubliclyVisible(tenant) {
   if (!tenant) {
     return false;
   }
-  return levelOf(tenant) !== SUPERVISION_LEVELS.BLOCKED;
+  return effectiveLevelOf(tenant) !== SUPERVISION_LEVELS.BLOCKED;
 }
 
 /**

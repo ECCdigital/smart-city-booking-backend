@@ -14,9 +14,11 @@ const {
 } = require("../utilities/cancellation-refund-tiers");
 const { publicTenantCondition } = require("../services/supervision/offer-gate");
 const {
+  SUPERVISION_FIELDS,
   SUPERVISION_LEVELS,
   SUPERVISION_LEVEL_VALUES,
 } = require("../services/supervision/supervision-constants");
+const { BadRequestError } = require("../../errors/BaseError");
 
 /**
  * The per-year document counters at the tenant. They belong to the number
@@ -31,7 +33,6 @@ const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
  * whole-tenant write carries them on insert only, so a stale copy of the
  * tenant cannot undo a level change.
  */
-const SUPERVISION_FIELDS = ["supervisionLevel", "supervisionChangedAt"];
 
 /**
  * Data Manager for Tenant objects.
@@ -90,7 +91,10 @@ class TenantManager {
    */
   static async updateSupervisionLevel({ tenantId, from, to, changedAt }) {
     if (!SUPERVISION_LEVEL_VALUES.includes(to)) {
-      throw new Error(`Unknown supervision level: ${to}`);
+      throw new BadRequestError("invalid_supervision_level", {
+        level: to,
+        allowed: SUPERVISION_LEVEL_VALUES,
+      });
     }
     // A tenant from before the supervision has no stored level; `from:
     // "free"` has to match it as well.
