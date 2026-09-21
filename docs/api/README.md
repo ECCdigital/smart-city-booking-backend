@@ -49,9 +49,20 @@ A tenant can only be created if one of the following conditions is met:
 - The user is included in `instance.allowedUsersToCreateTenant`, or
 - The user is listed in `instance.ownerUserIds`.
 
+The body needs `name`, `contactName` and a formally valid `mail` (the tenant's contact, not the creator's account address); `phone`, `website` and `location` are optional. Answers `201` with an empty body, or:
+
+| Status | `code`                                                 | When                                                                                                                                                                                                                                                   |
+| ------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | `missing_name`, `missing_contact_name`, `invalid_mail` | A required contact field is missing or invalid (`params.field`)                                                                                                                                                                                        |
+| 403    | `email_verification_required`                          | A creator who is not an instance owner has no verification proof (`params.method`: `email` or `identity_provider`)                                                                                                                                     |
+| 409    | `max_tenants_reached`                                  | The global `MAX_TENANTS` is reached (instance owners included)                                                                                                                                                                                         |
+| 429    | `too_many_requests`                                    | A creator who is not an instance owner already created three tenants within the last 24 hours (`RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`); `Retry-After` names the wait in seconds. Failed creations do not count, deleting a tenant returns no quota |
+
+The creator becomes the tenant owner. The tenant starts at the instance's initial supervision level (`free` for an instance owner); supervision fields in the body are ignored.
+
 ### PUT /api/tenants
 
-Creates or updates a tenant (upsert). **Requires JWT.** Same creation rules as `POST`.
+Creates or updates a tenant (upsert). **Requires JWT.** Same creation rules and answers as `POST`; an update of an existing tenant does not need the contact fields.
 
 ### DELETE /api/tenants/:id
 

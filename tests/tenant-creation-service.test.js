@@ -19,7 +19,11 @@ const SupervisionHistoryManager = require("../src/commons/data-managers/supervis
 const SupervisionNotificationManager = require("../src/commons/data-managers/supervision-notification-manager");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
 const { User } = require("../src/commons/entities/user/user");
-const { TooManyRequestsError } = require("../src/errors/BaseError");
+const {
+  TooManyRequestsError,
+  ConflictError,
+  ForbiddenError,
+} = require("../src/errors/BaseError");
 
 const USER = "raumgeber@example.test";
 const VALID = Object.freeze({
@@ -77,6 +81,7 @@ describe("TenantCreationService under contention", function () {
     tenants = new Map();
     memberships = new Map();
     sinon.stub(TenantManager, "checkTenantCount").resolves(true);
+    sinon.stub(TenantManager, "checkTenantCountAfterInsert").resolves(true);
     sinon.stub(TenantManager, "storeTenant").callsFake(async (tenant) => {
       // Slow enough that the four creations below overlap.
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -102,7 +107,7 @@ describe("TenantCreationService under contention", function () {
     });
     sinon
       .stub(UserManager, "getUser")
-      .resolves(new User({ id: USER, isVerified: true }));
+      .callsFake(async (id) => new User({ id, isVerified: true }));
     sinon.stub(MediaReferenceGuard, "assertTenantStorable").resolves();
     sinon.stub(SupervisionHistoryManager, "insert").resolves({});
     sinon.stub(SupervisionNotificationManager, "record").resolves({});
@@ -166,6 +171,76 @@ describe("TenantCreationService under contention", function () {
     // fourth does not.
     await createAs(USER);
     await rejects(createAs(USER), TooManyRequestsError);
+  });
+
+  it("keeps the created tenant when the outbox is down: the occasion never undoes the creation", async function () {
+    const rows = inMemoryRateLimitStore();
+    SupervisionNotificationManager.record.rejects(new Error("outbox down"));
+
+    const tenant = await createAs(USER);
+
+    expect(tenants.has(tenant.id)).to.be.true;
+    expect(memberships.has(tenant.id)).to.be.true;
+    expect(rows.size).to.equal(1);
+    expect(TenantManager.removeTenant.called).to.be.false;
+  });
+
+  it("answers the original failure and frees the slot even when the rollback fails too", async function () {
+    const rows = inMemoryRateLimitStore();
+    MembershipManager.addMembership.rejects(new Error("down"));
+    TenantManager.removeTenant.rejects(new Error("rollback down"));
+
+    const error = await rejects(createAs(USER), Error);
+
+    expect(error.message).to.equal("down");
+    expect(rows.size).to.equal(0);
+  });
+
+  it("takes a creation back that overshot MAX_TENANTS in a race", async function () {
+    const rows = inMemoryRateLimitStore();
+    TenantManager.checkTenantCountAfterInsert.resolves(false);
+
+    const error = await rejects(createAs(USER), ConflictError);
+
+    expect(error.code).to.equal("max_tenants_reached");
+    expect(tenants.size).to.equal(0);
+    expect(memberships.size).to.equal(0);
+    expect(rows.size).to.equal(0);
+    expect(SupervisionHistoryManager.insert.called).to.be.false;
+  });
+
+  it("stores the contact trimmed", async function () {
+    inMemoryRateLimitStore();
+
+    const tenant = await TenantCreationService.create({
+      body: {
+        name: " Werkstatt ",
+        contactName: " Max ",
+        mail: " w@example.test ",
+      },
+      creatorUserId: USER,
+      creatorIsInstanceOwner: false,
+      mediaScope: { reach: "own", userId: USER },
+    });
+
+    expect(tenant).to.include({
+      name: "Werkstatt",
+      contactName: "Max",
+      mail: "w@example.test",
+    });
+  });
+
+  it("takes the proof of the creator's own account only", async function () {
+    inMemoryRateLimitStore();
+    // The user lookup matches loosely; a verified look-alike is no proof.
+    UserManager.getUser.resolves(
+      new User({ id: `x${USER}`, isVerified: true }),
+    );
+
+    const error = await rejects(createAs(USER), ForbiddenError);
+
+    expect(error.code).to.equal("email_verification_required");
+    expect(tenants.size).to.equal(0);
   });
 
   it("counts every user on their own", async function () {

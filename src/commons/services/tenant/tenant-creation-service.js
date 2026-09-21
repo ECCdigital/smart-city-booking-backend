@@ -5,6 +5,7 @@
  * create (`tenant.create`) is the router's; everything after it is here.
  */
 
+const bunyan = require("bunyan");
 const { readFileSync } = require("fs");
 const { join } = require("path");
 const { v4: uuidv4 } = require("uuid");
@@ -23,6 +24,7 @@ const {
 } = require("../../mail-service/templates/default-mail-snippets");
 const MediaReferenceGuard = require("../media/media-reference-guard");
 const { assertVerifiedForSelfService } = require("../user/verification-proof");
+const { userIdsMatch } = require("../../utilities/user-id-utils");
 const RateLimiter = require("../rate-limit/rate-limiter");
 const { tenantSelfCreationPerUser } = require("../rate-limit/limits");
 const SupervisionService = require("../supervision/supervision-service");
@@ -39,9 +41,16 @@ const {
   TooManyRequestsError,
 } = require("../../../errors/BaseError");
 
-const TEMPLATES = join(__dirname, "../..");
+const COMMONS_ROOT = join(__dirname, "../..");
 const readTemplate = (relative) =>
-  readFileSync(join(TEMPLATES, relative), "utf8");
+  readFileSync(join(COMMONS_ROOT, relative), "utf8");
+
+const logger = bunyan.createLogger({
+  name: "tenant-creation-service.js",
+  level: process.env.LOG_LEVEL,
+});
+
+const CONTACT_FIELDS = ["name", "contactName", "mail"];
 
 const isFilled = (value) => typeof value === "string" && value.trim() !== "";
 
@@ -96,11 +105,15 @@ class TenantCreationService {
   }) {
     TenantCreationService.assertContact(body);
 
-    const stripped = { ...body };
+    const accepted = { ...body };
     for (const field of SUPERVISION_FIELDS) {
-      delete stripped[field];
+      delete accepted[field];
     }
-    const tenant = new Tenant(stripped);
+    // Stored as validated: without the surrounding whitespace.
+    for (const field of CONTACT_FIELDS) {
+      accepted[field] = accepted[field].trim();
+    }
+    const tenant = new Tenant(accepted);
     tenant.id = uuidv4();
     tenant.ownerUserIds = [creatorUserId];
 
@@ -113,7 +126,11 @@ class TenantCreationService {
     // the server, from the stored user - the request's user carries no
     // verification fields, and signing in alone is no proof (§6.3).
     if (!creatorIsInstanceOwner) {
-      assertVerifiedForSelfService(await UserManager.getUser(creatorUserId));
+      // The lookup matches loosely; only the creator's own account proves.
+      const stored = await UserManager.getUser(creatorUserId);
+      assertVerifiedForSelfService(
+        userIdsMatch(stored?.id, creatorUserId) ? stored : null,
+      );
     }
 
     // A tenant that does not exist yet owns no media, so any medium named
@@ -167,7 +184,22 @@ class TenantCreationService {
 
     try {
       await TenantManager.storeTenant(tenant);
+      // Counted again with the new tenant in: racing creations see each
+      // other, so the cap holds across parallel requests and processes.
+      if ((await TenantManager.checkTenantCountAfterInsert()) === false) {
+        throw new ConflictError("max_tenants_reached");
+      }
       await MembershipManager.addMembership(tenant.id, membership);
+    } catch (error) {
+      await TenantCreationService._rollBack(tenant.id, creatorUserId, slot);
+      throw error;
+    }
+
+    // History and occasion follow the successful write (architecture,
+    // "Concurrency and idempotency") and never undo it (spec §8): the rows
+    // are insert-only, so a creation rolled back for them would leave the
+    // history of a tenant that does not exist.
+    try {
       await TenantCreationService._recordCreation({
         tenant,
         creatorUserId,
@@ -175,9 +207,10 @@ class TenantCreationService {
         now,
       });
     } catch (error) {
-      await TenantCreationService._rollBack(tenant.id, creatorUserId);
-      if (slot) await slot.release();
-      throw error;
+      logger.error(
+        { err: error, tenantId: tenant.id },
+        "could not record the creation in the supervision history or outbox",
+      );
     }
     return tenant;
   }
@@ -218,12 +251,26 @@ class TenantCreationService {
     });
   }
 
-  /** Removes what a failed creation left, so no half-created tenant stays. */
-  static async _rollBack(tenantId, creatorUserId) {
-    await Promise.allSettled([
+  /**
+   * Removes what a failed creation left and gives the slot back, so no
+   * half-created tenant stays and the failure does not count. A step that
+   * fails here is logged, never thrown: the caller answers the original
+   * failure.
+   */
+  static async _rollBack(tenantId, creatorUserId, slot) {
+    const results = await Promise.allSettled([
       MembershipManager.removeMembership(tenantId, creatorUserId),
       TenantManager.removeTenant(tenantId),
+      slot ? slot.release() : Promise.resolve(),
     ]);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        logger.error(
+          { err: result.reason, tenantId },
+          "could not roll back a failed tenant creation",
+        );
+      }
+    }
   }
 }
 
