@@ -10,12 +10,13 @@
  *
  * Both start at the tenant (glossary "Aufsichtsstufe"): a blocked tenant
  * shows nothing, a tenant without a stored level counts as free. The
- * review dimension of a supervised tenant (§5.1, rows 3-5; ticket 05) is
- * the one extension point below, `offerPassesReview`.
+ * review dimension of a supervised tenant (§5.1, rows 3-5) is
+ * `offerPassesReview`.
  */
 
 const {
   SUPERVISION_LEVELS,
+  REVIEW_STATUS,
   effectiveLevelOf,
 } = require("./supervision-constants");
 
@@ -33,17 +34,20 @@ function isTenantPubliclyVisible(tenant) {
 }
 
 /**
- * The review dimension of the gate - the extension point of ticket 05:
- * under `supervised` an offer passes only with an approved review status.
- * In this ticket every offer of a non-blocked tenant passes.
+ * The review dimension of the gate (§5.1, rows 3-5): a free tenant needs
+ * no review, whatever status is stored; under `supervised` an offer
+ * passes only with an approved review status (glossary "Prüfstatus") -
+ * none, pending and rejected do not, for list and direct link alike.
  *
  * @param {Object} tenant - A tenant that is publicly visible.
  * @param {Object} offer - A bookable or an event.
  * @returns {boolean}
  */
-// eslint-disable-next-line no-unused-vars
 function offerPassesReview(tenant, offer) {
-  return true;
+  if (effectiveLevelOf(tenant) !== SUPERVISION_LEVELS.SUPERVISED) {
+    return true;
+  }
+  return offer?.review?.status === REVIEW_STATUS.APPROVED;
 }
 
 /**

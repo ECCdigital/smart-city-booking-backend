@@ -447,9 +447,17 @@ class BookableManager {
 
     bookableEntity.validate();
 
+    // The review (glossary "Prüfstatus") belongs to `updateReview` alone
+    // once the bookable exists: a whole-bookable write carries it on
+    // insert only, so an edit or a stale copy never undoes a decision.
+    const update = { ...bookableEntity };
+    if (existingBookable) {
+      delete update.review;
+    }
+
     await BookableModel.updateOne(
       { id: bookableEntity.id, tenantId: bookableEntity.tenantId },
-      bookableEntity,
+      update,
       { upsert: upsert },
     );
 
@@ -465,6 +473,29 @@ class BookableManager {
     }
 
     return bookableEntity;
+  }
+
+  /**
+   * Writes the review of a bookable, conditional on the review status it
+   * was read at: the write of a review transition (tenant supervision
+   * spec §4). Touches no other field.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.id Bookable ID
+   * @param {string|null} params.expectedStatus The status the transition
+   *   starts from; null matches a bookable without a review as well
+   * @param {Object} params.review The review to store
+   * @returns {Promise<Bookable|null>} The bookable after the write, or
+   *   null when no bookable of the tenant is at the expected status
+   */
+  static async updateReview({ tenantId, id, expectedStatus, review }) {
+    const raw = await BookableModel.findOneAndUpdate(
+      { id, tenantId, "review.status": expectedStatus ?? null },
+      { $set: { review } },
+      { new: true },
+    );
+    return raw ? raw.toEntity() : null;
   }
 
   /**

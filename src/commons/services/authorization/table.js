@@ -97,6 +97,10 @@ const TABLE = {
       own: "signedIn",
       any: "manageBookings.readAny",
     },
+    // The review of the tenant supervision (spec §6.2): the tenant owner
+    // submits, the instance owner alone decides.
+    reviewSubmit: { own: "tenantOwner", any: "instanceOwner" },
+    reviewDecide: { any: "instanceOwner" },
   },
 
   event: {

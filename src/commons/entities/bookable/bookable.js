@@ -455,15 +455,20 @@ class Bookable {
    * and third-party integrations built on `/bookables/public` read them from
    * outside, where a relative address resolves against the wrong host.
    *
+   * They are the public routes, so the review (glossary "Prüfstatus") is
+   * left out entirely: no public DTO carries a status or a private reason.
+   *
    * @returns {Object} A plain copy with `images`, `imgUrl` and `attachments`
-   *   resolved; every other field exactly as stored.
+   *   resolved and without `review`; every other field exactly as stored.
    */
   withResolvedMediaUrls() {
     const absolute = (reference) =>
       reference ? { ...reference, url: absoluteUrl(reference.url) } : reference;
+    // eslint-disable-next-line no-unused-vars
+    const { review, ...fields } = this;
 
     return {
-      ...this,
+      ...fields,
       images: enrichMediaReferences(this.images, this.tenantId).map(absolute),
       imgUrl: absoluteUrl(this.coverImageUrl) || "",
       attachments: (this.attachments || []).map((attachment) => {

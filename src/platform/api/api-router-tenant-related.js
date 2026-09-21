@@ -32,6 +32,13 @@ const {
 const {
   publicTenantGate,
 } = require("../../commons/services/supervision/public-tenant-gate");
+const {
+  publicBookableGate,
+} = require("../../commons/services/supervision/public-offer-gate");
+const SupervisionController = require("./controllers/supervision-controller");
+const {
+  OFFER_TYPES,
+} = require("../../commons/services/supervision/supervision-constants");
 
 const router = express.Router({ mergeParams: true });
 
@@ -43,6 +50,9 @@ const router = express.Router({ mergeParams: true });
 // `public` a blocked tenant answers 404. Not on the checkout (its gate is
 // a check in the item checkout), not on the existing-booking paths, the
 // payments, the hooks - a blanket gate on `publicRoute()` would be wrong.
+// A route about one bookable carries the offer gate instead, which
+// includes the tenant gate (spec §5.1): under the reach `public` a
+// bookable that is not reachable answers 404.
 router.get(
   "/bookables/public",
   publicRoute("bookable", "readPublic"),
@@ -52,55 +62,55 @@ router.get(
 router.get(
   "/bookables/public/:id",
   publicRoute("bookable", "readPublic"),
-  publicTenantGate(),
+  publicBookableGate(),
   BookableController.getPublicBookable,
 );
 router.get(
   "/bookables/:id/bookings",
   publicRoute("bookable", "relatedBookings"),
-  publicTenantGate(),
+  publicBookableGate(),
   BookingController.getRelatedBookings,
 );
 router.get(
   "/bookables/:id/openingHours",
   publicRoute("bookable", "readPublic"),
-  publicTenantGate(),
+  publicBookableGate(),
   BookableController.getOpeningHours,
 );
 router.get(
   "/bookables/:id/availability/v1",
   publicRoute(),
-  publicTenantGate(),
+  publicBookableGate(),
   CalendarController.getBookableAvailabilityV1,
 );
 router.get(
   "/bookables/:id/availability/v2",
   publicRoute(),
-  publicTenantGate(),
+  publicBookableGate(),
   CalendarController.getBookableAvailabilityV2,
 );
 router.get(
   "/bookables/:id/availability",
   publicRoute(),
-  publicTenantGate(),
+  publicBookableGate(),
   CalendarController.getBookableAvailability,
 );
 router.get(
   "/bookables/:id/block-periods",
   publicRoute(),
-  publicTenantGate(),
+  publicBookableGate(),
   CalendarController.getBookableBlockPeriods,
 );
 router.get(
   "/bookables/:id/occupancy",
   publicRoute("bookable", "readPublic"),
-  publicTenantGate(),
+  publicBookableGate(),
   BookableController.getBookableOccupancy,
 );
 router.get(
   "/bookables/:id/prices",
   publicRoute("bookable", "prices"),
-  publicTenantGate(),
+  publicBookableGate(),
   BookableController.getBookablePriceCategories,
 );
 
@@ -130,6 +140,17 @@ router.delete(
   "/bookables/:id",
   authorize("bookable", "delete"),
   BookableController.removeBookable,
+);
+// The review of a bookable (tenant supervision spec §6.2).
+router.post(
+  "/bookables/:id/review/submissions",
+  authorize("bookable", "reviewSubmit"),
+  SupervisionController.submitReview(OFFER_TYPES.BOOKABLE),
+);
+router.post(
+  "/bookables/:id/review/decisions",
+  authorize("bookable", "reviewDecide"),
+  SupervisionController.decideReview(OFFER_TYPES.BOOKABLE),
 );
 router.get(
   "/bookables/_meta/tags",
@@ -391,7 +412,7 @@ router.post(
 router.get(
   "/checkout/permissions/:id",
   publicRoute(),
-  publicTenantGate(),
+  publicBookableGate(),
   CheckoutController.checkoutPermissions,
 );
 

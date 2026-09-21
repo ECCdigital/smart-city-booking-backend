@@ -5,6 +5,11 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const CalendarService = require("../../../commons/services/calendar-service");
 const CalendarServiceV2 = require("../../../commons/services/calendar-service-v2");
 const BlockPeriodService = require("../../../commons/services/block-period-service");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  listableOffers,
+  reachableOffers,
+} = require("../../../commons/services/supervision/public-offer-gate");
 const { NotFoundError, BadRequestError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
 
@@ -25,11 +30,18 @@ class CalendarController {
     let occupancies = [];
 
     let bookables = await BookableManager.getBookables(tenant);
+    const tenantRecord = await TenantManager.getTenant(tenant);
 
+    // The offer gate of the supervision (spec §5.2): the aggregate of the
+    // tenant is list-type delivery, the occupancy of bookables the caller
+    // names by id follows the direct-link rule.
     if (bookableIds && bookableIds.length > 0) {
-      bookables = bookables.filter((bookable) =>
-        bookableIds.includes(bookable.id),
+      bookables = reachableOffers(
+        tenantRecord,
+        bookables.filter((bookable) => bookableIds.includes(bookable.id)),
       );
+    } else {
+      bookables = listableOffers(tenantRecord, bookables);
     }
 
     for (const bookable of bookables) {

@@ -21,6 +21,18 @@ const MediaReferenceGuard = require("../../../commons/services/media/media-refer
 const {
   withLockerDetails,
 } = require("../../../commons/services/access/bookable-locker-details");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const ReviewService = require("../../../commons/services/supervision/review-service");
+const {
+  listableOffers,
+  reachableOffers,
+} = require("../../../commons/services/supervision/public-offer-gate");
+const {
+  OFFER_TYPES,
+} = require("../../../commons/services/supervision/supervision-constants");
+const {
+  emptyReview,
+} = require("../../../commons/services/supervision/review-transitions");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -36,20 +48,20 @@ class BookableController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const bookables = await BookableManager.getBookables(tenant);
+      // List-type delivery (tenant supervision spec §5.1): what asks to be
+      // listed and passes the tenant's supervision.
+      const tenantRecord = await TenantManager.getTenant(tenant);
+      const bookables = listableOffers(
+        tenantRecord,
+        await BookableManager.getBookables(tenant),
+      );
 
       if (request.query.populate === "true") {
         for (const bookable of bookables) {
-          bookable._populated = {
-            event: await EventManager.getEvent(
-              bookable.eventId,
-              bookable.tenantId,
-            ),
-            relatedBookables: await BookableManager.getRelatedBookables(
-              bookable.id,
-              bookable.tenantId,
-            ),
-          };
+          bookable._populated = await BookableController._publicPopulation(
+            bookable,
+            tenantRecord,
+          );
         }
       }
       logger.info(
@@ -133,16 +145,10 @@ class BookableController {
       }
 
       if (request.query.populate === "true") {
-        bookable._populated = {
-          event: await EventManager.getEvent(
-            bookable.eventId,
-            bookable.tenantId,
-          ),
-          relatedBookables: await BookableManager.getRelatedBookables(
-            bookable.id,
-            bookable.tenantId,
-          ),
-        };
+        bookable._populated = await BookableController._publicPopulation(
+          bookable,
+          await TenantManager.getTenant(tenant),
+        );
       }
 
       logger.info(
@@ -156,6 +162,28 @@ class BookableController {
       logger.error(`${tenant} -- ${err.message}`);
       response.status(500).send(`Could not get bookable`);
     }
+  }
+
+  /**
+   * What a public bookable carries as `_populated`: its event and the
+   * related bookables the public may reach (tenant supervision spec §5.2:
+   * no leak over embedded objects), each without its review.
+   *
+   * @param {Bookable} bookable
+   * @param {Object} tenantRecord The tenant of the bookable
+   * @returns {Promise<{event: Object|null, relatedBookables: Object[]}>}
+   */
+  static async _publicPopulation(bookable, tenantRecord) {
+    const related = await BookableManager.getRelatedBookables(
+      bookable.id,
+      bookable.tenantId,
+    );
+    return {
+      event: await EventManager.getEvent(bookable.eventId, bookable.tenantId),
+      relatedBookables: reachableOffers(tenantRecord, related).map(
+        (relatedBookable) => relatedBookable.withResolvedMediaUrls(),
+      ),
+    };
   }
 
   /**
@@ -264,6 +292,8 @@ class BookableController {
       const bookable = new Bookable(request.body);
       bookable.id = uuidv4();
       bookable.ownerUserId = user.id;
+      // The review is the review service's alone (supervision spec §3).
+      bookable.review = emptyReview();
 
       if (
         (await BookableManager.checkPublicBookableCount(bookable.tenantId)) ===
@@ -281,6 +311,9 @@ class BookableController {
         scopeFor(request, "media", "read"),
       );
       await BookableManager.storeBookable(bookable);
+      if (bookable.isPublic) {
+        await BookableController._submitFirstPublicationWish(request, bookable);
+      }
       logger.info(
         `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
       );
@@ -328,6 +361,10 @@ class BookableController {
           .send(`Bookable with id ${bookable.id} not found`);
       }
 
+      // The review is the review service's alone (supervision spec §3):
+      // an edit keeps the stored one, whatever the body carries.
+      bookable.review = existingBookable.review ?? emptyReview();
+
       if (!existingBookable.isPublic && bookable.isPublic) {
         if (
           (await BookableManager.checkPublicBookableCount(
@@ -346,6 +383,9 @@ class BookableController {
         scopeFor(request, "media", "read"),
       );
       await BookableManager.storeBookable(bookable);
+      if (!existingBookable.isPublic && bookable.isPublic) {
+        await BookableController._submitFirstPublicationWish(request, bookable);
+      }
       logger.info(
         `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
       );
@@ -360,6 +400,27 @@ class BookableController {
       }
       response.status(500).send("Could not update bookable");
     }
+  }
+
+  /**
+   * The first publication wish of a bookable without a review status is
+   * its submission (tenant supervision spec §4, §6.1) - whatever the
+   * tenant's level. A bookable that has a status keeps it: switching the
+   * wish off and on again is no resubmission.
+   *
+   * @param {Object} request
+   * @param {Bookable} bookable The stored bookable, its review updated in place
+   */
+  static async _submitFirstPublicationWish(request, bookable) {
+    if ((bookable.review?.status ?? null) !== null) {
+      return;
+    }
+    bookable.review = await ReviewService.submit({
+      offerType: OFFER_TYPES.BOOKABLE,
+      tenantId: request.params.tenant,
+      offerId: bookable.id,
+      actorUserId: request.principal?.userId ?? request.user?.id ?? null,
+    });
   }
 
   /**
@@ -625,9 +686,13 @@ class BookableController {
           .send(`Bookable with id ${bookableId} not found`);
       }
 
-      // The public sees the prices of a public bookable; whoever may read
-      // the bookable itself sees them before it is listed.
+      // Whether the public reaches the prices is the offer gate's answer
+      // at the route (tenant supervision spec §5.2: the direct-link rule,
+      // no blanket `isPublic` requirement). Inside the tenant, a signed-in
+      // reader sees the prices of a bookable within their reach or of one
+      // that asks to be listed.
       if (
+        request.reach !== "public" &&
         !bookable.isPublic &&
         !withinReach(bookable, "ownerUserId", scopeOf(request))
       ) {

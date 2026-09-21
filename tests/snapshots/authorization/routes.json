@@ -868,8 +868,8 @@
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookables/:id/prices": {
-    "anonymous": "403 Bookable with id fx is not public",
-    "signedIn": "403 Bookable with id fx is not public",
+    "anonymous": 200,
+    "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -908,6 +908,20 @@
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
+  },
+  "POST /api/:tenant/bookables/:id/review/submissions": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": 200,
+    "instanceOwner": 200
+  },
+  "POST /api/:tenant/bookables/:id/review/decisions": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "instanceOwner": 400
   },
   "GET /api/:tenant/bookables/_meta/tags": {
     "anonymous": 401,

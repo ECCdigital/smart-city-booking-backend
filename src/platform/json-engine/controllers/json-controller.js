@@ -9,6 +9,9 @@ const {
   enforceTenantCatalogAccess,
 } = require("../../../commons/utilities/catalog-participation-utils");
 const {
+  isOfferListable,
+} = require("../../../commons/services/supervision/offer-gate");
+const {
   GroupBookingPermissions,
 } = require("../../../commons/utilities/group-booking-permissions");
 
@@ -93,7 +96,11 @@ class JSONController {
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
       let bookables = await BookableManager.getBookables(tenantId);
 
-      bookables = bookables.filter((bookable) => bookable.isPublic);
+      // List-type delivery of the supervision (spec §5.1): listed is what
+      // asks for it and passes the tenant's review.
+      bookables = bookables.filter((offer) =>
+        isOfferListable({ tenant, offer }),
+      );
 
       bookables = bookables.filter((bookable) => {
         return JSONController.hasAccess(bookable, identity, userRoles);
@@ -152,7 +159,7 @@ class JSONController {
           .filter(
             (b) =>
               b &&
-              b.isPublic &&
+              isOfferListable({ tenant, offer: b }) &&
               JSONController.hasAccess(b, identity, userRoles),
           );
         pub.relatedBookables = await Promise.all(
@@ -199,7 +206,8 @@ class JSONController {
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
       const bookable = await BookableManager.getBookable(id, tenantId);
 
-      if (!bookable?.id || bookable.isPublic === false) {
+      // The embed interface shows what is listed, its detail included.
+      if (!bookable?.id || !isOfferListable({ tenant, offer: bookable })) {
         return res.status(404).json({
           success: false,
           message: "Bookable not found",
@@ -234,7 +242,9 @@ class JSONController {
             : [];
 
         pub.relatedBookables = relatedBookables.filter(
-          (b) => b.isPublic && JSONController.hasAccess(b, identity, userRoles),
+          (b) =>
+            isOfferListable({ tenant, offer: b }) &&
+            JSONController.hasAccess(b, identity, userRoles),
         );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
@@ -319,7 +329,7 @@ class JSONController {
         );
         event.tickets = await Promise.all(
           tickets
-            .filter((ticket) => ticket.isPublic)
+            .filter((ticket) => isOfferListable({ tenant, offer: ticket }))
             .map((ticket) =>
               JSONController._exportPublicBookable(
                 ticket,
@@ -368,7 +378,7 @@ class JSONController {
         const publicEvent = event.exportPublic({ absoluteMediaUrls: true });
         publicEvent.tickets = await Promise.all(
           tickets
-            .filter((ticket) => ticket.isPublic)
+            .filter((ticket) => isOfferListable({ tenant, offer: ticket }))
             .map((ticket) =>
               JSONController._exportPublicBookable(
                 ticket,
