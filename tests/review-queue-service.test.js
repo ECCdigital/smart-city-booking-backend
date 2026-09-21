@@ -240,6 +240,12 @@ describe("ReviewQueueService.listActiveReviewQueue", function () {
     ]);
   });
 
+  it("answers an offer without a name with a null title", async function () {
+    events.push(event({ id: "e-unnamed", name: "" }));
+
+    expect((await list()).items[0].title).to.equal(null);
+  });
+
   it("derives the admin path of a bookable from the editor of its type", async function () {
     bookables.push(
       bookable({ id: "b1", type: "room" }),
@@ -339,6 +345,10 @@ describe("ReviewQueueService.listActiveReviewQueue", function () {
     expect(await list({ page: 0, pageSize: 5000 })).to.include({
       page: 1,
       pageSize: 200,
+    });
+    expect(await list({ page: "1e999", pageSize: "2.9" })).to.include({
+      page: 1,
+      pageSize: 2,
     });
   });
 

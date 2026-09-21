@@ -37,17 +37,16 @@
 const TenantManager = require("../../data-managers/tenant-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const EventManager = require("../../data-managers/event-manager");
+const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const { SUPERVISION_LEVELS, OFFER_TYPES } = require("./supervision-constants");
-
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
+const { pageWindow } = require("./page-window");
 
 const BOOKABLE_EDITOR_BY_TYPE = Object.freeze({
-  room: "rooms",
-  resource: "resources",
-  ticket: "tickets",
-  "event-location": "event-locations",
-  // The schema's older name of an event location.
+  [BOOKABLE_TYPES.ROOM]: "rooms",
+  [BOOKABLE_TYPES.RESOURCE]: "resources",
+  [BOOKABLE_TYPES.TICKET]: "tickets",
+  [BOOKABLE_TYPES.EVENT_LOCATION]: "event-locations",
+  // The name the bookable schema stores an event location under.
   location: "event-locations",
 });
 
@@ -61,7 +60,7 @@ const editorPath = (editor, offerId) =>
 const QUEUE_SOURCES = Object.freeze({
   [OFFER_TYPES.BOOKABLE]: {
     list: (tenantIds) => BookableManager.getPendingReviewOffers(tenantIds),
-    title: (bookable) => bookable.title ?? null,
+    title: (bookable) => bookable.title || null,
     adminPath: (bookable) => {
       const editor = BOOKABLE_EDITOR_BY_TYPE[bookable.type];
       return editor ? editorPath(editor, bookable.id) : null;
@@ -69,7 +68,7 @@ const QUEUE_SOURCES = Object.freeze({
   },
   [OFFER_TYPES.EVENT]: {
     list: (tenantIds) => EventManager.getPendingReviewOffers(tenantIds),
-    title: (event) => event.information?.name ?? null,
+    title: (event) => event.information?.name || null,
     adminPath: (event) => editorPath("events", event.id),
   },
 });
@@ -103,14 +102,10 @@ class ReviewQueueService {
   static async listActiveReviewQueue({
     tenantId,
     offerType,
-    page = 1,
-    pageSize = DEFAULT_PAGE_SIZE,
+    page,
+    pageSize,
   } = {}) {
-    const safePage = Math.max(1, Math.floor(Number(page)) || 1);
-    const safePageSize = Math.min(
-      MAX_PAGE_SIZE,
-      Math.max(1, Math.floor(Number(pageSize)) || DEFAULT_PAGE_SIZE),
-    );
+    const window = pageWindow({ page, pageSize });
 
     const supervised = (
       await TenantManager.getTenants(
@@ -127,7 +122,7 @@ class ReviewQueueService {
       const types = offerType ? [offerType] : Object.keys(QUEUE_SOURCES);
       for (const type of types) {
         const source = QUEUE_SOURCES[type];
-        const offers = source ? await source.list([...tenantNames.keys()]) : [];
+        const offers = await source.list([...tenantNames.keys()]);
         for (const offer of offers) {
           rows.push({
             tenantId: offer.tenantId,
@@ -144,12 +139,11 @@ class ReviewQueueService {
     }
     rows.sort(byWaitingTime);
 
-    const start = (safePage - 1) * safePageSize;
     return {
-      items: rows.slice(start, start + safePageSize),
+      items: rows.slice(window.skip, window.skip + window.pageSize),
       total: rows.length,
-      page: safePage,
-      pageSize: safePageSize,
+      page: window.page,
+      pageSize: window.pageSize,
     };
   }
 }

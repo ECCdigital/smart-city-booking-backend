@@ -1,8 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const SupervisionHistoryModel = require("./models/supervisionHistoryModel");
-
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
+const { pageWindow } = require("../services/supervision/page-window");
 
 /**
  * Data manager of the supervision history (glossary "Aufsichtshistorie").
@@ -47,18 +45,8 @@ class SupervisionHistoryManager {
    * @param {number} [params.pageSize] Capped at 200
    * @returns {Promise<{items: Object[], total: number, page: number, pageSize: number}>}
    */
-  static async list({
-    tenantId,
-    offerType,
-    offerId,
-    page = 1,
-    pageSize = DEFAULT_PAGE_SIZE,
-  } = {}) {
-    const safePage = Math.max(1, Number(page) || 1);
-    const safePageSize = Math.min(
-      MAX_PAGE_SIZE,
-      Math.max(1, Number(pageSize) || DEFAULT_PAGE_SIZE),
-    );
+  static async list({ tenantId, offerType, offerId, page, pageSize } = {}) {
+    const window = pageWindow({ page, pageSize });
 
     const filter = {};
     if (tenantId) filter.tenantId = tenantId;
@@ -68,13 +56,13 @@ class SupervisionHistoryManager {
     const [items, total] = await Promise.all([
       SupervisionHistoryModel.find(filter)
         .sort({ occurredAt: -1, id: 1 })
-        .skip((safePage - 1) * safePageSize)
-        .limit(safePageSize)
+        .skip(window.skip)
+        .limit(window.pageSize)
         .lean(),
       SupervisionHistoryModel.countDocuments(filter),
     ]);
 
-    return { items, total, page: safePage, pageSize: safePageSize };
+    return { items, total, page: window.page, pageSize: window.pageSize };
   }
 }
 
