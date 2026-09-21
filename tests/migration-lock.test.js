@@ -10,7 +10,7 @@ const { expect } = require("chai");
 const { runMigrations } = require("../migrations/migrationsManager");
 const { createFakeMongoose } = require("./helpers/fake-mongoose");
 
-const silent = { log() {}, error() {} };
+const silent = { info() {}, error() {} };
 
 function world(collections = {}) {
   const connection = createFakeMongoose(
@@ -237,6 +237,40 @@ describe("migration runner: the lock against parallel runs", function () {
     expect(ran).to.deep.equal(["slow"]);
     // The lock of the runner that took over stays.
     expect(w.locks.map((lock) => lock.owner)).to.deep.equal(["runner-b"]);
+  });
+
+  it("counts a lease it could not renew in time as lost, and records nothing under it", async function () {
+    const w = world();
+    const lockModel = w.connection.model("MigrationLock");
+    const ran = [];
+    const migrations = [
+      {
+        name: "01-01-2025-slow",
+        up: async () => {
+          ran.push("slow");
+          // The database stops answering the heartbeat (as in a failover).
+          const acquire = lockModel.findOneAndUpdate;
+          lockModel.findOneAndUpdate = async (filter, ...rest) => {
+            if (filter.owner) throw new Error("no primary");
+            return acquire(filter, ...rest);
+          };
+          await new Promise((resolve) => setTimeout(resolve, 80));
+        },
+      },
+      { name: "02-01-2025-next", up: async () => ran.push("next") },
+    ];
+
+    let error;
+    await runMigrations(
+      w.connection,
+      w.options({ migrations, ownerId: "runner-a", leaseMs: 30 }),
+    ).catch((caught) => {
+      error = caught;
+    });
+
+    expect(error?.name).to.equal("MigrationLockLostError");
+    expect(ran).to.deep.equal(["slow"]);
+    expect(w.applied()).to.deep.equal([]);
   });
 
   it("reads the lock timing from the environment, with defaults", function () {

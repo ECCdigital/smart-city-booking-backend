@@ -18,6 +18,13 @@
 const crypto = require("crypto");
 const os = require("os");
 
+const bunyan = require("bunyan");
+
+const defaultLogger = bunyan.createLogger({
+  name: "migration-lock.js",
+  level: process.env.LOG_LEVEL,
+});
+
 const LOCK_KEY = "migrations";
 
 const DEFAULTS = Object.freeze({
@@ -85,44 +92,34 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function tryAcquire(lockModel, owner, leaseMs) {
   const now = new Date();
+  const expiresAt = new Date(now.getTime() + leaseMs);
   try {
     const lock = await lockModel.findOneAndUpdate(
       { _id: LOCK_KEY, expiresAt: { $lte: now } },
-      {
-        $set: {
-          owner,
-          acquiredAt: now,
-          heartbeatAt: now,
-          expiresAt: new Date(now.getTime() + leaseMs),
-        },
-      },
+      { $set: { owner, acquiredAt: now, heartbeatAt: now, expiresAt } },
       { upsert: true, new: true },
     );
-    return lock?.owner === owner;
+    return lock?.owner === owner ? expiresAt.getTime() : null;
   } catch (error) {
     // The duplicate `_id`: a lease that has not run out is in the way.
-    if (isDuplicateKey(error)) return false;
+    if (isDuplicateKey(error)) return null;
     throw error;
   }
 }
 
 async function renew(lockModel, owner, leaseMs) {
   const now = new Date();
+  const expiresAt = new Date(now.getTime() + leaseMs);
   const lock = await lockModel.findOneAndUpdate(
     { _id: LOCK_KEY, owner },
-    {
-      $set: {
-        heartbeatAt: now,
-        expiresAt: new Date(now.getTime() + leaseMs),
-      },
-    },
+    { $set: { heartbeatAt: now, expiresAt } },
     { new: true },
   );
-  return Boolean(lock);
+  return lock ? expiresAt.getTime() : null;
 }
 
 async function currentHolder(lockModel) {
-  const [lock] = await lockModel.find({ _id: LOCK_KEY });
+  const lock = await lockModel.findOne({ _id: LOCK_KEY }).lean();
   return lock?.owner;
 }
 
@@ -131,34 +128,35 @@ async function currentHolder(lockModel) {
  *
  * Waits (polling) while another runner holds the lock and fails with a
  * {@link MigrationLockTimeoutError} when it is still held after
- * `waitTimeoutMs`. `work` gets `{ waited, assertHeld }`: `waited` tells that
- * another runner was at work in the meantime, `assertHeld()` throws once the
- * lease was lost. The lock is released whether `work` succeeds or throws.
+ * `waitTimeoutMs`. `work` gets `{ assertHeld }`: `assertHeld()` throws once
+ * the lease was lost - taken over, or run out without a renewal. The lock is released whether `work` succeeds or throws.
  *
  * @param {Object} lockModel The mongoose model of the lock collection
  * @param {Object} options `ownerId`, `leaseMs`, `pollMs`, `waitTimeoutMs`, `logger`
- * @param {function({waited: boolean, assertHeld: function(): void}): Promise<*>} work
+ * @param {function({assertHeld: function(): void}): Promise<*>} work
  * @returns {Promise<*>} What `work` returns
  */
 async function withMigrationLock(lockModel, options, work) {
   const owner = options.ownerId ?? defaultOwnerId();
-  const logger = options.logger ?? console;
+  const logger = options.logger ?? defaultLogger;
   const { leaseMs, pollMs, waitTimeoutMs } = lockTiming(options);
 
   const waitingSince = Date.now();
-  let waited = false;
-  while (!(await tryAcquire(lockModel, owner, leaseMs))) {
+  let announced = false;
+  let leaseUntil = await tryAcquire(lockModel, owner, leaseMs);
+  while (leaseUntil === null) {
     if (Date.now() - waitingSince >= waitTimeoutMs) {
       throw new MigrationLockTimeoutError(
         waitTimeoutMs,
         await currentHolder(lockModel),
       );
     }
-    if (!waited) {
-      logger.log("Migration lock is held by another runner, waiting ...");
-      waited = true;
+    if (!announced) {
+      logger.info("Migration lock is held by another runner, waiting ...");
+      announced = true;
     }
     await sleep(pollMs);
+    leaseUntil = await tryAcquire(lockModel, owner, leaseMs);
   }
 
   let lost = false;
@@ -166,12 +164,14 @@ async function withMigrationLock(lockModel, options, work) {
   const heartbeat = setInterval(
     () => {
       renewing = renew(lockModel, owner, leaseMs).then(
-        (held) => {
-          if (!held) lost = true;
+        (renewedUntil) => {
+          if (renewedUntil === null) lost = true;
+          else leaseUntil = renewedUntil;
         },
         (error) => {
-          // A failed renewal is retried by the next beat; the lease decides.
-          logger.error("Could not renew the migration lock", error);
+          // The next beat tries again; `leaseUntil` stays, so a lease that
+          // could not be renewed in time counts as lost.
+          logger.error({ err: error }, "Could not renew the migration lock");
         },
       );
     },
@@ -179,12 +179,16 @@ async function withMigrationLock(lockModel, options, work) {
   );
   heartbeat.unref?.();
 
+  // Lost: another runner holds the lock, or the lease ran out unrenewed and
+  // another runner may take it any moment.
   const assertHeld = () => {
-    if (lost) throw new MigrationLockLostError(owner);
+    if (lost || Date.now() >= leaseUntil) {
+      throw new MigrationLockLostError(owner);
+    }
   };
 
   try {
-    return await work({ waited, assertHeld });
+    return await work({ assertHeld });
   } finally {
     clearInterval(heartbeat);
     await renewing;
@@ -192,7 +196,7 @@ async function withMigrationLock(lockModel, options, work) {
       await lockModel.deleteOne({ _id: LOCK_KEY, owner });
     } catch (error) {
       // The lease runs out by itself; never hide the outcome of `work`.
-      logger.error("Could not release the migration lock", error);
+      logger.error({ err: error }, "Could not release the migration lock");
     }
   }
 }

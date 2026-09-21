@@ -221,6 +221,16 @@ function createModel(name, documents, indexes, uniqueFields = []) {
       return createQuery(documents.filter((doc) => matches(doc, filter)));
     },
 
+    findOne(filter = {}) {
+      const found = documents.find((doc) => matches(doc, filter)) ?? null;
+      const answer = () => Promise.resolve(found && clone(found));
+      return {
+        lean: answer,
+        then: (onFulfilled, onRejected) =>
+          answer().then(onFulfilled, onRejected),
+      };
+    },
+
     async updateOne(filter, update, options = {}) {
       const document = documents.find((candidate) =>
         matches(candidate, filter),

@@ -1,9 +1,15 @@
 const fs = require("fs");
 const path = require("path");
 
+const bunyan = require("bunyan");
 const mongoose = require("mongoose");
 
 const { withMigrationLock } = require("./lib/migration-lock");
+
+const defaultLogger = bunyan.createLogger({
+  name: "migrationsManager.js",
+  level: process.env.LOG_LEVEL,
+});
 
 const migrationSchema = new mongoose.Schema({
   name: {
@@ -79,7 +85,7 @@ async function runMigrations(mongoose, options = {}) {
   const allMigrations = options.migrations ?? loadMigrations();
   const migrationModel = options.migrationModel ?? Migration;
   const lockModel = options.lockModel ?? MigrationLock;
-  const logger = options.logger ?? console;
+  const logger = options.logger ?? defaultLogger;
 
   await withMigrationLock(lockModel, options, async ({ assertHeld }) => {
     const executedMigrations = await migrationModel.find(
@@ -91,16 +97,19 @@ async function runMigrations(mongoose, options = {}) {
     for (const migration of allMigrations) {
       if (!executedNames.includes(migration.name)) {
         assertHeld();
-        logger.log(`Starte Migration: ${migration.name}`);
+        logger.info(`Starting migration: ${migration.name}`);
         await migration.up(mongoose);
 
+        // Never record under a lock another runner may hold by now; the
+        // migrations are repeatable, so the next run picks this one up again.
+        assertHeld();
         await migrationModel.create({ name: migration.name });
-        logger.log(`Migration completed : ${migration.name}`);
+        logger.info(`Migration completed : ${migration.name}`);
       }
     }
   });
 
-  logger.log("All migrations completed");
+  logger.info("All migrations completed");
 }
 
 /**

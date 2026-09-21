@@ -56,6 +56,19 @@ reverse proxy has to hand on `X-Forwarded-For`.
 ### 1. Prepare
 
 - Back up the database.
+- Note the stock the migration has to leave alone, for the comparison in
+  step 4 (in `mongosh`):
+
+  ```javascript
+  db.bookables.countDocuments({ isPublic: true });
+  db.bookables.countDocuments({ isBookable: true });
+  db.events.countDocuments({ isPublic: true });
+  db.tenants.countDocuments({ "catalogParticipation.visible": true });
+  db.bookings.countDocuments();
+  db.bookables.countDocuments({ "review.status": "approved" });
+  db.events.countDocuments({ "review.status": "approved" });
+  ```
+
 - Have the three matching releases at hand: this backend, the
   [Admin UI](https://github.com/ECCdigital/smart-city-booking-vue-app) and the
   [Storefront](https://github.com/ECCdigital/smart-city-booking-store-front)
@@ -92,13 +105,14 @@ reverse proxy has to hand on `X-Forwarded-For`.
 In `mongosh`, on the application database:
 
 ```javascript
-// The migration is recorded, the lock is gone.
+// The migration is recorded; the lock is gone once no process is starting
+// (a process that starts holds it for a moment).
 db.migrations.find({ name: "21-09-2026-tenant-supervision-initial-state" });
-db.migrationlocks.find(); // empty
+db.migrationlocks.find();
 
 // Every instance has an initial level, every tenant a level. Expected: 0 and 0.
 db.instances.countDocuments({
-  tenantInitialSupervisionLevel: { $exists: false },
+  tenantInitialSupervisionLevel: { $nin: ["free", "supervised", "blocked"] },
 });
 db.tenants.countDocuments({
   supervisionLevel: { $nin: ["free", "supervised", "blocked"] },
@@ -109,10 +123,9 @@ db.tenants.countDocuments({
 db.bookables.countDocuments({ isPublic: true, "review.status": null });
 db.events.countDocuments({ isPublic: true, "review.status": null });
 
-// Nothing was approved by the migration: compare with the number of approvals
-// before the cutover (0 on a first upgrade).
-db.bookables.countDocuments({ "review.status": "approved" });
-db.events.countDocuments({ "review.status": "approved" });
+// Nothing was approved and the stock stands: the seven counts noted in
+// step 1 (publication wish, bookability, catalog participation, bookings,
+// approvals) answer the same numbers.
 
 // The initial state is in the history, once per subject, and no mail waits.
 db.supervisionhistories.aggregate([
@@ -159,7 +172,8 @@ Against the internal address of the new stack:
   offer, prices, availability and a test booking work as before.
 - Set a test tenant to `supervised`: an unapproved offer disappears from list
   and direct link, and its checkout is refused
-  (`checkout.offer_not_reachable`); after approval it is back.
+  (`checkout.offer_not_reachable`); after approval it is back - listed with
+  the publication wish, and by direct link and bookable without it.
 - Set a test tenant to `blocked`: it leaves `GET /api/tenants/public`, its
   public paths answer `404`, a new booking is refused; the status page of an
   existing booking still answers, and the tenant's owner still reaches the
