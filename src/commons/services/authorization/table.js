@@ -300,6 +300,12 @@ const TABLE = {
     // `GET /tenants/count/check`: whether the instance has room for one
     // more; signed in, nothing further (as today).
     countCheck: { own: "signedIn" },
+    // `PUT /tenants/:tenant/supervision`: the supervision level (glossary
+    // "Aufsichtsstufe") is the instance owner's alone.
+    supervise: { any: "instanceOwner" },
+    // `GET /tenants/:tenant/supervision/history`: the tenant owner reads
+    // the history of the tenant the route names.
+    supervisionHistory: { own: "tenantOwner", any: "instanceOwner" },
   },
 
   ical: {
@@ -342,6 +348,8 @@ const TABLE = {
     readPublic: { public: true },
     read: { any: "instanceOwner" },
     update: { any: "instanceOwner" },
+    // `GET /instances/supervision/history`: the instance-wide history.
+    supervisionHistory: { any: "instanceOwner" },
   },
 
   rule: {

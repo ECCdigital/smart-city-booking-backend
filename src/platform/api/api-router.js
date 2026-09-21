@@ -11,10 +11,14 @@ const MailTemplateController = require("./controllers/mail-template-controller")
 const { BookingController } = require("./controllers/booking-controller");
 const AccessController = require("./controllers/access-controller");
 const InstanceController = require("./controllers/instance-controller");
+const SupervisionController = require("./controllers/supervision-controller");
 const {
   authorize,
   publicRoute,
 } = require("../../commons/services/authorization");
+const {
+  publicTenantGate,
+} = require("../../commons/services/supervision/public-tenant-gate");
 
 const router = express.Router({ mergeParams: true });
 
@@ -45,6 +49,11 @@ router.put(
   "/instances",
   authorize("instance", "update"),
   InstanceController.storeInstance,
+);
+router.get(
+  "/instances/supervision/history",
+  authorize("instance", "supervisionHistory"),
+  SupervisionController.getInstanceHistory,
 );
 
 // RULES
@@ -126,6 +135,18 @@ router.delete(
   authorize("tenant", "delete"),
   TenantController.removeTenant,
 );
+// The supervision (glossary "Mandanten-Aufsicht"): the level is the
+// instance owner's, the history the tenant owner's too.
+router.put(
+  "/tenants/:tenant/supervision",
+  authorize("tenant", "supervise"),
+  SupervisionController.changeTenantLevel,
+);
+router.get(
+  "/tenants/:tenant/supervision/history",
+  authorize("tenant", "supervisionHistory"),
+  SupervisionController.getTenantHistory,
+);
 router.get(
   "/tenants/:tenant/readiness",
   authorize("tenant", "readiness"),
@@ -134,6 +155,7 @@ router.get(
 router.get(
   "/tenants/:tenant/payment-apps",
   publicRoute("tenant", "paymentApps"),
+  publicTenantGate(),
   TenantController.getActivePaymentApps,
 );
 router.get(

@@ -12,6 +12,11 @@ const { ownCondition } = require("../services/authorization/reach");
 const {
   normalizeCancellationRefundTiers,
 } = require("../utilities/cancellation-refund-tiers");
+const { publicTenantCondition } = require("../services/supervision/offer-gate");
+const {
+  SUPERVISION_LEVELS,
+  SUPERVISION_LEVEL_VALUES,
+} = require("../services/supervision/supervision-constants");
 
 /**
  * The per-year document counters at the tenant. They belong to the number
@@ -19,6 +24,14 @@ const {
  * carries them, so a stale copy of the tenant cannot roll a counter back.
  */
 const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
+
+/**
+ * The supervision fields (glossary "Aufsichtsstufe"). They belong to the
+ * level change (`updateSupervisionLevel`) alone once the tenant exists; a
+ * whole-tenant write carries them on insert only, so a stale copy of the
+ * tenant cannot undo a level change.
+ */
+const SUPERVISION_FIELDS = ["supervisionLevel", "supervisionChangedAt"];
 
 /**
  * Data Manager for Tenant objects.
@@ -32,13 +45,63 @@ class TenantManager {
    * @param {{reach?: string, userId?: string|null}} [scope]
    * @param {Object} [options]
    * @param {boolean} [options.owned=false] Only the tenants the user owns.
+   * @param {string} [options.supervisionLevel] Only the tenants at this
+   *   supervision level (a tenant without a stored level is `free`).
    * @returns {Promise<Tenant[]>} List of tenants
    */
-  static async getTenants(scope = {}, { owned = false } = {}) {
-    const rawTenants = await TenantModel.find(
-      await TenantManager._reachCondition(scope, owned),
-    );
+  static async getTenants(
+    scope = {},
+    { owned = false, supervisionLevel } = {},
+  ) {
+    const condition = await TenantManager._reachCondition(scope, owned);
+    if (supervisionLevel) {
+      condition.supervisionLevel =
+        supervisionLevel === SUPERVISION_LEVELS.FREE
+          ? { $in: [supervisionLevel, null] }
+          : supervisionLevel;
+    }
+    const rawTenants = await TenantModel.find(condition);
     return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * The tenants the public sees (tenant supervision spec §5.2): every
+   * tenant but the blocked ones.
+   *
+   * @returns {Promise<Tenant[]>}
+   */
+  static async getPublicTenants() {
+    const rawTenants = await TenantModel.find(publicTenantCondition());
+    return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Sets the supervision level of a tenant, conditionally: the write
+   * matches only while the tenant is still at `from`, so two level changes
+   * at the same moment cannot both succeed (spec "Concurrency").
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.from The level the caller read
+   * @param {string} params.to The new level
+   * @param {Date} params.changedAt
+   * @returns {Promise<Tenant|null>} The tenant after the write, or null
+   *   when no tenant at `from` matched
+   */
+  static async updateSupervisionLevel({ tenantId, from, to, changedAt }) {
+    if (!SUPERVISION_LEVEL_VALUES.includes(to)) {
+      throw new Error(`Unknown supervision level: ${to}`);
+    }
+    // A tenant from before the supervision has no stored level; `from:
+    // "free"` has to match it as well.
+    const currentLevel =
+      from === SUPERVISION_LEVELS.FREE ? { $in: [from, null] } : from;
+    const raw = await TenantModel.findOneAndUpdate(
+      { id: tenantId, supervisionLevel: currentLevel },
+      { $set: { supervisionLevel: to, supervisionChangedAt: changedAt } },
+      { new: true },
+    );
+    return raw ? raw.toEntity() : null;
   }
 
   /**
@@ -104,8 +167,8 @@ class TenantManager {
     tenantEntity.validate();
     const update = { ...tenantEntity };
     if (existingTenant) {
-      for (const counter of DOCUMENT_COUNTERS) {
-        delete update[counter];
+      for (const field of [...DOCUMENT_COUNTERS, ...SUPERVISION_FIELDS]) {
+        delete update[field];
       }
     }
     await TenantModel.updateOne({ id: tenantEntity.id }, update, {

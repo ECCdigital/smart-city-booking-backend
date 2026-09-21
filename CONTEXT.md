@@ -352,8 +352,12 @@ Alle Angebote beaufsichtigter Mandanten mit ausstehendem Prüfstatus, unabhängi
 _Avoid_: Alle ausstehenden Angebote, Freigabeliste (das ist die Berechtigung zur Selbst-Anlage)
 
 **Aufsichtshistorie**:
-Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneuten Einreichungen sowie Prüfentscheidungen eines Mandanten und seiner Angebote, jeweils mit Zeitpunkt, handelnder Person oder System, vorherigem und neuem Stand sowie optionaler Begründung. Instanz-Owner sehen die gesamte Aufsichtshistorie, Tenant-Owner die ihres Mandanten und seiner Angebote.
+Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneuten Einreichungen sowie Prüfentscheidungen eines Mandanten und seiner Angebote, jeweils mit Zeitpunkt, handelnder Person oder System, vorherigem und neuem Stand sowie optionaler Begründung. Instanz-Owner sehen die gesamte Aufsichtshistorie, Tenant-Owner die ihres Mandanten und seiner Angebote. Wird nur angefügt, nie geändert oder gelöscht; ein Request, der nichts ändert (dieselbe Stufe noch einmal setzen), schreibt keinen Eintrag.
 _Avoid_: Audit-Log, Änderungsverlauf (unqualifiziert), Prüfstatus (das ist der aktuelle Stand)
+
+**Mitteilungsanlass**:
+Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und später getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere.
+_Avoid_: Mail (das ist der Versand), Notification (als Sprechbegriff), Event (das ist die Veranstaltung), Benachrichtigungs-Job
 
 **Angebot**:
 Sammelbegriff für Buchungsobjekte und Events eines Mandanten, unabhängig davon, ob sie öffentlich ausgespielt oder nur per Direktlink angeboten werden. Bei beaufsichtigten Mandanten benötigen beide Wege einen freigegebenen Prüfstatus; bei freien Mandanten ist keine Freigabe nötig.
