@@ -36,6 +36,48 @@ components:
         type: string
 
   schemas:
+    OfferReview:
+      type: object
+      description: |
+        The review of an offer (glossary "Prüfstatus"). Carried by the admin
+        DTOs of a bookable (`GET /api/{tenant}/bookables`, `/bookables/{id}`,
+        the answers of `PUT /api/{tenant}/bookables`) as `review`; never part
+        of a public DTO and never taken from a store or update body.
+      properties:
+        status:
+          type: string
+          nullable: true
+          enum: [pending, approved, rejected, null]
+          description: "`null`: not submitted yet - which is no approval."
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The current or last submission; a resubmission sets it anew.
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        decidedBy:
+          type: string
+          nullable: true
+          description: The instance owner who decided.
+        reason:
+          type: string
+          nullable: true
+          description: Optional reason of the current decision.
+
+    OfferReviewAnswer:
+      type: object
+      properties:
+        offerType:
+          type: string
+          enum: [bookable, event]
+        offerId:
+          type: string
+        review:
+          $ref: "#/components/schemas/OfferReview"
+
     SupervisionLevel:
       type: string
       description: |
