@@ -286,6 +286,10 @@ const TABLE = {
     mailTemplates: { any: "tenantOwner" },
     // `POST /tenants/:tenant/pdf-preview`
     pdfPreview: { any: "tenantOwner" },
+    // `GET /tenants/:tenant/readiness`: the readiness check (glossary
+    // "Bereitschafts-Check") of the tenant of the path - its owner reads it
+    // as his own tenant, the instance owner any.
+    readiness: { own: "tenantOwner", any: "instanceOwner" },
     // The tenant catalog, read and store.
     catalog: { any: "tenantOwner" },
     // --- instance level: `GET /tenants` lists the user's own memberships
