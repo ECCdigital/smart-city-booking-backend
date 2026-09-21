@@ -7,6 +7,11 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Verifizierungsnachweis (glossary): `assertVerifiedForSelfService(user)` (`src/commons/services/user/verification-proof.js`) is the check the tenant self-creation re-runs on the server; without proof it refuses with `403 email_verification_required` and `params: { method: "email" | "identity_provider", provider }`. A local or card account is proven by its e-mail verification, an SSO account only by the identity provider's confirmation: `POST /auth/sso/signup` and `/auth/sso/signin` persist Keycloak's `email_verified: true` as the new user fields `idpEmailVerifiedAt` and `idpEmailVerifiedProvider` (`null` until then; answered with `authType` in the user object). The `isVerified: true` every SSO signup sets is no proof — see [docs/api/authentication.md](api/authentication.md)
+- Rückkehrziel (glossary): a signup's `nextUrl` survives the verification mail (the storefront's verify link gains `&next=`) and `POST /auth/verify-email`, which answers `200 { success, message, nextUrl }` as JSON now (was plain text). Only a relative path or an address on the origin of `verifyUrl` or `FRONTEND_URL` is kept, also on the legacy `GET /auth/verify/:hookId` redirect
+
 ### Removed
 
 - Behaviour change, deliberate: `POST /api/:tenant/access/:accessPointId/unlatch` (deprecated since the access provider seam) is gone and answers `404`, with `AccessService.unlatch`, the provider method and the capability `unlatch`; the admin UI's „Tür öffnen“ button goes with it ([smart-city-booking-vue-app#236](https://github.com/ECCdigital/smart-city-booking-vue-app/pull/236)). What it did is the access point's Öffnungsart (glossary) now: `open` sends the configured action, so no client picks the way a door opens. Audit rows already written with `action: "unlatch"` stay readable and filterable; new rows are `action: "open"` with `openAction` and `openActionOrigin`. `LockBusyError.params.action` is `open | close`; the authorization route snapshot loses the route's line on purpose. Rollout: never deploy this backend before the admin UI build without the button, or the button answers `404`

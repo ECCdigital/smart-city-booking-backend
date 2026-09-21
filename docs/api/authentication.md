@@ -50,13 +50,68 @@ Register a new user.
   "id": "someone@example.com",
   "password": "your-password",
   "firstName": "First Name",
-  "lastName": "Last Name"
+  "lastName": "Last Name",
+  "verifyUrl": "https://storefront.example.com/auth/verify",
+  "nextUrl": "/tenants/new"
 }
 ```
+
+`verifyUrl` (optional) is the client's own verify page; the verification mail links it with `?token=<hookId>&id=<email>`. Without it the mail links `GET /auth/verify/:hookId`.
+
+`nextUrl` (optional) is the return target (Rückkehrziel): where the client sends the user once the account is verified and signed in, e.g. the tenant self-creation the user came from. It is kept on the verification hook and travels with the flow: the mail link gains `&next=<encoded nextUrl>`, `POST /auth/verify-email` answers it, and `GET /auth/verify/:hookId` redirects to `<FRONTEND_URL>/email/verify?next=<encoded nextUrl>`. Only a relative path (`/…`, not `//…`) or an absolute `http(s)` address on the origin of `verifyUrl` or of `FRONTEND_URL` is kept; anything else is dropped silently. The client carries the target from its verify page to the login and on.
+
+### POST /auth/verify-email
+
+Verify a user with the token and address from the verification mail's link.
+
+**Request body:**
+
+```json
+{
+  "token": "<hookId>",
+  "id": "someone@example.com"
+}
+```
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "message": "Email verified successfully",
+  "nextUrl": "/tenants/new"
+}
+```
+
+`nextUrl` is the signup's return target, `null` when the signup named none. Failures answer their status with a plain text message (`400` bad token or id mismatch, `404` unknown, `410` already verified).
 
 ### GET /auth/verify/:hookId
 
 Verify a user using the hook ID generated during signup.
+
+## Verification proof
+
+The self-service actions of the tenant supervision (e.g. the self-creation of a tenant) need a verified account, and the server re-checks it on the action; a login alone is not enough. What counts as proof (Verifizierungsnachweis):
+
+- a local or card account: its e-mail verification (`isVerified`, set by the released verification hook — or by an instance administrator through the user administration, which counts the same)
+- an SSO account: the identity provider's confirmation of the e-mail, persisted on the user as `idpEmailVerifiedAt` (Date) and `idpEmailVerifiedProvider` (`keycloak`) when a `POST /auth/sso/signup` or `POST /auth/sso/signin` carries Keycloak's `email_verified: true` claim. The first proof stands. An SSO account whose provider has not confirmed the e-mail has no proof — the `isVerified: true` every SSO signup sets is an activation flag, not a proof.
+
+Both fields are part of the user object the auth routes answer (`user.idpEmailVerifiedAt`, `user.idpEmailVerifiedProvider`, next to `user.authType`). The claim is read on the SSO routes only; a Keycloak bearer session that never passed `POST /auth/sso/signin` gains its proof at its next SSO sign-in.
+
+Server-side the check is `assertVerifiedForSelfService(user)` (`src/commons/services/user/verification-proof.js`), fed the stored user (`UserManager.getUser(id)`), not the slim `req.user` of the auth middleware.
+
+An action without proof is refused with `403`:
+
+```json
+{
+  "error": "ForbiddenError",
+  "code": "email_verification_required",
+  "statusCode": 403,
+  "params": { "method": "email", "provider": null }
+}
+```
+
+`params.method` names the way to get one: `email` (verify the e-mail address) or `identity_provider` (confirm the address at the provider named in `params.provider`, e.g. `keycloak`).
 
 ### GET /auth/reset/:hookId
 

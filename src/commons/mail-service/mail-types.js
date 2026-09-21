@@ -263,9 +263,14 @@ const MailType = Object.freeze({
     templateName: "verification-request",
     audience: "named",
     subject: () => "Bestätigen Sie Ihre E-Mail-Adresse",
-    templateData: ({ to, hookId, verifyUrl }) => ({
+    // The storefront's link carries the signup's return target (`nextUrl`,
+    // already normalized by the signup) so the verify page opened from the
+    // mail knows where to send the user on; the backend's own route reads it
+    // from the hook.
+    templateData: ({ to, hookId, verifyUrl, nextUrl }) => ({
       verifyUrl: verifyUrl
-        ? hookLink(verifyUrl, hookId, to)
+        ? hookLink(verifyUrl, hookId, to) +
+          (nextUrl ? `&next=${encodeURIComponent(nextUrl)}` : "")
         : `${process.env.BACKEND_URL}/auth/verify/${hookId}`,
     }),
   },

@@ -15,10 +15,15 @@ const MembershipManager = require("../data-managers/membership-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
 const { notify } = require("../mail-service");
+const { normalizeReturnTarget } = require("./user/return-target");
 
 class UserService {
   static async singUpUser(user, nextUrl, verifyUrl, invitation = null) {
-    const hook = user.addHook(USER_HOOK_TYPES.VERIFY, { nextUrl, verifyUrl });
+    const returnTarget = normalizeReturnTarget(nextUrl, { verifyUrl });
+    const hook = user.addHook(USER_HOOK_TYPES.VERIFY, {
+      nextUrl: returnTarget,
+      verifyUrl,
+    });
     const createdUser = await UserManager.createUser(user);
 
     if (invitation && invitation.token && invitation.tenantId) {
@@ -33,6 +38,7 @@ class UserService {
       to: createdUser.id,
       hookId: hook.id,
       verifyUrl,
+      nextUrl: returnTarget,
     });
     await notify("USER_CREATED", { userId: createdUser.id });
   }
@@ -110,7 +116,7 @@ class UserService {
 
     await UserManager.updateUser(user);
 
-    return { success: true };
+    return { success: true, nextUrl: hook.payload?.nextUrl ?? null };
   }
 
   static async requestForgotPassword(email, resetUrl) {

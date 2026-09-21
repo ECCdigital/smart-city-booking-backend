@@ -387,12 +387,16 @@ class AuthenticationController {
     }
 
     try {
-      const { success } = await UserService.verifyEmail(token, id);
+      const { success, nextUrl } = await UserService.verifyEmail(token, id);
       if (!success) {
         throw new Error("Email verification failed");
       }
       logger.info(`Email verified for user ${id}.`);
-      return response.status(200).send("Email verified successfully");
+      return response.status(200).json({
+        success: true,
+        message: "Email verified successfully",
+        nextUrl: nextUrl ?? null,
+      });
     } catch (error) {
       logger.error(`Email verification failed for user ${id}:`, error);
       return response

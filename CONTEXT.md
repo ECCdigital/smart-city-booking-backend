@@ -367,6 +367,14 @@ _Avoid_: Anbieter, Vermieter, Host
 Ein Ehrenamtlicher, der über das mandantenübergreifende Storefront Räume für Veranstaltungen sucht und bucht. Kein eigener Nutzertyp, sondern ein gewöhnlicher Buchender.
 _Avoid_: Kunde (das ist die Buchungsrolle), Mieter
 
+**Verifizierungsnachweis (eines Nutzerkontos)**:
+Der serverseitig belastbare Beleg, dass die E-Mail-Adresse eines Kontos bestätigt ist — Voraussetzung jeder Selbst-Anlage, vom Server bei der Anlage erneut geprüft; Login allein genügt nicht. Ein lokales (oder Karten-)Konto erbringt ihn durch die abgeschlossene E-Mail-Verifizierung, ein SSO-Konto allein durch die bestätigte Zusage des Identity-Providers (`email_verified`), die beim Login oder der Registrierung festgehalten wird. Das pauschal bei jeder SSO-Registrierung gesetzte `isVerified` ist Aktivierungsmerkmal, kein Nachweis. Fehlt er, verweist der Server auf den Weg dahin: E-Mail-Verifizierung oder Identity-Provider.
+_Avoid_: isVerified (als Sprechbegriff — das ist das Aktivierungsmerkmal), verifiziert (unqualifiziert), Login-Nachweis
+
+**Rückkehrziel (einer Registrierung)**:
+Die Stelle, zu der ein Nutzer nach Registrierung, Verifizierung und Login zurückkehrt — etwa die Mandanten-Anlage, aus der ein Raumgeber über „Angebote bereitstellen" kam. Wird bei der Registrierung am Verifizierungs-Hook festgehalten, reist mit dem Link der Verifizierungs-Mail und wird von der Verifizierung beantwortet; nur relative Pfade oder Adressen auf dem Ursprung der eigenen Verifizierungsseite bzw. des Frontends werden behalten. Bei SSO trägt der Client es selbst durch den Identity-Provider-Umweg.
+_Avoid_: nextUrl (als Sprechbegriff — das ist der Feldname), Redirect (das ist der Mechanismus), Deep-Link
+
 **Bereitschafts-Check (eines Mandanten)**:
 Die unverbindliche Auskunft über fehlende Angaben in der aktuellen Einrichtung eines Mandanten — dieselbe Liste für den Tenant-Owner beim Onboarding und für den Instanz-Owner vor dem Anheben der Aufsichtsstufe. Sie beschreibt die Vorbereitung auf den öffentlichen Auftritt, garantiert aber keine tatsächliche Buchbarkeit oder Funktionsfähigkeit von Zahlung und Mailversand.
 _Avoid_: Readiness, Checkliste (als Modellbegriff), Validierung
