@@ -29,61 +29,78 @@ const {
   publicRoute,
   tokenAuthorized,
 } = require("../../commons/services/authorization");
+const {
+  publicTenantGate,
+} = require("../../commons/services/supervision/public-tenant-gate");
 
 const router = express.Router({ mergeParams: true });
 
 // BOOKABLES
 // =========
 
-// Public
+// Public. The public delivery paths of the tenant carry the tenant gate
+// of the supervision after their marker (spec §5.2): under the reach
+// `public` a blocked tenant answers 404. Not on the checkout (its gate is
+// a check in the item checkout), not on the existing-booking paths, the
+// payments, the hooks - a blanket gate on `publicRoute()` would be wrong.
 router.get(
   "/bookables/public",
   publicRoute("bookable", "readPublic"),
+  publicTenantGate(),
   BookableController.getPublicBookables,
 );
 router.get(
   "/bookables/public/:id",
   publicRoute("bookable", "readPublic"),
+  publicTenantGate(),
   BookableController.getPublicBookable,
 );
 router.get(
   "/bookables/:id/bookings",
   publicRoute("bookable", "relatedBookings"),
+  publicTenantGate(),
   BookingController.getRelatedBookings,
 );
 router.get(
   "/bookables/:id/openingHours",
   publicRoute("bookable", "readPublic"),
+  publicTenantGate(),
   BookableController.getOpeningHours,
 );
 router.get(
   "/bookables/:id/availability/v1",
   publicRoute(),
+  publicTenantGate(),
   CalendarController.getBookableAvailabilityV1,
 );
 router.get(
   "/bookables/:id/availability/v2",
   publicRoute(),
+  publicTenantGate(),
   CalendarController.getBookableAvailabilityV2,
 );
 router.get(
   "/bookables/:id/availability",
   publicRoute(),
+  publicTenantGate(),
   CalendarController.getBookableAvailability,
 );
 router.get(
   "/bookables/:id/block-periods",
   publicRoute(),
+  publicTenantGate(),
   CalendarController.getBookableBlockPeriods,
 );
 router.get(
   "/bookables/:id/occupancy",
   publicRoute("bookable", "readPublic"),
+  publicTenantGate(),
   BookableController.getBookableOccupancy,
 );
 router.get(
   "/bookables/:id/prices",
   publicRoute("bookable", "prices"),
+  publicTenantGate(),
   BookableController.getBookablePriceCategories,
 );
 
@@ -129,10 +146,16 @@ router.get(
 // ======
 
 // Public
-router.get("/events", publicRoute("event", "read"), EventController.getEvents);
+router.get(
+  "/events",
+  publicRoute("event", "read"),
+  publicTenantGate(),
+  EventController.getEvents,
+);
 router.get(
   "/events/:id",
   publicRoute("event", "read"),
+  publicTenantGate(),
   EventController.getEvent,
 );
 router.get(
@@ -170,6 +193,7 @@ router.get(
 router.get(
   "/bookings",
   publicRoute("booking", "list"),
+  publicTenantGate(),
   BookingController.getBookings,
 );
 router.put(
@@ -367,6 +391,7 @@ router.post(
 router.get(
   "/checkout/permissions/:id",
   publicRoute(),
+  publicTenantGate(),
   CheckoutController.checkoutPermissions,
 );
 
@@ -408,6 +433,7 @@ router.get(
 router.get(
   "/calendar/occupancy",
   publicRoute(),
+  publicTenantGate(),
   CalendarController.getOccupancies,
 );
 
@@ -421,6 +447,7 @@ router.get(
 router.get(
   "/coupons/:id",
   publicRoute("coupon", "lookup"),
+  publicTenantGate(),
   CouponController.getCoupon,
 );
 // The obsolete store: an update, or a creation the handler decides (§11).
@@ -445,6 +472,7 @@ router.delete(
 router.get(
   "/files/get",
   publicRoute("media", "file"),
+  publicTenantGate(),
   FileController.getTenantFile,
 );
 

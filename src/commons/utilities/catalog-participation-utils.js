@@ -5,6 +5,9 @@ const {
   NotFoundError,
   UnauthorizedError,
 } = require("../../errors/BaseError");
+const {
+  isTenantPubliclyVisible,
+} = require("../services/supervision/offer-gate");
 
 async function getMemberTenantIds(userId) {
   if (!userId) {
@@ -24,6 +27,12 @@ function hasRestrictedCatalogAccess(tenant, memberTenantIds) {
 }
 
 function isTenantListedInCatalog(tenant, catalog, memberTenantIds) {
+  // The tenant gate of the supervision comes first (spec §5.2): a blocked
+  // tenant is not listed, whatever its catalog participation says.
+  if (!isTenantPubliclyVisible(tenant)) {
+    return false;
+  }
+
   if (!tenant?.catalogParticipation?.visible) {
     return false;
   }
@@ -37,7 +46,9 @@ function isTenantListedInCatalog(tenant, catalog, memberTenantIds) {
 
 async function enforceTenantCatalogAccess(tenantId, userId) {
   const tenant = await TenantManager.getTenant(tenantId);
-  if (!tenant) {
+  // A blocked tenant answers as an unknown one (spec §5.2): the public
+  // response names no reason.
+  if (!isTenantPubliclyVisible(tenant)) {
     throw new NotFoundError("tenant_not_found", { tenantId });
   }
 

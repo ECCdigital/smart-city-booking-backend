@@ -14,6 +14,8 @@ const CHECK_TYPES = Object.freeze({
   MAX_AMOUNT: "max-amount",
   BLOCK_PERIOD: "block-period",
   TIME_PERIOD: "time-period",
+  // The offer gate of the tenant supervision (spec §5.1).
+  SUPERVISION: "supervision",
 });
 
 module.exports = { CHECK_TYPES };

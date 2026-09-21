@@ -37,6 +37,8 @@ const MediaManager = require("../../src/commons/data-managers/media-manager");
 const MembershipManager = require("../../src/commons/data-managers/membership-manager");
 const { RoleManager } = require("../../src/commons/data-managers/role-manager");
 const RuleManager = require("../../src/commons/data-managers/rule-manager");
+const SupervisionHistoryManager = require("../../src/commons/data-managers/supervision-history-manager");
+const SupervisionNotificationManager = require("../../src/commons/data-managers/supervision-notification-manager");
 const TenantManager = require("../../src/commons/data-managers/tenant-manager");
 const UserManager = require("../../src/commons/data-managers/user-manager");
 const WorkflowManager = require("../../src/commons/data-managers/workflow-manager");
@@ -321,6 +323,25 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
   stubManager(RuleManager, {
     one: rule,
     only: { getExecutionLogs: async () => [] },
+  });
+  // The supervision history and outbox: insert-only, an empty page to read.
+  const historyRow = () => ({
+    id: FIXTURE_ID,
+    tenantId,
+    eventType: "tenant.levelChanged",
+    occurredAt: new Date(0),
+    actor: { type: "user", userId: ownerUserId },
+    from: "free",
+    to: "blocked",
+  });
+  stubManager(SupervisionHistoryManager, {
+    one: historyRow,
+    only: {
+      list: async () => ({ items: [], total: 0, page: 1, pageSize: 50 }),
+    },
+  });
+  stubManager(SupervisionNotificationManager, {
+    one: () => ({ id: FIXTURE_ID, tenantId, status: "pending" }),
   });
   stubManager(TenantManager, {
     one: tenantEntity,

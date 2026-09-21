@@ -70,7 +70,10 @@
       to. With `publicTenants=true` the list switches to the public tenant
       export, which does not carry legal documents at all, but `accessApps`:
       the customer-service contact of every active access application that
-      has one, and nothing else of the application.
+      has one, and nothing else of the application. Both exports carry the
+      supervision level (`supervisionLevel`), the full one also
+      `supervisionChangedAt`; `?supervisionLevel=` narrows the list to one
+      level (a tenant without a stored level counts as `free`).
     security:
       - bearerAuth: []
     parameters:
@@ -80,6 +83,12 @@
         schema:
           type: boolean
         description: Return the public export instead, without legal documents
+      - name: supervisionLevel
+        in: query
+        required: false
+        schema:
+          $ref: "#/components/schemas/SupervisionLevel"
+        description: Only the tenants at this supervision level
     responses:
       "200":
         description: The tenants
@@ -112,6 +121,8 @@
                               type: string
                             email:
                               type: string
+      "400":
+        description: "`invalid_supervision_level`: a level outside the vocabulary"
 
 /api/tenants/{id}:
   get:

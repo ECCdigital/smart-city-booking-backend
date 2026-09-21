@@ -1,0 +1,111 @@
+# swagger/schemas/supervision.yaml
+
+components:
+  parameters:
+    SupervisionHistoryPage:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number (default 1)
+      schema:
+        type: integer
+        minimum: 1
+    SupervisionHistoryPageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: Rows per page (default 50, at most 200)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+    SupervisionHistoryOfferType:
+      name: offerType
+      in: query
+      required: false
+      description: Only the rows of one kind of offer
+      schema:
+        type: string
+        enum: [bookable, event]
+    SupervisionHistoryOfferId:
+      name: offerId
+      in: query
+      required: false
+      description: Only the rows of one offer
+      schema:
+        type: string
+
+  schemas:
+    SupervisionLevel:
+      type: string
+      description: |
+        The supervision level of a tenant (glossary "Aufsichtsstufe"): `free`
+        works without approvals, `supervised` needs an approved review status
+        per offer (tickets 05-07), `blocked` has no public projection. A
+        tenant without a stored level is `free`.
+      enum: [free, supervised, blocked]
+
+    SupervisionHistoryRow:
+      type: object
+      description: One immutable row of the supervision history.
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        offerType:
+          type: string
+          nullable: true
+          enum: [bookable, event, null]
+        offerId:
+          type: string
+          nullable: true
+        eventType:
+          type: string
+          enum:
+            - tenant.created
+            - tenant.levelChanged
+            - review.submitted
+            - review.approved
+            - review.rejected
+            - review.withdrawn
+        occurredAt:
+          type: string
+          format: date-time
+        actor:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [user, system]
+            userId:
+              type: string
+              nullable: true
+        from:
+          type: string
+          nullable: true
+          description: The state before (a level, or a review status).
+        to:
+          type: string
+          nullable: true
+          description: The state after.
+        reason:
+          type: string
+          nullable: true
+        origin:
+          type: string
+          enum: [api, migration]
+
+    SupervisionHistoryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupervisionHistoryRow"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer

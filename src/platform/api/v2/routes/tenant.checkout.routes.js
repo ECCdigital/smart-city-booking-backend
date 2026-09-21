@@ -1,6 +1,9 @@
 const { asyncRouter } = require("../../../../middleware/async-router");
 const CheckoutControllerV2 = require("../controllers/checkout.controller");
 const { publicRoute } = require("../../../../commons/services/authorization");
+const {
+  publicTenantGate,
+} = require("../../../../commons/services/supervision/public-tenant-gate");
 
 const router = asyncRouter();
 
@@ -23,6 +26,7 @@ router.post(
 router.get(
   "/permissions/:id",
   publicRoute("checkout", "all"),
+  publicTenantGate(),
   CheckoutControllerV2.checkoutPermissions,
 );
 

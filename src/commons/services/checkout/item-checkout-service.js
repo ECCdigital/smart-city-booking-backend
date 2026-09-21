@@ -36,6 +36,8 @@ const {
   shouldSkipOpeningHoursCheck,
 } = require("../../availability/availability-rules");
 const { CheckoutPermissions } = require("./checkout-permissions");
+const { isOfferReachable } = require("../supervision/offer-gate");
+const { CHECKOUT_REASONS } = require("./checkout-reasons");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
 const { BadRequestError } = require("../../../errors/BaseError");
@@ -687,6 +689,30 @@ class ItemCheckoutService {
     return grossPrice;
   }
 
+  /**
+   * The offer gate of the tenant supervision (spec §5.1, §5.2): a new
+   * self-booking has to reach the offer at the moment of the attempt -
+   * not at the moment the page was opened, and whoever is signed in. A
+   * check of the self-booking policy like the others, so every entrance
+   * (v1, v2, group, validation) and every position - a ticket of an event
+   * or a group item referencing a bookable included - passes it.
+   */
+  async checkSupervision() {
+    const tenant = await this._cached("supervisionTenant", () =>
+      TenantManager.getTenant(this.tenantId),
+    );
+    if (!isOfferReachable({ tenant, offer: this.originBookable })) {
+      throw {
+        checkType: CHECK_TYPES.SUPERVISION,
+        reason: CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
+        available: false,
+        message: `Das Objekt ${this.originBookable?.title} kann derzeit nicht gebucht werden.`,
+        bookableId: this.bookableId,
+      };
+    }
+    return { checkType: CHECK_TYPES.SUPERVISION, available: true };
+  }
+
   async checkPermissions() {
     const provider = await this._getAvailabilityProvider();
     return runPermissionCheck({
@@ -927,6 +953,7 @@ class ItemCheckoutService {
 
     if (stopOnFirstError) {
       return await Promise.all([
+        this.checkSupervision(),
         this.checkPermissions(),
         this.checkOpeningHours(),
         this.checkMaxAmount(),
@@ -944,6 +971,7 @@ class ItemCheckoutService {
     }
 
     return await Promise.allSettled([
+      this.checkSupervision(),
       this.checkPermissions(),
       this.checkMaxAmount(),
       this.checkOpeningHours(),

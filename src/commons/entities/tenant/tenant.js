@@ -30,6 +30,9 @@ class Tenant {
       "eventDetailLink",
       "defaultEventCreationMode",
       "enablePublicStatusView",
+      // The level alone (tenant supervision spec §3): the storefront
+      // explains a blocked tenant with it; the change time stays inside.
+      "supervisionLevel",
     ];
 
     const exported = publicFields.reduce((result, field) => {

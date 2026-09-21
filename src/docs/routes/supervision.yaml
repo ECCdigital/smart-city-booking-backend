@@ -1,0 +1,144 @@
+# swagger/routes/supervision.yaml
+#
+# The tenant supervision (glossary "Mandanten-Aufsicht"): the supervision
+# level of a tenant, set by the instance owner alone, and the immutable
+# supervision history. The level is also carried by the tenant DTOs:
+# `supervisionLevel` and `supervisionChangedAt` in the admin DTO
+# (`GET /api/tenants`, `GET /api/tenants/{tenant}`), `supervisionLevel` alone
+# in the public one (`GET /api/tenants/public`, `?publicTenants=true`). Neither
+# field is accepted by `POST /api/tenants` or `PUT /api/tenants`; both are
+# dropped from the body.
+#
+# A blocked tenant has no public projection: it is left out of
+# `GET /api/tenants/public` and the catalog bundle, its slug and theme answer
+# 404, and every public offer path of the tenant (`/api/{tenant}/bookables/
+# public*`, opening hours, availability, block periods, occupancy, prices,
+# `/events*`, `/bookings?public=true`, `/calendar/occupancy`, coupon lookup,
+# media files, iCal, the JSON and HTML engines, `/checkout/permissions/{id}`
+# and `/api/tenants/{tenant}/payment-apps`) answers `404 tenant_not_found`
+# under the public reach. Staff of the tenant keep their reach. A new
+# self-booking of a blocked tenant is refused by every checkout entrance with
+# the reason `checkout.offer_not_reachable`; the administration's manual
+# booking, existing bookings, payment callbacks, hooks and webhooks are
+# unaffected.
+
+/api/tenants/{tenant}/supervision:
+  put:
+    tags:
+      - Supervision
+    summary: Set the supervision level of a tenant
+    description: |
+      Sets the level (glossary "Aufsichtsstufe") of the tenant. Instance
+      owner only. Actor and time are the server's. The level that is already
+      effective is a no-op: nothing is written, the stored change time is
+      answered. A change writes one history row (`tenant.levelChanged`) and
+      records one notification occasion for the tenant owners.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [level]
+            properties:
+              level:
+                $ref: "#/components/schemas/SupervisionLevel"
+              reason:
+                type: string
+                nullable: true
+                description: Optional reason, stored with the history row.
+    responses:
+      "200":
+        description: The effective level and when it last changed.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                supervisionLevel:
+                  $ref: "#/components/schemas/SupervisionLevel"
+                supervisionChangedAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+      "400":
+        description: "`invalid_supervision_level`: a level outside the vocabulary."
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`tenant_not_found`"
+      "409":
+        description: |
+          `supervision_level_changed`: the level moved underneath the request;
+          read the tenant again and repeat.
+
+/api/tenants/{tenant}/supervision/history:
+  get:
+    tags:
+      - Supervision
+    summary: The supervision history of a tenant
+    description: |
+      The immutable history (glossary "Aufsichtshistorie") of the tenant and
+      its offers, newest first. The tenant owner reads the tenant the route
+      names, the instance owner every tenant.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferType"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferId"
+    responses:
+      "200":
+        description: One page of the history.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionHistoryPage"
+      "400":
+        description: "`invalid_offer_type`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Neither the tenant owner nor the instance owner
+
+/api/instances/supervision/history:
+  get:
+    tags:
+      - Supervision
+    summary: The instance-wide supervision history
+    description: |
+      The history across every tenant, newest first, optionally narrowed to
+      one tenant and one offer. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenantId
+        in: query
+        required: false
+        schema:
+          type: string
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferType"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferId"
+    responses:
+      "200":
+        description: One page of the history.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionHistoryPage"
+      "400":
+        description: "`invalid_offer_type`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner

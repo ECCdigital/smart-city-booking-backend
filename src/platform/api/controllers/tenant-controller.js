@@ -40,6 +40,7 @@ const {
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
   BaseError,
+  BadRequestError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
@@ -50,6 +51,27 @@ const {
 } = require("../../../commons/services/authorization");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const Formatters = require("../../../commons/utilities/formatters");
+const InstanceManager = require("../../../commons/data-managers/instance-manager");
+const SupervisionService = require("../../../commons/services/supervision/supervision-service");
+const {
+  SUPERVISION_LEVEL_VALUES,
+} = require("../../../commons/services/supervision/supervision-constants");
+
+/**
+ * The supervision fields a tenant write may not bring (tenant supervision
+ * spec §3): the level is set server-side on creation and changed only by
+ * `PUT /tenants/:tenant/supervision`. Applies to the creation, the update
+ * and the obsolete `PUT /tenants` alike.
+ */
+const SUPERVISION_FIELDS = ["supervisionLevel", "supervisionChangedAt"];
+
+function withoutSupervisionFields(body) {
+  const stripped = { ...body };
+  for (const field of SUPERVISION_FIELDS) {
+    delete stripped[field];
+  }
+  return stripped;
+}
 
 const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
@@ -150,9 +172,23 @@ class TenantController {
   static async getTenants(request, response) {
     try {
       const publicTenants = request.query.publicTenants === "true";
+      const { supervisionLevel } = request.query;
+      if (
+        supervisionLevel !== undefined &&
+        !SUPERVISION_LEVEL_VALUES.includes(supervisionLevel)
+      ) {
+        return ApiResponse.fail(
+          response,
+          new BadRequestError("invalid_supervision_level", {
+            level: supervisionLevel,
+            allowed: SUPERVISION_LEVEL_VALUES,
+          }),
+        );
+      }
 
       const tenants = await TenantManager.getTenants(scopeOf(request), {
         owned: !publicTenants,
+        ...(supervisionLevel !== undefined && { supervisionLevel }),
       });
 
       response
@@ -174,7 +210,7 @@ class TenantController {
 
   static async getPublicTenants(request, response) {
     try {
-      const tenants = await TenantManager.getTenants();
+      const tenants = await TenantManager.getPublicTenants();
       const publicTenants = tenants.map((tenant) => tenant.exportPublic());
       response.status(200).send(publicTenants);
     } catch (error) {
@@ -240,7 +276,7 @@ class TenantController {
   static async createTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = new Tenant(request.body);
+      const tenant = new Tenant(withoutSupervisionFields(request.body));
       tenant.id = uuidv4();
 
       if (Object.prototype.hasOwnProperty.call(request.body, "mailSnippets")) {
@@ -344,6 +380,15 @@ class TenantController {
       tenant.receiptTemplate = receiptTemplate;
       tenant.invoiceTemplate = invoiceTemplate;
       tenant.mailSnippets = mergeDefaultMailSnippets(tenant.mailSnippets);
+
+      // The level a new tenant starts at is the server's (tenant supervision
+      // spec §2): free for the instance owner, the instance's initial level
+      // otherwise - never the body's.
+      tenant.supervisionLevel = SupervisionService.initialLevelForCreation({
+        instance: await InstanceManager.getInstance(),
+        creatorIsInstanceOwner: request.principal?.isInstanceOwner === true,
+      });
+      tenant.supervisionChangedAt = null;
 
       await TenantManager.storeTenant(tenant);
       await MembershipManager.addMembership(tenant.id, membership);
