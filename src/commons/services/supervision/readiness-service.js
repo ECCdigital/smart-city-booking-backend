@@ -11,6 +11,7 @@
 
 const { NotFoundError } = require("../../../errors/BaseError");
 const { Event } = require("../../entities/event/event");
+const { Bookable } = require("../../entities/bookable/bookable");
 const TenantManager = require("../../data-managers/tenant-manager");
 const InstanceManager = require("../../data-managers/instance-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
@@ -90,6 +91,8 @@ function legalCriterion() {
 
 const asEvent = (record) =>
   record instanceof Event ? record : new Event(record);
+const asBookable = (record) =>
+  record instanceof Bookable ? record : new Bookable(record);
 
 const offerRef = (offerType, offer, title) => ({
   offerType,
@@ -183,6 +186,20 @@ function hasValidPeriod(event) {
   );
 }
 
+/**
+ * The references of the relevant offers that fail a rule, bookables first.
+ *
+ * @param {{ bookables: Bookable[], events: Event[] }} relevant
+ * @param {(bookable: Bookable) => boolean} bookablePasses
+ * @param {(event: Event) => boolean} eventPasses
+ */
+function failingOffers(relevant, bookablePasses, eventPasses) {
+  return [
+    ...relevant.bookables.filter((b) => !bookablePasses(b)).map(bookableRef),
+    ...relevant.events.filter((e) => !eventPasses(e)).map(eventRef),
+  ];
+}
+
 /** Schedule: every relevant offer has a usable time configuration. */
 function scheduleCriterion(relevant) {
   if (relevant.bookables.length + relevant.events.length === 0) {
@@ -193,12 +210,11 @@ function scheduleCriterion(relevant) {
     );
   }
 
-  const offers = [
-    ...relevant.bookables
-      .filter((bookable) => !hasFittingTimeConfiguration(bookable))
-      .map(bookableRef),
-    ...relevant.events.filter((event) => !hasValidPeriod(event)).map(eventRef),
-  ];
+  const offers = failingOffers(
+    relevant,
+    hasFittingTimeConfiguration,
+    hasValidPeriod,
+  );
 
   if (offers.length === 0) {
     return criterion(
@@ -303,12 +319,12 @@ function paymentCriterion(tenant, relevant) {
   }
 
   const apps = completePaymentApps(tenant);
-  const offers = [
-    ...paidBookables
-      .filter((bookable) => !isPayableBy(apps, bookable))
-      .map(bookableRef),
-    ...paidEvents.filter((event) => !isPayableBy(apps, event)).map(eventRef),
-  ];
+  const payable = (offer) => isPayableBy(apps, offer);
+  const offers = failingOffers(
+    { bookables: paidBookables, events: paidEvents },
+    payable,
+    payable,
+  );
 
   if (offers.length === 0) {
     return criterion(
@@ -354,12 +370,12 @@ function mailCriterion(tenant, instance) {
     );
   }
 
-  const fallback = tenant.useInstanceMail === false;
+  const optedOutOfInstanceMail = tenant.useInstanceMail === false;
   if (isCompleteTenantMailConfig(instance)) {
     return criterion(
       CRITERION_KEYS.MAIL,
       STATES.FULFILLED,
-      fallback
+      optedOutOfInstanceMail
         ? "Das Mandanten-Postfach ist unvollständig; der Versand läuft über das Instanz-Postfach."
         : "Der Versand läuft über das Instanz-Postfach.",
       { transport: "instance" },
@@ -368,7 +384,7 @@ function mailCriterion(tenant, instance) {
   return criterion(
     CRITERION_KEYS.MAIL,
     STATES.MISSING,
-    fallback
+    optedOutOfInstanceMail
       ? "Weder das Mandanten-Postfach noch das Instanz-Postfach ist vollständig eingerichtet."
       : "Das Instanz-Postfach ist nicht vollständig eingerichtet.",
     { transport: "instance" },
