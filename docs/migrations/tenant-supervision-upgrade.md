@@ -49,5 +49,9 @@ repeats no history row and touches no decision made in the meantime.
 
 There is no rollback (`down` is a no-op): it would drop decisions made since.
 
-Run it with traffic held back and a single runner; the runner itself has no
-lock against parallel runs yet.
+Run it with traffic held back. The runner holds a lock in MongoDB, so
+processes that start in parallel run it once: the others wait and then find it
+recorded. `/healthz/ready` answers `503` until the migrations have succeeded in
+the process asked. The whole procedure - maintenance window, verification,
+frontend versions and caches, error path - is the
+[cutover guide](../tenant-supervision-cutover.md).

@@ -41,6 +41,13 @@ module.exports = {
 - Test on a copy of production data when changes are destructive
 - Document breaking schema changes in `docs/CHANGELOG.md`
 
+## Lock and readiness
+
+- `runMigrations` holds a Mongo-backed lock (`migrations/lib/migration-lock.js`: one document `_id: "migrations"` in `migrationlocks`, owner + `expiresAt` lease, heartbeat, released in `finally`). A second runner waits, then reads the recorded migrations under its own lock, so nothing runs twice; it throws `MigrationLockTimeoutError` when the lock is still held after `MIGRATION_LOCK_WAIT_TIMEOUT_MS`
+- A migration that runs longer than the lease is fine (the heartbeat renews it); one that blocks the event loop for longer than `MIGRATION_LOCK_LEASE_MS` is not — keep long loops asynchronous
+- `/healthz/ready` answers `503 { details: { migrations: "pending" | "failed" } }` until `runMigrations` has succeeded in this process (`src/commons/utilities/migration-state.js`), so a failing migration keeps the instance out of traffic
+- Tests pass fakes through the second argument: `runMigrations(connection, { migrations, migrationModel, lockModel, … })` — see `tests/migration-lock.test.js`
+
 ## When to write a migration
 
 - Renaming/moving fields on existing documents
