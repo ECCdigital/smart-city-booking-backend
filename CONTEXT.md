@@ -352,7 +352,7 @@ Die Handlung des Instanz-Owners am Prüfstatus eines Angebots: _freigeben_ (auss
 _Avoid_: Moderation, Statuswechsel (unqualifiziert), Sperre (das ist die Aufsichtsstufe)
 
 **Direktlink (eines Angebots)**:
-Der Zugriff auf ein bekanntes einzelnes Angebot — Detail, Preise, Zeiten, Verfügbarkeit, Belegung und die neue Selbstbuchung — im Unterschied zur Ausspielung in Listen, Katalogen und Aggregaten. Braucht keinen Veröffentlichungswunsch, bei beaufsichtigten Mandanten aber einen freigegebenen Prüfstatus; bei gesperrten Mandanten gibt es ihn nicht. Katalog-Teilnahme und Katalog-Ausschlüsse sind kein Direktlink-Verbot.
+Der Zugriff auf ein bekanntes einzelnes Angebot — Detail, Preise, Zeiten, Verfügbarkeit, Belegung und die neue Selbstbuchung — im Unterschied zur Ausspielung in Listen, Katalogen und Aggregaten. Braucht keinen Veröffentlichungswunsch, bei beaufsichtigten Mandanten aber einen freigegebenen Prüfstatus; bei gesperrten Mandanten gibt es ihn nicht. Katalog-Teilnahme und Katalog-Ausschlüsse sind kein Direktlink-Verbot. Das Ticket eines Events ist nur zusammen mit seinem Event erreichbar und buchbar: beide Angebote müssen das Tor passieren.
 _Avoid_: Deep Link, versteckte Seite, nicht öffentlich (als Verbot gelesen)
 
 **Erneutes Einreichen (eines Angebots)**:

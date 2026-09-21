@@ -34,6 +34,17 @@
 # requirement, under supervision the approval is; otherwise
 # `404 offer_not_found`, naming no reason. Every checkout entrance refuses
 # a new self-booking of such a bookable with `checkout.offer_not_reachable`.
+#
+# Events pass the same gate with their own review. List-type delivery:
+# `GET /api/{tenant}/events`, the JSON engine (list and detail), the HTML
+# engine's list, iCal and the iCal feeds (without `includePrivate`).
+# Detail-type delivery: `GET /api/{tenant}/events/{id}`, the HTML engine's
+# event detail, the event embedded by `?populate=true` in a public bookable,
+# and everything about a ticket of the event - its detail, prices,
+# availability, permission pre-check and every checkout entrance - which
+# needs the ticket and its event reachable. Under the public reach the
+# event routes answer without `review`; whoever may read events
+# (`manageBookables.readAny`, or `readOwn` for their own) gets them whole.
 
 /api/{tenant}/bookables/{id}/review/submissions:
   post:
@@ -92,6 +103,95 @@
       records a `review.decided` notification occasion for the tenant owners.
       The write is conditional on the status the decision was taken on: of
       two concurrent decisions one answers `409`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [action]
+            properties:
+              action:
+                type: string
+                enum: [approve, reject, withdraw]
+              reason:
+                type: string
+                nullable: true
+                description: Optional reason, stored trimmed with review and history.
+    responses:
+      "200":
+        description: The new review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "400":
+        description: "`invalid_review_action`, `invalid_review_reason`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`offer_not_found`"
+      "409":
+        description: "`review_transition_invalid` with `params: { from, action }`"
+
+/api/{tenant}/events/{id}/review/submissions:
+  post:
+    tags:
+      - Supervision
+    summary: Submit an event for review
+    description: |
+      As for a bookable (`/api/{tenant}/bookables/{id}/review/submissions`),
+      with `offerType: "event"`: no body, a repeat on a pending event is a
+      no-op `200`, a `review.submitted` history row, a `review.queueEntered`
+      occasion only for a `supervised` tenant. The first publication wish of
+      an event without a review status (`PUT /api/{tenant}/events` with
+      `isPublic: true`) submits it the same way. The expiry of an event
+      changes no status: a past event is submitted like any other.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The current review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Neither the tenant owner nor the instance owner
+      "404":
+        description: "`offer_not_found`: the tenant has no such event."
+      "409":
+        description: "`review_transition_invalid` with `params: { from, action }`"
+
+/api/{tenant}/events/{id}/review/decisions:
+  post:
+    tags:
+      - Supervision
+    summary: Decide the review of an event
+    description: |
+      As for a bookable (`/api/{tenant}/bookables/{id}/review/decisions`),
+      with `offerType: "event"`. A pending event that has expired stays
+      decidable.
     security:
       - bearerAuth: []
     parameters:
