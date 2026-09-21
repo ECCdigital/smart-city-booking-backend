@@ -283,6 +283,8 @@ describe("supervision routes", function () {
     it("strips a level from a created tenant and stores the server-side one", async function () {
       const res = await call("post", "/tenants", ADMIN, {
         name: "Neu",
+        contactName: "Erika",
+        mail: "neu@example.test",
         supervisionLevel: "blocked",
         supervisionChangedAt: "2020-01-01T00:00:00.000Z",
       });
@@ -299,6 +301,8 @@ describe("supervision routes", function () {
       const res = await call("put", "/tenants", ADMIN, {
         id: "brand-new",
         name: "Neu",
+        contactName: "Erika",
+        mail: "neu@example.test",
         supervisionLevel: "blocked",
       });
 

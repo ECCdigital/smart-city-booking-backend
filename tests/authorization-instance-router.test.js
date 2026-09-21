@@ -99,10 +99,22 @@ describe("authorization on the instance router", function () {
 
   it("opens a tenant to whom the instance lets, over POST /tenants", async function () {
     expect(
-      (await call("post", "/tenants", CUSTOMER, { name: "Neu" })).status,
+      (
+        await call("post", "/tenants", CUSTOMER, {
+          name: "Neu",
+          contactName: "Erika",
+          mail: "neu@example.test",
+        })
+      ).status,
     ).to.equal(403);
     expect(
-      (await call("post", "/tenants", ADMIN, { name: "Neu" })).status,
+      (
+        await call("post", "/tenants", ADMIN, {
+          name: "Neu",
+          contactName: "Erika",
+          mail: "neu@example.test",
+        })
+      ).status,
     ).to.equal(201);
   });
 
