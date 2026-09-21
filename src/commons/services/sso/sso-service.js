@@ -70,7 +70,7 @@ class SsoService {
       legalAcceptance: legalAcceptance,
     });
 
-    newUser.authType = "keycloak";
+    newUser.authType = SSO_PROVIDER;
     // The account is active, but this flag is no verification proof (spec
     // §6.3); the proof is the provider's claim below.
     newUser.isVerified = true;
@@ -96,8 +96,9 @@ class SsoService {
 
   /**
    * Persists the provider's confirmation as the account's verification proof
-   * on a login that carries it. The first proof stands; an account without
-   * the claim stays without proof, whatever its historic `isVerified` says.
+   * on a login that carries it and sets it on the given `user` too. The first
+   * proof stands; an account without the claim stays without proof, whatever
+   * its historic `isVerified` says.
    */
   static async recordVerificationProof(user, claims) {
     if (user.idpEmailVerifiedAt || !SsoService.hasConfirmedEmail(claims)) {

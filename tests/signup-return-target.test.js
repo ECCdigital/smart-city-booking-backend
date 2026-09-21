@@ -124,10 +124,9 @@ describe("the return target of a signup", function () {
     ]) {
       const hook = await signUp(foreign);
 
-      const verification = sent[sent.length - 2];
-      expect(verification.subject).to.equal(
-        "Bestätigen Sie Ihre E-Mail-Adresse",
-      );
+      const verification = sent
+        .filter((mail) => mail.subject === "Bestätigen Sie Ihre E-Mail-Adresse")
+        .pop();
       expect(verification.html).not.to.include("next=");
       const result = await UserService.verifyEmail(hook.id, CUSTOMER);
       expect(result.nextUrl).to.equal(null);

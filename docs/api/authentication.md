@@ -93,10 +93,12 @@ Verify a user using the hook ID generated during signup.
 
 The self-service actions of the tenant supervision (e.g. the self-creation of a tenant) need a verified account, and the server re-checks it on the action; a login alone is not enough. What counts as proof (Verifizierungsnachweis):
 
-- a local or card account: its e-mail verification (`isVerified`, set only by the released verification hook)
+- a local or card account: its e-mail verification (`isVerified`, set by the released verification hook — or by an instance administrator through the user administration, which counts the same)
 - an SSO account: the identity provider's confirmation of the e-mail, persisted on the user as `idpEmailVerifiedAt` (Date) and `idpEmailVerifiedProvider` (`keycloak`) when a `POST /auth/sso/signup` or `POST /auth/sso/signin` carries Keycloak's `email_verified: true` claim. The first proof stands. An SSO account whose provider has not confirmed the e-mail has no proof — the `isVerified: true` every SSO signup sets is an activation flag, not a proof.
 
-Both fields are part of the user object the auth routes answer (`user.idpEmailVerifiedAt`, `user.idpEmailVerifiedProvider`, next to `user.authType`).
+Both fields are part of the user object the auth routes answer (`user.idpEmailVerifiedAt`, `user.idpEmailVerifiedProvider`, next to `user.authType`). The claim is read on the SSO routes only; a Keycloak bearer session that never passed `POST /auth/sso/signin` gains its proof at its next SSO sign-in.
+
+Server-side the check is `assertVerifiedForSelfService(user)` (`src/commons/services/user/verification-proof.js`), fed the stored user (`UserManager.getUser(id)`), not the slim `req.user` of the auth middleware.
 
 An action without proof is refused with `403`:
 

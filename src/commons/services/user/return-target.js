@@ -1,14 +1,17 @@
 /**
- * The return target of a signup (`nextUrl`): where the client sends the user
- * once the account is verified and signed in. Kept only where the client can
- * safely be sent — a relative path, or an absolute address on the origin of
- * the client's own verify URL or of the frontend — so a signup cannot plant
- * a foreign address in the verification mail.
+ * The return target of a signup (`nextUrl`, glossary „Rückkehrziel“): where
+ * the client sends the user once the account is verified and signed in.
+ * Kept only where the client can be sent — a relative path, or an absolute
+ * address on the origin of the client's own verify URL or of the frontend.
+ * The verify URL is the client's and already the address the mail links, so a
+ * target on its origin is trusted exactly as far as the verify URL itself;
+ * what the check refuses is a target on a third host planted next to it.
  */
 
-function originOf(url) {
+function parseHttpUrl(url) {
   try {
-    return new URL(url).origin;
+    const parsed = new URL(url);
+    return /^https?:$/.test(parsed.protocol) ? parsed : null;
   } catch {
     return null;
   }
@@ -33,14 +36,15 @@ function normalizeReturnTarget(nextUrl, { verifyUrl } = {}) {
   if (target.startsWith("/")) {
     return target.startsWith("//") ? null : target;
   }
-  const origin = originOf(target);
-  if (!origin || !/^https?:$/.test(new URL(target).protocol)) {
+  const parsed = parseHttpUrl(target);
+  if (!parsed) {
     return null;
   }
   const allowed = [verifyUrl, process.env.FRONTEND_URL]
-    .map(originOf)
-    .filter(Boolean);
-  return allowed.includes(origin) ? target : null;
+    .map(parseHttpUrl)
+    .filter(Boolean)
+    .map((url) => url.origin);
+  return allowed.includes(parsed.origin) ? target : null;
 }
 
 module.exports = { normalizeReturnTarget };
