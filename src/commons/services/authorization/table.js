@@ -78,9 +78,10 @@ const TABLE = {
     // `/bookables/public*`, `openingHours`, `occupancy`
     readPublic: { public: true },
     // `GET /bookables/:id/prices`: the public projection is the prices of
-    // a public bookable; whoever may read the bookable itself reads the
-    // prices of a hidden one too - the admin UI previews a provider's
-    // prices before the bookable is listed.
+    // a bookable the public reaches by direct link (the supervision's
+    // offer gate); whoever may read the bookable itself reads its prices
+    // whatever the gate says - the admin UI previews a provider's prices
+    // before the bookable is approved.
     prices: {
       public: true,
       own: "manageBookables.readOwn",
@@ -97,6 +98,10 @@ const TABLE = {
       own: "signedIn",
       any: "manageBookings.readAny",
     },
+    // The review of the tenant supervision (spec §6.2): the tenant owner
+    // submits, the instance owner alone decides.
+    reviewSubmit: { own: "tenantOwner", any: "instanceOwner" },
+    reviewDecide: { any: "instanceOwner" },
   },
 
   event: {

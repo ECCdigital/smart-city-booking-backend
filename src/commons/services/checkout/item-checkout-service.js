@@ -318,8 +318,22 @@ class ItemCheckoutService {
     };
   }
 
+  /**
+   * The bookable as the booking snapshots it (`_bookableUsed`): without
+   * its review (glossary "Prüfstatus") - a booking is read by the booker,
+   * and no public DTO carries a status or a private reason.
+   */
   get bookableUsed() {
-    return this.originBookable;
+    const origin = this.originBookable;
+    if (!origin) {
+      return origin;
+    }
+    const snapshot = Object.assign(
+      Object.create(Object.getPrototypeOf(origin)),
+      origin,
+    );
+    delete snapshot.review;
+    return snapshot;
   }
 
   get hasEvent() {

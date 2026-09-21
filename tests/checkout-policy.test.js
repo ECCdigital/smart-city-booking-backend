@@ -182,6 +182,11 @@ describe("ItemCheckoutService policy behaviour", function () {
 
     await service.init();
 
-    assert.strictEqual(service.bookableUsed, stored);
+    assert.strictEqual(service.originBookable, stored);
+    // The snapshot is the loaded bookable without its review.
+    assert.ok(service.bookableUsed instanceof Bookable);
+    assert.strictEqual(service.bookableUsed.id, "room-a");
+    assert.strictEqual("review" in service.bookableUsed, false);
+    assert.strictEqual(stored.review.status, null);
   });
 });

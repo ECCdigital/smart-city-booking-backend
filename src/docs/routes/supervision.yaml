@@ -21,6 +21,118 @@
 # the reason `checkout.offer_not_reachable`; the administration's manual
 # booking, existing bookings, payment callbacks, hooks and webhooks are
 # unaffected.
+#
+# The review of a bookable (glossary "Prüfstatus"): under `supervised` only
+# an approved bookable passes the offer gate. List-type delivery
+# (`/api/{tenant}/bookables/public`, `/calendar/occupancy` without `ids`, the
+# JSON and HTML engines incl. related bookables and tickets) shows a bookable
+# that asks to be listed (`isPublic`) and - under supervision - is approved.
+# Detail-type delivery under the public reach (`/bookables/public/{id}`,
+# `/bookables/{id}/prices|openingHours|availability*|block-periods|occupancy|
+# bookings?public=true`, `/checkout/permissions/{id}` v1 and v2,
+# `/calendar/occupancy?ids=`) follows the direct-link rule: `isPublic` is no
+# requirement, under supervision the approval is; otherwise
+# `404 offer_not_found`, naming no reason. Every checkout entrance refuses
+# a new self-booking of such a bookable with `checkout.offer_not_reachable`.
+
+/api/{tenant}/bookables/{id}/review/submissions:
+  post:
+    tags:
+      - Supervision
+    summary: Submit a bookable for review
+    description: |
+      The submission (glossary "Einreichung"): a bookable without a review
+      status or a rejected one becomes `pending` with a new `submittedAt`,
+      with or without a publication wish and whatever the tenant's level.
+      Takes no body; actor and time are the server's. Repeating it on a
+      pending bookable is a no-op `200` (no new waiting time, no history
+      row). Writes a `review.submitted` history row; records a
+      `review.queueEntered` notification occasion only when the tenant is
+      `supervised`. Tenant owner or instance owner. The first publication
+      wish of a bookable without a review status (`PUT /api/{tenant}/bookables`
+      with `isPublic: true`) submits it the same way.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The current review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Neither the tenant owner nor the instance owner
+      "404":
+        description: "`offer_not_found`: the tenant has no such bookable."
+      "409":
+        description: |
+          `review_transition_invalid` with `params: { from, action }`: an
+          approved bookable cannot be submitted, or the status moved
+          underneath the request.
+
+/api/{tenant}/bookables/{id}/review/decisions:
+  post:
+    tags:
+      - Supervision
+    summary: Decide the review of a bookable
+    description: |
+      The decision (glossary "Prüfentscheidung") of the instance owner:
+      `approve` a pending or rejected bookable, `reject` a pending one,
+      `withdraw` an approval (→ `rejected`). The publication wish stays as
+      it is. Writes a `review.approved|rejected|withdrawn` history row and
+      records a `review.decided` notification occasion for the tenant owners.
+      The write is conditional on the status the decision was taken on: of
+      two concurrent decisions one answers `409`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [action]
+            properties:
+              action:
+                type: string
+                enum: [approve, reject, withdraw]
+              reason:
+                type: string
+                nullable: true
+                description: Optional reason, stored trimmed with review and history.
+    responses:
+      "200":
+        description: The new review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "400":
+        description: "`invalid_review_action`, `invalid_review_reason`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`offer_not_found`"
+      "409":
+        description: "`review_transition_invalid` with `params: { from, action }`"
 
 /api/tenants/{tenant}/supervision:
   put:

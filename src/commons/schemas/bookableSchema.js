@@ -2,6 +2,7 @@ const { Double } = require("mongodb");
 const { Schema } = require("mongoose");
 const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const { mediaReferenceSchema } = require("./mediaSchema");
+const { reviewField } = require("./reviewSchema");
 
 const priceCategorySchemaDefinition = {
   priceEur: { type: Number, required: true },
@@ -108,6 +109,9 @@ const bookableSchemaDefinition = {
   title: { type: String, required: true },
   description: { type: String, default: "" },
   isPublic: { type: Boolean, default: false },
+  // The review of the offer (glossary "Prüfstatus"): the review service's
+  // alone, never taken from a store or update body.
+  review: reviewField,
   // The ordered image list. Position 0 is the cover image — there is no field
   // of its own for it, reordering the list changes the cover.
   images: { type: [mediaReferenceSchema], default: [] },

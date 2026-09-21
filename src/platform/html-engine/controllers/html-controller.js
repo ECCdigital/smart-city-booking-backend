@@ -3,6 +3,10 @@ const {
 } = require("../../../commons/data-managers/bookable-manager");
 const HtmlEngine = require("../html-engine");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  isOfferListable,
+} = require("../../../commons/services/supervision/offer-gate");
 const {
   readsRecords,
   scopeOf,
@@ -19,7 +23,9 @@ class HtmlController {
         .map((id) => id.trim())
         .filter((id) => id.length > 0) || null;
     let bookables = await BookableManager.getBookables(tenantId);
-    bookables = bookables.filter((bookable) => bookable.isPublic);
+    // List-type delivery of the supervision (spec §5.1).
+    const tenant = await TenantManager.getTenant(tenantId);
+    bookables = bookables.filter((offer) => isOfferListable({ tenant, offer }));
 
     if (type) {
       bookables = bookables.filter((bookable) => bookable.type === type);
@@ -56,8 +62,9 @@ class HtmlController {
     const sanitizedId = id.trim();
     const bookable = await BookableManager.getBookable(sanitizedId, tenantId);
 
-    // if bookable is not bookable, return 404
-    if (bookable?.id && bookable.isPublic === true) {
+    // The embed interface shows what is listed, its detail included.
+    const tenant = await TenantManager.getTenant(tenantId);
+    if (bookable?.id && isOfferListable({ tenant, offer: bookable })) {
       const htmlOutput = await HtmlEngine.bookable(bookable);
       response.setHeader("content-type", "text/plain");
       response.status(200).send(htmlOutput);

@@ -1,4 +1,5 @@
 const SupervisionService = require("../../../commons/services/supervision/supervision-service");
+const ReviewService = require("../../../commons/services/supervision/review-service");
 const SupervisionHistoryManager = require("../../../commons/data-managers/supervision-history-manager");
 const {
   OFFER_TYPE_VALUES,
@@ -22,7 +23,7 @@ function optionalEnum(value, allowed, code) {
 
 /**
  * Web controller of the tenant supervision (glossary "Mandanten-Aufsicht",
- * spec §6.2): the level change and the history. The right is the
+ * spec §6.2): the level change, the history and the review of an offer. The right is the
  * router's; a handler hands the tenant the route names on and never
  * branches over rights. The instance router is a plain express router, so
  * every handler passes its error to `next` for the central error handler.
@@ -77,6 +78,61 @@ class SupervisionController {
     } catch (err) {
       return next(err);
     }
+  }
+
+  /**
+   * `POST /api/:tenant/<offers>/:id/review/submissions` - submits the
+   * offer for review (glossary "Einreichung"). Takes no body: the status
+   * is the transition's, actor and time are the server's. Answers the
+   * current review; a repeat on a pending offer is a no-op 200.
+   *
+   * @param {string} offerType One of `OFFER_TYPES`
+   * @returns {import("express").RequestHandler}
+   */
+  static submitReview(offerType) {
+    return async (req, res, next) => {
+      try {
+        const review = await ReviewService.submit({
+          offerType,
+          tenantId: req.params.tenant,
+          offerId: req.params.id,
+          actorUserId: req.principal?.userId ?? null,
+        });
+        return res
+          .status(200)
+          .json({ offerType, offerId: req.params.id, review });
+      } catch (err) {
+        return next(err);
+      }
+    };
+  }
+
+  /**
+   * `POST /api/:tenant/<offers>/:id/review/decisions` - the instance
+   * owner's decision (glossary "Prüfentscheidung"). Body: `{ action:
+   * "approve" | "reject" | "withdraw", reason? }`. Answers the new review.
+   *
+   * @param {string} offerType One of `OFFER_TYPES`
+   * @returns {import("express").RequestHandler}
+   */
+  static decideReview(offerType) {
+    return async (req, res, next) => {
+      try {
+        const review = await ReviewService.decide({
+          offerType,
+          tenantId: req.params.tenant,
+          offerId: req.params.id,
+          action: req.body?.action,
+          reason: req.body?.reason,
+          actorUserId: req.principal?.userId ?? null,
+        });
+        return res
+          .status(200)
+          .json({ offerType, offerId: req.params.id, review });
+      } catch (err) {
+        return next(err);
+      }
+    };
   }
 
   static _historyFilters(query) {

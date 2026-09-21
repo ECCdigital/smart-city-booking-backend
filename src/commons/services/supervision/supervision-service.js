@@ -17,23 +17,12 @@ const {
   HISTORY_ORIGINS,
   NOTIFICATION_TYPES,
 } = require("./supervision-constants");
+const { normalizeReason } = require("./reason");
 const {
   BadRequestError,
   NotFoundError,
   ConflictError,
 } = require("../../../errors/BaseError");
-
-/** A reason as it is stored: a trimmed string, or null for none. */
-function normalizeReason(reason) {
-  if (reason === undefined || reason === null) {
-    return null;
-  }
-  if (typeof reason !== "string") {
-    throw new BadRequestError("invalid_supervision_reason");
-  }
-  const trimmed = reason.trim();
-  return trimmed === "" ? null : trimmed;
-}
 
 class SupervisionService {
   /**
@@ -70,7 +59,7 @@ class SupervisionService {
         allowed: SUPERVISION_LEVEL_VALUES,
       });
     }
-    const storedReason = normalizeReason(reason);
+    const storedReason = normalizeReason(reason, "invalid_supervision_reason");
 
     const tenant = await TenantManager.getTenant(tenantId);
     if (!tenant) {

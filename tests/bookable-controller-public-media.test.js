@@ -5,6 +5,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const { Bookable } = require("../src/commons/entities/bookable/bookable");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 
 function createMockResponse() {
   return {
@@ -26,6 +27,8 @@ function mediaBookable() {
     id: "bookable-1",
     tenantId: "tenant-1",
     title: "Week",
+    // The public list shows what asks to be listed (supervision spec §5.1).
+    isPublic: true,
     imgUrl: "",
     images: [
       { source: "media", mediaId: "media-1", url: null },
@@ -96,6 +99,9 @@ describe("BookableController public routes resolve media references", () => {
 
   it("getPublicBookables serves resolved urls for every bookable", async () => {
     sinon.stub(BookableManager, "getBookables").resolves([mediaBookable()]);
+    sinon
+      .stub(TenantManager, "getTenant")
+      .resolves({ id: "tenant-1", supervisionLevel: "free" });
 
     const response = createMockResponse();
     await BookableController.getPublicBookables(

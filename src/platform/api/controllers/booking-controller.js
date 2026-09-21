@@ -39,6 +39,9 @@ const CancellationReceiptService = require("../../../commons/services/payment/ca
 const mailService = require("../../../commons/mail-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
+  reachableOffers,
+} = require("../../../commons/services/supervision/public-offer-gate");
+const {
   CancellationRefundService,
 } = require("../../../commons/services/payment/cancellation-refund-service");
 
@@ -233,6 +236,12 @@ class BookingController {
         return next(new ForbiddenError());
       }
       const scope = isPublicView ? undefined : scopeOf(request);
+      // The anonymized projection embeds only bookables the public reaches
+      // (tenant supervision spec §5.2: no leak over aggregates).
+      const visibleInView = async (bookables) =>
+        isPublicView
+          ? reachableOffers(await TenantManager.getTenant(tenant), bookables)
+          : bookables;
 
       let bookings = await BookingManager.getRelatedBookings(
         tenant,
@@ -241,9 +250,8 @@ class BookingController {
       );
 
       if (includeRelatedBookings) {
-        let relatedBookables = await BookableManager.getRelatedBookables(
-          bookableId,
-          tenant,
+        let relatedBookables = await visibleInView(
+          await BookableManager.getRelatedBookables(bookableId, tenant),
         );
 
         let relatedBookings = [];
@@ -259,9 +267,8 @@ class BookingController {
       }
 
       if (includeParentBookings) {
-        let parentBookables = await BookableManager.getAncestorBookables(
-          bookableId,
-          tenant,
+        let parentBookables = await visibleInView(
+          await BookableManager.getAncestorBookables(bookableId, tenant),
         );
         let parentBookings = [];
         for (let parentBookable of parentBookables) {

@@ -343,6 +343,18 @@ _Avoid_: Review, Moderation, approved (als Feldname im Gespräch), isPublic (das
 Die vom Mandanten getroffene Wahl, ein Angebot öffentlich in Listen und Katalogen auszuspielen, unabhängig von der Entscheidung des Instanz-Owners. Bleibt auch bei Ablehnung bestehen; ohne Veröffentlichungswunsch kann ein Buchungsobjekt oder Event per Direktlink erreichbar und buchbar sein, bei beaufsichtigten Mandanten aber nur mit freigegebenem Prüfstatus und bei gesperrten Mandanten nie.
 _Avoid_: isPublic (als Sprechbegriff), Freigabe (das ist die Entscheidung des Instanz-Owners), öffentlich (als tatsächliche Sichtbarkeit)
 
+**Einreichung (eines Angebots)**:
+Der Schritt, der ein Angebot ohne Prüfstatus oder ein abgelehntes Angebot auf _ausstehend_ setzt und die Einreichungszeit neu festhält: der erste Veröffentlichungswunsch eines Angebots ohne Prüfstatus oder das ausdrückliche „Zur Prüfung einreichen“ des Tenant-Owners, auch bei freiem oder gesperrtem Mandanten. Eine Wiederholung auf einem ausstehenden Angebot ändert nichts und startet keine neue Wartezeit.
+_Avoid_: Veröffentlichung, Antrag, Speichern (eine normale Bearbeitung ist keine Einreichung)
+
+**Prüfentscheidung**:
+Die Handlung des Instanz-Owners am Prüfstatus eines Angebots: _freigeben_ (ausstehend oder abgelehnt → freigegeben), _ablehnen_ (ausstehend → abgelehnt) oder die Freigabe _zurückziehen_ (freigegeben → abgelehnt), wahlweise mit Begründung; Akteur und Zeitpunkt bestimmt der Server. Verändert den Veröffentlichungswunsch nie. Eine unzulässige oder von einer gleichzeitigen Entscheidung überholte Prüfentscheidung ist ein Konflikt, kein stiller Verlust.
+_Avoid_: Moderation, Statuswechsel (unqualifiziert), Sperre (das ist die Aufsichtsstufe)
+
+**Direktlink (eines Angebots)**:
+Der Zugriff auf ein bekanntes einzelnes Angebot — Detail, Preise, Zeiten, Verfügbarkeit, Belegung und die neue Selbstbuchung — im Unterschied zur Ausspielung in Listen, Katalogen und Aggregaten. Braucht keinen Veröffentlichungswunsch, bei beaufsichtigten Mandanten aber einen freigegebenen Prüfstatus; bei gesperrten Mandanten gibt es ihn nicht. Katalog-Teilnahme und Katalog-Ausschlüsse sind kein Direktlink-Verbot.
+_Avoid_: Deep Link, versteckte Seite, nicht öffentlich (als Verbot gelesen)
+
 **Erneutes Einreichen (eines Angebots)**:
 Die ausdrückliche Bitte des Tenant-Owners um eine neue Prüfung eines abgelehnten Angebots, auch ohne Veröffentlichungswunsch; setzt den Prüfstatus auf _ausstehend_. Weder Bearbeiten noch Aus- und Einschalten des Veröffentlichungswunsches gilt als erneutes Einreichen; dabei bleibt der Prüfstatus erhalten.
 _Avoid_: Wiederveröffentlichung, Status-Reset, Freigabe beantragen (unqualifiziert)
