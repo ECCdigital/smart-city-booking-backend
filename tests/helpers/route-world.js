@@ -39,6 +39,7 @@ const { RoleManager } = require("../../src/commons/data-managers/role-manager");
 const RuleManager = require("../../src/commons/data-managers/rule-manager");
 const TenantManager = require("../../src/commons/data-managers/tenant-manager");
 const UserManager = require("../../src/commons/data-managers/user-manager");
+const RateLimitEventManager = require("../../src/commons/data-managers/rate-limit-event-manager");
 const WorkflowManager = require("../../src/commons/data-managers/workflow-manager");
 const {
   AccessPoint,
@@ -339,6 +340,15 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
     only: {
       getUserByHookID: async () => null,
       getUserByCard: async () => null,
+    },
+  });
+  // The rate limits never trip here: every attempt is the first of its key.
+  stubManager(RateLimitEventManager, {
+    only: {
+      record: async () => FIXTURE_ID,
+      countSince: async () => 1,
+      oldestAtWithin: async () => null,
+      remove: async () => {},
     },
   });
   stubManager(WorkflowManager, {

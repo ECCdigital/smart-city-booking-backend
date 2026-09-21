@@ -7,6 +7,14 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Changed
+
+- Behaviour change, deliberate: the public registration no longer tells whether an address is registered (tenant supervision spec §6.3). `POST /auth/signup` answers `201` for a known address too — no second account; an unverified one gets its verification mail again, a verified one nothing — and `400` without `id` or `password` (was `409`/`500`). `POST /auth/check-email` answers `200` for every well-formed address (was `409` for a known one). Admin UI and Storefront flows that read the `409` are [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app) / [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) work; the authorization route snapshot changes on purpose
+
+### Added
+
+- Rate limits on the public registration, counted in MongoDB (`rateLimitEvents`, sliding windows, TTL 7 days) so they hold across parallel requests and server processes: signup 10/h per IP, verification mails 1/min and 5/h per account and 30/h per IP, all configurable by `RATE_LIMIT_*` variables (`.env-example`). A hit answers `429 too_many_requests` with `Retry-After`; the per-account limits apply silently so a limit never reveals an account. New `POST /auth/resend-verification` (`202` for every address) mails an unverified account its verification link again. `TooManyRequestsError` (429) joins `src/errors/BaseError.js`; the error handler and `ApiResponse.fail` set `Retry-After` from `params.retryAfterSeconds`. `RateLimiter.consume/consumeAll` and `limits.js` (incl. the tenant self-creation limit of 3 per rolling 24 h per user, wired by the tenant creation ticket) are reusable
+
 ### Removed
 
 - Behaviour change, deliberate: `POST /api/:tenant/access/:accessPointId/unlatch` (deprecated since the access provider seam) is gone and answers `404`, with `AccessService.unlatch`, the provider method and the capability `unlatch`; the admin UI's „Tür öffnen“ button goes with it ([smart-city-booking-vue-app#236](https://github.com/ECCdigital/smart-city-booking-vue-app/pull/236)). What it did is the access point's Öffnungsart (glossary) now: `open` sends the configured action, so no client picks the way a door opens. Audit rows already written with `action: "unlatch"` stay readable and filterable; new rows are `action: "open"` with `openAction` and `openActionOrigin`. `LockBusyError.params.action` is `open | close`; the authorization route snapshot loses the route's line on purpose. Rollout: never deploy this backend before the admin UI build without the button, or the button answers `404`
