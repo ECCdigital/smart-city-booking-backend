@@ -42,7 +42,8 @@
 # event detail, the event embedded by `?populate=true` in a public bookable,
 # and everything about a ticket of the event - its detail, prices,
 # availability, permission pre-check and every checkout entrance - which
-# needs the ticket and its event reachable. Under the public reach the
+# needs the ticket and its event reachable; the public bookable lists leave
+# out the tickets of an event that is not. Under the public reach the
 # event routes answer without `review`; whoever may read events
 # (`manageBookables.readAny`, or `readOwn` for their own) gets them whole.
 

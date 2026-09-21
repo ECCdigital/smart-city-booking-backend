@@ -722,10 +722,7 @@ class ItemCheckoutService {
     const event = this.hasEvent
       ? (await this._getAvailabilityProvider()).getEvent()
       : null;
-    if (
-      !isOfferReachable({ tenant, offer: this.originBookable }) ||
-      (event && !isOfferReachable({ tenant, offer: event }))
-    ) {
+    if (!isOfferReachable({ tenant, offer: this.originBookable, event })) {
       throw {
         checkType: CHECK_TYPES.SUPERVISION,
         reason: CHECKOUT_REASONS.OFFER_NOT_REACHABLE,

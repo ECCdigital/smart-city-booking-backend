@@ -56,10 +56,7 @@ async function assertOfferReachable(tenantId, offer) {
   // A ticket is reachable with its event only: what booking it needs -
   // detail, prices, availability - follows the event's supervision too.
   const event = await eventOfTicket(offer);
-  if (
-    !isOfferReachable({ tenant, offer }) ||
-    (event && !isOfferReachable({ tenant, offer: event }))
-  ) {
+  if (!isOfferReachable({ tenant, offer, event })) {
     throw new NotFoundError("offer_not_found", { id: offer.id });
   }
 }
@@ -72,11 +69,14 @@ async function assertOfferReachable(tenantId, offer) {
  * @returns {Promise<Object|null>}
  */
 async function eventOfTicket(offer) {
-  if (offer.type !== BOOKABLE_TYPES.TICKET || !offer.eventId) {
+  if (!hangsOnEvent(offer)) {
     return null;
   }
   return EventManager.getEvent(offer.eventId, offer.tenantId);
 }
+
+const hangsOnEvent = (offer) =>
+  offer.type === BOOKABLE_TYPES.TICKET && Boolean(offer.eventId);
 
 /**
  * The gate as a middleware for a route that names its tenant `:tenant`
@@ -105,6 +105,30 @@ function listableOffers(tenant, offers) {
   return offers.filter((offer) => isOfferListable({ tenant, offer }));
 }
 
+/**
+ * Leaves the tickets of events the public cannot reach out of a list of
+ * bookables that passed the gate themselves (spec §5.2: no leak over
+ * embedded objects) - a ticket goes out with its event only. A ticket
+ * whose event is gone stays, as on the direct link.
+ *
+ * @param {Object} tenant
+ * @param {Object[]} bookables
+ * @returns {Promise<Object[]>}
+ */
+async function withoutTicketsOfUnreachableEvents(tenant, bookables) {
+  if (!bookables.some(hangsOnEvent)) {
+    return bookables;
+  }
+  const events = new Map(
+    (await EventManager.getEvents(tenant.id)).map((event) => [event.id, event]),
+  );
+  return bookables.filter(
+    (offer) =>
+      !hangsOnEvent(offer) ||
+      isOfferReachable({ tenant, offer, event: events.get(offer.eventId) }),
+  );
+}
+
 /** The offers embedded in a reachable one: what a direct link may show. */
 function reachableOffers(tenant, offers) {
   return offers.filter((offer) => isOfferReachable({ tenant, offer }));
@@ -116,4 +140,5 @@ module.exports = {
   publicBookableGate,
   listableOffers,
   reachableOffers,
+  withoutTicketsOfUnreachableEvents,
 };

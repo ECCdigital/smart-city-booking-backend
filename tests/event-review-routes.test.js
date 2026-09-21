@@ -626,6 +626,18 @@ describe("event review routes", function () {
               }
             }
 
+            // The (listed, approved) ticket goes out with its event only.
+            for (const path of [
+              `/api/${TENANT}/bookables/public`,
+              `/json/${TENANT}/bookables`,
+            ]) {
+              const res = await call("get", path);
+              expect(
+                res.status === 200 && res.body.some((b) => b.id === "ticket"),
+                `ticket in ${path}`,
+              ).to.equal(want.reachable);
+            }
+
             for (const path of detailPaths) {
               for (const userId of [null, CUSTOMER]) {
                 const res = await call("get", path, userId);
@@ -734,6 +746,19 @@ describe("event review routes", function () {
       );
       expect(legacy.status).to.equal(409);
       expect(h.store.size).to.equal(storeSizeBefore);
+    });
+
+    it("lets a ticket whose event is gone through the event part of the gate", async function () {
+      events = {};
+      h.bookables.ticket.isPublic = true;
+
+      const detail = await call(
+        "get",
+        `/api/${TENANT}/bookables/public/ticket`,
+      );
+      expect(detail.status).to.equal(200);
+      const list = await call("get", `/api/${TENANT}/bookables/public`);
+      expect(list.body.some((b) => b.id === "ticket")).to.equal(true);
     });
 
     it("keeps the management reach on a supervised tenant's unapproved event", async function () {

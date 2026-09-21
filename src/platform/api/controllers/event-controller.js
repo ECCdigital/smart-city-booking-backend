@@ -44,17 +44,14 @@ class EventController {
       const user = request.user;
       const scope = scopeOf(request);
       const tenantRecord = await TenantManager.getTenant(tenant);
-      const events = (await EventManager.getEvents(tenant))
-        .filter(
-          (event) =>
-            withinReach(event, "ownerUserId", scope) ||
-            isOfferListable({ tenant: tenantRecord, offer: event }),
-        )
-        .map((event) =>
-          withinReach(event, "ownerUserId", scope)
-            ? event
-            : event.withoutReview(),
-        );
+      const events = (await EventManager.getEvents(tenant)).flatMap((event) => {
+        if (withinReach(event, "ownerUserId", scope)) {
+          return [event];
+        }
+        return isOfferListable({ tenant: tenantRecord, offer: event })
+          ? [event.withoutReview()]
+          : [];
+      });
 
       logger.info(
         `${tenant} -- sending ${events.length} events to user ${user?.id}`,

@@ -9,6 +9,9 @@ const {
   isOfferReachable,
 } = require("../../../commons/services/supervision/offer-gate");
 const {
+  withoutTicketsOfUnreachableEvents,
+} = require("../../../commons/services/supervision/public-offer-gate");
+const {
   readsRecords,
   scopeOf,
 } = require("../../../commons/services/authorization");
@@ -26,7 +29,10 @@ class HtmlController {
     let bookables = await BookableManager.getBookables(tenantId);
     // List-type delivery of the supervision (spec §5.1).
     const tenant = await TenantManager.getTenant(tenantId);
-    bookables = bookables.filter((offer) => isOfferListable({ tenant, offer }));
+    bookables = await withoutTicketsOfUnreachableEvents(
+      tenant,
+      bookables.filter((offer) => isOfferListable({ tenant, offer })),
+    );
 
     if (type) {
       bookables = bookables.filter((bookable) => bookable.type === type);

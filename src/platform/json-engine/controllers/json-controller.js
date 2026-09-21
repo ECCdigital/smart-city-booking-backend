@@ -12,6 +12,9 @@ const {
   isOfferListable,
 } = require("../../../commons/services/supervision/offer-gate");
 const {
+  withoutTicketsOfUnreachableEvents,
+} = require("../../../commons/services/supervision/public-offer-gate");
+const {
   GroupBookingPermissions,
 } = require("../../../commons/utilities/group-booking-permissions");
 
@@ -98,8 +101,9 @@ class JSONController {
 
       // List-type delivery of the supervision (spec §5.1): listed is what
       // asks for it and passes the tenant's review.
-      bookables = bookables.filter((offer) =>
-        isOfferListable({ tenant, offer }),
+      bookables = await withoutTicketsOfUnreachableEvents(
+        tenant,
+        bookables.filter((offer) => isOfferListable({ tenant, offer })),
       );
 
       bookables = bookables.filter((bookable) => {
