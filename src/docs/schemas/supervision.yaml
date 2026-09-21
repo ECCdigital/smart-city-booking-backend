@@ -118,6 +118,7 @@ components:
           type: string
           enum:
             - tenant.created
+            - tenant.levelInitialized
             - tenant.levelChanged
             - review.submitted
             - review.approved

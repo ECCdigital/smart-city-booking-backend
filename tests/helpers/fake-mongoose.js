@@ -72,6 +72,11 @@ function matchesCondition(values, condition) {
     }
   }
 
+  // `{ field: null }` matches a null and a missing field alike, as in MongoDB.
+  if (condition === null) {
+    return values.length === 0 || values.some((value) => value == null);
+  }
+
   return values.some((value) =>
     Array.isArray(value) ? value.includes(condition) : value === condition,
   );
@@ -129,6 +134,7 @@ function applyUpdate(document, update, { inserted = false } = {}) {
 function createQuery(documents) {
   const query = {
     sort: () => query,
+    select: () => query,
     lean: () => Promise.resolve(clone(documents)),
     then: (onFulfilled, onRejected) =>
       Promise.resolve(clone(documents)).then(onFulfilled, onRejected),
@@ -177,7 +183,14 @@ function createCollection(documents, indexes) {
   };
 }
 
-function createModel(name, documents, indexes) {
+function duplicateKeyError(writeErrors) {
+  return Object.assign(new Error("E11000 duplicate key error"), {
+    code: 11000,
+    writeErrors,
+  });
+}
+
+function createModel(name, documents, indexes, uniqueFields = []) {
   return {
     modelName: name,
     documents: documents,
@@ -208,6 +221,55 @@ function createModel(name, documents, indexes) {
       documents.push(inserted);
     },
 
+    async updateMany(filter, update) {
+      documents
+        .filter((candidate) => matches(candidate, filter))
+        .forEach((document) => applyUpdate(document, update));
+    },
+
+    /**
+     * Unordered insert: every row that breaks no unique field is stored, the
+     * others are reported in one duplicate-key error, as the driver does.
+     */
+    async insertMany(rows, options = {}) {
+      if (options.ordered !== false) {
+        throw new Error(
+          "fake-mongoose: insertMany supports ordered:false only",
+        );
+      }
+
+      const writeErrors = [];
+
+      rows.forEach((row, index) => {
+        const duplicate = uniqueFields.some(
+          (field) =>
+            row[field] !== undefined &&
+            documents.some((document) => document[field] === row[field]),
+        );
+
+        // The shape mongoose hands on: the driver's error sits under `err`.
+        if (duplicate) writeErrors.push({ index, err: { code: 11000 } });
+        else documents.push(clone(row));
+      });
+
+      if (writeErrors.length > 0) throw duplicateKeyError(writeErrors);
+    },
+
+    async bulkWrite(operations) {
+      for (const operation of operations) {
+        const [kind] = Object.keys(operation);
+        if (kind !== "updateOne") {
+          throw new Error(`fake-mongoose: unsupported bulk operation ${kind}`);
+        }
+
+        const { filter, update } = operation.updateOne;
+        const document = documents.find((candidate) =>
+          matches(candidate, filter),
+        );
+        if (document) applyUpdate(document, update);
+      }
+    },
+
     async createCollection() {},
     async syncIndexes() {},
   };
@@ -217,21 +279,24 @@ function createModel(name, documents, indexes) {
  * Build a fake mongoose connection over the given collections.
  *
  * @param {Object<string, Object[]>} collections Documents per model name
+ * @param {Object} [options]
+ * @param {Object<string, string[]>} [options.unique] Unique fields per model
+ *   name, enforced by `insertMany`
  * @returns {{model: function(string): Object, snapshot: function(): Object}}
  *   A connection that resolves models by name plus a deep copy of all
  *   documents and indexes for comparing states
  */
-function createFakeMongoose(collections = {}) {
+function createFakeMongoose(collections = {}, { unique = {} } = {}) {
   const models = new Map();
 
   for (const [name, documents] of Object.entries(collections)) {
-    models.set(name, createModel(name, documents, new Map()));
+    models.set(name, createModel(name, documents, new Map(), unique[name]));
   }
 
   return {
     model(name) {
       if (!models.has(name)) {
-        models.set(name, createModel(name, [], new Map()));
+        models.set(name, createModel(name, [], new Map(), unique[name]));
       }
       return models.get(name);
     },

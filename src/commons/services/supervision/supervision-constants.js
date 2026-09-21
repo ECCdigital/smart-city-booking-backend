@@ -27,6 +27,9 @@ const OFFER_TYPES = Object.freeze({
 /** The event types of the supervision history (glossary "Aufsichtshistorie"). */
 const HISTORY_EVENT_TYPES = Object.freeze({
   TENANT_CREATED: "tenant.created",
+  // The level a tenant from before the supervision was given by the
+  // migration: an initial state, neither a creation nor a change.
+  TENANT_LEVEL_INITIALIZED: "tenant.levelInitialized",
   TENANT_LEVEL_CHANGED: "tenant.levelChanged",
   REVIEW_SUBMITTED: "review.submitted",
   REVIEW_APPROVED: "review.approved",

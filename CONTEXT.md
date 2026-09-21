@@ -364,7 +364,7 @@ Alle Angebote beaufsichtigter Mandanten mit ausstehendem Prüfstatus, unabhängi
 _Avoid_: Alle ausstehenden Angebote, Freigabeliste (das ist die Berechtigung zur Selbst-Anlage)
 
 **Aufsichtshistorie**:
-Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneuten Einreichungen sowie Prüfentscheidungen eines Mandanten und seiner Angebote, jeweils mit Zeitpunkt, handelnder Person oder System, vorherigem und neuem Stand sowie optionaler Begründung. Instanz-Owner sehen die gesamte Aufsichtshistorie, Tenant-Owner die ihres Mandanten und seiner Angebote. Wird nur angefügt, nie geändert oder gelöscht; ein Request, der nichts ändert (dieselbe Stufe noch einmal setzen), schreibt keinen Eintrag.
+Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneuten Einreichungen sowie Prüfentscheidungen eines Mandanten und seiner Angebote, jeweils mit Zeitpunkt, handelnder Person oder System, vorherigem und neuem Stand sowie optionaler Begründung. Instanz-Owner sehen die gesamte Aufsichtshistorie, Tenant-Owner die ihres Mandanten und seiner Angebote. Wird nur angefügt, nie geändert oder gelöscht; ein Request, der nichts ändert (dieselbe Stufe noch einmal setzen), schreibt keinen Eintrag. Der Anfangsstand des Bestands (Migration) steht als Systemeintrag mit Herkunft `migration` und tatsächlichem Migrationszeitpunkt darin: `tenant.levelInitialized` für die Stufe eines Bestandsmandanten, `review.submitted` für ein Bestandsangebot mit Veröffentlichungswunsch — nie als erfundene frühere Anlage, Einreichung oder Freigabe.
 _Avoid_: Audit-Log, Änderungsverlauf (unqualifiziert), Prüfstatus (das ist der aktuelle Stand)
 
 **Mitteilungsanlass**:
