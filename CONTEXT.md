@@ -368,8 +368,12 @@ Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneut
 _Avoid_: Audit-Log, Änderungsverlauf (unqualifiziert), Prüfstatus (das ist der aktuelle Stand)
 
 **Mitteilungsanlass**:
-Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und später getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere.
+Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und direkt danach getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere.
 _Avoid_: Mail (das ist der Versand), Notification (als Sprechbegriff), Event (das ist die Veranstaltung), Benachrichtigungs-Job
+
+**Aufsichtsmitteilung**:
+Die Mail, die aus einem Mitteilungsanlass entsteht: an alle Instanz-Owner (Selbst-Anlage, Eintritt in die aktive Prüfliste — ein Anlass, eine Sammelmail) oder an alle Tenant-Owner des Mandanten (Stufenwechsel, Prüfentscheidung; bei der Selbst-Anlage die Bestätigung an den Anlegenden mit der tatsächlichen Startstufe). Geht immer über den Instanz-Versand mit zentralen Vorlagen, nie über den Versandweg oder die Textbausteine des Mandanten. Der Versand folgt direkt auf die Aufzeichnung des Anlasses; schlägt er fehl, bleibt der Anlass _fehlgeschlagen_ mit Grund sichtbar und wird vom Instanz-Owner erneut versendet — nur an die, die noch keine Mail haben, ohne neue Entscheidung und ohne neuen Eintrag in der Aufsichtshistorie.
+_Avoid_: Benachrichtigung (unqualifiziert), Mitteilung (das ist die Mail des Buchungsablaufs), Prüf-Mail (nur eine der Arten)
 
 **Angebot**:
 Sammelbegriff für Buchungsobjekte und Events eines Mandanten, unabhängig davon, ob sie öffentlich ausgespielt oder nur per Direktlink angeboten werden. Bei beaufsichtigten Mandanten benötigen beide Wege einen freigegebenen Prüfstatus; bei freien Mandanten ist keine Freigabe nötig.

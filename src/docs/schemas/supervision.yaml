@@ -163,3 +163,66 @@ components:
           type: integer
         pageSize:
           type: integer
+
+    SupervisionNotification:
+      type: object
+      description: One row of the supervision notification outbox.
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - tenant.selfCreated
+            - tenant.levelChanged
+            - review.queueEntered
+            - review.decided
+        tenantId:
+          type: string
+        payload:
+          type: object
+          description: What the notice needs (old and new state, reason, offers).
+        status:
+          type: string
+          enum: [pending, sent, failed]
+        attempts:
+          type: integer
+          description: The dispatches of the row so far.
+        lastError:
+          type: string
+          nullable: true
+          description: Why the last dispatch failed; never carries credentials.
+        createdAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveries:
+          type: array
+          description: The mails of the row that went out; a retry leaves them out.
+          items:
+            type: object
+            properties:
+              mailType:
+                type: string
+              to:
+                type: string
+              deliveredAt:
+                type: string
+                format: date-time
+
+    SupervisionNotificationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupervisionNotification"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
