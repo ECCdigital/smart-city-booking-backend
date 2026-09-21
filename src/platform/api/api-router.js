@@ -127,6 +127,11 @@ router.delete(
   TenantController.removeTenant,
 );
 router.get(
+  "/tenants/:tenant/readiness",
+  authorize("tenant", "readiness"),
+  TenantController.getReadiness,
+);
+router.get(
   "/tenants/:tenant/payment-apps",
   publicRoute("tenant", "paymentApps"),
   TenantController.getActivePaymentApps,

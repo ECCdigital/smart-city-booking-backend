@@ -332,3 +332,4 @@ class MailerService {
 
 module.exports = MailerService;
 module.exports.MAIL_HELPER_NAMES = MAIL_HELPER_NAMES;
+module.exports.isCompleteTenantMailConfig = isCompleteTenantMailConfig;

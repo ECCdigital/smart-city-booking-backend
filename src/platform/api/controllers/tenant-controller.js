@@ -49,6 +49,9 @@ const {
   scopeFor,
 } = require("../../../commons/services/authorization");
 const ApiResponse = require("../../../commons/utilities/api-response");
+const {
+  computeReadiness,
+} = require("../../../commons/services/supervision/readiness-service");
 const Formatters = require("../../../commons/utilities/formatters");
 
 const PDF_TEMPLATE_FIELDS = {
@@ -206,6 +209,24 @@ class TenantController {
     } catch (err) {
       logger.error(err);
       response.status(500).send("could not get tenant");
+    }
+  }
+
+  /**
+   * The readiness check (glossary "Bereitschafts-Check") of the tenant of
+   * the path: computed on every call, the same answer for the tenant owner
+   * and the instance owner. The route's marker decides who reads it.
+   */
+  static async getReadiness(request, response) {
+    try {
+      const readiness = await computeReadiness(request.params.tenant);
+      response.status(200).json(readiness);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return ApiResponse.fail(response, err);
+      }
+      logger.error(err);
+      response.status(500).send("could not compute readiness");
     }
   }
 

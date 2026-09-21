@@ -145,3 +145,90 @@
                   $ref: "#/components/schemas/TenantLegalDocuments"
       "403":
         description: Neither tenant owner nor instance owner
+
+/api/tenants/{tenant}/readiness:
+  get:
+    tags:
+      - Tenants
+    summary: The readiness check of a tenant
+    description: |
+      The readiness check (glossary „Bereitschafts-Check“) of the tenant: a
+      non-binding account of what its current configuration still lacks for a
+      public appearance, computed from the current data on every call and never
+      stored. The tenant owner and the instance owner get the same answer.
+      „Fulfilled“ confirms configuration, not that payment or mail actually
+      work; no test mail, test payment or reachability test is run, and the
+      check is no gate for the supervision level or for submitting an offer.
+
+      Criteria, in order: `contact` (name, contact person, formally valid mail;
+      phone, website and address optional), `legal` (always `not_required`),
+      `offers` (at least one bookable or ongoing/upcoming event with the
+      publication wish `isPublic`), `schedule` (every such offer has a valid
+      period, or - for a bookable - entries behind each enabled time
+      restriction), `payment` (every such paid platform offer has an active and
+      completely configured payment app; the invoice counts; free and
+      externally booked events need none; a dynamic external price counts as
+      paid), `mail` (mail switched on for the instance and the transport the
+      tenant's mails take complete; `transport` names it, never a credential).
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenant
+        in: path
+        required: true
+        schema:
+          type: string
+        example: tenant1
+    responses:
+      "200":
+        description: The check
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkedAt, criteria]
+              properties:
+                checkedAt:
+                  type: string
+                  format: date-time
+                criteria:
+                  type: array
+                  items:
+                    type: object
+                    required: [key, state, hint, offers]
+                    properties:
+                      key:
+                        type: string
+                        enum: [contact, legal, offers, schedule, payment, mail]
+                      state:
+                        type: string
+                        enum: [fulfilled, missing, not_required]
+                      hint:
+                        type: string
+                        description: User-facing explanation (German)
+                      offers:
+                        type: array
+                        description: The offers the item concerns
+                        items:
+                          type: object
+                          properties:
+                            offerType:
+                              type: string
+                              enum: [bookable, event]
+                            offerId:
+                              type: string
+                            title:
+                              type: string
+                      transport:
+                        type: string
+                        nullable: true
+                        enum: [tenant, instance]
+                        description: |
+                          `mail` only - the transport the tenant's mails take;
+                          `null` while the instance has mail switched off
+      "401":
+        description: Not signed in
+      "403":
+        description: Neither owner of this tenant nor instance owner
+      "404":
+        description: "Unknown tenant (`code: tenant_not_found`)"

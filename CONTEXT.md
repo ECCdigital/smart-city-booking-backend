@@ -376,8 +376,8 @@ Die Stelle, zu der ein Nutzer nach Registrierung, Verifizierung und Login zurüc
 _Avoid_: nextUrl (als Sprechbegriff — das ist der Feldname), Redirect (das ist der Mechanismus), Deep-Link
 
 **Bereitschafts-Check (eines Mandanten)**:
-Die unverbindliche Auskunft über fehlende Angaben in der aktuellen Einrichtung eines Mandanten — dieselbe Liste für den Tenant-Owner beim Onboarding und für den Instanz-Owner vor dem Anheben der Aufsichtsstufe. Sie beschreibt die Vorbereitung auf den öffentlichen Auftritt, garantiert aber keine tatsächliche Buchbarkeit oder Funktionsfähigkeit von Zahlung und Mailversand.
-_Avoid_: Readiness, Checkliste (als Modellbegriff), Validierung
+Die unverbindliche Auskunft über fehlende Angaben in der aktuellen Einrichtung eines Mandanten — dieselbe Liste für den Tenant-Owner beim Onboarding und für den Instanz-Owner vor dem Anheben der Aufsichtsstufe. Sie beschreibt die Vorbereitung auf den öffentlichen Auftritt, garantiert aber keine tatsächliche Buchbarkeit oder Funktionsfähigkeit von Zahlung und Mailversand. Sechs Kriterien mit festem Schlüssel, jedes _erfüllt_, _fehlend_ oder _nicht erforderlich_: Kontakt, Rechtstexte (immer nicht erforderlich), Angebote, Zeiten, Zahlung, Mail — die letzten drei nur über Angebote mit Veröffentlichungswunsch, vergangene Events ausgenommen. Ein reiner Direktlink-Mandant erhält daher „kein Angebot“, obwohl er buchbar ist; das ist Auskunft, kein Tor.
+_Avoid_: Readiness, Checkliste (als Modellbegriff), Validierung, Freigabe-Voraussetzung (der Check ist kein Tor)
 
 ### Rechte
 
