@@ -44,6 +44,11 @@ router.post(
   AuthenticationController.checkEmail,
 );
 router.post(
+  "/resend-verification",
+  publicRoute("auth", "all"),
+  AuthenticationController.resendVerification,
+);
+router.post(
   "/forgot-password",
   publicRoute("auth", "all"),
   AuthenticationController.forgotPassword,

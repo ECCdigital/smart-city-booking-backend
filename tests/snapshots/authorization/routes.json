@@ -1,10 +1,10 @@
 {
   "POST /auth/signup": {
-    "anonymous": 409,
-    "signedIn": 409,
-    "roleHolder": 409,
-    "tenantOwner": 409,
-    "instanceOwner": 409
+    "anonymous": 400,
+    "signedIn": 400,
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
   },
   "POST /auth/refresh": {
     "anonymous": 401,
@@ -26,6 +26,13 @@
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400
+  },
+  "POST /auth/resend-verification": {
+    "anonymous": 202,
+    "signedIn": 202,
+    "roleHolder": 202,
+    "tenantOwner": 202,
+    "instanceOwner": 202
   },
   "POST /auth/forgot-password": {
     "anonymous": 200,

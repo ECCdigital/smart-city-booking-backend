@@ -44,6 +44,10 @@ class ApiResponse {
    * @returns {import("express").Response} The sent response
    */
   static fail(res, error) {
+    const retryAfterSeconds = error.params?.retryAfterSeconds;
+    if (Number.isFinite(retryAfterSeconds)) {
+      res.set("Retry-After", String(Math.ceil(retryAfterSeconds)));
+    }
     return res.status(error.statusCode).json(error.toJSON());
   }
 }

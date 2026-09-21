@@ -128,14 +128,7 @@ class UserService {
 
     const userEntity = user instanceof User ? user : new User(user);
 
-    userEntity.hooks.forEach((hook) => {
-      if (
-        hook.type === USER_HOOK_TYPES.FORGOT_PASSWORD &&
-        hook.status === "active"
-      ) {
-        hook.status = "revoked";
-      }
-    });
+    userEntity.revokeActiveHooks(USER_HOOK_TYPES.FORGOT_PASSWORD);
 
     const hook = userEntity.addForgotPasswordHook(resetUrl);
     await UserManager.updateUser(userEntity);

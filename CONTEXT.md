@@ -379,6 +379,14 @@ _Avoid_: nextUrl (als Sprechbegriff — das ist der Feldname), Redirect (das ist
 Die unverbindliche Auskunft über fehlende Angaben in der aktuellen Einrichtung eines Mandanten — dieselbe Liste für den Tenant-Owner beim Onboarding und für den Instanz-Owner vor dem Anheben der Aufsichtsstufe. Sie beschreibt die Vorbereitung auf den öffentlichen Auftritt, garantiert aber keine tatsächliche Buchbarkeit oder Funktionsfähigkeit von Zahlung und Mailversand. Sechs Kriterien mit festem Schlüssel, jedes _erfüllt_, _fehlend_ oder _nicht erforderlich_: Kontakt, Rechtstexte (immer nicht erforderlich), Angebote, Zeiten, Zahlung, Mail — die letzten drei nur über Angebote mit Veröffentlichungswunsch, vergangene Events ausgenommen. Ein reiner Direktlink-Mandant erhält daher „kein Angebot“, obwohl er buchbar ist; das ist Auskunft, kein Tor.
 _Avoid_: Readiness, Checkliste (als Modellbegriff), Validierung, Freigabe-Voraussetzung (der Check ist kein Tor)
 
+**Zeitliche Grenze (Rate Limit)**:
+Die Höchstzahl gleichartiger Versuche eines Subjekts — IP-Adresse, Konto oder Nutzer — in einem gleitenden Zeitfenster: Registrierung je IP, Verifizierungs-Mails je Konto und je IP, Selbst-Anlage je Nutzer; Werte und Fenster kommen aus der Betriebskonfiguration (`RATE_LIMIT_*`). Gezählt in der Datenbank, damit parallele Requests und mehrere Prozesse die Grenze nicht umgehen; ein abgewiesener Versuch zählt nicht, ein erlaubter kann bei Scheitern der Handlung zurückgegeben werden. Wo die Grenze sichtbar ist, antwortet sie mit 429 und `Retry-After`; kontobezogene Grenzen bleiben stumm, weil ihre Antwort sonst das Konto verriete.
+_Avoid_: Throttling, Quota (das ist `MAX_TENANTS`, dauerhaft), Sperre (das ist die Aufsichtsstufe), CAPTCHA
+
+**Kontoneutrale Antwort**:
+Eine öffentliche Antwort der Registrierung, Verifizierung oder E-Mail-Prüfung, die für eine registrierte und eine unbekannte Adresse in Status, Body und sichtbaren Grenzen gleich ausfällt. Eine Registrierung mit bekannter Adresse legt kein zweites Konto an und schickt einem unverifizierten Konto höchstens seine Verifizierungs-Mail erneut.
+_Avoid_: Enumeration-Schutz (als Sprechbegriff), 409 (als Antwort auf „E-Mail vergeben")
+
 ### Rechte
 
 **Reichweite**:

@@ -7,10 +7,15 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Changed
+
+- Behaviour change, deliberate: the public registration no longer tells whether an address is registered (tenant supervision spec §6.3). `POST /auth/signup` answers `201` for a known address too — no second account; an unverified one gets its verification mail again, a verified one nothing — and `400` without `id` or `password` (was `409`/`500`). `POST /auth/check-email` answers `200` for every well-formed address (was `409` for a known one). Admin UI and Storefront flows that read the `409` are [smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app) / [smart-city-booking-store-front](https://github.com/ECCdigital/smart-city-booking-store-front) work; the authorization route snapshot changes on purpose
+
 ### Added
 
 - Verifizierungsnachweis (glossary): `assertVerifiedForSelfService(user)` (`src/commons/services/user/verification-proof.js`) is the check the tenant self-creation re-runs on the server; without proof it refuses with `403 email_verification_required` and `params: { method: "email" | "identity_provider", provider }`. A local or card account is proven by its e-mail verification, an SSO account only by the identity provider's confirmation: `POST /auth/sso/signup` and `/auth/sso/signin` persist Keycloak's `email_verified: true` as the new user fields `idpEmailVerifiedAt` and `idpEmailVerifiedProvider` (`null` until then; answered with `authType` in the user object). The `isVerified: true` every SSO signup sets is no proof — see [docs/api/authentication.md](api/authentication.md)
 - Rückkehrziel (glossary): a signup's `nextUrl` survives the verification mail (the storefront's verify link gains `&next=`) and `POST /auth/verify-email`, which answers `200 { success, message, nextUrl }` as JSON now (was plain text). Only a relative path or an address on the origin of `verifyUrl` or `FRONTEND_URL` is kept, also on the legacy `GET /auth/verify/:hookId` redirect
+- Rate limits on the public registration, counted in MongoDB (`rateLimitEvents`, sliding windows, TTL 7 days) so they hold across parallel requests and server processes: signup 10/h per IP, verification mails 1/min and 5/h per account and 30/h per IP, all configurable by `RATE_LIMIT_*` variables (`.env-example`). A hit answers `429 too_many_requests` with `Retry-After`; the per-account limits apply silently so a limit never reveals an account. New `POST /auth/resend-verification` (`202` for every address) mails an unverified account its verification link again. `TooManyRequestsError` (429) joins `src/errors/BaseError.js`; the error handler and `ApiResponse.fail` set `Retry-After` from `params.retryAfterSeconds`. `RateLimiter.consume/consumeAll` and `limits.js` (incl. the tenant self-creation limit of 3 per rolling 24 h per user, wired by the tenant creation ticket) are reusable
 
 ### Removed
 
