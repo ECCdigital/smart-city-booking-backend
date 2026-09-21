@@ -1,8 +1,11 @@
 const SupervisionService = require("../../../commons/services/supervision/supervision-service");
 const ReviewService = require("../../../commons/services/supervision/review-service");
 const SupervisionHistoryManager = require("../../../commons/data-managers/supervision-history-manager");
+const SupervisionNotificationManager = require("../../../commons/data-managers/supervision-notification-manager");
+const SupervisionNotificationService = require("../../../commons/services/supervision/supervision-notification-service");
 const {
   OFFER_TYPE_VALUES,
+  NOTIFICATION_STATUS_VALUES,
 } = require("../../../commons/services/supervision/supervision-constants");
 const { BadRequestError } = require("../../../errors/BaseError");
 
@@ -75,6 +78,44 @@ class SupervisionController {
         ...SupervisionController._historyFilters(req.query),
       });
       return res.status(200).json(result);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * `GET /api/instances/supervision/notifications` - the outbox of the
+   * supervision notices (glossary "Aufsichtsmitteilung"), newest first,
+   * paginated (`?status=&page=&pageSize=`); `?status=failed` is what did
+   * not go out.
+   */
+  static async listNotifications(req, res, next) {
+    try {
+      const result = await SupervisionNotificationManager.list({
+        status: optionalEnum(
+          req.query.status,
+          NOTIFICATION_STATUS_VALUES,
+          "invalid_notification_status",
+        ),
+        page: req.query.page,
+        pageSize: req.query.pageSize,
+      });
+      return res.status(200).json(result);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * `POST /api/instances/supervision/notifications/:id/retry` - sends the
+   * mails of a row that are still missing. Answers the row as it is after
+   * (`sent`, or `failed` again with its `lastError`); never decides again
+   * and never writes history.
+   */
+  static async retryNotification(req, res, next) {
+    try {
+      const row = await SupervisionNotificationService.retry(req.params.id);
+      return res.status(200).json(row);
     } catch (err) {
       return next(err);
     }

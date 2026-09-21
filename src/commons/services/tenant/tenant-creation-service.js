@@ -16,7 +16,7 @@ const MembershipManager = require("../../data-managers/membership-manager");
 const InstanceManager = require("../../data-managers/instance-manager");
 const UserManager = require("../../data-managers/user-manager");
 const SupervisionHistoryManager = require("../../data-managers/supervision-history-manager");
-const SupervisionNotificationManager = require("../../data-managers/supervision-notification-manager");
+const SupervisionNotificationService = require("../supervision/supervision-notification-service");
 const Tenant = require("../../entities/tenant/tenant");
 const Membership = require("../../entities/tenant/membership");
 const {
@@ -237,7 +237,7 @@ class TenantCreationService {
     if (!selfCreated) {
       return;
     }
-    await SupervisionNotificationManager.record({
+    await SupervisionNotificationService.recordAndDispatch({
       type: NOTIFICATION_TYPES.TENANT_SELF_CREATED,
       tenantId: tenant.id,
       payload: {

@@ -13,6 +13,15 @@ class MembershipManager {
     return rawMemberships.map((raw) => raw.toEntity());
   }
 
+  /** The memberships that own the tenant (`owner: true`). */
+  static async getOwnerMembershipsByTenantID(tenantID) {
+    const rawMemberships = await MembershipModel.find({
+      tenantId: tenantID,
+      owner: true,
+    });
+    return rawMemberships.map((raw) => raw.toEntity());
+  }
+
   static async getMembershipsByUserID(userID) {
     const rawMembership = await MembershipModel.find({
       userId: normalizeUserId(userID),

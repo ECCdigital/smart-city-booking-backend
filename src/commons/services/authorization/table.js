@@ -366,6 +366,10 @@ const TABLE = {
     update: { any: "instanceOwner" },
     // `GET /instances/supervision/history`: the instance-wide history.
     supervisionHistory: { any: "instanceOwner" },
+    // `GET /instances/supervision/notifications` and `POST .../:id/retry`:
+    // the outbox of the supervision notices and sending one again.
+    supervisionNotifications: { any: "instanceOwner" },
+    supervisionNotificationRetry: { any: "instanceOwner" },
   },
 
   rule: {

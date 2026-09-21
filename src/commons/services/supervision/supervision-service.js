@@ -8,7 +8,7 @@
 const bunyan = require("bunyan");
 const TenantManager = require("../../data-managers/tenant-manager");
 const SupervisionHistoryManager = require("../../data-managers/supervision-history-manager");
-const SupervisionNotificationManager = require("../../data-managers/supervision-notification-manager");
+const SupervisionNotificationService = require("./supervision-notification-service");
 const {
   SUPERVISION_LEVELS,
   effectiveLevelOf,
@@ -110,7 +110,7 @@ class SupervisionService {
       reason: storedReason,
       origin: HISTORY_ORIGINS.API,
     });
-    await SupervisionNotificationManager.record({
+    await SupervisionNotificationService.recordAndDispatch({
       type: NOTIFICATION_TYPES.TENANT_LEVEL_CHANGED,
       tenantId,
       payload: {

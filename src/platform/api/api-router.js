@@ -55,6 +55,18 @@ router.get(
   authorize("instance", "supervisionHistory"),
   SupervisionController.getInstanceHistory,
 );
+// The supervision notification outbox (glossary "Aufsichtsmitteilung"):
+// what did not go out, and sending it again without deciding again.
+router.get(
+  "/instances/supervision/notifications",
+  authorize("instance", "supervisionNotifications"),
+  SupervisionController.listNotifications,
+);
+router.post(
+  "/instances/supervision/notifications/:id/retry",
+  authorize("instance", "supervisionNotificationRetry"),
+  SupervisionController.retryNotification,
+);
 
 // RULES
 // =====
