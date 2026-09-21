@@ -44,6 +44,10 @@ function resolveValues(document, path) {
   );
 }
 
+function comparable(value) {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
 function matchesCondition(values, condition) {
   if (isPlainObject(condition)) {
     const operators = Object.keys(condition).filter((key) =>
@@ -62,6 +66,15 @@ function matchesCondition(values, condition) {
             Array.isArray(value)
               ? value.some((entry) => condition.$in.includes(entry))
               : condition.$in.includes(value),
+          );
+        }
+
+        if (operator === "$lte") {
+          // Documents hold dates as ISO strings (see `clone`), which order
+          // like the dates they stand for.
+          const limit = comparable(condition.$lte);
+          return values.some(
+            (value) => value != null && comparable(value) <= limit,
           );
         }
 
@@ -191,6 +204,13 @@ function duplicateKeyError(writeErrors) {
 }
 
 function createModel(name, documents, indexes, uniqueFields = []) {
+  const breaksUnique = (row) =>
+    uniqueFields.some(
+      (field) =>
+        row[field] !== undefined &&
+        documents.some((document) => document[field] === row[field]),
+    );
+
   return {
     modelName: name,
     documents: documents,
@@ -199,6 +219,16 @@ function createModel(name, documents, indexes, uniqueFields = []) {
 
     find(filter = {}) {
       return createQuery(documents.filter((doc) => matches(doc, filter)));
+    },
+
+    findOne(filter = {}) {
+      const found = documents.find((doc) => matches(doc, filter)) ?? null;
+      const answer = () => Promise.resolve(found && clone(found));
+      return {
+        lean: answer,
+        then: (onFulfilled, onRejected) =>
+          answer().then(onFulfilled, onRejected),
+      };
     },
 
     async updateOne(filter, update, options = {}) {
@@ -227,6 +257,46 @@ function createModel(name, documents, indexes, uniqueFields = []) {
         .forEach((document) => applyUpdate(document, update));
     },
 
+    async create(row) {
+      if (breaksUnique(row)) throw duplicateKeyError([]);
+      documents.push(clone(row));
+      return clone(row);
+    },
+
+    /**
+     * The atomic read-and-write of the driver: the matching document is
+     * updated; without one an upsert inserts - and fails on a unique field
+     * another document holds already, as the unique index makes it.
+     */
+    async findOneAndUpdate(filter, update, options = {}) {
+      const document = documents.find((candidate) =>
+        matches(candidate, filter),
+      );
+
+      if (document) {
+        applyUpdate(document, update);
+        return clone(document);
+      }
+
+      if (!options.upsert) return null;
+
+      const inserted = {};
+      for (const [path, condition] of Object.entries(filter)) {
+        if (!isPlainObject(condition)) setPath(inserted, path, condition);
+      }
+      applyUpdate(inserted, update, { inserted: true });
+      if (breaksUnique(inserted)) throw duplicateKeyError([]);
+      documents.push(inserted);
+      return clone(inserted);
+    },
+
+    async deleteOne(filter = {}) {
+      const index = documents.findIndex((candidate) =>
+        matches(candidate, filter),
+      );
+      if (index >= 0) documents.splice(index, 1);
+    },
+
     /**
      * Unordered insert: every row that breaks no unique field is stored, the
      * others are reported in one duplicate-key error, as the driver does.
@@ -241,11 +311,7 @@ function createModel(name, documents, indexes, uniqueFields = []) {
       const writeErrors = [];
 
       rows.forEach((row, index) => {
-        const duplicate = uniqueFields.some(
-          (field) =>
-            row[field] !== undefined &&
-            documents.some((document) => document[field] === row[field]),
-        );
+        const duplicate = breaksUnique(row);
 
         // The shape mongoose hands on: the driver's error sits under `err`.
         if (duplicate) writeErrors.push({ index, err: { code: 11000 } });
