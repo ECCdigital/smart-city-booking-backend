@@ -61,6 +61,38 @@ describe("BookableManager: the review", function () {
     ).to.equal(null);
   });
 
+  it("lists the tenant's offers at one review status, longest waiting first", async function () {
+    const sort = sinon.stub().resolves([
+      {
+        toEntity: () =>
+          new Bookable({
+            id: "b1",
+            tenantId: "t1",
+            title: "Saal",
+            type: "room",
+            review: pending,
+          }),
+      },
+    ]);
+    const find = sinon.stub(BookableModel, "find").returns({ sort });
+
+    const offers = await BookableManager.getOffersByReviewStatus(
+      "t1",
+      "pending",
+    );
+
+    expect(find.firstCall.args[0]).to.deep.equal({
+      tenantId: "t1",
+      "review.status": "pending",
+    });
+    expect(sort.firstCall.args[0]).to.deep.equal({
+      "review.submittedAt": 1,
+      id: 1,
+    });
+    expect(offers.map((offer) => offer.id)).to.deep.equal(["b1"]);
+    expect(offers[0]).to.be.instanceOf(Bookable);
+  });
+
   describe("storeBookable", function () {
     let updateOne;
 

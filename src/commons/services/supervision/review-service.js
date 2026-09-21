@@ -14,6 +14,9 @@
  *     → the offer after a write conditional on `review.status ===
  *       expectedStatus` (null matches "none yet"), or null when the status
  *       moved underneath - the write never touches another field
+ *   listByReviewStatus(tenantId, status)
+ *     → the tenant's offers at that status, in the same shape, longest
+ *       waiting first
  *
  * Bookables and events are registered at the end of this file. An event
  * has no `title` of its own: its adapter answers `information.name`.
@@ -28,6 +31,7 @@ const {
   SUPERVISION_LEVELS,
   REVIEW_STATUS,
   OFFER_TYPES,
+  OFFER_TYPE_VALUES,
   HISTORY_EVENT_TYPES,
   HISTORY_ACTOR_TYPES,
   HISTORY_ORIGINS,
@@ -59,12 +63,13 @@ class ReviewService {
    * Registers the adapter of an offer type (contract: see the file head).
    *
    * @param {string} offerType One of `OFFER_TYPES`
-   * @param {{load: Function, updateReview: Function}} adapter
+   * @param {{load: Function, updateReview: Function, listByReviewStatus: Function}} adapter
    */
   static registerOfferAdapter(offerType, adapter) {
     if (
       typeof adapter?.load !== "function" ||
-      typeof adapter?.updateReview !== "function"
+      typeof adapter?.updateReview !== "function" ||
+      typeof adapter?.listByReviewStatus !== "function"
     ) {
       throw new Error(`review: incomplete adapter for ${offerType}`);
     }
@@ -277,24 +282,73 @@ class ReviewService {
       review.status === REVIEW_STATUS.PENDING &&
       effectiveLevelOf(tenant) === SUPERVISION_LEVELS.SUPERVISED
     ) {
-      await SupervisionNotificationManager.record({
-        ...base,
-        type: NOTIFICATION_TYPES.REVIEW_QUEUE_ENTERED,
-        payload: {
-          tenantName: tenant?.name ?? null,
-          cause: HISTORY_EVENT_TYPES.REVIEW_SUBMITTED,
-          offers: [
-            {
-              offerType,
-              offerId: offer.id,
-              title: offer.title ?? null,
-              submittedAt: review.submittedAt,
-              isPublic: offer.isPublic === true,
-            },
-          ],
-        },
+      await ReviewService.recordQueueEntry({
+        tenantId,
+        tenantName: tenant?.name ?? null,
+        cause: HISTORY_EVENT_TYPES.REVIEW_SUBMITTED,
+        entries: [{ offerType, offer: { ...offer, review } }],
+        now,
       });
     }
+  }
+
+  /**
+   * The offers of a tenant at one review status, across the offer types
+   * (bookables first, then events; within a type longest waiting first).
+   *
+   * @param {string} tenantId
+   * @param {string|null} status One of `REVIEW_STATUS`, or null
+   * @returns {Promise<Array<{offerType: string, offer: Object}>>} The
+   *   offers in the adapter shape `{ id, title, isPublic, review }`
+   */
+  static async listOffersByReviewStatus(tenantId, status) {
+    const entries = [];
+    for (const offerType of OFFER_TYPE_VALUES) {
+      const offers = await adapters
+        .get(offerType)
+        .listByReviewStatus(tenantId, status);
+      for (const offer of offers) {
+        entries.push({ offerType, offer });
+      }
+    }
+    return entries;
+  }
+
+  /**
+   * Records the occasion `review.queueEntered` (spec §8): one outbox row
+   * per cause, listing every offer that entered the active review queue
+   * with it - one offer for a submission, all pending ones for a switch
+   * to `supervised`. No offers, no row.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string|null} params.tenantName
+   * @param {string} params.cause The history event type that caused the
+   *   entry: `review.submitted` or `tenant.levelChanged`
+   * @param {Array<{offerType: string, offer: Object}>} params.entries
+   * @param {Date} params.now
+   * @returns {Promise<Object|null>} The recorded row, or null without offers
+   */
+  static async recordQueueEntry({ tenantId, tenantName, cause, entries, now }) {
+    if (entries.length === 0) {
+      return null;
+    }
+    return SupervisionNotificationManager.record({
+      type: NOTIFICATION_TYPES.REVIEW_QUEUE_ENTERED,
+      tenantId,
+      createdAt: now,
+      payload: {
+        tenantName: tenantName ?? null,
+        cause,
+        offers: entries.map(({ offerType, offer }) => ({
+          offerType,
+          offerId: offer.id,
+          title: offer.title ?? null,
+          submittedAt: offer.review?.submittedAt ?? null,
+          isPublic: offer.isPublic === true,
+        })),
+      },
+    });
   }
 }
 
@@ -307,6 +361,8 @@ ReviewService.registerOfferAdapter(OFFER_TYPES.BOOKABLE, {
       expectedStatus,
       review,
     }),
+  listByReviewStatus: (tenantId, status) =>
+    BookableManager.getOffersByReviewStatus(tenantId, status),
 });
 
 /** An event as the review service reads an offer. */
@@ -329,6 +385,10 @@ ReviewService.registerOfferAdapter(OFFER_TYPES.EVENT, {
         expectedStatus,
         review,
       }),
+    ),
+  listByReviewStatus: async (tenantId, status) =>
+    (await EventManager.getOffersByReviewStatus(tenantId, status)).map(
+      eventAsOffer,
     ),
 });
 

@@ -102,6 +102,25 @@ class EventManager {
   }
 
   /**
+   * The events of a tenant at one review status (glossary "Prüfstatus"),
+   * whatever their publication wish or dates - the offers a level change
+   * or the review queue asks for. Longest waiting first.
+   *
+   * @param {string} tenantId Identifier of the tenant
+   * @param {string|null} status One of `REVIEW_STATUS`; null matches an
+   *   event without a review as well
+   * @returns {Promise<Event[]>} The events, by `review.submittedAt`
+   *   ascending, then by id
+   */
+  static async getOffersByReviewStatus(tenantId, status) {
+    const rawEvents = await EventModel.find({
+      tenantId,
+      "review.status": status ?? null,
+    }).sort({ "review.submittedAt": 1, id: 1 });
+    return rawEvents.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Find the events that reference a medium — teaser image, contact person
    * image, the photo of a speaker, the image list or one of the attachments.
    * The usage proof is searched on demand (§4.7 of the media spec); a medium

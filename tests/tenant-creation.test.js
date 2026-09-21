@@ -284,6 +284,101 @@ describe("tenant creation", function () {
     });
   });
 
+  describe("the initial level of a self-creation", function () {
+    const storedLevel = () =>
+      TenantManager.storeTenant.lastCall.args[0].supervisionLevel;
+    const openCreation = () => {
+      instance.allowedUsersToCreateTenant = [];
+      instance.allowAllUsersToCreateTenant = true;
+    };
+
+    for (const level of ["free", "supervised", "blocked"]) {
+      it(`starts a creation over the Freigabeliste ${level} when the instance says so`, async function () {
+        instance.tenantInitialSupervisionLevel = level;
+
+        expect((await create(CUSTOMER, VALID)).status).to.equal(201);
+        expect(storedLevel()).to.equal(level);
+        expect(SupervisionHistoryManager.insert.firstCall.args[0]).to.include({
+          eventType: "tenant.created",
+          from: null,
+          to: level,
+        });
+      });
+
+      it(`starts an open creation ${level} when the instance says so`, async function () {
+        openCreation();
+        instance.tenantInitialSupervisionLevel = level;
+
+        expect((await create(OWNER, VALID)).status).to.equal(201);
+        expect(storedLevel()).to.equal(level);
+        expect(
+          SupervisionNotificationManager.record.firstCall.args[0].payload
+            .supervisionLevel,
+        ).to.equal(level);
+      });
+    }
+
+    it("refuses a user whom neither way permits", async function () {
+      instance.allowedUsersToCreateTenant = [];
+
+      expect((await create(CUSTOMER, VALID)).status).to.equal(403);
+      expect(TenantManager.storeTenant.called).to.be.false;
+    });
+
+    it("starts free when the instance names no level", async function () {
+      delete instance.tenantInitialSupervisionLevel;
+
+      await create(CUSTOMER, VALID);
+
+      expect(storedLevel()).to.equal("free");
+    });
+
+    it("reads the level at the time of each creation, not retroactively", async function () {
+      instance.tenantInitialSupervisionLevel = "supervised";
+      await create(CUSTOMER, VALID);
+      const first = TenantManager.storeTenant.lastCall.args[0];
+
+      instance.tenantInitialSupervisionLevel = "blocked";
+      await create(CUSTOMER, VALID);
+
+      expect(first.supervisionLevel).to.equal("supervised");
+      expect(storedLevel()).to.equal("blocked");
+      expect(TenantManager.updateSupervisionLevel.called).to.be.false;
+    });
+
+    it("ignores a level, a change time and a review in the body on both ways", async function () {
+      const forged = {
+        ...VALID,
+        supervisionLevel: "free",
+        supervisionChangedAt: "2020-01-01T00:00:00.000Z",
+        review: { status: "approved" },
+      };
+      instance.tenantInitialSupervisionLevel = "blocked";
+
+      await create(CUSTOMER, forged);
+      let stored = TenantManager.storeTenant.lastCall.args[0];
+      expect(stored.supervisionLevel).to.equal("blocked");
+      expect(stored.supervisionChangedAt).to.equal(null);
+      expect(stored).to.not.have.property("review");
+
+      openCreation();
+      await create(OWNER, forged);
+      stored = TenantManager.storeTenant.lastCall.args[0];
+      expect(stored.supervisionLevel).to.equal("blocked");
+      expect(stored).to.not.have.property("review");
+    });
+
+    it("starts the instance owner's tenant free on every initial level, the forged body included", async function () {
+      for (const level of ["supervised", "blocked"]) {
+        instance.tenantInitialSupervisionLevel = level;
+
+        await create(ADMIN, { ...VALID, supervisionLevel: level });
+
+        expect(storedLevel()).to.equal("free");
+      }
+    });
+  });
+
   describe("the limit of three self-creations per rolling 24 hours", function () {
     it("counts a successful self-creation against the user, and keeps the slot", async function () {
       const res = await create(CUSTOMER, VALID);
@@ -482,6 +577,33 @@ describe("tenant creation", function () {
       expect(
         SupervisionNotificationManager.record.firstCall.args[0].type,
       ).to.equal("tenant.selfCreated");
+
+      // The initial level is the instance's here too, whatever the body says.
+      instance.tenantInitialSupervisionLevel = "supervised";
+      res = response();
+      await TenantController.storeTenant(
+        request({ ...VALID, supervisionLevel: "free", review: {} }),
+        res,
+        sinon.stub(),
+      );
+      expect(res.statusCode).to.equal(201);
+      const stored = TenantManager.storeTenant.lastCall.args[0];
+      expect(stored.supervisionLevel).to.equal("supervised");
+      expect(stored).to.not.have.property("review");
+    });
+
+    it("starts the instance owner's tenant free over the obsolete PUT as well", async function () {
+      instance.tenantInitialSupervisionLevel = "blocked";
+
+      const res = await createLegacy(ADMIN, {
+        ...VALID,
+        supervisionLevel: "blocked",
+      });
+
+      expect(res.status).to.equal(201);
+      expect(
+        TenantManager.storeTenant.lastCall.args[0].supervisionLevel,
+      ).to.equal("free");
     });
 
     it("creates for the instance owner with owner membership and history like the POST", async function () {
