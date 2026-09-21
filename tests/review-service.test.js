@@ -292,7 +292,32 @@ describe("ReviewService", function () {
     });
   });
 
-  it("knows the bookable adapter out of the box", function () {
-    expect(ReviewService.hasOfferAdapter("bookable")).to.be.true;
+  describe("submitOnPublicationWish", function () {
+    const wish = (offer) =>
+      ReviewService.submitOnPublicationWish({
+        offerType: OFFER_TYPE,
+        tenantId: "t1",
+        offer: { id: "o1", ...offer },
+        actorUserId: "owner@example.test",
+      });
+
+    it("submits an offer stored with a publication wish and no status", async function () {
+      const result = await wish({ isPublic: true, review: review(null) });
+
+      expect(result.status).to.equal("pending");
+      expect(history.calledOnce).to.be.true;
+    });
+
+    it("leaves an offer without the wish, or with any status, alone", async function () {
+      expect(await wish({ isPublic: false, review: review(null) })).to.equal(
+        null,
+      );
+      for (const status of ["pending", "approved", "rejected"]) {
+        expect(await wish({ isPublic: true, review: review(status) })).to.equal(
+          null,
+        );
+      }
+      expect(history.called).to.be.false;
+    });
   });
 });

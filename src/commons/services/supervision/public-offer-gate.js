@@ -24,16 +24,30 @@ const { assertTenantPubliclyVisible } = require("./public-tenant-gate");
  * @param {string} bookableId
  * @returns {Promise<void>}
  * @throws {NotFoundError} `tenant_not_found` for a blocked or unknown
- *   tenant, `bookable_not_found` for a bookable that is not reachable
+ *   tenant, `offer_not_found` for a bookable that is not reachable
  */
 async function assertBookableReachable(tenantId, bookableId) {
-  const tenant = await assertTenantPubliclyVisible(tenantId);
   const bookable = await BookableManager.getBookable(
     String(bookableId ?? "").trim(),
     tenantId,
   );
-  if (bookable && !isOfferReachable({ tenant, offer: bookable })) {
-    throw new NotFoundError("bookable_not_found", { id: bookableId });
+  await assertOfferReachable(tenantId, bookable);
+}
+
+/**
+ * The same question about an offer the caller already holds. No offer
+ * (the tenant has none of that id) passes the offer part: the caller
+ * answers for it as before.
+ *
+ * @param {string} tenantId
+ * @param {Object|null} offer A bookable or an event of the tenant
+ * @returns {Promise<void>}
+ * @throws {NotFoundError} `tenant_not_found`, `offer_not_found`
+ */
+async function assertOfferReachable(tenantId, offer) {
+  const tenant = await assertTenantPubliclyVisible(tenantId);
+  if (offer && !isOfferReachable({ tenant, offer })) {
+    throw new NotFoundError("offer_not_found", { id: offer.id });
   }
 }
 
@@ -41,11 +55,16 @@ async function assertBookableReachable(tenantId, bookableId) {
  * The gate as a middleware for a route that names its tenant `:tenant`
  * and its bookable `:id`. A plain function, as `publicTenantGate()`.
  *
+ * @param {Object} [options]
+ * @param {string[]} [options.exemptReaches] The reaches the gate lets
+ *   through unasked: the management reaches `own` and `any` by default. A
+ *   route whose `own` is every signed-in user names `any` alone - signing
+ *   in never opens the gate (spec §5.2).
  * @returns {import("express").RequestHandler}
  */
-function publicBookableGate() {
+function publicBookableGate({ exemptReaches = [REACH.OWN, REACH.ANY] } = {}) {
   return (req, res, next) => {
-    if (req.reach !== REACH.PUBLIC) {
+    if (exemptReaches.includes(req.reach)) {
       return next();
     }
     assertBookableReachable(req.params?.tenant, req.params?.id)
@@ -66,6 +85,7 @@ function reachableOffers(tenant, offers) {
 
 module.exports = {
   assertBookableReachable,
+  assertOfferReachable,
   publicBookableGate,
   listableOffers,
   reachableOffers,

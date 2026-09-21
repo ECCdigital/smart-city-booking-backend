@@ -70,9 +70,37 @@ class ReviewService {
     adapters.set(offerType, adapter);
   }
 
-  /** Whether an offer type can be reviewed. */
-  static hasOfferAdapter(offerType) {
-    return adapters.has(offerType);
+  /**
+   * The publication wish of an offer without a review status is its
+   * submission (spec §4, §6.1) - whatever the tenant's level. Called by
+   * every write that stores an offer with `isPublic`; an offer that has a
+   * status keeps it, so switching the wish off and on is no resubmission,
+   * and a write repeated after a failed submission submits again.
+   *
+   * @param {Object} params
+   * @param {string} params.offerType One of `OFFER_TYPES`
+   * @param {string} params.tenantId
+   * @param {{id: string, isPublic: boolean, review?: Object}} params.offer
+   *   The offer as it was stored
+   * @param {string|null} params.actorUserId
+   * @returns {Promise<Object|null>} The review after the submission, or
+   *   null when the write is no publication wish to submit
+   */
+  static async submitOnPublicationWish({
+    offerType,
+    tenantId,
+    offer,
+    actorUserId,
+  }) {
+    if (offer.isPublic !== true || (offer.review?.status ?? null) !== null) {
+      return null;
+    }
+    return ReviewService.submit({
+      offerType,
+      tenantId,
+      offerId: offer.id,
+      actorUserId,
+    });
   }
 
   /**

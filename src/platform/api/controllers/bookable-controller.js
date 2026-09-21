@@ -24,6 +24,7 @@ const {
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const ReviewService = require("../../../commons/services/supervision/review-service");
 const {
+  assertOfferReachable,
   listableOffers,
   reachableOffers,
 } = require("../../../commons/services/supervision/public-offer-gate");
@@ -311,9 +312,7 @@ class BookableController {
         scopeFor(request, "media", "read"),
       );
       await BookableManager.storeBookable(bookable);
-      if (bookable.isPublic) {
-        await BookableController._submitFirstPublicationWish(request, bookable);
-      }
+      await BookableController._submitPublicationWish(request, bookable);
       logger.info(
         `${tenant} -- Bookable ${bookable.id} created by user ${user?.id}`,
       );
@@ -383,9 +382,7 @@ class BookableController {
         scopeFor(request, "media", "read"),
       );
       await BookableManager.storeBookable(bookable);
-      if (!existingBookable.isPublic && bookable.isPublic) {
-        await BookableController._submitFirstPublicationWish(request, bookable);
-      }
+      await BookableController._submitPublicationWish(request, bookable);
       logger.info(
         `${tenant} -- Bookable ${bookable.id} updated by user ${user?.id}`,
       );
@@ -403,24 +400,22 @@ class BookableController {
   }
 
   /**
-   * The first publication wish of a bookable without a review status is
-   * its submission (tenant supervision spec §4, §6.1) - whatever the
-   * tenant's level. A bookable that has a status keeps it: switching the
-   * wish off and on again is no resubmission.
+   * Hands a stored bookable's publication wish to the review (tenant
+   * supervision spec §4, §6.1) and carries the resulting review.
    *
    * @param {Object} request
    * @param {Bookable} bookable The stored bookable, its review updated in place
    */
-  static async _submitFirstPublicationWish(request, bookable) {
-    if ((bookable.review?.status ?? null) !== null) {
-      return;
-    }
-    bookable.review = await ReviewService.submit({
+  static async _submitPublicationWish(request, bookable) {
+    const review = await ReviewService.submitOnPublicationWish({
       offerType: OFFER_TYPES.BOOKABLE,
       tenantId: request.params.tenant,
-      offerId: bookable.id,
+      offer: bookable,
       actorUserId: request.principal?.userId ?? request.user?.id ?? null,
     });
+    if (review) {
+      bookable.review = review;
+    }
   }
 
   /**
@@ -667,7 +662,7 @@ class BookableController {
     }
   }
 
-  static async getBookablePriceCategories(request, response) {
+  static async getBookablePriceCategories(request, response, next) {
     try {
       const { tenant: tenantId, id: bookableId } = request.params;
 
@@ -686,22 +681,11 @@ class BookableController {
           .send(`Bookable with id ${bookableId} not found`);
       }
 
-      // Whether the public reaches the prices is the offer gate's answer
-      // at the route (tenant supervision spec §5.2: the direct-link rule,
-      // no blanket `isPublic` requirement). Inside the tenant, a signed-in
-      // reader sees the prices of a bookable within their reach or of one
-      // that asks to be listed.
-      if (
-        request.reach !== "public" &&
-        !bookable.isPublic &&
-        !withinReach(bookable, "ownerUserId", scopeOf(request))
-      ) {
-        logger.warn(
-          `${tenantId} -- Bookable with id ${bookableId} is not public.`,
-        );
-        return response
-          .status(403)
-          .send(`Bookable with id ${bookableId} is not public`);
+      // Whoever may read the bookable itself reads its prices. Everyone
+      // else gets them by the direct-link rule of the supervision (spec
+      // §5.2): no `isPublic` requirement, but the offer has to be reachable.
+      if (!withinReach(bookable, "ownerUserId", scopeOf(request))) {
+        await assertOfferReachable(tenantId, bookable);
       }
 
       const priceCategories =
@@ -712,6 +696,9 @@ class BookableController {
 
       response.status(200).send(priceCategories);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("Could not get bookable price categories");
     }

@@ -488,6 +488,38 @@ describe("bookable review routes", function () {
       );
     });
 
+    it("signing in opens neither the anonymized bookings nor the prices of an unapproved bookable", async function () {
+      for (const path of [
+        `/api/${TENANT}/bookables/${FIXTURE_ID}/bookings?public=true`,
+        `/api/${TENANT}/bookables/${FIXTURE_ID}/prices`,
+      ]) {
+        expect((await call("get", path, CUSTOMER)).status, path).to.equal(404);
+        expect((await call("get", path, ADMIN)).status, path).to.equal(200);
+      }
+    });
+
+    it("keeps the review out of the booking a checkout stores and answers", async function () {
+      h.bookables[FIXTURE_ID].review = review("approved", {
+        reason: "Geheimgrund",
+        decidedBy: ADMIN,
+      });
+
+      const res = await call(
+        "post",
+        `/api/v2/${TENANT}/checkout`,
+        CUSTOMER,
+        checkoutBody(FIXTURE_ID),
+      );
+
+      expect(res.body.success).to.equal(true);
+      expect(JSON.stringify(res.body)).to.not.include("Geheimgrund");
+      expect(JSON.stringify([...h.store.values()])).to.not.include(
+        "Geheimgrund",
+      );
+      // The catalogue's bookable keeps its review.
+      expect(h.bookables[FIXTURE_ID].review.status).to.equal("approved");
+    });
+
     it("leaves unlisted related bookables out of a public detail's embedding", async function () {
       h.bookables[FIXTURE_ID].review = review("approved");
       BookableManager.getRelatedBookables.resolves([

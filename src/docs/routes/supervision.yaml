@@ -32,7 +32,7 @@
 # bookings?public=true`, `/checkout/permissions/{id}` v1 and v2,
 # `/calendar/occupancy?ids=`) follows the direct-link rule: `isPublic` is no
 # requirement, under supervision the approval is; otherwise
-# `404 bookable_not_found`, naming no reason. Every checkout entrance refuses
+# `404 offer_not_found`, naming no reason. Every checkout entrance refuses
 # a new self-booking of such a bookable with `checkout.offer_not_reachable`.
 
 /api/{tenant}/bookables/{id}/review/submissions:

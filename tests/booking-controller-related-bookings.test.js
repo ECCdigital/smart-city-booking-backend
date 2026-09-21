@@ -7,6 +7,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 
 function createMockResponse() {
   return {
@@ -68,6 +69,11 @@ describe("BookingController.getRelatedBookings", () => {
     sinon
       .stub(BookableManager, "getAncestorBookables")
       .resolves([{ id: "parent-1" }, { id: "grandparent-1" }]);
+    // The anonymized projection embeds what the public reaches: everything
+    // of a free tenant.
+    sinon
+      .stub(TenantManager, "getTenant")
+      .resolves({ id: "tenant-1", supervisionLevel: "free" });
 
     const response = createMockResponse();
     await BookingController.getRelatedBookings(

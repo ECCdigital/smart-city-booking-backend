@@ -17,6 +17,7 @@
  */
 
 const { REVIEW_STATUS } = require("./supervision-constants");
+const { normalizeReason } = require("./reason");
 const { BadRequestError, ConflictError } = require("../../../errors/BaseError");
 
 /** The actions a review takes (glossary "Einreichung", "Prüfentscheidung"). */
@@ -45,18 +46,6 @@ function emptyReview() {
     decidedBy: null,
     reason: null,
   };
-}
-
-/** A reason as it is stored: a trimmed string, or null for none. */
-function normalizeReason(reason) {
-  if (reason === undefined || reason === null) {
-    return null;
-  }
-  if (typeof reason !== "string") {
-    throw new BadRequestError("invalid_review_reason");
-  }
-  const trimmed = reason.trim();
-  return trimmed === "" ? null : trimmed;
 }
 
 /** The transition table: `[from status][action]` → the target status. */
@@ -102,7 +91,7 @@ function applyReviewTransition(
       allowed: REVIEW_ACTION_VALUES,
     });
   }
-  const storedReason = normalizeReason(reason);
+  const storedReason = normalizeReason(reason, "invalid_review_reason");
   const current = { ...emptyReview(), ...(review || {}) };
   const from = current.status ?? null;
   const to = TRANSITIONS[from]?.[action];
@@ -134,9 +123,7 @@ function applyReviewTransition(
 
 module.exports = {
   REVIEW_ACTIONS,
-  REVIEW_ACTION_VALUES,
   DECISION_ACTIONS,
   emptyReview,
-  normalizeReason,
   applyReviewTransition,
 };

@@ -3,6 +3,8 @@ const { Event } = require("../entities/event/event");
 const { Bookable } = require("../entities/bookable/bookable");
 const EventManager = require("../data-managers/event-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
+const ReviewService = require("./supervision/review-service");
+const { OFFER_TYPES } = require("./supervision/supervision-constants");
 
 class EventService {
   static async createEvent(tenantId, rawEvent, user, withTickets = false) {
@@ -26,6 +28,14 @@ class EventService {
         autoCommitBooking: true,
       });
       await BookableManager.storeBookable(ticket);
+      // The ticket is created with a publication wish: its submission
+      // (tenant supervision spec §4).
+      await ReviewService.submitOnPublicationWish({
+        offerType: OFFER_TYPES.BOOKABLE,
+        tenantId,
+        offer: ticket,
+        actorUserId: user?.id ?? null,
+      });
     }
   }
 }

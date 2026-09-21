@@ -35,6 +35,7 @@ const {
 const {
   publicBookableGate,
 } = require("../../commons/services/supervision/public-offer-gate");
+const { REACH } = require("../../commons/services/authorization/policy");
 const SupervisionController = require("./controllers/supervision-controller");
 const {
   OFFER_TYPES,
@@ -68,7 +69,8 @@ router.get(
 router.get(
   "/bookables/:id/bookings",
   publicRoute("bookable", "relatedBookings"),
-  publicBookableGate(),
+  // `own` is every signed-in user here: only `any` manages.
+  publicBookableGate({ exemptReaches: [REACH.ANY] }),
   BookingController.getRelatedBookings,
 );
 router.get(
@@ -109,8 +111,8 @@ router.get(
 );
 router.get(
   "/bookables/:id/prices",
+  // The handler asks the offer gate for whoever cannot read the bookable.
   publicRoute("bookable", "prices"),
-  publicBookableGate(),
   BookableController.getBookablePriceCategories,
 );
 
