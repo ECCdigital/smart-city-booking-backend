@@ -22,7 +22,8 @@ function limitFrom(envName, defaultLimit, defaultWindowSeconds) {
   };
 }
 
-const account = (mail) => String(mail).trim().toLowerCase();
+/** An address or user id as one key: trimmed, lower case. */
+const normalizeSubject = (id) => String(id).trim().toLowerCase();
 
 /** Public signup attempts per IP: 10 per hour. */
 function signupPerIp(ip) {
@@ -36,11 +37,11 @@ function signupPerIp(ip) {
 function verificationMailPerAccount(mail) {
   return [
     {
-      key: `verification-mail:account:short:${account(mail)}`,
+      key: `verification-mail:account:short:${normalizeSubject(mail)}`,
       ...limitFrom("RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT", 1, 60),
     },
     {
-      key: `verification-mail:account:long:${account(mail)}`,
+      key: `verification-mail:account:long:${normalizeSubject(mail)}`,
       ...limitFrom("RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG", 5, 3600),
     },
   ];
@@ -57,7 +58,7 @@ function verificationMailPerIp(ip) {
 /** Successful tenant self-creations per user: 3 per rolling 24 hours. */
 function tenantSelfCreationPerUser(userId) {
   return {
-    key: `tenant-self-creation:user:${account(userId)}`,
+    key: `tenant-self-creation:user:${normalizeSubject(userId)}`,
     ...limitFrom("RATE_LIMIT_TENANT_SELF_CREATION_PER_USER", 3, 86400),
   };
 }

@@ -139,9 +139,9 @@ describe("RateLimiter.consume", function () {
   });
 
   it("never lets parallel attempts exceed the limit, and denied ones spend nothing", async function () {
-    // Every attempt inserts before it counts, so a burst can be denied in
-    // full (fail-closed) but never allowed past the limit; the denied ones
-    // take their row back, so the next serial attempt is judged afresh.
+    // Every attempt inserts before it counts, so a burst is never allowed
+    // past the limit (it may be over-denied, never over-allowed); the denied
+    // ones take their row back, so they cost the allowed ones nothing.
     const results = await Promise.all(
       Array.from({ length: 12 }, () =>
         RateLimiter.consume({
@@ -154,8 +154,10 @@ describe("RateLimiter.consume", function () {
     );
     const allowed = results.filter((r) => r.allowed).length;
     assert.ok(allowed <= 5, `allowed ${allowed} of 12 with a limit of 5`);
+    assert.ok(allowed >= 1, "a burst is not denied wholesale");
     assert.strictEqual(events.size, allowed);
 
+    await results.find((r) => r.allowed).release();
     const next = await RateLimiter.consume({
       key: "k",
       limit: 5,

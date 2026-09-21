@@ -36,9 +36,14 @@ class RegistrationService {
    */
   static async signup({ user, nextUrl, verifyUrl, invitation = null, ip }) {
     await RegistrationService._gate(limits.signupPerIp(ip));
+    // Validated before the lookup, so a malformed body fails the same way
+    // whether or not the address has an account.
+    user.validate();
 
     const existing = await UserManager.getUser(user.id, true);
     if (existing) {
+      // A failure surfaces like one of a fresh signup would: the answer
+      // must not depend on the branch.
       await RegistrationService._sendVerificationMail(existing, {
         nextUrl,
         verifyUrl,
@@ -71,12 +76,20 @@ class RegistrationService {
     await RegistrationService._gate(limits.verificationMailPerIp(ip));
 
     const user = await UserManager.getUser(id, true);
-    await RegistrationService._sendVerificationMail(user, {
-      nextUrl,
-      verifyUrl,
-      // The IP limit is already spent above; only the account's own remain.
-      ip: null,
-    });
+    try {
+      await RegistrationService._sendVerificationMail(user, {
+        nextUrl,
+        verifyUrl,
+        // The IP limit is already spent above; only the account's own remain.
+        ip: null,
+      });
+    } catch (error) {
+      // An unknown address never fails here, so a known one must not either.
+      logger.error(
+        { err: error },
+        `Could not send the verification mail for ${id}`,
+      );
+    }
   }
 
   static async _gate(limit) {
@@ -97,8 +110,9 @@ class RegistrationService {
 
   /**
    * Mails a fresh verification link when the account can use one and its
-   * limits allow it; otherwise does nothing. Never throws: a failing mail
-   * would tell the caller the account exists.
+   * limits allow it; otherwise does nothing. A failed send gives the
+   * reservation back and rethrows; the caller decides what the failure may
+   * tell.
    *
    * @returns {Promise<boolean>} Whether a mail went out
    */
@@ -121,11 +135,7 @@ class RegistrationService {
 
     try {
       const entity = user instanceof User ? user : new User(user);
-      for (const hook of entity.hooks) {
-        if (hook.type === USER_HOOK_TYPES.VERIFY && hook.status === "active") {
-          hook.status = "revoked";
-        }
-      }
+      entity.revokeActiveHooks(USER_HOOK_TYPES.VERIFY);
       const hook = entity.addHook(USER_HOOK_TYPES.VERIFY, {
         nextUrl,
         verifyUrl,
@@ -139,11 +149,7 @@ class RegistrationService {
       return true;
     } catch (error) {
       await gate.release();
-      logger.error(
-        { err: error },
-        `Could not send the verification mail for ${user.id}`,
-      );
-      return false;
+      throw error;
     }
   }
 }

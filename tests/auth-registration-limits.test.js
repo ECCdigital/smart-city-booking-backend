@@ -27,7 +27,10 @@ const {
 const {
   installInMemoryMailTransport,
 } = require("./helpers/in-memory-mail-transport");
-const { installMailStackStore } = require("./helpers/mail-stack-fixtures");
+const {
+  installMailStackStore,
+  instance,
+} = require("./helpers/mail-stack-fixtures");
 
 const KNOWN_UNVERIFIED = "pending@example.test";
 const KNOWN_VERIFIED = "erika@example.test";
@@ -39,6 +42,7 @@ const ENV_KEYS = [
   "RATE_LIMIT_SIGNUP_PER_IP",
   "RATE_LIMIT_VERIFICATION_MAIL_PER_IP",
   "RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT",
+  "RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG",
   "DISABLE_EMAIL_CHECK",
 ];
 
@@ -203,6 +207,22 @@ describe("public registration: account-neutral answers and rate limits", functio
       assert.strictEqual(sent.length, 0);
     });
 
+    it("answers a known and an unknown address alike when the mail cannot go out", async function () {
+      // The transport retries with backoff before it gives up.
+      this.timeout(15000);
+      sinon.restore();
+      installInMemoryRateLimitEvents();
+      installMailStackStore({ instance: instance({ noreplyHost: "broken" }) });
+      installUserStore();
+      sent = installInMemoryMailTransport();
+
+      const unknown = await signup(UNKNOWN);
+      const known = await signup(KNOWN_UNVERIFIED);
+
+      assert.strictEqual(known.status, unknown.status);
+      assert.strictEqual(known.text, unknown.text);
+    });
+
     it("holds the limit against parallel attempts", async function () {
       process.env.RATE_LIMIT_SIGNUP_PER_IP = "3";
 
@@ -273,6 +293,22 @@ describe("public registration: account-neutral answers and rate limits", functio
       assert.deepStrictEqual(second.body, first.body);
       assert.strictEqual(second.headers["retry-after"], undefined);
       assert.strictEqual(verificationMailsTo(KNOWN_UNVERIFIED).length, 1);
+    });
+
+    it("applies the per-account hour limit silently, on top of the minute limit", async function () {
+      process.env.RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_SHORT = "10";
+      process.env.RATE_LIMIT_VERIFICATION_MAIL_PER_ACCOUNT_LONG = "2";
+
+      const answers = [];
+      for (let i = 0; i < 3; i++) {
+        answers.push(await resend(KNOWN_UNVERIFIED));
+      }
+
+      assert.deepStrictEqual(
+        answers.map((r) => r.status),
+        [202, 202, 202],
+      );
+      assert.strictEqual(verificationMailsTo(KNOWN_UNVERIFIED).length, 2);
     });
 
     it("applies the per-IP limit visibly, for known and unknown addresses alike", async function () {
