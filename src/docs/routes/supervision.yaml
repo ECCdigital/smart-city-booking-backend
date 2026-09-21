@@ -410,3 +410,75 @@
         description: Not authenticated
       "403":
         description: Not the instance owner
+
+/api/instances/supervision/notifications:
+  get:
+    tags:
+      - Supervision
+    summary: The outbox of the supervision notices
+    description: |
+      The recorded occasions (glossary "Mitteilungsanlass") of the supervision
+      notices with their delivery, newest first. `?status=failed` lists what
+      did not go out, with the reason in `lastError`. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [pending, sent, failed]
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+    responses:
+      "200":
+        description: One page of the outbox.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionNotificationPage"
+      "400":
+        description: "`invalid_notification_status`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/supervision/notifications/{id}/retry:
+  post:
+    tags:
+      - Supervision
+    summary: Send a supervision notice again
+    description: |
+      Dispatches a `failed` or `pending` row again: only the mails still
+      missing go out (`deliveries` names who already has theirs). Never
+      repeats the decision and never writes history. Answers the row as it is
+      after the dispatch - `sent`, or `failed` again with its `lastError`.
+      Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The row after the dispatch.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionNotification"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`supervision_notification_not_found`"
+      "409":
+        description: |
+          `supervision_notification_already_sent`, or
+          `supervision_notification_dispatch_in_progress` while another
+          dispatch of the row is at work.

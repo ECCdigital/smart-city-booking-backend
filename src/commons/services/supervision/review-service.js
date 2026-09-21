@@ -26,7 +26,7 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const EventManager = require("../../data-managers/event-manager");
 const SupervisionHistoryManager = require("../../data-managers/supervision-history-manager");
-const SupervisionNotificationManager = require("../../data-managers/supervision-notification-manager");
+const SupervisionNotificationService = require("./supervision-notification-service");
 const {
   SUPERVISION_LEVELS,
   REVIEW_STATUS,
@@ -259,7 +259,7 @@ class ReviewService {
     const base = { tenantId, createdAt: now };
 
     if (action !== REVIEW_ACTIONS.SUBMIT) {
-      await SupervisionNotificationManager.record({
+      await SupervisionNotificationService.recordAndDispatch({
         ...base,
         type: NOTIFICATION_TYPES.REVIEW_DECIDED,
         payload: {
@@ -333,7 +333,7 @@ class ReviewService {
     if (entries.length === 0) {
       return null;
     }
-    return SupervisionNotificationManager.record({
+    return SupervisionNotificationService.recordAndDispatch({
       type: NOTIFICATION_TYPES.REVIEW_QUEUE_ENTERED,
       tenantId,
       createdAt: now,

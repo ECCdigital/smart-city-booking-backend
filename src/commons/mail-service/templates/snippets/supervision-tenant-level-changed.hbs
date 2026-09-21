@@ -1,0 +1,16 @@
+<p>
+  Die Aufsichtsstufe Ihres Mandanten <strong>{{tenantName}}</strong> wurde
+  geändert.
+</p>
+<br />
+<p><strong>Bisherige Stufe:</strong> {{fromLevel}}</p>
+<p><strong>Neue Stufe:</strong> {{toLevel}}</p>
+{{#if reason}}
+  <p><strong>Begründung:</strong> {{reason}}</p>
+{{/if}}
+{{#if levelHint}}
+  <br />
+  <p>{{levelHint}}</p>
+{{/if}}
+<br />
+<p><a href="{{adminUrl}}">Zur Verwaltung Ihres Mandanten</a></p>

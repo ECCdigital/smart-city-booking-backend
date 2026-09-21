@@ -73,6 +73,27 @@ A tenant can only be deleted if one of the following conditions is met:
 - The user has a `Membership` with `owner: true` for that tenant, or
 - The user is listed in `instance.ownerUserIds`.
 
+## Supervision notices
+
+The tenant supervision tells the owners in charge by mail (glossary „Aufsichtsmitteilung“). Every notice goes out over the **instance's** mail account with central templates — never over a tenant's own mail configuration, and a tenant cannot override the texts.
+
+| Occasion                                                                                   | Recipients                                                                                                   |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Tenant self-creation                                                                       | All instance owners (`instance.ownerUserIds`); the creator gets a confirmation with the actual initial level |
+| Offers newly enter the active review queue (submission, or a level change to `supervised`) | All instance owners — one mail per occasion listing all offers                                               |
+| Supervision level changed                                                                  | All tenant owners (memberships with `owner: true`): old and new level, reason, admin link                    |
+| Review decided (approve, reject, withdraw; bookable or event)                              | All tenant owners: offer, old and new status, reason, admin link                                             |
+
+Pending offers of a `free` or `blocked` tenant cause no review mail, and repeating an action causes no new mail. Sending follows the recording and never rolls a decision back.
+
+### GET /api/instances/supervision/notifications
+
+The outbox, newest first (`?status=pending|sent|failed&page=&pageSize=`). `status=failed` lists what did not go out with its `lastError` (`mail_disabled` while the instance's mail is off, `no_recipients` where no owner has an account). **Instance owner only.**
+
+### POST /api/instances/supervision/notifications/:id/retry
+
+Sends the mails of a `failed` or `pending` row that are still missing (`deliveries` names who already has theirs) and answers the row — `sent`, or `failed` again. `409` for a row already sent or being dispatched, `404` for an unknown one. Never repeats the decision, never writes history. **Instance owner only.**
+
 ## Roles
 
 ### GET /api/roles

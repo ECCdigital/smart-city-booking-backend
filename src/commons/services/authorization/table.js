@@ -368,6 +368,10 @@ const TABLE = {
     supervisionHistory: { any: "instanceOwner" },
     // `GET /instances/review-queue`: the active review queue.
     reviewQueue: { any: "instanceOwner" },
+    // `GET /instances/supervision/notifications` and `POST .../:id/retry`:
+    // the outbox of the supervision notices and sending one again.
+    supervisionNotifications: { any: "instanceOwner" },
+    supervisionNotificationRetry: { any: "instanceOwner" },
   },
 
   rule: {

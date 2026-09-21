@@ -16,4 +16,23 @@ function cancellationUrl(booking, tenantId) {
   return `${process.env.FRONTEND_URL}/booking/request-reject/${tenantId}?id=${booking.id}`;
 }
 
-module.exports = { bookingStatusUrl, cancellationUrl };
+/**
+ * The admin links of the supervision notices (glossary
+ * "Aufsichtsmitteilung"): `FRONTEND_URL` is the Admin UI. The tenant owner
+ * lands on the overview of their tenants, the instance owner on the
+ * instance's tenant list.
+ */
+function adminDashboardUrl() {
+  return `${process.env.FRONTEND_URL}/dashboard`;
+}
+
+function adminInstanceTenantsUrl() {
+  return `${process.env.FRONTEND_URL}/instance/mandanten`;
+}
+
+module.exports = {
+  bookingStatusUrl,
+  cancellationUrl,
+  adminDashboardUrl,
+  adminInstanceTenantsUrl,
+};
