@@ -366,6 +366,8 @@ const TABLE = {
     update: { any: "instanceOwner" },
     // `GET /instances/supervision/history`: the instance-wide history.
     supervisionHistory: { any: "instanceOwner" },
+    // `GET /instances/review-queue`: the active review queue.
+    reviewQueue: { any: "instanceOwner" },
   },
 
   rule: {

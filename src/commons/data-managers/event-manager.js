@@ -1,6 +1,9 @@
 const { Event } = require("../entities/event/event");
 const EventModel = require("./models/eventModel");
 const { ownCondition } = require("../services/authorization/reach");
+const {
+  REVIEW_STATUS,
+} = require("../services/supervision/supervision-constants");
 
 /**
  * Data Manager for Event objects.
@@ -118,6 +121,31 @@ class EventManager {
       "review.status": status ?? null,
     }).sort({ "review.submittedAt": 1, id: 1 });
     return rawEvents.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * The events of a set of tenants that wait for a decision (glossary
+   * "Aktive Prüfliste"), across tenants and whatever their dates, reduced
+   * to what a queue row reads - never the whole event.
+   *
+   * @param {string[]} tenantIds The tenants to read from
+   * @returns {Promise<Array<{id: string, tenantId: string, information: {name: string}, isPublic: boolean, review: Object}>>}
+   *   Plain rows, by `review.submittedAt` ascending, then by id
+   */
+  static async getPendingReviewOffers(tenantIds) {
+    return EventModel.find(
+      { tenantId: { $in: tenantIds }, "review.status": REVIEW_STATUS.PENDING },
+      {
+        _id: 0,
+        id: 1,
+        tenantId: 1,
+        "information.name": 1,
+        isPublic: 1,
+        review: 1,
+      },
+    )
+      .sort({ "review.submittedAt": 1, id: 1 })
+      .lean();
   }
 
   /**

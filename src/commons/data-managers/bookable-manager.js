@@ -9,6 +9,9 @@ const {
 const InstanceModel = require("./models/instanceModel");
 const TenantModel = require("./models/tenantModel");
 const { ownCondition } = require("../services/authorization/reach");
+const {
+  REVIEW_STATUS,
+} = require("../services/supervision/supervision-constants");
 
 /**
  * Data Manager for Bookable objects.
@@ -515,6 +518,24 @@ class BookableManager {
       "review.status": status ?? null,
     }).sort({ "review.submittedAt": 1, id: 1 });
     return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * The bookables of a set of tenants that wait for a decision
+   * (glossary "Aktive Prüfliste"), across tenants and reduced to what a
+   * queue row reads - never the whole bookable.
+   *
+   * @param {string[]} tenantIds The tenants to read from
+   * @returns {Promise<Array<{id: string, tenantId: string, title: string, type: string, isPublic: boolean, review: Object}>>}
+   *   Plain rows, by `review.submittedAt` ascending, then by id
+   */
+  static async getPendingReviewOffers(tenantIds) {
+    return BookableModel.find(
+      { tenantId: { $in: tenantIds }, "review.status": REVIEW_STATUS.PENDING },
+      { _id: 0, id: 1, tenantId: 1, title: 1, type: 1, isPublic: 1, review: 1 },
+    )
+      .sort({ "review.submittedAt": 1, id: 1 })
+      .lean();
   }
 
   /**

@@ -367,3 +367,46 @@
         description: Not authenticated
       "403":
         description: Not the instance owner
+
+/api/instances/review-queue:
+  get:
+    tags:
+      - Supervision
+    summary: The active review queue
+    description: |
+      Every offer that waits for a decision, across tenants and offer types
+      (glossary "Aktive Prüfliste"). The selection is exactly: the tenant is
+      `supervised` AND the offer's `review.status` is `pending`. Neither the
+      publication wish (`isPublic`) nor the date of an event is a filter, so
+      unlisted offers and past events are rows as well.
+
+      Sorted by `submittedAt` ascending (longest waiting first), then by
+      `offerType` and `offerId`. The queue is computed on read: a
+      resubmission moves the row to the back, a decision or a level change
+      away from `supervised` removes it, switching `isPublic` off does not.
+      `total` counts every row the filters match. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenantId
+        in: query
+        required: false
+        description: Only the rows of this tenant
+        schema:
+          type: string
+      - $ref: "#/components/parameters/SupervisionHistoryOfferType"
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+    responses:
+      "200":
+        description: One page of the queue.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewQueuePage"
+      "400":
+        description: "`invalid_offer_type`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
