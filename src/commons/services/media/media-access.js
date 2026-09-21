@@ -1,7 +1,20 @@
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
-const { isTenantPubliclyVisible } = require("../supervision/offer-gate");
+const EventManager = require("../../data-managers/event-manager");
+const { BookableManager } = require("../../data-managers/bookable-manager");
+const {
+  isTenantPubliclyVisible,
+  isOfferReachable,
+} = require("../supervision/offer-gate");
+const {
+  SUPERVISION_LEVELS,
+  effectiveLevelOf,
+} = require("../supervision/supervision-constants");
+const { MediaUsageService, USAGE_TYPE } = require("./media-usage");
+
+/** The usage sites that are offers (glossary "Angebot"). */
+const OFFER_USAGE = new Set([USAGE_TYPE.BOOKABLE, USAGE_TYPE.EVENT]);
 const { readsRecords, withinReach } = require("../authorization/reach");
 const {
   ForbiddenError,
@@ -114,10 +127,12 @@ async function assertBookingDocumentAccess(media, scope = {}) {
 }
 
 /**
- * A public medium follows the tenant gate (tenant supervision spec §5.2): a
- * blocked tenant has no public projection, so only its own people still read
- * its public media. Booking documents never come here - they follow the
- * booking, blocked tenant or not.
+ * A public medium follows the supervision (tenant supervision spec §5.2):
+ * a blocked tenant has no public projection, and under a supervised tenant
+ * a medium that only offers hold goes out with a reachable one of them -
+ * the missing publication wish alone never refuses it. The tenant's own
+ * people keep reading. Booking documents never come here: they follow the
+ * booking, whatever the tenant's level.
  *
  * @param {Object} media - The public medium.
  * @param {{reach?: string, userId?: string|null}} file - The reach of `media.file`.
@@ -126,7 +141,10 @@ async function assertBookingDocumentAccess(media, scope = {}) {
  */
 async function assertPublicMediaOfVisibleTenant(media, file) {
   const tenant = await TenantManager.getTenant(media.tenantId);
-  if (isTenantPubliclyVisible(tenant)) {
+  if (
+    isTenantPubliclyVisible(tenant) &&
+    (await hasReachableHolder(tenant, media))
+  ) {
     return;
   }
   const ownPeople =
@@ -136,6 +154,40 @@ async function assertPublicMediaOfVisibleTenant(media, file) {
   if (!ownPeople) {
     throw new NotFoundError("media_not_found", { mediaId: media.id });
   }
+}
+
+/**
+ * Whether the public may see a medium by what holds it. Only a supervised
+ * tenant asks: a medium that nothing but offers hold needs one of them to
+ * be reachable; one that anything else holds (the tenant, the hero), or
+ * nothing at all, is not an offer's to hide.
+ *
+ * @param {Object} tenant
+ * @param {Object} media
+ * @returns {Promise<boolean>}
+ */
+async function hasReachableHolder(tenant, media) {
+  if (effectiveLevelOf(tenant) !== SUPERVISION_LEVELS.SUPERVISED) {
+    return true;
+  }
+  const usage = await MediaUsageService.findUsage({
+    tenantId: media.tenantId,
+    mediaId: media.id,
+  });
+  const offerSites = usage.filter((site) => OFFER_USAGE.has(site.type));
+  if (offerSites.length === 0 || offerSites.length < usage.length) {
+    return true;
+  }
+  for (const site of offerSites) {
+    const offer =
+      site.type === USAGE_TYPE.EVENT
+        ? await EventManager.getEvent(site.id, media.tenantId)
+        : await BookableManager.getBookable(site.id, media.tenantId);
+    if (offer && isOfferReachable({ tenant, offer })) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

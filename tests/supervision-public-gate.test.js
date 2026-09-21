@@ -146,6 +146,16 @@ describe("supervision: the tenant gate on public delivery", function () {
     expect((await get(path, ADMIN)).status).to.equal(200);
   });
 
+  it("keeps the tags of a blocked tenant from a signed-in user outside the tenant", async function () {
+    h.bookables[FIXTURE_ID].tags = ["sauna"];
+    const path = `/api/${TENANT}/bookables/_meta/tags`;
+
+    expect((await get(path, CUSTOMER)).body).to.deep.equal(["sauna"]);
+    h.tenant.supervisionLevel = "blocked";
+    expect((await get(path, CUSTOMER)).body).to.deep.equal([]);
+    expect((await get(path, OWNER)).body).to.deep.equal(["sauna"]);
+  });
+
   it("leaves the existing-booking and instance paths as they were", async function () {
     const before = {};
     for (const path of UNGATED) {

@@ -367,7 +367,7 @@ describe("supervision routes", function () {
         supervisionLevel: "supervised",
         supervisionChangedAt: changedAt,
       }).exportPublic();
-      expect(publicDto.supervisionLevel).to.equal("supervised");
+      expect(publicDto).to.not.have.property("supervisionLevel");
       expect(publicDto).to.not.have.property("supervisionChangedAt");
     });
 

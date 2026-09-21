@@ -21,6 +21,7 @@ const {
 } = require("../../../commons/services/supervision/offer-gate");
 const {
   assertOfferReachable,
+  offersForSignedInAggregate,
 } = require("../../../commons/services/supervision/public-offer-gate");
 
 const logger = bunyan.createLogger({
@@ -257,7 +258,11 @@ class EventController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const events = await EventManager.getEvents(tenant);
+      const events = await offersForSignedInAggregate(
+        request.principal,
+        tenant,
+        await EventManager.getEvents(tenant),
+      );
       const tags = events
         .map((e) => e.information?.tags || [])
         .flat()

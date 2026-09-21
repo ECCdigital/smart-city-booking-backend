@@ -148,9 +148,9 @@
       to. With `publicTenants=true` the list switches to the public tenant
       export, which does not carry legal documents at all, but `accessApps`:
       the customer-service contact of every active access application that
-      has one, and nothing else of the application. Both exports carry the
-      supervision level (`supervisionLevel`), the full one also
-      `supervisionChangedAt`; `?supervisionLevel=` narrows the list to one
+      has one, and nothing else of the application. The full export carries the
+      supervision level (`supervisionLevel`) and `supervisionChangedAt`, the
+      public one neither; `?supervisionLevel=` narrows the list to one
       level (a tenant without a stored level counts as `free`).
     security:
       - bearerAuth: []

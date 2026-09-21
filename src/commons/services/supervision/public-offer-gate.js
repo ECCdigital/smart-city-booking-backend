@@ -14,6 +14,7 @@
 
 const { BookableManager } = require("../../data-managers/bookable-manager");
 const EventManager = require("../../data-managers/event-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const { NotFoundError } = require("../../../errors/BaseError");
 const { REACH } = require("../authorization/policy");
@@ -153,7 +154,38 @@ async function reachableBookableIds(tenantId) {
   return new Set(reachable.map((bookable) => bookable.id));
 }
 
+/** Whether the principal manages anything in the tenant of the request. */
+function managesTenant(principal) {
+  return Boolean(
+    principal?.isInstanceOwner ||
+      principal?.isTenantOwner ||
+      Object.values(principal?.grants || {}).some((group) =>
+        Object.values(group).some(Boolean),
+      ),
+  );
+}
+
+/**
+ * The offers an aggregate for any signed-in user (tags, counters) is
+ * built from (spec §5.2: no leak over tags or counters): the tenant's own
+ * people see every offer, anyone else what a public list would show -
+ * nothing of a blocked tenant.
+ *
+ * @param {Object} principal The principal of the request
+ * @param {string} tenantId
+ * @param {Object[]} offers Bookables or events of the tenant
+ * @returns {Promise<Object[]>}
+ */
+async function offersForSignedInAggregate(principal, tenantId, offers) {
+  if (managesTenant(principal)) {
+    return offers;
+  }
+  const tenant = await TenantManager.getTenant(tenantId);
+  return listableOffers(tenant, offers);
+}
+
 module.exports = {
+  offersForSignedInAggregate,
   reachableBookableIds,
   assertBookableReachable,
   assertOfferReachable,

@@ -25,6 +25,7 @@ const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const ReviewService = require("../../../commons/services/supervision/review-service");
 const {
   assertOfferReachable,
+  offersForSignedInAggregate,
   listableOffers,
   reachableOffers,
   withoutTicketsOfUnreachableEvents,
@@ -586,7 +587,11 @@ class BookableController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const bookables = await BookableManager.getBookables(tenant);
+      const bookables = await offersForSignedInAggregate(
+        request.principal,
+        tenant,
+        await BookableManager.getBookables(tenant),
+      );
       const tags = bookables
         .map((b) => b.tags)
         .flat()

@@ -5,6 +5,12 @@ const BookingManager = require("../src/commons/data-managers/booking-manager");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
+const {
+  MediaUsageService,
+} = require("../src/commons/services/media/media-usage");
+const {
   assertMediaFileAccess,
 } = require("../src/commons/services/media/media-access");
 
@@ -51,7 +57,7 @@ describe("supervision: the file of a medium under a blocked tenant", function ()
   }
 
   it("serves a public medium of a tenant that is not blocked", async function () {
-    getTenant.resolves({ id: TENANT, supervisionLevel: "supervised" });
+    getTenant.resolves({ id: TENANT, supervisionLevel: "free" });
 
     expect(await outcome(medium(), { file: anonymous })).to.equal("served");
   });
@@ -84,5 +90,61 @@ describe("supervision: the file of a medium under a blocked tenant", function ()
 
     expect(result).to.equal("served");
     expect(getTenant.called).to.equal(false);
+  });
+});
+
+describe("supervision: a public medium under a supervised tenant", function () {
+  const holder = (review, isPublic = false) => ({
+    id: "b1",
+    tenantId: TENANT,
+    isPublic,
+    review: { status: review },
+  });
+
+  function world({ usage, bookable }) {
+    sinon
+      .stub(TenantManager, "getTenant")
+      .resolves({ id: TENANT, supervisionLevel: "supervised" });
+    sinon
+      .stub(MembershipManager, "getMembershipByTenantAndUserID")
+      .resolves(null);
+    sinon.stub(MediaUsageService, "findUsage").resolves(usage);
+    sinon.stub(BookableManager, "getBookable").resolves(bookable);
+  }
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  const served = (scopes) =>
+    assertMediaFileAccess(medium(), scopes).then(
+      () => true,
+      (err) => `${err.statusCode} ${err.code}`,
+    );
+
+  const bookableSite = [{ type: "bookable", id: "b1", title: "Hall" }];
+
+  it("hides a medium that only an unapproved offer holds", async function () {
+    world({ usage: bookableSite, bookable: holder("pending", true) });
+
+    expect(await served({ file: anonymous })).to.equal("404 media_not_found");
+  });
+
+  it("serves it with an approved offer, publication wish or not", async function () {
+    world({ usage: bookableSite, bookable: holder("approved", false) });
+
+    expect(await served({ file: anonymous })).to.equal(true);
+  });
+
+  it("serves a medium that something besides offers holds, or nothing", async function () {
+    world({
+      usage: [...bookableSite, { type: "tenant", id: TENANT, title: "T" }],
+      bookable: holder(null),
+    });
+    expect(await served({ file: anonymous })).to.equal(true);
+
+    sinon.restore();
+    world({ usage: [], bookable: null });
+    expect(await served({ file: anonymous })).to.equal(true);
   });
 });
