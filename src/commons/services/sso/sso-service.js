@@ -5,6 +5,8 @@ const { RoleManager } = require("../../data-managers/role-manager");
 const { User } = require("../../entities/user/user");
 const MembershipManager = require("../../data-managers/membership-manager");
 
+const SSO_PROVIDER = "keycloak";
+
 class SsoService {
   static async handleLogin(token) {
     const instance = await InstanceManger.getInstance();
@@ -24,6 +26,8 @@ class SsoService {
     if (user.isSuspended) {
       throw { message: "User account is suspended", status: 403 };
     }
+
+    await SsoService.recordVerificationProof(user, kcResponse);
 
     const kcRoles = extractRoles(kcResponse.resource_access);
 
@@ -67,13 +71,44 @@ class SsoService {
     });
 
     newUser.authType = "keycloak";
+    // The account is active, but this flag is no verification proof (spec
+    // §6.3); the proof is the provider's claim below.
     newUser.isVerified = true;
+    if (SsoService.hasConfirmedEmail(kcResponse)) {
+      newUser.idpEmailVerifiedAt = new Date();
+      newUser.idpEmailVerifiedProvider = SSO_PROVIDER;
+    }
 
     if (app.roleMapping?.active) {
       await SsoService.mapRoles(newUser, kcRoles, app);
     }
 
     await UserManager.signupUser(newUser);
+  }
+
+  /**
+   * Whether the identity provider confirmed the e-mail of the token's holder
+   * (the OIDC `email_verified` claim in Keycloak's introspection answer).
+   */
+  static hasConfirmedEmail(claims) {
+    return claims?.email_verified === true;
+  }
+
+  /**
+   * Persists the provider's confirmation as the account's verification proof
+   * on a login that carries it. The first proof stands; an account without
+   * the claim stays without proof, whatever its historic `isVerified` says.
+   */
+  static async recordVerificationProof(user, claims) {
+    if (user.idpEmailVerifiedAt || !SsoService.hasConfirmedEmail(claims)) {
+      return;
+    }
+    const proof = {
+      idpEmailVerifiedAt: new Date(),
+      idpEmailVerifiedProvider: SSO_PROVIDER,
+    };
+    await UserManager.updateUser({ id: user.id, ...proof }, false);
+    Object.assign(user, proof);
   }
 
   static async verifyToken(userToken, app) {

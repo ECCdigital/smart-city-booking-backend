@@ -120,6 +120,9 @@ class User {
       created: this.created,
       isVerified: this.isVerified,
       isSuspended: this.isSuspended,
+      authType: this.authType,
+      idpEmailVerifiedAt: this.idpEmailVerifiedAt,
+      idpEmailVerifiedProvider: this.idpEmailVerifiedProvider,
     };
   }
 
