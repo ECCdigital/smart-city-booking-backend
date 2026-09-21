@@ -29,6 +29,9 @@
  * cannot come about. The order relies on a review status never returning
  * to `null` once set (see `review-transitions.js`).
  *
+ * A tenant without `id`, or an offer without `id`/`tenantId`, has no subject
+ * a row could name: it is skipped and reported, not migrated.
+ *
  * `down` is a no-op on purpose: taking the levels or the `pending` back
  * would drop decisions made since, and the history is never deleted.
  */
@@ -54,6 +57,25 @@ function chunks(items, size) {
   return result;
 }
 
+/**
+ * The documents a history row can name. One without its id (or tenant) has
+ * no subject to record; it is left as it is and reported, rather than
+ * failing the run on every start.
+ */
+function identified(documents, keys, label) {
+  const usable = documents.filter((document) =>
+    keys.every((key) => typeof document[key] === "string" && document[key]),
+  );
+
+  if (usable.length < documents.length) {
+    console.warn(
+      `Tenant supervision migration: skipped ${documents.length - usable.length} ${label} document(s) without ${keys.join("/")}`,
+    );
+  }
+
+  return usable;
+}
+
 function isDuplicateKeyOnly(error) {
   const writeErrors = [].concat(error?.writeErrors ?? []);
   if (writeErrors.length > 0) {
@@ -65,7 +87,7 @@ function isDuplicateKeyOnly(error) {
   return error?.code === DUPLICATE_KEY;
 }
 
-function migrationRow(row, now) {
+function migrationRow(subject, now) {
   return {
     id: uuidv4(),
     offerType: null,
@@ -75,7 +97,7 @@ function migrationRow(row, now) {
     from: null,
     reason: null,
     origin: HISTORY_ORIGINS.MIGRATION,
-    ...row,
+    ...subject,
   };
 }
 
@@ -98,9 +120,11 @@ async function migrateTenants(mongoose, now) {
   const Tenant = mongoose.model("Tenant");
   const SupervisionHistory = mongoose.model("SupervisionHistory");
 
-  const tenants = await Tenant.find({ supervisionLevel: null })
-    .select("id")
-    .lean();
+  const tenants = identified(
+    await Tenant.find({ supervisionLevel: null }).select("id").lean(),
+    ["id"],
+    "tenant",
+  );
 
   for (const batch of chunks(tenants, BATCH_SIZE)) {
     await insertHistoryOnce(
@@ -141,9 +165,11 @@ async function migrateOffers(mongoose, { model, offerType }, now) {
   const Offer = mongoose.model(model);
   const SupervisionHistory = mongoose.model("SupervisionHistory");
 
-  const offers = await Offer.find(UNREVIEWED_PUBLIC)
-    .select("id tenantId")
-    .lean();
+  const offers = identified(
+    await Offer.find(UNREVIEWED_PUBLIC).select("id tenantId").lean(),
+    ["id", "tenantId"],
+    offerType,
+  );
 
   for (const batch of chunks(offers, BATCH_SIZE)) {
     await insertHistoryOnce(
@@ -224,8 +250,8 @@ module.exports = {
 
     await migrateTenants(mongoose, now);
 
-    for (const offers of OFFER_MODELS) {
-      await migrateOffers(mongoose, offers, now);
+    for (const offerModel of OFFER_MODELS) {
+      await migrateOffers(mongoose, offerModel, now);
     }
   },
 

@@ -27,10 +27,18 @@ The history rows are system rows (`actor.type: "system"`,
 
 ## Consequence for the operator
 
-All tenants start `free`, so the public projection is unchanged right after
-the upgrade. The waiting offers show up in the active review queue; they only
-matter once a tenant is set to `supervised` - then its stock offers are hidden
-until approved. Review the queue of a tenant **before** supervising it.
+A stock tenant starts `free`, so its public projection is unchanged right
+after the upgrade, and its waiting offers are not in the active review queue
+(the queue lists supervised tenants only). They enter it once the tenant is
+set to `supervised` - from then on its stock offers are hidden until approved,
+so plan the review together with that switch.
+
+A tenant that is `supervised` already when the migration runs gets no stock
+approval either: its public offers without a review status wait as `pending`
+and are hidden at once, without a mail.
+
+An offer without `id` or `tenantId`, or a tenant without `id`, cannot be named
+in the history; it is skipped and reported on the console.
 
 ## Rerun and abort
 

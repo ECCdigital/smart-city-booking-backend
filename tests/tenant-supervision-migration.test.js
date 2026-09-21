@@ -421,6 +421,12 @@ describe("21-09-2026-tenant-supervision-initial-state migration", function () {
       ],
       ["after the bookable reviews", "Bookable", "bulkWrite", { after: true }],
       [
+        "before the event history",
+        "SupervisionHistory",
+        "insertMany",
+        { call: 3 },
+      ],
+      [
         "between the event history and the event reviews",
         "Event",
         "bulkWrite",
@@ -529,6 +535,76 @@ describe("21-09-2026-tenant-supervision-initial-state migration", function () {
       expect(byId(mongoose, "Tenant", "t-old").supervisionLevel).to.equal(
         undefined,
       );
+    });
+  });
+
+  describe("a stock larger than one batch", function () {
+    function largeStock() {
+      const data = fixture();
+      data.Bookable = Array.from({ length: 1201 }, (_, n) => ({
+        id: `b-${n}`,
+        tenantId: "t-old",
+        isPublic: true,
+      }));
+      data.Event = [];
+      return data;
+    }
+
+    it("resumes after an abort between two batches without resetting the first", async function () {
+      const mongoose = world(largeStock());
+      const Bookable = mongoose.model("Bookable");
+      const original = Bookable.bulkWrite.bind(Bookable);
+      const stub = sinon.stub(Bookable, "bulkWrite");
+      stub.onFirstCall().callsFake(original);
+      stub.onSecondCall().rejects(new Error("connection lost"));
+
+      await migration.up(mongoose).catch(() => {});
+
+      const waiting = () =>
+        Bookable.documents.filter((b) => b.review?.status === "pending");
+      expect(waiting()).to.have.length(500);
+
+      sinon.restore();
+      clock = sinon.useFakeTimers({
+        now: new Date(SECOND_RUN),
+        toFake: ["Date"],
+      });
+      await migration.up(mongoose);
+
+      expect(waiting()).to.have.length(1201);
+      const times = waiting().map((b) => b.review.submittedAt);
+      // Two batches carry the row of the first run, the third the rerun's.
+      expect(times.filter((time) => time === FIRST_RUN)).to.have.length(1000);
+      expect(times.filter((time) => time === SECOND_RUN)).to.have.length(201);
+
+      const keys = history(mongoose)
+        .filter((row) => row.offerType === "bookable")
+        .map((row) => row.dedupeKey);
+      expect(new Set(keys).size).to.equal(1201);
+      expect(keys).to.have.length(1201);
+    });
+  });
+
+  describe("a document the history cannot name", function () {
+    it("is skipped and reported instead of failing the run", async function () {
+      const data = fixture();
+      data.Bookable.push({ id: "b-orphan", isPublic: true });
+      data.Tenant.push({ name: "No id" });
+      const mongoose = world(data);
+      const warn = sinon.stub(console, "warn");
+
+      await migration.up(mongoose);
+
+      expect(byId(mongoose, "Bookable", "b-orphan").review).to.equal(undefined);
+      expect(
+        mongoose.model("Tenant").documents.find((t) => t.name === "No id")
+          .supervisionLevel,
+      ).to.equal(undefined);
+      expect(history(mongoose)).to.have.length(6);
+      expect(warn.callCount).to.equal(2);
+      expect(
+        byId(mongoose, "Bookable", "b-public-missing").review.status,
+      ).to.equal("pending");
     });
   });
 

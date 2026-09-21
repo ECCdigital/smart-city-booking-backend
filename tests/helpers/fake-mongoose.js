@@ -247,7 +247,8 @@ function createModel(name, documents, indexes, uniqueFields = []) {
             documents.some((document) => document[field] === row[field]),
         );
 
-        if (duplicate) writeErrors.push({ index, code: 11000 });
+        // The shape mongoose hands on: the driver's error sits under `err`.
+        if (duplicate) writeErrors.push({ index, err: { code: 11000 } });
         else documents.push(clone(row));
       });
 
