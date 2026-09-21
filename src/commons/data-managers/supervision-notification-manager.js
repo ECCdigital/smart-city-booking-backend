@@ -4,8 +4,8 @@ const {
   NOTIFICATION_STATUS,
 } = require("../services/supervision/supervision-constants");
 
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
+const { pageWindow } = require("../services/supervision/page-window");
+
 /** A row as it is answered: without the store's own fields. */
 const ROW_FIELDS = { _id: 0, __v: 0 };
 
@@ -143,24 +143,20 @@ class SupervisionNotificationManager {
    * @param {number} [options.pageSize] Default 50, at most 200
    * @returns {Promise<{items: Object[], total: number, page: number, pageSize: number}>}
    */
-  static async list({ status, page = 1, pageSize = DEFAULT_PAGE_SIZE } = {}) {
-    const safePage = Math.max(1, Number(page) || 1);
-    const safePageSize = Math.min(
-      MAX_PAGE_SIZE,
-      Math.max(1, Number(pageSize) || DEFAULT_PAGE_SIZE),
-    );
+  static async list({ status, page, pageSize } = {}) {
+    const window = pageWindow({ page, pageSize });
     const filter = status ? { status } : {};
 
     const [items, total] = await Promise.all([
       SupervisionNotificationModel.find(filter, ROW_FIELDS)
         .sort({ createdAt: -1, id: 1 })
-        .skip((safePage - 1) * safePageSize)
-        .limit(safePageSize)
+        .skip(window.skip)
+        .limit(window.pageSize)
         .lean(),
       SupervisionNotificationModel.countDocuments(filter),
     ]);
 
-    return { items, total, page: safePage, pageSize: safePageSize };
+    return { items, total, page: window.page, pageSize: window.pageSize };
   }
 }
 

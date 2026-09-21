@@ -1,8 +1,11 @@
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
+const TenantManager = require("../../data-managers/tenant-manager");
+const { isTenantPubliclyVisible } = require("../supervision/offer-gate");
 const { readsRecords, withinReach } = require("../authorization/reach");
 const {
   ForbiddenError,
+  NotFoundError,
   UnauthorizedError,
 } = require("../../../errors/BaseError");
 
@@ -111,6 +114,31 @@ async function assertBookingDocumentAccess(media, scope = {}) {
 }
 
 /**
+ * A public medium follows the tenant gate (tenant supervision spec §5.2): a
+ * blocked tenant has no public projection, so only its own people still read
+ * its public media. Booking documents never come here - they follow the
+ * booking, blocked tenant or not.
+ *
+ * @param {Object} media - The public medium.
+ * @param {{reach?: string, userId?: string|null}} file - The reach of `media.file`.
+ * @returns {Promise<void>}
+ * @throws {NotFoundError} `media_not_found`, naming no reason
+ */
+async function assertPublicMediaOfVisibleTenant(media, file) {
+  const tenant = await TenantManager.getTenant(media.tenantId);
+  if (isTenantPubliclyVisible(tenant)) {
+    return;
+  }
+  const ownPeople =
+    file.userId &&
+    (withinReach(media, "uploadedBy", file) ||
+      (await hasActiveMembership(file.userId, media.tenantId)));
+  if (!ownPeople) {
+    throw new NotFoundError("media_not_found", { mediaId: media.id });
+  }
+}
+
+/**
  * Read access to the file of a tenant medium: `public` media are readable
  * anonymously, an `intern` one for whoever the reach covers or holds an
  * active membership in the owning tenant. Booking documents follow the
@@ -131,7 +159,7 @@ async function assertMediaFileAccess(media, { file = {}, document = {} } = {}) {
   }
 
   if (media.isPublic()) {
-    return;
+    return await assertPublicMediaOfVisibleTenant(media, file);
   }
 
   if (!file.userId) {

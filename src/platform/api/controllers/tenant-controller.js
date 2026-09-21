@@ -35,7 +35,6 @@ const {
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
 const {
   BaseError,
-  BadRequestError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
@@ -51,7 +50,7 @@ const {
 const Formatters = require("../../../commons/utilities/formatters");
 const TenantCreationService = require("../../../commons/services/tenant/tenant-creation-service");
 const {
-  SUPERVISION_LEVEL_VALUES,
+  assertSupervisionLevel,
 } = require("../../../commons/services/supervision/supervision-constants");
 
 const PDF_TEMPLATE_FIELDS = {
@@ -154,17 +153,8 @@ class TenantController {
     try {
       const publicTenants = request.query.publicTenants === "true";
       const supervisionLevel = request.query.supervisionLevel || undefined;
-      if (
-        supervisionLevel !== undefined &&
-        !SUPERVISION_LEVEL_VALUES.includes(supervisionLevel)
-      ) {
-        return ApiResponse.fail(
-          response,
-          new BadRequestError("invalid_supervision_level", {
-            level: supervisionLevel,
-            allowed: SUPERVISION_LEVEL_VALUES,
-          }),
-        );
+      if (supervisionLevel !== undefined) {
+        assertSupervisionLevel(supervisionLevel);
       }
 
       const tenants = await TenantManager.getTenants(scopeOf(request), {
@@ -184,6 +174,9 @@ class TenantController {
           ),
         );
     } catch (error) {
+      if (error instanceof BaseError) {
+        return ApiResponse.fail(response, error);
+      }
       logger.error(error);
       response.sendStatus(500);
     }

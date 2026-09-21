@@ -227,7 +227,6 @@ router.get(
 router.get(
   "/bookings",
   publicRoute("booking", "list"),
-  publicTenantGate(),
   BookingController.getBookings,
 );
 router.put(
@@ -506,7 +505,6 @@ router.delete(
 router.get(
   "/files/get",
   publicRoute("media", "file"),
-  publicTenantGate(),
   FileController.getTenantFile,
 );
 

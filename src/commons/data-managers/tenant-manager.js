@@ -15,10 +15,9 @@ const {
 const { publicTenantCondition } = require("../services/supervision/offer-gate");
 const {
   SUPERVISION_FIELDS,
+  assertSupervisionLevel,
   SUPERVISION_LEVELS,
-  SUPERVISION_LEVEL_VALUES,
 } = require("../services/supervision/supervision-constants");
-const { BadRequestError } = require("../../errors/BaseError");
 
 /**
  * The per-year document counters at the tenant. They belong to the number
@@ -90,12 +89,7 @@ class TenantManager {
    *   when no tenant at `from` matched
    */
   static async updateSupervisionLevel({ tenantId, from, to, changedAt }) {
-    if (!SUPERVISION_LEVEL_VALUES.includes(to)) {
-      throw new BadRequestError("invalid_supervision_level", {
-        level: to,
-        allowed: SUPERVISION_LEVEL_VALUES,
-      });
-    }
+    assertSupervisionLevel(to);
     // A tenant from before the supervision has no stored level; `from:
     // "free"` has to match it as well.
     const currentLevel =

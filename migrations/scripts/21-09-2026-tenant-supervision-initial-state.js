@@ -36,6 +36,7 @@
  * would drop decisions made since, and the history is never deleted.
  */
 
+const bunyan = require("bunyan");
 const { v4: uuidv4 } = require("uuid");
 const {
   SUPERVISION_LEVELS,
@@ -45,6 +46,11 @@ const {
   HISTORY_ACTOR_TYPES,
   HISTORY_ORIGINS,
 } = require("../../src/commons/services/supervision/supervision-constants");
+
+const logger = bunyan.createLogger({
+  name: "21-09-2026-tenant-supervision-initial-state.js",
+  level: process.env.LOG_LEVEL,
+});
 
 const BATCH_SIZE = 500;
 const DUPLICATE_KEY = 11000;
@@ -68,8 +74,9 @@ function identified(documents, keys, label) {
   );
 
   if (usable.length < documents.length) {
-    console.warn(
-      `Tenant supervision migration: skipped ${documents.length - usable.length} ${label} document(s) without ${keys.join("/")}`,
+    logger.warn(
+      { skipped: documents.length - usable.length, label, keys },
+      "Tenant supervision migration: skipped documents without their keys",
     );
   }
 

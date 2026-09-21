@@ -14,6 +14,7 @@ const {
   bookable,
   TENANT,
   ADMIN,
+  CUSTOMER,
   OWNER,
   ROLE_HOLDER,
 } = require("./helpers/booking-lifecycle-harness");
@@ -135,6 +136,14 @@ describe("supervision: the tenant gate on public delivery", function () {
       }
     }
     expect(wrong).to.deep.equal([]);
+  });
+
+  it("does not open the public booking projection of a blocked tenant by signing in", async function () {
+    h.tenant.supervisionLevel = "blocked";
+    const path = `/api/${TENANT}/bookings?public=true`;
+
+    expect((await get(path, CUSTOMER)).status).to.equal(404);
+    expect((await get(path, ADMIN)).status).to.equal(200);
   });
 
   it("leaves the existing-booking and instance paths as they were", async function () {

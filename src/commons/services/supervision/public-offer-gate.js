@@ -134,7 +134,27 @@ function reachableOffers(tenant, offers) {
   return offers.filter((offer) => isOfferReachable({ tenant, offer }));
 }
 
+/**
+ * The ids of the bookables of a tenant the public can reach: what an
+ * anonymized aggregate over the whole tenant (the public booking list) may
+ * name. Tickets follow their event.
+ *
+ * @param {string} tenantId
+ * @returns {Promise<Set<string>>}
+ * @throws {NotFoundError} `tenant_not_found` for a blocked or unknown tenant
+ */
+async function reachableBookableIds(tenantId) {
+  const tenant = await assertTenantPubliclyVisible(tenantId);
+  const bookables = await BookableManager.getBookables(tenantId);
+  const reachable = await withoutTicketsOfUnreachableEvents(
+    tenant,
+    reachableOffers(tenant, bookables),
+  );
+  return new Set(reachable.map((bookable) => bookable.id));
+}
+
 module.exports = {
+  reachableBookableIds,
   assertBookableReachable,
   assertOfferReachable,
   publicBookableGate,

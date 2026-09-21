@@ -15,9 +15,9 @@ const {
 } = require("../services/hero-layout/hero-layout-schema");
 const {
   SUPERVISION_LEVELS,
-  SUPERVISION_LEVEL_VALUES,
+  assertSupervisionLevel,
 } = require("../services/supervision/supervision-constants");
-const { NotFoundError, BadRequestError } = require("../../errors/BaseError");
+const { NotFoundError } = require("../../errors/BaseError");
 
 const DEFAULT_BRANDING = Object.freeze({
   active: false,
@@ -90,14 +90,9 @@ class InstanceManager {
     // The Startstufe is one of the three levels or not named at all; an
     // unknown value is refused before anything is read or written.
     const initialLevel = synced.tenantInitialSupervisionLevel;
-    if (
-      initialLevel !== undefined &&
-      !SUPERVISION_LEVEL_VALUES.includes(initialLevel)
-    ) {
-      throw new BadRequestError("invalid_supervision_level", {
+    if (initialLevel !== undefined) {
+      assertSupervisionLevel(initialLevel, {
         field: "tenantInitialSupervisionLevel",
-        level: initialLevel,
-        allowed: SUPERVISION_LEVEL_VALUES,
       });
     }
 

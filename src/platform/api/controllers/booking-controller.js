@@ -13,6 +13,7 @@ const {
   issue: issueDocument,
 } = require("../../../commons/services/documents/document-issuance");
 const {
+  BaseError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
@@ -38,6 +39,9 @@ const {
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
 const mailService = require("../../../commons/mail-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  reachableBookableIds,
+} = require("../../../commons/services/supervision/public-offer-gate");
 const {
   reachableOffers,
 } = require("../../../commons/services/supervision/public-offer-gate");
@@ -144,7 +148,16 @@ class BookingController {
       const user = request.user;
 
       if (request.query.public === "true") {
-        const bookings = await BookingManager.getTenantBookings(tenant);
+        let bookings = await BookingManager.getTenantBookings(tenant);
+        // The projection is an aggregate over the tenant's offers: it names
+        // only what the public can reach, and signing in opens nothing
+        // (tenant supervision spec §5.2). Management (`any`) sees it all.
+        if (request.reach !== "any") {
+          const reachableIds = await reachableBookableIds(tenant);
+          bookings = bookings.filter((b) =>
+            (b.bookableIds || []).every((id) => reachableIds.has(id)),
+          );
+        }
         const anonymizedBookings = bookings.map((b) => {
           return BookingController.anonymizeBooking(b);
         });
@@ -176,6 +189,9 @@ class BookingController {
       );
       response.status(200).send(allowedBookings);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("Could not get bookings");
     }

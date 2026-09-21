@@ -26,6 +26,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const { RoleManager } = require("../src/commons/data-managers/role-manager");
@@ -182,6 +183,12 @@ describe("tenant controllers on the reach", function () {
       sinon
         .stub(BookingManager, "getTenantBookings")
         .resolves([{ id: "b1", tenantId: "t1", name: "Erika", timeBegin: 1 }]);
+      // The projection names only what the public can reach (supervision
+      // spec §5.2): a free tenant lets every offer out.
+      sinon
+        .stub(TenantManager, "getTenant")
+        .resolves({ id: "t1", supervisionLevel: "free" });
+      sinon.stub(BookableManager, "getBookables").resolves([]);
       const res = response();
       await BookingController.getBookings(
         request({

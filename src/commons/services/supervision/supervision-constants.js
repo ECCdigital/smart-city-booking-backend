@@ -5,6 +5,8 @@
  */
 
 /** The supervision level of a tenant (glossary "Aufsichtsstufe"). */
+const { BadRequestError } = require("../../../errors/BaseError");
+
 const SUPERVISION_LEVELS = Object.freeze({
   FREE: "free",
   SUPERVISED: "supervised",
@@ -87,8 +89,29 @@ function effectiveLevelOf(tenant) {
   return tenant?.supervisionLevel ?? SUPERVISION_LEVELS.FREE;
 }
 
+/**
+ * The one check of a supervision level that comes from outside.
+ *
+ * @param {*} level
+ * @param {Object} [params] What the error names besides the level
+ * @returns {string} The level
+ * @throws {BadRequestError} `invalid_supervision_level`
+ */
+function assertSupervisionLevel(level, params = {}) {
+  const allowed = Object.values(SUPERVISION_LEVELS);
+  if (!allowed.includes(level)) {
+    throw new BadRequestError("invalid_supervision_level", {
+      ...params,
+      level,
+      allowed,
+    });
+  }
+  return level;
+}
+
 module.exports = {
   SUPERVISION_FIELDS,
+  assertSupervisionLevel,
   effectiveLevelOf,
   SUPERVISION_LEVELS,
   SUPERVISION_LEVEL_VALUES: values(SUPERVISION_LEVELS),

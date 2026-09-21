@@ -10,6 +10,7 @@ const {
 const BookingManager = require("../src/commons/data-managers/booking-manager");
 const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const MediaManager = require("../src/commons/data-managers/media-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const MediaService = require("../src/commons/services/media/media-service");
 const {
   MediaUsageService,
@@ -235,6 +236,10 @@ describe("MediaControllerV2", function () {
 
   beforeEach(function () {
     sandbox = sinon.createSandbox();
+    // A public medium asks the tenant gate: a free tenant lets it out.
+    sandbox
+      .stub(TenantManager, "getTenant")
+      .resolves({ id: "tenant", supervisionLevel: "free" });
 
     provider = {
       name: "nextcloud",

@@ -37,11 +37,16 @@ async function assertTenantPubliclyVisible(tenantId) {
  * A plain (non-async) function on purpose: it runs on the plain express
  * routers as on the async ones, and passes its error to `next` itself.
  *
+ * @param {Object} [options]
+ * @param {string[]} [options.exemptReaches] The reaches the gate lets
+ *   through unasked. A route whose answer is a public projection for the
+ *   signed-in too (`own: "signedIn"`) exempts `any` only: signing in does
+ *   not open a blocked tenant.
  * @returns {import("express").RequestHandler}
  */
-function publicTenantGate() {
+function publicTenantGate({ exemptReaches = [REACH.OWN, REACH.ANY] } = {}) {
   return (req, res, next) => {
-    if (req.reach !== REACH.PUBLIC) {
+    if (exemptReaches.includes(req.reach)) {
       return next();
     }
     assertTenantPubliclyVisible(req.params?.tenant)

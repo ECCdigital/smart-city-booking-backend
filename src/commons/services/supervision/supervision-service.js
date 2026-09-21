@@ -11,6 +11,7 @@ const SupervisionHistoryManager = require("../../data-managers/supervision-histo
 const SupervisionNotificationService = require("./supervision-notification-service");
 const {
   SUPERVISION_LEVELS,
+  assertSupervisionLevel,
   effectiveLevelOf,
   SUPERVISION_LEVEL_VALUES,
   REVIEW_STATUS,
@@ -21,11 +22,7 @@ const {
 } = require("./supervision-constants");
 const { normalizeReason } = require("./reason");
 const ReviewService = require("./review-service");
-const {
-  BadRequestError,
-  NotFoundError,
-  ConflictError,
-} = require("../../../errors/BaseError");
+const { NotFoundError, ConflictError } = require("../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
   name: "supervision-service.js",
@@ -61,12 +58,7 @@ class SupervisionService {
     actorUserId,
     now = new Date(),
   }) {
-    if (!SUPERVISION_LEVEL_VALUES.includes(level)) {
-      throw new BadRequestError("invalid_supervision_level", {
-        level,
-        allowed: SUPERVISION_LEVEL_VALUES,
-      });
-    }
+    assertSupervisionLevel(level);
     const storedReason = normalizeReason(reason, "invalid_supervision_reason");
 
     const tenant = await TenantManager.getTenant(tenantId);

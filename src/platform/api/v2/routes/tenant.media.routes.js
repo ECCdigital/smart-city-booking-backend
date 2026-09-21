@@ -3,9 +3,6 @@ const {
   authorize,
   publicRoute,
 } = require("../../../../commons/services/authorization");
-const {
-  publicTenantGate,
-} = require("../../../../commons/services/supervision/public-tenant-gate");
 const MediaControllerV2 = require("../controllers/media.controller");
 
 const router = asyncRouter();
@@ -33,7 +30,6 @@ router.delete(
 router.get(
   "/:id/file",
   publicRoute("media", "file"),
-  publicTenantGate(),
   MediaControllerV2.getMediaFile,
 );
 router.get(

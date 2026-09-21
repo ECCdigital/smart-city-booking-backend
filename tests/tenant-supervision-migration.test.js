@@ -591,7 +591,7 @@ describe("21-09-2026-tenant-supervision-initial-state migration", function () {
       data.Bookable.push({ id: "b-orphan", isPublic: true });
       data.Tenant.push({ name: "No id" });
       const mongoose = world(data);
-      const warn = sinon.stub(console, "warn");
+      const warn = sinon.stub(require("bunyan").prototype, "warn");
 
       await migration.up(mongoose);
 
