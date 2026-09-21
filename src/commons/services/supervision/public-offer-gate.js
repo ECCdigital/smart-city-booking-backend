@@ -1,16 +1,20 @@
 /**
- * The offer gate at the HTTP edge (tenant supervision spec §5.1, §5.2),
- * for bookables: the detail-type public delivery of one bookable - its
- * detail, prices, opening hours, availability, block periods, occupancy,
- * the permission pre-check of its checkout - answers 404 unless the
- * bookable is reachable. It includes the tenant gate, so a route carries
- * this one instead of `publicTenantGate()`, after its marker.
+ * The offer gate at the HTTP edge (tenant supervision spec §5.1, §5.2):
+ * the detail-type public delivery of one bookable - its detail, prices,
+ * opening hours, availability, block periods, occupancy, the permission
+ * pre-check of its checkout - answers 404 unless the bookable is
+ * reachable, and a ticket unless its event is reachable too. It includes
+ * the tenant gate, so a route carries this one instead of
+ * `publicTenantGate()`, after its marker. An event's own detail asks
+ * `assertOfferReachable` in its handler.
  *
  * Asked only under the reach `public`: staff of the tenant (`own`, `any`)
  * keep their management reach. The 404 names no reason (§5.2).
  */
 
 const { BookableManager } = require("../../data-managers/bookable-manager");
+const EventManager = require("../../data-managers/event-manager");
+const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const { NotFoundError } = require("../../../errors/BaseError");
 const { REACH } = require("../authorization/policy");
 const { isOfferReachable, isOfferListable } = require("./offer-gate");
@@ -46,9 +50,32 @@ async function assertBookableReachable(tenantId, bookableId) {
  */
 async function assertOfferReachable(tenantId, offer) {
   const tenant = await assertTenantPubliclyVisible(tenantId);
-  if (offer && !isOfferReachable({ tenant, offer })) {
+  if (!offer) {
+    return;
+  }
+  // A ticket is reachable with its event only: what booking it needs -
+  // detail, prices, availability - follows the event's supervision too.
+  const event = await eventOfTicket(offer);
+  if (
+    !isOfferReachable({ tenant, offer }) ||
+    (event && !isOfferReachable({ tenant, offer: event }))
+  ) {
     throw new NotFoundError("offer_not_found", { id: offer.id });
   }
+}
+
+/**
+ * The event an offer hangs on: the event of a ticket, null for every
+ * other bookable, for an event itself and for a ticket whose event is gone.
+ *
+ * @param {Object} offer A bookable or an event
+ * @returns {Promise<Object|null>}
+ */
+async function eventOfTicket(offer) {
+  if (offer.type !== BOOKABLE_TYPES.TICKET || !offer.eventId) {
+    return null;
+  }
+  return EventManager.getEvent(offer.eventId, offer.tenantId);
 }
 
 /**

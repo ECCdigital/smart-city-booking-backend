@@ -167,7 +167,7 @@ class BookableController {
 
   /**
    * What a public bookable carries as `_populated`: its event and the
-   * related bookables the public may reach (tenant supervision spec §5.2:
+   * related bookables, as far as the public may reach them (tenant supervision spec §5.2:
    * no leak over embedded objects), each without its review.
    *
    * @param {Bookable} bookable
@@ -179,8 +179,16 @@ class BookableController {
       bookable.id,
       bookable.tenantId,
     );
+    const event = await EventManager.getEvent(
+      bookable.eventId,
+      bookable.tenantId,
+    );
+    const [reachableEvent] = reachableOffers(
+      tenantRecord,
+      event ? [event] : [],
+    );
     return {
-      event: await EventManager.getEvent(bookable.eventId, bookable.tenantId),
+      event: reachableEvent ? reachableEvent.withoutReview() : null,
       relatedBookables: reachableOffers(tenantRecord, related).map(
         (relatedBookable) => relatedBookable.withResolvedMediaUrls(),
       ),

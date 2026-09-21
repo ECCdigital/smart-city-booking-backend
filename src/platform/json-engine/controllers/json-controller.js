@@ -295,7 +295,8 @@ class JSONController {
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
-      events = events.filter((event) => event.isPublic);
+      // List-type delivery of the supervision (spec §5.1).
+      events = events.filter((offer) => isOfferListable({ tenant, offer }));
 
       if (ids) {
         const idsArray = ids.split(",");
@@ -369,7 +370,8 @@ class JSONController {
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
-      if (event?.id && event.isPublic === true) {
+      // The embed interface shows what is listed, its detail included.
+      if (event?.id && isOfferListable({ tenant, offer: event })) {
         const tickets = await BookableManager.getEventBookables(
           tenantId,
           event.id,

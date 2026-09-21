@@ -1,3 +1,5 @@
+const { reviewField } = require("./reviewSchema");
+
 /**
  * The reference sites of an event are typed as Mixed on purpose: the media
  * spec (§4.8) pins them to the paths the usage search already reads
@@ -78,6 +80,9 @@ const eventSchemaDefinition = {
     flags: { type: Array, default: [] },
   },
   isPublic: { type: Boolean, default: false },
+  // The review of the offer (glossary "Prüfstatus"): the review service's
+  // alone, never taken from a store or update body.
+  review: reviewField,
   schedules: { type: Array, default: [] },
   ownerUserId: { type: String, default: "" },
 };

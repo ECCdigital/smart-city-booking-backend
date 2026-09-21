@@ -194,6 +194,17 @@ router.delete(
   authorize("event", "delete"),
   EventController.removeEvent,
 );
+// The review of an event (tenant supervision spec §6.2).
+router.post(
+  "/events/:id/review/submissions",
+  authorize("event", "reviewSubmit"),
+  SupervisionController.submitReview(OFFER_TYPES.EVENT),
+);
+router.post(
+  "/events/:id/review/decisions",
+  authorize("event", "reviewDecide"),
+  SupervisionController.decideReview(OFFER_TYPES.EVENT),
+);
 router.get(
   "/events/_meta/tags",
   authorize("event", "meta"),

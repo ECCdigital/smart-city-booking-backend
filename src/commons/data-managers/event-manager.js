@@ -54,15 +54,51 @@ class EventManager {
 
     eventEntity.validate();
 
+    // The review (glossary "Prüfstatus") belongs to `updateReview` alone
+    // once the event exists: a whole-event write carries it on insert
+    // only, so an edit or a stale copy never undoes a decision.
+    const update = { ...eventEntity };
+    const exists = await EventModel.exists({
+      id: eventEntity.id,
+      tenantId: eventEntity.tenantId,
+    });
+    if (exists) {
+      delete update.review;
+    }
+
     await EventModel.updateOne(
       { id: eventEntity.id, tenantId: eventEntity.tenantId },
-      eventEntity,
+      update,
       {
         upsert: upsert,
       },
     );
 
     return eventEntity;
+  }
+
+  /**
+   * Writes the review of an event, conditional on the review status it was
+   * read at: the write of a review transition (tenant supervision spec
+   * §4). Touches no other field - the event's dates included, so an
+   * expired event is decided like any other.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.id Event ID
+   * @param {string|null} params.expectedStatus The status the transition
+   *   starts from; null matches an event without a review as well
+   * @param {Object} params.review The review to store
+   * @returns {Promise<Event|null>} The event after the write, or null when
+   *   no event of the tenant is at the expected status
+   */
+  static async updateReview({ tenantId, id, expectedStatus, review }) {
+    const raw = await EventModel.findOneAndUpdate(
+      { id, tenantId, "review.status": expectedStatus ?? null },
+      { $set: { review } },
+      { new: true },
+    );
+    return raw ? raw.toEntity() : null;
   }
 
   /**

@@ -6,6 +6,7 @@ const EventManager = require("../../../commons/data-managers/event-manager");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
   isOfferListable,
+  isOfferReachable,
 } = require("../../../commons/services/supervision/offer-gate");
 const {
   readsRecords,
@@ -82,7 +83,9 @@ class HtmlController {
         .map((id) => id.trim())
         .filter((id) => id.length > 0) || null;
     let events = await EventManager.getEvents(tenantId);
-    events = events.filter((event) => event.isPublic);
+    // List-type delivery of the supervision (spec §5.1).
+    const tenant = await TenantManager.getTenant(tenantId);
+    events = events.filter((offer) => isOfferListable({ tenant, offer }));
 
     if (sanitizedIds && sanitizedIds.length > 0) {
       events = events.filter((event) => sanitizedIds.includes(event.id));
@@ -120,7 +123,10 @@ class HtmlController {
     const sanitizedId = id.trim();
     const event = await EventManager.getEvent(sanitizedId, tenantId);
 
-    if (event?.id) {
+    // The event's embed detail never asked for `isPublic`: it follows the
+    // direct-link rule of the supervision (spec §5.2).
+    const tenant = await TenantManager.getTenant(tenantId);
+    if (event?.id && isOfferReachable({ tenant, offer: event })) {
       const htmlOutput = await HtmlEngine.event(event, beyondPublic);
 
       response.setHeader("content-type", "text/plain");
