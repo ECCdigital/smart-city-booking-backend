@@ -325,6 +325,23 @@ class TenantManager {
     const count = await TenantModel.countDocuments({});
     return count < maxTenants;
   }
+
+  /**
+   * The same cap, asked after a tenant was inserted: whether the tenants,
+   * the new one included, still fit `MAX_TENANTS`. Counting after the write
+   * lets racing creations see each other, so the cap holds across parallel
+   * requests and server processes.
+   *
+   * @returns {Promise<boolean>} false when the insert overshot the cap
+   */
+  static async checkTenantCountAfterInsert() {
+    const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
+    if (!maxTenants) {
+      return true;
+    }
+    const count = await TenantModel.countDocuments({});
+    return count <= maxTenants;
+  }
 }
 
 module.exports = TenantManager;

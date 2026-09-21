@@ -44,7 +44,9 @@ describe("TenantController legal documents", function () {
     };
     res = {
       status: sandbox.stub().returnsThis(),
+      set: sandbox.stub(),
       send: sandbox.stub(),
+      json: sandbox.stub(),
       sendStatus: sandbox.stub(),
     };
   });
@@ -251,6 +253,11 @@ describe("TenantController legal documents", function () {
     beforeEach(function () {
       sandbox.stub(TenantManager, "checkTenantCount").resolves(true);
       sandbox.stub(MembershipManager, "addMembership").resolves();
+      Object.assign(req.body, {
+        name: "Stadt",
+        contactName: "Erika",
+        mail: "stadt@example.test",
+      });
     });
 
     it("answers 400 when the list breaks a shape rule", async function () {
@@ -277,7 +284,7 @@ describe("TenantController legal documents", function () {
       await TenantController.createTenant(req, res);
 
       expect(res.status.calledWith(400)).to.be.true;
-      expect(res.send.firstCall.args[0].code).to.equal(
+      expect(res.json.firstCall.args[0].code).to.equal(
         "media_reference_unknown",
       );
       expect(storeStub.called).to.be.false;

@@ -6,6 +6,76 @@
 # alone and leave the remaining tenant fields undocumented.
 
 /api/tenants:
+  post:
+    tags:
+      - Tenants
+    summary: Create a tenant (the creation contract)
+    description: |
+      Opens a tenant for the caller, who becomes its owner (`Membership.owner`)
+      and gets the default mail and PDF templates. Whom the instance lets
+      create is the right `tenant.create` (instance owner, the Freigabeliste,
+      or everyone when the instance says so); the global `MAX_TENANTS` holds
+      for everyone. A Selbst-Anlage (glossary; the caller is not an instance
+      owner) is proven once more on the server — the stored account needs the
+      verification proof, for an SSO account the identity provider's — and
+      counted: three successful self-creations per rolling 24 hours per user
+      (`RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`), a failed one not, a deleted
+      tenant returns nothing. A new tenant starts at the server-side
+      supervision level (`free` for the instance owner, else the instance's
+      initial level); `supervisionLevel`/`supervisionChangedAt` in the body
+      are dropped. The obsolete `PUT /api/tenants` with an unknown id follows
+      the same contract.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, contactName, mail]
+            properties:
+              name:
+                type: string
+                example: Stadthalle
+              contactName:
+                type: string
+                description: The contact person of the tenant
+                example: Erika Muster
+              mail:
+                type: string
+                format: email
+                description: The formally valid contact address of the tenant (not the creator's account address)
+                example: kontakt@stadthalle.example
+              phone:
+                type: string
+              website:
+                type: string
+              location:
+                type: string
+              legalDocuments:
+                $ref: "#/components/schemas/TenantLegalDocuments"
+    responses:
+      "201":
+        description: The tenant exists; the body is empty — read it back with `GET /api/tenants`
+      "400":
+        description: |
+          `missing_name`, `missing_contact_name` or `invalid_mail` (with
+          `params.field`); or a media reference that may not be stored
+          (`media_reference_unknown`, `media_reference_not_public`).
+      "403":
+        description: |
+          No right to create (`forbidden`), or a Selbst-Anlage without
+          verification proof: `email_verification_required` with
+          `params.method` (`email` | `identity_provider`) and `params.provider`.
+      "409":
+        description: "`max_tenants_reached`: the global `MAX_TENANTS` is reached"
+      "429":
+        description: |
+          `too_many_requests`: the caller's three self-creations of the last 24
+          hours are spent; `Retry-After` (seconds) and `params.retryAfterSeconds`
+          say when the next one is possible.
+
   put:
     tags:
       - Tenants
@@ -49,16 +119,24 @@
         description: |
           An unknown id created a tenant instead — for the instance owner, who
           alone owns a tenant that does not exist yet; everyone else opens a
-          tenant with `POST /api/tenants`. The body is empty — read the new
-          tenant back with `GET /api/tenants/{id}`.
+          tenant with `POST /api/tenants`. The creation follows the contract of
+          `POST /api/tenants` (required `name`, `contactName`, `mail`; the
+          answers `400`, `409`, `429` of that operation). The body is empty —
+          read the new tenant back with `GET /api/tenants/{id}`.
       "400":
         description: |
           The list breaks a shape rule (a known type twice, a title on a known
           type, `other` without one), or a medium may not be referenced —
           `media_reference_unknown` for one that is not a medium of this tenant,
-          `media_reference_not_public` for an `intern` one.
+          `media_reference_not_public` for an `intern` one. A creation: a
+          missing or invalid contact field (see `POST /api/tenants`). An update
+          of an existing tenant needs no contact fields.
       "403":
         description: Neither owner of the tenant named by `id` nor instance owner, or no right to pick the medium
+      "409":
+        description: "A creation: `max_tenants_reached`"
+      "429":
+        description: "A creation: `too_many_requests` with `Retry-After`"
 
   get:
     tags:
