@@ -113,24 +113,28 @@ describe("the initial supervision level of the instance", function () {
       );
     });
 
-    it("is part of the public export, the private data is not", function () {
+    it("is part of the public export with the open-creation flag, the private data is not", function () {
       const instance = new Instance({
         [FIELD]: "supervised",
         ownerUserIds: ["owner"],
         allowedUsersToCreateTenant: ["someone"],
         allowAllUsersToCreateTenant: true,
         noreplyPassword: { encrypted: "x" },
+        mailAddress: "instance@example.org",
       });
 
       instance.removePrivateData();
       const exported = instance.exportWithMedia();
 
       expect(exported[FIELD]).to.equal("supervised");
+      expect(exported.allowAllUsersToCreateTenant).to.equal(true);
       for (const field of [
         "ownerUserIds",
         "allowedUsersToCreateTenant",
-        "allowAllUsersToCreateTenant",
         "noreplyPassword",
+        "noreplyUser",
+        "noreplyGraphClientSecret",
+        "mailAddress",
         "mailTemplate",
       ]) {
         expect(exported).to.not.have.property(field);
@@ -196,7 +200,20 @@ describe("the initial supervision level of the instance", function () {
       expect(res.body[FIELD]).to.equal("supervised");
       expect(res.body).to.not.have.property("ownerUserIds");
       expect(res.body).to.not.have.property("allowedUsersToCreateTenant");
-      expect(res.body).to.not.have.property("allowAllUsersToCreateTenant");
+    });
+
+    it("tells the public whether everyone may create a tenant, the allow-list stays private", async function () {
+      for (const open of [true, false]) {
+        instance.allowAllUsersToCreateTenant = open;
+
+        const res = await call("get", "/instances/public");
+
+        expect(res.status).to.equal(200);
+        expect(res.body.allowAllUsersToCreateTenant, String(open)).to.equal(
+          open,
+        );
+        expect(res.body).to.not.have.property("allowedUsersToCreateTenant");
+      }
     });
 
     it("answers it to the instance owner", async function () {

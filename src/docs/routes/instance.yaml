@@ -1,9 +1,10 @@
 # swagger/routes/instance.yaml
 #
-# The instance, as far as the tenant supervision reads and writes it: the
-# initial supervision level (glossary "Startstufe") a self-created tenant
-# starts at. The other instance fields travel with the same routes and are
-# not described here.
+# The instance, as far as the tenant supervision and the public consumers
+# read and write it: the initial supervision level (glossary "Startstufe") a
+# self-created tenant starts at, and whether everyone may create a tenant.
+# The other instance fields travel with the same routes and are not
+# described here.
 
 /api/instances/public:
   get:
@@ -12,9 +13,11 @@
     summary: The public instance
     description: |
       The instance without its private data (mail transport, owners, the
-      tenant creation permissions, instance custom fields). Carries
+      tenant creation allow-list, instance custom fields). Carries
       `tenantInitialSupervisionLevel`, so a frontend can tell a user what a
-      new tenant starts at before it is created.
+      new tenant starts at before it is created, and
+      `allowAllUsersToCreateTenant`, so a storefront can show its "offer
+      spaces" entry to a visitor who is not signed in.
     responses:
       "200":
         description: The public instance.
@@ -23,6 +26,12 @@
             schema:
               type: object
               properties:
+                allowAllUsersToCreateTenant:
+                  type: boolean
+                  description: |
+                    `true` when every signed-in user may create a tenant.
+                    The allow-list (`allowedUsersToCreateTenant`) is not
+                    part of the public instance.
                 tenantInitialSupervisionLevel:
                   $ref: "#/components/schemas/TenantInitialSupervisionLevel"
 
