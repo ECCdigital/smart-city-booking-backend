@@ -60,6 +60,11 @@ router.get(
   authorize("instance", "reviewQueue"),
   SupervisionController.getReviewQueue,
 );
+router.get(
+  "/instances/tenant-approval-queue",
+  authorize("instance", "tenantApprovalQueue"),
+  SupervisionController.getTenantApprovalQueue,
+);
 // The supervision notification outbox (glossary "Aufsichtsmitteilung"):
 // what did not go out, and sending it again without deciding again.
 router.get(

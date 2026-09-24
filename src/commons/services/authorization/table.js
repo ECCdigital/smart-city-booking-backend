@@ -368,6 +368,8 @@ const TABLE = {
     supervisionHistory: { any: "instanceOwner" },
     // `GET /instances/review-queue`: the active review queue.
     reviewQueue: { any: "instanceOwner" },
+    // `GET /instances/tenant-approval-queue`: the tenant approval queue.
+    tenantApprovalQueue: { any: "instanceOwner" },
     // `GET /instances/supervision/notifications` and `POST .../:id/retry`:
     // the outbox of the supervision notices and sending one again.
     supervisionNotifications: { any: "instanceOwner" },

@@ -539,6 +539,17 @@ class BookableManager {
   }
 
   /**
+   * How many bookables a tenant has, whatever their publication wish or
+   * review status - the offer count of the tenant approval queue.
+   *
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<number>}
+   */
+  static async countBookables(tenantId) {
+    return BookableModel.countDocuments({ tenantId });
+  }
+
+  /**
    * Remove a bookable
    * @param {string} id Bookable ID
    * @param {string} tenantId Tenant ID

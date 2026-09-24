@@ -217,6 +217,83 @@ components:
         pageSize:
           type: integer
 
+    TenantApprovalQueueRow:
+      type: object
+      description: One waiting tenant, with what the decision needs.
+      properties:
+        tenantId:
+          type: string
+        tenantName:
+          type: string
+          nullable: true
+        waitingSince:
+          type: string
+          format: date-time
+          nullable: true
+          description: The tenant's `supervisionChangedAt`
+        contact:
+          type: object
+          properties:
+            contactName:
+              type: string
+              nullable: true
+            mail:
+              type: string
+              nullable: true
+            phone:
+              type: string
+              nullable: true
+            website:
+              type: string
+              nullable: true
+            location:
+              type: string
+              nullable: true
+        owners:
+          type: array
+          description: Every owner membership of the tenant; empty without one
+          items:
+            type: object
+            properties:
+              userId:
+                type: string
+              displayName:
+                type: string
+                nullable: true
+                description: The account's name; `null` without an account or a name
+              mail:
+                type: string
+                description: The account's address (the user id)
+        offerCount:
+          type: integer
+          description: |
+            All bookables plus all events of the tenant, whatever their
+            publication wish or review status
+        lastChange:
+          nullable: true
+          description: |
+            The newest history row about the tenant itself, in the shape of
+            `GET /api/tenants/{tenant}/supervision/history` (`tenant.created`,
+            `tenant.levelInitialized` or `tenant.levelChanged`); `null`
+            without one
+          allOf:
+            - $ref: "#/components/schemas/SupervisionHistoryRow"
+
+    TenantApprovalQueuePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TenantApprovalQueueRow"
+        total:
+          type: integer
+          description: Every waiting tenant - the queue's counter
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
     SupervisionNotification:
       type: object
       description: One row of the supervision notification outbox.
