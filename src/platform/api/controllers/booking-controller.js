@@ -222,10 +222,19 @@ class BookingController {
         await BookingController._populate(bookings);
       }
 
+      // The tenant snapshot and the event core data a customer's pages
+      // render from (tenant supervision spec §5.2), whatever the level of
+      // the tenant - the booking is the customer's contract with it.
+      const viewOf = await customerViewOf(bookings);
+      const view = bookings.map((booking) => ({
+        ...booking,
+        ...viewOf(booking),
+      }));
+
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
       );
-      response.status(200).send(bookings);
+      response.status(200).send(view);
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get assigned bookings");

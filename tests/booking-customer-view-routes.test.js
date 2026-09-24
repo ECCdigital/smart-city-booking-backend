@@ -16,7 +16,11 @@ const BookingStatusControllerV2 = require("../src/platform/api/v2/controllers/bo
 const {
   BookingController,
 } = require("../src/platform/api/controllers/booking-controller");
+const AccessService = require("../src/commons/services/access/access-service");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const { Booking } = require("../src/commons/entities/booking/booking");
@@ -171,6 +175,103 @@ function v1Response() {
 describe("booking-bound customer routes: tenant snapshot and event core data", function () {
   afterEach(function () {
     sinon.restore();
+  });
+
+  describe("GET /api/bookings/assigned", function () {
+    async function assignedOf(stored, query = {}) {
+      sinon.stub(BookingManager, "getAssignedBookings").resolves(stored);
+      const response = v1Response();
+      await BookingController.getAssignedBookings(
+        { params: {}, query, principal: { userId: "erika" } },
+        response,
+      );
+      expect(response.statusCode).to.equal(200);
+      return JSON.parse(JSON.stringify(response.body));
+    }
+
+    it("carries the tenant snapshot and the event core data with every booking, across tenants", async function () {
+      const other = tenant({
+        id: "tenant-2",
+        name: "Gemeinde Beispiel",
+        applications: [],
+      });
+      installWorld({ tenants: [tenant(), other] });
+
+      const [ticket, room, elsewhere] = await assignedOf([
+        ticketBooking(),
+        roomBooking(),
+        roomBooking({ id: "B-3", tenantId: "tenant-2" }),
+      ]);
+
+      expect(ticket).to.include({ id: "B-2", status: "confirmed" });
+      expect(ticket.bookableItems).to.have.length(1);
+      expect(ticket.tenant).to.deep.equal(TENANT_SNAPSHOT);
+      expect(ticket.event).to.deep.equal(EVENT_SNAPSHOT);
+      expect(room.tenant).to.deep.equal(TENANT_SNAPSHOT);
+      expect(room).to.not.have.property("event");
+      expect(elsewhere.tenant).to.deep.equal({
+        ...TENANT_SNAPSHOT,
+        id: "tenant-2",
+        name: "Gemeinde Beispiel",
+        accessApps: [],
+      });
+    });
+
+    it("answers tenant: null for a booking of a deleted tenant", async function () {
+      installWorld({ tenants: [] });
+
+      const [item] = await assignedOf([roomBooking()]);
+
+      expect(item.tenant).to.equal(null);
+    });
+  });
+
+  describe("GET /api/access/bookings", function () {
+    /** The doors: one on the room, one on the ticket, both remote. */
+    async function accessBookingsOf(stored) {
+      sinon.stub(BookingManager, "getUserBookingsFiltered").resolves(stored);
+      sinon.stub(AccessService, "_getAccessTriggerMapsForTenants").resolves(
+        new Map([
+          [
+            TENANT,
+            new Map([
+              ["room", new Map([["door-1", { mode: "remote", type: "door" }]])],
+              [
+                "ticket",
+                new Map([["door-2", { mode: "remote", type: "door" }]]),
+              ],
+            ]),
+          ],
+        ]),
+      );
+      sinon.stub(BookableManager, "getBookablesByIds").resolves([]);
+      return AccessService.getUserBookingsWithAccess("erika", {
+        state: "all",
+      });
+    }
+
+    it("carries the tenant snapshot and the event core data with every access booking", async function () {
+      installWorld();
+
+      const results = await accessBookingsOf([ticketBooking(), roomBooking()]);
+
+      expect(results.map((r) => r.id)).to.have.members(["B-1", "B-2"]);
+      const ticket = results.find((r) => r.id === "B-2");
+      const room = results.find((r) => r.id === "B-1");
+      expect(ticket.tenant).to.deep.equal(TENANT_SNAPSHOT);
+      expect(ticket.event).to.deep.equal(EVENT_SNAPSHOT);
+      expect(ticket.leadBookable).to.equal(null);
+      expect(room.tenant).to.deep.equal(TENANT_SNAPSHOT);
+      expect(room).to.not.have.property("event");
+    });
+
+    it("answers tenant: null for a booking of a deleted tenant", async function () {
+      installWorld({ tenants: [] });
+
+      const [item] = await accessBookingsOf([roomBooking()]);
+
+      expect(item.tenant).to.equal(null);
+    });
   });
 
   describe("GET /api/:tenant/bookings/:ids/status (v1)", function () {

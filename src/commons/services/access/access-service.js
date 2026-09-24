@@ -14,6 +14,7 @@ const { AccessPointType } = require("../../schemas/accessPointSchema");
 const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 const AccessProvisionError = require("../../../errors/AccessProvisionError");
+const { customerViewOf } = require("../booking/booking-customer-view");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -1772,7 +1773,13 @@ class AccessService {
 
     await this._attachLeadBookables(matched);
 
-    const results = matched.map(({ result }) => result);
+    // The tenant snapshot and the event core data the mobile key renders
+    // from (tenant supervision spec §5.2), whatever the level of the
+    // tenant: the booking is the customer's contract with it.
+    const viewOf = await customerViewOf(matched.map(({ booking }) => booking));
+    const results = matched.map(({ result, booking }) =>
+      Object.assign(result, viewOf(booking)),
+    );
 
     return this._sortResults(results, state);
   }

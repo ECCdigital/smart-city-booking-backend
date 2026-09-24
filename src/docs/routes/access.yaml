@@ -309,6 +309,97 @@
             schema:
               $ref: "#/components/schemas/ErrorResponse"
 
+/api/access/bookings:
+  get:
+    tags:
+      - Access
+    summary: The bookings of a person that grant an access, across all tenants
+    description: |
+      Tenant-independent: every valid booking of the signed-in user (or of
+      `userId`, for whoever may read any access booking) that confers an
+      access authorization, filtered by `state`, optionally with the access
+      points, the lockers, the buffers and the eligibility decision. Each
+      booking carries the customer view of ticket 18 (tenant supervision
+      spec §5.2): `tenant`, the snapshot of the tenant - name and
+      support/emergency contact for the help at the lock - whatever its
+      supervision level (`null` for a deleted tenant), and for a ticket
+      booking `event`, the core data of the event (`null` when the event is
+      gone). `GET /api/access/access-points/{accessPointId}/bookings`, the
+      same list for one access point, carries both as well.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: state
+        in: query
+        required: false
+        description: "`active`, `upcoming`, `past` or `all` (default); `filter` is the older name"
+        schema:
+          type: string
+          enum: [active, upcoming, past, all]
+      - name: capability
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [authorization]
+      - name: includeAccessPoints
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+      - name: includeLockers
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+      - name: includeBuffer
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+      - name: includeEligibility
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+      - name: userId
+        in: query
+        required: false
+        description: Another person's bookings; refused under the own reach
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The access bookings, each with `tenant` and, for a ticket booking, `event`
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/AccessBooking"
+      "400":
+        description: An unknown `state` or `capability`
+      "401":
+        description: Not authenticated
+      "403":
+        description: Another person's bookings under the own reach
+      "500":
+        description: Could not get access bookings
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorResponse"
+
 /api/{tenant}/access:
   get:
     tags:
@@ -360,6 +451,56 @@
 
 components:
   schemas:
+    AccessBooking:
+      type: object
+      description: A booking that grants an access, as `GET /access/bookings` lists it
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        assignedUserId:
+          type: string
+        timeBegin:
+          type: integer
+        timeEnd:
+          type: integer
+        isCommitted:
+          type: boolean
+        isPayed:
+          type: boolean
+        isRejected:
+          type: boolean
+        priceEur:
+          type: number
+        state:
+          type: string
+          enum: [active, upcoming, past]
+        accessPointIds:
+          type: array
+          items:
+            type: string
+        leadBookable:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            location:
+              type: string
+        tenant:
+          $ref: "#/components/schemas/BookingTenantSnapshot"
+        event:
+          $ref: "#/components/schemas/BookingEventCoreData"
+        accessPoints:
+          type: array
+          description: With `includeAccessPoints=true`
+          items:
+            $ref: "#/components/schemas/AccessPoint"
+        accessEligibility:
+          $ref: "#/components/schemas/AccessEligibility"
     ResolveScanSuccess:
       type: object
       description: The scan code resolved to an access point
