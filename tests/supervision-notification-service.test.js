@@ -190,6 +190,37 @@ describe("supervision notification sender", function () {
       expect(rows[0]).to.include({ status: "sent", attempts: 1 });
       expect(rows[0].sentAt.getTime()).to.equal(NOW);
     });
+
+    it("names a pending tenant 'Freigabe ausstehend' and says what waits for the approval", async function () {
+      given();
+
+      await occasion(levelChanged({ from: "supervised", to: "pending" }));
+
+      expect(sent[0].html).to.include(
+        "<strong>Bisherige Stufe:</strong> beaufsichtigt",
+      );
+      expect(sent[0].html).to.include(
+        "<strong>Neue Stufe:</strong> Freigabe ausstehend",
+      );
+      expect(sent[0].html).to.include(
+        "Ihr Mandant wartet auf die Freigabe durch die Plattform. Sie können bereits alles vorbereiten; Ihre Angebote werden erst nach der Freigabe öffentlich sichtbar und buchbar.",
+      );
+      expect(sent[0].html).to.not.include("gesperrt");
+    });
+
+    it("names a declined tenant 'abgewiesen' without a hint yet", async function () {
+      given();
+
+      await occasion(levelChanged({ from: "pending", to: "declined" }));
+
+      expect(sent[0].html).to.include(
+        "<strong>Bisherige Stufe:</strong> Freigabe ausstehend",
+      );
+      expect(sent[0].html).to.include(
+        "<strong>Neue Stufe:</strong> abgewiesen",
+      );
+      expect(sent[0].html).to.not.include("declined");
+    });
   });
 
   describe("a review decision", function () {
@@ -303,6 +334,19 @@ describe("supervision notification sender", function () {
       await occasion(selfCreated({ supervisionLevel: "free" }));
 
       expect(sent[2].html).to.include("<strong>Aufsichtsstufe:</strong> frei");
+    });
+
+    it("confirms a pending start as 'Freigabe ausstehend' with the waiting hint", async function () {
+      given();
+
+      await occasion(selfCreated({ supervisionLevel: "pending" }));
+
+      expect(sent[2].html).to.include(
+        "<strong>Aufsichtsstufe:</strong> Freigabe ausstehend",
+      );
+      expect(sent[2].html).to.include(
+        "Ihr Mandant wartet auf die Freigabe durch die Plattform.",
+      );
     });
 
     it("is not sent while no instance owner could be told, though the creator has the confirmation", async function () {
