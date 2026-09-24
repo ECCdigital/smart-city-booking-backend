@@ -316,7 +316,11 @@ describe("supervision notification sender", function () {
     });
 
     it("tells a reset to pending to the tenant owners only, with the waiting hint", async function () {
-      given();
+      given({
+        storeOptions: {
+          instance: { contactAddress: "kontakt@plattform.example.test" },
+        },
+      });
 
       await occasion(levelChanged({ from: "declined", to: "pending" }));
 
