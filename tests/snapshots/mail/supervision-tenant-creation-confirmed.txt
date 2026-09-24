@@ -36,7 +36,7 @@ Subject: Ihr Mandant Stadthalle Musterstadt wurde angelegt
   <div style="font-family: inherit;">
     <p>Ihr Mandant <strong>Stadthalle Musterstadt</strong> wurde angelegt.</p>
 <br />
-<p><strong>Aufsichtsstufe:</strong> beaufsichtigt</p>
+<p><strong>Freigabestufe:</strong> beaufsichtigt</p>
   <p>Ihre Angebote werden vor der Veröffentlichung von der Plattform geprüft. Reichen Sie ein Angebot zur Prüfung ein, sobald es fertig ist.</p>
 <br />
 <p><a href="https://buchung.example.test/dashboard">Zur Verwaltung Ihres Mandanten</a></p>

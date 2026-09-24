@@ -25,8 +25,6 @@ const LEVEL_LABELS = Object.freeze({
   [SUPERVISION_LEVELS.DECLINED]: "abgewiesen",
 });
 
-// `declined` has no hint yet (its wording comes with its management gate);
-// a level without a hint renders none.
 const LEVEL_HINTS = Object.freeze({
   [SUPERVISION_LEVELS.FREE]:
     "Ihre Angebote können ohne vorherige Prüfung veröffentlicht werden.",
@@ -34,6 +32,8 @@ const LEVEL_HINTS = Object.freeze({
     "Ihre Angebote werden vor der Veröffentlichung von der Plattform geprüft. Reichen Sie ein Angebot zur Prüfung ein, sobald es fertig ist.",
   [SUPERVISION_LEVELS.PENDING]:
     "Ihr Mandant wartet auf die Freigabe durch die Plattform. Sie können bereits alles vorbereiten; Ihre Angebote werden erst nach der Freigabe öffentlich sichtbar und buchbar.",
+  [SUPERVISION_LEVELS.DECLINED]:
+    "Ihr Mandant wurde von der Plattform abgewiesen. Er und seine Angebote sind öffentlich nicht sichtbar und nicht buchbar, und Sie und Ihre Mitglieder können ihn im Admin-Bereich derzeit nicht bearbeiten oder einsehen. Bereits getätigte Buchungen bleiben für Ihre Kundinnen und Kunden gültig; Zugang, Belege und Stornierungen laufen weiter. Die Abweisung kann von der Plattform jederzeit zurückgenommen werden.",
 });
 
 const REVIEW_STATUS_LABELS = Object.freeze({
@@ -112,20 +112,33 @@ const SupervisionMailType = Object.freeze({
     }),
   },
 
+  // A declination (glossary "Abweisung") is a level change like any other
+  // - no occasion of its own - but the mail names it as such and gives the
+  // owners somebody to ask; the withdrawal of a declination is the generic
+  // change, nothing branches on `from`.
   SUPERVISION_TENANT_LEVEL_CHANGED: {
     family: "instance",
     templateName: "supervision-tenant-level-changed",
     audience: "tenantOwners",
     subject: (ctx) =>
-      `Aufsichtsstufe Ihres Mandanten ${ctx.tenantName} wurde geändert`,
-    templateData: (ctx) => ({
-      tenantName: tenantNameOf(ctx),
-      fromLevel: levelLabel(ctx.payload.from),
-      toLevel: levelLabel(ctx.payload.to),
-      levelHint: LEVEL_HINTS[ctx.payload.to] ?? "",
-      reason: ctx.payload.reason || null,
-      adminUrl: adminDashboardUrl(),
-    }),
+      ctx.declined
+        ? `Ihr Mandant ${ctx.tenantName} wurde abgewiesen`
+        : `Freigabestufe Ihres Mandanten ${ctx.tenantName} wurde geändert`,
+    templateData: (ctx, { instance }) => {
+      const declined = ctx.payload.to === SUPERVISION_LEVELS.DECLINED;
+      return {
+        tenantName: tenantNameOf(ctx),
+        declined,
+        fromLevel: levelLabel(ctx.payload.from),
+        toLevel: levelLabel(ctx.payload.to),
+        levelHint: LEVEL_HINTS[ctx.payload.to] ?? "",
+        reason: ctx.payload.reason || null,
+        contact: declined
+          ? instance?.contactAddress || instance?.mailAddress || null
+          : null,
+        adminUrl: adminDashboardUrl(),
+      };
+    },
   },
 
   SUPERVISION_REVIEW_DECIDED: {

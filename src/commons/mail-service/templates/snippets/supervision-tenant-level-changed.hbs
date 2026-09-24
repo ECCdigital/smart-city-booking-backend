@@ -1,5 +1,5 @@
 <p>
-  Die Aufsichtsstufe Ihres Mandanten <strong>{{tenantName}}</strong> wurde
+  Die Freigabestufe Ihres Mandanten <strong>{{tenantName}}</strong> wurde
   geändert.
 </p>
 <br />
@@ -11,6 +11,9 @@
 {{#if levelHint}}
   <br />
   <p>{{levelHint}}</p>
+{{/if}}
+{{#if contact}}
+  <p>Bei Fragen wenden Sie sich an {{contact}}</p>
 {{/if}}
 <br />
 <p><a href="{{adminUrl}}">Zur Verwaltung Ihres Mandanten</a></p>

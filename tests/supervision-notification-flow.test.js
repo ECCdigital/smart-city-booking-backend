@@ -233,7 +233,7 @@ describe("supervision notices: from the action to the mail", function () {
     expect(mails()).to.deep.equal([
       [
         TENANT_OWNER,
-        "Aufsichtsstufe Ihres Mandanten Stadthalle Musterstadt wurde geändert",
+        "Freigabestufe Ihres Mandanten Stadthalle Musterstadt wurde geändert",
       ],
       [INSTANCE_OWNER, "2 neue Angebote zur Prüfung: Stadthalle Musterstadt"],
     ]);

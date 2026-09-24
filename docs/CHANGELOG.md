@@ -13,6 +13,8 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 - Behaviour change, deliberate: a new tenant needs its contact (tenant supervision spec §6.1). `POST /api/tenants` and the obsolete `PUT /api/tenants` with an unknown id refuse a creation without `name`, `contactName` or a formally valid `mail` (`400 missing_name | missing_contact_name | invalid_mail`); updates of existing tenants are unaffected. A reached `MAX_TENANTS` answers `409 max_tenants_reached` (was `500`) and is re-counted after the insert, so parallel creations cannot overshoot it. The authorization route snapshot changes on purpose (`POST /api/tenants` with a bare body: `400`). The Admin UI has to send the contact ([smart-city-booking-vue-app](https://github.com/ECCdigital/smart-city-booking-vue-app))
 
+- Supervision mails to tenant owners say „Freigabestufe" (spec §8); the self-creation notice to instance owners keeps „Aufsichtsstufe". A change to `declined` has its own subject („Ihr Mandant X wurde abgewiesen"), a hint and a contact line from `instance.contactAddress` or `mailAddress`; its withdrawal is the generic level change. Mail snapshots change on purpose
+
 ### Added
 
 - Tenant approval queue (glossary „Freigabeliste der Mandanten“, tenant supervision spec §6.2): `GET /api/instances/tenant-approval-queue?page=&pageSize=` lists the tenants at `pending`, longest waiting first, with contact, owners, offer count and the newest tenant history row as `lastChange`; `total` is the counter. Instance owner only (`instance.tenantApprovalQueue`); the authorization route snapshot gains the route

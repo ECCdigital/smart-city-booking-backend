@@ -208,18 +208,136 @@ describe("supervision notification sender", function () {
       expect(sent[0].html).to.not.include("gesperrt");
     });
 
-    it("names a declined tenant 'abgewiesen' without a hint yet", async function () {
-      given();
+    it("tells a declined tenant's owners the declination, the reason and the instance's contact", async function () {
+      given({
+        storeOptions: {
+          instance: { contactAddress: "kontakt@plattform.example.test" },
+        },
+      });
 
-      await occasion(levelChanged({ from: "pending", to: "declined" }));
+      await occasion(
+        levelChanged({
+          from: "pending",
+          to: "declined",
+          reason: "Der Mandant gehört nicht zur Stadt.",
+        }),
+      );
 
+      expect(sent.map((mail) => mail.to)).to.deep.equal([
+        TENANT_OWNER_A,
+        TENANT_OWNER_B,
+      ]);
+      expect(sent[0].subject).to.equal(
+        "Ihr Mandant Stadthalle Musterstadt wurde abgewiesen",
+      );
       expect(sent[0].html).to.include(
         "<strong>Bisherige Stufe:</strong> Freigabe ausstehend",
       );
       expect(sent[0].html).to.include(
         "<strong>Neue Stufe:</strong> abgewiesen",
       );
+      expect(sent[0].html).to.include(
+        "<strong>Begründung:</strong> Der Mandant gehört nicht zur Stadt.",
+      );
+      expect(sent[0].html).to.include(
+        "Ihr Mandant wurde von der Plattform abgewiesen. Er und seine Angebote sind öffentlich nicht sichtbar und nicht buchbar, und Sie und Ihre Mitglieder können ihn im Admin-Bereich derzeit nicht bearbeiten oder einsehen. Bereits getätigte Buchungen bleiben für Ihre Kundinnen und Kunden gültig; Zugang, Belege und Stornierungen laufen weiter. Die Abweisung kann von der Plattform jederzeit zurückgenommen werden.",
+      );
+      expect(sent[0].html).to.include(
+        "Bei Fragen wenden Sie sich an kontakt@plattform.example.test",
+      );
+      expect(sent[0].html).to.include(`${FRONTEND_URL}/dashboard`);
       expect(sent[0].html).to.not.include("declined");
+      expectSnapshot(
+        "mail/supervision-tenant-declined.txt",
+        snapshotOf(sent[0]),
+      );
+    });
+
+    it("leaves the reason and the contact line out of a declination without a reason by an instance without a contact", async function () {
+      given({
+        storeOptions: { instance: { contactAddress: "", mailAddress: "" } },
+      });
+
+      await occasion(
+        levelChanged({ from: "supervised", to: "declined", reason: null }),
+      );
+
+      expect(sent[0].subject).to.equal(
+        "Ihr Mandant Stadthalle Musterstadt wurde abgewiesen",
+      );
+      expect(sent[0].html).to.include(
+        "<strong>Neue Stufe:</strong> abgewiesen",
+      );
+      expect(sent[0].html).to.include(
+        "Ihr Mandant wurde von der Plattform abgewiesen.",
+      );
+      expect(sent[0].html).to.not.include("Begründung");
+      expect(sent[0].html).to.not.include("Bei Fragen wenden Sie sich an");
+    });
+
+    it("falls back to the instance's mail address for the contact of a declination", async function () {
+      given({ storeOptions: { instance: { contactAddress: "" } } });
+
+      await occasion(levelChanged({ from: "pending", to: "declined" }));
+
+      expect(sent[0].html).to.include(
+        "Bei Fragen wenden Sie sich an admin@plattform.example.test",
+      );
+    });
+
+    it("tells the withdrawal of a declination as a generic level change with the new level's hint and no contact", async function () {
+      given({
+        storeOptions: {
+          instance: { contactAddress: "kontakt@plattform.example.test" },
+        },
+      });
+
+      await occasion(
+        levelChanged({ from: "declined", to: "supervised", reason: null }),
+      );
+
+      expect(sent[0].subject).to.equal(
+        "Freigabestufe Ihres Mandanten Stadthalle Musterstadt wurde geändert",
+      );
+      expect(sent[0].html).to.include(
+        "<strong>Bisherige Stufe:</strong> abgewiesen",
+      );
+      expect(sent[0].html).to.include(
+        "<strong>Neue Stufe:</strong> beaufsichtigt",
+      );
+      expect(sent[0].html).to.include(
+        "Ihre Angebote werden vor der Veröffentlichung von der Plattform geprüft.",
+      );
+      expect(sent[0].html).to.not.include(
+        "Ihr Mandant wurde von der Plattform abgewiesen",
+      );
+      expect(sent[0].html).to.not.include("Bei Fragen wenden Sie sich an");
+      expect(sent[0].html).to.include(`${FRONTEND_URL}/dashboard`);
+    });
+
+    it("tells a reset to pending to the tenant owners only, with the waiting hint", async function () {
+      given({
+        storeOptions: {
+          instance: { contactAddress: "kontakt@plattform.example.test" },
+        },
+      });
+
+      await occasion(levelChanged({ from: "declined", to: "pending" }));
+
+      expect(sent.map((mail) => mail.to)).to.deep.equal([
+        TENANT_OWNER_A,
+        TENANT_OWNER_B,
+      ]);
+      expect(sent[0].subject).to.equal(
+        "Freigabestufe Ihres Mandanten Stadthalle Musterstadt wurde geändert",
+      );
+      expect(sent[0].html).to.include(
+        "<strong>Neue Stufe:</strong> Freigabe ausstehend",
+      );
+      expect(sent[0].html).to.include(
+        "Ihr Mandant wartet auf die Freigabe durch die Plattform.",
+      );
+      expect(sent[0].html).to.not.include("Bei Fragen wenden Sie sich an");
     });
   });
 
@@ -307,10 +425,15 @@ describe("supervision notification sender", function () {
         CREATOR,
       ]);
       expect(sent[0].html).to.include(CREATOR);
+      expect(sent[0].html).to.include(
+        "<strong>Aufsichtsstufe:</strong> beaufsichtigt",
+      );
       expect(sent[2].subject).to.equal(
         "Ihr Mandant Stadthalle Musterstadt wurde angelegt",
       );
-      expect(sent[2].html).to.include("beaufsichtigt");
+      expect(sent[2].html).to.include(
+        "<strong>Freigabestufe:</strong> beaufsichtigt",
+      );
       expectSnapshot(
         "mail/supervision-tenant-self-created.txt",
         snapshotOf(sent[0]),
@@ -333,7 +456,7 @@ describe("supervision notification sender", function () {
 
       await occasion(selfCreated({ supervisionLevel: "free" }));
 
-      expect(sent[2].html).to.include("<strong>Aufsichtsstufe:</strong> frei");
+      expect(sent[2].html).to.include("<strong>Freigabestufe:</strong> frei");
     });
 
     it("confirms a pending start as 'Freigabe ausstehend' with the waiting hint", async function () {
@@ -342,7 +465,7 @@ describe("supervision notification sender", function () {
       await occasion(selfCreated({ supervisionLevel: "pending" }));
 
       expect(sent[2].html).to.include(
-        "<strong>Aufsichtsstufe:</strong> Freigabe ausstehend",
+        "<strong>Freigabestufe:</strong> Freigabe ausstehend",
       );
       expect(sent[2].html).to.include(
         "Ihr Mandant wartet auf die Freigabe durch die Plattform.",
