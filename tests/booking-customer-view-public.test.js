@@ -108,7 +108,7 @@ describe("booking-bound customer view: not on the public projections", function 
   });
 
   it("the customer's own bookings carry the snapshot of a non-public tenant while the public projections stay bare", async function () {
-    h.tenant.supervisionLevel = SUPERVISION_LEVELS.BLOCKED;
+    h.tenant.supervisionLevel = SUPERVISION_LEVELS.DECLINED;
 
     const assigned = await h
       .api()

@@ -56,7 +56,7 @@ const EVENT_SNAPSHOT = {
   timeEnd: new Date("2027-06-21T22:00").getTime(),
 };
 
-/** A tenant at the non-public level, with everything the snapshot leaves out. */
+/** A tenant awaiting approval (pending), with everything the snapshot leaves out. */
 function tenant(overrides = {}) {
   return new Tenant({
     id: TENANT,
@@ -66,7 +66,7 @@ function tenant(overrides = {}) {
     phone: "+49 555 1",
     website: "https://stadt.example",
     location: "Musterhausen",
-    supervisionLevel: SUPERVISION_LEVELS.BLOCKED,
+    supervisionLevel: SUPERVISION_LEVELS.PENDING,
     supervisionChangedAt: new Date("2026-09-01"),
     applications: [
       {
@@ -189,10 +189,11 @@ describe("booking-bound customer routes: tenant snapshot and event core data", f
       return JSON.parse(JSON.stringify(response.body));
     }
 
-    it("carries the tenant snapshot and the event core data with every booking, across tenants", async function () {
+    it("carries the tenant snapshot and the event core data with every booking, across a pending and a declined tenant", async function () {
       const other = tenant({
         id: "tenant-2",
         name: "Gemeinde Beispiel",
+        supervisionLevel: SUPERVISION_LEVELS.DECLINED,
         applications: [],
       });
       installWorld({ tenants: [tenant(), other] });
