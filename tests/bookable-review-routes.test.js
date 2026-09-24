@@ -308,8 +308,8 @@ describe("bookable review routes", function () {
       delete h.bookables[res.body.id];
     });
 
-    it("submits on the first publication wish of an edit, for a blocked tenant too", async function () {
-      h.tenant.supervisionLevel = "blocked";
+    it("submits on the first publication wish of an edit, for a pending tenant too", async function () {
+      h.tenant.supervisionLevel = "pending";
 
       const res = await call(
         "put",
@@ -374,15 +374,25 @@ describe("bookable review routes", function () {
   });
 
   describe("the decision matrix (§5.1)", function () {
-    const LEVELS = ["free", "supervised", "blocked"];
+    const LEVELS = ["free", "supervised", "pending", "declined"];
     const STATUSES = [null, "pending", "approved", "rejected"];
 
     /** The matrix itself, spelled from the spec table. */
     const expected = (level, status, isPublic) => {
-      if (level === "blocked") return { listed: false, reachable: false };
-      if (level === "free") return { listed: isPublic, reachable: true };
+      // A pending or declined tenant has no public projection at all: the
+      // tenant gate answers 404 before any offer is asked.
+      if (["pending", "declined"].includes(level)) {
+        return { tenantVisible: false, listed: false, reachable: false };
+      }
+      if (level === "free") {
+        return { tenantVisible: true, listed: isPublic, reachable: true };
+      }
       const approved = status === "approved";
-      return { listed: approved && isPublic, reachable: approved };
+      return {
+        tenantVisible: true,
+        listed: approved && isPublic,
+        reachable: approved,
+      };
     };
 
     const detailPaths = [
@@ -408,7 +418,7 @@ describe("bookable review routes", function () {
             h.bookables[FIXTURE_ID].isPublic = isPublic;
 
             const list = await call("get", `/api/${TENANT}/bookables/public`);
-            if (level === "blocked") {
+            if (!want.tenantVisible) {
               expect(list.status).to.equal(404);
             } else {
               expect(list.body.some((b) => b.id === FIXTURE_ID)).to.equal(
@@ -423,7 +433,7 @@ describe("bookable review routes", function () {
               "get",
               `/api/${TENANT}/calendar/occupancy`,
             );
-            expect(occupancy.status).to.equal(level === "blocked" ? 404 : 200);
+            expect(occupancy.status).to.equal(want.tenantVisible ? 200 : 404);
 
             for (const path of detailPaths) {
               const res = await call("get", path);

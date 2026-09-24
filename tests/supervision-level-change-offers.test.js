@@ -1,7 +1,7 @@
 /**
  * A level change of a tenant, end to end over the routes (tenant
  * supervision spec §2, §5.1, §8): the instance owner switches between
- * `free`, `supervised` and `blocked` in every direction; under
+ * `free`, `supervised`, `pending` and `declined` in every direction; under
  * `supervised` every offer that is not approved - bookable or event -
  * leaves the public lists, the direct link and the checkout at once and
  * comes back with `free`; no switch ever writes a review; and the switch
@@ -256,10 +256,13 @@ describe("supervision: a level change and the tenant's offers", function () {
     const before = reviews();
     const path = [
       "supervised",
-      "blocked",
+      "pending",
       "supervised",
       "free",
-      "blocked",
+      "pending",
+      "declined",
+      "supervised",
+      "declined",
       "free",
     ];
 
@@ -277,11 +280,14 @@ describe("supervision: a level change and the tenant's offers", function () {
       .map((c) => c.args[0]);
     expect(rows.map((row) => [row.from, row.to, row.reason])).to.deep.equal([
       ["free", "supervised", "nach supervised"],
-      ["supervised", "blocked", "nach blocked"],
-      ["blocked", "supervised", "nach supervised"],
+      ["supervised", "pending", "nach pending"],
+      ["pending", "supervised", "nach supervised"],
       ["supervised", "free", "nach free"],
-      ["free", "blocked", "nach blocked"],
-      ["blocked", "free", "nach free"],
+      ["free", "pending", "nach pending"],
+      ["pending", "declined", "nach declined"],
+      ["declined", "supervised", "nach supervised"],
+      ["supervised", "declined", "nach declined"],
+      ["declined", "free", "nach free"],
     ]);
     expect(rows.every((row) => row.eventType === "tenant.levelChanged")).to.be
       .true;
@@ -318,7 +324,8 @@ describe("supervision: a level change and the tenant's offers", function () {
 
     await switchTo("supervised");
     await switchTo("free");
-    await switchTo("blocked");
+    await switchTo("pending");
+    await switchTo("declined");
 
     expect(queueRows()).to.have.length(1);
   });

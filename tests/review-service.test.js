@@ -141,8 +141,8 @@ describe("ReviewService", function () {
       ]);
     });
 
-    it("submits for a free and a blocked tenant too, without a queue occasion", async function () {
-      for (const level of ["free", "blocked", undefined]) {
+    it("submits for a free, a pending and a declined tenant too, without a queue occasion", async function () {
+      for (const level of ["free", "pending", "declined", undefined]) {
         offers.o1.review = review(null);
         tenant.supervisionLevel = level;
         history.resetHistory();

@@ -333,7 +333,7 @@ function installRouteWorld({ tenantId, tenant, ownerUserId, bookables }) {
     occurredAt: new Date(0),
     actor: { type: "user", userId: ownerUserId },
     from: "free",
-    to: "blocked",
+    to: "pending",
   });
   stubManager(SupervisionHistoryManager, {
     one: historyRow,

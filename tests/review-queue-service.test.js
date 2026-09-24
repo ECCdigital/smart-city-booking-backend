@@ -77,7 +77,8 @@ describe("ReviewQueueService.listActiveReviewQueue", function () {
       { id: "t-sup", name: "Verein", supervisionLevel: "supervised" },
       { id: "t-sup2", name: "Club", supervisionLevel: "supervised" },
       { id: "t-free", name: "Stadt", supervisionLevel: "free" },
-      { id: "t-blocked", name: "Spam", supervisionLevel: "blocked" },
+      { id: "t-pending", name: "Spam", supervisionLevel: "pending" },
+      { id: "t-declined", name: "Declined", supervisionLevel: "declined" },
     ];
     bookables = [];
     events = [];
@@ -162,7 +163,8 @@ describe("ReviewQueueService.listActiveReviewQueue", function () {
       bookable({ id: "b-rejected", review: review("rejected", day(1)) }),
       bookable({ id: "b-none", review: review(null) }),
       bookable({ id: "b-free", tenantId: "t-free" }),
-      bookable({ id: "b-blocked", tenantId: "t-blocked" }),
+      bookable({ id: "b-pending", tenantId: "t-pending" }),
+      bookable({ id: "b-declined", tenantId: "t-declined" }),
     );
 
     const result = await list();
@@ -475,7 +477,7 @@ describe("ReviewQueueService.listActiveReviewQueue", function () {
       await changeLevel("free");
       expect((await list()).total).to.equal(0);
 
-      await changeLevel("blocked");
+      await changeLevel("pending");
       expect((await list()).total).to.equal(0);
 
       await changeLevel("supervised");
