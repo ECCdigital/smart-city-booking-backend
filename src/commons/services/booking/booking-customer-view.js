@@ -23,7 +23,9 @@ const eventKey = (tenantId, id) => `${tenantId}\u0000${id}`;
 
 /**
  * The event a ticket booking is for, read off the booking's own snapshot of
- * the ticket (`_bookableUsed`): the first ticket item names it.
+ * the ticket (`_bookableUsed`): the first ticket item names it. A booking
+ * from before the snapshot names no event, and gets none - the view reads
+ * the booking, it loads no bookable.
  *
  * @param {Object} booking
  * @returns {{tenantId: string, id: string}|null}
@@ -89,4 +91,20 @@ async function customerViewOf(bookings) {
   };
 }
 
-module.exports = { customerViewOf };
+/**
+ * The bookings projected for a customer, each with its part of the view.
+ *
+ * @param {Object[]} bookings
+ * @param {(booking: Object) => Object} project The booking as the route
+ *   answers it, e.g. `(b) => b.exportStatus()`
+ * @returns {Promise<Object[]>}
+ */
+async function withCustomerView(bookings, project) {
+  const viewOf = await customerViewOf(bookings);
+  return bookings.map((booking) => ({
+    ...project(booking),
+    ...viewOf(booking),
+  }));
+}
+
+module.exports = { customerViewOf, withCustomerView };

@@ -60,14 +60,11 @@ class EventManager {
     if (pairs.length === 0) {
       return [];
     }
-    const rawEvents = await EventModel.find({
-      $or: [...new Set(pairs.map((p) => `${p.tenantId}\u0000${p.id}`))].map(
-        (key) => {
-          const [tenantId, id] = key.split("\u0000");
-          return { tenantId, id };
-        },
-      ),
-    });
+    // One condition per distinct (tenant, id) pair.
+    const unique = new Map(
+      pairs.map(({ tenantId, id }) => [`${tenantId}/${id}`, { tenantId, id }]),
+    );
+    const rawEvents = await EventModel.find({ $or: [...unique.values()] });
     return rawEvents.map((doc) => doc.toEntity());
   }
 
