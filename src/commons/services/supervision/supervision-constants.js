@@ -99,11 +99,14 @@ const values = (enumeration) => Object.freeze(Object.values(enumeration));
 /**
  * The tenant fields the supervision owns: set server-side on creation,
  * changed only by `PUT /tenants/:tenant/supervision`, never taken from a
- * tenant write (spec §3).
+ * tenant write (spec §3). `supervisionReason` is the reason of the latest
+ * level change (glossary "Begründung des jüngsten Stufenwechsels"), set
+ * with every actual change - to `null` without one.
  */
 const SUPERVISION_FIELDS = Object.freeze([
   "supervisionLevel",
   "supervisionChangedAt",
+  "supervisionReason",
 ]);
 
 /**

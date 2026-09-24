@@ -19,6 +19,18 @@
  * option `tenantOf(req)` names for a route that carries its tenant
  * elsewhere (`PUT /api/tenants` names it in the body).
  *
+ * The management gate of a declined tenant (tenant supervision spec §6.1,
+ * glossary "abgewiesen") sits in `authorize` too, after the decision: a
+ * rule the principal satisfied as the tenant's owner or role holder loads
+ * the tenant - once, memoised on `req.tenantRecord` - and a declined one
+ * loses what the membership gave: the rule is decided again as for a
+ * stranger, and answers `403 tenant_declined` when nothing is left. What
+ * any signed-in user has (own booking, receipt, refund preview, the lock
+ * of the own booking, an invitation) stays, the instance owner is never
+ * asked, `public` and `tokenAuthorized` routes never are, and an unknown
+ * tenant passes to the handler's 404. No route lists itself, no service
+ * asks again.
+ *
  * Every marker carries an `authorization` descriptor on the middleware
  * function, which the route inventory reads (`tests/helpers/route-inventory.js`)
  * to hold the invariant "every route carries one marker". The handlers are
@@ -31,8 +43,13 @@ const {
   optionalAuth,
 } = require("../../../middleware/auth-middleware");
 const { ForbiddenError } = require("../../../errors/BaseError");
+const TenantManager = require("../../data-managers/tenant-manager");
+const {
+  SUPERVISION_LEVELS,
+  effectiveLevelOf,
+} = require("../supervision/supervision-constants");
 const { loadPrincipal, anonymous } = require("./principal");
-const { decide, entryOf } = require("./policy");
+const { decide, decideWith, entryOf, PRECEDENCE } = require("./policy");
 
 const MARKER = Object.freeze({
   AUTHORIZE: "authorize",
@@ -65,6 +82,64 @@ async function principalOf(req, tenantOf = tenantParam) {
     req.principal = await loadPrincipal(req.user?.id, tenantOf(req));
   }
   return req.principal;
+}
+
+/** The precedences the membership in the tenant gives, lost when declined. */
+const MEMBERSHIP_PRECEDENCES = Object.freeze([
+  PRECEDENCE.TENANT_OWNER,
+  PRECEDENCE.ROLE,
+]);
+
+/**
+ * The tenant of a request, loaded once.
+ *
+ * @param {import("express").Request} req
+ * @param {string} tenantId
+ * @returns {Promise<Object|null>} The tenant entity, or null for an unknown one
+ */
+async function tenantRecordOf(req, tenantId) {
+  if (req.tenantRecord === undefined) {
+    req.tenantRecord = await TenantManager.getTenant(tenantId);
+  }
+  return req.tenantRecord;
+}
+
+/**
+ * The decision of `authorize`, the management gate of a declined tenant
+ * included.
+ *
+ * @param {import("express").Request} req
+ * @param {string} resource
+ * @param {string} action
+ * @param {TenantOf} tenantOf
+ * @returns {Promise<string|null>} The reach, or null without one
+ * @throws {ForbiddenError} `tenant_declined` for the staff of a declined
+ *   tenant on a rule only the membership satisfied
+ */
+async function decideForRequest(req, resource, action, tenantOf) {
+  const principal = await principalOf(req, tenantOf);
+  const decision = decideWith(principal, resource, action);
+  if (!decision || !MEMBERSHIP_PRECEDENCES.includes(decision.satisfiedBy)) {
+    return decision?.reach ?? null;
+  }
+
+  const tenantId = tenantOf(req);
+  const tenant = await tenantRecordOf(req, tenantId);
+  if (!tenant || effectiveLevelOf(tenant) !== SUPERVISION_LEVELS.DECLINED) {
+    return decision.reach;
+  }
+
+  const stranger = { ...principal, isTenantOwner: false, grants: {} };
+  const left = decide(stranger, resource, action);
+  if (left) {
+    return left;
+  }
+  throw new ForbiddenError("tenant_declined", {
+    tenantId,
+    supervisionLevel: SUPERVISION_LEVELS.DECLINED,
+    supervisionChangedAt: tenant.supervisionChangedAt ?? null,
+    supervisionReason: tenant.supervisionReason ?? null,
+  });
 }
 
 /**
@@ -116,7 +191,7 @@ function authorize(resource, action, { tenantOf = tenantParam } = {}) {
 
   const handler = (req, res, next) =>
     afterAuth(requireAuth, req, res, next, async () => {
-      const reach = decide(await principalOf(req, tenantOf), resource, action);
+      const reach = await decideForRequest(req, resource, action, tenantOf);
       if (!reach) {
         return next(new ForbiddenError());
       }
