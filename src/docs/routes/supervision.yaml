@@ -296,8 +296,8 @@
       "400":
         description: |
           `invalid_supervision_level` with `params: { level, allowed }`: a level
-          outside the vocabulary; the former name `blocked` is one of them, it
-          is neither accepted nor aliased.
+          outside the four of `SupervisionLevel`; a former name of a level is
+          neither accepted nor aliased.
       "401":
         description: Not authenticated
       "403":

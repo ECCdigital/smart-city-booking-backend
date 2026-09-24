@@ -49,9 +49,9 @@ const router = express.Router({ mergeParams: true });
 // Public. The public delivery paths of the tenant carry the tenant gate
 // of the supervision after their marker (spec §5.2): under the reach
 // `public` a pending or declined tenant answers 404. Not on the checkout
-// (its gate is
-// a check in the item checkout), not on the existing-booking paths, the
-// payments, the hooks - a blanket gate on `publicRoute()` would be wrong.
+// (its gate is a check in the item checkout), not on the existing-booking
+// paths, the payments, the hooks - a blanket gate on `publicRoute()` would
+// be wrong.
 // A route about one bookable carries the offer gate instead, which
 // includes the tenant gate (spec §5.1): under the reach `public` a
 // bookable that is not reachable answers 404.

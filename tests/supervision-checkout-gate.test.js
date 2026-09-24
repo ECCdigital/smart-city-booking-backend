@@ -22,36 +22,44 @@ const {
   CHECKOUT_REASONS,
 } = require("../src/commons/services/checkout/checkout-reasons");
 
-for (const level of ["pending", "declined"]) {
-  describe(`supervision: the checkout gate under a ${level} tenant`, function () {
-    this.timeout(20000);
+// The two levels without a public projection; the checkout tells them not
+// apart.
+const HIDDEN_LEVELS = ["pending", "declined"];
 
-    let h;
+describe("supervision: the checkout gate", function () {
+  this.timeout(20000);
 
-    before(async function () {
-      h = await installHarness();
-    });
+  let h;
 
-    after(async function () {
-      sinon.restore();
-      await h.close();
-    });
+  before(async function () {
+    h = await installHarness();
+  });
 
-    beforeEach(function () {
+  after(async function () {
+    sinon.restore();
+    await h.close();
+  });
+
+  afterEach(function () {
+    h.tenant.supervisionLevel = "free";
+  });
+
+  const post = (path, body, userId) => {
+    let req = h.api().post(path);
+    if (userId) req = req.set(h.as(userId));
+    return req.send(body);
+  };
+
+  /** Runs the check once per hidden level, the tenant set to it. */
+  async function underEachHiddenLevel(check) {
+    for (const level of HIDDEN_LEVELS) {
       h.tenant.supervisionLevel = level;
-    });
+      await check(level);
+    }
+  }
 
-    afterEach(function () {
-      h.tenant.supervisionLevel = "free";
-    });
-
-    const post = (path, body, userId) => {
-      let req = h.api().post(path);
-      if (userId) req = req.set(h.as(userId));
-      return req.send(body);
-    };
-
-    it("the v2 checkout refuses the booking with a reason and stores nothing", async function () {
+  it("the v2 checkout refuses the booking with a reason and stores nothing", async function () {
+    await underEachHiddenLevel(async () => {
       const res = await post(
         `/api/v2/${TENANT}/checkout`,
         checkoutBody("room"),
@@ -65,8 +73,10 @@ for (const level of ["pending", "declined"]) {
       expect(h.store.size).to.equal(0);
       expect(h.takeEffects()).to.deep.equal([]);
     });
+  });
 
-    it("signing in does not open it", async function () {
+  it("signing in does not open it", async function () {
+    await underEachHiddenLevel(async () => {
       const res = await post(
         `/api/v2/${TENANT}/checkout`,
         checkoutBody("room"),
@@ -78,8 +88,10 @@ for (const level of ["pending", "declined"]) {
         CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
       );
     });
+  });
 
-    it("a ticket of an event is refused the same way", async function () {
+  it("a ticket of an event is refused the same way", async function () {
+    await underEachHiddenLevel(async () => {
       const res = await post(
         `/api/v2/${TENANT}/checkout`,
         checkoutBody("ticket", { timeBegin: null, timeEnd: null }),
@@ -90,8 +102,10 @@ for (const level of ["pending", "declined"]) {
         CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
       );
     });
+  });
 
-    it("the v2 validation and group entrances refuse it too", async function () {
+  it("the v2 validation and group entrances refuse it too", async function () {
+    await underEachHiddenLevel(async () => {
       const validate = await post(`/api/v2/${TENANT}/checkout/validate/room`, {
         start: TIME_BEGIN,
         end: TIME_END,
@@ -131,8 +145,10 @@ for (const level of ["pending", "declined"]) {
       ]);
       expect(h.store.size).to.equal(0);
     });
+  });
 
-    it("the legacy checkout form is refused as well", async function () {
+  it("the legacy checkout form is refused as well", async function () {
+    await underEachHiddenLevel(async () => {
       const single = await post(
         `/api/${TENANT}/checkout`,
         checkoutBody("room"),
@@ -166,23 +182,23 @@ for (const level of ["pending", "declined"]) {
       expect(group.status).to.not.equal(200);
       expect(h.store.size).to.equal(0);
     });
+  });
 
-    it("the administration's manual booking stays open", async function () {
+  it("the administration's manual booking stays open", async function () {
+    await underEachHiddenLevel(async (level) => {
       const booking = await h.manualBooking("room");
 
-      expect(h.stored(booking.id)).to.exist;
-    });
-
-    it("a free tenant books as before", async function () {
-      h.tenant.supervisionLevel = "free";
-
-      const res = await post(
-        `/api/v2/${TENANT}/checkout`,
-        checkoutBody("room"),
-      );
-
-      expect(res.body.success).to.equal(true);
-      expect(h.store.size).to.equal(2);
+      expect(h.stored(booking.id), level).to.exist;
     });
   });
-}
+
+  it("a free tenant books as before", async function () {
+    h.tenant.supervisionLevel = "free";
+    const before = h.store.size;
+
+    const res = await post(`/api/v2/${TENANT}/checkout`, checkoutBody("room"));
+
+    expect(res.body.success).to.equal(true);
+    expect(h.store.size).to.equal(before + 1);
+  });
+});
