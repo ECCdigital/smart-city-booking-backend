@@ -132,13 +132,13 @@ describe("21-09-2026-tenant-supervision-initial-state migration", function () {
 
     it("keeps an initial level that is set", async function () {
       const data = fixture();
-      data.Instance[0].tenantInitialSupervisionLevel = "blocked";
+      data.Instance[0].tenantInitialSupervisionLevel = "pending";
       const mongoose = world(data);
       await migration.up(mongoose);
 
       expect(
         mongoose.model("Instance").documents[0].tenantInitialSupervisionLevel,
-      ).to.equal("blocked");
+      ).to.equal("pending");
     });
 
     it("sets a missing or null tenant level to free without a change date", async function () {
@@ -365,7 +365,7 @@ describe("21-09-2026-tenant-supervision-initial-state migration", function () {
 
       const approved = { status: "approved", ...DECISION };
       byId(mongoose, "Bookable", "b-public-missing").review = approved;
-      byId(mongoose, "Tenant", "t-old").supervisionLevel = "blocked";
+      byId(mongoose, "Tenant", "t-old").supervisionLevel = "pending";
 
       clock.setSystemTime(new Date(SECOND_RUN));
       await migration.up(mongoose);
@@ -374,7 +374,7 @@ describe("21-09-2026-tenant-supervision-initial-state migration", function () {
         approved,
       );
       expect(byId(mongoose, "Tenant", "t-old").supervisionLevel).to.equal(
-        "blocked",
+        "pending",
       );
       expect(history(mongoose)).to.have.length(6);
     });
