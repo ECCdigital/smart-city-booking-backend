@@ -123,10 +123,18 @@ class TenantManager {
    * @param {string} params.from The level the caller read
    * @param {string} params.to The new level
    * @param {Date} params.changedAt
+   * @param {string|null} [params.reason] The reason of this change, stored
+   *   as the tenant's `supervisionReason` - `null` without one
    * @returns {Promise<Tenant|null>} The tenant after the write, or null
    *   when no tenant at `from` matched
    */
-  static async updateSupervisionLevel({ tenantId, from, to, changedAt }) {
+  static async updateSupervisionLevel({
+    tenantId,
+    from,
+    to,
+    changedAt,
+    reason = null,
+  }) {
     assertSupervisionLevel(to);
     // A tenant from before the supervision has no stored level; `from:
     // "free"` has to match it as well.
@@ -134,7 +142,13 @@ class TenantManager {
       from === SUPERVISION_LEVELS.FREE ? { $in: [from, null] } : from;
     const raw = await TenantModel.findOneAndUpdate(
       { id: tenantId, supervisionLevel: currentLevel },
-      { $set: { supervisionLevel: to, supervisionChangedAt: changedAt } },
+      {
+        $set: {
+          supervisionLevel: to,
+          supervisionChangedAt: changedAt,
+          supervisionReason: reason ?? null,
+        },
+      },
       { new: true },
     );
     return raw ? raw.toEntity() : null;

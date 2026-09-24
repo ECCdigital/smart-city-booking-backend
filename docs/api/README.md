@@ -37,7 +37,7 @@ Returns tenants visible to the authenticated user. **Requires JWT.**
 
 ### GET /api/tenants/:id
 
-Returns a single tenant. **Requires JWT.**
+Returns a single tenant. **Requires JWT.** Carries `supervisionLevel`, `supervisionChangedAt` and `supervisionReason`; the owner of a declined tenant gets `403 tenant_declined` (see [authentication.md](authentication.md#the-management-gate-of-a-declined-tenant)).
 
 ### POST /api/tenants
 

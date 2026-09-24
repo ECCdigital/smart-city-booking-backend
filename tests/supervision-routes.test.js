@@ -29,6 +29,7 @@ describe("supervision routes", function () {
   let h;
   let level;
   let changedAt;
+  let reason;
 
   before(async function () {
     h = await installHarness({
@@ -56,21 +57,24 @@ describe("supervision routes", function () {
   beforeEach(function () {
     level = "free";
     changedAt = null;
+    reason = null;
     const current = () =>
       new Tenant({
         ...h.tenant,
         supervisionLevel: level,
         supervisionChangedAt: changedAt,
+        supervisionReason: reason,
       });
     TenantManager.getTenant.restore();
     sinon.stub(TenantManager, "getTenant").callsFake(async () => current());
     TenantManager.updateSupervisionLevel.restore();
     sinon
       .stub(TenantManager, "updateSupervisionLevel")
-      .callsFake(async ({ from, to, changedAt: at }) => {
+      .callsFake(async ({ from, to, changedAt: at, reason: why }) => {
         if (from !== level) return null;
         level = to;
         changedAt = at;
+        reason = why ?? null;
         return current();
       });
     SupervisionHistoryManager.insert.resetHistory();
@@ -181,6 +185,26 @@ describe("supervision routes", function () {
         "declined",
       ]);
       expect(level).to.equal("free");
+    });
+
+    it("answers the reason of the latest change, and null after a change without one", async function () {
+      const declined = await call(
+        "put",
+        `/tenants/${TENANT}/supervision`,
+        ADMIN,
+        { level: "declined", reason: "Kein Impressum" },
+      );
+      expect(declined.status).to.equal(200);
+      expect(declined.body.supervisionReason).to.equal("Kein Impressum");
+
+      const reversed = await call(
+        "put",
+        `/tenants/${TENANT}/supervision`,
+        ADMIN,
+        { level: "supervised" },
+      );
+      expect(reversed.status).to.equal(200);
+      expect(reversed.body.supervisionReason).to.equal(null);
     });
 
     it("repeats an effective level as a no-op", async function () {
@@ -366,9 +390,10 @@ describe("supervision routes", function () {
       ).to.equal(400);
     });
 
-    it("exposes level and change time in the admin DTO, the level alone publicly", async function () {
+    it("exposes level, change time and reason in the admin DTO, none of them publicly", async function () {
       level = "pending";
       changedAt = new Date("2026-01-01T00:00:00.000Z");
+      reason = "Spam";
 
       const admin = await call("get", `/tenants/${TENANT}`, ADMIN);
       expect(admin.status).to.equal(200);
@@ -376,15 +401,28 @@ describe("supervision routes", function () {
       expect(admin.body.supervisionChangedAt).to.equal(
         "2026-01-01T00:00:00.000Z",
       );
+      expect(admin.body.supervisionReason).to.equal("Spam");
+
+      // The list reads the harness' tenant record.
+      h.tenant.supervisionReason = "Spam";
+      try {
+        const list = await call("get", "/tenants", ADMIN);
+        expect(list.status).to.equal(200);
+        expect(list.body[0].supervisionReason).to.equal("Spam");
+      } finally {
+        delete h.tenant.supervisionReason;
+      }
 
       const publicDto = new Tenant({
         id: "x",
         name: "X",
         supervisionLevel: "supervised",
         supervisionChangedAt: changedAt,
+        supervisionReason: "Spam",
       }).exportPublic();
       expect(publicDto).to.not.have.property("supervisionLevel");
       expect(publicDto).to.not.have.property("supervisionChangedAt");
+      expect(publicDto).to.not.have.property("supervisionReason");
     });
 
     it("strips a level from a created tenant and stores the server-side one", async function () {
@@ -419,17 +457,21 @@ describe("supervision routes", function () {
       ).to.equal("free");
     });
 
-    it("ignores a level on an update", async function () {
+    it("ignores a level and a reason on an update", async function () {
       const res = await call("put", "/tenants", ADMIN, {
         id: TENANT,
         name: "Umbenannt",
         supervisionLevel: "pending",
+        supervisionReason: "Selbst geschrieben",
       });
 
       expect(res.status).to.equal(200);
       expect(
         TenantManager.storeTenant.lastCall.args[0].supervisionLevel,
       ).to.equal("free");
+      expect(
+        TenantManager.storeTenant.lastCall.args[0].supervisionReason,
+      ).to.equal(null);
       expect(TenantManager.updateSupervisionLevel.called).to.be.false;
     });
   });

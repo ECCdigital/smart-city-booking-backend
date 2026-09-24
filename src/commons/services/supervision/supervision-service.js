@@ -13,6 +13,7 @@ const {
   SUPERVISION_LEVELS,
   assertSupervisionLevel,
   effectiveLevelOf,
+  supervisionOf,
   INITIAL_SUPERVISION_LEVELS,
   REVIEW_STATUS,
   HISTORY_EVENT_TYPES,
@@ -35,8 +36,10 @@ class SupervisionService {
    * conditionally on the level the tenant was read at (a concurrent change
    * is a conflict, never a lost update), and - only when the level actually
    * changed - writes one history row and records one notification
-   * occasion. Setting the level that is already effective is a no-op: no
-   * history, no occasion, the stored change time stays.
+   * occasion. The reason becomes the tenant's `supervisionReason` (glossary
+   * "Begründung des jüngsten Stufenwechsels") with every actual change,
+   * `null` without one. Setting the level that is already effective is a
+   * no-op: no history, no occasion, the stored change time and reason stay.
    *
    * @param {Object} params
    * @param {string} params.tenantId
@@ -44,8 +47,8 @@ class SupervisionService {
    * @param {string|null} [params.reason] Optional reason, stored with the row
    * @param {string|null} params.actorUserId Who changes it (server-determined)
    * @param {Date} [params.now] The change time; default: now
-   * @returns {Promise<{supervisionLevel: string, supervisionChangedAt: Date|null}>}
-   *   The effective level and its change time
+   * @returns {Promise<{supervisionLevel: string, supervisionChangedAt: Date|null, supervisionReason: string|null}>}
+   *   The effective level, its change time and the reason of the latest change
    * @throws {BadRequestError} `invalid_supervision_level` for an unknown level
    * @throws {NotFoundError} `tenant_not_found`
    * @throws {ConflictError} `supervision_level_changed` when the level moved
@@ -68,10 +71,7 @@ class SupervisionService {
 
     const from = effectiveLevelOf(tenant);
     if (from === level) {
-      return {
-        supervisionLevel: from,
-        supervisionChangedAt: tenant.supervisionChangedAt ?? null,
-      };
+      return supervisionOf(tenant);
     }
 
     const updated = await TenantManager.updateSupervisionLevel({
@@ -79,6 +79,7 @@ class SupervisionService {
       from,
       to: level,
       changedAt: now,
+      reason: storedReason,
     });
     if (!updated) {
       throw new ConflictError("supervision_level_changed", {
@@ -143,10 +144,7 @@ class SupervisionService {
       }
     }
 
-    return {
-      supervisionLevel: updated.supervisionLevel,
-      supervisionChangedAt: updated.supervisionChangedAt,
-    };
+    return supervisionOf(updated);
   }
 
   /**

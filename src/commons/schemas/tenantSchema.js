@@ -111,15 +111,17 @@ const tenantSchemaDefinition = {
     },
   },
 
-  // The supervision level (glossary "Aufsichtsstufe") and when it last
-  // changed. Set server-side on creation, changed only by the supervision
-  // service - never taken from a tenant write's body.
+  // The supervision level (glossary "Aufsichtsstufe"), when it last
+  // changed and the reason of that latest change (glossary "Begründung des
+  // jüngsten Stufenwechsels"). Set server-side on creation, changed only by
+  // the supervision service - never taken from a tenant write's body.
   supervisionLevel: {
     type: String,
     enum: SUPERVISION_LEVEL_VALUES,
     default: SUPERVISION_LEVELS.FREE,
   },
   supervisionChangedAt: { type: Date, default: null },
+  supervisionReason: { type: String, default: null },
 
   bookableCustomFields: {
     type: [customFieldDefinitionSchema],

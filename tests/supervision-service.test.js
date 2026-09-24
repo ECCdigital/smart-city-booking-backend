@@ -60,7 +60,7 @@ describe("SupervisionService.changeTenantLevel", function () {
     sinon.stub(TenantManager, "getTenant").callsFake(async () => tenant);
     sinon
       .stub(TenantManager, "updateSupervisionLevel")
-      .callsFake(async ({ tenantId, from, to, changedAt }) => {
+      .callsFake(async ({ tenantId, from, to, changedAt, reason }) => {
         // As the manager does it: a missing level is `free`.
         const current = tenant.supervisionLevel ?? "free";
         if (tenant.id !== tenantId || current !== from) {
@@ -70,6 +70,7 @@ describe("SupervisionService.changeTenantLevel", function () {
           ...tenant,
           supervisionLevel: to,
           supervisionChangedAt: changedAt,
+          supervisionReason: reason ?? null,
         };
         return tenant;
       });
@@ -97,6 +98,7 @@ describe("SupervisionService.changeTenantLevel", function () {
     expect(result).to.deep.equal({
       supervisionLevel: "pending",
       supervisionChangedAt: NOW,
+      supervisionReason: "Spam",
     });
     expect(history.calledOnce).to.be.true;
     expect(history.firstCall.args[0]).to.include({
@@ -122,6 +124,66 @@ describe("SupervisionService.changeTenantLevel", function () {
       to: "pending",
       reason: "Spam",
       actorUserId: "owner@example.test",
+    });
+  });
+
+  describe("the reason of the latest level change (glossary 'Begründung des jüngsten Stufenwechsels')", function () {
+    it("is written to the tenant with the change and answered", async function () {
+      await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "declined",
+        reason: "Kein Impressum",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(tenant.supervisionReason).to.equal("Kein Impressum");
+      expect(tenant.supervisionLevel).to.equal("declined");
+    });
+
+    it("is set anew by the reversal of a declination, to null without one", async function () {
+      tenant = {
+        ...tenant,
+        supervisionLevel: "declined",
+        supervisionReason: "Kein Impressum",
+      };
+
+      const result = await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "pending",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(result).to.deep.equal({
+        supervisionLevel: "pending",
+        supervisionChangedAt: NOW,
+        supervisionReason: null,
+      });
+      expect(tenant.supervisionReason).to.equal(null);
+    });
+
+    it("stays with a no-op, and is answered", async function () {
+      tenant = {
+        ...tenant,
+        supervisionLevel: "declined",
+        supervisionChangedAt: NOW,
+        supervisionReason: "Kein Impressum",
+      };
+
+      const result = await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "declined",
+        reason: "Etwas anderes",
+        actorUserId: "owner@example.test",
+      });
+
+      expect(result).to.deep.equal({
+        supervisionLevel: "declined",
+        supervisionChangedAt: NOW,
+        supervisionReason: "Kein Impressum",
+      });
+      expect(history.called).to.be.false;
     });
   });
 
@@ -249,6 +311,36 @@ describe("SupervisionService.changeTenantLevel", function () {
       expect(outbox.callCount).to.equal(1);
     });
 
+    it("comes from declined as well: the reversal into supervision enters the pending offers", async function () {
+      tenant = { ...tenant, supervisionLevel: "declined" };
+
+      await SupervisionService.changeTenantLevel({
+        tenantId: "t1",
+        level: "supervised",
+        actorUserId: "owner@example.test",
+        now: NOW,
+      });
+
+      expect(queueRows()).to.have.length(1);
+      expect(queueRows()[0].payload.offers.map((o) => o.offerId)).to.deep.equal(
+        ["b1", "e1"],
+      );
+    });
+
+    it("a reversal from declined to free or pending records none", async function () {
+      for (const level of ["free", "pending"]) {
+        tenant = { ...tenant, supervisionLevel: "declined" };
+        await SupervisionService.changeTenantLevel({
+          tenantId: "t1",
+          level,
+          actorUserId: "owner@example.test",
+          now: NOW,
+        });
+      }
+
+      expect(queueRows()).to.deep.equal([]);
+    });
+
     it("a switch away from supervised records none", async function () {
       for (const level of ["free", "pending"]) {
         tenant = { ...tenant, supervisionLevel: "supervised" };
@@ -340,6 +432,7 @@ describe("SupervisionService.changeTenantLevel", function () {
     expect(result).to.deep.equal({
       supervisionLevel: "pending",
       supervisionChangedAt: tenant.supervisionChangedAt,
+      supervisionReason: null,
     });
     expect(history.called).to.be.false;
     expect(outbox.called).to.be.false;

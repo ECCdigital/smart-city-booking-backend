@@ -16,6 +16,7 @@ const { expect } = require("chai");
 const { errorHandler } = require("../src/middleware/error-handler");
 const JwtHelper = require("../src/commons/utilities/jwt-helper");
 const UserManager = require("../src/commons/data-managers/user-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const {
   authorize,
   publicRoute,
@@ -71,6 +72,11 @@ describe("authorization middleware: the three markers", function () {
     sinon
       .stub(UserManager, "getUserPermissions")
       .callsFake(async (id) => permissionsOf(id));
+    // The management gate of a declined tenant loads the tenant for the
+    // staff; here every tenant is free.
+    sinon
+      .stub(TenantManager, "getTenant")
+      .callsFake(async (id) => ({ id, supervisionLevel: "free" }));
   });
 
   afterEach(function () {

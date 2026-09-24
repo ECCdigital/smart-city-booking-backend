@@ -102,6 +102,91 @@ components:
         the same absence. A tenant without a stored level is `free`.
       enum: [free, supervised, pending, declined]
 
+    TenantDeclinedError:
+      type: object
+      description: |
+        The management gate of a declined tenant (glossary "abgewiesen",
+        tenant supervision spec §6.1): every management request of a tenant
+        owner or role holder about a declined tenant - read and write, on
+        `/api/{tenant}/...`, `/api/tenants/{tenant}/...`,
+        `/api/v2/{tenant}/...`, `/csv/{tenant}/...` and `PUT /api/tenants`
+        with the tenant in the body - answers `403 tenant_declined`. Not
+        affected: the instance owner, what any signed-in user has (the own
+        booking, its receipt, refund preview and lock, an invitation - the
+        tenant's staff keep exactly that, at the reach `own`), public and
+        token-authorized routes (booking status, payment callbacks, hooks,
+        webhooks). The body is the JSON form of `ForbiddenError`.
+      properties:
+        error:
+          type: string
+          example: ForbiddenError
+        code:
+          type: string
+          enum: [tenant_declined]
+        statusCode:
+          type: integer
+          example: 403
+        params:
+          type: object
+          properties:
+            tenantId:
+              type: string
+            supervisionLevel:
+              type: string
+              enum: [declined]
+            supervisionChangedAt:
+              type: string
+              format: date-time
+              nullable: true
+            supervisionReason:
+              type: string
+              nullable: true
+              description: The reason of the latest level change, if any.
+
+    SignInTenantPermission:
+      type: object
+      description: |
+        One entry of `permissions.tenants[]` in the sign-in answers
+        (`POST /auth/signin`, `GET /auth/me`, the SSO and the card sign-in):
+        the merged role levels of the user's active memberships in the
+        tenant, and the tenant's supervision - so a client marks a declined
+        or waiting tenant before its first request.
+      properties:
+        tenantId:
+          type: string
+        isOwner:
+          type: boolean
+        adminInterfaces:
+          type: array
+          items:
+            type: string
+        supervisionLevel:
+          $ref: "#/components/schemas/SupervisionLevel"
+        supervisionChangedAt:
+          type: string
+          format: date-time
+          nullable: true
+        supervisionReason:
+          type: string
+          nullable: true
+          description: |
+            The reason of the latest level change (glossary "Begründung des
+            jüngsten Stufenwechsels"), `null` without one.
+      additionalProperties: true
+
+    SignInPermissions:
+      type: object
+      description: The `permissions` of every sign-in answer.
+      properties:
+        tenants:
+          type: array
+          items:
+            $ref: "#/components/schemas/SignInTenantPermission"
+        allowCreateTenant:
+          type: boolean
+        instanceOwner:
+          type: boolean
+
     SupervisionHistoryRow:
       type: object
       description: One immutable row of the supervision history.

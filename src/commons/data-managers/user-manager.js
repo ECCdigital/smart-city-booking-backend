@@ -3,7 +3,11 @@ const { RoleManager } = require("./role-manager");
 const InstanceManager = require("./instance-manager");
 const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
+const TenantManager = require("./tenant-manager");
 const { escapeRegex } = require("../utilities/regex-utils");
+const {
+  supervisionOf,
+} = require("../services/supervision/supervision-constants");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
@@ -321,6 +325,20 @@ class UserManager {
           ]),
         ];
       }
+    }
+
+    // The supervision of every tenant of the user (tenant supervision spec
+    // §6.1): one query, so a client can mark a declined or waiting tenant
+    // before its first request. A tenant whose document is gone reads as
+    // one without a stored level.
+    const tenants = await TenantManager.getTenantsByIds(
+      tenantPermissions.map((permission) => permission.tenantId),
+    );
+    for (const permission of tenantPermissions) {
+      Object.assign(
+        permission,
+        supervisionOf(tenants.find((t) => t.id === permission.tenantId)),
+      );
     }
 
     const permissions = {

@@ -200,7 +200,7 @@ describe("event review routes", function () {
     });
 
     it("records a queue entry only under a supervised tenant", async function () {
-      for (const level of ["free", "pending", "declined"]) {
+      for (const level of ["free", "pending"]) {
         h.tenant.supervisionLevel = level;
         events[EVENT_ID].review = review(null);
 
@@ -208,6 +208,17 @@ describe("event review routes", function () {
 
         expect(res.body.review.status, level).to.equal("pending");
       }
+      // A declined tenant's owner is behind the management gate (ticket
+      // 15); the instance owner's submission is recorded without an
+      // occasion as well.
+      h.tenant.supervisionLevel = "declined";
+      events[EVENT_ID].review = review(null);
+      const refused = await call("post", submissions, OWNER);
+      expect(refused.status).to.equal(403);
+      expect(refused.body.code).to.equal("tenant_declined");
+      const res = await call("post", submissions, ADMIN);
+      expect(res.body.review.status, "declined").to.equal("pending");
+
       expect(SupervisionHistoryManager.insert.callCount).to.equal(3);
       expect(SupervisionNotificationManager.record.called).to.be.false;
     });
