@@ -1,6 +1,7 @@
 /**
  * The initial supervision level of the instance (glossary "Startstufe",
- * tenant supervision spec §2, §3): `free`, `supervised` or `blocked`,
+ * tenant supervision spec §2, §3): `free`, `supervised` or `pending`,
+ * never `declined`,
  * `free` where nothing is stored; written by the instance owner alone and
  * validated; part of the public instance without any private data; and
  * never retroactive - a change touches no existing tenant.
@@ -64,7 +65,7 @@ describe("the initial supervision level of the instance", function () {
       throw new Error("expected the instance write to be refused");
     }
 
-    for (const level of ["free", "supervised", "blocked"]) {
+    for (const level of ["free", "supervised", "pending"]) {
       it(`stores ${level}`, async function () {
         await InstanceManager.updateInstance({ [FIELD]: level });
 
@@ -72,7 +73,7 @@ describe("the initial supervision level of the instance", function () {
       });
     }
 
-    for (const value of ["strict", "", null, 1, ["free"]]) {
+    for (const value of ["strict", "blocked", "", null, 1, ["free"]]) {
       it(`refuses ${JSON.stringify(value)} as invalid_supervision_level and writes nothing`, async function () {
         const error = await refused({ [FIELD]: value });
 
@@ -81,6 +82,19 @@ describe("the initial supervision level of the instance", function () {
         expect(update).to.equal(null);
       });
     }
+
+    it("refuses declined as an initial level, naming the three initial levels", async function () {
+      const error = await refused({ [FIELD]: "declined" });
+
+      expect(error.statusCode).to.equal(400);
+      expect(error.toJSON().code).to.equal("invalid_supervision_level");
+      expect(error.toJSON().params).to.deep.equal({
+        field: FIELD,
+        level: "declined",
+        allowed: ["free", "supervised", "pending"],
+      });
+      expect(update).to.equal(null);
+    });
 
     it("keeps the stored level when the write does not name one", async function () {
       stored[FIELD] = "supervised";
@@ -97,7 +111,7 @@ describe("the initial supervision level of the instance", function () {
     });
 
     it("touches no existing tenant", async function () {
-      await InstanceManager.updateInstance({ [FIELD]: "blocked" });
+      await InstanceManager.updateInstance({ [FIELD]: "pending" });
 
       for (const write of tenantWrites) {
         expect(write.called).to.be.false;
@@ -236,31 +250,38 @@ describe("the initial supervision level of the instance", function () {
       expect(InstanceManager.updateInstance.called).to.be.false;
     });
 
-    it("answers an unknown level with 400 invalid_supervision_level", async function () {
-      InstanceManager.updateInstance.restore();
-      const write = sinon.stub(InstanceModel, "findOneAndUpdate");
-      try {
-        const res = await call("put", "/instances", ADMIN, {
-          [FIELD]: "strict",
-        });
+    for (const level of ["strict", "blocked", "declined"]) {
+      it(`answers ${level} with 400 invalid_supervision_level`, async function () {
+        InstanceManager.updateInstance.restore();
+        const write = sinon.stub(InstanceModel, "findOneAndUpdate");
+        try {
+          const res = await call("put", "/instances", ADMIN, {
+            [FIELD]: level,
+          });
 
-        expect(res.status).to.equal(400);
-        expect(res.body.code).to.equal("invalid_supervision_level");
-        expect(write.called).to.be.false;
-      } finally {
-        write.restore();
-        sinon.stub(InstanceManager, "updateInstance").resolves(null);
-      }
-    });
+          expect(res.status).to.equal(400);
+          expect(res.body.code).to.equal("invalid_supervision_level");
+          expect(res.body.params.allowed).to.deep.equal([
+            "free",
+            "supervised",
+            "pending",
+          ]);
+          expect(write.called).to.be.false;
+        } finally {
+          write.restore();
+          sinon.stub(InstanceManager, "updateInstance").resolves(null);
+        }
+      });
+    }
 
     it("changes no tenant when the instance owner changes it", async function () {
       const res = await call("put", "/instances", ADMIN, {
-        [FIELD]: "blocked",
+        [FIELD]: "pending",
       });
 
       expect(res.status).to.equal(200);
       expect(InstanceManager.updateInstance.firstCall.args[0][FIELD]).to.equal(
-        "blocked",
+        "pending",
       );
       expect(TenantManager.updateSupervisionLevel.called).to.be.false;
     });

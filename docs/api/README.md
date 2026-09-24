@@ -84,7 +84,7 @@ The tenant supervision tells the owners in charge by mail (glossary „Aufsichts
 | Supervision level changed                                                                  | All tenant owners (memberships with `owner: true`): old and new level, reason, admin link                    |
 | Review decided (approve, reject, withdraw; bookable or event)                              | All tenant owners: offer, old and new status, reason, admin link                                             |
 
-Pending offers of a `free` or `blocked` tenant cause no review mail, and repeating an action causes no new mail. Sending follows the recording and never rolls a decision back.
+Pending offers of a `free`, `pending` or `declined` tenant cause no review mail, and repeating an action causes no new mail. Sending follows the recording and never rolls a decision back.
 
 ### GET /api/instances/supervision/notifications
 

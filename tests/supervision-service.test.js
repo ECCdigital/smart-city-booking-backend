@@ -85,17 +85,17 @@ describe("SupervisionService.changeTenantLevel", function () {
     sinon.restore();
   });
 
-  it("blocks a free tenant, with a history row and a notification occasion", async function () {
+  it("sets a free tenant pending, with a history row and a notification occasion", async function () {
     const result = await SupervisionService.changeTenantLevel({
       tenantId: "t1",
-      level: "blocked",
+      level: "pending",
       reason: "Spam",
       actorUserId: "owner@example.test",
       now: NOW,
     });
 
     expect(result).to.deep.equal({
-      supervisionLevel: "blocked",
+      supervisionLevel: "pending",
       supervisionChangedAt: NOW,
     });
     expect(history.calledOnce).to.be.true;
@@ -103,7 +103,7 @@ describe("SupervisionService.changeTenantLevel", function () {
       tenantId: "t1",
       eventType: "tenant.levelChanged",
       from: "free",
-      to: "blocked",
+      to: "pending",
       reason: "Spam",
       origin: "api",
     });
@@ -119,7 +119,7 @@ describe("SupervisionService.changeTenantLevel", function () {
     });
     expect(outbox.firstCall.args[0].payload).to.include({
       from: "free",
-      to: "blocked",
+      to: "pending",
       reason: "Spam",
       actorUserId: "owner@example.test",
     });
@@ -221,8 +221,8 @@ describe("SupervisionService.changeTenantLevel", function () {
       expect(outbox.callCount).to.equal(2);
     });
 
-    it("comes from blocked as well", async function () {
-      tenant.supervisionLevel = "blocked";
+    it("comes from pending as well", async function () {
+      tenant.supervisionLevel = "pending";
 
       await SupervisionService.changeTenantLevel({
         tenantId: "t1",
@@ -250,7 +250,7 @@ describe("SupervisionService.changeTenantLevel", function () {
     });
 
     it("a switch away from supervised records none", async function () {
-      for (const level of ["free", "blocked"]) {
+      for (const level of ["free", "pending"]) {
         tenant = { ...tenant, supervisionLevel: "supervised" };
         outbox.resetHistory();
 
@@ -266,10 +266,10 @@ describe("SupervisionService.changeTenantLevel", function () {
       }
     });
 
-    it("a switch between free and blocked records none", async function () {
+    it("a switch between free and pending records none", async function () {
       await SupervisionService.changeTenantLevel({
         tenantId: "t1",
-        level: "blocked",
+        level: "pending",
         actorUserId: "owner@example.test",
         now: NOW,
       });
@@ -312,7 +312,7 @@ describe("SupervisionService.changeTenantLevel", function () {
       const updateBookable = sinon.stub(BookableManager, "updateReview");
       const updateEvent = sinon.stub(EventManager, "updateReview");
 
-      for (const level of ["supervised", "blocked", "free"]) {
+      for (const level of ["supervised", "pending", "free"]) {
         await SupervisionService.changeTenantLevel({
           tenantId: "t1",
           level,
@@ -327,18 +327,18 @@ describe("SupervisionService.changeTenantLevel", function () {
   });
 
   it("is a no-op when the level is already effective", async function () {
-    tenant.supervisionLevel = "blocked";
+    tenant.supervisionLevel = "pending";
     tenant.supervisionChangedAt = new Date("2026-01-01T00:00:00.000Z");
 
     const result = await SupervisionService.changeTenantLevel({
       tenantId: "t1",
-      level: "blocked",
+      level: "pending",
       actorUserId: "owner@example.test",
       now: NOW,
     });
 
     expect(result).to.deep.equal({
-      supervisionLevel: "blocked",
+      supervisionLevel: "pending",
       supervisionChangedAt: tenant.supervisionChangedAt,
     });
     expect(history.called).to.be.false;
@@ -350,7 +350,7 @@ describe("SupervisionService.changeTenantLevel", function () {
 
     await SupervisionService.changeTenantLevel({
       tenantId: "t1",
-      level: "blocked",
+      level: "pending",
       actorUserId: "owner@example.test",
       now: NOW,
     });
@@ -378,7 +378,7 @@ describe("SupervisionService.changeTenantLevel", function () {
       await rejection(
         SupervisionService.changeTenantLevel({
           tenantId: "nope",
-          level: "blocked",
+          level: "pending",
           actorUserId: "owner@example.test",
         }),
       ),
@@ -392,7 +392,7 @@ describe("SupervisionService.changeTenantLevel", function () {
       await rejection(
         SupervisionService.changeTenantLevel({
           tenantId: "t1",
-          level: "blocked",
+          level: "pending",
           actorUserId: "owner@example.test",
         }),
       ),
@@ -406,7 +406,7 @@ describe("SupervisionService.initialLevelForCreation", function () {
   it("gives an instance owner a free tenant, whatever the instance says", function () {
     expect(
       SupervisionService.initialLevelForCreation({
-        instance: { tenantInitialSupervisionLevel: "blocked" },
+        instance: { tenantInitialSupervisionLevel: "pending" },
         creatorIsInstanceOwner: true,
       }),
     ).to.equal("free");
@@ -419,6 +419,15 @@ describe("SupervisionService.initialLevelForCreation", function () {
         creatorIsInstanceOwner: false,
       }),
     ).to.equal("supervised");
+  });
+
+  it("never starts a tenant declined: a stored declined initial level reads as free", function () {
+    expect(
+      SupervisionService.initialLevelForCreation({
+        instance: { tenantInitialSupervisionLevel: "declined" },
+        creatorIsInstanceOwner: false,
+      }),
+    ).to.equal("free");
   });
 
   it("defaults to free without an instance setting", function () {

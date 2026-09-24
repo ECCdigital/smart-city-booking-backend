@@ -16,6 +16,7 @@ const {
 const {
   SUPERVISION_LEVELS,
   assertSupervisionLevel,
+  INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
 const { NotFoundError } = require("../../errors/BaseError");
 
@@ -87,12 +88,14 @@ class InstanceManager {
       synced.copyright = synced.copyright.trim();
     }
 
-    // The Startstufe is one of the three levels or not named at all; an
-    // unknown value is refused before anything is read or written.
+    // The Startstufe is one of the three initial levels (never `declined`)
+    // or not named at all; anything else is refused before anything is
+    // read or written.
     const initialLevel = synced.tenantInitialSupervisionLevel;
     if (initialLevel !== undefined) {
       assertSupervisionLevel(initialLevel, {
         field: "tenantInitialSupervisionLevel",
+        allowed: INITIAL_SUPERVISION_LEVELS,
       });
     }
 

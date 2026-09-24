@@ -9,7 +9,7 @@
  * `event-review-routes` walk the many further read paths per offer type;
  * this one is the consolidated acceptance walk and adds the checkout
  * entrances they leave out per row (v1 and group), and the cutover
- * scenarios around a block.
+ * scenarios around a level without a public projection.
  */
 
 const { expect } = require("chai");
@@ -76,7 +76,14 @@ const SPEC_ROWS = [
     reachable: false,
   },
   {
-    level: "blocked",
+    level: "pending",
+    statuses: ANY_STATUS,
+    wishes: ANY_WISH,
+    listed: false,
+    reachable: false,
+  },
+  {
+    level: "declined",
     statuses: ANY_STATUS,
     wishes: ANY_WISH,
     listed: false,
@@ -303,14 +310,21 @@ describe("supervision: the acceptance matrix (§5.1) for both offer types", func
   }
 
   /**
-   * The cutover scenarios of spec §12: what was delivered before a block or
-   * a withdrawal opens nothing afterwards, and what exists stays usable.
+   * The cutover scenarios of spec §12: what was delivered before the tenant
+   * lost its public projection or an approval was withdrawn opens nothing
+   * afterwards, and what exists stays usable.
    */
   const CLOSINGS = [
     {
-      name: "the tenant is blocked",
+      name: "the tenant is set pending",
       close: () => {
-        h.tenant.supervisionLevel = "blocked";
+        h.tenant.supervisionLevel = "pending";
+      },
+    },
+    {
+      name: "the tenant is declined",
+      close: () => {
+        h.tenant.supervisionLevel = "declined";
       },
     },
     {
@@ -364,8 +378,10 @@ describe("supervision: the acceptance matrix (§5.1) for both offer types", func
     }
   }
 
-  it("keeps the management routes open to the owner of a blocked tenant", async function () {
-    h.tenant.supervisionLevel = "blocked";
+  // The management gate of a declined tenant (`403 tenant_declined`) is
+  // ticket 15; here the owner of a pending tenant prepares everything.
+  it("keeps the management routes open to the owner of a pending tenant", async function () {
+    h.tenant.supervisionLevel = "pending";
 
     for (const path of [
       `/api/tenants/${TENANT}`,
@@ -381,7 +397,7 @@ describe("supervision: the acceptance matrix (§5.1) for both offer types", func
         expect(res.status, `${path} as ${userId}`).to.equal(200);
       }
     }
-    // Preparing goes on: the owner still edits an offer of the blocked tenant.
+    // Preparing goes on: the owner still edits an offer of the pending tenant.
     const edit = await call("put", `/api/${TENANT}/bookables`, OWNER, {
       ...h.bookables[ROOM_ID],
       title: `${ROOM_NAME} (neu)`,

@@ -28,8 +28,9 @@ const { assertTenantPubliclyVisible } = require("./public-tenant-gate");
  * @param {string} tenantId
  * @param {string} bookableId
  * @returns {Promise<void>}
- * @throws {NotFoundError} `tenant_not_found` for a blocked or unknown
- *   tenant, `offer_not_found` for a bookable that is not reachable
+ * @throws {NotFoundError} `tenant_not_found` for an unknown tenant or one
+ *   without a public projection, `offer_not_found` for a bookable that is
+ *   not reachable
  */
 async function assertBookableReachable(tenantId, bookableId) {
   const bookable = await BookableManager.getBookable(
@@ -142,7 +143,8 @@ function reachableOffers(tenant, offers) {
  *
  * @param {string} tenantId
  * @returns {Promise<Set<string>>}
- * @throws {NotFoundError} `tenant_not_found` for a blocked or unknown tenant
+ * @throws {NotFoundError} `tenant_not_found` for an unknown tenant or one
+ *   without a public projection
  */
 async function reachableBookableIds(tenantId) {
   const tenant = await assertTenantPubliclyVisible(tenantId);
@@ -169,7 +171,7 @@ function managesTenant(principal) {
  * The offers an aggregate for any signed-in user (tags, counters) is
  * built from (spec §5.2: no leak over tags or counters): the tenant's own
  * people see every offer, anyone else what a public list would show -
- * nothing of a blocked tenant.
+ * nothing of a pending or declined tenant.
  *
  * @param {Object} principal The principal of the request
  * @param {string} tenantId

@@ -200,7 +200,7 @@ describe("event review routes", function () {
     });
 
     it("records a queue entry only under a supervised tenant", async function () {
-      for (const level of ["free", "blocked"]) {
+      for (const level of ["free", "pending", "declined"]) {
         h.tenant.supervisionLevel = level;
         events[EVENT_ID].review = review(null);
 
@@ -208,7 +208,7 @@ describe("event review routes", function () {
 
         expect(res.body.review.status, level).to.equal("pending");
       }
-      expect(SupervisionHistoryManager.insert.callCount).to.equal(2);
+      expect(SupervisionHistoryManager.insert.callCount).to.equal(3);
       expect(SupervisionNotificationManager.record.called).to.be.false;
     });
 
@@ -485,8 +485,8 @@ describe("event review routes", function () {
       expect(SupervisionNotificationManager.record.called).to.be.false;
     });
 
-    it("submits on the first publication wish of an edit, for a blocked tenant too", async function () {
-      h.tenant.supervisionLevel = "blocked";
+    it("submits on the first publication wish of an edit, for a pending tenant too", async function () {
+      h.tenant.supervisionLevel = "pending";
 
       const res = await call(
         "put",
@@ -557,12 +557,14 @@ describe("event review routes", function () {
     });
   });
   describe("the decision matrix (§5.1)", function () {
-    const LEVELS = ["free", "supervised", "blocked"];
+    const LEVELS = ["free", "supervised", "pending", "declined"];
     const STATUSES = [null, "pending", "approved", "rejected"];
 
     /** The matrix itself, spelled from the spec table. */
     const expected = (level, status, isPublic) => {
-      if (level === "blocked") return { listed: false, reachable: false };
+      if (["pending", "declined"].includes(level)) {
+        return { listed: false, reachable: false };
+      }
       if (level === "free") return { listed: isPublic, reachable: true };
       const approved = status === "approved";
       return { listed: approved && isPublic, reachable: approved };

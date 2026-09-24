@@ -17,19 +17,23 @@ const {
 } = require("../services/supervision/review-transitions");
 const { adminDashboardUrl, adminInstanceTenantsUrl } = require("./mail-links");
 
+/** The level as the tenant owner reads it (glossary "Freigabestufe"). */
 const LEVEL_LABELS = Object.freeze({
   [SUPERVISION_LEVELS.FREE]: "frei",
   [SUPERVISION_LEVELS.SUPERVISED]: "beaufsichtigt",
-  [SUPERVISION_LEVELS.BLOCKED]: "gesperrt",
+  [SUPERVISION_LEVELS.PENDING]: "Freigabe ausstehend",
+  [SUPERVISION_LEVELS.DECLINED]: "abgewiesen",
 });
 
+// `declined` has no hint yet (its wording comes with its management gate);
+// a level without a hint renders none.
 const LEVEL_HINTS = Object.freeze({
   [SUPERVISION_LEVELS.FREE]:
     "Ihre Angebote können ohne vorherige Prüfung veröffentlicht werden.",
   [SUPERVISION_LEVELS.SUPERVISED]:
     "Ihre Angebote werden vor der Veröffentlichung von der Plattform geprüft. Reichen Sie ein Angebot zur Prüfung ein, sobald es fertig ist.",
-  [SUPERVISION_LEVELS.BLOCKED]:
-    "Ihr Mandant ist derzeit gesperrt: Er und seine Angebote sind öffentlich nicht sichtbar und nicht buchbar.",
+  [SUPERVISION_LEVELS.PENDING]:
+    "Ihr Mandant wartet auf die Freigabe durch die Plattform. Sie können bereits alles vorbereiten; Ihre Angebote werden erst nach der Freigabe öffentlich sichtbar und buchbar.",
 });
 
 const REVIEW_STATUS_LABELS = Object.freeze({

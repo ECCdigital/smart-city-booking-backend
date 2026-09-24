@@ -1,6 +1,7 @@
 /**
  * The tenant gate of the supervision on the public delivery paths (tenant
- * supervision spec §5.2, research inventory 01): a blocked tenant's public
+ * supervision spec §5.2, research inventory 01): a pending or declined
+ * tenant's public
  * projection does not exist - single resources answer 404, lists leave it
  * out - while staff keep their management reach and the existing-booking
  * paths, hooks and management routes never change.
@@ -111,7 +112,12 @@ describe("supervision: the tenant gate on public delivery", function () {
     return req;
   };
 
-  it("answers 404 for every public delivery path of a blocked tenant", async function () {
+  // The two levels without a public projection: to the public, a pending
+  // (glossary "Freigabe ausstehend") and a declined (glossary "abgewiesen")
+  // tenant are the same absence.
+  const HIDDEN_LEVELS = ["pending", "declined"];
+
+  it("answers 404 for every public delivery path of a pending and of a declined tenant", async function () {
     // The answer when free, to tell the gate's 404 from a fixture's. The
     // html event pages hang in the fixture world (pinned as `timeout` in
     // the route snapshot), which is as good as "not 404" here.
@@ -122,54 +128,60 @@ describe("supervision: the tenant gate on public delivery", function () {
         (err) => (err.timeout ? "timeout" : `error: ${err.message}`),
       );
     }
-    h.tenant.supervisionLevel = "blocked";
 
     const wrong = [];
-    for (const path of GATED) {
-      const res = await get(path);
-      if (res.status !== 404) {
-        wrong.push(`${path} -> ${res.status}`);
-      } else if (before[path] === 404 || /^error/.test(before[path])) {
-        wrong.push(`${path} was ${before[path]} already when free`);
-      } else if (JSON.stringify(res.body).includes("supervision")) {
-        wrong.push(`${path} names the reason`);
+    for (const level of HIDDEN_LEVELS) {
+      h.tenant.supervisionLevel = level;
+      for (const path of GATED) {
+        const res = await get(path);
+        if (res.status !== 404) {
+          wrong.push(`${level}: ${path} -> ${res.status}`);
+        } else if (before[path] === 404 || /^error/.test(before[path])) {
+          wrong.push(`${path} was ${before[path]} already when free`);
+        } else if (JSON.stringify(res.body).includes("supervision")) {
+          wrong.push(`${level}: ${path} names the reason`);
+        }
       }
     }
     expect(wrong).to.deep.equal([]);
   });
 
-  it("does not open the public booking projection of a blocked tenant by signing in", async function () {
-    h.tenant.supervisionLevel = "blocked";
-    const path = `/api/${TENANT}/bookings?public=true`;
+  for (const level of HIDDEN_LEVELS) {
+    it(`does not open the public booking projection of a ${level} tenant by signing in`, async function () {
+      h.tenant.supervisionLevel = level;
+      const path = `/api/${TENANT}/bookings?public=true`;
 
-    expect((await get(path, CUSTOMER)).status).to.equal(404);
-    expect((await get(path, ADMIN)).status).to.equal(200);
-  });
+      expect((await get(path, CUSTOMER)).status).to.equal(404);
+      expect((await get(path, ADMIN)).status).to.equal(200);
+    });
 
-  it("keeps the tags of a blocked tenant from a signed-in user outside the tenant", async function () {
-    h.bookables[FIXTURE_ID].tags = ["sauna"];
-    const path = `/api/${TENANT}/bookables/_meta/tags`;
+    it(`keeps the tags of a ${level} tenant from a signed-in user outside the tenant`, async function () {
+      h.bookables[FIXTURE_ID].tags = ["sauna"];
+      const path = `/api/${TENANT}/bookables/_meta/tags`;
 
-    expect((await get(path, CUSTOMER)).body).to.deep.equal(["sauna"]);
-    h.tenant.supervisionLevel = "blocked";
-    expect((await get(path, CUSTOMER)).body).to.deep.equal([]);
-    expect((await get(path, OWNER)).body).to.deep.equal(["sauna"]);
-  });
+      expect((await get(path, CUSTOMER)).body).to.deep.equal(["sauna"]);
+      h.tenant.supervisionLevel = level;
+      expect((await get(path, CUSTOMER)).body).to.deep.equal([]);
+      expect((await get(path, OWNER)).body).to.deep.equal(["sauna"]);
+    });
 
-  it("leaves the existing-booking and instance paths as they were", async function () {
-    const before = {};
-    for (const path of UNGATED) {
-      before[path] = (await get(path)).status;
-    }
-    h.tenant.supervisionLevel = "blocked";
+    it(`leaves the existing-booking and instance paths of a ${level} tenant as they were`, async function () {
+      const before = {};
+      for (const path of UNGATED) {
+        before[path] = (await get(path)).status;
+      }
+      h.tenant.supervisionLevel = level;
 
-    for (const path of UNGATED) {
-      expect((await get(path)).status, path).to.equal(before[path]);
-    }
-  });
+      for (const path of UNGATED) {
+        expect((await get(path)).status, path).to.equal(before[path]);
+      }
+    });
+  }
 
+  // Ticket 15 narrows the staff exemption to `pending`; in this ticket it
+  // holds for both hidden levels.
   it("keeps the management reach of the tenant's staff", async function () {
-    h.tenant.supervisionLevel = "blocked";
+    h.tenant.supervisionLevel = "pending";
 
     expect(
       (await get(`/api/${TENANT}/bookables/${FIXTURE_ID}/prices`, ADMIN))
@@ -201,13 +213,13 @@ describe("supervision: the tenant gate on public delivery", function () {
   });
 
   describe("tenant lists and catalog", function () {
-    it("leaves blocked tenants out of the public tenant list", async function () {
+    it("lists only the tenants at a public level, a missing level counting as free", async function () {
       const find = sinon.stub(TenantModel, "find").resolves([]);
       try {
         TenantManager.getPublicTenants.restore();
         await TenantManager.getPublicTenants();
         expect(find.firstCall.args[0]).to.deep.equal({
-          supervisionLevel: { $ne: "blocked" },
+          supervisionLevel: { $in: ["free", "supervised", null] },
         });
       } finally {
         find.restore();
@@ -215,7 +227,7 @@ describe("supervision: the tenant gate on public delivery", function () {
       }
     });
 
-    it("leaves a blocked tenant out of the catalog bundle", async function () {
+    it("leaves a pending and a declined tenant out of the catalog bundle", async function () {
       InstanceManager.getPortalConfig.resolves({
         publicOffersEnabled: true,
         portalUrl: "https://portal.example.test",
@@ -232,10 +244,13 @@ describe("supervision: the tenant gate on public delivery", function () {
         expect((await get("/api/catalog/bundle")).body.tenants).to.have.length(
           1,
         );
-        h.tenant.supervisionLevel = "blocked";
-        expect((await get("/api/catalog/bundle")).body.tenants).to.have.length(
-          0,
-        );
+        for (const level of HIDDEN_LEVELS) {
+          h.tenant.supervisionLevel = level;
+          expect(
+            (await get("/api/catalog/bundle")).body.tenants,
+            level,
+          ).to.have.length(0);
+        }
       } finally {
         InstanceManager.getPortalConfig.resolves({
           publicOffersEnabled: false,
@@ -243,7 +258,7 @@ describe("supervision: the tenant gate on public delivery", function () {
       }
     });
 
-    it("answers 404 for the slug and theme of a blocked single-tenant catalog", async function () {
+    it("answers 404 for the slug and theme of a pending or declined single-tenant catalog", async function () {
       InstanceManager.getPortalConfig.resolves({
         publicOffersEnabled: true,
         portalUrl: "https://portal.example.test",
@@ -260,9 +275,16 @@ describe("supervision: the tenant gate on public delivery", function () {
       );
       try {
         expect((await get("/api/catalog/fx-slug")).status).to.equal(200);
-        h.tenant.supervisionLevel = "blocked";
-        expect((await get("/api/catalog/fx-slug")).status).to.equal(404);
-        expect((await get("/api/catalog/themes/fx-slug")).status).to.equal(404);
+        for (const level of HIDDEN_LEVELS) {
+          h.tenant.supervisionLevel = level;
+          expect((await get("/api/catalog/fx-slug")).status, level).to.equal(
+            404,
+          );
+          expect(
+            (await get("/api/catalog/themes/fx-slug")).status,
+            level,
+          ).to.equal(404);
+        }
       } finally {
         InstanceManager.getPortalConfig.resolves({
           publicOffersEnabled: false,

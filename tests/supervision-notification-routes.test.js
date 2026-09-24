@@ -66,7 +66,7 @@ describe("supervision notification routes", function () {
       await SupervisionNotificationManager.record({
         type: "tenant.levelChanged",
         tenantId: TENANT,
-        payload: { tenantName: "Verein", from: "free", to: "blocked" },
+        payload: { tenantName: "Verein", from: "free", to: "pending" },
         createdAt: new Date(Date.UTC(2026, 8, day)),
       });
       Object.assign(rows.at(-1), { status, lastError });

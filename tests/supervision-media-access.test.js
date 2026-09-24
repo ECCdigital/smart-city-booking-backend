@@ -31,13 +31,13 @@ function medium({ isPublic = true, bookingIds = [] } = {}) {
 const anonymous = { reach: "public", userId: null };
 const signedIn = (userId) => ({ reach: "own", userId });
 
-describe("supervision: the file of a medium under a blocked tenant", function () {
+describe("supervision: the file of a medium under a pending tenant", function () {
   let getTenant;
 
   beforeEach(function () {
     getTenant = sinon
       .stub(TenantManager, "getTenant")
-      .resolves({ id: TENANT, supervisionLevel: "blocked" });
+      .resolves({ id: TENANT, supervisionLevel: "pending" });
     sinon
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves(null);
@@ -56,7 +56,7 @@ describe("supervision: the file of a medium under a blocked tenant", function ()
     }
   }
 
-  it("serves a public medium of a tenant that is not blocked", async function () {
+  it("serves a public medium of a tenant at a public level", async function () {
     getTenant.resolves({ id: TENANT, supervisionLevel: "free" });
 
     expect(await outcome(medium(), { file: anonymous })).to.equal("served");
@@ -69,6 +69,14 @@ describe("supervision: the file of a medium under a blocked tenant", function ()
     expect(
       await outcome(medium(), { file: signedIn("customer@example.com") }),
     ).to.equal("404 media_not_found");
+  });
+
+  it("answers the same 404 under a declined tenant", async function () {
+    getTenant.resolves({ id: TENANT, supervisionLevel: "declined" });
+
+    expect(await outcome(medium(), { file: anonymous })).to.equal(
+      "404 media_not_found",
+    );
   });
 
   it("keeps a public medium readable for the one who uploaded it", async function () {

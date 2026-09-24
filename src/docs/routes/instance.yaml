@@ -83,8 +83,9 @@
       "400":
         description: |
           `invalid_supervision_level` with `params: { field, level, allowed }`
-          for a `tenantInitialSupervisionLevel` outside the vocabulary
-          (`null` and `""` included); `validation_failed` for the other fields.
+          for a `tenantInitialSupervisionLevel` outside the initial levels
+          (`allowed: [free, supervised, pending]`; `declined`, `null` and `""`
+          included); `validation_failed` for the other fields.
       "401":
         description: Not authenticated
       "403":

@@ -4,14 +4,42 @@
  * through these.
  */
 
-/** The supervision level of a tenant (glossary "Aufsichtsstufe"). */
 const { BadRequestError } = require("../../../errors/BaseError");
 
+/**
+ * The supervision level of a tenant (glossary "Aufsichtsstufe"): `free`,
+ * `supervised`, `pending` (glossary "Freigabe ausstehend": nothing public,
+ * everything may be prepared) and `declined` (glossary "abgewiesen":
+ * nothing public, and the tenant's own people lose their access - the
+ * effect of ticket 15). `PENDING` collides in name with
+ * `REVIEW_STATUS.PENDING` and `NOTIFICATION_STATUS.PENDING` on purpose:
+ * the value follows the glossary, the enum names what it is about.
+ */
 const SUPERVISION_LEVELS = Object.freeze({
   FREE: "free",
   SUPERVISED: "supervised",
-  BLOCKED: "blocked",
+  PENDING: "pending",
+  DECLINED: "declined",
 });
+
+/**
+ * The levels a self-created tenant may start at (glossary "Startstufe"):
+ * never `declined`.
+ */
+const INITIAL_SUPERVISION_LEVELS = Object.freeze([
+  SUPERVISION_LEVELS.FREE,
+  SUPERVISION_LEVELS.SUPERVISED,
+  SUPERVISION_LEVELS.PENDING,
+]);
+
+/**
+ * The levels with a public projection (spec §5.2): a positive list, so a
+ * level added later is not public until it is named here.
+ */
+const PUBLIC_SUPERVISION_LEVELS = Object.freeze([
+  SUPERVISION_LEVELS.FREE,
+  SUPERVISION_LEVELS.SUPERVISED,
+]);
 
 /** The review status of an offer (glossary "Prüfstatus"); `null` is "none yet". */
 const REVIEW_STATUS = Object.freeze({
@@ -93,17 +121,22 @@ function effectiveLevelOf(tenant) {
  * The one check of a supervision level that comes from outside.
  *
  * @param {*} level
- * @param {Object} [params] What the error names besides the level
+ * @param {Object} [params] What the error names besides the level;
+ *   `params.allowed` narrows the accepted levels (the initial level checks
+ *   against `INITIAL_SUPERVISION_LEVELS`) and is named in the error as
+ *   given. Default: every level.
  * @returns {string} The level
  * @throws {BadRequestError} `invalid_supervision_level`
  */
-function assertSupervisionLevel(level, params = {}) {
-  const allowed = Object.values(SUPERVISION_LEVELS);
+function assertSupervisionLevel(
+  level,
+  { allowed = Object.values(SUPERVISION_LEVELS), ...params } = {},
+) {
   if (!allowed.includes(level)) {
     throw new BadRequestError("invalid_supervision_level", {
       ...params,
       level,
-      allowed,
+      allowed: [...allowed],
     });
   }
   return level;
@@ -115,6 +148,8 @@ module.exports = {
   effectiveLevelOf,
   SUPERVISION_LEVELS,
   SUPERVISION_LEVEL_VALUES: values(SUPERVISION_LEVELS),
+  INITIAL_SUPERVISION_LEVELS,
+  PUBLIC_SUPERVISION_LEVELS,
   REVIEW_STATUS,
   REVIEW_STATUS_VALUES: values(REVIEW_STATUS),
   OFFER_TYPES,

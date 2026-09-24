@@ -13,7 +13,7 @@ const {
   SUPERVISION_LEVELS,
   assertSupervisionLevel,
   effectiveLevelOf,
-  SUPERVISION_LEVEL_VALUES,
+  INITIAL_SUPERVISION_LEVELS,
   REVIEW_STATUS,
   HISTORY_EVENT_TYPES,
   HISTORY_ACTOR_TYPES,
@@ -152,19 +152,20 @@ class SupervisionService {
   /**
    * The level a new tenant starts at (spec §2): a tenant the instance owner
    * creates is always free; a self-creation starts at the instance's
-   * initial level, `free` when the instance names none.
+   * initial level, `free` when the instance names none or one that is no
+   * initial level (`declined` never starts a tenant).
    *
    * @param {Object} params
    * @param {Object|null} params.instance The instance record
    * @param {boolean} params.creatorIsInstanceOwner
-   * @returns {string} One of `SUPERVISION_LEVELS`
+   * @returns {string} One of `INITIAL_SUPERVISION_LEVELS`
    */
   static initialLevelForCreation({ instance, creatorIsInstanceOwner }) {
     if (creatorIsInstanceOwner) {
       return SUPERVISION_LEVELS.FREE;
     }
     const level = instance?.tenantInitialSupervisionLevel;
-    return SUPERVISION_LEVEL_VALUES.includes(level)
+    return INITIAL_SUPERVISION_LEVELS.includes(level)
       ? level
       : SUPERVISION_LEVELS.FREE;
   }

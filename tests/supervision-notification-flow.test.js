@@ -3,7 +3,7 @@
  * submission, a decision and a level change - of a bookable and of an
  * event - over the real services, the in-memory outbox, the mail fixture
  * and the in-memory transport. What is asserted is who gets a mail, that a
- * free or blocked tenant and a repeated action cause none, and that a
+ * free, pending or declined tenant and a repeated action cause none, and that a
  * failed send leaves the decision and the history alone.
  */
 
@@ -207,7 +207,7 @@ describe("supervision notices: from the action to the mail", function () {
     expect(rows).to.have.length(3);
   });
 
-  for (const level of ["free", "blocked"]) {
+  for (const level of ["free", "pending", "declined"]) {
     it(`a submission at a ${level} tenant records no occasion and sends no review mail`, async function () {
       given({ level });
 
@@ -243,10 +243,10 @@ describe("supervision notices: from the action to the mail", function () {
 
   it("a repeated level change causes no new mail", async function () {
     given({ level: "free" });
-    await changeLevel("blocked");
+    await changeLevel("pending");
     await idle();
 
-    await changeLevel("blocked");
+    await changeLevel("pending");
     await idle();
 
     expect(rows).to.have.length(1);

@@ -17,8 +17,8 @@ const CHECKOUT_REASONS = {
   // bookable
   BOOKABLE_NOT_FOUND: "checkout.bookable_not_found",
   // The tenant supervision refuses a new self-booking of the offer (a
-  // blocked tenant, or - under supervision - an offer not approved). Names
-  // no internal reason on purpose (spec §5.2).
+  // pending or declined tenant, or - under supervision - an offer not
+  // approved). Names no internal reason on purpose (spec §5.2).
   OFFER_NOT_REACHABLE: "checkout.offer_not_reachable",
   BOOKABLE_NOT_BOOKABLE: "checkout.bookable_not_bookable",
   BOOKABLE_UNAVAILABLE: "checkout.bookable_unavailable",
