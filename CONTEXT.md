@@ -324,12 +324,25 @@ Ein Nutzer, der auf der Instanz als Owner geführt ist; betreibt die Plattform, 
 _Avoid_: Admin (unqualifiziert), Superadmin, Plattform-Betreiber (als Modellbegriff), Instance-Owner (Schreibweise)
 
 **Aufsichtsstufe (eines Mandanten)**:
-Das vom Instanz-Owner ausdrücklich manuell gesetzte, jederzeit umkehrbare Maß, wie weit ein Mandant ohne dessen Zutun öffentlich auftreten darf: _frei_ (arbeitet wie bisher, ganz ohne Freigaben), _beaufsichtigt_ (tritt öffentlich auf, aber jedes Angebot braucht einen freigegebenen Prüfstatus) oder _gesperrt_ (nichts ist öffentlich, auch nicht per Direktlink; im Admin-Bereich darf alles vorbereitet werden). Ein zweites, vom Mandanten unabhängiges Tor neben dessen eigener Katalog-Teilnahme; sie schränkt nie Rechte innerhalb des Mandanten ein und wirkt nur auf Neues, bestehende Buchungen bleiben.
-_Avoid_: Status (das ist die Membership), Vertrauensstufe, Freigabe (unqualifiziert — es gibt zwei Tore), aktiv/inaktiv, verified
+Das vom Instanz-Owner ausdrücklich manuell gesetzte, jederzeit umkehrbare Maß, wie weit ein Mandant ohne dessen Zutun öffentlich auftreten darf: _frei_ (arbeitet wie bisher, ganz ohne Freigaben), _beaufsichtigt_ (tritt öffentlich auf, aber jedes Angebot braucht einen freigegebenen Prüfstatus), _Freigabe ausstehend_ (nichts ist öffentlich, auch nicht per Direktlink; im Admin-Bereich darf alles vorbereitet werden — der Wartezustand einer Selbst-Anlage, bis der Instanz-Owner die Stufe anhebt oder den Mandanten abweist) oder _abgewiesen_ (nichts ist öffentlich, und Tenant-Owner wie Mitglieder können den Mandanten nicht mehr bearbeiten oder lesen; nur der Instanz-Owner behält alle Rechte; bestehende Buchungen bleiben für ihre Kunden nutzbar). Ein zweites, vom Mandanten unabhängiges Tor neben dessen eigener Katalog-Teilnahme; unterhalb von _abgewiesen_ schränkt sie nie Rechte innerhalb des Mandanten ein und wirkt nur auf Neues, bestehende Buchungen bleiben. Jede Stufe ist aus jeder anderen erreichbar, auch zurück aus _abgewiesen_; Löschen bleibt der einzige endgültige Schritt.
+In Aufsichtsmitteilungen an Tenant-Owner heißt sie _Freigabestufe_; Instanz-Owner lesen in Mail und Admin-Bereich „Aufsichtsstufe“.
+_Avoid_: Status (das ist die Membership), Vertrauensstufe, Freigabe (unqualifiziert — es gibt zwei Tore), aktiv/inaktiv, verified, gesperrt/blocked (der alte Name von _Freigabe ausstehend_), abgelehnt (das ist der Prüfstatus eines Angebots), deaktiviert/gelöscht (Löschen ist kein Stufenwechsel)
 
 **Startstufe (neuer Mandanten)**:
-Die vom Instanz-Owner festgelegte Aufsichtsstufe für jede Selbst-Anlage, gemeinsam für Freigabeliste und offene Anlage: _frei_, _beaufsichtigt_ oder _gesperrt_, standardmäßig _frei_. Gilt ausschließlich bei der Anlage und verändert bestehende Mandanten nicht; vom Instanz-Owner selbst angelegte Mandanten starten immer _frei_.
+Die vom Instanz-Owner festgelegte Aufsichtsstufe für jede Selbst-Anlage, gemeinsam für Freigabeliste und offene Anlage: _frei_, _beaufsichtigt_ oder _Freigabe ausstehend_, nie _abgewiesen_; standardmäßig _frei_. Gilt ausschließlich bei der Anlage und verändert bestehende Mandanten nicht; vom Instanz-Owner selbst angelegte Mandanten starten immer _frei_.
 _Avoid_: Default-Status, Modus, Anlage-Modus
+
+**Freigabe (eines Mandanten)**:
+Der Stufenwechsel des Instanz-Owners von _Freigabe ausstehend_ auf _beaufsichtigt_ oder _frei_ — keine eigene Aktion, kein eigener Historieneintrag: Freigegeben ist ein Mandant, dessen Stufe nicht mehr _Freigabe ausstehend_ und nicht _abgewiesen_ ist. Unter _beaufsichtigt_ rücken seine ausstehenden Angebote in die aktive Prüfliste, unter _frei_ sind seine Angebote sofort ohne Prüfung öffentlich.
+_Avoid_: Aktivierung, Bestätigung, Approval, Freigabe (unqualifiziert — die Freigabe eines Angebots ist die Prüfentscheidung)
+
+**Abweisung (eines Mandanten)**:
+Der Stufenwechsel des Instanz-Owners auf _abgewiesen_, aus jeder Stufe heraus, wahlweise mit Begründung, jederzeit umkehrbar. Nimmt dem Mandanten sein öffentliches Angebot und seinen Tenant-Ownern und Mitgliedern den Zugriff, ohne ihn zu löschen; die Begründung erreicht die Tenant-Owner mit der Aufsichtsmitteilung zum Stufenwechsel und bleibt als Begründung des jüngsten Stufenwechsels am Mandanten für Tenant-Owner, Mitglieder und Instanz-Owner lesbar. Öffentlich ist ein abgewiesener Mandant von einem auf Freigabe wartenden nicht zu unterscheiden; Personal eines abgewiesenen Mandanten sieht auch die öffentliche Projektion nicht mehr.
+_Avoid_: Ablehnung (das ist die Prüfentscheidung an einem Angebot), Sperrung, Löschung, Deaktivierung
+
+**Freigabeliste der Mandanten**:
+Alle Mandanten der Stufe _Freigabe ausstehend_, für den Instanz-Owner zum Freigeben oder Abweisen; ob ein Mandant neu angelegt oder vom Instanz-Owner auf diese Stufe zurückgesetzt wurde, unterscheidet die Liste nicht. Nicht zu verwechseln mit der Freigabeliste der Selbst-Anlage (wer anlegen darf) und der aktiven Prüfliste (welche Angebote warten).
+_Avoid_: Prüfliste (das sind die Angebote), Warteschlange, Pending-Tenants
 
 **Selbst-Anlage (eines Mandanten)**:
 Das Anlegen eines Mandanten durch einen Nutzer, der nicht Instanz-Owner ist — über den Instanz-Schalter „alle dürfen anlegen" oder die Freigabeliste. Erzeugt den Mandanten in der Startstufe und macht den Anlegenden zum Tenant-Owner.
@@ -340,11 +353,11 @@ Der Stand der Prüfung eines Angebots durch den Instanz-Owner: _ausstehend_, _fr
 _Avoid_: Review, Moderation, approved (als Feldname im Gespräch), isPublic (das ist der Wunsch des Mandanten, nicht die Entscheidung)
 
 **Veröffentlichungswunsch (eines Angebots)**:
-Die vom Mandanten getroffene Wahl, ein Angebot öffentlich in Listen und Katalogen auszuspielen, unabhängig von der Entscheidung des Instanz-Owners. Bleibt auch bei Ablehnung bestehen; ohne Veröffentlichungswunsch kann ein Buchungsobjekt oder Event per Direktlink erreichbar und buchbar sein, bei beaufsichtigten Mandanten aber nur mit freigegebenem Prüfstatus und bei gesperrten Mandanten nie.
+Die vom Mandanten getroffene Wahl, ein Angebot öffentlich in Listen und Katalogen auszuspielen, unabhängig von der Entscheidung des Instanz-Owners. Bleibt auch bei Ablehnung bestehen; ohne Veröffentlichungswunsch kann ein Buchungsobjekt oder Event per Direktlink erreichbar und buchbar sein, bei beaufsichtigten Mandanten aber nur mit freigegebenem Prüfstatus und bei Mandanten mit ausstehender Freigabe oder abgewiesenen Mandanten nie.
 _Avoid_: isPublic (als Sprechbegriff), Freigabe (das ist die Entscheidung des Instanz-Owners), öffentlich (als tatsächliche Sichtbarkeit)
 
 **Einreichung (eines Angebots)**:
-Der Schritt, der ein Angebot ohne Prüfstatus oder ein abgelehntes Angebot auf _ausstehend_ setzt und die Einreichungszeit neu festhält: der erste Veröffentlichungswunsch eines Angebots ohne Prüfstatus oder das ausdrückliche „Zur Prüfung einreichen“ des Tenant-Owners, auch bei freiem oder gesperrtem Mandanten. Eine Wiederholung auf einem ausstehenden Angebot ändert nichts und startet keine neue Wartezeit.
+Der Schritt, der ein Angebot ohne Prüfstatus oder ein abgelehntes Angebot auf _ausstehend_ setzt und die Einreichungszeit neu festhält: der erste Veröffentlichungswunsch eines Angebots ohne Prüfstatus oder das ausdrückliche „Zur Prüfung einreichen“ des Tenant-Owners, auch bei freiem Mandanten oder ausstehender Freigabe. Eine Wiederholung auf einem ausstehenden Angebot ändert nichts und startet keine neue Wartezeit.
 _Avoid_: Veröffentlichung, Antrag, Speichern (eine normale Bearbeitung ist keine Einreichung)
 
 **Prüfentscheidung**:
@@ -352,7 +365,7 @@ Die Handlung des Instanz-Owners am Prüfstatus eines Angebots: _freigeben_ (auss
 _Avoid_: Moderation, Statuswechsel (unqualifiziert), Sperre (das ist die Aufsichtsstufe)
 
 **Direktlink (eines Angebots)**:
-Der Zugriff auf ein bekanntes einzelnes Angebot — Detail, Preise, Zeiten, Verfügbarkeit, Belegung und die neue Selbstbuchung — im Unterschied zur Ausspielung in Listen, Katalogen und Aggregaten. Braucht keinen Veröffentlichungswunsch, bei beaufsichtigten Mandanten aber einen freigegebenen Prüfstatus; bei gesperrten Mandanten gibt es ihn nicht. Katalog-Teilnahme und Katalog-Ausschlüsse sind kein Direktlink-Verbot. Das Ticket eines Events ist nur zusammen mit seinem Event erreichbar und buchbar: beide Angebote müssen das Tor passieren.
+Der Zugriff auf ein bekanntes einzelnes Angebot — Detail, Preise, Zeiten, Verfügbarkeit, Belegung und die neue Selbstbuchung — im Unterschied zur Ausspielung in Listen, Katalogen und Aggregaten. Braucht keinen Veröffentlichungswunsch, bei beaufsichtigten Mandanten aber einen freigegebenen Prüfstatus; bei Mandanten mit ausstehender Freigabe oder abgewiesenen Mandanten gibt es ihn nicht. Katalog-Teilnahme und Katalog-Ausschlüsse sind kein Direktlink-Verbot. Das Ticket eines Events ist nur zusammen mit seinem Event erreichbar und buchbar: beide Angebote müssen das Tor passieren.
 _Avoid_: Deep Link, versteckte Seite, nicht öffentlich (als Verbot gelesen)
 
 **Erneutes Einreichen (eines Angebots)**:
@@ -360,7 +373,7 @@ Die ausdrückliche Bitte des Tenant-Owners um eine neue Prüfung eines abgelehnt
 _Avoid_: Wiederveröffentlichung, Status-Reset, Freigabe beantragen (unqualifiziert)
 
 **Aktive Prüfliste**:
-Alle Angebote beaufsichtigter Mandanten mit ausstehendem Prüfstatus, unabhängig vom Veröffentlichungswunsch. Ausstehende Prüfstatus freier oder gesperrter Mandanten bleiben erhalten, gehören aber nicht zur aktiven Prüfliste.
+Alle Angebote beaufsichtigter Mandanten mit ausstehendem Prüfstatus, unabhängig vom Veröffentlichungswunsch. Ausstehende Prüfstatus freier, abgewiesener oder auf Freigabe wartender Mandanten bleiben erhalten, gehören aber nicht zur aktiven Prüfliste.
 _Avoid_: Alle ausstehenden Angebote, Freigabeliste (das ist die Berechtigung zur Selbst-Anlage)
 
 **Aufsichtshistorie**:
