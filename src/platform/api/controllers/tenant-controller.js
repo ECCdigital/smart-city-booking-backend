@@ -39,6 +39,7 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const {
+  anyReachIn,
   decide,
   scopeOf,
   scopeFor,
@@ -145,9 +146,11 @@ class TenantController {
   }
 
   /**
-   * The tenants within the reach: in full the ones the user owns (every
-   * one under `any`), with `?publicTenants=true` the public projection of
-   * the ones the user is a member of.
+   * The tenants within the reach: in full the ones the user owns and still
+   * reads (`tenant.read`; every one under `any`), with
+   * `?publicTenants=true` the public projection of the ones the user is a
+   * member of. A declined tenant goes out to its owner as to any member:
+   * the membership rests (glossary "Ruhende Mitgliedschaft").
    */
   static async getTenants(request, response) {
     try {
@@ -157,10 +160,21 @@ class TenantController {
         assertSupervisionLevel(supervisionLevel);
       }
 
-      const tenants = await TenantManager.getTenants(scopeOf(request), {
+      const scope = scopeOf(request);
+      let tenants = await TenantManager.getTenants(scope, {
         owned: !publicTenants,
         ...(supervisionLevel !== undefined && { supervisionLevel }),
       });
+      if (!publicTenants && scope.reach !== "any") {
+        const readsIn = anyReachIn(scope.userId, "tenant", "read");
+        const owned = [];
+        for (const tenant of tenants) {
+          if (await readsIn(tenant.id)) {
+            owned.push(tenant);
+          }
+        }
+        tenants = owned;
+      }
 
       response
         .status(200)

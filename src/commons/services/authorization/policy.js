@@ -14,22 +14,6 @@ const { TABLE, ROLE_GROUPS, ROLE_LEVELS } = require("./table");
 
 const REACH = Object.freeze({ ANY: "any", OWN: "own", PUBLIC: "public" });
 
-/**
- * The precedence a rule was satisfied through (glossary "Rechte"):
- * instanceOwner ⊇ tenantOwner ⊇ role ⊇ signedIn, plus `mayCreateTenant`,
- * which follows the instance setting alone and stands outside the chain.
- * The management gate of a declined tenant (tenant supervision spec §6.1)
- * reads it: what a principal has as a tenant owner or role holder is
- * lost there, what any signed-in user has is not.
- */
-const PRECEDENCE = Object.freeze({
-  INSTANCE_OWNER: "instanceOwner",
-  TENANT_OWNER: "tenantOwner",
-  ROLE: "role",
-  SIGNED_IN: "signedIn",
-  MAY_CREATE_TENANT: "mayCreateTenant",
-});
-
 /** The reaches, widest first: the order `decide` tries them in. */
 const REACHES = Object.freeze([REACH.ANY, REACH.OWN, REACH.PUBLIC]);
 
@@ -84,80 +68,39 @@ function entryOf(resource, action) {
 }
 
 /**
- * Through which precedence a principal satisfies a level of the table -
- * the first of the fixed chain instanceOwner ⊇ tenantOwner ⊇ role ⊇
- * signedIn that does - or `null`.
- *
- * @param {Object} principal
- * @param {string|undefined} level
- * @returns {string|null} One of `PRECEDENCE`, or null
- */
-function satisfiedBy(principal, level) {
-  if (!level) {
-    return null;
-  }
-  if (principal.isInstanceOwner) {
-    return PRECEDENCE.INSTANCE_OWNER;
-  }
-  const parsed = parseLevel(level);
-  if (parsed.kind === "role") {
-    if (principal.isTenantOwner === true) {
-      return PRECEDENCE.TENANT_OWNER;
-    }
-    return principal.grants?.[parsed.group]?.[parsed.step] === true
-      ? PRECEDENCE.ROLE
-      : null;
-  }
-  switch (parsed.level) {
-    case "instanceOwner":
-      return null;
-    case "mayCreateTenant":
-      return principal.mayCreateTenant === true
-        ? PRECEDENCE.MAY_CREATE_TENANT
-        : null;
-    case "tenantOwner":
-      return principal.isTenantOwner === true ? PRECEDENCE.TENANT_OWNER : null;
-    default:
-      return principal.userId != null ? PRECEDENCE.SIGNED_IN : null;
-  }
-}
-
-/**
- * Whether a principal satisfies a level of the table.
+ * Whether a principal satisfies a level of the table, with the fixed
+ * precedence instanceOwner ⊇ tenantOwner ⊇ role ⊇ signedIn. A resting
+ * membership (glossary "Ruhende Mitgliedschaft") is already in the
+ * principal: it is no tenant owner and holds no role level there.
  *
  * @param {Object} principal
  * @param {string|undefined} level
  * @returns {boolean}
  */
 function satisfies(principal, level) {
-  return satisfiedBy(principal, level) !== null;
-}
-
-/**
- * The widest reach the principal has for `(resource, action)` and the
- * precedence it has it through, or `null` without a reach. A public entry
- * reached as such carries no precedence.
- *
- * @param {Object} principal - See `principal.js`.
- * @param {string} resource
- * @param {string} action
- * @returns {{reach: "any"|"own"|"public", satisfiedBy: string|null}|null}
- */
-function decideWith(principal, resource, action) {
-  const entry = entryOf(resource, action);
-  for (const reach of REACHES) {
-    if (reach === REACH.PUBLIC) {
-      if (entry.public === true) {
-        return { reach, satisfiedBy: null };
-      }
-    } else {
-      const precedence = satisfiedBy(principal, entry[reach]);
-      if (precedence) {
-        return { reach, satisfiedBy: precedence };
-      }
-    }
+  if (!level) {
+    return false;
   }
-  return null;
+  if (principal.isInstanceOwner) {
+    return true;
+  }
+  const parsed = parseLevel(level);
+  if (parsed.kind === "role") {
+    return (
+      principal.isTenantOwner === true ||
+      principal.grants?.[parsed.group]?.[parsed.step] === true
+    );
+  }
+  switch (parsed.level) {
+    case "instanceOwner":
+      return false;
+    case "mayCreateTenant":
+      return principal.mayCreateTenant === true;
+    case "tenantOwner":
+      return principal.isTenantOwner === true;
+    default:
+      return principal.userId != null;
+  }
 }
 
 /**
@@ -169,7 +112,17 @@ function decideWith(principal, resource, action) {
  * @returns {"any"|"own"|"public"|null}
  */
 function decide(principal, resource, action) {
-  return decideWith(principal, resource, action)?.reach ?? null;
+  const entry = entryOf(resource, action);
+  for (const reach of REACHES) {
+    if (reach === REACH.PUBLIC) {
+      if (entry.public === true) {
+        return reach;
+      }
+    } else if (satisfies(principal, entry[reach])) {
+      return reach;
+    }
+  }
+  return null;
 }
 
 /**
@@ -200,12 +153,10 @@ assertTable();
 
 module.exports = {
   decide,
-  decideWith,
   entryOf,
   satisfies,
   parseLevel,
   REACH,
   REACHES,
-  PRECEDENCE,
   LEVEL_KEYWORDS,
 };

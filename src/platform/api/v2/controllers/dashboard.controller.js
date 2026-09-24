@@ -1,7 +1,10 @@
 const bunyan = require("bunyan");
 const DashboardService = require("../../../../commons/services/dashboard/dashboard-service");
 const ApiResponse = require("../../../../commons/utilities/api-response");
-const { scopeOf } = require("../../../../commons/services/authorization");
+const {
+  anyReachIn,
+  scopeOf,
+} = require("../../../../commons/services/authorization");
 const { BaseError } = require("../../../../errors/BaseError");
 
 const logger = bunyan.createLogger({
@@ -10,12 +13,18 @@ const logger = bunyan.createLogger({
 });
 
 class DashboardControllerV2 {
+  /**
+   * The KPIs across tenants. The route's reach is one of the instance; which
+   * tenants a user under `own` sees is the tenant route's question
+   * (`dashboard.read`) asked per tenant, handed to the service as it hands
+   * the access bookings theirs.
+   */
   static async getInstanceSummary(req, res) {
     try {
-      const data = await DashboardService.getInstanceSummary(
-        scopeOf(req),
-        req.query,
-      );
+      const scope = scopeOf(req);
+      const data = await DashboardService.getInstanceSummary(scope, req.query, {
+        readsIn: anyReachIn(scope.userId, "dashboard", "read"),
+      });
       return ApiResponse.ok(res, { data });
     } catch (err) {
       return DashboardControllerV2._handleError(err, res, "getInstanceSummary");

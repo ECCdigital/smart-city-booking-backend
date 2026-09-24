@@ -13,10 +13,8 @@ const { expect } = require("chai");
 
 const {
   decide,
-  decideWith,
   entryOf,
   REACH,
-  PRECEDENCE,
   LEVEL_KEYWORDS,
 } = require("../src/commons/services/authorization/policy");
 const {
@@ -286,49 +284,5 @@ describe("authorization policy: invariants of the table", function () {
         `${resource}.${action}`,
       ).to.be.at.least(rank(decide(tenantOwner(), resource, action)));
     }
-  });
-});
-
-describe("authorization policy: which precedence satisfied the rule", function () {
-  it("names the precedence with the reach, widest first", function () {
-    expect(decideWith(instanceOwner(), "bookable", "read")).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.INSTANCE_OWNER,
-    });
-    expect(decideWith(tenantOwner(), "bookable", "read")).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.TENANT_OWNER,
-    });
-    expect(
-      decideWith(roleHolder("manageBookables.readOwn"), "bookable", "read"),
-    ).to.deep.equal({ reach: REACH.OWN, satisfiedBy: PRECEDENCE.ROLE });
-    expect(decideWith(signedIn(), "booking", "read")).to.deep.equal({
-      reach: REACH.OWN,
-      satisfiedBy: PRECEDENCE.SIGNED_IN,
-    });
-  });
-
-  it("a tenant owner reaches any of a signedIn rule through the ownership, not the sign-in", function () {
-    expect(decideWith(tenantOwner(), "booking", "operate")).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.TENANT_OWNER,
-    });
-  });
-
-  it("a public entry and no reach carry no precedence", function () {
-    expect(decideWith(anonymous(), "event", "read")).to.deep.equal({
-      reach: REACH.PUBLIC,
-      satisfiedBy: null,
-    });
-    expect(decideWith(signedIn(), "bookable", "read")).to.equal(null);
-  });
-
-  it("mayCreateTenant is its own precedence, outside the tenant chain", function () {
-    expect(
-      decideWith(principal({ mayCreateTenant: true }), "tenant", "create"),
-    ).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.MAY_CREATE_TENANT,
-    });
   });
 });

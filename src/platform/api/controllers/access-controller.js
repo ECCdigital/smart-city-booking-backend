@@ -1,7 +1,6 @@
 const bunyan = require("bunyan");
 const {
-  decide,
-  loadPrincipal,
+  anyReachIn,
   scopeOf,
 } = require("../../../commons/services/authorization");
 const AccessService = require("../../../commons/services/access/access-service");
@@ -492,8 +491,10 @@ class AccessController {
    * user manages the bookings of that tenant. The two tenant-independent
    * lists need it, and the reach of their route is one of the instance -
    * an instance answers nothing about a tenant. So this hands the service
-   * a function (authorize spec §5, §15) that loads the principal in the
-   * tenant and asks the table what the marker of a tenant route asks.
+   * a function (authorize spec §5, §15) that asks what the marker of a
+   * tenant route asks, loaded once and only when the service asks - in a
+   * tenant whose membership rests (glossary "Ruhende Mitgliedschaft") the
+   * user manages nothing.
    *
    * The user is the one whose bookings are listed, not always the caller:
    * with `?userId=` an instance owner reads someone else's list, and what
@@ -503,9 +504,7 @@ class AccessController {
    * @returns {(tenantId: string) => Promise<boolean>}
    */
   static _canManageIn(userId) {
-    return async (tenantId) =>
-      decide(await loadPrincipal(userId, tenantId), "booking", "operate") ===
-      "any";
+    return anyReachIn(userId, "booking", "operate");
   }
 }
 

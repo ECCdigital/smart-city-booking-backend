@@ -251,6 +251,7 @@ class MediaControllerV2 {
     return await assertMediaFileAccess(media, {
       file: scopeOf(req),
       document: scopeFor(req, "media", "bookingDocument"),
+      isMember: req.principal?.isMember === true,
     });
   }
 

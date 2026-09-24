@@ -1,6 +1,5 @@
 const { DateTime } = require("luxon");
 const TenantManager = require("../../data-managers/tenant-manager");
-const UserManager = require("../../data-managers/user-manager");
 const DashboardManager = require("../../data-managers/dashboard-manager");
 const { DashboardCache } = require("./dashboard-cache");
 const { REACH } = require("../authorization/policy");
@@ -319,36 +318,43 @@ function revenueTotals(entry) {
 class DashboardService {
   /**
    * Tenants the dashboard shows within a reach (`instanceDashboard.read`):
-   * every tenant under `any`; under `own` the ones the user owns or has
-   * `manageBookings.readAny` in.
+   * every tenant under `any`; under `own` the ones the caller's answer
+   * names - the reach `any` of `dashboard.read` there, never a tenant whose
+   * membership rests.
    *
    * @param {{reach?: string, userId?: string|null}} scope
+   * @param {(tenantId: string) => Promise<boolean>} readsIn
    */
-  static async getAllowedTenants({ reach, userId }) {
+  static async getAllowedTenants({ reach }, readsIn) {
     const allTenants = await TenantManager.getTenants();
 
     if (reach === REACH.ANY) {
       return allTenants;
     }
 
-    const permissions = await UserManager.getUserPermissions(userId);
-    const allowedIds = new Set();
-
-    for (const tp of permissions.tenants || []) {
-      if (tp.isOwner === true || tp.manageBookings?.readAny === true) {
-        allowedIds.add(tp.tenantId);
+    const allowed = [];
+    for (const tenant of allTenants) {
+      if (await readsIn(tenant.id)) {
+        allowed.push(tenant);
       }
     }
-
-    return allTenants.filter((t) => allowedIds.has(t.id));
+    return allowed;
   }
 
   /**
    * @param {{reach?: string, userId?: string|null}} scope - The reach of
    *   `instanceDashboard.read`, as the route marker decided it.
    * @param {Object} query
+   * @param {Object} [options]
+   * @param {(tenantId: string) => Promise<boolean>} [options.readsIn] Whether
+   *   the user reads the dashboard of a tenant - the caller's answer, never
+   *   asked here; only consulted under `own`. The default reads none.
    */
-  static async getInstanceSummary(scope, query) {
+  static async getInstanceSummary(
+    scope,
+    query,
+    { readsIn = async () => false } = {},
+  ) {
     const filters = parseFilters(query);
     const key = cacheKey("instance", scope.userId, filters);
     const cached = DashboardCache.get(key);
@@ -356,7 +362,10 @@ class DashboardService {
       return cached;
     }
 
-    const allowedTenants = await DashboardService.getAllowedTenants(scope);
+    const allowedTenants = await DashboardService.getAllowedTenants(
+      scope,
+      readsIn,
+    );
     if (!allowedTenants.length) {
       throw new ForbiddenError("Permission denied");
     }

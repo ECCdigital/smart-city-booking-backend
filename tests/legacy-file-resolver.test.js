@@ -5,7 +5,6 @@ const FileController = require("../src/platform/api/controllers/file-controller"
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const MediaService = require("../src/commons/services/media/media-service");
-const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const {
   NextcloudManager,
 } = require("../src/commons/data-managers/file-manager");
@@ -63,6 +62,7 @@ function createRequest({
   name = LEGACY_PATH,
   params = {},
   reach = user ? "own" : "public",
+  isMember = false,
 } = {}) {
   return {
     user,
@@ -73,8 +73,10 @@ function createRequest({
     principal: {
       userId: user?.id ?? null,
       isInstanceOwner: false,
+      isMember,
       isTenantOwner: false,
       grants: {},
+      restingMembership: null,
     },
     on() {},
   };
@@ -131,9 +133,6 @@ describe("legacy file resolver", () => {
     sandbox.stub(MediaManager, "countImportedMedia").resolves(0);
     sandbox.stub(MediaManager, "getMediaByLegacyPath").resolves(null);
     sandbox.stub(MediaService, "getStream").resolves(stream);
-    sandbox
-      .stub(MembershipManager, "getMembershipByTenantAndUserID")
-      .resolves(null);
     sandbox
       .stub(NextcloudManager, "statFile")
       .resolves({ etag: "etag-1", lastmod: "Mon, 01 Jan 2024 00:00:00 GMT" });
@@ -206,13 +205,14 @@ describe("legacy file resolver", () => {
       MediaManager.getMediaByLegacyPath
         .withArgs(TENANT, LEGACY_PATH)
         .resolves(mediaFixture({ visibility: "intern" }));
-      MembershipManager.getMembershipByTenantAndUserID.resolves({
-        status: "active",
-      });
 
       const response = createResponse();
       await FileController.getTenantFile(
-        createRequest({ user: { id: "user-1" }, params: { tenant: TENANT } }),
+        createRequest({
+          user: { id: "user-1" },
+          params: { tenant: TENANT },
+          isMember: true,
+        }),
         response,
         () => assert.fail("no error expected"),
       );
@@ -273,16 +273,13 @@ describe("legacy file resolver", () => {
     });
 
     it("serves a protected legacy file to an active member", async () => {
-      MembershipManager.getMembershipByTenantAndUserID.resolves({
-        status: "active",
-      });
-
       const response = createResponse();
       await FileController.getTenantFile(
         createRequest({
           user: { id: "user-1" },
           name: PROTECTED_PATH,
           params: { tenant: TENANT },
+          isMember: true,
         }),
         response,
         () => assert.fail("no error expected"),

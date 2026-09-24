@@ -1,5 +1,4 @@
 const BookingManager = require("../../data-managers/booking-manager");
-const MembershipManager = require("../../data-managers/membership-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const EventManager = require("../../data-managers/event-manager");
 const { BookableManager } = require("../../data-managers/bookable-manager");
@@ -34,28 +33,6 @@ const {
  * medium itself decides: its visibility `public | intern`, and which bookings
  * a document belongs to.
  */
-
-/**
- * Whether the user is an active member of a tenant. An `intern` medium is
- * readable for a member even where no reach covers it — being signed in
- * anywhere is not enough.
- *
- * @param {string} userId - Id of the user.
- * @param {string} tenantId - Id of the tenant.
- * @returns {Promise<boolean>}
- */
-async function hasActiveMembership(userId, tenantId) {
-  if (!userId) {
-    return false;
-  }
-
-  const membership = await MembershipManager.getMembershipByTenantAndUserID(
-    tenantId,
-    userId,
-  );
-
-  return membership?.status === "active";
-}
 
 /**
  * Whether any booking a document references satisfies a predicate — the OR
@@ -137,10 +114,12 @@ async function assertBookingDocumentAccess(media, scope = {}) {
  *
  * @param {Object} media - The public medium.
  * @param {{reach?: string, userId?: string|null}} file - The reach of `media.file`.
+ * @param {boolean} isMember - Whether the caller is a member of the tenant
+ *   (glossary "Mitglied"): the caller's answer, never asked here.
  * @returns {Promise<void>}
  * @throws {NotFoundError} `media_not_found`, naming no reason
  */
-async function assertPublicMediaOfVisibleTenant(media, file) {
+async function assertPublicMediaOfVisibleTenant(media, file, isMember) {
   const tenant = await TenantManager.getTenant(media.tenantId);
   if (
     isTenantPubliclyVisible(tenant) &&
@@ -149,9 +128,7 @@ async function assertPublicMediaOfVisibleTenant(media, file) {
     return;
   }
   const ownPeople =
-    file.userId &&
-    (withinReach(media, "uploadedBy", file) ||
-      (await hasActiveMembership(file.userId, media.tenantId)));
+    file.userId && (withinReach(media, "uploadedBy", file) || isMember);
   if (!ownPeople) {
     throw new NotFoundError("media_not_found", { mediaId: media.id });
   }
@@ -193,9 +170,9 @@ async function hasReachableHolder(tenant, media) {
 
 /**
  * Read access to the file of a tenant medium: `public` media are readable
- * anonymously, an `intern` one for whoever the reach covers or holds an
- * active membership in the owning tenant. Booking documents follow the
- * receipt rule, which is its own reach.
+ * anonymously, an `intern` one for whoever the reach covers or is a member
+ * of the owning tenant (glossary "Mitglied") - not one whose membership
+ * rests. Booking documents follow the receipt rule, which is its own reach.
  *
  * @param {Object} media - The medium.
  * @param {Object} scopes
@@ -203,16 +180,21 @@ async function hasReachableHolder(tenant, media) {
  *   `media.file`.
  * @param {{reach?: string, userId?: string|null}} scopes.document - The reach
  *   of `media.bookingDocument`.
+ * @param {boolean} scopes.isMember - Whether the caller is a member of the
+ *   medium's tenant: the caller's answer, never asked here.
  * @returns {Promise<void>}
  * @throws {UnauthorizedError|ForbiddenError}
  */
-async function assertMediaFileAccess(media, { file = {}, document = {} } = {}) {
+async function assertMediaFileAccess(
+  media,
+  { file = {}, document = {}, isMember = false } = {},
+) {
   if (media.isBookingDocument()) {
     return await assertBookingDocumentAccess(media, document);
   }
 
   if (media.isPublic()) {
-    return await assertPublicMediaOfVisibleTenant(media, file);
+    return await assertPublicMediaOfVisibleTenant(media, file, isMember);
   }
 
   if (!file.userId) {
@@ -223,7 +205,7 @@ async function assertMediaFileAccess(media, { file = {}, document = {} } = {}) {
     return;
   }
 
-  if (!(await hasActiveMembership(file.userId, media.tenantId))) {
+  if (!isMember) {
     throw new ForbiddenError("forbidden");
   }
 }
@@ -255,5 +237,4 @@ module.exports = {
   assertInstanceMediaFileAccess,
   assertMediaFileAccess,
   coversBookingDocument,
-  hasActiveMembership,
 };

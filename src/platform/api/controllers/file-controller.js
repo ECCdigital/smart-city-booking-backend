@@ -25,7 +25,6 @@ const {
 const {
   assertInstanceMediaFileAccess,
   assertMediaFileAccess,
-  hasActiveMembership,
 } = require("../../../commons/services/media/media-access");
 const {
   readsRecords,
@@ -285,17 +284,17 @@ class FileController {
 
   /**
    * Read access to a file the import has not taken over yet. Public files stay
-   * anonymous; everything else needs an active membership in the owning tenant
-   * — the old check let any signed-in user through, whatever tenant they
-   * belonged to (§4.3).
+   * anonymous; everything else needs a membership in the owning tenant - the
+   * tenant of the route, the principal's (glossary "Mitglied"; not one that
+   * rests) - the old check let any signed-in user through, whatever tenant
+   * they belonged to (§4.3).
    *
    * @param {Object} request - Express request.
-   * @param {string} tenantId - Tenant of the file.
    * @param {string} legacyPath - The requested path.
-   * @returns {Promise<void>}
+   * @returns {void}
    * @throws {UnauthorizedError|ForbiddenError}
    */
-  static async _assertLegacyTenantAccess(request, tenantId, legacyPath) {
+  static _assertLegacyTenantAccess(request, legacyPath) {
     if (legacyRoot(legacyPath) === PUBLIC_ROOT) {
       return;
     }
@@ -310,7 +309,7 @@ class FileController {
       return;
     }
 
-    if (!(await hasActiveMembership(userId, tenantId))) {
+    if (!request.principal?.isMember) {
       throw new ForbiddenError("forbidden");
     }
   }
@@ -357,13 +356,10 @@ class FileController {
         assertMediaFileAccess(media, {
           file: scopeOf(req),
           document: scopeFor(req, "media", "bookingDocument"),
+          isMember: req.principal?.isMember === true,
         }),
       assertLegacyAccess: (req, legacyPath) =>
-        FileController._assertLegacyTenantAccess(
-          req,
-          req.params.tenant,
-          legacyPath,
-        ),
+        FileController._assertLegacyTenantAccess(req, legacyPath),
     });
   }
 }

@@ -15,7 +15,6 @@ const MediaService = require("../src/commons/services/media/media-service");
 const {
   MediaUsageService,
 } = require("../src/commons/services/media/media-usage");
-const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const storage = require("../src/commons/services/storage");
 const { Media } = require("../src/commons/entities/media/media");
@@ -185,9 +184,11 @@ describe("MediaControllerV2", function () {
       userId: user?.id ?? null,
       tenantId: TENANT,
       isInstanceOwner: Boolean(user) && instance.ownerUserIds.includes(user.id),
+      isMember: Boolean(user) && membership?.status === "active",
       isTenantOwner: membership?.owner === true,
       grants,
       mayCreateTenant: false,
+      restingMembership: null,
     };
   }
 
@@ -262,9 +263,6 @@ describe("MediaControllerV2", function () {
     sandbox
       .stub(InstanceManager, "getInstance")
       .callsFake(async () => instance);
-    sandbox
-      .stub(MembershipManager, "getMembershipByTenantAndUserID")
-      .callsFake(async () => membership);
     sandbox
       .stub(UserManager, "getUserPermissions")
       .callsFake(async () => permissions);

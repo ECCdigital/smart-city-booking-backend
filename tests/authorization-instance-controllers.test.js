@@ -98,6 +98,11 @@ describe("instance controllers on the reach", function () {
       const list = sinon
         .stub(TenantManager, "getTenants")
         .resolves([new Tenant({ id: "t1", name: "Stadt" })]);
+      sinon.stub(UserManager, "getUserPermissions").resolves({
+        tenants: [{ tenantId: "t1", isOwner: true, supervisionLevel: "free" }],
+        instanceOwner: false,
+        allowCreateTenant: false,
+      });
       const res = response();
       await TenantController.getTenants(
         request({ reach: "own", principal: customer }),

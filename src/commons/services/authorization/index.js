@@ -5,7 +5,7 @@
  * "Rechte" in `CONTEXT.md`.
  */
 
-const { loadPrincipal } = require("./principal");
+const { loadPrincipal, anyReachIn } = require("./principal");
 const { decide, REACH } = require("./policy");
 const { ownCondition, withinReach, readsRecords } = require("./reach");
 const { TABLE, ROLE_GROUPS, ROLE_LEVELS } = require("./table");
@@ -20,6 +20,7 @@ const {
 
 module.exports = {
   loadPrincipal,
+  anyReachIn,
   decide,
   REACH,
   ownCondition,

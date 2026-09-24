@@ -9,8 +9,9 @@
  * `assertOfferReachable` in its handler.
  *
  * Asked in full only under the reach `public`: staff of the tenant
- * (`own`, `any`) keep their management reach unless the tenant is
- * declined (§5.1). The 404 names no reason (§5.2).
+ * (`own`, `any`) keep their management reach - a declined tenant's staff
+ * have none, their membership rests in the principal (§5.1). The 404
+ * names no reason (§5.2).
  */
 
 const { BookableManager } = require("../../data-managers/bookable-manager");
@@ -20,11 +21,7 @@ const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const { NotFoundError } = require("../../../errors/BaseError");
 const { REACH } = require("../authorization/policy");
 const { isOfferReachable, isOfferListable } = require("./offer-gate");
-const {
-  assertTenantPubliclyVisible,
-  assertStaffMaySee,
-  staffSeesProjection,
-} = require("./public-tenant-gate");
+const { assertTenantPubliclyVisible } = require("./public-tenant-gate");
 
 /**
  * Refuses a bookable the public cannot reach by a direct link. A bookable
@@ -98,10 +95,12 @@ const hangsOnEvent = (offer) =>
  */
 function publicBookableGate({ exemptReaches = [REACH.OWN, REACH.ANY] } = {}) {
   return (req, res, next) => {
-    const check = exemptReaches.includes(req.reach)
-      ? assertStaffMaySee(req)
-      : assertBookableReachable(req.params?.tenant, req.params?.id);
-    check.then(() => next()).catch(next);
+    if (exemptReaches.includes(req.reach)) {
+      return next();
+    }
+    assertBookableReachable(req.params?.tenant, req.params?.id)
+      .then(() => next())
+      .catch(next);
   };
 }
 
@@ -173,9 +172,10 @@ function managesTenant(principal) {
 /**
  * The offers an aggregate for any signed-in user (tags, counters) is
  * built from (spec §5.2: no leak over tags or counters): the instance
- * owner and the tenant's own people see every offer - the latter not of
- * a declined tenant (§5.1) - anyone else what a public list would show:
- * nothing of a pending or declined tenant.
+ * owner and the tenant's own people see every offer - not those whose
+ * membership rests in a declined tenant (§5.1), the principal has none
+ * there - anyone else what a public list would show: nothing of a
+ * pending or declined tenant.
  *
  * @param {Object} principal The principal of the request
  * @param {string} tenantId
@@ -183,14 +183,10 @@ function managesTenant(principal) {
  * @returns {Promise<Object[]>}
  */
 async function offersForSignedInAggregate(principal, tenantId, offers) {
-  if (principal?.isInstanceOwner) {
+  if (managesTenant(principal)) {
     return offers;
   }
-  const tenant = await TenantManager.getTenant(tenantId);
-  if (managesTenant(principal) && staffSeesProjection(tenant)) {
-    return offers;
-  }
-  return listableOffers(tenant, offers);
+  return listableOffers(await TenantManager.getTenant(tenantId), offers);
 }
 
 module.exports = {
