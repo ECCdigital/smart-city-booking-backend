@@ -11,10 +11,11 @@
 # projection is simply not there. None of the fields is accepted by
 # `POST /api/tenants` or `PUT /api/tenants`; all are dropped from the body.
 #
-# A declined tenant (glossary "abgewiesen") is closed to its own people: every
-# management request of a tenant owner or role holder answers
-# `403 tenant_declined` (`TenantDeclinedError`), only the instance owner and
-# what any signed-in user has stay open. The sign-in answers carry the
+# A declined tenant (glossary "abgewiesen") is closed to its own people: the
+# membership of its tenant owners and members rests (glossary "Ruhende
+# Mitgliedschaft"), a request refused to them answers `403 tenant_declined`
+# (`TenantDeclinedError`), only the instance owner and what any signed-in
+# user has stay open. The sign-in answers carry the
 # supervision per tenant (`SignInTenantPermission`).
 #
 # A `pending` (glossary "Freigabe ausstehend") or `declined` (glossary
@@ -333,7 +334,7 @@
       The immutable history (glossary "Aufsichtshistorie") of the tenant and
       its offers, newest first. The tenant owner reads the tenant the route
       names, the instance owner every tenant. The owner of a declined tenant
-      is behind the management gate: `403 tenant_declined`
+      is refused, the membership rests: `403 tenant_declined`
       (`TenantDeclinedError`).
     security:
       - bearerAuth: []
