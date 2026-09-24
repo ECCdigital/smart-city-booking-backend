@@ -73,6 +73,12 @@ A tenant can only be deleted if one of the following conditions is met:
 - The user has a `Membership` with `owner: true` for that tenant, or
 - The user is listed in `instance.ownerUserIds`.
 
+## Tenant approval queue
+
+### GET /api/instances/tenant-approval-queue
+
+The tenants waiting for approval (glossary „Freigabeliste der Mandanten“: exactly `supervisionLevel: pending`), longest waiting first, paginated (`?page=&pageSize=`, no filters). A row carries `tenantId`, `tenantName`, `waitingSince`, the `contact`, the `owners` (every owner membership with `userId`, `displayName`, `mail`), the `offerCount` (all bookables plus events) and `lastChange`, the newest history row about the tenant (`tenant.created` = new, `tenant.levelChanged` with `to: pending` = reset, with its reason). `total` is the queue's counter. Approve or decline per tenant with `PUT /api/tenants/:tenant/supervision`. **Instance owner only.**
+
 ## Supervision notices
 
 The tenant supervision tells the owners in charge by mail (glossary „Aufsichtsmitteilung“). Every notice goes out over the **instance's** mail account with central templates — never over a tenant's own mail configuration, and a tenant cannot override the texts.

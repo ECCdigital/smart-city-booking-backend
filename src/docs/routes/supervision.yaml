@@ -417,6 +417,43 @@
       "403":
         description: Not the instance owner
 
+/api/instances/tenant-approval-queue:
+  get:
+    tags:
+      - Supervision
+    summary: The tenant approval queue
+    description: |
+      Every tenant that waits for the instance owner's approval (glossary
+      "Freigabeliste der Mandanten"): the selection is exactly
+      `supervisionLevel === "pending"`; a tenant without a stored level
+      (`free` by fallback) is never a row. The queue does not tell a newly
+      created tenant from one reset to `pending` - `lastChange` does:
+      `tenant.created` is new, `tenant.levelChanged` with `to: "pending"`
+      is reset, with its reason.
+
+      Sorted by `waitingSince` ascending (longest waiting first), then by
+      `tenantId`; the page is cut by the database. No filters, no search.
+      `total` counts every waiting tenant and is the queue's counter (a
+      badge reads it with `pageSize=1`). Approving and declining run per
+      tenant over `PUT /api/tenants/{tenant}/supervision`; there is no bulk
+      action. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+    responses:
+      "200":
+        description: One page of the queue.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TenantApprovalQueuePage"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
 /api/instances/supervision/notifications:
   get:
     tags:
