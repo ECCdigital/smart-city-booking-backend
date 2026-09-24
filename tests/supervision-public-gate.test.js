@@ -162,7 +162,7 @@ describe("supervision: the tenant gate on public delivery", function () {
       expect((await get(path, CUSTOMER)).body).to.deep.equal(["sauna"]);
       h.tenant.supervisionLevel = level;
       expect((await get(path, CUSTOMER)).body).to.deep.equal([]);
-      expect((await get(path, OWNER)).body).to.deep.equal(["sauna"]);
+      expect((await get(path, ADMIN)).body).to.deep.equal(["sauna"]);
     });
 
     it(`leaves the existing-booking and instance paths of a ${level} tenant as they were`, async function () {
@@ -178,23 +178,69 @@ describe("supervision: the tenant gate on public delivery", function () {
     });
   }
 
-  // Ticket 15 narrows the staff exemption to `pending`; in this ticket it
-  // holds for both hidden levels.
-  it("keeps the management reach of the tenant's staff", async function () {
-    h.tenant.supervisionLevel = "pending";
+  // The staff exemption at the public gates (spec §5.1): the tenant's own
+  // people see the public projection of a pending tenant (preparation),
+  // not of a declined one - there they get the public's 404. The instance
+  // owner keeps every right.
+  // The gated paths whose entry gives the staff a management reach; the
+  // plainly public ones (`/bookables/public*`, payment apps, the checkout
+  // pre-check) ask everyone as the public.
+  const STAFF_PATHS = [
+    `/api/${TENANT}/bookables/${FIXTURE_ID}/prices`,
+    `/api/${TENANT}/events`,
+    `/api/${TENANT}/events/${FIXTURE_ID}`,
+    `/api/${TENANT}/ical/events`,
+  ];
 
+  it("keeps the management reach of a pending tenant's staff at the public gates", async function () {
+    h.tenant.supervisionLevel = "pending";
+    h.bookables[FIXTURE_ID].tags = ["sauna"];
+
+    const wrong = [];
+    for (const userId of [OWNER, ROLE_HOLDER, ADMIN]) {
+      for (const path of STAFF_PATHS) {
+        const res = await get(path, userId);
+        if (res.status !== 200) {
+          wrong.push(`${path} as ${userId} -> ${res.status}`);
+        }
+      }
+    }
+    expect(wrong).to.deep.equal([]);
     expect(
-      (await get(`/api/${TENANT}/bookables/${FIXTURE_ID}/prices`, ADMIN))
-        .status,
-    ).to.equal(200);
-    expect(
-      (await get(`/api/${TENANT}/ical/events`, ROLE_HOLDER)).status,
-    ).to.equal(200);
-    expect(
-      (await get(`/api/${TENANT}/events/${FIXTURE_ID}`, ROLE_HOLDER)).status,
-    ).to.equal(200);
+      (await get(`/api/${TENANT}/bookables/_meta/tags`, OWNER)).body,
+    ).to.deep.equal(["sauna"]);
     expect((await get(`/api/${TENANT}/bookables`, OWNER)).status).to.equal(200);
     expect((await get(`/api/tenants/${TENANT}`, OWNER)).status).to.equal(200);
+  });
+
+  it("gives a declined tenant's staff the public's 404 at the public gates, the instance owner not", async function () {
+    h.tenant.supervisionLevel = "declined";
+    h.bookables[FIXTURE_ID].tags = ["sauna"];
+
+    const wrong = [];
+    for (const userId of [OWNER, ROLE_HOLDER]) {
+      for (const path of STAFF_PATHS) {
+        const res = await get(path, userId);
+        if (res.status !== 404) {
+          wrong.push(`${path} as ${userId} -> ${res.status}`);
+        } else if (JSON.stringify(res.body).includes("supervision")) {
+          wrong.push(`${path} as ${userId} names the reason`);
+        }
+      }
+    }
+    for (const path of STAFF_PATHS) {
+      const res = await get(path, ADMIN);
+      if (res.status !== 200) {
+        wrong.push(`${path} as the instance owner -> ${res.status}`);
+      }
+    }
+    expect(wrong).to.deep.equal([]);
+    expect(
+      (await get(`/api/${TENANT}/bookables/_meta/tags`, OWNER)).body,
+    ).to.deep.equal([]);
+    expect(
+      (await get(`/api/${TENANT}/bookables/_meta/tags`, ADMIN)).body,
+    ).to.deep.equal(["sauna"]);
   });
 
   it("does not turn a failing tenant load into an empty 200", async function () {

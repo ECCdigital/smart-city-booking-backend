@@ -31,6 +31,9 @@ const {
   withoutTicketsOfUnreachableEvents,
 } = require("../../../commons/services/supervision/public-offer-gate");
 const {
+  assertStaffMaySee,
+} = require("../../../commons/services/supervision/public-tenant-gate");
+const {
   isOfferReachable,
 } = require("../../../commons/services/supervision/offer-gate");
 const {
@@ -699,10 +702,13 @@ class BookableController {
           .send(`Bookable with id ${bookableId} not found`);
       }
 
-      // Whoever may read the bookable itself reads its prices. Everyone
-      // else gets them by the direct-link rule of the supervision (spec
-      // §5.2): no `isPublic` requirement, but the offer has to be reachable.
-      if (!withinReach(bookable, "ownerUserId", scopeOf(request))) {
+      // Whoever may read the bookable itself reads its prices - unless the
+      // tenant is declined (spec §5.1). Everyone else gets them by the
+      // direct-link rule of the supervision (§5.2): no `isPublic`
+      // requirement, but the offer has to be reachable.
+      if (withinReach(bookable, "ownerUserId", scopeOf(request))) {
+        await assertStaffMaySee(request);
+      } else {
         await assertOfferReachable(tenantId, bookable);
       }
 
