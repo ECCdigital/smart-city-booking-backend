@@ -51,7 +51,7 @@ Die erste Referenz in der Bilderliste eines Bookables — durch die Position bes
 _Avoid_: Hauptbild, Cover, imgUrl (Alt-Feldname)
 
 **Sichtbarkeit (eines Mediums)**:
-Die zweistufige Lese-Einstufung eines Mediums: _public_ (für jedermann lesbar, anonym und cachebar) oder _intern_ (nur für Angehörige des Tenants). Regelt ausschließlich das Lesen — wer ein Medium auswählen, ändern oder löschen darf, bestimmen die Medien-Rechte der Rolle. Für Buchungsdokumente bedeutungslos: deren Zugriff folgt allein aus der Buchungs-Verknüpfung.
+Die zweistufige Lese-Einstufung eines Mediums: _public_ (für jedermann lesbar, anonym und cachebar) oder _intern_ (nur für Mitglieder des Tenants). Regelt ausschließlich das Lesen — wer ein Medium auswählen, ändern oder löschen darf, bestimmen die Medien-Rechte der Rolle. Für Buchungsdokumente bedeutungslos: deren Zugriff folgt allein aus der Buchungs-Verknüpfung.
 _Avoid_: protected (das ist der Alt-Pfad im Storage), accessLevel (Alt-Feldname), eingeschränkt (als dritte Stufe — gibt es nicht)
 
 **Buchungsdokument**:
@@ -59,7 +59,7 @@ Ein Dokument-Medium mit Verknüpfung zu einer oder mehreren Buchungen — allein
 _Avoid_: Rechnung (als Oberbegriff — Rechnungen sind eine Sorte Buchungsdokument), Invoice-File, Sammelbeleg-Kopie (aggregierte Belege sind ein Medium, keine Kopien)
 
 **Instanz-Medium**:
-Ein Medium ohne Tenant-Zuordnung — instanzweite Inhalte wie Branding und Rechts-Dokumente. Gleiches Datenmodell, keine eigene Entität; _intern_ bedeutet hier „jeder angemeldete Nutzer der Instanz" (es gibt keinen Tenant, dessen Angehörigkeit zählen könnte). Strikt von Tenant-Kontexten getrennt: Instanz-Medien sind nur in Instanz-Kontexten referenzierbar und erscheinen nie in Tenant-Pickern — wer ein Instanz-Bild im Tenant nutzen will, lädt es dort neu hoch. Verwaltet allein vom Instance-Owner.
+Ein Medium ohne Tenant-Zuordnung — instanzweite Inhalte wie Branding und Rechts-Dokumente. Gleiches Datenmodell, keine eigene Entität; _intern_ bedeutet hier „jeder angemeldete Nutzer der Instanz" (es gibt keinen Tenant, dessen Mitgliedschaft zählen könnte). Strikt von Tenant-Kontexten getrennt: Instanz-Medien sind nur in Instanz-Kontexten referenzierbar und erscheinen nie in Tenant-Pickern — wer ein Instanz-Bild im Tenant nutzen will, lädt es dort neu hoch. Verwaltet allein vom Instance-Owner.
 _Avoid_: globale Datei, Instanz-Datei (das meint den Alt-Bestand der tenant-losen File-Endpoints)
 
 **Storage-Ort (eines Mediums)**:
@@ -337,7 +337,7 @@ Der Stufenwechsel des Instanz-Owners von _Freigabe ausstehend_ auf _beaufsichtig
 _Avoid_: Aktivierung, Bestätigung, Approval, Freigabe (unqualifiziert — die Freigabe eines Angebots ist die Prüfentscheidung)
 
 **Abweisung (eines Mandanten)**:
-Der Stufenwechsel des Instanz-Owners auf _abgewiesen_, aus jeder Stufe heraus, wahlweise mit Begründung, jederzeit umkehrbar. Nimmt dem Mandanten sein öffentliches Angebot und seinen Tenant-Ownern und Mitgliedern den Zugriff, ohne ihn zu löschen; die Begründung erreicht die Tenant-Owner mit der Aufsichtsmitteilung zum Stufenwechsel und bleibt als Begründung des jüngsten Stufenwechsels am Mandanten für Tenant-Owner, Mitglieder und Instanz-Owner lesbar. Öffentlich ist ein abgewiesener Mandant von einem auf Freigabe wartenden nicht zu unterscheiden; Personal eines abgewiesenen Mandanten sieht auch die öffentliche Projektion nicht mehr.
+Der Stufenwechsel des Instanz-Owners auf _abgewiesen_, aus jeder Stufe heraus, wahlweise mit Begründung, jederzeit umkehrbar. Nimmt dem Mandanten sein öffentliches Angebot und lässt die Mitgliedschaften seiner Tenant-Owner und Mitglieder ruhen, ohne ihn zu löschen; wird einem von ihnen deshalb etwas verweigert, nennt die Antwort die Abweisung samt Begründung. Die Begründung erreicht die Tenant-Owner mit der Aufsichtsmitteilung zum Stufenwechsel und bleibt als Begründung des jüngsten Stufenwechsels am Mandanten für Tenant-Owner, Mitglieder und Instanz-Owner lesbar. Öffentlich ist ein abgewiesener Mandant von einem auf Freigabe wartenden nicht zu unterscheiden; wer eine ruhende Mitgliedschaft hat, sieht auch die öffentliche Projektion nicht mehr.
 _Avoid_: Ablehnung (das ist die Prüfentscheidung an einem Angebot), Sperrung, Löschung, Deaktivierung
 
 **Freigabeliste der Mandanten**:
@@ -427,8 +427,16 @@ Die Antwort einer Berechtigungsprüfung, wenn sie nicht „nein“ lautet: _any_
 _Avoid_: Scope (bei Medien bereits Tenant- vs. Instanz-Scope), Level, AccessLevel (das sind die Rollenstufen `readAny`/`readOwn` …)
 
 **Prinzipal**:
-Wer einen Request stellt, als ein einmal je Request geladener Wert: Nutzer (oder anonym), Mandant (oder Instanz-Ebene), ob Instance-Owner, ob Tenant-Owner, die zusammengeführten Rollenstufen im Mandanten und ob er Mandanten anlegen darf. Vier Stufen mit fester Vorrangordnung: Instance-Owner erfüllt alles, Tenant-Owner alles im Mandanten, Rolle ihre Stufen, der Angemeldete seine eigenen Datensätze. Die Vorrangordnung gilt ausnahmslos: es gibt keine Route mehr, die einen Instance-Owner abweist. Die Domäne kennt den Prinzipal nicht, nur die daraus abgeleitete Reichweite.
+Wer einen Request stellt, als ein einmal je Request geladener Wert: Nutzer (oder anonym), Mandant (oder Instanz-Ebene), ob Instance-Owner, ob Mitglied, ob Tenant-Owner, die zusammengeführten Rollenstufen im Mandanten und ob er Mandanten anlegen darf. Die Abweisung des Mandanten steckt schon im Wert: bei ruhender Mitgliedschaft ist er weder Mitglied noch Tenant-Owner und hat keine Rollenstufen — jeder Weg, der aus dem Prinzipal entscheidet, kennt sie damit ohne eigene Prüfung. Vier Stufen mit fester Vorrangordnung: Instance-Owner erfüllt alles, Tenant-Owner alles im Mandanten, Rolle ihre Stufen, der Angemeldete seine eigenen Datensätze. Die Vorrangordnung gilt ausnahmslos: es gibt keine Route mehr, die einen Instance-Owner abweist. Die Domäne kennt den Prinzipal nicht, nur die daraus abgeleitete Reichweite.
 _Avoid_: User (das ist die Entität), Subject, Caller, Session
+
+**Mitglied (eines Mandanten)**:
+Ein Nutzer mit aktiver Mitgliedschaft im Mandanten — mit oder ohne Rolle, Tenant-Owner eingeschlossen. Mitglieder lesen die _internen_ Medien ihres Mandanten; was sie darüber hinaus dürfen, geben Tenant-Owner-Markierung und Rollen. Nicht zu verwechseln mit dem Mitglied einer Gruppenbuchung.
+_Avoid_: Angehöriger, Personal (als Modellbegriff), Staff, Member
+
+**Ruhende Mitgliedschaft**:
+Die Mitgliedschaft in einem abgewiesenen Mandanten: sie besteht fort, gibt aber nichts — weder Mitglied noch Tenant-Owner noch Rollenstufen, nur, was jeder Angemeldete hat (die eigene Buchung, ihre Belege, eine Einladung). Lebt wieder auf, sobald der Mandant nicht mehr abgewiesen ist; bei _Freigabe ausstehend_ ruht nichts.
+_Avoid_: gesperrte Mitgliedschaft, suspended, Fremder (der Code-Altname „as for a stranger“)
 
 **Rechtetabelle**:
 Die eine Stelle, die je geschützter Sache (_resource_, z.B. Buchung, AccessPoint) und Handlung (_action_, z.B. lesen, schreiben, bedienen) sagt, welche Stufe des Prinzipals welche Reichweite bekommt. Daten, kein Code; jede Route nennt ihren Eintrag. Handlungen jenseits von anlegen, lesen, ändern, löschen sind benannte Einträge, keine neuen Rollenstufen.
