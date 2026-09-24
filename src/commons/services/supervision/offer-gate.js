@@ -8,14 +8,17 @@
  *   isOfferReachable   direct link and a new self-booking - the tenant lets
  *                      it out, `isPublic` is no requirement
  *
- * Both start at the tenant (glossary "Aufsichtsstufe"): a blocked tenant
- * shows nothing, a tenant without a stored level counts as free. The
- * review dimension of a supervised tenant (§5.1, rows 3-5) is
- * `offerPassesReview`.
+ * Both start at the tenant (glossary "Aufsichtsstufe"): only a tenant at a
+ * public level (`PUBLIC_SUPERVISION_LEVELS`: free, supervised) shows
+ * anything - a pending (glossary "Freigabe ausstehend") and a declined
+ * (glossary "abgewiesen") tenant are, to the public, the same absence. A
+ * tenant without a stored level counts as free. The review dimension of a
+ * supervised tenant (§5.1, rows 3-5) is `offerPassesReview`.
  */
 
 const {
   SUPERVISION_LEVELS,
+  PUBLIC_SUPERVISION_LEVELS,
   REVIEW_STATUS,
   effectiveLevelOf,
 } = require("./supervision-constants");
@@ -24,13 +27,14 @@ const {
  * Whether a tenant appears in public tenant lists and lets any offer out.
  *
  * @param {Object|null} tenant
- * @returns {boolean} false for a blocked or unknown tenant
+ * @returns {boolean} false for an unknown tenant and for one at a level
+ *   that is not public
  */
 function isTenantPubliclyVisible(tenant) {
   if (!tenant) {
     return false;
   }
-  return effectiveLevelOf(tenant) !== SUPERVISION_LEVELS.BLOCKED;
+  return PUBLIC_SUPERVISION_LEVELS.includes(effectiveLevelOf(tenant));
 }
 
 /**
@@ -88,13 +92,13 @@ function isOfferReachable({ tenant, offer, event = null }) {
 
 /**
  * The same tenant question as a query condition, for a list that filters
- * in the database: every tenant that is not blocked, a missing level
- * included.
+ * in the database: every tenant at a public level, a missing level
+ * included (`null` in `$in` matches a missing field).
  *
  * @returns {Object} The condition to spread into a tenant query.
  */
 function publicTenantCondition() {
-  return { supervisionLevel: { $ne: SUPERVISION_LEVELS.BLOCKED } };
+  return { supervisionLevel: { $in: [...PUBLIC_SUPERVISION_LEVELS, null] } };
 }
 
 module.exports = {

@@ -292,7 +292,7 @@ describe("tenant creation", function () {
       instance.allowAllUsersToCreateTenant = true;
     };
 
-    for (const level of ["free", "supervised", "blocked"]) {
+    for (const level of ["free", "supervised", "pending"]) {
       it(`starts a creation over the Freigabeliste ${level} when the instance says so`, async function () {
         instance.tenantInitialSupervisionLevel = level;
 
@@ -338,11 +338,11 @@ describe("tenant creation", function () {
       await create(CUSTOMER, VALID);
       const first = TenantManager.storeTenant.lastCall.args[0];
 
-      instance.tenantInitialSupervisionLevel = "blocked";
+      instance.tenantInitialSupervisionLevel = "pending";
       await create(CUSTOMER, VALID);
 
       expect(first.supervisionLevel).to.equal("supervised");
-      expect(storedLevel()).to.equal("blocked");
+      expect(storedLevel()).to.equal("pending");
       expect(TenantManager.updateSupervisionLevel.called).to.be.false;
     });
 
@@ -353,23 +353,23 @@ describe("tenant creation", function () {
         supervisionChangedAt: "2020-01-01T00:00:00.000Z",
         review: { status: "approved" },
       };
-      instance.tenantInitialSupervisionLevel = "blocked";
+      instance.tenantInitialSupervisionLevel = "pending";
 
       await create(CUSTOMER, forged);
       let stored = TenantManager.storeTenant.lastCall.args[0];
-      expect(stored.supervisionLevel).to.equal("blocked");
+      expect(stored.supervisionLevel).to.equal("pending");
       expect(stored.supervisionChangedAt).to.equal(null);
       expect(stored).to.not.have.property("review");
 
       openCreation();
       await create(OWNER, forged);
       stored = TenantManager.storeTenant.lastCall.args[0];
-      expect(stored.supervisionLevel).to.equal("blocked");
+      expect(stored.supervisionLevel).to.equal("pending");
       expect(stored).to.not.have.property("review");
     });
 
     it("starts the instance owner's tenant free on every initial level, the forged body included", async function () {
-      for (const level of ["supervised", "blocked"]) {
+      for (const level of ["supervised", "pending"]) {
         instance.tenantInitialSupervisionLevel = level;
 
         await create(ADMIN, { ...VALID, supervisionLevel: level });
@@ -593,11 +593,11 @@ describe("tenant creation", function () {
     });
 
     it("starts the instance owner's tenant free over the obsolete PUT as well", async function () {
-      instance.tenantInitialSupervisionLevel = "blocked";
+      instance.tenantInitialSupervisionLevel = "pending";
 
       const res = await createLegacy(ADMIN, {
         ...VALID,
-        supervisionLevel: "blocked",
+        supervisionLevel: "pending",
       });
 
       expect(res.status).to.equal(201);

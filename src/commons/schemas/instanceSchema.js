@@ -3,7 +3,7 @@ const path = require("path");
 const { customFieldDefinitionSchema } = require("./customFieldDefinition");
 const {
   SUPERVISION_LEVELS,
-  SUPERVISION_LEVEL_VALUES,
+  INITIAL_SUPERVISION_LEVELS,
 } = require("../services/supervision/supervision-constants");
 const defaultMailTemplate = fs.readFileSync(
   path.join(
@@ -66,11 +66,12 @@ const instanceSchemaDefinition = {
   allowAllUsersToCreateTenant: { type: Boolean, default: false },
   allowedUsersToCreateTenant: { type: Array, ref: "User", default: [] },
   // The Startstufe (glossary): the supervision level a self-created tenant
-  // starts at. Read server-side on creation and never retroactive; a
-  // missing value reads as `free`.
+  // starts at - one of the initial levels, never `declined`. Read
+  // server-side on creation and never retroactive; a missing value reads
+  // as `free`.
   tenantInitialSupervisionLevel: {
     type: String,
-    enum: SUPERVISION_LEVEL_VALUES,
+    enum: INITIAL_SUPERVISION_LEVELS,
     default: SUPERVISION_LEVELS.FREE,
   },
   ownerUserIds: { type: Array, ref: "User", default: [] },

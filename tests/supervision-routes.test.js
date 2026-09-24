@@ -85,14 +85,14 @@ describe("supervision routes", function () {
   };
 
   describe("PUT /api/tenants/:tenant/supervision", function () {
-    it("lets the instance owner block a tenant and answers level and time", async function () {
+    it("lets the instance owner set a tenant pending and answers level and time", async function () {
       const res = await call("put", `/tenants/${TENANT}/supervision`, ADMIN, {
-        level: "blocked",
+        level: "pending",
         reason: "Spam",
       });
 
       expect(res.status).to.equal(200);
-      expect(res.body.supervisionLevel).to.equal("blocked");
+      expect(res.body.supervisionLevel).to.equal("pending");
       expect(new Date(res.body.supervisionChangedAt).getTime()).to.be.closeTo(
         Date.now(),
         5000,
@@ -101,7 +101,7 @@ describe("supervision routes", function () {
       expect(SupervisionHistoryManager.insert.firstCall.args[0]).to.include({
         tenantId: TENANT,
         from: "free",
-        to: "blocked",
+        to: "pending",
         reason: "Spam",
       });
       expect(
@@ -114,29 +114,29 @@ describe("supervision routes", function () {
       expect(
         (
           await call("put", `/tenants/${TENANT}/supervision`, OWNER, {
-            level: "blocked",
+            level: "pending",
           })
         ).status,
       ).to.equal(403);
       expect(
         (
           await call("put", `/tenants/${TENANT}/supervision`, ROLE_HOLDER, {
-            level: "blocked",
+            level: "pending",
           })
         ).status,
       ).to.equal(403);
       expect(
         (
           await call("put", `/tenants/${TENANT}/supervision`, null, {
-            level: "blocked",
+            level: "pending",
           })
         ).status,
       ).to.equal(401);
       expect(level).to.equal("free");
     });
 
-    it("switches between all three levels in every direction", async function () {
-      const LEVELS = ["free", "supervised", "blocked"];
+    it("switches between all four levels in every direction, declined included", async function () {
+      const LEVELS = ["free", "supervised", "pending", "declined"];
       for (const from of LEVELS) {
         for (const to of LEVELS.filter((other) => other !== from)) {
           level = from;
@@ -167,12 +167,28 @@ describe("supervision routes", function () {
       expect(res.body.code).to.equal("invalid_supervision_level");
     });
 
+    it("refuses the former name blocked with 400, naming the four levels", async function () {
+      const res = await call("put", `/tenants/${TENANT}/supervision`, ADMIN, {
+        level: "blocked",
+      });
+
+      expect(res.status).to.equal(400);
+      expect(res.body.code).to.equal("invalid_supervision_level");
+      expect(res.body.params.allowed).to.deep.equal([
+        "free",
+        "supervised",
+        "pending",
+        "declined",
+      ]);
+      expect(level).to.equal("free");
+    });
+
     it("repeats an effective level as a no-op", async function () {
-      level = "blocked";
+      level = "pending";
       changedAt = new Date("2026-01-01T00:00:00.000Z");
 
       const res = await call("put", `/tenants/${TENANT}/supervision`, ADMIN, {
-        level: "blocked",
+        level: "pending",
       });
 
       expect(res.status).to.equal(200);
@@ -247,7 +263,7 @@ describe("supervision routes", function () {
           reason: "  Bewährt  ",
         });
         await call("put", `/tenants/${TENANT}/supervision`, ADMIN, {
-          level: "blocked",
+          level: "pending",
         });
 
         for (const userId of [OWNER, ADMIN]) {
@@ -265,7 +281,7 @@ describe("supervision routes", function () {
               row.reason,
             ]),
           ).to.deep.equal([
-            ["tenant.levelChanged", "free", "blocked", null],
+            ["tenant.levelChanged", "free", "pending", null],
             ["tenant.levelChanged", "supervised", "free", "Bewährt"],
             ["tenant.created", null, "supervised", null],
           ]);
@@ -330,8 +346,8 @@ describe("supervision routes", function () {
   });
 
   describe("the tenant DTOs and writes", function () {
-    it("filters the admin list by each of the three levels", async function () {
-      for (const wanted of ["free", "supervised", "blocked"]) {
+    it("filters the admin list by each of the four levels", async function () {
+      for (const wanted of ["free", "supervised", "pending", "declined"]) {
         const res = await call(
           "get",
           `/tenants?supervisionLevel=${wanted}`,
@@ -351,12 +367,12 @@ describe("supervision routes", function () {
     });
 
     it("exposes level and change time in the admin DTO, the level alone publicly", async function () {
-      level = "blocked";
+      level = "pending";
       changedAt = new Date("2026-01-01T00:00:00.000Z");
 
       const admin = await call("get", `/tenants/${TENANT}`, ADMIN);
       expect(admin.status).to.equal(200);
-      expect(admin.body.supervisionLevel).to.equal("blocked");
+      expect(admin.body.supervisionLevel).to.equal("pending");
       expect(admin.body.supervisionChangedAt).to.equal(
         "2026-01-01T00:00:00.000Z",
       );
@@ -376,7 +392,7 @@ describe("supervision routes", function () {
         name: "Neu",
         contactName: "Erika",
         mail: "neu@example.test",
-        supervisionLevel: "blocked",
+        supervisionLevel: "pending",
         supervisionChangedAt: "2020-01-01T00:00:00.000Z",
       });
 
@@ -394,7 +410,7 @@ describe("supervision routes", function () {
         name: "Neu",
         contactName: "Erika",
         mail: "neu@example.test",
-        supervisionLevel: "blocked",
+        supervisionLevel: "pending",
       });
 
       expect(res.status).to.equal(201);
@@ -407,7 +423,7 @@ describe("supervision routes", function () {
       const res = await call("put", "/tenants", ADMIN, {
         id: TENANT,
         name: "Umbenannt",
-        supervisionLevel: "blocked",
+        supervisionLevel: "pending",
       });
 
       expect(res.status).to.equal(200);
