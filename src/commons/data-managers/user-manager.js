@@ -6,7 +6,7 @@ const MembershipManager = require("./membership-manager");
 const TenantManager = require("./tenant-manager");
 const { escapeRegex } = require("../utilities/regex-utils");
 const {
-  effectiveLevelOf,
+  supervisionOf,
 } = require("../services/supervision/supervision-constants");
 
 class UserManager {
@@ -335,10 +335,10 @@ class UserManager {
       tenantPermissions.map((permission) => permission.tenantId),
     );
     for (const permission of tenantPermissions) {
-      const tenant = tenants.find((t) => t.id === permission.tenantId);
-      permission.supervisionLevel = effectiveLevelOf(tenant);
-      permission.supervisionChangedAt = tenant?.supervisionChangedAt ?? null;
-      permission.supervisionReason = tenant?.supervisionReason ?? null;
+      Object.assign(
+        permission,
+        supervisionOf(tenants.find((t) => t.id === permission.tenantId)),
+      );
     }
 
     const permissions = {

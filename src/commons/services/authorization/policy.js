@@ -203,7 +203,6 @@ module.exports = {
   decideWith,
   entryOf,
   satisfies,
-  satisfiedBy,
   parseLevel,
   REACH,
   REACHES,

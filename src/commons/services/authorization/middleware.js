@@ -45,8 +45,8 @@ const {
 const { ForbiddenError } = require("../../../errors/BaseError");
 const TenantManager = require("../../data-managers/tenant-manager");
 const {
-  SUPERVISION_LEVELS,
-  effectiveLevelOf,
+  isDeclined,
+  supervisionOf,
 } = require("../supervision/supervision-constants");
 const { loadPrincipal, anonymous } = require("./principal");
 const { decide, decideWith, entryOf, PRECEDENCE } = require("./policy");
@@ -125,7 +125,7 @@ async function decideForRequest(req, resource, action, tenantOf) {
 
   const tenantId = tenantOf(req);
   const tenant = await tenantRecordOf(req, tenantId);
-  if (!tenant || effectiveLevelOf(tenant) !== SUPERVISION_LEVELS.DECLINED) {
+  if (!tenant || !isDeclined(tenant)) {
     return decision.reach;
   }
 
@@ -136,9 +136,7 @@ async function decideForRequest(req, resource, action, tenantOf) {
   }
   throw new ForbiddenError("tenant_declined", {
     tenantId,
-    supervisionLevel: SUPERVISION_LEVELS.DECLINED,
-    supervisionChangedAt: tenant.supervisionChangedAt ?? null,
-    supervisionReason: tenant.supervisionReason ?? null,
+    ...supervisionOf(tenant),
   });
 }
 

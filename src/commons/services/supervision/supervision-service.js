@@ -13,6 +13,7 @@ const {
   SUPERVISION_LEVELS,
   assertSupervisionLevel,
   effectiveLevelOf,
+  supervisionOf,
   INITIAL_SUPERVISION_LEVELS,
   REVIEW_STATUS,
   HISTORY_EVENT_TYPES,
@@ -70,11 +71,7 @@ class SupervisionService {
 
     const from = effectiveLevelOf(tenant);
     if (from === level) {
-      return {
-        supervisionLevel: from,
-        supervisionChangedAt: tenant.supervisionChangedAt ?? null,
-        supervisionReason: tenant.supervisionReason ?? null,
-      };
+      return supervisionOf(tenant);
     }
 
     const updated = await TenantManager.updateSupervisionLevel({
@@ -147,11 +144,7 @@ class SupervisionService {
       }
     }
 
-    return {
-      supervisionLevel: updated.supervisionLevel,
-      supervisionChangedAt: updated.supervisionChangedAt,
-      supervisionReason: updated.supervisionReason ?? null,
-    };
+    return supervisionOf(updated);
   }
 
   /**

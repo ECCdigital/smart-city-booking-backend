@@ -19,10 +19,7 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const { NotFoundError } = require("../../../errors/BaseError");
 const { REACH } = require("../authorization/policy");
 const { isTenantPubliclyVisible } = require("./offer-gate");
-const {
-  SUPERVISION_LEVELS,
-  effectiveLevelOf,
-} = require("./supervision-constants");
+const { isDeclined } = require("./supervision-constants");
 
 /**
  * The tenant, when the public may see it.
@@ -49,7 +46,7 @@ async function assertTenantPubliclyVisible(tenantId) {
  * @returns {boolean}
  */
 function staffSeesProjection(tenant) {
-  return effectiveLevelOf(tenant) !== SUPERVISION_LEVELS.DECLINED;
+  return !isDeclined(tenant);
 }
 
 /**
@@ -86,10 +83,10 @@ async function assertStaffMaySee(req) {
  */
 function publicTenantGate({ exemptReaches = [REACH.OWN, REACH.ANY] } = {}) {
   return (req, res, next) => {
-    const question = exemptReaches.includes(req.reach)
+    const check = exemptReaches.includes(req.reach)
       ? assertStaffMaySee(req)
       : assertTenantPubliclyVisible(req.params?.tenant);
-    question.then(() => next()).catch(next);
+    check.then(() => next()).catch(next);
   };
 }
 

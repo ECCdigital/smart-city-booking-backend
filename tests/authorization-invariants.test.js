@@ -205,6 +205,7 @@ describe("authorization invariants: the management gate of a declined tenant", f
       tenantId,
       isOwner: userId === "owner",
       manageBookables: userId === "manager" ? { readAny: true } : {},
+      manageBookings: userId === "manager" ? { updateAny: true } : {},
     });
     return {
       tenants: [...Object.keys(tenants), "t-unknown"].map(membership),
@@ -222,6 +223,7 @@ describe("authorization invariants: the management gate of a declined tenant", f
     const tenantRouter = express.Router({ mergeParams: true });
     tenantRouter.get("/bookables", authorize("bookable", "read"), answer);
     tenantRouter.get("/bookings/:id", authorize("booking", "read"), answer);
+    tenantRouter.get("/access", authorize("booking", "operate"), answer);
     tenantRouter.get("/events", publicRoute("event", "read"), answer);
     server.use("/api/:tenant", tenantRouter);
     const instanceRouter = express.Router();
@@ -296,6 +298,19 @@ describe("authorization invariants: the management gate of a declined tenant", f
       .set(as("owner"));
     expect(owner.status).to.equal(200);
     expect(owner.body.reach).to.equal("own");
+  });
+
+  it("closes booking.operate over any for the manager, and leaves it open over own", async function () {
+    const free = await request(app())
+      .get("/api/t-free/access")
+      .set(as("manager"));
+    expect(free.body.reach).to.equal("any");
+
+    const declined = await request(app())
+      .get("/api/t-declined/access")
+      .set(as("manager"));
+    expect(declined.status).to.equal(200);
+    expect(declined.body.reach).to.equal("own");
   });
 
   it("does not load the tenant when the rule was satisfied by the sign-in or the instance owner", async function () {

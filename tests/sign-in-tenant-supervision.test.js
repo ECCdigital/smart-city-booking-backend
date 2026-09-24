@@ -16,6 +16,7 @@ const InstanceManager = require("../src/commons/data-managers/instance-manager")
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const { RoleManager } = require("../src/commons/data-managers/role-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const JwtHelper = require("../src/commons/utilities/jwt-helper");
 const {
   installHarness,
   TENANT,
@@ -129,6 +130,46 @@ describe("GET /auth/me: the supervision of the user's tenants", function () {
       supervisionChangedAt: CHANGED_AT.toISOString(),
       supervisionReason: "Kein Impressum",
     });
+  });
+
+  it("carries the same entry in the answer of POST /auth/signin", async function () {
+    h.tenant.supervisionLevel = "declined";
+    h.tenant.supervisionChangedAt = CHANGED_AT;
+    h.tenant.supervisionReason = "Kein Impressum";
+    // The local strategy needs a verified local user who knows the
+    // password; the tokens are the JWT helper's, whose refresh token would
+    // write a session.
+    UserManager.getUser.restore();
+    sinon.stub(UserManager, "getUser").callsFake(async (id) => ({
+      id,
+      isVerified: true,
+      isSuspended: false,
+      authType: "local",
+      verifyPassword: () => true,
+    }));
+    sinon.stub(JwtHelper, "generateToken").resolves("access");
+    sinon.stub(JwtHelper, "generateRefreshToken").resolves("refresh");
+    try {
+      const res = await h
+        .api()
+        .post("/auth/signin")
+        .send({ id: OWNER, password: "geheim" });
+
+      expect(res.status).to.equal(200);
+      const entry = res.body.permissions.tenants.find(
+        (tenant) => tenant.tenantId === TENANT,
+      );
+      expect(entry).to.include({
+        supervisionLevel: "declined",
+        supervisionChangedAt: CHANGED_AT.toISOString(),
+        supervisionReason: "Kein Impressum",
+      });
+    } finally {
+      JwtHelper.generateToken.restore();
+      JwtHelper.generateRefreshToken.restore();
+      UserManager.getUser.restore();
+      sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
+    }
   });
 
   it("answers free and no change for a tenant that was never changed", async function () {

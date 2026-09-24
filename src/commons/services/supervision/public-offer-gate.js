@@ -98,10 +98,10 @@ const hangsOnEvent = (offer) =>
  */
 function publicBookableGate({ exemptReaches = [REACH.OWN, REACH.ANY] } = {}) {
   return (req, res, next) => {
-    const question = exemptReaches.includes(req.reach)
+    const check = exemptReaches.includes(req.reach)
       ? assertStaffMaySee(req)
       : assertBookableReachable(req.params?.tenant, req.params?.id);
-    question.then(() => next()).catch(next);
+    check.then(() => next()).catch(next);
   };
 }
 

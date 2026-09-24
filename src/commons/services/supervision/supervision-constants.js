@@ -121,6 +121,34 @@ function effectiveLevelOf(tenant) {
 }
 
 /**
+ * Whether a tenant is declined (glossary "abgewiesen"): closed to its own
+ * people, its public projection gone for them too.
+ *
+ * @param {Object|null} tenant
+ * @returns {boolean}
+ */
+function isDeclined(tenant) {
+  return effectiveLevelOf(tenant) === SUPERVISION_LEVELS.DECLINED;
+}
+
+/**
+ * The supervision of a tenant as it goes out - in the admin answers, the
+ * sign-in and the management gate's error: the effective level, when it
+ * last changed and the reason of that change, `null` where nothing is
+ * stored (a tenant without a document reads as one without a level).
+ *
+ * @param {Object|null} tenant
+ * @returns {{supervisionLevel: string, supervisionChangedAt: Date|null, supervisionReason: string|null}}
+ */
+function supervisionOf(tenant) {
+  return {
+    supervisionLevel: effectiveLevelOf(tenant),
+    supervisionChangedAt: tenant?.supervisionChangedAt ?? null,
+    supervisionReason: tenant?.supervisionReason ?? null,
+  };
+}
+
+/**
  * The one check of a supervision level that comes from outside.
  *
  * @param {*} level
@@ -149,6 +177,8 @@ module.exports = {
   SUPERVISION_FIELDS,
   assertSupervisionLevel,
   effectiveLevelOf,
+  isDeclined,
+  supervisionOf,
   SUPERVISION_LEVELS,
   SUPERVISION_LEVEL_VALUES: values(SUPERVISION_LEVELS),
   INITIAL_SUPERVISION_LEVELS,
