@@ -9,6 +9,8 @@ const sinon = require("sinon");
 
 const BookingStatusController = require("../src/platform/api/v2/controllers/booking-status.controller");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const Tenant = require("../src/commons/entities/tenant/tenant");
 const { Booking } = require("../src/commons/entities/booking/booking");
 
 const TENANT = "tenant-1";
@@ -29,6 +31,9 @@ function booking(overrides = {}) {
 
 async function statusOf(ids, stored) {
   sinon.stub(BookingManager, "getBookings").resolves(stored);
+  sinon
+    .stub(TenantManager, "getTenantsByIds")
+    .resolves([new Tenant({ id: TENANT, name: "Stadt" })]);
   const response = {
     status: sinon.stub().returnsThis(),
     json: sinon.stub().returnsThis(),
@@ -65,6 +70,14 @@ describe("v2 booking status", function () {
             isPayed: false,
             isRejected: false,
             priceEur: 40,
+            tenant: {
+              id: TENANT,
+              name: "Stadt",
+              contactName: "",
+              mail: "",
+              phone: "",
+              accessApps: [],
+            },
           },
         ],
       },

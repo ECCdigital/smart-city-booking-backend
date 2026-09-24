@@ -38,6 +38,9 @@ const {
 } = require("../../../commons/utilities/checkout-utils");
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
 const mailService = require("../../../commons/mail-service");
+const {
+  withCustomerView,
+} = require("../../../commons/services/booking/booking-customer-view");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
   reachableBookableIds,
@@ -219,10 +222,17 @@ class BookingController {
         await BookingController._populate(bookings);
       }
 
+      // The tenant snapshot and the event core data a customer's pages
+      // render from (tenant supervision spec §5.2), whatever the level of
+      // the tenant - the booking is the customer's contract with it.
+      const view = await withCustomerView(bookings, (booking) => ({
+        ...booking,
+      }));
+
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
       );
-      response.status(200).send(bookings);
+      response.status(200).send(view);
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get assigned bookings");
@@ -374,9 +384,11 @@ class BookingController {
       if (ids) {
         const splitIds = ids.split(",");
 
-        const bookingsStatus = await BookingManager.getBookingStatus(
-          tenantId,
-          splitIds,
+        const bookings = await BookingManager.getBookings(tenantId, splitIds);
+        // The tenant snapshot and the event core data a customer's page
+        // renders from (tenant supervision spec §5.2), whatever the level.
+        const bookingsStatus = await withCustomerView(bookings, (booking) =>
+          booking.exportStatus(),
         );
 
         logger.info(

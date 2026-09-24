@@ -6,6 +6,7 @@ const {
   ACCESS_BLOCKING_REASONS,
 } = require("../src/commons/services/access/access-blocking-reasons");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
@@ -175,6 +176,8 @@ describe("AccessService.getUserBookingsWithAccess includeEligibility", () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    // The tenant snapshot of the answer (ticket 18): no tenant here.
+    sandbox.stub(TenantManager, "getTenantsByIds").resolves([]);
   });
 
   afterEach(() => {
@@ -320,6 +323,8 @@ describe("AccessService.getUserBookingsWithAccess includeAccessPoints", () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    // The tenant snapshot of the answer (ticket 18): no tenant here.
+    sandbox.stub(TenantManager, "getTenantsByIds").resolves([]);
   });
 
   afterEach(() => {

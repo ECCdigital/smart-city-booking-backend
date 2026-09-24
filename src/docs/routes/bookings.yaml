@@ -94,6 +94,140 @@
           write, a payment webhook say (params carry `bookingId`, `status`,
           `transition`)
 
+/api/bookings/assigned:
+  get:
+    tags:
+      - Bookings
+    summary: The bookings of the signed-in customer, across all tenants
+    description: |
+      Every booking assigned to the signed-in user, of every tenant. Each
+      booking carries, beside its stored fields, the customer view of ticket
+      18 (tenant supervision spec §5.2): `tenant`, a snapshot of the tenant -
+      name and support/emergency contact - whatever its supervision level,
+      because the booking is the customer's contract with it; and for a
+      ticket booking `event`, the core data of the event. Neither depends on
+      the public tenant or catalog projection, which a non-public tenant
+      does not have, so a customer's pages render from this answer alone.
+      `?populate=true` adds `_populated` with the lead bookable and the
+      workflow status, as before.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: populate
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+    responses:
+      "200":
+        description: The bookings, each with `tenant` and, for a ticket booking, `event`
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/CustomerBooking"
+      "401":
+        description: Not authenticated
+
+/api/{tenant}/bookings/assigned:
+  get:
+    tags:
+      - Bookings
+    summary: The bookings of the signed-in customer in one tenant
+    description: |
+      As `GET /api/bookings/assigned`, limited to the tenant of the path.
+      Each booking carries `tenant` and, for a ticket booking, `event`
+      (ticket 18).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - name: populate
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["true"]
+    responses:
+      "200":
+        description: The bookings, each with `tenant` and, for a ticket booking, `event`
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/CustomerBooking"
+      "401":
+        description: Not authenticated
+
+/api/{tenant}/bookings/{ids}/status:
+  get:
+    tags:
+      - Bookings
+    summary: The status of one or more bookings (v1)
+    description: |
+      The status view of the bookings named by `ids` (comma-separated),
+      for the storefront's status page after a checkout; an unknown id is
+      left out. Each item carries the customer view of ticket 18: `tenant`,
+      the snapshot of the tenant whatever its supervision level (`null` for
+      a deleted tenant), and for a ticket booking `event`, the core data of
+      the event (`null` when the event is gone). Nothing of the supervision
+      is named.
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdsParam"
+    responses:
+      "200":
+        description: The status of every booking found
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/BookingStatusV1"
+      "400":
+        description: No booking id named
+
+/api/v2/{tenant}/bookings/{ids}/status:
+  get:
+    tags:
+      - Bookings
+    summary: The status of one or more bookings (v2)
+    description: |
+      Always HTTP 200: a failure is `success: false` with a reason, an
+      unknown id an item with `success: false` and the reason
+      `booking_status.booking_not_found`. A found booking carries its state
+      as `status`, the flags and the i18n key, and the customer view of
+      ticket 18: `tenant`, the snapshot of the tenant whatever its
+      supervision level (`null` for a deleted tenant), and for a ticket
+      booking `event`, the core data of the event (`null` when the event is
+      gone).
+    parameters:
+      - $ref: "#/components/parameters/BookingTenantParam"
+      - $ref: "#/components/parameters/BookingIdsParam"
+    responses:
+      "200":
+        description: The status of the bookings, or the failure
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                data:
+                  type: object
+                  properties:
+                    bookings:
+                      type: array
+                      items:
+                        $ref: "#/components/schemas/BookingStatusV2Item"
+                error:
+                  type: object
+                  description: "On `success: false` at the top level - `missing_parameters`, `internal_error`"
+
 /api/{tenant}/bookings/{bookingId}/reinstate:
   post:
     tags:
@@ -145,3 +279,146 @@ components:
       description: Booking identifier
       schema:
         type: string
+    BookingIdsParam:
+      name: ids
+      in: path
+      required: true
+      description: One or more booking identifiers, comma-separated
+      schema:
+        type: string
+  schemas:
+    BookingTenantSnapshot:
+      type: object
+      nullable: true
+      description: |
+        The tenant as a customer's booking carries it (ticket 18, tenant
+        supervision spec §5.2): the fields `GET /api/tenants/public` names
+        them by, without the supervision level or anything of the
+        supervision, whatever the level. `null` for a deleted tenant.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        contactName:
+          type: string
+        mail:
+          type: string
+        phone:
+          type: string
+        accessApps:
+          type: array
+          description: The customer service of every active access application that has one
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              customerService:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                  email:
+                    type: string
+    BookingEventCoreData:
+      type: object
+      nullable: true
+      description: |
+        The core data of the event of a ticket booking (ticket 18): the id,
+        the title and the period as Unix timestamps in milliseconds (`null`
+        where the event names no date). No description, no prices, no media
+        - the booking vouches for the event, not for its offer. Present on
+        ticket bookings only; `null` when the event is gone.
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        timeBegin:
+          type: integer
+          nullable: true
+        timeEnd:
+          type: integer
+          nullable: true
+    CustomerBooking:
+      type: object
+      description: A booking as stored, with the customer view of ticket 18
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        tenantId:
+          type: string
+        status:
+          type: string
+        timeBegin:
+          type: integer
+        timeEnd:
+          type: integer
+        bookableItems:
+          type: array
+          items:
+            type: object
+        tenant:
+          $ref: "#/components/schemas/BookingTenantSnapshot"
+        event:
+          $ref: "#/components/schemas/BookingEventCoreData"
+    BookingStatusV1:
+      type: object
+      properties:
+        bookingId:
+          type: string
+        priceEur:
+          type: number
+        timeBegin:
+          type: integer
+        timeEnd:
+          type: integer
+        status:
+          type: string
+          enum: [requested, payment_due, confirmed, rejected, cancelled]
+        isCommitted:
+          type: boolean
+        isPayed:
+          type: boolean
+        isRejected:
+          type: boolean
+        cancellationPolicy:
+          type: object
+        tenant:
+          $ref: "#/components/schemas/BookingTenantSnapshot"
+        event:
+          $ref: "#/components/schemas/BookingEventCoreData"
+    BookingStatusV2Item:
+      type: object
+      properties:
+        bookingId:
+          type: string
+        success:
+          type: boolean
+        status:
+          type: string
+          enum: [requested, payment_due, confirmed, rejected, cancelled]
+        statusKey:
+          type: string
+        paymentProvider:
+          type: string
+          nullable: true
+        isCommitted:
+          type: boolean
+        isPayed:
+          type: boolean
+        isRejected:
+          type: boolean
+        priceEur:
+          type: number
+        tenant:
+          $ref: "#/components/schemas/BookingTenantSnapshot"
+        event:
+          $ref: "#/components/schemas/BookingEventCoreData"
+        error:
+          type: object
+          description: "On `success: false` - `booking_status.booking_not_found` with `params.bookingId`"

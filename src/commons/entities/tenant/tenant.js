@@ -43,6 +43,26 @@ class Tenant {
   }
 
   /**
+   * The tenant as a customer's booking carries it (tenant supervision spec
+   * §5.2, glossary "Mandanten-Aufsicht"): the name and the support and
+   * emergency contact, the same fields `exportPublic` names them by, and
+   * nothing of the supervision - a booking is a contract with the tenant,
+   * whatever its level.
+   *
+   * @returns {{ id, name, contactName, mail, phone, accessApps }}
+   */
+  exportBookingSnapshot() {
+    return {
+      id: this.id,
+      name: this.name,
+      contactName: this.contactName,
+      mail: this.mail,
+      phone: this.phone,
+      accessApps: this._exportPublicAccessApps(),
+    };
+  }
+
+  /**
    * The customer-service contact of every access application that has one
    * (glossary "Notfallhilfe"), for the storefront's emergency help. Each
    * entry is built key by key - an application carries its provider's

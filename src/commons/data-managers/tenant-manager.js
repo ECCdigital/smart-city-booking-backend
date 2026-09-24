@@ -140,6 +140,24 @@ class TenantManager {
   }
 
   /**
+   * The tenants of some ids, in one query, whatever their supervision
+   * level - for the snapshot a customer's booking carries (tenant
+   * supervision spec §5.2); the caller knows the bookings, so nothing about
+   * a tenant is revealed that the booking does not vouch for.
+   *
+   * @param {string[]} ids
+   * @returns {Promise<Tenant[]>} The tenants that exist, in no order
+   */
+  static async getTenantsByIds(ids) {
+    const unique = [...new Set(ids)].filter(Boolean);
+    if (unique.length === 0) {
+      return [];
+    }
+    const rawTenants = await TenantModel.find({ id: { $in: unique } });
+    return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Insert a tenant object into the database or update it.
    * Validates the tenant data before storing it.
    *
