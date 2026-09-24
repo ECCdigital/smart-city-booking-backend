@@ -64,6 +64,20 @@ class SupervisionHistoryManager {
 
     return { items, total, page: window.page, pageSize: window.pageSize };
   }
+
+  /**
+   * The newest row about the tenant itself (`offerType: null`: created,
+   * level initialized, level changed), in the shape `list` answers a row
+   * in - how the tenant got where it is.
+   *
+   * @param {string} tenantId
+   * @returns {Promise<Object|null>} The row, or null without one
+   */
+  static async latestTenantRow(tenantId) {
+    return SupervisionHistoryModel.findOne({ tenantId, offerType: null })
+      .sort({ occurredAt: -1, id: 1 })
+      .lean();
+  }
 }
 
 module.exports = SupervisionHistoryManager;

@@ -172,6 +172,17 @@ class EventManager {
   }
 
   /**
+   * How many events a tenant has, whatever their dates, publication wish
+   * or review status - the offer count of the tenant approval queue.
+   *
+   * @param {string} tenantId Identifier of the tenant
+   * @returns {Promise<number>}
+   */
+  static async countEvents(tenantId) {
+    return EventModel.countDocuments({ tenantId });
+  }
+
+  /**
    * Find the events that reference a medium — teaser image, contact person
    * image, the photo of a speaker, the image list or one of the attachments.
    * The usage proof is searched on demand (§4.7 of the media spec); a medium

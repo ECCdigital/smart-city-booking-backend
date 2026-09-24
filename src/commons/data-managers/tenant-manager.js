@@ -47,12 +47,51 @@ class TenantManager {
    * @param {boolean} [options.owned=false] Only the tenants the user owns.
    * @param {string} [options.supervisionLevel] Only the tenants at this
    *   supervision level (a tenant without a stored level is `free`).
+   * @param {Object} [options.sort] A mongoose sort, e.g.
+   *   `{ supervisionChangedAt: 1, id: 1 }`; default: the database's order
+   * @param {number} [options.skip] Rows to skip - the page's start
+   * @param {number} [options.limit] Rows at most - the page's size
    * @returns {Promise<Tenant[]>} List of tenants
    */
   static async getTenants(
     scope = {},
+    { owned = false, supervisionLevel, sort, skip, limit } = {},
+  ) {
+    const condition = await TenantManager._condition(scope, {
+      owned,
+      supervisionLevel,
+    });
+    let query = TenantModel.find(condition);
+    if (sort) query = query.sort(sort);
+    if (skip) query = query.skip(skip);
+    if (limit) query = query.limit(limit);
+    const rawTenants = await query;
+    return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * How many tenants `getTenants` would list under the same scope and
+   * options - the `total` of a page of them.
+   *
+   * @param {{reach?: string, userId?: string|null}} [scope]
+   * @param {Object} [options]
+   * @param {boolean} [options.owned=false]
+   * @param {string} [options.supervisionLevel]
+   * @returns {Promise<number>}
+   */
+  static async countTenants(
+    scope = {},
     { owned = false, supervisionLevel } = {},
   ) {
+    const condition = await TenantManager._condition(scope, {
+      owned,
+      supervisionLevel,
+    });
+    return TenantModel.countDocuments(condition);
+  }
+
+  /** The query condition of `getTenants` and `countTenants`. */
+  static async _condition(scope, { owned, supervisionLevel }) {
     const condition = await TenantManager._reachCondition(scope, owned);
     if (supervisionLevel) {
       condition.supervisionLevel =
@@ -60,8 +99,7 @@ class TenantManager {
           ? { $in: [supervisionLevel, null] }
           : supervisionLevel;
     }
-    const rawTenants = await TenantModel.find(condition);
-    return rawTenants.map((doc) => doc.toEntity());
+    return condition;
   }
 
   /**
