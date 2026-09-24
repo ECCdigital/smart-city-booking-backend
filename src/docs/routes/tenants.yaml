@@ -85,7 +85,9 @@
       with the tenant like every other field, and is only stored when the
       payload carries it. Whoever saves has to own the tenant named by `id`, or
       the instance; the medium behind a document is checked after that, so a
-      save can be refused for the reference rather than the tenant.
+      save can be refused for the reference rather than the tenant. The owner
+      of a declined tenant is behind the management gate: `403 tenant_declined`
+      (`TenantDeclinedError`).
     security:
       - bearerAuth: []
     requestBody:
@@ -149,9 +151,10 @@
       export, which does not carry legal documents at all, but `accessApps`:
       the customer-service contact of every active access application that
       has one, and nothing else of the application. The full export carries the
-      supervision level (`supervisionLevel`) and `supervisionChangedAt`, the
-      public one neither; `?supervisionLevel=` narrows the list to one
-      level (a tenant without a stored level counts as `free`).
+      supervision level (`supervisionLevel`), `supervisionChangedAt` and
+      `supervisionReason` (the reason of the latest level change, `null`
+      without one), the public one none of them; `?supervisionLevel=` narrows
+      the list to one level (a tenant without a stored level counts as `free`).
     security:
       - bearerAuth: []
     parameters:
@@ -210,7 +213,8 @@
     description: |
       Reads the whole tenant for its owner. Every media reference of the legal
       documents carries the address it resolves to; nothing is normalised on the
-      way in, only on the way out.
+      way in, only on the way out. The answer carries `supervisionLevel`,
+      `supervisionChangedAt` and `supervisionReason`.
     security:
       - bearerAuth: []
     parameters:
@@ -232,8 +236,21 @@
                   type: string
                 legalDocuments:
                   $ref: "#/components/schemas/TenantLegalDocuments"
+                supervisionLevel:
+                  $ref: "#/components/schemas/SupervisionLevel"
+                supervisionChangedAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                supervisionReason:
+                  type: string
+                  nullable: true
       "403":
-        description: Neither tenant owner nor instance owner
+        description: |
+          Neither tenant owner nor instance owner (`forbidden`), or the owner
+          of a declined tenant: `tenant_declined` with `params: { tenantId,
+          supervisionLevel, supervisionChangedAt, supervisionReason }`
+          (`TenantDeclinedError`).
 
 /api/tenants/{tenant}/readiness:
   get:

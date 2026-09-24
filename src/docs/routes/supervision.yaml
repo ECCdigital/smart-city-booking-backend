@@ -3,12 +3,19 @@
 # The tenant supervision (glossary "Mandanten-Aufsicht"): the supervision
 # level of a tenant, set by the instance owner alone, and the immutable
 # supervision history. The level is carried by the admin tenant DTO alone:
-# `supervisionLevel` and `supervisionChangedAt` in `GET /api/tenants` and
-# `GET /api/tenants/{tenant}`. The public tenant DTO (`GET /api/tenants/public`,
-# `?publicTenants=true`) carries neither - the storefront never branches on
-# the level; a tenant without a public projection is simply not there.
-# Neither field is accepted by `POST /api/tenants` or `PUT /api/tenants`; both
-# are dropped from the body.
+# `supervisionLevel`, `supervisionChangedAt` and `supervisionReason` (the
+# reason of the latest level change, `null` without one) in
+# `GET /api/tenants` and `GET /api/tenants/{tenant}`. The public tenant DTO
+# (`GET /api/tenants/public`, `?publicTenants=true`) carries none of them -
+# the storefront never branches on the level; a tenant without a public
+# projection is simply not there. None of the fields is accepted by
+# `POST /api/tenants` or `PUT /api/tenants`; all are dropped from the body.
+#
+# A declined tenant (glossary "abgewiesen") is closed to its own people: every
+# management request of a tenant owner or role holder answers
+# `403 tenant_declined` (`TenantDeclinedError`), only the instance owner and
+# what any signed-in user has stay open. The sign-in answers carry the
+# supervision per tenant (`SignInTenantPermission`).
 #
 # A `pending` (glossary "Freigabe ausstehend") or `declined` (glossary
 # "abgewiesen") tenant has no public projection, and the two are not told
@@ -19,7 +26,8 @@
 # `/events*`, `/bookings?public=true`, `/calendar/occupancy`, coupon lookup,
 # media files, iCal, the JSON and HTML engines, `/checkout/permissions/{id}`
 # and `/api/tenants/{tenant}/payment-apps`) answers `404 tenant_not_found`
-# under the public reach. Staff of the tenant keep their reach. A new
+# under the public reach. Staff of a pending tenant keep their reach there
+# (preparation); staff of a declined tenant get the public's 404. A new
 # self-booking of such a tenant is refused by every checkout entrance with
 # the reason `checkout.offer_not_reachable`; the administration's manual
 # booking, existing bookings, payment callbacks, hooks and webhooks are
@@ -281,7 +289,11 @@
                 description: Optional reason, stored with the history row.
     responses:
       "200":
-        description: The effective level and when it last changed.
+        description: |
+          The effective level, when it last changed and the reason of that
+          latest change (glossary "Begründung des jüngsten Stufenwechsels"):
+          the `reason` of this request after an actual change - `null`
+          without one - and the stored reason after a no-op.
         content:
           application/json:
             schema:
@@ -292,6 +304,9 @@
                 supervisionChangedAt:
                   type: string
                   format: date-time
+                  nullable: true
+                supervisionReason:
+                  type: string
                   nullable: true
       "400":
         description: |
@@ -317,7 +332,9 @@
     description: |
       The immutable history (glossary "Aufsichtshistorie") of the tenant and
       its offers, newest first. The tenant owner reads the tenant the route
-      names, the instance owner every tenant.
+      names, the instance owner every tenant. The owner of a declined tenant
+      is behind the management gate: `403 tenant_declined`
+      (`TenantDeclinedError`).
     security:
       - bearerAuth: []
     parameters:

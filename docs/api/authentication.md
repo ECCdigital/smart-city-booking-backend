@@ -23,6 +23,8 @@ Sign in a user and receive JWT tokens.
 }
 ```
 
+**Response:** `{ user, permissions, accessToken, refreshToken }`. `permissions.tenants[]` carries, per active membership of the user, the merged role levels and the tenant's supervision (see [Tenant supervision in the sign-in](#tenant-supervision-in-the-sign-in)). The SSO and card sign-ins answer the same `permissions`.
+
 ### POST /auth/refresh
 
 Exchange a refresh token for new `accessToken` and `refreshToken`.
@@ -156,7 +158,51 @@ Update the password using the hook data.
 
 ### GET /auth/me
 
-Retrieve data of the currently authenticated user.
+Retrieve data of the currently authenticated user: `{ user, permissions }`, the same `permissions` as the sign-in.
+
+## Tenant supervision in the sign-in
+
+Every entry of `permissions.tenants[]` (`/auth/signin`, `/auth/me`, `/auth/sso/signin`, `/auth/card/signin`) carries the supervision of that tenant (glossary „Aufsichtsstufe“), so the Admin UI can mark a declined or waiting tenant before its first request:
+
+```json
+{
+  "tenantId": "tenant-1",
+  "isOwner": true,
+  "supervisionLevel": "declined",
+  "supervisionChangedAt": "2026-09-24T10:00:00.000Z",
+  "supervisionReason": "Kein Impressum"
+}
+```
+
+`supervisionLevel` is `free | supervised | pending | declined` (a tenant without a stored level reads `free`), `supervisionChangedAt` the latest level change or `null`, `supervisionReason` the reason of that latest change (glossary „Begründung des jüngsten Stufenwechsels“) or `null`.
+
+## The management gate of a declined tenant
+
+A declined tenant (glossary „abgewiesen“) is closed to its own people. After the rights decision, `authorize` loads the tenant of the route - only when the rule was satisfied as tenant owner or role holder, once per request - and a declined tenant answers:
+
+```http
+HTTP/1.1 403 Forbidden
+{
+  "error": "ForbiddenError",
+  "code": "tenant_declined",
+  "statusCode": 403,
+  "params": {
+    "tenantId": "tenant-1",
+    "supervisionLevel": "declined",
+    "supervisionChangedAt": "2026-09-24T10:00:00.000Z",
+    "supervisionReason": "Kein Impressum"
+  }
+}
+```
+
+This holds for every management request - read and write - on `/api/:tenant/...`, `/api/tenants/:tenant/...`, `/api/v2/:tenant/...`, `/csv/:tenant/...` and `PUT /api/tenants` with the tenant in the body; the supervision history and the readiness check of the tenant included. Not affected:
+
+- the instance owner (every right stays),
+- what any signed-in user has: the own booking, its receipt, refund preview and lock, an invitation - a tenant owner who booked in the own tenant keeps exactly that, at the reach `own`,
+- public and token-authorized routes: booking status, payment callbacks, hooks, webhooks,
+- an unknown tenant, which passes to the handler's `404`.
+
+Staff of a declined tenant see its public projection no more either: the public delivery paths answer them the public's `404 tenant_not_found`. Staff of a `pending` tenant keep their reach there, so a tenant can be prepared before its approval.
 
 ## Environment variables
 
