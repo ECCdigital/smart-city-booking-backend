@@ -62,9 +62,9 @@ class TenantManager {
       supervisionLevel,
     });
     let query = TenantModel.find(condition);
-    if (sort) query = query.sort(sort);
-    if (skip) query = query.skip(skip);
-    if (limit) query = query.limit(limit);
+    if (sort !== undefined) query = query.sort(sort);
+    if (skip !== undefined) query = query.skip(skip);
+    if (limit !== undefined) query = query.limit(limit);
     const rawTenants = await query;
     return rawTenants.map((doc) => doc.toEntity());
   }

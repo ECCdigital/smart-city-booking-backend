@@ -1,5 +1,6 @@
 /**
- * The page of a paginated supervision list (history, active review queue):
+ * The page of a paginated supervision list (history, active review queue,
+ * tenant approval queue):
  * 1-based, 50 rows by default, at most 200. Whatever is no positive whole
  * number - absent, text, a fraction's rest, infinity - falls back, so a
  * query string never reaches a query or a response unchecked.
