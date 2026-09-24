@@ -89,7 +89,10 @@ reverse proxy has to hand on `X-Forwarded-For`.
 
 - Start **one** process of the new backend with traffic still closed. It seeds,
   takes the lock and runs the pending migrations, among them
-  `21-09-2026-tenant-supervision-initial-state`.
+  `21-09-2026-tenant-supervision-initial-state` and, after it, the rewrite
+  `24-09-2026-rename-supervision-level-blocked` (a stored level `blocked`
+  from an earlier build of the branch becomes `pending`; a database that never
+  held one is left as it is).
 - Watch the log for `All migrations completed`, and the probe:
 
   ```bash
@@ -105,17 +108,34 @@ reverse proxy has to hand on `X-Forwarded-For`.
 In `mongosh`, on the application database:
 
 ```javascript
-// The migration is recorded; the lock is gone once no process is starting
+// Both migrations are recorded; the lock is gone once no process is starting
 // (a process that starts holds it for a moment).
 db.migrations.find({ name: "21-09-2026-tenant-supervision-initial-state" });
+db.migrations.find({ name: "24-09-2026-rename-supervision-level-blocked" });
 db.migrationlocks.find();
 
-// Every instance has an initial level, every tenant a level. Expected: 0 and 0.
+// Every instance has an initial level (one of the three initial levels),
+// every tenant one of the four levels. Expected: 0 and 0.
 db.instances.countDocuments({
-  tenantInitialSupervisionLevel: { $nin: ["free", "supervised", "blocked"] },
+  tenantInitialSupervisionLevel: { $nin: ["free", "supervised", "pending"] },
 });
 db.tenants.countDocuments({
-  supervisionLevel: { $nin: ["free", "supervised", "blocked"] },
+  supervisionLevel: { $nin: ["free", "supervised", "pending", "declined"] },
+});
+
+// The rewrite migration has run: the former name `blocked` is nowhere.
+// Expected: 0, 0, 0 and 0.
+db.tenants.countDocuments({ supervisionLevel: "blocked" });
+db.instances.countDocuments({ tenantInitialSupervisionLevel: "blocked" });
+db.supervisionhistories.countDocuments({
+  $or: [{ from: "blocked" }, { to: "blocked" }],
+});
+db.supervisionnotifications.countDocuments({
+  $or: [
+    { "payload.from": "blocked" },
+    { "payload.to": "blocked" },
+    { "payload.supervisionLevel": "blocked" },
+  ],
 });
 
 // No public offer is left without a review status (`null` matches a missing
@@ -174,10 +194,12 @@ Against the internal address of the new stack:
   and direct link, and its checkout is refused
   (`checkout.offer_not_reachable`); after approval it is back - listed with
   the publication wish, and by direct link and bookable without it.
-- Set a test tenant to `blocked`: it leaves `GET /api/tenants/public`, its
-  public paths answer `404`, a new booking is refused; the status page of an
-  existing booking still answers, and the tenant's owner still reaches the
-  administration.
+- Set a test tenant to `pending` (glossary „Freigabe ausstehend“): it leaves
+  `GET /api/tenants/public`, its public paths answer `404`, a new booking is
+  refused; the status page of an existing booking still answers, and the
+  tenant's owner still reaches the administration. Set it to `declined`
+  (glossary „abgewiesen“): in public the same absence, not to be told apart.
+  Setting `blocked` answers `400 invalid_supervision_level`.
 - The Admin UI shows the supervision level, the review queue and the history;
   the Storefront shows the refusal of an unreachable offer.
 
@@ -199,9 +221,9 @@ traffic only after its own migration check has succeeded.
   (`Error during application initialization steps`). Do not route around the
   probe.
 - **Never reopen an old version.** A version from before the supervision
-  ignores blocks and review decisions that are already stored: it would list
-  and book what has been blocked or withdrawn, and write offers without a
-  review. This holds from the moment the first new process has taken traffic
+  ignores levels and review decisions that are already stored: it would list
+  and book what has been set pending, declined or withdrawn, and write offers
+  without a review. This holds from the moment the first new process has taken traffic
   or a level/decision has been set.
 - **Fix forward.** Correct the cause (data, configuration, a patched release
   of the _new_ line) and start a process again: the recorded migrations are

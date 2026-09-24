@@ -38,11 +38,12 @@ components:
   schemas:
     TenantInitialSupervisionLevel:
       type: string
-      enum: [free, supervised, blocked]
+      enum: [free, supervised, pending]
       default: free
       description: |
         The initial supervision level of the instance (glossary
-        "Startstufe"): the level every self-created tenant starts at, over
+        "Startstufe"): one of the three regular levels - never `declined` -
+        that every self-created tenant starts at, over
         the allow-list (`allowedUsersToCreateTenant`) and the open creation
         (`allowAllUsersToCreateTenant`) alike. Read by the server at the
         moment of the creation, never taken from a creation body; a tenant
@@ -95,9 +96,11 @@ components:
       description: |
         The supervision level of a tenant (glossary "Aufsichtsstufe"): `free`
         works without approvals, `supervised` needs an approved review status
-        per offer (tickets 05-07), `blocked` has no public projection. A
-        tenant without a stored level is `free`.
-      enum: [free, supervised, blocked]
+        per offer, `pending` (glossary "Freigabe ausstehend") has no public
+        projection while everything may be prepared, `declined` (glossary
+        "abgewiesen") has no public projection either - in public the two are
+        the same absence. A tenant without a stored level is `free`.
+      enum: [free, supervised, pending, declined]
 
     SupervisionHistoryRow:
       type: object

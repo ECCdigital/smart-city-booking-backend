@@ -1,6 +1,7 @@
 /**
  * The tenant gate at the HTTP edge (tenant supervision spec §5.2): a
- * blocked tenant has no public projection. `assertTenantPubliclyVisible`
+ * tenant at a level without a public projection (pending, declined) is
+ * not there for the public. `assertTenantPubliclyVisible`
  * is the question for a service that holds the tenant id;
  * `publicTenantGate()` is the same question as a route middleware, placed
  * after the route's marker on the public delivery paths of the inventory
@@ -8,8 +9,9 @@
  * payment callbacks, the hooks and the webhooks keep their behaviour.
  *
  * The middleware asks only under the reach `public`: staff of the tenant
- * (`own`, `any`) keep their management reach and may prepare a blocked
- * tenant. The 404 names no reason (§5.2).
+ * (`own`, `any`) keep their management reach and may prepare a pending
+ * tenant. The 404 names no reason (§5.2). Ticket 15 narrows the exemption
+ * to the pending level; a declined tenant's staff will get the same 404.
  */
 
 const TenantManager = require("../../data-managers/tenant-manager");
@@ -22,7 +24,8 @@ const { isTenantPubliclyVisible } = require("./offer-gate");
  *
  * @param {string} tenantId
  * @returns {Promise<Object>} The tenant entity
- * @throws {NotFoundError} `tenant_not_found` for an unknown or blocked tenant
+ * @throws {NotFoundError} `tenant_not_found` for an unknown tenant and one
+ *   without a public projection
  */
 async function assertTenantPubliclyVisible(tenantId) {
   const tenant = await TenantManager.getTenant(tenantId);
@@ -41,7 +44,7 @@ async function assertTenantPubliclyVisible(tenantId) {
  * @param {string[]} [options.exemptReaches] The reaches the gate lets
  *   through unasked. A route whose answer is a public projection for the
  *   signed-in too (`own: "signedIn"`) exempts `any` only: signing in does
- *   not open a blocked tenant.
+ *   not open a pending or declined tenant.
  * @returns {import("express").RequestHandler}
  */
 function publicTenantGate({ exemptReaches = [REACH.OWN, REACH.ANY] } = {}) {

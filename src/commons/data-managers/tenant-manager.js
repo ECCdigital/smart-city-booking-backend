@@ -65,8 +65,8 @@ class TenantManager {
   }
 
   /**
-   * The tenants the public sees (tenant supervision spec §5.2): every
-   * tenant but the blocked ones.
+   * The tenants the public sees (tenant supervision spec §5.2): the
+   * tenants at a public level, a missing level counting as free.
    *
    * @returns {Promise<Tenant[]>}
    */

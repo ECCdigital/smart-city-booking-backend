@@ -128,7 +128,8 @@ async function assertBookingDocumentAccess(media, scope = {}) {
 
 /**
  * A public medium follows the supervision (tenant supervision spec §5.2):
- * a blocked tenant has no public projection, and under a supervised tenant
+ * a pending or declined tenant has no public projection, and under a
+ * supervised tenant
  * a medium that only offers hold goes out with a reachable one of them -
  * the missing publication wish alone never refuses it. The tenant's own
  * people keep reading. Booking documents never come here: they follow the
