@@ -88,6 +88,8 @@ For production, prefer pinned release tags or GHCR images behind a TLS reverse p
 
 Database migration scripts live in `migrations/scripts/`. Run them according to your deployment process when upgrading between versions. See [CHANGELOG.md](CHANGELOG.md) and [migrations/](migrations/) for breaking changes.
 
+Pending migrations run at start-up under a MongoDB lock, so parallel processes run them once, and `GET /healthz/ready` answers `503` until they have succeeded in that process — route traffic by that probe. The cutover to the tenant supervision is described in [tenant-supervision-cutover.md](tenant-supervision-cutover.md).
+
 ## Operations checklist
 
 - Keep MongoDB data on persistent storage

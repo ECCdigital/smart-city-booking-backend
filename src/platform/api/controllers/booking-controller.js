@@ -13,6 +13,7 @@ const {
   issue: issueDocument,
 } = require("../../../commons/services/documents/document-issuance");
 const {
+  BaseError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
@@ -37,7 +38,16 @@ const {
 } = require("../../../commons/utilities/checkout-utils");
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
 const mailService = require("../../../commons/mail-service");
+const {
+  withCustomerView,
+} = require("../../../commons/services/booking/booking-customer-view");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  reachableBookableIds,
+} = require("../../../commons/services/supervision/public-offer-gate");
+const {
+  reachableOffers,
+} = require("../../../commons/services/supervision/public-offer-gate");
 const {
   CancellationRefundService,
 } = require("../../../commons/services/payment/cancellation-refund-service");
@@ -141,7 +151,16 @@ class BookingController {
       const user = request.user;
 
       if (request.query.public === "true") {
-        const bookings = await BookingManager.getTenantBookings(tenant);
+        let bookings = await BookingManager.getTenantBookings(tenant);
+        // The projection is an aggregate over the tenant's offers: it names
+        // only what the public can reach, and signing in opens nothing
+        // (tenant supervision spec §5.2). Management (`any`) sees it all.
+        if (request.reach !== "any") {
+          const reachableIds = await reachableBookableIds(tenant);
+          bookings = bookings.filter((b) =>
+            (b.bookableIds || []).every((id) => reachableIds.has(id)),
+          );
+        }
         const anonymizedBookings = bookings.map((b) => {
           return BookingController.anonymizeBooking(b);
         });
@@ -173,6 +192,9 @@ class BookingController {
       );
       response.status(200).send(allowedBookings);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("Could not get bookings");
     }
@@ -200,10 +222,17 @@ class BookingController {
         await BookingController._populate(bookings);
       }
 
+      // The tenant snapshot and the event core data a customer's pages
+      // render from (tenant supervision spec §5.2), whatever the level of
+      // the tenant - the booking is the customer's contract with it.
+      const view = await withCustomerView(bookings, (booking) => ({
+        ...booking,
+      }));
+
       logger.info(
         `${tenant} -- sending ${bookings.length} assigned bookings to user ${user?.id}`,
       );
-      response.status(200).send(bookings);
+      response.status(200).send(view);
     } catch (err) {
       logger.error(err);
       response.status(500).send("Could not get assigned bookings");
@@ -233,6 +262,12 @@ class BookingController {
         return next(new ForbiddenError());
       }
       const scope = isPublicView ? undefined : scopeOf(request);
+      // The anonymized projection embeds only bookables the public reaches
+      // (tenant supervision spec §5.2: no leak over aggregates).
+      const visibleInView = async (bookables) =>
+        isPublicView
+          ? reachableOffers(await TenantManager.getTenant(tenant), bookables)
+          : bookables;
 
       let bookings = await BookingManager.getRelatedBookings(
         tenant,
@@ -241,9 +276,8 @@ class BookingController {
       );
 
       if (includeRelatedBookings) {
-        let relatedBookables = await BookableManager.getRelatedBookables(
-          bookableId,
-          tenant,
+        let relatedBookables = await visibleInView(
+          await BookableManager.getRelatedBookables(bookableId, tenant),
         );
 
         let relatedBookings = [];
@@ -259,9 +293,8 @@ class BookingController {
       }
 
       if (includeParentBookings) {
-        let parentBookables = await BookableManager.getAncestorBookables(
-          bookableId,
-          tenant,
+        let parentBookables = await visibleInView(
+          await BookableManager.getAncestorBookables(bookableId, tenant),
         );
         let parentBookings = [];
         for (let parentBookable of parentBookables) {
@@ -351,9 +384,11 @@ class BookingController {
       if (ids) {
         const splitIds = ids.split(",");
 
-        const bookingsStatus = await BookingManager.getBookingStatus(
-          tenantId,
-          splitIds,
+        const bookings = await BookingManager.getBookings(tenantId, splitIds);
+        // The tenant snapshot and the event core data a customer's page
+        // renders from (tenant supervision spec §5.2), whatever the level.
+        const bookingsStatus = await withCustomerView(bookings, (booking) =>
+          booking.exportStatus(),
         );
 
         logger.info(

@@ -1,0 +1,16 @@
+<p>
+  Beim Mandanten <strong>{{tenantName}}</strong> warten neue Angebote auf Ihre
+  Prüfung.
+</p>
+<br />
+<ul>
+  {{#each offers}}
+    <li>
+      <strong>{{typeLabel}}:</strong> {{title}} – eingereicht am
+      {{formatDateTime submittedAt}}{{#unless isPublic}} (ohne
+      Veröffentlichungswunsch){{/unless}}
+    </li>
+  {{/each}}
+</ul>
+<br />
+<p><a href="{{adminUrl}}">Zur Prüfung in der Verwaltung</a></p>

@@ -3,7 +3,8 @@
  * section 2.5), resolved from what the loader read: the booker, the
  * tenant behind its gate, the supervisors named at the booker's
  * membership, the organizers of the events the tickets belong to, the
- * instance's address, or the address the caller named. An empty circle is
+ * instance's address, the instance's or a tenant's owners, or the address
+ * the caller named. An empty circle is
  * a valid answer - no mail, no error.
  */
 
@@ -135,6 +136,32 @@ function organizerEmails({ bookables, events }) {
 }
 
 /**
+ * The addresses of the accounts the ids name - a user's id is their
+ * address - once each; an id without an account is left out.
+ */
+async function accountAddresses(userIds) {
+  const ids = [...new Set((userIds || []).map(normalizeUserId))].filter(
+    Boolean,
+  );
+  if (ids.length === 0) {
+    return [];
+  }
+  const known = new Set(
+    (await UserManager.getUsersById(ids)).map((user) =>
+      normalizeUserId(user.id),
+    ),
+  );
+  return ids.filter((id) => known.has(id) && isEmail(id));
+}
+
+/** The owners of a tenant: the memberships with `owner: true`. */
+async function tenantOwnerAddresses(tenantId) {
+  const memberships =
+    await MembershipManager.getOwnerMembershipsByTenantID(tenantId);
+  return accountAddresses(memberships.map((membership) => membership.userId));
+}
+
+/**
  * The recipients of a notice of the given type over what the loader read.
  *
  * @param {Object} mailType The registry entry
@@ -147,6 +174,10 @@ async function resolveRecipients(mailType, loaded) {
   switch (mailType.audience) {
     case "instanceAdmin":
       return [loaded.instance?.mailAddress].filter(Boolean);
+    case "instanceOwners":
+      return accountAddresses(loaded.instance?.ownerUserIds);
+    case "tenantOwners":
+      return tenantOwnerAddresses(loaded.ctx.tenantId);
     case "booker":
       return [loaded.bookings[0].mail].filter(Boolean);
     case "tenant":

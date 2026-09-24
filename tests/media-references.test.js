@@ -335,8 +335,10 @@ describe("media references at bookables and events", function () {
         BookableManager,
       } = require("../src/commons/data-managers/bookable-manager");
       const ExternalPriceService = require("../src/commons/services/external-price-service");
+      const TenantManager = require("../src/commons/data-managers/tenant-manager");
       sandbox.stub(BookableManager, "getRelatedBookables").resolves([]);
       sandbox.stub(ExternalPriceService, "resolve").resolves(null);
+      sandbox.stub(TenantManager, "getTenant").resolves({ id: TENANT });
 
       const html = await HtmlEngine.bookable(
         bookableFixture({

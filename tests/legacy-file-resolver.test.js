@@ -3,6 +3,7 @@ const sinon = require("sinon");
 
 const FileController = require("../src/platform/api/controllers/file-controller");
 const MediaManager = require("../src/commons/data-managers/media-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const MediaService = require("../src/commons/services/media/media-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const {
@@ -120,6 +121,10 @@ describe("legacy file resolver", () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     stream = createStream();
+    // A public medium asks the tenant gate: a free tenant lets it out.
+    sandbox
+      .stub(TenantManager, "getTenant")
+      .resolves({ id: "tenant", supervisionLevel: "free" });
 
     // Nothing imported yet: the resolver may still fall back to the old tree.
     resetImportStatus();

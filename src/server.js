@@ -9,6 +9,10 @@ const swaggerUi = require("swagger-ui-express");
 
 const DatabaseManager = require("./commons/utilities/database-manager.js");
 const { runMigrations } = require("../migrations/migrationsManager");
+const {
+  migrationState,
+  MIGRATION_STATES,
+} = require("./commons/utilities/migration-state");
 const seed = require("../seeder/seeder");
 const RuleEngine = require("./rule-engine/ruleEngine");
 const { requestLogger } = require("./middleware/logger.js");
@@ -105,7 +109,10 @@ async function pingMongoWithTimeout(client, ms = 800) {
   return Promise.race([ping, timeout]);
 }
 
-app.get("/healthz/ready", async (req, res) => {
+// HTTP listens before the migrations have run (the liveness probe must answer
+// during a long or waiting run), so readiness - not the listen order - is what
+// keeps traffic closed until the migrations of this process have succeeded.
+app.get("/healthz/ready", migrationState.readinessGate, async (req, res) => {
   try {
     await pingMongoWithTimeout(dbm.dbClient, 800);
 
@@ -161,7 +168,7 @@ dbm.connect().then(() => {
     app.emit("app_started");
     try {
       await seed(dbm.dbClient.connection);
-      await runMigrations(dbm.dbClient.connection);
+      await migrationState.track(() => runMigrations(dbm.dbClient.connection));
       // Not migrating is not an error: the legacy resolver route keeps serving
       // the old tree until the media CLI has run (§4.10).
       await warnIfImportPending();
@@ -176,6 +183,11 @@ dbm.connect().then(() => {
       }
     } catch (err) {
       logger.error("Error during application initialization steps", err);
+      if (migrationState.get() !== MIGRATION_STATES.SUCCEEDED) {
+        logger.error(
+          "Migrations have not completed - /healthz/ready stays 503 and traffic stays closed. See docs/tenant-supervision-cutover.md.",
+        );
+      }
     }
   });
 });

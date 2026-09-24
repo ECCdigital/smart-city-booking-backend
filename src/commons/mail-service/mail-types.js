@@ -12,7 +12,9 @@
  * - `templateName`: the snippet, and the key of the tenant's overrides.
  * - `audience`: the recipients (glossary "Empfängerkreis") - `booker`,
  *   `tenant`, `supervisors`, `organizers`, `instanceAdmin` (the instance's
- *   address) or `named` (`ctx.to`).
+ *   address), `instanceOwners` (the users of `instance.ownerUserIds`),
+ *   `tenantOwners` (the users owning the tenant `ctx.tenantId` by
+ *   membership) or `named` (`ctx.to`).
  * - `subject(ctx)`: the default subject; a subject override of the
  *   tenant takes precedence.
  * - `includeQRCode(ctx)`, `sendBCC(ctx)`, `addRejectionLink`: as before.
@@ -40,6 +42,8 @@
 const {
   CancellationRefundService,
 } = require("../services/payment/cancellation-refund-service");
+
+const { SupervisionMailType } = require("./supervision-mail-types");
 
 /** A storefront route with the hook's token and the address it is for. */
 function hookLink(base, hookId, address) {
@@ -263,9 +267,14 @@ const MailType = Object.freeze({
     templateName: "verification-request",
     audience: "named",
     subject: () => "Bestätigen Sie Ihre E-Mail-Adresse",
-    templateData: ({ to, hookId, verifyUrl }) => ({
+    // The storefront's link carries the signup's return target (`nextUrl`,
+    // already normalized by the signup) so the verify page opened from the
+    // mail knows where to send the user on; the backend's own route reads it
+    // from the hook.
+    templateData: ({ to, hookId, verifyUrl, nextUrl }) => ({
       verifyUrl: verifyUrl
-        ? hookLink(verifyUrl, hookId, to)
+        ? hookLink(verifyUrl, hookId, to) +
+          (nextUrl ? `&next=${encodeURIComponent(nextUrl)}` : "")
         : `${process.env.BACKEND_URL}/auth/verify/${hookId}`,
     }),
   },
@@ -324,6 +333,9 @@ const MailType = Object.freeze({
       ),
     }),
   },
+
+  // The supervision notices (glossary "Aufsichtsmitteilung").
+  ...SupervisionMailType,
 });
 
 module.exports = { MailType };

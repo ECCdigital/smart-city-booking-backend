@@ -86,7 +86,8 @@ describe("BookingCheckout.createBooking — mandatory addons are never priced tw
     sinon
       .stub(MembershipManager, "getMembershipsByTenantAndRoles")
       .resolves([]);
-    sinon.stub(TenantManager, "getTenant").resolves(null);
+    // The checkout asks the tenant for its supervision level (offer gate).
+    sinon.stub(TenantManager, "getTenant").resolves({ id: TENANT_ID });
     sinon.stub(EventManager, "getEvent").resolves(null);
     sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
     sinon.stub(AccessService, "holdForBooking").resolves([]);

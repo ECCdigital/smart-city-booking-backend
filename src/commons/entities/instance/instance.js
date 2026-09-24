@@ -13,7 +13,10 @@ class Instance {
   }
 
   /**
-   * Remove private data from the instance
+   * Remove private data from the instance. `allowAllUsersToCreateTenant`
+   * stays: it only says that everyone may create a tenant, and public
+   * consumers gate their tenant self-creation entry points on it; the
+   * allow-list and the owners are private.
    */
   removePrivateData() {
     this.applications = this.applications.map((a) => {
@@ -37,7 +40,6 @@ class Instance {
     delete this.mailEnabled;
     delete this.isInitialized;
     delete this.allowedUsersToCreateTenant;
-    delete this.allowAllUsersToCreateTenant;
     delete this.bookableCustomFields;
   }
 

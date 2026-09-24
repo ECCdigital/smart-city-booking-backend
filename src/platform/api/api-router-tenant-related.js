@@ -29,60 +29,90 @@ const {
   publicRoute,
   tokenAuthorized,
 } = require("../../commons/services/authorization");
+const {
+  publicTenantGate,
+} = require("../../commons/services/supervision/public-tenant-gate");
+const {
+  publicBookableGate,
+} = require("../../commons/services/supervision/public-offer-gate");
+const { REACH } = require("../../commons/services/authorization/policy");
+const SupervisionController = require("./controllers/supervision-controller");
+const {
+  OFFER_TYPES,
+} = require("../../commons/services/supervision/supervision-constants");
 
 const router = express.Router({ mergeParams: true });
 
 // BOOKABLES
 // =========
 
-// Public
+// Public. The public delivery paths of the tenant carry the tenant gate
+// of the supervision after their marker (spec §5.2): under the reach
+// `public` a pending or declined tenant answers 404. Not on the checkout
+// (its gate is a check in the item checkout), not on the existing-booking
+// paths, the payments, the hooks - a blanket gate on `publicRoute()` would
+// be wrong.
+// A route about one bookable carries the offer gate instead, which
+// includes the tenant gate (spec §5.1): under the reach `public` a
+// bookable that is not reachable answers 404.
 router.get(
   "/bookables/public",
   publicRoute("bookable", "readPublic"),
+  publicTenantGate(),
   BookableController.getPublicBookables,
 );
 router.get(
   "/bookables/public/:id",
   publicRoute("bookable", "readPublic"),
+  publicBookableGate(),
   BookableController.getPublicBookable,
 );
 router.get(
   "/bookables/:id/bookings",
   publicRoute("bookable", "relatedBookings"),
+  // `own` is every signed-in user here: only `any` manages.
+  publicBookableGate({ exemptReaches: [REACH.ANY] }),
   BookingController.getRelatedBookings,
 );
 router.get(
   "/bookables/:id/openingHours",
   publicRoute("bookable", "readPublic"),
+  publicBookableGate(),
   BookableController.getOpeningHours,
 );
 router.get(
   "/bookables/:id/availability/v1",
   publicRoute(),
+  publicBookableGate(),
   CalendarController.getBookableAvailabilityV1,
 );
 router.get(
   "/bookables/:id/availability/v2",
   publicRoute(),
+  publicBookableGate(),
   CalendarController.getBookableAvailabilityV2,
 );
 router.get(
   "/bookables/:id/availability",
   publicRoute(),
+  publicBookableGate(),
   CalendarController.getBookableAvailability,
 );
 router.get(
   "/bookables/:id/block-periods",
   publicRoute(),
+  publicBookableGate(),
   CalendarController.getBookableBlockPeriods,
 );
 router.get(
   "/bookables/:id/occupancy",
   publicRoute("bookable", "readPublic"),
+  publicBookableGate(),
   BookableController.getBookableOccupancy,
 );
 router.get(
   "/bookables/:id/prices",
+  // The handler asks the offer gate for whoever cannot read the bookable.
   publicRoute("bookable", "prices"),
   BookableController.getBookablePriceCategories,
 );
@@ -114,6 +144,17 @@ router.delete(
   authorize("bookable", "delete"),
   BookableController.removeBookable,
 );
+// The review of a bookable (tenant supervision spec §6.2).
+router.post(
+  "/bookables/:id/review/submissions",
+  authorize("bookable", "reviewSubmit"),
+  SupervisionController.submitReview(OFFER_TYPES.BOOKABLE),
+);
+router.post(
+  "/bookables/:id/review/decisions",
+  authorize("bookable", "reviewDecide"),
+  SupervisionController.decideReview(OFFER_TYPES.BOOKABLE),
+);
 router.get(
   "/bookables/_meta/tags",
   authorize("bookable", "meta"),
@@ -129,10 +170,16 @@ router.get(
 // ======
 
 // Public
-router.get("/events", publicRoute("event", "read"), EventController.getEvents);
+router.get(
+  "/events",
+  publicRoute("event", "read"),
+  publicTenantGate(),
+  EventController.getEvents,
+);
 router.get(
   "/events/:id",
   publicRoute("event", "read"),
+  publicTenantGate(),
   EventController.getEvent,
 );
 router.get(
@@ -147,6 +194,17 @@ router.delete(
   "/events/:id",
   authorize("event", "delete"),
   EventController.removeEvent,
+);
+// The review of an event (tenant supervision spec §6.2).
+router.post(
+  "/events/:id/review/submissions",
+  authorize("event", "reviewSubmit"),
+  SupervisionController.submitReview(OFFER_TYPES.EVENT),
+);
+router.post(
+  "/events/:id/review/decisions",
+  authorize("event", "reviewDecide"),
+  SupervisionController.decideReview(OFFER_TYPES.EVENT),
 );
 router.get(
   "/events/_meta/tags",
@@ -367,6 +425,7 @@ router.post(
 router.get(
   "/checkout/permissions/:id",
   publicRoute(),
+  publicBookableGate(),
   CheckoutController.checkoutPermissions,
 );
 
@@ -408,6 +467,7 @@ router.get(
 router.get(
   "/calendar/occupancy",
   publicRoute(),
+  publicTenantGate(),
   CalendarController.getOccupancies,
 );
 
@@ -421,6 +481,7 @@ router.get(
 router.get(
   "/coupons/:id",
   publicRoute("coupon", "lookup"),
+  publicTenantGate(),
   CouponController.getCoupon,
 );
 // The obsolete store: an update, or a creation the handler decides (§11).

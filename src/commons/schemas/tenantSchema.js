@@ -8,6 +8,10 @@ const {
   getLegalDocumentsError,
 } = require("../utilities/legal-documents");
 const { mediaReferenceSchema } = require("./mediaSchema");
+const {
+  SUPERVISION_LEVELS,
+  SUPERVISION_LEVEL_VALUES,
+} = require("../services/supervision/supervision-constants");
 
 const cancellationRefundTierSchema = new Schema(
   {
@@ -106,6 +110,18 @@ const tenantSchemaDefinition = {
       restricted: false,
     },
   },
+
+  // The supervision level (glossary "Aufsichtsstufe"), when it last
+  // changed and the reason of that latest change (glossary "Begründung des
+  // jüngsten Stufenwechsels"). Set server-side on creation, changed only by
+  // the supervision service - never taken from a tenant write's body.
+  supervisionLevel: {
+    type: String,
+    enum: SUPERVISION_LEVEL_VALUES,
+    default: SUPERVISION_LEVELS.FREE,
+  },
+  supervisionChangedAt: { type: Date, default: null },
+  supervisionReason: { type: String, default: null },
 
   bookableCustomFields: {
     type: [customFieldDefinitionSchema],

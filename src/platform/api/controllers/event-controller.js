@@ -13,7 +13,16 @@ const {
   decide,
   scopeOf,
   scopeFor,
+  withinReach,
 } = require("../../../commons/services/authorization");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const {
+  isOfferListable,
+} = require("../../../commons/services/supervision/offer-gate");
+const {
+  assertOfferReachable,
+  offersForSignedInAggregate,
+} = require("../../../commons/services/supervision/public-offer-gate");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -24,13 +33,26 @@ const logger = bunyan.createLogger({
  * Web Controller for Events.
  */
 class EventController {
+  /**
+   * `GET /events`: whoever may read events gets them whole (under `own`
+   * the events of their own); everyone else - signed in or not - gets the
+   * list-type delivery of the supervision (spec §5.1): what asks to be
+   * listed and passes the tenant's supervision, without its review.
+   */
   static async getEvents(request, response) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const events = await EventManager.getEvents(tenant);
-
-      //TODO: Add Public version of events
+      const scope = scopeOf(request);
+      const tenantRecord = await TenantManager.getTenant(tenant);
+      const events = (await EventManager.getEvents(tenant)).flatMap((event) => {
+        if (withinReach(event, "ownerUserId", scope)) {
+          return [event];
+        }
+        return isOfferListable({ tenant: tenantRecord, offer: event })
+          ? [event.withoutReview()]
+          : [];
+      });
 
       logger.info(
         `${tenant} -- sending ${events.length} events to user ${user?.id}`,
@@ -42,21 +64,32 @@ class EventController {
     }
   }
 
-  static async getEvent(request, response) {
+  /**
+   * `GET /events/:id`: whole within the reach of the request; for everyone
+   * else by the direct-link rule of the supervision (spec §5.2) - no
+   * `isPublic` requirement, but the event has to be reachable, or the
+   * answer is a 404 that names no reason.
+   */
+  static async getEvent(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const id = request.params.id;
       if (id) {
         const event = await EventManager.getEvent(id, tenant);
+        if (!event || withinReach(event, "ownerUserId", scopeOf(request))) {
+          return response.status(200).send(event);
+        }
 
-        //TODO: Add Public version of event
-
-        response.status(200).send(event);
+        await assertOfferReachable(tenant, event);
+        response.status(200).send(event.withoutReview());
       } else {
         logger.warn(`Could not get event. Missing ID.`);
         response.sendStatus(400);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.warn(err);
       response.status(500).send("could not get event");
     }
@@ -178,7 +211,12 @@ class EventController {
         tenant,
         scopeFor(request, "media", "read"),
       );
-      await EventManager.storeEvent(event);
+      await EventService.updateEvent(
+        tenant,
+        event,
+        existingEvent,
+        request.principal?.userId ?? user?.id ?? null,
+      );
       logger.info(`${tenant} -- updated event ${event.id} by user ${user?.id}`);
       response.sendStatus(201);
     } catch (err) {
@@ -220,7 +258,11 @@ class EventController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const events = await EventManager.getEvents(tenant);
+      const events = await offersForSignedInAggregate(
+        request.principal,
+        tenant,
+        await EventManager.getEvents(tenant),
+      );
       const tags = events
         .map((e) => e.information?.tags || [])
         .flat()

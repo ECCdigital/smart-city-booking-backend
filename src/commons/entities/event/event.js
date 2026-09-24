@@ -159,6 +159,19 @@ class Event {
   }
 
   /**
+   * The event as the public REST routes deliver it: every field as stored,
+   * without the review (glossary "Prüfstatus") - no public DTO carries a
+   * status or a private reason.
+   *
+   * @returns {Object} A plain copy without `review`.
+   */
+  withoutReview() {
+    // eslint-disable-next-line no-unused-vars
+    const { review, ...fields } = this;
+    return fields;
+  }
+
+  /**
    * @param {Object} [options]
    * @param {boolean} [options.absoluteMediaUrls] - Resolve media addresses to
    *   absolute URLs, for consumers outside the platform's own host — the

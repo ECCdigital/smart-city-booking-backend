@@ -182,7 +182,9 @@ function createCheckoutStubs(fixture) {
       },
     },
     TenantManager: {
-      getTenant: async () => fixture.tenant ?? null,
+      // The checkout asks the tenant for its supervision level (offer gate):
+      // a world without one is a free tenant.
+      getTenant: async () => fixture.tenant ?? { id: TENANT_ID },
     },
     TenantModel: {
       findOne: async () =>

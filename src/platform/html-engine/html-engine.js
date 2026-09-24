@@ -2,6 +2,9 @@ const {
   BookableManager,
 } = require("../../commons/data-managers/bookable-manager");
 const TenantManager = require("../../commons/data-managers/tenant-manager");
+const {
+  isOfferListable,
+} = require("../../commons/services/supervision/offer-gate");
 const ExternalPriceService = require("../../commons/services/external-price-service");
 const InstanceManager = require("../../commons/data-managers/instance-manager");
 const {
@@ -258,9 +261,10 @@ class HtmlEngine {
         "</a>";
     }
 
+    const tenant = await TenantManager.getTenant(bookable.tenantId);
     let relatedBookables = (
       await BookableManager.getRelatedBookables(bookable.id, bookable.tenantId)
-    ).filter((bookable) => bookable.isPublic === true);
+    ).filter((offer) => isOfferListable({ tenant, offer }));
 
     if (relatedBookables.length > 0) {
       htmlOutput += '<div class="related-bookable-objects">';
@@ -606,13 +610,14 @@ class HtmlEngine {
       }
     }
 
+    const tenant = await TenantManager.getTenant(event.tenantId);
     let relatedTickets = (
       await BookableManager.getBookables(event.tenantId)
     ).filter(
       (bookable) =>
         bookable.type === "ticket" &&
         bookable.eventId === event.id &&
-        bookable.isPublic === true,
+        isOfferListable({ tenant, offer: bookable }),
     );
 
     if (relatedTickets.length > 0) {

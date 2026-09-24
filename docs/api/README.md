@@ -37,7 +37,7 @@ Returns tenants visible to the authenticated user. **Requires JWT.**
 
 ### GET /api/tenants/:id
 
-Returns a single tenant. **Requires JWT.**
+Returns a single tenant. **Requires JWT.** Carries `supervisionLevel`, `supervisionChangedAt` and `supervisionReason`; the owner of a declined tenant gets `403 tenant_declined` (see [authentication.md](authentication.md#the-management-gate-of-a-declined-tenant)).
 
 ### POST /api/tenants
 
@@ -49,9 +49,20 @@ A tenant can only be created if one of the following conditions is met:
 - The user is included in `instance.allowedUsersToCreateTenant`, or
 - The user is listed in `instance.ownerUserIds`.
 
+The body needs `name`, `contactName` and a formally valid `mail` (the tenant's contact, not the creator's account address); `phone`, `website` and `location` are optional. Answers `201` with an empty body, or:
+
+| Status | `code`                                                 | When                                                                                                                                                                                                                                                   |
+| ------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | `missing_name`, `missing_contact_name`, `invalid_mail` | A required contact field is missing or invalid (`params.field`)                                                                                                                                                                                        |
+| 403    | `email_verification_required`                          | A creator who is not an instance owner has no verification proof (`params.method`: `email` or `identity_provider`)                                                                                                                                     |
+| 409    | `max_tenants_reached`                                  | The global `MAX_TENANTS` is reached (instance owners included)                                                                                                                                                                                         |
+| 429    | `too_many_requests`                                    | A creator who is not an instance owner already created three tenants within the last 24 hours (`RATE_LIMIT_TENANT_SELF_CREATION_PER_USER`); `Retry-After` names the wait in seconds. Failed creations do not count, deleting a tenant returns no quota |
+
+The creator becomes the tenant owner. The tenant starts at the instance's initial supervision level (`free` for an instance owner); supervision fields in the body are ignored.
+
 ### PUT /api/tenants
 
-Creates or updates a tenant (upsert). **Requires JWT.** Same creation rules as `POST`.
+Creates or updates a tenant (upsert). **Requires JWT.** Same creation rules and answers as `POST`; an update of an existing tenant does not need the contact fields.
 
 ### DELETE /api/tenants/:id
 
@@ -61,6 +72,33 @@ A tenant can only be deleted if one of the following conditions is met:
 
 - The user has a `Membership` with `owner: true` for that tenant, or
 - The user is listed in `instance.ownerUserIds`.
+
+## Tenant approval queue
+
+### GET /api/instances/tenant-approval-queue
+
+The tenants waiting for approval (glossary „Freigabeliste der Mandanten“: exactly `supervisionLevel: pending`), longest waiting first, paginated (`?page=&pageSize=`, no filters). A row carries `tenantId`, `tenantName`, `waitingSince`, the `contact`, the `owners` (every owner membership with `userId`, `displayName`, `mail`), the `offerCount` (all bookables plus events) and `lastChange`, the newest history row about the tenant (`tenant.created` = new, `tenant.levelChanged` with `to: pending` = reset, with its reason). `total` is the queue's counter. Approve or decline per tenant with `PUT /api/tenants/:tenant/supervision`. **Instance owner only.**
+
+## Supervision notices
+
+The tenant supervision tells the owners in charge by mail (glossary „Aufsichtsmitteilung“). Every notice goes out over the **instance's** mail account with central templates — never over a tenant's own mail configuration, and a tenant cannot override the texts.
+
+| Occasion                                                                                   | Recipients                                                                                                   |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Tenant self-creation                                                                       | All instance owners (`instance.ownerUserIds`); the creator gets a confirmation with the actual initial level |
+| Offers newly enter the active review queue (submission, or a level change to `supervised`) | All instance owners — one mail per occasion listing all offers                                               |
+| Supervision level changed                                                                  | All tenant owners (memberships with `owner: true`): old and new level, reason, admin link                    |
+| Review decided (approve, reject, withdraw; bookable or event)                              | All tenant owners: offer, old and new status, reason, admin link                                             |
+
+Pending offers of a `free`, `pending` or `declined` tenant cause no review mail, and repeating an action causes no new mail. Sending follows the recording and never rolls a decision back.
+
+### GET /api/instances/supervision/notifications
+
+The outbox, newest first (`?status=pending|sent|failed&page=&pageSize=`). `status=failed` lists what did not go out with its `lastError` (`mail_disabled` while the instance's mail is off, `no_recipients` where no owner has an account). **Instance owner only.**
+
+### POST /api/instances/supervision/notifications/:id/retry
+
+Sends the mails of a `failed` or `pending` row that are still missing (`deliveries` names who already has theirs) and answers the row — `sent`, or `failed` again. `409` for a row already sent or being dispatched, `404` for an unknown one. Never repeats the decision, never writes history. **Instance owner only.**
 
 ## Roles
 

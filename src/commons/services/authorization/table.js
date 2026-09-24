@@ -78,9 +78,10 @@ const TABLE = {
     // `/bookables/public*`, `openingHours`, `occupancy`
     readPublic: { public: true },
     // `GET /bookables/:id/prices`: the public projection is the prices of
-    // a public bookable; whoever may read the bookable itself reads the
-    // prices of a hidden one too - the admin UI previews a provider's
-    // prices before the bookable is listed.
+    // a bookable the public reaches by direct link (the supervision's
+    // offer gate); whoever may read the bookable itself reads its prices
+    // whatever the gate says - the admin UI previews a provider's prices
+    // before the bookable is approved.
     prices: {
       public: true,
       own: "manageBookables.readOwn",
@@ -97,11 +98,23 @@ const TABLE = {
       own: "signedIn",
       any: "manageBookings.readAny",
     },
+    // The review of the tenant supervision (spec §6.2): the tenant owner
+    // submits, the instance owner alone decides.
+    reviewSubmit: { own: "tenantOwner", any: "instanceOwner" },
+    reviewDecide: { any: "instanceOwner" },
   },
 
   event: {
-    // Stays public on purpose (§7.2): no public projection in this card.
-    read: { public: true, any: "manageBookables.readAny" },
+    // `GET /events`, `/events/:id`: the public projection is the events
+    // the supervision's offer gate lets out, without their review; whoever
+    // may read events reads them whole whatever the gate says - under
+    // `own` the events of their own - so the admin UI prepares an event
+    // before it is listed or approved.
+    read: {
+      public: true,
+      own: "manageBookables.readOwn",
+      any: "manageBookables.readAny",
+    },
     create: { any: "manageBookables.create" },
     update: {
       own: "manageBookables.updateOwn",
@@ -117,6 +130,9 @@ const TABLE = {
     },
     // `_meta/tags`, `count/check`: signed in, nothing further (as today).
     meta: { own: "signedIn" },
+    // The review of the tenant supervision (spec §6.2), as for a bookable.
+    reviewSubmit: { own: "tenantOwner", any: "instanceOwner" },
+    reviewDecide: { any: "instanceOwner" },
   },
 
   booking: {
@@ -286,6 +302,10 @@ const TABLE = {
     mailTemplates: { any: "tenantOwner" },
     // `POST /tenants/:tenant/pdf-preview`
     pdfPreview: { any: "tenantOwner" },
+    // `GET /tenants/:tenant/readiness`: the readiness check (glossary
+    // "Bereitschafts-Check") of the tenant of the path - its owner reads it
+    // as his own tenant, the instance owner any.
+    readiness: { own: "tenantOwner", any: "instanceOwner" },
     // The tenant catalog, read and store.
     catalog: { any: "tenantOwner" },
     // --- instance level: `GET /tenants` lists the user's own memberships
@@ -296,6 +316,12 @@ const TABLE = {
     // `GET /tenants/count/check`: whether the instance has room for one
     // more; signed in, nothing further (as today).
     countCheck: { own: "signedIn" },
+    // `PUT /tenants/:tenant/supervision`: the supervision level (glossary
+    // "Aufsichtsstufe") is the instance owner's alone.
+    supervise: { any: "instanceOwner" },
+    // `GET /tenants/:tenant/supervision/history`: the tenant owner reads
+    // the history of the tenant the route names.
+    supervisionHistory: { own: "tenantOwner", any: "instanceOwner" },
   },
 
   ical: {
@@ -338,6 +364,16 @@ const TABLE = {
     readPublic: { public: true },
     read: { any: "instanceOwner" },
     update: { any: "instanceOwner" },
+    // `GET /instances/supervision/history`: the instance-wide history.
+    supervisionHistory: { any: "instanceOwner" },
+    // `GET /instances/review-queue`: the active review queue.
+    reviewQueue: { any: "instanceOwner" },
+    // `GET /instances/tenant-approval-queue`: the tenant approval queue.
+    tenantApprovalQueue: { any: "instanceOwner" },
+    // `GET /instances/supervision/notifications` and `POST .../:id/retry`:
+    // the outbox of the supervision notices and sending one again.
+    supervisionNotifications: { any: "instanceOwner" },
+    supervisionNotificationRetry: { any: "instanceOwner" },
   },
 
   rule: {

@@ -1,0 +1,544 @@
+# swagger/routes/supervision.yaml
+#
+# The tenant supervision (glossary "Mandanten-Aufsicht"): the supervision
+# level of a tenant, set by the instance owner alone, and the immutable
+# supervision history. The level is carried by the admin tenant DTO alone:
+# `supervisionLevel`, `supervisionChangedAt` and `supervisionReason` (the
+# reason of the latest level change, `null` without one) in
+# `GET /api/tenants` and `GET /api/tenants/{tenant}`. The public tenant DTO
+# (`GET /api/tenants/public`, `?publicTenants=true`) carries none of them -
+# the storefront never branches on the level; a tenant without a public
+# projection is simply not there. None of the fields is accepted by
+# `POST /api/tenants` or `PUT /api/tenants`; all are dropped from the body.
+#
+# A declined tenant (glossary "abgewiesen") is closed to its own people: every
+# management request of a tenant owner or role holder answers
+# `403 tenant_declined` (`TenantDeclinedError`), only the instance owner and
+# what any signed-in user has stay open. The sign-in answers carry the
+# supervision per tenant (`SignInTenantPermission`).
+#
+# A `pending` (glossary "Freigabe ausstehend") or `declined` (glossary
+# "abgewiesen") tenant has no public projection, and the two are not told
+# apart in public: it is left out of
+# `GET /api/tenants/public` and the catalog bundle, its slug and theme answer
+# 404, and every public offer path of the tenant (`/api/{tenant}/bookables/
+# public*`, opening hours, availability, block periods, occupancy, prices,
+# `/events*`, `/bookings?public=true`, `/calendar/occupancy`, coupon lookup,
+# media files, iCal, the JSON and HTML engines, `/checkout/permissions/{id}`
+# and `/api/tenants/{tenant}/payment-apps`) answers `404 tenant_not_found`
+# under the public reach. Staff of a pending tenant keep their reach there
+# (preparation); staff of a declined tenant get the public's 404. A new
+# self-booking of such a tenant is refused by every checkout entrance with
+# the reason `checkout.offer_not_reachable`; the administration's manual
+# booking, existing bookings, payment callbacks, hooks and webhooks are
+# unaffected.
+#
+# The review of a bookable (glossary "Prüfstatus"): under `supervised` only
+# an approved bookable passes the offer gate. List-type delivery
+# (`/api/{tenant}/bookables/public`, `/calendar/occupancy` without `ids`, the
+# JSON and HTML engines incl. related bookables and tickets) shows a bookable
+# that asks to be listed (`isPublic`) and - under supervision - is approved.
+# Detail-type delivery under the public reach (`/bookables/public/{id}`,
+# `/bookables/{id}/prices|openingHours|availability*|block-periods|occupancy|
+# bookings?public=true`, `/checkout/permissions/{id}` v1 and v2,
+# `/calendar/occupancy?ids=`) follows the direct-link rule: `isPublic` is no
+# requirement, under supervision the approval is; otherwise
+# `404 offer_not_found`, naming no reason. Every checkout entrance refuses
+# a new self-booking of such a bookable with `checkout.offer_not_reachable`.
+#
+# Events pass the same gate with their own review. List-type delivery:
+# `GET /api/{tenant}/events`, the JSON engine (list and detail), the HTML
+# engine's list, iCal and the iCal feeds (without `includePrivate`).
+# Detail-type delivery: `GET /api/{tenant}/events/{id}`, the HTML engine's
+# event detail, the event embedded by `?populate=true` in a public bookable,
+# and everything about a ticket of the event - its detail, prices,
+# availability, permission pre-check and every checkout entrance - which
+# needs the ticket and its event reachable; the public bookable lists leave
+# out the tickets of an event that is not. Under the public reach the
+# event routes answer without `review`; whoever may read events
+# (`manageBookables.readAny`, or `readOwn` for their own) gets them whole.
+
+/api/{tenant}/bookables/{id}/review/submissions:
+  post:
+    tags:
+      - Supervision
+    summary: Submit a bookable for review
+    description: |
+      The submission (glossary "Einreichung"): a bookable without a review
+      status or a rejected one becomes `pending` with a new `submittedAt`,
+      with or without a publication wish and whatever the tenant's level.
+      Takes no body; actor and time are the server's. Repeating it on a
+      pending bookable is a no-op `200` (no new waiting time, no history
+      row). Writes a `review.submitted` history row; records a
+      `review.queueEntered` notification occasion only when the tenant is
+      `supervised`. Tenant owner or instance owner. The first publication
+      wish of a bookable without a review status (`PUT /api/{tenant}/bookables`
+      with `isPublic: true`) submits it the same way.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The current review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Neither the tenant owner nor the instance owner
+      "404":
+        description: "`offer_not_found`: the tenant has no such bookable."
+      "409":
+        description: |
+          `review_transition_invalid` with `params: { from, action }`: an
+          approved bookable cannot be submitted, or the status moved
+          underneath the request.
+
+/api/{tenant}/bookables/{id}/review/decisions:
+  post:
+    tags:
+      - Supervision
+    summary: Decide the review of a bookable
+    description: |
+      The decision (glossary "Prüfentscheidung") of the instance owner:
+      `approve` a pending or rejected bookable, `reject` a pending one,
+      `withdraw` an approval (→ `rejected`). The publication wish stays as
+      it is. Writes a `review.approved|rejected|withdrawn` history row and
+      records a `review.decided` notification occasion for the tenant owners.
+      The write is conditional on the status the decision was taken on: of
+      two concurrent decisions one answers `409`.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [action]
+            properties:
+              action:
+                type: string
+                enum: [approve, reject, withdraw]
+              reason:
+                type: string
+                nullable: true
+                description: Optional reason, stored trimmed with review and history.
+    responses:
+      "200":
+        description: The new review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "400":
+        description: "`invalid_review_action`, `invalid_review_reason`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`offer_not_found`"
+      "409":
+        description: "`review_transition_invalid` with `params: { from, action }`"
+
+/api/{tenant}/events/{id}/review/submissions:
+  post:
+    tags:
+      - Supervision
+    summary: Submit an event for review
+    description: |
+      As for a bookable (`/api/{tenant}/bookables/{id}/review/submissions`),
+      with `offerType: "event"`: no body, a repeat on a pending event is a
+      no-op `200`, a `review.submitted` history row, a `review.queueEntered`
+      occasion only for a `supervised` tenant. The first publication wish of
+      an event without a review status (`PUT /api/{tenant}/events` with
+      `isPublic: true`) submits it the same way. The expiry of an event
+      changes no status: a past event is submitted like any other.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The current review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Neither the tenant owner nor the instance owner
+      "404":
+        description: "`offer_not_found`: the tenant has no such event."
+      "409":
+        description: "`review_transition_invalid` with `params: { from, action }`"
+
+/api/{tenant}/events/{id}/review/decisions:
+  post:
+    tags:
+      - Supervision
+    summary: Decide the review of an event
+    description: |
+      As for a bookable (`/api/{tenant}/bookables/{id}/review/decisions`),
+      with `offerType: "event"`. A pending event that has expired stays
+      decidable.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [action]
+            properties:
+              action:
+                type: string
+                enum: [approve, reject, withdraw]
+              reason:
+                type: string
+                nullable: true
+                description: Optional reason, stored trimmed with review and history.
+    responses:
+      "200":
+        description: The new review.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferReviewAnswer"
+      "400":
+        description: "`invalid_review_action`, `invalid_review_reason`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`offer_not_found`"
+      "409":
+        description: "`review_transition_invalid` with `params: { from, action }`"
+
+/api/tenants/{tenant}/supervision:
+  put:
+    tags:
+      - Supervision
+    summary: Set the supervision level of a tenant
+    description: |
+      Sets the level (glossary "Aufsichtsstufe") of the tenant. Instance
+      owner only. Actor and time are the server's. The level that is already
+      effective is a no-op: nothing is written, the stored change time is
+      answered. A change writes one history row (`tenant.levelChanged`) and
+      records one notification occasion for the tenant owners.
+
+      All three levels are accepted in every direction, and only by this
+      request: nothing promotes or suggests a level automatically. No change
+      writes the review of an offer. Under `supervised` every offer of the
+      tenant that is not `approved` leaves the public lists, the direct link
+      and the new self-booking at once; back to `free` it returns unchanged.
+      A switch to `supervised` also records one `review.queueEntered`
+      occasion listing every offer of the tenant that is `pending` at that
+      moment - bookables and events, `payload: { tenantName, cause:
+      "tenant.levelChanged", offers: [{ offerType, offerId, title,
+      submittedAt, isPublic }] }` - and none when no offer is pending; a
+      switch away from `supervised` records none.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [level]
+            properties:
+              level:
+                $ref: "#/components/schemas/SupervisionLevel"
+              reason:
+                type: string
+                nullable: true
+                description: Optional reason, stored with the history row.
+    responses:
+      "200":
+        description: |
+          The effective level, when it last changed and the reason of that
+          latest change (glossary "Begründung des jüngsten Stufenwechsels"):
+          the `reason` of this request after an actual change - `null`
+          without one - and the stored reason after a no-op.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                supervisionLevel:
+                  $ref: "#/components/schemas/SupervisionLevel"
+                supervisionChangedAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                supervisionReason:
+                  type: string
+                  nullable: true
+      "400":
+        description: |
+          `invalid_supervision_level` with `params: { level, allowed }`: a level
+          outside the four of `SupervisionLevel`; a former name of a level is
+          neither accepted nor aliased.
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`tenant_not_found`"
+      "409":
+        description: |
+          `supervision_level_changed`: the level moved underneath the request;
+          read the tenant again and repeat.
+
+/api/tenants/{tenant}/supervision/history:
+  get:
+    tags:
+      - Supervision
+    summary: The supervision history of a tenant
+    description: |
+      The immutable history (glossary "Aufsichtshistorie") of the tenant and
+      its offers, newest first. The tenant owner reads the tenant the route
+      names, the instance owner every tenant. The owner of a declined tenant
+      is behind the management gate: `403 tenant_declined`
+      (`TenantDeclinedError`).
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferType"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferId"
+    responses:
+      "200":
+        description: One page of the history.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionHistoryPage"
+      "400":
+        description: "`invalid_offer_type`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Neither the tenant owner nor the instance owner
+
+/api/instances/supervision/history:
+  get:
+    tags:
+      - Supervision
+    summary: The instance-wide supervision history
+    description: |
+      The history across every tenant, newest first, optionally narrowed to
+      one tenant and one offer. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenantId
+        in: query
+        required: false
+        schema:
+          type: string
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferType"
+      - $ref: "#/components/parameters/SupervisionHistoryOfferId"
+    responses:
+      "200":
+        description: One page of the history.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionHistoryPage"
+      "400":
+        description: "`invalid_offer_type`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/review-queue:
+  get:
+    tags:
+      - Supervision
+    summary: The active review queue
+    description: |
+      Every offer that waits for a decision, across tenants and offer types
+      (glossary "Aktive Prüfliste"). The selection is exactly: the tenant is
+      `supervised` AND the offer's `review.status` is `pending`. Neither the
+      publication wish (`isPublic`) nor the date of an event is a filter, so
+      unlisted offers and past events are rows as well.
+
+      Sorted by `submittedAt` ascending (longest waiting first), then by
+      `offerType` and `offerId`. The queue is computed on read: a
+      resubmission moves the row to the back, a decision or a level change
+      away from `supervised` removes it, switching `isPublic` off does not.
+      `total` counts every row the filters match. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: tenantId
+        in: query
+        required: false
+        description: Only the rows of this tenant
+        schema:
+          type: string
+      - $ref: "#/components/parameters/SupervisionHistoryOfferType"
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+    responses:
+      "200":
+        description: One page of the queue.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewQueuePage"
+      "400":
+        description: "`invalid_offer_type`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/tenant-approval-queue:
+  get:
+    tags:
+      - Supervision
+    summary: The tenant approval queue
+    description: |
+      Every tenant that waits for the instance owner's approval (glossary
+      "Freigabeliste der Mandanten"): the selection is exactly
+      `supervisionLevel === "pending"`; a tenant without a stored level
+      (`free` by fallback) is never a row. The queue does not tell a newly
+      created tenant from one reset to `pending` - `lastChange` does:
+      `tenant.created` is new, `tenant.levelChanged` with `to: "pending"`
+      is reset, with its reason.
+
+      Sorted by `waitingSince` ascending (longest waiting first), then by
+      `tenantId`; the page is cut by the database. No filters, no search.
+      `total` counts every waiting tenant and is the queue's counter (a
+      badge reads it with `pageSize=1`). Approving and declining run per
+      tenant over `PUT /api/tenants/{tenant}/supervision`; there is no bulk
+      action. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+    responses:
+      "200":
+        description: One page of the queue.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TenantApprovalQueuePage"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/supervision/notifications:
+  get:
+    tags:
+      - Supervision
+    summary: The outbox of the supervision notices
+    description: |
+      The recorded occasions (glossary "Mitteilungsanlass") of the supervision
+      notices with their delivery, newest first. `?status=failed` lists what
+      did not go out, with the reason in `lastError`. Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [pending, sent, failed]
+      - $ref: "#/components/parameters/SupervisionHistoryPage"
+      - $ref: "#/components/parameters/SupervisionHistoryPageSize"
+    responses:
+      "200":
+        description: One page of the outbox.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionNotificationPage"
+      "400":
+        description: "`invalid_notification_status`"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+/api/instances/supervision/notifications/{id}/retry:
+  post:
+    tags:
+      - Supervision
+    summary: Send a supervision notice again
+    description: |
+      Dispatches a `failed` or `pending` row again: only the mails still
+      missing go out (`deliveries` names who already has theirs). Never
+      repeats the decision and never writes history. Answers the row as it is
+      after the dispatch - `sent`, or `failed` again with its `lastError`.
+      Instance owner only.
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        description: The row after the dispatch.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupervisionNotification"
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+      "404":
+        description: "`supervision_notification_not_found`"
+      "409":
+        description: |
+          `supervision_notification_already_sent`, or
+          `supervision_notification_dispatch_in_progress` while another
+          dispatch of the row is at work.

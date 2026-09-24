@@ -9,6 +9,9 @@ const {
 const InstanceModel = require("./models/instanceModel");
 const TenantModel = require("./models/tenantModel");
 const { ownCondition } = require("../services/authorization/reach");
+const {
+  REVIEW_STATUS,
+} = require("../services/supervision/supervision-constants");
 
 /**
  * Data Manager for Bookable objects.
@@ -447,9 +450,17 @@ class BookableManager {
 
     bookableEntity.validate();
 
+    // The review (glossary "Prüfstatus") belongs to `updateReview` alone
+    // once the bookable exists: a whole-bookable write carries it on
+    // insert only, so an edit or a stale copy never undoes a decision.
+    const update = { ...bookableEntity };
+    if (existingBookable) {
+      delete update.review;
+    }
+
     await BookableModel.updateOne(
       { id: bookableEntity.id, tenantId: bookableEntity.tenantId },
-      bookableEntity,
+      update,
       { upsert: upsert },
     );
 
@@ -465,6 +476,77 @@ class BookableManager {
     }
 
     return bookableEntity;
+  }
+
+  /**
+   * Writes the review of a bookable, conditional on the review status it
+   * was read at: the write of a review transition (tenant supervision
+   * spec §4). Touches no other field.
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.id Bookable ID
+   * @param {string|null} params.expectedStatus The status the transition
+   *   starts from; null matches a bookable without a review as well
+   * @param {Object} params.review The review to store
+   * @returns {Promise<Bookable|null>} The bookable after the write, or
+   *   null when no bookable of the tenant is at the expected status
+   */
+  static async updateReview({ tenantId, id, expectedStatus, review }) {
+    const raw = await BookableModel.findOneAndUpdate(
+      { id, tenantId, "review.status": expectedStatus ?? null },
+      { $set: { review } },
+      { new: true },
+    );
+    return raw ? raw.toEntity() : null;
+  }
+
+  /**
+   * The bookables of a tenant at one review status (glossary
+   * "Prüfstatus"), whatever their publication wish - the offers a level
+   * change or the review queue asks for. Longest waiting first.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string|null} status One of `REVIEW_STATUS`; null matches a
+   *   bookable without a review as well
+   * @returns {Promise<Bookable[]>} The bookables, by `review.submittedAt`
+   *   ascending, then by id
+   */
+  static async getOffersByReviewStatus(tenantId, status) {
+    const rawBookables = await BookableModel.find({
+      tenantId,
+      "review.status": status ?? null,
+    }).sort({ "review.submittedAt": 1, id: 1 });
+    return rawBookables.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * The bookables of a set of tenants that wait for a decision
+   * (glossary "Aktive Prüfliste"), across tenants and reduced to what a
+   * queue row reads - never the whole bookable.
+   *
+   * @param {string[]} tenantIds The tenants to read from
+   * @returns {Promise<Array<{id: string, tenantId: string, title: string, type: string, isPublic: boolean, review: Object}>>}
+   *   Plain rows, by `review.submittedAt` ascending, then by id
+   */
+  static async getPendingReviewOffers(tenantIds) {
+    return BookableModel.find(
+      { tenantId: { $in: tenantIds }, "review.status": REVIEW_STATUS.PENDING },
+      { _id: 0, id: 1, tenantId: 1, title: 1, type: 1, isPublic: 1, review: 1 },
+    )
+      .sort({ "review.submittedAt": 1, id: 1 })
+      .lean();
+  }
+
+  /**
+   * How many bookables a tenant has, whatever their publication wish or
+   * review status - the offer count of the tenant approval queue.
+   *
+   * @param {string} tenantId Tenant ID
+   * @returns {Promise<number>}
+   */
+  static async countBookables(tenantId) {
+    return BookableModel.countDocuments({ tenantId });
   }
 
   /**

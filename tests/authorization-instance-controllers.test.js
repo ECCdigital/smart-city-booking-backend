@@ -23,6 +23,9 @@ const InstanceManager = require("../src/commons/data-managers/instance-manager")
 const InvitationService = require("../src/commons/services/invitation-service");
 const AccessService = require("../src/commons/services/access/access-service");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
+const RateLimiter = require("../src/commons/services/rate-limit/rate-limiter");
+const SupervisionHistoryManager = require("../src/commons/data-managers/supervision-history-manager");
+const SupervisionNotificationManager = require("../src/commons/data-managers/supervision-notification-manager");
 const Tenant = require("../src/commons/entities/tenant/tenant");
 const { ForbiddenError } = require("../src/errors/BaseError");
 
@@ -198,12 +201,32 @@ describe("instance controllers on the reach", function () {
       sinon.stub(TenantManager, "getTenant").resolves(null);
       sinon.stub(TenantManager, "checkTenantCount").resolves(true);
       sinon.stub(InstanceManager, "getInstance").resolves({});
+      // A Selbst-Anlage: the stored account is proven, the limit has room.
+      sinon
+        .stub(UserManager, "getUser")
+        .resolves({ id: "creator", isVerified: true });
+      sinon.stub(RateLimiter, "consume").resolves({
+        allowed: true,
+        retryAfterSeconds: 0,
+        release: async () => {},
+      });
+      sinon.stub(SupervisionHistoryManager, "insert").resolves({});
+      sinon.stub(SupervisionNotificationManager, "record").resolves({});
       sinon.stub(MediaReferenceGuard, "assertTenantStorable").resolves();
       const store = sinon.stub(TenantManager, "storeTenant").resolves();
       sinon.stub(MembershipManager, "addMembership").resolves();
       const res = response();
       await TenantController.storeTenant(
-        request({ reach: "any", principal: creator, body: { id: "new" } }),
+        request({
+          reach: "any",
+          principal: creator,
+          body: {
+            id: "new",
+            name: "Neu",
+            contactName: "Erika",
+            mail: "neu@example.test",
+          },
+        }),
         res,
         sinon.stub(),
       );

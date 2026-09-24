@@ -12,6 +12,12 @@ const { ownCondition } = require("../services/authorization/reach");
 const {
   normalizeCancellationRefundTiers,
 } = require("../utilities/cancellation-refund-tiers");
+const { publicTenantCondition } = require("../services/supervision/offer-gate");
+const {
+  SUPERVISION_FIELDS,
+  assertSupervisionLevel,
+  SUPERVISION_LEVELS,
+} = require("../services/supervision/supervision-constants");
 
 /**
  * The per-year document counters at the tenant. They belong to the number
@@ -19,6 +25,13 @@ const {
  * carries them, so a stale copy of the tenant cannot roll a counter back.
  */
 const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
+
+/**
+ * The supervision fields (glossary "Aufsichtsstufe"). They belong to the
+ * level change (`updateSupervisionLevel`) alone once the tenant exists; a
+ * whole-tenant write carries them on insert only, so a stale copy of the
+ * tenant cannot undo a level change.
+ */
 
 /**
  * Data Manager for Tenant objects.
@@ -32,13 +45,113 @@ class TenantManager {
    * @param {{reach?: string, userId?: string|null}} [scope]
    * @param {Object} [options]
    * @param {boolean} [options.owned=false] Only the tenants the user owns.
+   * @param {string} [options.supervisionLevel] Only the tenants at this
+   *   supervision level (a tenant without a stored level is `free`).
+   * @param {Object} [options.sort] A mongoose sort, e.g.
+   *   `{ supervisionChangedAt: 1, id: 1 }`; default: the database's order
+   * @param {number} [options.skip] Rows to skip - the page's start
+   * @param {number} [options.limit] Rows at most - the page's size
    * @returns {Promise<Tenant[]>} List of tenants
    */
-  static async getTenants(scope = {}, { owned = false } = {}) {
-    const rawTenants = await TenantModel.find(
-      await TenantManager._reachCondition(scope, owned),
-    );
+  static async getTenants(
+    scope = {},
+    { owned = false, supervisionLevel, sort, skip, limit } = {},
+  ) {
+    const condition = await TenantManager._condition(scope, {
+      owned,
+      supervisionLevel,
+    });
+    let query = TenantModel.find(condition);
+    if (sort !== undefined) query = query.sort(sort);
+    if (skip !== undefined) query = query.skip(skip);
+    if (limit !== undefined) query = query.limit(limit);
+    const rawTenants = await query;
     return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * How many tenants `getTenants` would list under the same scope and
+   * options - the `total` of a page of them.
+   *
+   * @param {{reach?: string, userId?: string|null}} [scope]
+   * @param {Object} [options]
+   * @param {boolean} [options.owned=false]
+   * @param {string} [options.supervisionLevel]
+   * @returns {Promise<number>}
+   */
+  static async countTenants(
+    scope = {},
+    { owned = false, supervisionLevel } = {},
+  ) {
+    const condition = await TenantManager._condition(scope, {
+      owned,
+      supervisionLevel,
+    });
+    return TenantModel.countDocuments(condition);
+  }
+
+  /** The query condition of `getTenants` and `countTenants`. */
+  static async _condition(scope, { owned, supervisionLevel }) {
+    const condition = await TenantManager._reachCondition(scope, owned);
+    if (supervisionLevel) {
+      condition.supervisionLevel =
+        supervisionLevel === SUPERVISION_LEVELS.FREE
+          ? { $in: [supervisionLevel, null] }
+          : supervisionLevel;
+    }
+    return condition;
+  }
+
+  /**
+   * The tenants the public sees (tenant supervision spec §5.2): the
+   * tenants at a public level, a missing level counting as free.
+   *
+   * @returns {Promise<Tenant[]>}
+   */
+  static async getPublicTenants() {
+    const rawTenants = await TenantModel.find(publicTenantCondition());
+    return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
+   * Sets the supervision level of a tenant, conditionally: the write
+   * matches only while the tenant is still at `from`, so two level changes
+   * at the same moment cannot both succeed (spec "Concurrency").
+   *
+   * @param {Object} params
+   * @param {string} params.tenantId
+   * @param {string} params.from The level the caller read
+   * @param {string} params.to The new level
+   * @param {Date} params.changedAt
+   * @param {string|null} [params.reason] The reason of this change, stored
+   *   as the tenant's `supervisionReason` - `null` without one
+   * @returns {Promise<Tenant|null>} The tenant after the write, or null
+   *   when no tenant at `from` matched
+   */
+  static async updateSupervisionLevel({
+    tenantId,
+    from,
+    to,
+    changedAt,
+    reason = null,
+  }) {
+    assertSupervisionLevel(to);
+    // A tenant from before the supervision has no stored level; `from:
+    // "free"` has to match it as well.
+    const currentLevel =
+      from === SUPERVISION_LEVELS.FREE ? { $in: [from, null] } : from;
+    const raw = await TenantModel.findOneAndUpdate(
+      { id: tenantId, supervisionLevel: currentLevel },
+      {
+        $set: {
+          supervisionLevel: to,
+          supervisionChangedAt: changedAt,
+          supervisionReason: reason ?? null,
+        },
+      },
+      { new: true },
+    );
+    return raw ? raw.toEntity() : null;
   }
 
   /**
@@ -79,6 +192,24 @@ class TenantManager {
   }
 
   /**
+   * The tenants of some ids, in one query, whatever their supervision
+   * level - for the snapshot a customer's booking carries (tenant
+   * supervision spec §5.2); the caller knows the bookings, so nothing about
+   * a tenant is revealed that the booking does not vouch for.
+   *
+   * @param {string[]} ids
+   * @returns {Promise<Tenant[]>} The tenants that exist, in no order
+   */
+  static async getTenantsByIds(ids) {
+    const unique = [...new Set(ids)].filter(Boolean);
+    if (unique.length === 0) {
+      return [];
+    }
+    const rawTenants = await TenantModel.find({ id: { $in: unique } });
+    return rawTenants.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Insert a tenant object into the database or update it.
    * Validates the tenant data before storing it.
    *
@@ -104,8 +235,8 @@ class TenantManager {
     tenantEntity.validate();
     const update = { ...tenantEntity };
     if (existingTenant) {
-      for (const counter of DOCUMENT_COUNTERS) {
-        delete update[counter];
+      for (const field of [...DOCUMENT_COUNTERS, ...SUPERVISION_FIELDS]) {
+        delete update[field];
       }
     }
     await TenantModel.updateOne({ id: tenantEntity.id }, update, {
@@ -257,6 +388,23 @@ class TenantManager {
     }
     const count = await TenantModel.countDocuments({});
     return count < maxTenants;
+  }
+
+  /**
+   * The same cap, asked after a tenant was inserted: whether the tenants,
+   * the new one included, still fit `MAX_TENANTS`. Counting after the write
+   * lets racing creations see each other, so the cap holds across parallel
+   * requests and server processes.
+   *
+   * @returns {Promise<boolean>} false when the insert overshot the cap
+   */
+  static async checkTenantCountAfterInsert() {
+    const maxTenants = parseInt(process.env.MAX_TENANTS, 10);
+    if (!maxTenants) {
+      return true;
+    }
+    const count = await TenantModel.countDocuments({});
+    return count <= maxTenants;
   }
 }
 

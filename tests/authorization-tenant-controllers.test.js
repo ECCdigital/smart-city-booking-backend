@@ -26,6 +26,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const { RoleManager } = require("../src/commons/data-managers/role-manager");
@@ -34,6 +35,7 @@ const BookingService = require("../src/commons/services/checkout/booking-service
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
 const { ForbiddenError } = require("../src/errors/BaseError");
 const { Role } = require("../src/commons/entities/role/role");
+const { Booking } = require("../src/commons/entities/booking/booking");
 
 function response() {
   return {
@@ -182,6 +184,12 @@ describe("tenant controllers on the reach", function () {
       sinon
         .stub(BookingManager, "getTenantBookings")
         .resolves([{ id: "b1", tenantId: "t1", name: "Erika", timeBegin: 1 }]);
+      // The projection names only what the public can reach (supervision
+      // spec §5.2): a free tenant lets every offer out.
+      sinon
+        .stub(TenantManager, "getTenant")
+        .resolves({ id: "t1", supervisionLevel: "free" });
+      sinon.stub(BookableManager, "getBookables").resolves([]);
       const res = response();
       await BookingController.getBookings(
         request({
@@ -309,7 +317,13 @@ describe("tenant controllers on the reach", function () {
     });
 
     it("GET /bookings/:ids/status answers the status without the dead loop (§11)", async function () {
-      sinon.stub(BookingManager, "getBookingStatus").resolves([{ id: "b1" }]);
+      sinon
+        .stub(BookingManager, "getBookings")
+        .resolves([
+          new Booking({ id: "b1", tenantId: "t1", bookableItems: [] }),
+        ]);
+      // The tenant snapshot of the answer (ticket 18): no tenant here.
+      sinon.stub(TenantManager, "getTenantsByIds").resolves([]);
       const service = sinon.stub(BookingService, "getBookingStatus");
       const res = response();
       await BookingController.getBookingStatus(

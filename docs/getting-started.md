@@ -227,13 +227,13 @@ Without a tenant and public bookables, the Storefront will look empty even if al
 
 ## Verify
 
-| Check        | How                                                                   |
-| ------------ | --------------------------------------------------------------------- |
-| API alive    | `GET http://localhost:8081/healthz/live` → `200`                      |
-| API ready    | `GET http://localhost:8081/healthz/ready` → `200` (MongoDB connected) |
-| Admin login  | Sign in at http://localhost:8080                                      |
-| Storefront   | http://localhost:3000 shows catalog / tenant content after bootstrap  |
-| Booking path | Create a test booking in the Storefront against a public bookable     |
+| Check        | How                                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| API alive    | `GET http://localhost:8081/healthz/live` → `200`                                                                                        |
+| API ready    | `GET http://localhost:8081/healthz/ready` → `200` (MongoDB connected, migrations completed; `503` with `details.migrations` until then) |
+| Admin login  | Sign in at http://localhost:8080                                                                                                        |
+| Storefront   | http://localhost:3000 shows catalog / tenant content after bootstrap                                                                    |
+| Booking path | Create a test booking in the Storefront against a public bookable                                                                       |
 
 ---
 

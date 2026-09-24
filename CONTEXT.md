@@ -324,12 +324,25 @@ Ein Nutzer, der auf der Instanz als Owner geführt ist; betreibt die Plattform, 
 _Avoid_: Admin (unqualifiziert), Superadmin, Plattform-Betreiber (als Modellbegriff), Instance-Owner (Schreibweise)
 
 **Aufsichtsstufe (eines Mandanten)**:
-Das vom Instanz-Owner ausdrücklich manuell gesetzte, jederzeit umkehrbare Maß, wie weit ein Mandant ohne dessen Zutun öffentlich auftreten darf: _frei_ (arbeitet wie bisher, ganz ohne Freigaben), _beaufsichtigt_ (tritt öffentlich auf, aber jedes Angebot braucht einen freigegebenen Prüfstatus) oder _gesperrt_ (nichts ist öffentlich, auch nicht per Direktlink; im Admin-Bereich darf alles vorbereitet werden). Ein zweites, vom Mandanten unabhängiges Tor neben dessen eigener Katalog-Teilnahme; sie schränkt nie Rechte innerhalb des Mandanten ein und wirkt nur auf Neues, bestehende Buchungen bleiben.
-_Avoid_: Status (das ist die Membership), Vertrauensstufe, Freigabe (unqualifiziert — es gibt zwei Tore), aktiv/inaktiv, verified
+Das vom Instanz-Owner ausdrücklich manuell gesetzte, jederzeit umkehrbare Maß, wie weit ein Mandant ohne dessen Zutun öffentlich auftreten darf: _frei_ (arbeitet wie bisher, ganz ohne Freigaben), _beaufsichtigt_ (tritt öffentlich auf, aber jedes Angebot braucht einen freigegebenen Prüfstatus), _Freigabe ausstehend_ (nichts ist öffentlich, auch nicht per Direktlink; im Admin-Bereich darf alles vorbereitet werden — der Wartezustand einer Selbst-Anlage, bis der Instanz-Owner die Stufe anhebt oder den Mandanten abweist) oder _abgewiesen_ (nichts ist öffentlich, und Tenant-Owner wie Mitglieder können den Mandanten nicht mehr bearbeiten oder lesen; nur der Instanz-Owner behält alle Rechte; bestehende Buchungen bleiben für ihre Kunden nutzbar). Ein zweites, vom Mandanten unabhängiges Tor neben dessen eigener Katalog-Teilnahme; unterhalb von _abgewiesen_ schränkt sie nie Rechte innerhalb des Mandanten ein und wirkt nur auf Neues, bestehende Buchungen bleiben. Jede Stufe ist aus jeder anderen erreichbar, auch zurück aus _abgewiesen_; Löschen bleibt der einzige endgültige Schritt.
+In Aufsichtsmitteilungen an Tenant-Owner heißt sie _Freigabestufe_; Instanz-Owner lesen in Mail und Admin-Bereich „Aufsichtsstufe“.
+_Avoid_: Status (das ist die Membership), Vertrauensstufe, Freigabe (unqualifiziert — es gibt zwei Tore), aktiv/inaktiv, verified, gesperrt/blocked (der alte Name von _Freigabe ausstehend_), abgelehnt (das ist der Prüfstatus eines Angebots), deaktiviert/gelöscht (Löschen ist kein Stufenwechsel)
 
 **Startstufe (neuer Mandanten)**:
-Die vom Instanz-Owner festgelegte Aufsichtsstufe für jede Selbst-Anlage, gemeinsam für Freigabeliste und offene Anlage: _frei_, _beaufsichtigt_ oder _gesperrt_, standardmäßig _frei_. Gilt ausschließlich bei der Anlage und verändert bestehende Mandanten nicht; vom Instanz-Owner selbst angelegte Mandanten starten immer _frei_.
+Die vom Instanz-Owner festgelegte Aufsichtsstufe für jede Selbst-Anlage, gemeinsam für Freigabeliste und offene Anlage: _frei_, _beaufsichtigt_ oder _Freigabe ausstehend_, nie _abgewiesen_; standardmäßig _frei_. Gilt ausschließlich bei der Anlage und verändert bestehende Mandanten nicht; vom Instanz-Owner selbst angelegte Mandanten starten immer _frei_.
 _Avoid_: Default-Status, Modus, Anlage-Modus
+
+**Freigabe (eines Mandanten)**:
+Der Stufenwechsel des Instanz-Owners von _Freigabe ausstehend_ auf _beaufsichtigt_ oder _frei_ — keine eigene Aktion, kein eigener Historieneintrag: Freigegeben ist ein Mandant, dessen Stufe nicht mehr _Freigabe ausstehend_ und nicht _abgewiesen_ ist. Unter _beaufsichtigt_ rücken seine ausstehenden Angebote in die aktive Prüfliste, unter _frei_ sind seine Angebote sofort ohne Prüfung öffentlich.
+_Avoid_: Aktivierung, Bestätigung, Approval, Freigabe (unqualifiziert — die Freigabe eines Angebots ist die Prüfentscheidung)
+
+**Abweisung (eines Mandanten)**:
+Der Stufenwechsel des Instanz-Owners auf _abgewiesen_, aus jeder Stufe heraus, wahlweise mit Begründung, jederzeit umkehrbar. Nimmt dem Mandanten sein öffentliches Angebot und seinen Tenant-Ownern und Mitgliedern den Zugriff, ohne ihn zu löschen; die Begründung erreicht die Tenant-Owner mit der Aufsichtsmitteilung zum Stufenwechsel und bleibt als Begründung des jüngsten Stufenwechsels am Mandanten für Tenant-Owner, Mitglieder und Instanz-Owner lesbar. Öffentlich ist ein abgewiesener Mandant von einem auf Freigabe wartenden nicht zu unterscheiden; Personal eines abgewiesenen Mandanten sieht auch die öffentliche Projektion nicht mehr.
+_Avoid_: Ablehnung (das ist die Prüfentscheidung an einem Angebot), Sperrung, Löschung, Deaktivierung
+
+**Freigabeliste der Mandanten**:
+Alle Mandanten der Stufe _Freigabe ausstehend_, für den Instanz-Owner zum Freigeben oder Abweisen; ob ein Mandant neu angelegt oder vom Instanz-Owner auf diese Stufe zurückgesetzt wurde, unterscheidet die Liste nicht. Nicht zu verwechseln mit der Freigabeliste der Selbst-Anlage (wer anlegen darf) und der aktiven Prüfliste (welche Angebote warten).
+_Avoid_: Prüfliste (das sind die Angebote), Warteschlange, Pending-Tenants
 
 **Selbst-Anlage (eines Mandanten)**:
 Das Anlegen eines Mandanten durch einen Nutzer, der nicht Instanz-Owner ist — über den Instanz-Schalter „alle dürfen anlegen" oder die Freigabeliste. Erzeugt den Mandanten in der Startstufe und macht den Anlegenden zum Tenant-Owner.
@@ -340,20 +353,40 @@ Der Stand der Prüfung eines Angebots durch den Instanz-Owner: _ausstehend_, _fr
 _Avoid_: Review, Moderation, approved (als Feldname im Gespräch), isPublic (das ist der Wunsch des Mandanten, nicht die Entscheidung)
 
 **Veröffentlichungswunsch (eines Angebots)**:
-Die vom Mandanten getroffene Wahl, ein Angebot öffentlich in Listen und Katalogen auszuspielen, unabhängig von der Entscheidung des Instanz-Owners. Bleibt auch bei Ablehnung bestehen; ohne Veröffentlichungswunsch kann ein Buchungsobjekt oder Event per Direktlink erreichbar und buchbar sein, bei beaufsichtigten Mandanten aber nur mit freigegebenem Prüfstatus und bei gesperrten Mandanten nie.
+Die vom Mandanten getroffene Wahl, ein Angebot öffentlich in Listen und Katalogen auszuspielen, unabhängig von der Entscheidung des Instanz-Owners. Bleibt auch bei Ablehnung bestehen; ohne Veröffentlichungswunsch kann ein Buchungsobjekt oder Event per Direktlink erreichbar und buchbar sein, bei beaufsichtigten Mandanten aber nur mit freigegebenem Prüfstatus und bei Mandanten mit ausstehender Freigabe oder abgewiesenen Mandanten nie.
 _Avoid_: isPublic (als Sprechbegriff), Freigabe (das ist die Entscheidung des Instanz-Owners), öffentlich (als tatsächliche Sichtbarkeit)
+
+**Einreichung (eines Angebots)**:
+Der Schritt, der ein Angebot ohne Prüfstatus oder ein abgelehntes Angebot auf _ausstehend_ setzt und die Einreichungszeit neu festhält: der erste Veröffentlichungswunsch eines Angebots ohne Prüfstatus oder das ausdrückliche „Zur Prüfung einreichen“ des Tenant-Owners, auch bei freiem Mandanten oder ausstehender Freigabe. Eine Wiederholung auf einem ausstehenden Angebot ändert nichts und startet keine neue Wartezeit.
+_Avoid_: Veröffentlichung, Antrag, Speichern (eine normale Bearbeitung ist keine Einreichung)
+
+**Prüfentscheidung**:
+Die Handlung des Instanz-Owners am Prüfstatus eines Angebots: _freigeben_ (ausstehend oder abgelehnt → freigegeben), _ablehnen_ (ausstehend → abgelehnt) oder die Freigabe _zurückziehen_ (freigegeben → abgelehnt), wahlweise mit Begründung; Akteur und Zeitpunkt bestimmt der Server. Verändert den Veröffentlichungswunsch nie. Eine unzulässige oder von einer gleichzeitigen Entscheidung überholte Prüfentscheidung ist ein Konflikt, kein stiller Verlust.
+_Avoid_: Moderation, Statuswechsel (unqualifiziert), Sperre (das ist die Aufsichtsstufe)
+
+**Direktlink (eines Angebots)**:
+Der Zugriff auf ein bekanntes einzelnes Angebot — Detail, Preise, Zeiten, Verfügbarkeit, Belegung und die neue Selbstbuchung — im Unterschied zur Ausspielung in Listen, Katalogen und Aggregaten. Braucht keinen Veröffentlichungswunsch, bei beaufsichtigten Mandanten aber einen freigegebenen Prüfstatus; bei Mandanten mit ausstehender Freigabe oder abgewiesenen Mandanten gibt es ihn nicht. Katalog-Teilnahme und Katalog-Ausschlüsse sind kein Direktlink-Verbot. Das Ticket eines Events ist nur zusammen mit seinem Event erreichbar und buchbar: beide Angebote müssen das Tor passieren.
+_Avoid_: Deep Link, versteckte Seite, nicht öffentlich (als Verbot gelesen)
 
 **Erneutes Einreichen (eines Angebots)**:
 Die ausdrückliche Bitte des Tenant-Owners um eine neue Prüfung eines abgelehnten Angebots, auch ohne Veröffentlichungswunsch; setzt den Prüfstatus auf _ausstehend_. Weder Bearbeiten noch Aus- und Einschalten des Veröffentlichungswunsches gilt als erneutes Einreichen; dabei bleibt der Prüfstatus erhalten.
 _Avoid_: Wiederveröffentlichung, Status-Reset, Freigabe beantragen (unqualifiziert)
 
 **Aktive Prüfliste**:
-Alle Angebote beaufsichtigter Mandanten mit ausstehendem Prüfstatus, unabhängig vom Veröffentlichungswunsch. Ausstehende Prüfstatus freier oder gesperrter Mandanten bleiben erhalten, gehören aber nicht zur aktiven Prüfliste.
+Alle Angebote beaufsichtigter Mandanten mit ausstehendem Prüfstatus, unabhängig vom Veröffentlichungswunsch. Ausstehende Prüfstatus freier, abgewiesener oder auf Freigabe wartender Mandanten bleiben erhalten, gehören aber nicht zur aktiven Prüfliste.
 _Avoid_: Alle ausstehenden Angebote, Freigabeliste (das ist die Berechtigung zur Selbst-Anlage)
 
 **Aufsichtshistorie**:
-Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneuten Einreichungen sowie Prüfentscheidungen eines Mandanten und seiner Angebote, jeweils mit Zeitpunkt, handelnder Person oder System, vorherigem und neuem Stand sowie optionaler Begründung. Instanz-Owner sehen die gesamte Aufsichtshistorie, Tenant-Owner die ihres Mandanten und seiner Angebote.
+Die unveränderliche Folge der Startstufe, Stufenwechsel, erstmaligen und erneuten Einreichungen sowie Prüfentscheidungen eines Mandanten und seiner Angebote, jeweils mit Zeitpunkt, handelnder Person oder System, vorherigem und neuem Stand sowie optionaler Begründung. Instanz-Owner sehen die gesamte Aufsichtshistorie, Tenant-Owner die ihres Mandanten und seiner Angebote. Wird nur angefügt, nie geändert oder gelöscht; ein Request, der nichts ändert (dieselbe Stufe noch einmal setzen), schreibt keinen Eintrag. Der Anfangsstand des Bestands (Migration) steht als Systemeintrag mit Herkunft `migration` und tatsächlichem Migrationszeitpunkt darin: `tenant.levelInitialized` für die Stufe eines Bestandsmandanten, `review.submitted` für ein Bestandsangebot mit Veröffentlichungswunsch — nie als erfundene frühere Anlage, Einreichung oder Freigabe.
 _Avoid_: Audit-Log, Änderungsverlauf (unqualifiziert), Prüfstatus (das ist der aktuelle Stand)
+
+**Mitteilungsanlass**:
+Ein beim Eintreten eines Aufsichtsereignisses festgehaltener Grund für eine Aufsichtsmitteilung — Selbst-Anlage, tatsächlicher Stufenwechsel, tatsächlicher Eintritt in die aktive Prüfliste, Prüfentscheidung — mit den Angaben, die die Mitteilung braucht (alter und neuer Stand, Begründung). Wird zuerst nur aufgezeichnet (Outbox, Status _ausstehend_) und direkt danach getrennt versendet: ein fehlgeschlagener Versand rollt die Entscheidung nicht zurück und ist ohne erneutes Entscheiden wiederholbar. Ein Stufenwechsel mit mehreren neu wartenden Angeboten ist ein Anlass, nicht mehrere.
+_Avoid_: Mail (das ist der Versand), Notification (als Sprechbegriff), Event (das ist die Veranstaltung), Benachrichtigungs-Job
+
+**Aufsichtsmitteilung**:
+Die Mail, die aus einem Mitteilungsanlass entsteht: an alle Instanz-Owner (Selbst-Anlage, Eintritt in die aktive Prüfliste — ein Anlass, eine Sammelmail) oder an alle Tenant-Owner des Mandanten (Stufenwechsel, Prüfentscheidung; bei der Selbst-Anlage die Bestätigung an den Anlegenden mit der tatsächlichen Startstufe). Geht immer über den Instanz-Versand mit zentralen Vorlagen, nie über den Versandweg oder die Textbausteine des Mandanten. Der Versand folgt direkt auf die Aufzeichnung des Anlasses; schlägt er fehl, bleibt der Anlass _fehlgeschlagen_ mit Grund sichtbar und wird vom Instanz-Owner erneut versendet — nur an die, die noch keine Mail haben, ohne neue Entscheidung und ohne neuen Eintrag in der Aufsichtshistorie.
+_Avoid_: Benachrichtigung (unqualifiziert), Mitteilung (das ist die Mail des Buchungsablaufs), Prüf-Mail (nur eine der Arten)
 
 **Angebot**:
 Sammelbegriff für Buchungsobjekte und Events eines Mandanten, unabhängig davon, ob sie öffentlich ausgespielt oder nur per Direktlink angeboten werden. Bei beaufsichtigten Mandanten benötigen beide Wege einen freigegebenen Prüfstatus; bei freien Mandanten ist keine Freigabe nötig.
@@ -367,9 +400,25 @@ _Avoid_: Anbieter, Vermieter, Host
 Ein Ehrenamtlicher, der über das mandantenübergreifende Storefront Räume für Veranstaltungen sucht und bucht. Kein eigener Nutzertyp, sondern ein gewöhnlicher Buchender.
 _Avoid_: Kunde (das ist die Buchungsrolle), Mieter
 
+**Verifizierungsnachweis (eines Nutzerkontos)**:
+Der serverseitig belastbare Beleg, dass die E-Mail-Adresse eines Kontos bestätigt ist — Voraussetzung jeder Selbst-Anlage, vom Server bei der Anlage erneut geprüft; Login allein genügt nicht. Ein lokales (oder Karten-)Konto erbringt ihn durch die abgeschlossene E-Mail-Verifizierung, ein SSO-Konto allein durch die bestätigte Zusage des Identity-Providers (`email_verified`), die beim Login oder der Registrierung festgehalten wird. Das pauschal bei jeder SSO-Registrierung gesetzte `isVerified` ist Aktivierungsmerkmal, kein Nachweis. Fehlt er, verweist der Server auf den Weg dahin: E-Mail-Verifizierung oder Identity-Provider.
+_Avoid_: isVerified (als Sprechbegriff — das ist das Aktivierungsmerkmal), verifiziert (unqualifiziert), Login-Nachweis
+
+**Rückkehrziel (einer Registrierung)**:
+Die Stelle, zu der ein Nutzer nach Registrierung, Verifizierung und Login zurückkehrt — etwa die Mandanten-Anlage, aus der ein Raumgeber über „Angebote bereitstellen" kam. Wird bei der Registrierung am Verifizierungs-Hook festgehalten, reist mit dem Link der Verifizierungs-Mail und wird von der Verifizierung beantwortet; nur relative Pfade oder Adressen auf dem Ursprung der eigenen Verifizierungsseite bzw. des Frontends werden behalten. Bei SSO trägt der Client es selbst durch den Identity-Provider-Umweg.
+_Avoid_: nextUrl (als Sprechbegriff — das ist der Feldname), Redirect (das ist der Mechanismus), Deep-Link
+
 **Bereitschafts-Check (eines Mandanten)**:
-Die unverbindliche Auskunft über fehlende Angaben in der aktuellen Einrichtung eines Mandanten — dieselbe Liste für den Tenant-Owner beim Onboarding und für den Instanz-Owner vor dem Anheben der Aufsichtsstufe. Sie beschreibt die Vorbereitung auf den öffentlichen Auftritt, garantiert aber keine tatsächliche Buchbarkeit oder Funktionsfähigkeit von Zahlung und Mailversand.
-_Avoid_: Readiness, Checkliste (als Modellbegriff), Validierung
+Die unverbindliche Auskunft über fehlende Angaben in der aktuellen Einrichtung eines Mandanten — dieselbe Liste für den Tenant-Owner beim Onboarding und für den Instanz-Owner vor dem Anheben der Aufsichtsstufe. Sie beschreibt die Vorbereitung auf den öffentlichen Auftritt, garantiert aber keine tatsächliche Buchbarkeit oder Funktionsfähigkeit von Zahlung und Mailversand. Sechs Kriterien mit festem Schlüssel, jedes _erfüllt_, _fehlend_ oder _nicht erforderlich_: Kontakt, Rechtstexte (immer nicht erforderlich), Angebote, Zeiten, Zahlung, Mail — die letzten drei nur über Angebote mit Veröffentlichungswunsch, vergangene Events ausgenommen. Ein reiner Direktlink-Mandant erhält daher „kein Angebot“, obwohl er buchbar ist; das ist Auskunft, kein Tor.
+_Avoid_: Readiness, Checkliste (als Modellbegriff), Validierung, Freigabe-Voraussetzung (der Check ist kein Tor)
+
+**Zeitliche Grenze (Rate Limit)**:
+Die Höchstzahl gleichartiger Versuche eines Subjekts — IP-Adresse, Konto oder Nutzer — in einem gleitenden Zeitfenster: Registrierung je IP, Verifizierungs-Mails je Konto und je IP, Selbst-Anlage je Nutzer; Werte und Fenster kommen aus der Betriebskonfiguration (`RATE_LIMIT_*`). Gezählt in der Datenbank, damit parallele Requests und mehrere Prozesse die Grenze nicht umgehen; ein abgewiesener Versuch zählt nicht, ein erlaubter kann bei Scheitern der Handlung zurückgegeben werden. Wo die Grenze sichtbar ist, antwortet sie mit 429 und `Retry-After`; kontobezogene Grenzen bleiben stumm, weil ihre Antwort sonst das Konto verriete.
+_Avoid_: Throttling, Quota (das ist `MAX_TENANTS`, dauerhaft), Sperre (das ist die Aufsichtsstufe), CAPTCHA
+
+**Kontoneutrale Antwort**:
+Eine öffentliche Antwort der Registrierung, Verifizierung oder E-Mail-Prüfung, die für eine registrierte und eine unbekannte Adresse in Status, Body und sichtbaren Grenzen gleich ausfällt. Eine Registrierung mit bekannter Adresse legt kein zweites Konto an und schickt einem unverifizierten Konto höchstens seine Verifizierungs-Mail erneut.
+_Avoid_: Enumeration-Schutz (als Sprechbegriff), 409 (als Antwort auf „E-Mail vergeben")
 
 ### Rechte
 

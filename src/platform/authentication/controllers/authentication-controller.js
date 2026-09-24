@@ -3,6 +3,9 @@ const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const SsoService = require("../../../commons/services/sso/sso-service");
 const UserService = require("../../../commons/services/user-service");
+const RegistrationService = require("../../../commons/services/user/registration-service");
+const ApiResponse = require("../../../commons/utilities/api-response");
+const { TooManyRequestsError } = require("../../../errors/BaseError");
 const CardAuthService = require("../../../commons/services/card-auth/card-auth-service");
 
 const JwtHelper = require("../../../commons/utilities/jwt-helper");
@@ -170,6 +173,12 @@ class AuthenticationController {
     }
   }
 
+  /**
+   * Public signup. Answers account-neutrally (spec §6.3): 201 whether or not
+   * the address already has an account - an existing account is never
+   * duplicated and, if still unverified, gets its verification mail again.
+   * The per-IP signup limit answers 429 with `Retry-After`.
+   */
   static async signup(request, response) {
     try {
       const {
@@ -185,10 +194,8 @@ class AuthenticationController {
         invitationTenantId,
       } = request.body;
 
-      const existingUser = await UserManager.getUser(userID);
-
-      if (existingUser) {
-        return response.sendStatus(409);
+      if (!userID || !password) {
+        return response.status(400).send("Email and password are required");
       }
 
       const user = new User({
@@ -206,12 +213,54 @@ class AuthenticationController {
           ? { token: invitationToken, tenantId: invitationTenantId }
           : null;
 
-      await UserService.singUpUser(user, nextUrl, verifyUrl, invitation);
+      await RegistrationService.signup({
+        user,
+        nextUrl,
+        verifyUrl,
+        invitation,
+        ip: request.ip,
+      });
 
       return response.sendStatus(201);
     } catch (error) {
+      if (error instanceof TooManyRequestsError) {
+        return ApiResponse.fail(response, error);
+      }
       logger.error("Could not sign up user", error);
       return response.status(error.status || 500).send(error.message);
+    }
+  }
+
+  /**
+   * Sends the verification mail of an unverified account again. Always 202
+   * for a well-formed request, whether the address is known or not; only
+   * the per-IP limit answers 429 with `Retry-After`.
+   */
+  static async resendVerification(request, response) {
+    const { id, verifyUrl, nextUrl } = request.body;
+
+    if (!id) {
+      return response.status(400).send("Email is required");
+    }
+
+    try {
+      await RegistrationService.requestVerificationMail({
+        id,
+        verifyUrl,
+        nextUrl,
+        ip: request.ip,
+      });
+      return response.status(202).json({
+        success: true,
+        message:
+          "If the address belongs to an unverified account, a verification mail has been sent",
+      });
+    } catch (error) {
+      if (error instanceof TooManyRequestsError) {
+        return ApiResponse.fail(response, error);
+      }
+      logger.error("Verification resend failed:", error);
+      return response.status(500).send("Internal server error");
     }
   }
 
@@ -356,6 +405,11 @@ class AuthenticationController {
     }
   }
 
+  /**
+   * Once told whether an address was free; now answers every well-formed
+   * address alike (spec §6.3), so the check reveals no account. Kept for the
+   * clients that still call it.
+   */
   static async checkEmail(request, response) {
     if (process.env.DISABLE_EMAIL_CHECK === "true") {
       return response.status(200).send("Email check is disabled");
@@ -367,16 +421,7 @@ class AuthenticationController {
       return response.status(400).send("Email is required");
     }
 
-    try {
-      const user = await UserManager.getUser(email);
-      if (user) {
-        return response.status(409).send("Email already in use");
-      }
-      return response.status(200).send("Email is available");
-    } catch (error) {
-      logger.error(error);
-      return response.status(500).send("Internal server error");
-    }
+    return response.status(200).send("Email accepted");
   }
 
   static async verifyEmail(request, response) {
@@ -387,12 +432,16 @@ class AuthenticationController {
     }
 
     try {
-      const { success } = await UserService.verifyEmail(token, id);
+      const { success, nextUrl } = await UserService.verifyEmail(token, id);
       if (!success) {
         throw new Error("Email verification failed");
       }
       logger.info(`Email verified for user ${id}.`);
-      return response.status(200).send("Email verified successfully");
+      return response.status(200).json({
+        success: true,
+        message: "Email verified successfully",
+        nextUrl: nextUrl ?? null,
+      });
     } catch (error) {
       logger.error(`Email verification failed for user ${id}:`, error);
       return response

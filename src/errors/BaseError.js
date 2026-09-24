@@ -59,6 +59,17 @@ class ConflictError extends BaseError {
   }
 }
 
+/**
+ * A rate limit hit. `params.retryAfterSeconds` (seconds until a slot frees)
+ * becomes the `Retry-After` header of the answer.
+ */
+class TooManyRequestsError extends BaseError {
+  constructor(code = "too_many_requests", params = {}) {
+    super(code, 429, params);
+    this.name = "TooManyRequestsError";
+  }
+}
+
 module.exports = {
   BaseError,
   NotFoundError,
@@ -67,4 +78,5 @@ module.exports = {
   ForbiddenError,
   MethodNotAllowedError,
   ConflictError,
+  TooManyRequestsError,
 };

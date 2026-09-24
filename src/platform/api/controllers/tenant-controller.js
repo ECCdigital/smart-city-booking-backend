@@ -3,8 +3,6 @@ const Tenant = require("../../../commons/entities/tenant/tenant");
 const UserManager = require("../../../commons/data-managers/user-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const bunyan = require("bunyan");
-const { readFileSync } = require("fs");
-const { join } = require("path");
 const { v4: uuidv4 } = require("uuid");
 const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const Membership = require("../../../commons/entities/tenant/membership");
@@ -17,9 +15,6 @@ const {
   validateMailSnippets,
   validateMailSubjects,
 } = require("../../../commons/mail-service/templates/mail-snippet-overrides");
-const {
-  mergeDefaultMailSnippets,
-} = require("../../../commons/mail-service/templates/default-mail-snippets");
 const {
   normalizeUserId,
   userIdsMatch,
@@ -49,7 +44,14 @@ const {
   scopeFor,
 } = require("../../../commons/services/authorization");
 const ApiResponse = require("../../../commons/utilities/api-response");
+const {
+  computeReadiness,
+} = require("../../../commons/services/supervision/readiness-service");
 const Formatters = require("../../../commons/utilities/formatters");
+const TenantCreationService = require("../../../commons/services/tenant/tenant-creation-service");
+const {
+  assertSupervisionLevel,
+} = require("../../../commons/services/supervision/supervision-constants");
 
 const PDF_TEMPLATE_FIELDS = {
   receiptTemplate: "receipt",
@@ -150,9 +152,14 @@ class TenantController {
   static async getTenants(request, response) {
     try {
       const publicTenants = request.query.publicTenants === "true";
+      const supervisionLevel = request.query.supervisionLevel || undefined;
+      if (supervisionLevel !== undefined) {
+        assertSupervisionLevel(supervisionLevel);
+      }
 
       const tenants = await TenantManager.getTenants(scopeOf(request), {
         owned: !publicTenants,
+        ...(supervisionLevel !== undefined && { supervisionLevel }),
       });
 
       response
@@ -167,6 +174,9 @@ class TenantController {
           ),
         );
     } catch (error) {
+      if (error instanceof BaseError) {
+        return ApiResponse.fail(response, error);
+      }
       logger.error(error);
       response.sendStatus(500);
     }
@@ -174,7 +184,7 @@ class TenantController {
 
   static async getPublicTenants(request, response) {
     try {
-      const tenants = await TenantManager.getTenants();
+      const tenants = await TenantManager.getPublicTenants();
       const publicTenants = tenants.map((tenant) => tenant.exportPublic());
       response.status(200).send(publicTenants);
     } catch (error) {
@@ -210,6 +220,24 @@ class TenantController {
   }
 
   /**
+   * The readiness check (glossary "Bereitschafts-Check") of the tenant of
+   * the path: computed on every call, the same answer for the tenant owner
+   * and the instance owner. The route's marker decides who reads it.
+   */
+  static async getReadiness(request, response) {
+    try {
+      const readiness = await computeReadiness(request.params.tenant);
+      response.status(200).json(readiness);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return ApiResponse.fail(response, err);
+      }
+      logger.error(err);
+      response.status(500).send("could not compute readiness");
+    }
+  }
+
+  /**
    * @deprecated Use createTenant or updateTenant instead.
    *
    * The route carries `tenant.update` for the tenant of the body; an
@@ -240,8 +268,6 @@ class TenantController {
   static async createTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = new Tenant(request.body);
-      tenant.id = uuidv4();
 
       if (Object.prototype.hasOwnProperty.call(request.body, "mailSnippets")) {
         try {
@@ -293,66 +319,21 @@ class TenantController {
         return response.status(400).send(legalDocumentsError);
       }
 
-      tenant.ownerUserIds = [user.id];
-      if ((await TenantManager.checkTenantCount()) === false) {
-        throw new Error(`Maximum number of tenants reached.`);
-      }
-
-      // `storeTenant` routes an unknown id here, so this is the second half
-      // of the tenant write path and gets the same media check. A tenant that
-      // does not exist yet owns no media, so any medium named here is
-      // refused, which beats storing a reference nobody ever checked.
-      await MediaReferenceGuard.assertTenantStorable(
-        tenant,
-        tenant.id,
-        scopeFor(request, "media", "read"),
-      );
-
-      const membership = new Membership({
-        tenantId: tenant.id,
-        userId: user.id,
-        roles: [],
-        status: "active",
-        source: "manually",
-        owner: true,
+      // `storeTenant` routes an unknown id here too: both creation paths
+      // share the one contract of the creation service.
+      const tenant = await TenantCreationService.create({
+        body: request.body,
+        creatorUserId: user.id,
+        creatorIsInstanceOwner: request.principal?.isInstanceOwner === true,
+        mediaScope: scopeFor(request, "media", "read"),
       });
-
-      const emailTemplate = readFileSync(
-        join(
-          __dirname,
-          "../../../commons/mail-service/templates/default-generic-mail-template.temp.html",
-        ),
-        "utf8",
-      );
-      const receiptTemplate = readFileSync(
-        join(
-          __dirname,
-          "../../../commons/pdf-service/templates/default-receipt-template.temp.html",
-        ),
-        "utf8",
-      );
-
-      const invoiceTemplate = readFileSync(
-        join(
-          __dirname,
-          "../../../commons/pdf-service/templates/default-invoice-template.temp.html",
-        ),
-        "utf8",
-      );
-
-      tenant.genericMailTemplate = emailTemplate;
-      tenant.receiptTemplate = receiptTemplate;
-      tenant.invoiceTemplate = invoiceTemplate;
-      tenant.mailSnippets = mergeDefaultMailSnippets(tenant.mailSnippets);
-
-      await TenantManager.storeTenant(tenant);
-      await MembershipManager.addMembership(tenant.id, membership);
       logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
 
       response.sendStatus(201);
     } catch (err) {
+      // With the code and, for a hit limit, the `Retry-After` header.
       if (err instanceof BaseError) {
-        return response.status(err.statusCode).send(err.toJSON());
+        return ApiResponse.fail(response, err);
       }
 
       logger.error(err);

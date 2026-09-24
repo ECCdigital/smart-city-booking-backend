@@ -79,6 +79,18 @@ class User {
   }
 
   /**
+   * Revoke every active hook of a type, so only the link issued next works
+   * @param {string} type Hook type
+   */
+  revokeActiveHooks(type) {
+    for (const hook of this.hooks) {
+      if (hook.type === type && hook.status === "active") {
+        hook.status = "revoked";
+      }
+    }
+  }
+
+  /**
    * Release a hook
    * @param {string} hookId Hook ID to release
    * @returns {boolean} True if hook was released
@@ -120,6 +132,9 @@ class User {
       created: this.created,
       isVerified: this.isVerified,
       isSuspended: this.isSuspended,
+      authType: this.authType,
+      idpEmailVerifiedAt: this.idpEmailVerifiedAt,
+      idpEmailVerifiedProvider: this.idpEmailVerifiedProvider,
     };
   }
 

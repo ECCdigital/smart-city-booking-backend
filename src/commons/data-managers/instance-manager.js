@@ -13,6 +13,11 @@ const { exportInstanceBranding } = require("../services/media/instance-media");
 const {
   normalizeBackground,
 } = require("../services/hero-layout/hero-layout-schema");
+const {
+  SUPERVISION_LEVELS,
+  assertSupervisionLevel,
+  INITIAL_SUPERVISION_LEVELS,
+} = require("../services/supervision/supervision-constants");
 const { NotFoundError } = require("../../errors/BaseError");
 
 const DEFAULT_BRANDING = Object.freeze({
@@ -83,6 +88,17 @@ class InstanceManager {
       synced.copyright = synced.copyright.trim();
     }
 
+    // The Startstufe is one of the three initial levels (never `declined`)
+    // or not named at all; anything else is refused before anything is
+    // read or written.
+    const initialLevel = synced.tenantInitialSupervisionLevel;
+    if (initialLevel !== undefined) {
+      assertSupervisionLevel(initialLevel, {
+        field: "tenantInitialSupervisionLevel",
+        allowed: INITIAL_SUPERVISION_LEVELS,
+      });
+    }
+
     const instanceEntity = new Instance(synced);
 
     CustomFieldService.normalizeDefinitions(
@@ -97,6 +113,13 @@ class InstanceManager {
     }
 
     await InstanceManager._applyBackground(instanceEntity, rawInstance);
+
+    // A write that does not name the Startstufe keeps the stored one: a
+    // client from before the field must not reset it to the default.
+    if (initialLevel === undefined) {
+      instanceEntity.tenantInitialSupervisionLevel =
+        rawInstance.tenantInitialSupervisionLevel ?? SUPERVISION_LEVELS.FREE;
+    }
 
     const previousCustomFields = rawInstance.bookableCustomFields || [];
 

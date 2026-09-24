@@ -83,6 +83,7 @@ const PaymentService = require("../../src/commons/services/payment/providers/pay
 const { Bookable } = require("../../src/commons/entities/bookable/bookable");
 const { Role } = require("../../src/commons/entities/role/role");
 const Instance = require("../../src/commons/entities/instance/instance");
+const Tenant = require("../../src/commons/entities/tenant/tenant");
 const {
   ROLE_GROUPS,
   ROLE_LEVELS,
@@ -580,6 +581,13 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   });
 
   sinon.stub(TenantManager, "getTenant").resolves(tenantRecord);
+  // The tenants by id, as the sign-in and the customer view read them: the
+  // tenant of the harness as it is at the moment of the request.
+  sinon
+    .stub(TenantManager, "getTenantsByIds")
+    .callsFake(async (ids) =>
+      ids.includes(TENANT) ? [new Tenant(tenantRecord)] : [],
+    );
   sinon
     .stub(TenantManager, "getTenantApp")
     .callsFake(
