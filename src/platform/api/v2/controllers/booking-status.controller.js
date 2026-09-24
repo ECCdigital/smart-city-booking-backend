@@ -5,6 +5,9 @@ const {
   resolveBookingStatusKey,
 } = require("../../../../commons/services/booking/booking-status-keys");
 const { BookingStatusError } = require("../../../../errors/BookingStatusError");
+const {
+  customerViewOf,
+} = require("../../../../commons/services/booking/booking-customer-view");
 
 const logger = bunyan.createLogger({
   name: "booking-status.controller.v2.js",
@@ -70,6 +73,24 @@ class BookingStatusControllerV2 {
     }
 
     const byId = new Map(bookings.map((b) => [b.id, b]));
+    // The tenant snapshot and the event core data a customer's page renders
+    // from (tenant supervision spec §5.2), one load for the whole answer.
+    let viewOf;
+    try {
+      viewOf = await customerViewOf(bookings);
+    } catch (err) {
+      logger.error(
+        { err, tenantId, splitIds },
+        "getBookingStatus: customer view load failed",
+      );
+      return fail(
+        new BookingStatusError({
+          reason: BOOKING_STATUS_REASONS.INTERNAL_ERROR,
+          statusCode: 500,
+          params: {},
+        }),
+      );
+    }
 
     const items = splitIds.map((bookingId) => {
       const booking = byId.get(bookingId);
@@ -96,6 +117,7 @@ class BookingStatusControllerV2 {
         isPayed: Boolean(booking.isPayed),
         isRejected: Boolean(booking.isRejected),
         priceEur,
+        ...viewOf(booking),
       };
     });
 

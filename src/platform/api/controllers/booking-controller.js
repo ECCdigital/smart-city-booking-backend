@@ -38,6 +38,9 @@ const {
 } = require("../../../commons/utilities/checkout-utils");
 const CancellationReceiptService = require("../../../commons/services/payment/cancellation-service");
 const mailService = require("../../../commons/mail-service");
+const {
+  customerViewOf,
+} = require("../../../commons/services/booking/booking-customer-view");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const {
   reachableBookableIds,
@@ -374,10 +377,14 @@ class BookingController {
       if (ids) {
         const splitIds = ids.split(",");
 
-        const bookingsStatus = await BookingManager.getBookingStatus(
-          tenantId,
-          splitIds,
-        );
+        const bookings = await BookingManager.getBookings(tenantId, splitIds);
+        // The tenant snapshot and the event core data a customer's page
+        // renders from (tenant supervision spec §5.2), whatever the level.
+        const viewOf = await customerViewOf(bookings);
+        const bookingsStatus = bookings.map((booking) => ({
+          ...booking.exportStatus(),
+          ...viewOf(booking),
+        }));
 
         logger.info(
           `${tenantId} -- sending booking status ${bookingsStatus} for booking ${ids} to user ${user?.id}`,

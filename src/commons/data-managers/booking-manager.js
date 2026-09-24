@@ -184,17 +184,6 @@ class BookingManager {
   }
 
   /**
-   * Get booking status information
-   * @param {string} tenantId Tenant ID
-   * @param {string[]} bookingIds Array of booking IDs
-   * @returns {Promise<Object[]>} Array of booking status objects
-   */
-  static async getBookingStatus(tenantId, bookingIds) {
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
-    return bookings.map((booking) => booking.exportStatus());
-  }
-
-  /**
    * Store a booking (create or update)
    * @param {Booking|Object} booking Booking to store
    * @param {boolean} upsert Whether to create if not exists

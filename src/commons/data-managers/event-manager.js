@@ -46,6 +46,32 @@ class EventManager {
   }
 
   /**
+   * The events of some (tenant, id) references, in one query, whatever
+   * their review or their tenant's level - for the core data a ticket
+   * booking carries (tenant supervision spec §5.2); the booking exists, so
+   * the gate of the offer does not apply, and the caller reads only what it
+   * names.
+   *
+   * @param {Array<{tenantId: string, id: string}>} refs
+   * @returns {Promise<Event[]>} The events that exist, in no order
+   */
+  static async getEventsByIds(refs) {
+    const pairs = refs.filter((ref) => ref?.tenantId && ref?.id);
+    if (pairs.length === 0) {
+      return [];
+    }
+    const rawEvents = await EventModel.find({
+      $or: [...new Set(pairs.map((p) => `${p.tenantId}\u0000${p.id}`))].map(
+        (key) => {
+          const [tenantId, id] = key.split("\u0000");
+          return { tenantId, id };
+        },
+      ),
+    });
+    return rawEvents.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Insert an event object into the database or update it.
    *
    * @param {Event} event The event object to be stored.
