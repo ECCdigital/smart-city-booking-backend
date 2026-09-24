@@ -3,6 +3,7 @@ const SupervisionNotificationService = require("../../../commons/services/superv
 const SupervisionService = require("../../../commons/services/supervision/supervision-service");
 const ReviewService = require("../../../commons/services/supervision/review-service");
 const ReviewQueueService = require("../../../commons/services/supervision/review-queue-service");
+const TenantApprovalQueueService = require("../../../commons/services/supervision/tenant-approval-queue-service");
 const SupervisionHistoryManager = require("../../../commons/data-managers/supervision-history-manager");
 const {
   OFFER_TYPE_VALUES,
@@ -137,6 +138,23 @@ class SupervisionController {
           OFFER_TYPE_VALUES,
           "invalid_offer_type",
         ),
+        page: req.query.page,
+        pageSize: req.query.pageSize,
+      });
+      return res.status(200).json(result);
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  /**
+   * `GET /api/instances/tenant-approval-queue` - the tenant approval queue
+   * (glossary "Freigabeliste der Mandanten"), longest waiting first,
+   * paginated (`?page=&pageSize=`); `total` is its counter.
+   */
+  static async getTenantApprovalQueue(req, res, next) {
+    try {
+      const result = await TenantApprovalQueueService.listTenantApprovalQueue({
         page: req.query.page,
         pageSize: req.query.pageSize,
       });
