@@ -5,6 +5,7 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const PdfService = require("../../pdf-service/pdf-service");
 const { ACCESS_BLOCKING_REASONS } = require("./access-blocking-reasons");
 const { OPEN_ACTIONS, OPEN_ACTION_ORIGINS } = require("./access-open-action");
+const { DOMAIN } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "access-audit-service.js",
@@ -388,7 +389,7 @@ class AccessAuditService {
    * @returns {Promise<{buffer: Buffer, name: string}>}
    */
   static async toPdf(tenantId, entries, params = {}) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     const html = AccessAuditService._buildPdfHtml(tenant, entries, params);
     const filename = `Access-Audit-${tenantId}-${Date.now()}.pdf`;
     return PdfService.convertToPdf(html, filename);

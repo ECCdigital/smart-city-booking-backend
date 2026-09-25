@@ -71,6 +71,7 @@ class CalendarService {
 
     const maxBookingAdvanceInMonths = await TenantManager.getTenant(
       tenantId,
+      DOMAIN,
     ).then((tenant) => tenant?.maxBookingAdvanceInMonths);
 
     const maxBookingAdvancePeriods = generateTimePeriodsFromMaxBookingAdvance(

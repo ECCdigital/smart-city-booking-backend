@@ -1,5 +1,6 @@
 const InvitationService = require("../../../commons/services/invitation-service");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const { scopeOf } = require("../../../commons/services/authorization");
 const { normalizeUserId } = require("../../../commons/utilities/user-id-utils");
 const bunyan = require("bunyan");
 
@@ -123,7 +124,7 @@ class InvitationController {
 
       await InvitationService.verifyInvitation(tenantId, token, user?.id);
 
-      const tenant = await TenantManager.getTenant(tenantId);
+      const tenant = await TenantManager.getTenant(tenantId, scopeOf(request));
 
       return response.status(200).send({ ok: true, tenantName: tenant.name });
     } catch (error) {

@@ -353,7 +353,7 @@ class PdfService {
 
   static async generateSingleReceipt(tenantId, bookingId, receiptNumber) {
     const [tenant, booking, allBookables] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       BookingManager.getBooking(bookingId, tenantId, DOMAIN),
       BookableManager.getBookables(tenantId, DOMAIN),
     ]);
@@ -404,7 +404,7 @@ class PdfService {
   static async generateAggregatedReceipt(tenantId, bookingIds, receiptNumber) {
     try {
       const [tenant, bookings, allBookables] = await Promise.all([
-        TenantManager.getTenant(tenantId),
+        TenantManager.getTenant(tenantId, DOMAIN),
         BookingManager.getBookings(tenantId, bookingIds, DOMAIN),
         BookableManager.getBookables(tenantId, DOMAIN),
       ]);
@@ -445,7 +445,7 @@ class PdfService {
 
   static async generateSingleInvoice(tenantId, bookingId, invoiceNumber) {
     const [tenant, invoiceApp, booking, allBookables] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       TenantManager.getTenantApp(tenantId, "invoice"),
       BookingManager.getBooking(bookingId, tenantId, DOMAIN),
       BookableManager.getBookables(tenantId, DOMAIN),
@@ -514,7 +514,7 @@ class PdfService {
       : BookingManager.getBookings(tenantId, bookingIds, DOMAIN);
 
     const [tenant, invoiceApp, bookings, allBookables] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       TenantManager.getTenantApp(tenantId, "invoice"),
       bookingsPromise,
       BookableManager.getBookables(tenantId, DOMAIN),
@@ -574,7 +574,7 @@ class PdfService {
     } = options;
 
     const [tenant, booking, allBookables] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       BookingManager.getBooking(bookingId, tenantId, DOMAIN),
       BookableManager.getBookables(tenantId, DOMAIN),
     ]);
@@ -683,7 +683,7 @@ class PdfService {
     } = options;
 
     const [tenant, bookings, allBookables] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       BookingManager.getBookings(tenantId, bookingIds, DOMAIN),
       BookableManager.getBookables(tenantId, DOMAIN),
     ]);
@@ -795,7 +795,7 @@ class PdfService {
       throw new Error(`Unknown template type: ${templateType}`);
     }
 
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     const tenantTemplates = {
       receipt: tenant.receiptTemplate,
       invoice: tenant.invoiceTemplate,

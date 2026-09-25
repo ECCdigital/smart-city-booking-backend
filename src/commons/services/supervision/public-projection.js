@@ -74,7 +74,7 @@ const managers = () => ({
 
 async function project(tenantId, offers, passes) {
   const { TenantManager, EventManager } = managers();
-  const tenant = await TenantManager.getTenant(tenantId);
+  const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
   if (!isTenantPubliclyVisible(tenant)) {
     throw new NotFoundError("tenant_not_found", { tenantId });
   }

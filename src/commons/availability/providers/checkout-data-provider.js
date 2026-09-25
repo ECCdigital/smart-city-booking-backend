@@ -93,7 +93,7 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
           this.tenantId,
           DOMAIN,
         ),
-        TenantManager.getTenant(this.tenantId),
+        TenantManager.getTenant(this.tenantId, DOMAIN),
       ]);
 
     this.bookable = bookable;

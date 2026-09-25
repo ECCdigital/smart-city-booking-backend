@@ -8,6 +8,7 @@ const { embedMediaImages } = require("../services/media/mail-media");
 const { createSmtpTransport } = require("./transports/smtp-transport");
 const { createGraphTransport } = require("./transports/graph-transport");
 const { MAIL_HELPER_NAMES } = require("./templates/mail-helpers");
+const { DOMAIN } = require("../services/authorization/reach");
 
 Handlebars.registerPartial(
   "contactSnippet",
@@ -229,7 +230,7 @@ class MailerService {
       return viaInstance;
     }
 
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     if (tenant && tenant.useInstanceMail !== false) {
       return viaInstance;
     }

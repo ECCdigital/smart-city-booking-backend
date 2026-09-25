@@ -29,7 +29,7 @@ class ICalService {
    */
   static async getEventCal(eventID, tenantID, { includePast = false, scope }) {
     const event = await EventManager.getEvent(eventID, tenantID, scope);
-    const tenant = await TenantManager.getTenant(tenantID);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!event || (!includePast && event.isPast())) {
       throw new NotFoundError("event_not_found", { eventId: eventID });
@@ -54,7 +54,7 @@ class ICalService {
     { includePast = false, from = null, to = null, scope },
   ) {
     const events = await EventManager.getEvents(tenantID, scope);
-    const tenant = await TenantManager.getTenant(tenantID);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!events || events.length === 0) {
       return this.generateMultiEventCal([], tenant);
@@ -128,7 +128,7 @@ class ICalService {
    */
   static async getBookingCal(bookingID, tenantID, scope) {
     const booking = await BookingManager.getBooking(bookingID, tenantID, scope);
-    const tenant = await TenantManager.getTenant(tenantID);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!booking) {
       throw new Error(`Booking with ID ${bookingID} not found`);
@@ -198,7 +198,7 @@ class ICalService {
         )
       : [];
 
-    const tenant = await TenantManager.getTenant(tenantID);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     const cal = ICalService._bookingsCalendar(tenant, false);
 

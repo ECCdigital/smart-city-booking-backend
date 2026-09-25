@@ -69,7 +69,7 @@ class AvailabilityContext {
           this.tenantId,
           DOMAIN,
         ),
-        TenantManager.getTenant(this.tenantId),
+        TenantManager.getTenant(this.tenantId, DOMAIN),
       ]);
 
     this.metrics.dbQueryCount += 4;

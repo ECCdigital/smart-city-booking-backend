@@ -141,18 +141,23 @@ class TenantManager {
    * Get a specific tenant object from the database.
    *
    * @param {string} id Logical identifier of the tenant
-   * @param {{reach: string, userId?: string|null}} [scope] The reach of
-   *   a route that asks as the public (`PUBLIC`): then only a tenant with
-   *   a public projection (ADR 0003). Without one, the record.
+   * @param {{reach: string, userId?: string|null}} scope The reach of the
+   *   caller (ADR 0002); the domain says `DOMAIN`. Under `public` only a
+   *   tenant with a public projection (ADR 0003), under any other the
+   *   record.
    * @returns {Promise<Tenant|null>} A single tenant object or null
+   * @throws {Error} without a reach
    */
   static async getTenant(id, scope) {
+    if (scope?.reach === undefined) {
+      throw new Error("authorization: tenant read without a reach");
+    }
     // Under `public` the tenant the public sees (ADR 0003): a route that
     // asks as the public gets null for a tenant without a public
     // projection. Every other read - the domain's, a route's about the
     // tenant it names - is the record.
     const condition =
-      scope?.reach === REACH.PUBLIC ? publicTenantCondition() : {};
+      scope.reach === REACH.PUBLIC ? publicTenantCondition() : {};
     const rawTenant = await TenantModel.findOne({ id: id, ...condition });
     if (!rawTenant) {
       return null;

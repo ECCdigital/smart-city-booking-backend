@@ -1,6 +1,6 @@
 const bunyan = require("bunyan");
 const BookingManager = require("../../../commons/data-managers/booking-manager");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
+const AccessAppLifecycleService = require("../../../commons/services/access/access-app-lifecycle-service");
 const AccessLogService = require("../../../commons/services/access/access-log-service");
 const {
   getAccessProvider,
@@ -16,7 +16,7 @@ class AccessWebhookController {
     try {
       const { tenant, provider } = request.params;
       const accessProvider = getAccessProvider(provider);
-      const secret = await AccessWebhookController._getWebhookSecret(
+      const secret = await AccessAppLifecycleService.webhookSecretOf(
         tenant,
         provider,
       );
@@ -104,15 +104,6 @@ class AccessWebhookController {
         String(entry.externalId) === String(event.externalId),
     );
     return info?.accessPointId || null;
-  }
-
-  static async _getWebhookSecret(tenantId, provider) {
-    const tenant = await TenantManager.getTenant(tenantId);
-    const app = (tenant?.applications || []).find(
-      (a) => a.type === "access" && a.id === provider && a.active,
-    );
-
-    return app?.webhookSecret || app?.notificationSecret || null;
   }
 }
 

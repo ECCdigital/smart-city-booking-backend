@@ -276,7 +276,7 @@ class ItemCheckoutService {
     if (!parevaRows.length) return null;
 
     const app = AccessProvider.findActiveApplication(
-      await TenantManager.getTenant(this.tenantId),
+      await TenantManager.getTenant(this.tenantId, DOMAIN),
       PAREVA,
       [ACCESS_APP_TYPE],
     );

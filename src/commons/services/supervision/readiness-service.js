@@ -433,7 +433,7 @@ function evaluateReadiness({
  * @throws {NotFoundError} For an unknown tenant
  */
 async function computeReadiness(tenantId, { now = new Date() } = {}) {
-  const tenant = await TenantManager.getTenant(tenantId);
+  const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
   if (!tenant) {
     throw new NotFoundError("tenant_not_found", { id: tenantId });
   }

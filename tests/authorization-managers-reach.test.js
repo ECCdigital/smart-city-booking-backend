@@ -91,6 +91,7 @@ const READS = [
     "GroupBookingManager.getGroupBookingByBookingId",
     () => GroupBookingManager.getGroupBookingByBookingId("t1", "b1", false),
   ],
+  ["TenantManager.getTenant", () => TenantManager.getTenant("t1")],
   ["TenantManager.getTenants", () => TenantManager.getTenants()],
   ["TenantManager.countTenants", () => TenantManager.countTenants()],
   ["MediaManager.getMedia", () => MediaManager.getMedia("m1", "t1")],
@@ -115,6 +116,7 @@ describe("authorization: the managers' own condition", function () {
         [BookingModel, "findOne"],
         [GroupBookingModel, "find"],
         [TenantModel, "find"],
+        [TenantModel, "findOne"],
         [TenantModel, "countDocuments"],
         [MediaModel, "findOne"],
       ]) {

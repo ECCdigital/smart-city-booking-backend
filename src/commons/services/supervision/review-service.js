@@ -256,7 +256,7 @@ class ReviewService {
     actorUserId,
     now,
   }) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     const base = { tenantId, createdAt: now };
 
     if (action !== REVIEW_ACTIONS.SUBMIT) {

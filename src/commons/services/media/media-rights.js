@@ -176,7 +176,7 @@ async function offersHoldingAlone(media) {
  * tenant hides an offer, so only there the holders are looked up.
  */
 async function isPubliclyOut(media) {
-  const tenant = await TenantManager.getTenant(media.tenantId);
+  const tenant = await TenantManager.getTenant(media.tenantId, DOMAIN);
   const offers =
     tenant && effectiveLevelOf(tenant) === SUPERVISION_LEVELS.SUPERVISED
       ? await offersHoldingAlone(media)

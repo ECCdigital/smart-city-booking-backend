@@ -46,7 +46,7 @@ const store = {
    * @returns {Promise<Object|null>} The tenant, or null
    */
   async getTenant(tenantId) {
-    return await TenantManager.getTenant(tenantId);
+    return await TenantManager.getTenant(tenantId, DOMAIN);
   },
 
   /**

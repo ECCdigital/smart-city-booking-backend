@@ -72,7 +72,7 @@ class BookingService {
 
   static async getCancellationRefundPreview(tenantId, bookingId) {
     const [tenant, booking] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       BookingManager.getBooking(bookingId, tenantId, DOMAIN),
     ]);
 
@@ -95,7 +95,7 @@ class BookingService {
 
   static async getUserCancellationRefundPreview(tenantId, bookingId) {
     const [tenant, booking] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       BookingManager.getBooking(bookingId, tenantId, DOMAIN),
     ]);
 
@@ -161,7 +161,7 @@ class BookingService {
 
   static async getGroupCancellationRefundPreview(tenantId, groupBookingId) {
     const [tenant, groupBooking] = await Promise.all([
-      TenantManager.getTenant(tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
       GroupBookingManager.getGroupBooking(
         tenantId,
         groupBookingId,
@@ -228,7 +228,7 @@ class BookingService {
   }
 
   static async checkBookingStatus(bookingId, name, tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
 
     if (!tenant.enablePublicStatusView) {
       throw new BaseError("public_status_view_disabled", {

@@ -212,7 +212,7 @@ class TenantController {
       const user = request.user;
       const id = request.params.tenant;
 
-      const tenant = await TenantManager.getTenant(id);
+      const tenant = await TenantManager.getTenant(id, scopeOf(request));
       if (!tenant) {
         return TenantController._notFound(response, id);
       }
@@ -263,7 +263,10 @@ class TenantController {
     let isUpdate;
 
     try {
-      const existingTenant = await TenantManager.getTenant(tenant.id);
+      const existingTenant = await TenantManager.getTenant(
+        tenant.id,
+        scopeOf(request),
+      );
       isUpdate = !!(existingTenant && existingTenant.id);
     } catch (error) {
       logger.error(error);
@@ -358,7 +361,10 @@ class TenantController {
   static async updateTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = await TenantManager.getTenant(request.body.id);
+      const tenant = await TenantManager.getTenant(
+        request.body.id,
+        scopeOf(request),
+      );
       if (!tenant) {
         return TenantController._notFound(response, request.body.id);
       }
@@ -478,7 +484,10 @@ class TenantController {
         }
       });
 
-      const previousTenant = await TenantManager.getTenant(request.body.id);
+      const previousTenant = await TenantManager.getTenant(
+        request.body.id,
+        scopeOf(request),
+      );
       // Backend-owned access-app state (e.g. Salto IQ activations) is
       // neither written by a tenant update nor sent back in the answer.
       AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
@@ -510,7 +519,7 @@ class TenantController {
       const user = request.user;
       const id = request.params.tenant;
 
-      const tenant = await TenantManager.getTenant(id);
+      const tenant = await TenantManager.getTenant(id, scopeOf(request));
       if (!tenant) {
         return TenantController._notFound(response, id);
       }

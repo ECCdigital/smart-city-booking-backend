@@ -107,7 +107,10 @@ class HtmlEngine {
     }
 
     for (const bookable of bookables) {
-      const tenantObj = await TenantManager.getTenant(bookable.tenantId);
+      const tenantObj = await TenantManager.getTenant(
+        bookable.tenantId,
+        PUBLIC,
+      );
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
       // The markup is embedded on foreign websites, so every media address has
@@ -287,7 +290,7 @@ class HtmlEngine {
     let htmlOutput = '<ul class="booking-manager-list">';
 
     for (const event of events) {
-      const tenantObj = await TenantManager.getTenant(event.tenantId);
+      const tenantObj = await TenantManager.getTenant(event.tenantId, PUBLIC);
 
       let tags = "";
       event.information.tags.forEach((tag) => {

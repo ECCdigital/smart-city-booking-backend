@@ -2,6 +2,7 @@ const AccessProvider = require("./access-provider");
 const TenantManager = require("../../../data-managers/tenant-manager");
 const { createClient } = require("../clients/access-client-registry");
 const { NotFoundError } = require("../../../../errors/BaseError");
+const { DOMAIN } = require("../../authorization/reach");
 
 require("../clients");
 
@@ -38,7 +39,7 @@ class ParevaAccessProvider extends AccessProvider {
     }
 
     const rawApp = this._findActiveApplication(
-      tenantData || (await TenantManager.getTenant(tenant)),
+      tenantData || (await TenantManager.getTenant(tenant, DOMAIN)),
       PROVIDER_ID,
       [APP_TYPE],
     );
@@ -65,7 +66,10 @@ class ParevaAccessProvider extends AccessProvider {
    *   carries no `processId`
    */
   async grantAuthorization(accessPoint, bookingContext) {
-    const tenantData = await TenantManager.getTenant(bookingContext.tenant);
+    const tenantData = await TenantManager.getTenant(
+      bookingContext.tenant,
+      DOMAIN,
+    );
     const client = await this._getClient(bookingContext.tenant, tenantData);
 
     const rental = await client.startRental(accessPoint.externalId, {

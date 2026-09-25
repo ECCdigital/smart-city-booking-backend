@@ -54,7 +54,7 @@ function unique(values) {
 }
 
 async function loadTenant(tenantId) {
-  const tenant = await TenantManager.getTenant(tenantId);
+  const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
   if (!tenant) {
     throw new NotFoundError("tenant_not_found", { tenantId });
   }

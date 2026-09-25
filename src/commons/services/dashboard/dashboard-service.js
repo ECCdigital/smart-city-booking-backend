@@ -7,6 +7,7 @@ const {
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const { DOMAIN } = require("../authorization/reach");
 
 const DEFAULT_BY_BOOKABLE_LIMIT = 100;
 const MAX_BY_BOOKABLE_LIMIT = 500;
@@ -362,7 +363,7 @@ class DashboardService {
    * @param {Object} query
    */
   static async getTenantSummary(scope, tenantId, query) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     if (!tenant) {
       throw new NotFoundError("Tenant not found");
     }
