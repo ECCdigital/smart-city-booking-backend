@@ -173,14 +173,21 @@ class TenantManager {
    * a tenant is revealed that the booking does not vouch for.
    *
    * @param {string[]} ids
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): the domain says `DOMAIN`; none is a
+   *   programming error
    * @returns {Promise<Tenant[]>} The tenants that exist, in no order
    */
-  static async getTenantsByIds(ids) {
+  static async getTenantsByIds(ids, scope) {
+    const condition = TenantManager._condition(scope, {});
     const unique = [...new Set(ids)].filter(Boolean);
     if (unique.length === 0) {
       return [];
     }
-    const rawTenants = await TenantModel.find({ id: { $in: unique } });
+    const rawTenants = await TenantModel.find({
+      id: { $in: unique },
+      ...condition,
+    });
     return rawTenants.map((doc) => doc.toEntity());
   }
 

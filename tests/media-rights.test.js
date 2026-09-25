@@ -523,6 +523,63 @@ describe("media rights", function () {
     });
   });
 
+  describe("the imported medium by its legacy path", function () {
+    const LEGACY = "images/old/bild.png";
+
+    it("finds the medium as the domain, in the tenant asked, and answers it readable", async function () {
+      const byPath = sinon
+        .stub(MediaManager, "getMediaByLegacyPath")
+        .resolves(medium());
+
+      expect(
+        await outcome(
+          MediaRights.importedFileReadable(TENANT, LEGACY, anonymous),
+        ),
+      ).to.equal("m1");
+      expect(byPath.firstCall.args.slice(0, 2)).to.deep.equal([TENANT, LEGACY]);
+      expect(byPath.firstCall.args[2].reach).to.equal("domain");
+    });
+
+    it("answers null where the path names no medium", async function () {
+      sinon.stub(MediaManager, "getMediaByLegacyPath").resolves(null);
+
+      expect(
+        await MediaRights.importedFileReadable(TENANT, LEGACY, anonymous),
+      ).to.equal(null);
+    });
+
+    it("refuses the file like the file route does", async function () {
+      sinon
+        .stub(MediaManager, "getMediaByLegacyPath")
+        .resolves(medium({ visibility: "intern" }));
+
+      expect(
+        await outcome(
+          MediaRights.importedFileReadable(TENANT, LEGACY, anonymous),
+        ),
+      ).to.equal("401 unauthorized");
+      expect(
+        await outcome(
+          MediaRights.importedFileReadable(
+            TENANT,
+            LEGACY,
+            bundle(CUSTOMER, { file: "public", intern: "any" }),
+          ),
+        ),
+      ).to.equal("m1");
+    });
+
+    it("looks an instance file up without a tenant", async function () {
+      const byPath = sinon
+        .stub(MediaManager, "getMediaByLegacyPath")
+        .resolves(medium({ tenantId: null }));
+
+      await MediaRights.importedFileReadable(null, LEGACY, anonymous);
+
+      expect(byPath.firstCall.args[0]).to.equal(null);
+    });
+  });
+
   describe("the legacy file", function () {
     it("serves the public root to anyone", function () {
       expect(() =>

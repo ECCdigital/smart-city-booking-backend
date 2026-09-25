@@ -187,6 +187,7 @@ describe("authorization policy: hand cases", function () {
     expect(decide(anonymous(), "user", "readSelf")).to.equal(null);
     expect(decide(signedIn(), "user", "readSelf")).to.equal(REACH.SELF);
     expect(decide(signedIn(), "role", "readMine")).to.equal(REACH.SELF);
+    expect(decide(signedIn(), "booking", "readMine")).to.equal(REACH.SELF);
     expect(decide(signedIn(), "invitation", "respond")).to.equal(REACH.SELF);
     expect(decide(signedIn(), "tenant", "countCheck")).to.equal(REACH.SELF);
     expect(decide(instanceOwner(), "user", "readSelf")).to.equal(REACH.SELF);

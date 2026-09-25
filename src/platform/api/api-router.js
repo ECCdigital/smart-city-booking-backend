@@ -327,7 +327,7 @@ router.get(
 
 router.get(
   "/bookings/assigned",
-  authorize("booking", "read"),
+  authorize("booking", "readMine"),
   BookingController.getAssignedBookings,
 );
 

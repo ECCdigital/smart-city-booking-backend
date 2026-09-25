@@ -712,6 +712,7 @@ async function purgeLegacy({ dryRun = false } = {}) {
           const media = await MediaManager.getMediaByLegacyPath(
             scope.tenantId,
             file.legacyPath,
+            DOMAIN,
           );
 
           if (!media) {

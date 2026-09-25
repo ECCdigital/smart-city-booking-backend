@@ -209,23 +209,23 @@ class BookableManager {
   }
 
   /**
-   * Batch-load bookables with merged custom field definitions.
+   * Batch-load bookables with merged custom field definitions - a direct
+   * link each, as `getBookablesByIds`.
    * @param {string} tenantId
    * @param {string[]} ids
+   * @param {{reach: string, userId?: string|null}} scope As of `getBookable`
    * @returns {Promise<Bookable[]>}
    */
-  static async getBookablesByIdsWithCustomFields(tenantId, ids) {
+  static async getBookablesByIdsWithCustomFields(tenantId, ids, scope) {
     if (!ids?.length) return [];
 
-    const [rawBookables, defs] = await Promise.all([
-      BookableModel.find({
-        tenantId: tenantId,
-        id: { $in: ids },
-      }),
-      this.getCustomFieldDefinitions(tenantId),
-    ]);
-
-    return this._toEntitiesWithCustomFields(rawBookables, defs);
+    const defs = await this.getCustomFieldDefinitions(tenantId);
+    return BookableManager._reachedWithin(tenantId, scope, async (condition) =>
+      this._toEntitiesWithCustomFields(
+        await BookableModel.find({ tenantId, id: { $in: ids }, ...condition }),
+        defs,
+      ),
+    );
   }
 
   /**

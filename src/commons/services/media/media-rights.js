@@ -276,9 +276,8 @@ async function deletable(mediaId, tenantId, reaches) {
 }
 
 /**
- * The file of a medium already loaded (the legacy resolver finds it by its
- * old path): the receipt rule for a booking document, the visibility for
- * everything else.
+ * The file of a medium already loaded: the receipt rule for a booking
+ * document, the visibility for everything else.
  *
  * @param {Object} media
  * @param {Object} reaches - `file`, `intern`, `bookingDocument`, `userId`.
@@ -328,6 +327,31 @@ async function assertFileReadable(media, reaches) {
  */
 async function fileReadable(mediaId, tenantId, reaches) {
   const media = await load(mediaId, tenantId);
+  await assertFileReadable(media, reaches);
+  return media;
+}
+
+/**
+ * The file of an imported medium, found by the place its bytes had in the
+ * legacy tree (the resolver route `GET /files/get?name=`): the medium,
+ * readable as its file; `null` where the path names no imported medium,
+ * for the resolver to look in the old tree.
+ *
+ * @param {string|null} tenantId - The tenant, `null` on the instance.
+ * @param {string} legacyPath - Normalised legacy path.
+ * @param {Object} reaches - `file`, `intern`, `bookingDocument`, `userId`.
+ * @returns {Promise<Object|null>} The medium, or null.
+ * @throws {UnauthorizedError|ForbiddenError|NotFoundError}
+ */
+async function importedFileReadable(tenantId, legacyPath, reaches) {
+  const media = await MediaManager.getMediaByLegacyPath(
+    tenantId ?? null,
+    legacyPath,
+    DOMAIN,
+  );
+  if (!media) {
+    return null;
+  }
   await assertFileReadable(media, reaches);
   return media;
 }
@@ -393,7 +417,7 @@ module.exports = {
   updatable,
   deletable,
   fileReadable,
-  assertFileReadable,
+  importedFileReadable,
   legacyFileReadable,
   referenceable,
 };

@@ -126,9 +126,11 @@ class MediaManager {
    *
    * @param {string|null} tenantId - Tenant ID (null for instance media).
    * @param {string} legacyPath - Normalised legacy path.
+   * @param {{reach: string, userId?: string|null}} scope - As of `getMedia`.
    * @returns {Promise<Object|null>} The medium or null.
    */
-  static async getMediaByLegacyPath(tenantId, legacyPath) {
+  static async getMediaByLegacyPath(tenantId, legacyPath, scope) {
+    const reach = condition(scope);
     if (!legacyPath) {
       return null;
     }
@@ -136,6 +138,7 @@ class MediaManager {
     const rawMedia = await MediaModel.findOne({
       tenantId: tenantId ?? null,
       legacyPath,
+      ...reach,
     });
 
     return rawMedia ? rawMedia.toEntity() : null;

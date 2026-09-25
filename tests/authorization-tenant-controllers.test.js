@@ -31,7 +31,6 @@ const MembershipManager = require("../src/commons/data-managers/membership-manag
 const { RoleManager } = require("../src/commons/data-managers/role-manager");
 const ChallengeManager = require("../src/commons/data-managers/challenge-manager");
 const BookingService = require("../src/commons/services/checkout/booking-service");
-const WorkflowService = require("../src/commons/services/workflow/workflow-service");
 const { ForbiddenError, NotFoundError } = require("../src/errors/BaseError");
 const { Role } = require("../src/commons/entities/role/role");
 const { Booking } = require("../src/commons/entities/booking/booking");
@@ -162,6 +161,7 @@ describe("tenant controllers on the reach", function () {
         "b1",
         "t1",
         { reach: "own", userId: "erika" },
+        { populate: true },
       ]);
     });
 
@@ -401,20 +401,21 @@ describe("tenant controllers on the reach", function () {
     });
   });
 
-  it("populates a booking it found under own", async function () {
-    sinon
+  it("asks the manager to populate a booking it found under own", async function () {
+    const getBooking = sinon
       .stub(BookingManager, "getBooking")
       .resolves({ id: "b1", tenantId: "t1", bookableItems: [] });
-    sinon
-      .stub(BookableManager, "getBookablesByIdsWithCustomFields")
-      .resolves([]);
-    sinon.stub(WorkflowService, "getWorkflowStatusMap").resolves(new Map());
     const res = response();
     await BookingController.getBooking(
       request({ reach: "own", principal: customer, params: { id: "b1" } }),
       res,
     );
     expect(res.statusCode).to.equal(200);
-    expect(res.body._populated).to.have.property("workflowStatus");
+    expect(getBooking.firstCall.args).to.deep.equal([
+      "b1",
+      "t1",
+      { reach: "own", userId: customer.userId },
+      { populate: true },
+    ]);
   });
 });

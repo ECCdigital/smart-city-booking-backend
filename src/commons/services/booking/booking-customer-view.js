@@ -71,7 +71,7 @@ async function customerViewOf(bookings) {
   const eventRefs = bookings.map(eventRefOf).filter(Boolean);
 
   const [tenants, events] = await Promise.all([
-    TenantManager.getTenantsByIds(tenantIds),
+    TenantManager.getTenantsByIds(tenantIds, DOMAIN),
     eventRefs.length ? EventManager.getEventsByIds(eventRefs, DOMAIN) : [],
   ]);
 

@@ -30,26 +30,9 @@ class InvitationController {
     try {
       const user = request.user;
 
-      const invitations = await InvitationService.getPendingInvitationsForUser(
-        user.id,
-      );
+      const invitations = await InvitationService.getMyInvitations(user.id);
 
-      // The tenants the invitations name, whatever their level: the
-      // invitation vouches for its tenant's name.
-      const tenant = await TenantManager.getTenantsByIds(
-        invitations.map((invitation) => invitation.tenantId),
-      );
-
-      const invitationsWithTenantNames = invitations.map((invitation) => {
-        return {
-          token: invitation.token,
-          tenantId: invitation.tenantId,
-          tenantName:
-            tenant.find((t) => t.id === invitation.tenantId)?.name || "",
-        };
-      });
-
-      response.status(200).send(invitationsWithTenantNames);
+      response.status(200).send(invitations);
     } catch (error) {
       logger.error(error);
       response

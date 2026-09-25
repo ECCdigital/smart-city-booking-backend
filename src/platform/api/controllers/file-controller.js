@@ -1,7 +1,6 @@
 const bunyan = require("bunyan");
 const mime = require("mime-types");
 
-const MediaManager = require("../../../commons/data-managers/media-manager");
 const MediaService = require("../../../commons/services/media/media-service");
 const {
   NextcloudManager,
@@ -21,7 +20,7 @@ const {
   normaliseLegacyPath,
 } = require("../../../commons/services/media/legacy-path");
 const {
-  assertFileReadable,
+  importedFileReadable,
   legacyFileReadable,
 } = require("../../../commons/services/media/media-rights");
 const { reachesOf } = require("../../../commons/services/authorization");
@@ -233,13 +232,13 @@ class FileController {
     try {
       legacyPath = FileController._requireLegacyPath(request);
 
-      const media = await MediaManager.getMediaByLegacyPath(
+      const media = await importedFileReadable(
         tenantId,
         legacyPath,
+        reachesOf(request),
       );
 
       if (media) {
-        await assertFileReadable(media, reachesOf(request));
         return await FileController._sendMedia(request, response, next, media);
       }
 

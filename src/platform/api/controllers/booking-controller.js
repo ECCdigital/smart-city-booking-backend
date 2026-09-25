@@ -67,51 +67,6 @@ function bookingFromRequest(body = {}) {
  * Web Controller for Bookings.
  */
 class BookingController {
-  static _resolvePrimaryBookableId(booking) {
-    if (booking.bookableId) {
-      return booking.bookableId;
-    }
-
-    return booking.bookableItems?.[0]?.bookableId ?? null;
-  }
-
-  static async _populate(bookings) {
-    if (!bookings.length) {
-      return;
-    }
-
-    const tenantId = bookings[0].tenantId;
-    const bookableIds = [
-      ...new Set(
-        bookings
-          .map((booking) =>
-            BookingController._resolvePrimaryBookableId(booking),
-          )
-          .filter(Boolean),
-      ),
-    ];
-
-    const [bookables, workflowStatusMap] = await Promise.all([
-      BookableManager.getBookablesByIdsWithCustomFields(tenantId, bookableIds),
-      WorkflowService.getWorkflowStatusMap(tenantId),
-    ]);
-
-    const bookableById = new Map(
-      bookables.map((bookable) => [bookable.id, bookable]),
-    );
-
-    for (const booking of bookings) {
-      const bookableId = BookingController._resolvePrimaryBookableId(booking);
-      booking._populated = {
-        bookable: bookableId ? bookableById.get(bookableId) ?? null : null,
-        workflowStatus: WorkflowService.resolveWorkflowStatus(
-          workflowStatusMap,
-          booking.id,
-        ),
-      };
-    }
-  }
-
   /** Answers the 404 of a booking that is not there for this request. */
   static _notFound(response, bookingId) {
     return ApiResponse.fail(
@@ -176,11 +131,8 @@ class BookingController {
       const allowedBookings = await BookingManager.getTenantBookings(
         tenant,
         scopeOf(request),
+        { populate: request.query.populate === "true" },
       );
-
-      if (request.query.populate === "true") {
-        await BookingController._populate(allowedBookings);
-      }
 
       logger.info(
         `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
@@ -206,16 +158,15 @@ class BookingController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const filter = tenant ? { tenantId: tenant } : {};
-
-      const bookings = await BookingManager.getAssignedBookings({
-        userID: request.principal.userId,
-        filter,
-      });
-
-      if (request.query.populate === "true") {
-        await BookingController._populate(bookings);
-      }
+      // "My bookings" is the domain's read by the user (`self` reaches no
+      // record, ticket 22).
+      const bookings = await BookingService.getAssignedBookings(
+        request.principal.userId,
+        {
+          tenantId: tenant ?? null,
+          populate: request.query.populate === "true",
+        },
+      );
 
       // The tenant snapshot and the event core data a customer's pages
       // render from (tenant supervision spec §5.2), whatever the level of
@@ -361,12 +312,11 @@ class BookingController {
           id,
           tenantId,
           scopeOf(request),
+          { populate: true },
         );
         if (!booking) {
           return BookingController._notFound(response, id);
         }
-
-        await BookingController._populate([booking]);
         logger.info(`${tenantId} -- sending booking ${id} to user ${user?.id}`);
         response.status(200).send(booking);
       } else {

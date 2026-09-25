@@ -196,16 +196,20 @@ class GroupBookingManager {
    * @param {string} tenantId Tenant ID
    * @param {string[]} bookingIds Array of booking IDs
    * @param {boolean} populate Whether to populate bookings
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002); none is a programming error
    * @returns {Promise<GroupBooking[]>} Array of group bookings
    */
   static async getGroupBookingsByBookingIds(
     tenantId,
     bookingIds,
     populate = false,
+    scope,
   ) {
     let query = GroupBookingModel.find({
       tenantId: tenantId,
       bookingIds: { $in: bookingIds },
+      ...condition(scope),
     });
 
     if (populate) {

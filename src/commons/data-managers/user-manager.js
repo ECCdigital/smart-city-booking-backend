@@ -5,6 +5,7 @@ const UserModel = require("./models/userModel");
 const MembershipManager = require("./membership-manager");
 const TenantManager = require("./tenant-manager");
 const { escapeRegex } = require("../utilities/regex-utils");
+const { DOMAIN } = require("../services/authorization/reach");
 const {
   supervisionOf,
 } = require("../services/supervision/supervision-constants");
@@ -333,6 +334,7 @@ class UserManager {
     // one without a stored level.
     const tenants = await TenantManager.getTenantsByIds(
       tenantPermissions.map((permission) => permission.tenantId),
+      DOMAIN,
     );
     for (const permission of tenantPermissions) {
       Object.assign(

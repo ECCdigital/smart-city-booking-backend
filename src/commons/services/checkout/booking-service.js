@@ -411,6 +411,46 @@ class BookingService {
   }
 
   /**
+   * The one group some bookings form, for an aggregated payment: its id,
+   * or null where they form none or more than one.
+   *
+   * @param {string} tenantId
+   * @param {string[]} bookingIds
+   * @returns {Promise<string|null>}
+   */
+  static async getGroupBookingIdOf(tenantId, bookingIds) {
+    const groups = await GroupBookingManager.getGroupBookingsByBookingIds(
+      tenantId,
+      bookingIds,
+      false,
+      DOMAIN,
+    );
+    return groups.length === 1 ? groups[0].id : null;
+  }
+
+  /**
+   * "My bookings" (`booking.readMine`, reach `self`): the bookings assigned
+   * to the user, read by the domain by the user - in one tenant or across
+   * all. No record of anyone else is in reach, so the route's reach does
+   * not narrow the read.
+   *
+   * @param {string} userId
+   * @param {Object} [options]
+   * @param {string|null} [options.tenantId=null] The tenant, or every one
+   * @param {boolean} [options.populate=false] Carry the primary bookable
+   *   and the workflow status of each booking as `_populated`
+   * @returns {Promise<Booking[]>}
+   */
+  static async getAssignedBookings(
+    userId,
+    { tenantId = null, populate = false } = {},
+  ) {
+    return await BookingManager.getAssignedBookings(userId, tenantId, DOMAIN, {
+      populate,
+    });
+  }
+
+  /**
    * The booking a hook names, for the hook routes (`tokenAuthorized`: the
    * hook's secret is the authorization, the domain reads for it).
    *

@@ -519,6 +519,28 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       admin: 200,
       foreignOwner: 404,
     }),
+    // "My bookings" is the principal's own (`self`): every signed-in user
+    // gets theirs, in the tenant and across the tenants, a stranger to the
+    // tenant included - the domain reads them by the user, no record of
+    // anyone else is in reach (ticket 22).
+    row("get", inA("/bookings/assigned"), {
+      anonymous: 401,
+      customer: [],
+      reader: [],
+      staff: [],
+      owner: [],
+      admin: [],
+      foreignOwner: [],
+    }),
+    row("get", "/api/bookings/assigned", {
+      anonymous: 401,
+      customer: [],
+      reader: [],
+      staff: [],
+      owner: [],
+      admin: [],
+      foreignOwner: [],
+    }),
     // Deleting a booking is the administration's alone, own or not.
     row("delete", inA(`/bookings/${FX}`), {
       anonymous: 401,

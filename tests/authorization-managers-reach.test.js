@@ -158,6 +158,28 @@ const READS = [
     "MediaManager.getBookingDocuments",
     () => MediaManager.getBookingDocuments("t1", "b1"),
   ],
+  // The reads the platform called without a reach until ticket 24: they
+  // moved into the domain and take the scope like every other.
+  [
+    "BookingManager.getAssignedBookings",
+    () => BookingManager.getAssignedBookings("u1", "t1"),
+  ],
+  [
+    "BookableManager.getBookablesByIdsWithCustomFields",
+    () => BookableManager.getBookablesByIdsWithCustomFields("t1", ["b1"]),
+  ],
+  [
+    "GroupBookingManager.getGroupBookingsByBookingIds",
+    () => GroupBookingManager.getGroupBookingsByBookingIds("t1", ["b1"], false),
+  ],
+  [
+    "TenantManager.getTenantsByIds",
+    () => TenantManager.getTenantsByIds(["t1"]),
+  ],
+  [
+    "MediaManager.getMediaByLegacyPath",
+    () => MediaManager.getMediaByLegacyPath("t1", "old/bild.png"),
+  ],
 ];
 
 describe("authorization: the managers' own condition", function () {

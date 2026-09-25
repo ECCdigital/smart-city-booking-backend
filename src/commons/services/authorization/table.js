@@ -120,6 +120,9 @@ const TABLE = {
 
   booking: {
     read: { own: "signedIn", any: "manageBookings.readAny" },
+    // "My bookings": the signed-in user's own, read by the domain by the
+    // user - no record of anyone else is in reach (ticket 22).
+    readMine: { self: "signedIn" },
     list: { public: true, own: "signedIn", any: "manageBookings.readAny" },
     lookup: { public: true },
     document: { own: "signedIn", any: "manageBookings.readAny" },

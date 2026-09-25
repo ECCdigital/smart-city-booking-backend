@@ -115,6 +115,7 @@ async function importTree({ tenantId, root, report, dryRun }) {
       const existing = await MediaManager.getMediaByLegacyPath(
         tenantId,
         file.legacyPath,
+        DOMAIN,
       );
 
       if (existing) {
@@ -214,6 +215,7 @@ async function importBookingDocuments({ dryRun = false } = {}) {
           const existing = await MediaManager.getMediaByLegacyPath(
             tenant.id,
             file.legacyPath,
+            DOMAIN,
           );
 
           if (existing) {
@@ -287,6 +289,7 @@ async function resolveStoredAddress(value, tenantId) {
   const media = await MediaManager.getMediaByLegacyPath(
     tenantId,
     legacy.legacyPath,
+    DOMAIN,
   );
 
   if (!media) {
