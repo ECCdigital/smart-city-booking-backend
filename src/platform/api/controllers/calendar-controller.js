@@ -97,6 +97,13 @@ class CalendarController {
   /**
    * Primary availability endpoint (V2 engine, shared availability-rules).
    *
+   * The three availability routes (V2 and its alias, V1, block periods)
+   * hand the reach of the request on: the service reads the bookable of
+   * the route with it (ADR 0002) and throws `bookable_not_found` for one
+   * out of reach - the public's 404 for an offer it cannot reach (ADR
+   * 0003) - which the handlers map to `404` here. The handlers read
+   * nothing themselves.
+   *
    * @example
    * // GET /api/<tenant>/bookables/<bookableId>/availability?amount=1&startDate=2022-01-01&endDate=2022-01-07
    */
@@ -131,7 +138,6 @@ class CalendarController {
     }
 
     try {
-      await CalendarController.#assertWithinReach(request, tenant, bookableId);
       const result = await BlockPeriodService.getAvailableBlockPeriods(
         String(tenant),
         String(bookableId).trim(),
@@ -139,6 +145,7 @@ class CalendarController {
         endDateQuery,
         Number(amount),
         user,
+        scopeOf(request),
       );
 
       response.status(200).send(result);
@@ -198,7 +205,6 @@ class CalendarController {
     );
 
     try {
-      await CalendarController.#assertWithinReach(request, tenant, bookableId);
       const availability = await CalendarService.checkAvailability(
         String(tenant),
         String(bookableId).trim(),
@@ -206,6 +212,7 @@ class CalendarController {
         endDateQuery,
         Number(amount),
         user,
+        scopeOf(request),
       );
 
       response.status(200).send(availability);
@@ -218,29 +225,6 @@ class CalendarController {
       }
       console.error(error);
       response.status(500).send({ error: "Internal server error" });
-    }
-  }
-
-  /**
-   * The bookable of the route within the reach of the request (ADR 0002):
-   * what the public reaches by a direct link (ADR 0003), or the 404 that
-   * names no reason (spec §5.2). The availability itself the domain
-   * computes over the bookable and its dependents.
-   *
-   * @throws {NotFoundError} `bookable_not_found`, or the projection's
-   *   `tenant_not_found`
-   */
-  static async #assertWithinReach(request, tenant, bookableId) {
-    const bookable = await BookableManager.getBookable(
-      String(bookableId).trim(),
-      String(tenant),
-      scopeOf(request),
-    );
-    if (!bookable) {
-      throw new NotFoundError("bookable_not_found", {
-        bookableId,
-        tenantId: tenant,
-      });
     }
   }
 
@@ -276,7 +260,6 @@ class CalendarController {
     }
 
     try {
-      await CalendarController.#assertWithinReach(request, tenant, bookableId);
       const availability = await CalendarServiceV2.checkAvailability(
         String(tenant),
         String(bookableId).trim(),
@@ -284,6 +267,7 @@ class CalendarController {
         endDateQuery,
         Number(amount),
         user,
+        scopeOf(request),
       );
 
       CalendarController.#setV2ResponseHeaders(response);

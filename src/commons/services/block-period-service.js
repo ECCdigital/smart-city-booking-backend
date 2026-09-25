@@ -8,7 +8,6 @@ const { ContextDataProvider } = require("../availability/providers");
 const checkWindowAvailabilityModule = require("../availability/check-window-availability");
 const { ItemCheckoutService } = require("./checkout/item-checkout-service");
 const { NotFoundError, BadRequestError } = require("../../errors/BaseError");
-const { DOMAIN } = require("./authorization/reach");
 
 class BlockPeriodService {
   static MAX_RANGE_DAYS = 62;
@@ -19,8 +18,14 @@ class BlockPeriodService {
    * @param {string|number|Date|null|undefined} start
    * @param {string|number|Date|null|undefined} end
    * @param {number} amount
-   * @param {string|{ id: string }|null|undefined} user
+   * @param {string|{ id: string }|null|undefined} user The one booking
+   *   (permissions, quotas), never the reach
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   bookable of the route is read under (ADR 0002); a bookable out of
+   *   reach is `bookable_not_found`
    * @returns {Promise<{ title: string, blockPeriods: Object[] }>}
+   * @throws {NotFoundError} `bookable_not_found`, or the public
+   *   projection's `tenant_not_found`
    */
   static async getAvailableBlockPeriods(
     tenantId,
@@ -29,11 +34,12 @@ class BlockPeriodService {
     end,
     amount,
     user,
+    scope,
   ) {
     const bookable = await BookableManager.getBookable(
       bookableId,
       tenantId,
-      DOMAIN,
+      scope,
     );
 
     if (!bookable) {
@@ -81,6 +87,7 @@ class BlockPeriodService {
       bookableId,
       timeBegin,
       timeEnd,
+      scope,
     );
     const provider = new ContextDataProvider(context);
 

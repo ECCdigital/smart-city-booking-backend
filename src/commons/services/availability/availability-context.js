@@ -8,6 +8,18 @@ const {
 } = require("../../availability/availability-rules/booking-amount");
 const { DOMAIN } = require("../authorization/reach");
 
+/**
+ * The records an availability check reads, loaded once per request.
+ *
+ * The reach applies to the bookable of the route (ADR 0002): the bookable
+ * and, for a ticket, its event are read with the scope the caller hands
+ * in - the public's for a public route, so an offer the public cannot
+ * reach is not there (ADR 0003) and the service answers
+ * `bookable_not_found`. Everything the bookable depends on - its parents,
+ * the related bookables, the tenant and the bookings - the domain reads
+ * (`DOMAIN`): the same boundary as `CheckoutDataProvider.load`. The scope
+ * is required; without one the manager throws, as everywhere.
+ */
 class AvailabilityContext {
   /**
    * @param {Object} params
@@ -15,12 +27,15 @@ class AvailabilityContext {
    * @param {string} params.bookableId
    * @param {number} params.timeBegin
    * @param {number} params.timeEnd
+   * @param {{reach: string, userId?: string|null}} params.scope The reach
+   *   the bookable and its event are read under
    */
-  constructor({ tenantId, bookableId, timeBegin, timeEnd }) {
+  constructor({ tenantId, bookableId, timeBegin, timeEnd, scope }) {
     this.tenantId = tenantId;
     this.bookableId = bookableId;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
+    this.scope = scope;
 
     this.bookable = null;
     this.parentBookables = [];
@@ -42,14 +57,17 @@ class AvailabilityContext {
    * @param {string} bookableId
    * @param {number} timeBegin
    * @param {number} timeEnd
+   * @param {{reach: string, userId?: string|null}} scope The reach of the
+   *   route, or `DOMAIN`
    * @returns {Promise<AvailabilityContext>}
    */
-  static async create(tenantId, bookableId, timeBegin, timeEnd) {
+  static async create(tenantId, bookableId, timeBegin, timeEnd, scope) {
     const context = new AvailabilityContext({
       tenantId,
       bookableId,
       timeBegin,
       timeEnd,
+      scope,
     });
     await context.load();
     return context;
@@ -58,7 +76,7 @@ class AvailabilityContext {
   async load() {
     const [bookable, parentBookables, relatedBookables, tenant] =
       await Promise.all([
-        BookableManager.getBookable(this.bookableId, this.tenantId, DOMAIN),
+        BookableManager.getBookable(this.bookableId, this.tenantId, this.scope),
         BookableManager.getAncestorBookables(
           this.bookableId,
           this.tenantId,
@@ -127,7 +145,9 @@ class AvailabilityContext {
 
     if (bookable?.type === BOOKABLE_TYPES.TICKET && bookable?.eventId) {
       const [event, eventBookings] = await Promise.all([
-        EventManager.getEvent(bookable.eventId, this.tenantId, DOMAIN),
+        // The event of the ticket within the same reach: what the public
+        // reaches, or the bookable would not have been.
+        EventManager.getEvent(bookable.eventId, this.tenantId, this.scope),
         BookingManager.getEventBookings(
           this.tenantId,
           bookable.eventId,
