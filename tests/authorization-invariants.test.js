@@ -169,10 +169,10 @@ describe("authorization invariants: the order of the routers", function () {
     sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
     // The markers load the principal; an instance owner passes every route,
     // so the order of the routes is what these two tests read.
-    sinon.stub(UserManager, "getUserPermissions").resolves({
-      tenants: [],
+    sinon.stub(UserManager, "getMembershipPicture").resolves({
       instanceOwner: true,
-      allowCreateTenant: false,
+      mayCreateTenant: false,
+      memberships: [],
     });
   });
 
@@ -258,18 +258,22 @@ describe("authorization invariants: the management gate of a declined tenant", f
    * gone, included: owner, manager or plain. Each membership carries the
    * supervision of its tenant, as the sign-in answer does.
    */
-  function permissionsOf(userId) {
+  function pictureOf(userId) {
     const membership = (tenantId) => ({
       tenantId,
       isOwner: userId === "owner",
-      manageBookables: userId === "manager" ? { readAny: true } : {},
-      manageBookings: userId === "manager" ? { updateAny: true } : {},
-      ...supervisionOf(tenants[tenantId] ?? null),
+      supervision: supervisionOf(tenants[tenantId] ?? null),
+      grants: {
+        manageBookables: userId === "manager" ? { readAny: true } : {},
+        manageBookings: userId === "manager" ? { updateAny: true } : {},
+      },
+      adminInterfaces: [],
+      freeBookings: false,
     });
     return {
-      tenants: [...Object.keys(tenants), "t-unknown"].map(membership),
       instanceOwner: userId === "admin",
-      allowCreateTenant: false,
+      mayCreateTenant: false,
+      memberships: [...Object.keys(tenants), "t-unknown"].map(membership),
     };
   }
 
@@ -310,8 +314,8 @@ describe("authorization invariants: the management gate of a declined tenant", f
     }));
     sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
     sinon
-      .stub(UserManager, "getUserPermissions")
-      .callsFake(async (id) => permissionsOf(id));
+      .stub(UserManager, "getMembershipPicture")
+      .callsFake(async (id) => pictureOf(id));
     sinon
       .stub(TenantManager, "getTenant")
       .callsFake(async (id) => tenants[id] ?? null);

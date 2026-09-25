@@ -160,7 +160,7 @@ describe("MediaControllerV2", function () {
   // than stubbing the authorization, so the real rules run.
   let instance;
   let membership;
-  let permissions;
+  let picture;
 
   // The usage proof is searched over the entities, which no unit test holds —
   // tests that care about it set these lists. `publicUsage` is the half of it
@@ -170,15 +170,15 @@ describe("MediaControllerV2", function () {
 
   /**
    * The principal of a request, built from the same three sources the tests
-   * set (`instance`, `membership`, `permissions`) that the real loader reads.
+   * set (`instance`, `membership`, `picture`) that the real loader reads.
    */
   function createPrincipal(user) {
-    const tenantPermissions = permissions.tenants.find(
-      (entry) => entry.tenantId === TENANT,
+    const entry = picture.memberships.find(
+      (membership) => membership.tenantId === TENANT,
     );
     const grants = {};
     for (const group of ROLE_GROUPS) {
-      grants[group] = { ...(tenantPermissions?.[group] || {}) };
+      grants[group] = { ...(entry?.grants?.[group] || {}) };
     }
 
     return {
@@ -264,7 +264,7 @@ describe("MediaControllerV2", function () {
 
     instance = { ownerUserIds: [] };
     membership = null;
-    permissions = { tenants: [], instanceOwner: false };
+    picture = { instanceOwner: false, mayCreateTenant: false, memberships: [] };
     usage = [];
     publicUsage = [];
 
@@ -273,8 +273,8 @@ describe("MediaControllerV2", function () {
       .stub(InstanceManager, "getInstance")
       .callsFake(async () => instance);
     sandbox
-      .stub(UserManager, "getUserPermissions")
-      .callsFake(async () => permissions);
+      .stub(UserManager, "getMembershipPicture")
+      .callsFake(async () => picture);
     sandbox
       .stub(MediaUsageService, "findUsage")
       .callsFake(async () => usage.map((site) => ({ ...site })));
@@ -291,23 +291,28 @@ describe("MediaControllerV2", function () {
    * Grants role permissions in the tenant, e.g. `{ manageMedia: { create: true } }`.
    */
   function grant(dimensions) {
-    permissions = {
-      tenants: [
+    picture = {
+      instanceOwner: false,
+      mayCreateTenant: false,
+      memberships: [
         {
           tenantId: TENANT,
           isOwner: false,
+          supervision: { supervisionLevel: "free" },
+          grants: {
+            manageMedia: { ...NO_ACTIONS },
+            manageBookings: { ...NO_ACTIONS },
+            ...Object.fromEntries(
+              Object.entries(dimensions).map(([name, actions]) => [
+                name,
+                { ...NO_ACTIONS, ...actions },
+              ]),
+            ),
+          },
           adminInterfaces: [],
-          manageMedia: { ...NO_ACTIONS },
-          manageBookings: { ...NO_ACTIONS },
-          ...Object.fromEntries(
-            Object.entries(dimensions).map(([name, actions]) => [
-              name,
-              { ...NO_ACTIONS, ...actions },
-            ]),
-          ),
+          freeBookings: false,
         },
       ],
-      instanceOwner: false,
     };
   }
 

@@ -264,112 +264,144 @@ class UserManager {
     return rawUser.toEntity();
   }
 
-  static async getUserPermissions(userId) {
-    const tenantPermissions = [];
+  /**
+   * The membership picture of a user (glossary "Mitgliedschaftsbild", ADR
+   * 0004): loaded once per user, what the principal of the authorization
+   * and the sign-in answer are built from. The instance flags, and per
+   * active membership the tenant, the owner flag, the supervision of the
+   * tenant (a tenant whose document is gone reads as one without a stored
+   * level), the role levels merged over the role catalogue and the two
+   * extras of the roles. Two memberships in one tenant merge into one
+   * entry. The instance, the memberships, the roles of a tenant and the
+   * tenants are read once each; roles are configuration (ticket 22/4).
+   *
+   * @param {string} userId
+   * @returns {Promise<{instanceOwner: boolean, mayCreateTenant: boolean, memberships: Array<{tenantId: string, isOwner: boolean, supervision: {supervisionLevel: string, supervisionChangedAt: Date|null, supervisionReason: string|null}, grants: Object<string, Object<string, boolean>>, adminInterfaces: string[], freeBookings: boolean}>}>}
+   */
+  static async getMembershipPicture(userId) {
     const instance = await InstanceManager.getInstance(false);
-    const memberships = await MembershipManager.getMembershipsByUserID(userId);
-    const filteredMemberschips = memberships.filter(
-      (m) => m.status === "active",
-    );
+    const memberships = (
+      await MembershipManager.getMembershipsByUserID(userId)
+    ).filter((m) => m.status === "active");
 
-    for (const membership of filteredMemberschips) {
-      let tenantUserRef = {
-        userId: userId,
-        roles: membership.roles,
-      };
-
-      let workingPermission = tenantPermissions.find(
-        (p) => p.tenantId === membership.tenantId,
-      );
-      if (!workingPermission) {
-        workingPermission = {
+    const entries = [];
+    for (const membership of memberships) {
+      let entry = entries.find((e) => e.tenantId === membership.tenantId);
+      if (!entry) {
+        entry = {
           tenantId: membership.tenantId,
           isOwner: membership.owner,
+          supervision: null,
+          grants: Object.fromEntries(ROLE_GROUPS.map((group) => [group, {}])),
           adminInterfaces: [],
           freeBookings: false,
-          ...Object.fromEntries(ROLE_GROUPS.map((group) => [group, {}])),
         };
-        tenantPermissions.push(workingPermission);
+        entries.push(entry);
       }
-
       const roles = await RoleManager.getRolesByIds(
-        tenantUserRef.roles,
+        membership.roles,
         membership.tenantId,
       );
-
       for (const role of roles) {
-        mergeRoleIntoPermission(workingPermission, role);
-      }
-
-      if (workingPermission.isOwner) {
-        workingPermission.adminInterfaces = [
-          ...new Set([
-            ...workingPermission.adminInterfaces,
-            "tenants",
-            "users",
-            "locations",
-            "roles",
-            "bookings",
-            "coupons",
-            "rooms",
-            "resources",
-            "tickets",
-            "events",
-            "media",
-          ]),
-        ];
+        mergeRoleInto(entry, role);
       }
     }
 
-    // The supervision of every tenant of the user (tenant supervision spec
-    // §6.1): one query, so a client can mark a declined or waiting tenant
-    // before its first request. A tenant whose document is gone reads as
-    // one without a stored level.
     const tenants = await TenantManager.getTenantsByIds(
-      tenantPermissions.map((permission) => permission.tenantId),
+      entries.map((entry) => entry.tenantId),
       DOMAIN,
     );
-    for (const permission of tenantPermissions) {
-      Object.assign(
-        permission,
-        supervisionOf(tenants.find((t) => t.id === permission.tenantId)),
+    for (const entry of entries) {
+      entry.supervision = supervisionOf(
+        tenants.find((t) => t.id === entry.tenantId),
       );
     }
 
-    const permissions = {
-      tenants: tenantPermissions,
-      allowCreateTenant: false,
-      instanceOwner: instance.ownerUserIds.includes(userId),
+    const isInstanceOwner = instance.ownerUserIds.includes(userId);
+    return {
+      instanceOwner: isInstanceOwner,
+      mayCreateTenant:
+        isInstanceOwner ||
+        instance.allowAllUsersToCreateTenant === true ||
+        instance.allowedUsersToCreateTenant.includes(userId),
+      memberships: entries,
     };
-    if (
-      instance.allowAllUsersToCreateTenant ||
-      instance.allowedUsersToCreateTenant.includes(userId) ||
-      instance.ownerUserIds.includes(userId)
-    ) {
-      permissions.allowCreateTenant = true;
-    }
+  }
 
-    return permissions;
+  /**
+   * The sign-in answer (`/auth/signin`, `/auth/me`, the SSO and the card
+   * sign-in): a projection of the membership picture, never its source
+   * (ADR 0004). Per tenant the owner flag, the admin interfaces (an owner
+   * gets every one), `freeBookings`, the role levels written out by group
+   * and the supervision of the tenant (tenant supervision spec §6.1). A
+   * declined tenant shows every flag here; only the principal lets the
+   * membership rest (#299, Q12).
+   *
+   * @param {string} userId
+   * @returns {Promise<Object>}
+   */
+  static async getUserPermissions(userId) {
+    return signInPermissionsOf(await UserManager.getMembershipPicture(userId));
   }
 }
 
-function mergeRoleIntoPermission(workingPermission, role) {
-  workingPermission.adminInterfaces = [
-    ...new Set([...workingPermission.adminInterfaces, ...role.adminInterfaces]),
+/** The admin interfaces every tenant owner sees, whatever the roles say. */
+const OWNER_INTERFACES = Object.freeze([
+  "tenants",
+  "users",
+  "locations",
+  "roles",
+  "bookings",
+  "coupons",
+  "rooms",
+  "resources",
+  "tickets",
+  "events",
+  "media",
+]);
+
+/**
+ * The sign-in answer from the membership picture: see `getUserPermissions`.
+ *
+ * @param {Object} picture - The answer of `getMembershipPicture`.
+ * @returns {Object}
+ */
+function signInPermissionsOf(picture) {
+  return {
+    tenants: picture.memberships.map((membership) => ({
+      tenantId: membership.tenantId,
+      isOwner: membership.isOwner,
+      adminInterfaces: membership.isOwner
+        ? [...new Set([...membership.adminInterfaces, ...OWNER_INTERFACES])]
+        : [...membership.adminInterfaces],
+      freeBookings: membership.freeBookings,
+      ...Object.fromEntries(
+        ROLE_GROUPS.map((group) => [group, { ...membership.grants[group] }]),
+      ),
+      ...membership.supervision,
+    })),
+    allowCreateTenant: picture.mayCreateTenant,
+    instanceOwner: picture.instanceOwner,
+  };
+}
+
+/**
+ * Merges a role into an entry of the membership picture: a level a role
+ * grants stays granted, the extras union (`adminInterfaces`) and or
+ * (`freeBookings`).
+ */
+function mergeRoleInto(entry, role) {
+  entry.adminInterfaces = [
+    ...new Set([...entry.adminInterfaces, ...role.adminInterfaces]),
   ];
+  entry.freeBookings ||= role.freeBookings;
 
-  workingPermission.freeBookings ||= role.freeBookings;
-
-  for (const dimension of ROLE_GROUPS) {
-    if (!workingPermission[dimension]) {
-      workingPermission[dimension] = {};
-    }
-    if (!role[dimension]) {
+  for (const group of ROLE_GROUPS) {
+    if (!role[group]) {
       continue;
     }
-
-    for (const action of ROLE_LEVELS) {
-      workingPermission[dimension][action] ||= role[dimension][action];
+    for (const level of ROLE_LEVELS) {
+      entry.grants[group][level] ||= role[group][level];
     }
   }
 }

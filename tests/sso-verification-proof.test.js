@@ -56,7 +56,11 @@ describe("SSO verification proof", function () {
       updates.push(user);
       return user;
     });
-    sinon.stub(UserManager, "getUserPermissions").resolves([]);
+    sinon.stub(UserManager, "getMembershipPicture").resolves({
+      instanceOwner: false,
+      mayCreateTenant: false,
+      memberships: [],
+    });
   });
 
   afterEach(function () {

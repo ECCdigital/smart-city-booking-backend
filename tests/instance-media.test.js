@@ -192,9 +192,11 @@ describe("instance media", function () {
     sandbox
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ status: "active", owner: true });
-    sandbox
-      .stub(UserManager, "getUserPermissions")
-      .resolves({ tenants: [], instanceOwner: false });
+    sandbox.stub(UserManager, "getMembershipPicture").resolves({
+      instanceOwner: false,
+      mayCreateTenant: false,
+      memberships: [],
+    });
     sandbox.stub(MediaUsageService, "findUsage").resolves([]);
   });
 

@@ -1,10 +1,12 @@
 /**
  * The principal (glossary "Prinzipal"): who makes a request, as one value
  * loaded once per request. The one place of the module that reads: it
- * reuses `UserManager.getUserPermissions`, which already feeds the signin
- * answer with the merged role levels of every active membership, the
- * instance ownership, the tenant-creation setting and the supervision of
- * every tenant of the user.
+ * takes the membership picture (glossary "Mitgliedschaftsbild", ADR 0004)
+ * of `UserManager.getMembershipPicture` - the instance ownership, the
+ * tenant-creation setting and, per active membership, the owner flag, the
+ * role levels merged over the role catalogue and the supervision of the
+ * tenant. The sign-in answer is a projection of the same picture, never
+ * the principal's source.
  *
  * The declined tenant (glossary "Abweisung") is decided here, once: the
  * membership in it rests (glossary "Ruhende Mitgliedschaft") - the
@@ -21,10 +23,7 @@
  */
 
 const UserManager = require("../../data-managers/user-manager");
-const {
-  isDeclined,
-  supervisionOf,
-} = require("../supervision/supervision-constants");
+const { isDeclined } = require("../supervision/supervision-constants");
 const { decide, REACH } = require("./policy");
 const { ROLE_GROUPS, OWNER_KEY } = require("./table");
 
@@ -82,17 +81,20 @@ const REACH_ENTRIES = Object.values(OWNER_KEY)
   .filter((key) => key.tenantsOf === "reach")
   .map((key) => key.entry);
 
+/** Whether the membership rests: its tenant is declined. */
+const rests = (membership) => isDeclined(membership.supervision);
+
 /**
- * The tenant sets of a user, from the memberships the answer of
- * `getUserPermissions` carries: see `Principal.tenants`.
+ * The tenant sets of a user, from the memberships of the picture: see
+ * `Principal.tenants`.
  *
- * @param {Object} permissions
+ * @param {Object} picture - The membership picture.
  * @param {string} userId
  * @returns {{member: string[], owner: string[], reach: Object<string, string[]>}}
  */
-function tenantsIn(permissions, userId) {
-  const memberships = permissions.tenants ?? [];
-  const active = memberships.filter((entry) => !isDeclined(entry));
+function tenantsIn(picture, userId) {
+  const memberships = picture.memberships ?? [];
+  const active = memberships.filter((membership) => !rests(membership));
   const reach = {};
   for (const entry of new Set(REACH_ENTRIES)) {
     const [resource, action] = entry.split(".");
@@ -100,7 +102,7 @@ function tenantsIn(permissions, userId) {
       .filter(
         (membership) =>
           decide(
-            principalOf(permissions, userId, membership.tenantId),
+            principalOf(picture, userId, membership.tenantId),
             resource,
             action,
           ) === REACH.ANY,
@@ -108,27 +110,27 @@ function tenantsIn(permissions, userId) {
       .map((membership) => membership.tenantId);
   }
   return {
-    member: memberships.map((entry) => entry.tenantId),
+    member: memberships.map((membership) => membership.tenantId),
     owner: active
-      .filter((entry) => entry.isOwner === true)
-      .map((entry) => entry.tenantId),
+      .filter((membership) => membership.isOwner === true)
+      .map((membership) => membership.tenantId),
     reach,
   };
 }
 
 /**
- * The principal of a user in a tenant, built from the answer of
- * `getUserPermissions`. A principal without a tenant has no membership.
+ * The principal of a user in a tenant, built from the membership picture.
+ * A principal without a tenant has no membership.
  *
- * @param {Object} permissions - The answer of `getUserPermissions`.
+ * @param {Object} picture - The answer of `getMembershipPicture`.
  * @param {string} userId
  * @param {string|null} tenantId
  * @returns {Principal}
  */
-function principalIn(permissions, userId, tenantId) {
+function principalIn(picture, userId, tenantId) {
   return {
-    ...principalOf(permissions, userId, tenantId),
-    tenants: tenantsIn(permissions, userId),
+    ...principalOf(picture, userId, tenantId),
+    tenants: tenantsIn(picture, userId),
   };
 }
 
@@ -136,32 +138,32 @@ function principalIn(permissions, userId, tenantId) {
  * The principal in one tenant, without its tenant sets: what a decision
  * in that tenant needs (`decide`), and what the sets are computed from.
  *
- * @param {Object} permissions
+ * @param {Object} picture - The membership picture.
  * @param {string} userId
  * @param {string|null} tenantId
  * @returns {Omit<Principal, "tenants">}
  */
-function principalOf(permissions, userId, tenantId) {
+function principalOf(picture, userId, tenantId) {
   const membership = tenantId
-    ? permissions.tenants.find((entry) => entry.tenantId === tenantId)
+    ? (picture.memberships ?? []).find((entry) => entry.tenantId === tenantId)
     : null;
-  const rests = Boolean(membership) && isDeclined(membership);
-  const active = rests ? null : membership;
+  const resting = Boolean(membership) && rests(membership);
+  const active = resting ? null : membership;
 
   const grants = {};
   for (const group of ROLE_GROUPS) {
-    grants[group] = { ...(active?.[group] || {}) };
+    grants[group] = { ...(active?.grants?.[group] || {}) };
   }
 
   return {
     userId,
     tenantId,
-    isInstanceOwner: permissions.instanceOwner === true,
+    isInstanceOwner: picture.instanceOwner === true,
     isMember: Boolean(active),
     isTenantOwner: active?.isOwner === true,
     grants,
-    mayCreateTenant: permissions.allowCreateTenant === true,
-    restingMembership: rests ? supervisionOf(membership) : null,
+    mayCreateTenant: picture.mayCreateTenant === true,
+    restingMembership: resting ? { ...membership.supervision } : null,
   };
 }
 
@@ -177,8 +179,8 @@ async function loadPrincipal(userId, tenantId) {
   if (!userId) {
     return anonymous(tenant);
   }
-  const permissions = await UserManager.getUserPermissions(userId);
-  return principalIn(permissions, userId, tenant);
+  const picture = await UserManager.getMembershipPicture(userId);
+  return principalIn(picture, userId, tenant);
 }
 
 /**
@@ -195,13 +197,13 @@ async function loadPrincipal(userId, tenantId) {
  * @returns {(tenantId: string) => Promise<boolean>}
  */
 function anyReachIn(userId, resource, action) {
-  let permissions;
+  let picture;
   return async (tenantId) => {
     if (!userId) {
       return false;
     }
-    permissions ??= UserManager.getUserPermissions(userId);
-    const principal = principalOf(await permissions, userId, tenantId);
+    picture ??= UserManager.getMembershipPicture(userId);
+    const principal = principalOf(await picture, userId, tenantId);
     return decide(principal, resource, action) === REACH.ANY;
   };
 }

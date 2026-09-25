@@ -33,18 +33,23 @@ const as = (userId) => ({
  * The permissions of the three users: a booking manager, a customer and
  * the owner of the tenant `t1`.
  */
-function permissionsOf(userId) {
+function pictureOf(userId) {
   const manager = userId === "manager";
   return {
-    tenants: [
+    instanceOwner: false,
+    mayCreateTenant: false,
+    memberships: [
       {
         tenantId: "t1",
         isOwner: userId === "owner",
-        manageBookings: manager ? { readAny: true, updateAny: true } : {},
+        supervision: { supervisionLevel: "free" },
+        grants: {
+          manageBookings: manager ? { readAny: true, updateAny: true } : {},
+        },
+        adminInterfaces: [],
+        freeBookings: false,
       },
     ],
-    instanceOwner: false,
-    allowCreateTenant: false,
   };
 }
 
@@ -71,8 +76,8 @@ describe("authorization middleware: the three markers", function () {
     }));
     sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
     sinon
-      .stub(UserManager, "getUserPermissions")
-      .callsFake(async (id) => permissionsOf(id));
+      .stub(UserManager, "getMembershipPicture")
+      .callsFake(async (id) => pictureOf(id));
     // The management gate of a declined tenant loads the tenant for the
     // staff; here every tenant is free.
     sinon
@@ -132,7 +137,7 @@ describe("authorization middleware: the three markers", function () {
         answer,
       ]);
       await request(twice).get("/api/t1/bookings").set(as("manager"));
-      expect(UserManager.getUserPermissions.callCount).to.equal(1);
+      expect(UserManager.getMembershipPicture.callCount).to.equal(1);
     });
 
     it("takes the tenant from tenantOf where the route carries no :tenant", async function () {

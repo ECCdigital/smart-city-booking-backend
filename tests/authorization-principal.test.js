@@ -1,7 +1,25 @@
 /**
  * The principal at its seam (glossary "Prinzipal", "Ruhende
- * Mitgliedschaft"): built from the answer of `getUserPermissions`, the
- * membership in a declined tenant rests there - no member, no tenant
+ * Mitgliedschaft"): built from the membership picture (glossary
+ * "Mitgliedschaftsbild", ADR 0004) `UserManager.getMembershipPicture`
+ * loads once per user - the instance flags and, per active membership,
+ * the tenant, the owner flag, the supervision of the tenant, the grants
+ * merged over the role catalogue and the extras of the roles:
+ *
+ *   {
+ *     instanceOwner: false,
+ *     mayCreateTenant: false,
+ *     memberships: [{
+ *       tenantId: "t1",
+ *       isOwner: true,
+ *       supervision: { supervisionLevel, supervisionChangedAt, supervisionReason },
+ *       grants: { manageBookings: { readAny: true }, ... },
+ *       adminInterfaces: [],
+ *       freeBookings: false,
+ *     }],
+ *   }
+ *
+ * The membership in a declined tenant rests there - no member, no tenant
  * owner, no role level, and what rests is kept for the answer that names
  * the declination. A free or pending tenant rests nothing. `anyReachIn`
  * asks the same across tenants, from one load.
@@ -29,19 +47,23 @@ function membership(tenantId, supervisionLevel) {
   return {
     tenantId,
     isOwner: true,
-    manageBookings: { readAny: true },
-    supervisionLevel,
-    supervisionChangedAt: supervisionLevel === "free" ? null : CHANGED_AT,
-    supervisionReason:
-      supervisionLevel === "declined" ? "Kein Impressum" : null,
+    supervision: {
+      supervisionLevel,
+      supervisionChangedAt: supervisionLevel === "free" ? null : CHANGED_AT,
+      supervisionReason:
+        supervisionLevel === "declined" ? "Kein Impressum" : null,
+    },
+    grants: { manageBookings: { readAny: true } },
+    adminInterfaces: [],
+    freeBookings: false,
   };
 }
 
-function stubPermissions({ tenants = [], instanceOwner = false } = {}) {
-  sinon.stub(UserManager, "getUserPermissions").resolves({
-    tenants,
+function stubPicture({ memberships = [], instanceOwner = false } = {}) {
+  sinon.stub(UserManager, "getMembershipPicture").resolves({
     instanceOwner,
-    allowCreateTenant: false,
+    mayCreateTenant: false,
+    memberships,
   });
 }
 
@@ -53,7 +75,7 @@ describe("authorization principal: the resting membership", function () {
   it("gives a member of a free or pending tenant the membership whole", async function () {
     for (const level of ["free", "pending"]) {
       sinon.restore();
-      stubPermissions({ tenants: [membership("t1", level)] });
+      stubPicture({ memberships: [membership("t1", level)] });
 
       const principal = await loadPrincipal("u1", "t1");
 
@@ -67,7 +89,7 @@ describe("authorization principal: the resting membership", function () {
   });
 
   it("lets the membership in a declined tenant rest and keeps why", async function () {
-    stubPermissions({ tenants: [membership("t1", "declined")] });
+    stubPicture({ memberships: [membership("t1", "declined")] });
 
     const principal = await loadPrincipal("u1", "t1");
 
@@ -87,8 +109,8 @@ describe("authorization principal: the resting membership", function () {
   });
 
   it("leaves the instance owner every right in a declined tenant", async function () {
-    stubPermissions({
-      tenants: [membership("t1", "declined")],
+    stubPicture({
+      memberships: [membership("t1", "declined")],
       instanceOwner: true,
     });
 
@@ -99,7 +121,7 @@ describe("authorization principal: the resting membership", function () {
   });
 
   it("has no membership that could rest outside the user's tenants and at the instance", async function () {
-    stubPermissions({ tenants: [membership("t1", "declined")] });
+    stubPicture({ memberships: [membership("t1", "declined")] });
 
     for (const tenantId of ["t2", null]) {
       const principal = await loadPrincipal("u1", tenantId);
@@ -109,13 +131,13 @@ describe("authorization principal: the resting membership", function () {
   });
 
   it("loads nothing for the anonymous", async function () {
-    stubPermissions();
+    stubPicture();
 
     const principal = await loadPrincipal(null, "t1");
 
     expect(principal.isMember).to.equal(false);
     expect(principal.restingMembership).to.equal(null);
-    expect(UserManager.getUserPermissions.called).to.equal(false);
+    expect(UserManager.getMembershipPicture.called).to.equal(false);
   });
 });
 
@@ -125,8 +147,8 @@ describe("authorization principal: a question across tenants", function () {
   });
 
   it("answers per tenant from one load, made on the first question", async function () {
-    stubPermissions({
-      tenants: [
+    stubPicture({
+      memberships: [
         membership("t-free", "free"),
         membership("t-pending", "pending"),
         membership("t-declined", "declined"),
@@ -134,17 +156,17 @@ describe("authorization principal: a question across tenants", function () {
     });
 
     const readsIn = anyReachIn("u1", "dashboard", "read");
-    expect(UserManager.getUserPermissions.called).to.equal(false);
+    expect(UserManager.getMembershipPicture.called).to.equal(false);
 
     expect(await readsIn("t-free")).to.equal(true);
     expect(await readsIn("t-pending")).to.equal(true);
     expect(await readsIn("t-declined")).to.equal(false);
     expect(await readsIn("t-other")).to.equal(false);
-    expect(UserManager.getUserPermissions.callCount).to.equal(1);
+    expect(UserManager.getMembershipPicture.callCount).to.equal(1);
   });
 
   it("answers every tenant for the instance owner and none for the anonymous", async function () {
-    stubPermissions({ instanceOwner: true });
+    stubPicture({ instanceOwner: true });
 
     expect(await anyReachIn("admin", "booking", "operate")("t-any")).to.equal(
       true,
@@ -168,15 +190,20 @@ describe("authorization principal: the tenant sets", function () {
   });
 
   it("lists the memberships, the owned tenants and the ones a tenant entry reaches with any", async function () {
-    stubPermissions({
-      tenants: [
+    stubPicture({
+      memberships: [
         membership("t-free", "free"),
-        { tenantId: "t-member", isOwner: false, supervisionLevel: "free" },
+        {
+          tenantId: "t-member",
+          isOwner: false,
+          supervision: { supervisionLevel: "free" },
+          grants: {},
+        },
         {
           tenantId: "t-reader",
           isOwner: false,
-          manageBookings: { readAny: true },
-          supervisionLevel: "free",
+          supervision: { supervisionLevel: "free" },
+          grants: { manageBookings: { readAny: true } },
         },
         membership("t-pending", "pending"),
         membership("t-declined", "declined"),
@@ -199,11 +226,11 @@ describe("authorization principal: the tenant sets", function () {
     expect(principal.tenants.reach).to.deep.equal({
       "dashboard.read": ["t-free", "t-reader", "t-pending"],
     });
-    expect(UserManager.getUserPermissions.callCount).to.equal(1);
+    expect(UserManager.getMembershipPicture.callCount).to.equal(1);
   });
 
   it("answers an owner key's tenant set from the principal, and nothing for the anonymous", async function () {
-    stubPermissions({ tenants: [membership("t1", "free")] });
+    stubPicture({ memberships: [membership("t1", "free")] });
     const principal = await loadPrincipal("u1", null);
     expect(tenantsOf(principal, { tenantsOf: "membership" })).to.deep.equal([
       "t1",

@@ -100,7 +100,7 @@ describe("RoleController.getRoles", () => {
     const UserManager = require("../src/commons/data-managers/user-manager");
     const MembershipManager = require("../src/commons/data-managers/membership-manager");
     sandbox.stub(RoleManager, "getTenantRoles").resolves(roles);
-    const permissions = sandbox.stub(UserManager, "getUserPermissions");
+    const permissions = sandbox.stub(UserManager, "getMembershipPicture");
     const membership = sandbox.stub(
       MembershipManager,
       "getMembershipByTenantAndUserID",

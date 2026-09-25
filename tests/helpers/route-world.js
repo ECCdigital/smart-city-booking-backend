@@ -618,7 +618,7 @@ function installRouteWorld({
   stubManager(UserManager, {
     one: () => user(),
     // The rights run for real: the principal is loaded from this.
-    skip: ["getUserPermissions"],
+    skip: ["getMembershipPicture", "getUserPermissions"],
     only: {
       getUserByHookID: async () => null,
       getUserByCard: async () => null,
