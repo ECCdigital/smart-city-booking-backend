@@ -10,7 +10,7 @@ const router = asyncRouter();
 // The instance library is the same media library, addressed without a tenant
 // (§4.9) — the handlers are the tenant ones, the missing `:tenant` puts them
 // in the instance scope. The rights table tells the two apart by the resource
-// (`instanceMedia` against `media`, authorize spec §3.2): everything but
+// (`instanceMedia` against `media`): everything but
 // reading a file is the instance owner's; `public` media are readable
 // anonymously, `intern` ones by any signed-in user.
 router.post(
@@ -40,7 +40,7 @@ router.delete(
 );
 router.get(
   "/:id/file",
-  publicRoute("instanceMedia", "file"),
+  publicRoute("instanceMedia", "file", { also: ["intern"] }),
   MediaControllerV2.getMediaFile,
 );
 router.get(

@@ -104,15 +104,15 @@ Sends the mails of a `failed` or `pending` row that are still missing (`deliveri
 
 ### GET /api/roles
 
-Returns all roles (instance-level). **Requires JWT.**
+Returns all roles of all tenants (instance-level). **Requires JWT. Instance owner only:** without a tenant in the path nobody is a member, so every other signed-in user is refused (`403`). With `?public=true` the public projection `{ id, name, tenantId }`.
 
 ### GET /api/:tenant/roles
 
-Returns all roles for a tenant. **Requires JWT.**
+Returns all roles for a tenant. **Requires JWT and a membership in the tenant** (`role.list`: `own` for a member, `any` under `manageRoles.readAny`). Full roles under `manageRoles.readAny`; a member gets with `?public=true` the public projection `{ id, name, tenantId }` and without the flag an empty list. A non-member is refused (`403`), a member of a declined tenant with `403 tenant_declined`.
 
 ### GET /api/:tenant/roles/tenant
 
-Returns the current user's roles in the tenant. **Requires JWT.**
+Returns the current user's roles in the tenant, from their membership. **Requires JWT.** An empty list without a membership or in a declined tenant.
 
 ### GET /api/:tenant/roles/:id
 
@@ -136,11 +136,11 @@ Tenant-scoped routes under `/api/:tenant/bookables`.
 
 ### GET /api/:tenant/bookables/public
 
-Returns public bookables for a tenant. Optional auth.
+Returns the public list of a tenant's bookables: what asks to be listed and passes the tenant's supervision (ADR 0003). Optional auth; a role holder with `manageBookables.readAny` gets the tenant's bookables whole. A tenant without a public projection answers `404 tenant_not_found`.
 
 ### GET /api/:tenant/bookables/public/:id
 
-Returns a single public bookable. Optional auth.
+Returns a single bookable the public reaches by a direct link (no `isPublic` requirement, under supervision an approval). Optional auth, `manageBookables.readAny` reads whole. `404` for a bookable the public cannot reach, naming no reason.
 
 ### GET /api/:tenant/bookables
 
@@ -164,7 +164,7 @@ _Required permission:_ `bookable.allowDelete`
 
 ### GET /api/:tenant/bookables/:id/availability
 
-Returns availability intervals for a bookable (V2 engine, shared `availability-rules`).
+Returns availability intervals for a bookable the public reaches (V2 engine, shared `availability-rules`); `404` otherwise, for the block periods too.
 
 Optional auth. _Query parameters:_ `amount` (default: 1), `startDate`, `endDate` (ISO dates)
 
@@ -194,15 +194,15 @@ Returns block-period availability for a bookable. Optional auth.
 
 ### GET /api/:tenant/bookables/:id/openingHours
 
-Returns opening hours for a bookable. No auth middleware.
+Returns opening hours for a bookable the public reaches; `404` otherwise. Optional auth.
 
 ### GET /api/:tenant/bookables/:id/prices
 
-Returns price categories for a bookable. No auth middleware.
+Returns price categories for a bookable the public reaches; `404` otherwise. Optional auth, `manageBookables.readAny` reads whole (a role holder with `readOwn` alone gets the public's view).
 
 ### GET /api/:tenant/bookables/:id/occupancy
 
-Returns occupancy information for a bookable. No auth middleware (uses `user?.id` when present).
+Returns occupancy information for a bookable the public reaches; `404` otherwise. Optional auth (uses `user?.id` when present).
 
 _Parameters:_
 
@@ -274,8 +274,24 @@ Reprints the cancellation document of a cancelled booking as a further revision 
 
 Reprints the one aggregated cancellation document of a cancelled group booking as a further revision, attached to every member. Same right as `POST /group-bookings/:id/receipt`; `409 not_cancelled` if a member is not cancelled.
 
+## Media
+
+The media library of a tenant (`/api/v2/:tenant/media`) and of the instance (`/api/v2/instance/media`), and the permanent resolver of legacy file addresses (`/api/:tenant/files/get`, `/api/files/get`).
+
+### GET /api/v2/:tenant/media/:id, PATCH /api/v2/:tenant/media/:id, GET /api/v2/:tenant/media/:id/usage
+
+Metadata of a medium. **Requires JWT.** A library medium follows the media role (`manageMedia` read or update, `own` for the own uploads), a booking document the booking (`manageBookings`, or the owner of a referenced booking). A medium outside that reach answers `404 media_not_found`, like an unknown one.
+
+### DELETE /api/v2/:tenant/media/:id
+
+**Requires JWT and media delete permission.** A medium outside the reach answers `404 media_not_found`; a booking document within it `403 booking_document_not_deletable`; a medium in use `409` with its usage proof.
+
+### GET /api/v2/:tenant/media/:id/file
+
+The file. `public` media anonymously while the tenant has a public projection, `intern` media for members of the tenant, booking documents for whoever the booking rule covers (`401` anonymous, `403` otherwise).
+
 ## Other categories
 
-Endpoints for events, users, bookings, coupons, checkout, payments, calendars, catalog, workflows, access points, rules, and files follow the same pattern: mostly tenant-scoped paths under `/api/:tenant/...` with permission checks via roles and memberships.
+Endpoints for events, users, bookings, coupons, checkout, payments, calendars, catalog, workflows, access points and rules follow the same pattern: mostly tenant-scoped paths under `/api/:tenant/...` with permission checks via roles and memberships.
 
 Entity schemas are documented in [entities.md](../entities.md).

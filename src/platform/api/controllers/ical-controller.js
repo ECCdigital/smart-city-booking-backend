@@ -7,8 +7,8 @@ const BookingManager = require("../../../commons/data-managers/booking-manager")
 const {
   readsRecords,
   scopeOf,
+  PUBLIC,
 } = require("../../../commons/services/authorization");
-const EventManager = require("../../../commons/data-managers/event-manager");
 const {
   UnauthorizedError,
   NotFoundError,
@@ -28,10 +28,12 @@ function parseIds(raw) {
 
 /**
  * The reach that decides which private events a calendar may carry. The event
- * routes are public - everyone gets the public calendar - so `?includePrivate`
- * is the one place a reach beyond `public` is asked for: an anonymous caller
- * is sent to the login, a signed-in one without any bookable right is refused
- * (`ical.events`, authorize spec §3.1).
+ * routes are public - everyone gets the public calendar, staff included (ADR
+ * 0003) - so `?includePrivate` is the one place a reach beyond `public` is
+ * asked for: an anonymous caller is sent to the login, a signed-in one
+ * without any bookable right is refused (`ical.events`).
+ * The one question about the reach here, on the named list of
+ * `tests/authorization-handler-decisions.test.js`.
  *
  * @param {Object} request Express request
  * @returns {{reach: string, userId: string|null}}
@@ -57,18 +59,12 @@ class ICalController {
     const includePast = toBool(req.query.includePast);
     const includePrivate = toBool(req.query.includePrivate);
 
-    const options = { includePast };
+    // The public calendar, or the event within the reach of the request -
+    // none there is a 404 (the service's).
+    const options = { includePast, scope: PUBLIC };
 
     if (includePrivate) {
-      // The event within the reach of the request; none there is a 404.
-      const event = await EventManager.getEvent(
-        id,
-        tenant,
-        privateScopeOf(req),
-      );
-      if (!event) throw new NotFoundError("event_not_found");
-
-      options.includePrivate = true;
+      options.scope = privateScopeOf(req);
     }
 
     const cal = await ICalService.getEventCal(id, tenant, options);
@@ -84,26 +80,14 @@ class ICalController {
     const includePast = toBool(req.query.includePast);
     const includePrivate = toBool(req.query.includePrivate);
 
-    const options = { includePast, from, to };
-    let allowedIds = parseIds(req.query.ids);
+    const options = { includePast, from, to, scope: PUBLIC };
+    const allowedIds = parseIds(req.query.ids);
 
+    // The calendar within the reach: under `any` every event, under `own`
+    // the caller's - the service reads within the reach (ADR 0002), so a
+    // request that names other events gets a calendar without them.
     if (includePrivate) {
-      const scope = privateScopeOf(req);
-
-      // Under `any` every requested event may be shown; under `own` the
-      // request narrows to the events of the caller, and a request that asks
-      // for none of them is refused rather than answered with an empty
-      // calendar (as today).
-      if (scope.reach === "own") {
-        const own = await EventManager.getEvents(tenant, scope);
-        const ownIds = own.map((event) => event.id);
-        allowedIds = allowedIds
-          ? allowedIds.filter((id) => ownIds.includes(id))
-          : ownIds;
-        if (allowedIds.length === 0) throw new ForbiddenError();
-      }
-
-      options.includePrivate = true;
+      options.scope = privateScopeOf(req);
     }
 
     const cal = await ICalService.getMultiEventCal(allowedIds, tenant, options);
@@ -120,7 +104,7 @@ class ICalController {
     const booking = await BookingManager.getBooking(id, tenant, scopeOf(req));
     if (!booking) throw new NotFoundError("booking_not_found");
 
-    const cal = await ICalService.getBookingCal(id, tenant);
+    const cal = await ICalService.getBookingCal(id, tenant, scopeOf(req));
     sendIcalResponse(res, cal, `buchung-${id}`);
   }
 
@@ -150,6 +134,7 @@ class ICalController {
     const cal = await ICalService.getMultiBookingCal(allowedIds, tenant, {
       from,
       to,
+      scope: scopeOf(req),
     });
     sendIcalResponse(res, cal, `buchungen-${allowedIds.join(",")}`);
   }
@@ -162,6 +147,7 @@ class ICalController {
 
     const cal = await ICalService.getEventCal(id, tenant, {
       includePast: true,
+      scope: PUBLIC,
     });
 
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -177,6 +163,7 @@ class ICalController {
 
     const cal = await ICalService.getMultiEventCal(ids, tenant, {
       includePast: true,
+      scope: PUBLIC,
     });
 
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");

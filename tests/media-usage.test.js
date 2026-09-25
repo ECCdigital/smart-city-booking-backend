@@ -2,6 +2,7 @@ const assert = require("assert");
 const sinon = require("sinon");
 
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const BookingModel = require("../src/commons/data-managers/models/bookingModel");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
 const CatalogManager = require("../src/commons/data-managers/catalog-manager");
@@ -515,7 +516,11 @@ describe("media deletion", function () {
         .stub(MediaModel, "find")
         .resolves([{ toEntity: () => documentFixture() }]);
 
-      const documents = await MediaManager.getBookingDocuments(TENANT, BOOKING);
+      const documents = await MediaManager.getBookingDocuments(
+        TENANT,
+        BOOKING,
+        DOMAIN,
+      );
 
       assert.strictEqual(documents.length, 1);
       assert.deepStrictEqual(MediaModel.find.firstCall.args[0], {

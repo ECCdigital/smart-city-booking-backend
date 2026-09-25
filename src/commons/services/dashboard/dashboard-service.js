@@ -1,14 +1,13 @@
 const { DateTime } = require("luxon");
 const TenantManager = require("../../data-managers/tenant-manager");
-const UserManager = require("../../data-managers/user-manager");
 const DashboardManager = require("../../data-managers/dashboard-manager");
 const { DashboardCache } = require("./dashboard-cache");
-const { REACH } = require("../authorization/policy");
 const {
   BadRequestError,
   ForbiddenError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const { DOMAIN } = require("../authorization/reach");
 
 const DEFAULT_BY_BOOKABLE_LIMIT = 100;
 const MAX_BY_BOOKABLE_LIMIT = 500;
@@ -318,34 +317,21 @@ function revenueTotals(entry) {
 
 class DashboardService {
   /**
-   * Tenants the dashboard shows within a reach (`instanceDashboard.read`):
-   * every tenant under `any`; under `own` the ones the user owns or has
-   * `manageBookings.readAny` in.
+   * Tenants the dashboard shows within a reach (`instanceDashboard.read`,
+   * ADR 0002): every tenant under `any`; under `own` the tenant set the
+   * scope carries - the tenants whose own dashboard the user reads with
+   * `any` (`dashboard.read`), never one whose membership rests.
    *
-   * @param {{reach?: string, userId?: string|null}} scope
+   * @param {{reach: string, userId?: string|null, tenantIds?: string[]}} scope
    */
-  static async getAllowedTenants({ reach, userId }) {
-    const allTenants = await TenantManager.getTenants();
-
-    if (reach === REACH.ANY) {
-      return allTenants;
-    }
-
-    const permissions = await UserManager.getUserPermissions(userId);
-    const allowedIds = new Set();
-
-    for (const tp of permissions.tenants || []) {
-      if (tp.isOwner === true || tp.manageBookings?.readAny === true) {
-        allowedIds.add(tp.tenantId);
-      }
-    }
-
-    return allTenants.filter((t) => allowedIds.has(t.id));
+  static async getAllowedTenants(scope) {
+    return TenantManager.getTenants(scope);
   }
 
   /**
-   * @param {{reach?: string, userId?: string|null}} scope - The reach of
-   *   `instanceDashboard.read`, as the route marker decided it.
+   * @param {{reach: string, userId?: string|null, tenantIds?: string[]}} scope
+   *   - The reach of `instanceDashboard.read`, as the route marker decided
+   *   it, with the tenant set `own` means there.
    * @param {Object} query
    */
   static async getInstanceSummary(scope, query) {
@@ -377,7 +363,7 @@ class DashboardService {
    * @param {Object} query
    */
   static async getTenantSummary(scope, tenantId, query) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     if (!tenant) {
       throw new NotFoundError("Tenant not found");
     }

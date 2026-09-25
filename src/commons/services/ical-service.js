@@ -4,45 +4,57 @@ const TenantManager = require("../data-managers/tenant-manager");
 const BookingManager = require("../data-managers/booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const { DateTime } = require("luxon");
-const { isOfferListable } = require("./supervision/offer-gate");
+const { DOMAIN } = require("./authorization/reach");
+const { NotFoundError } = require("../../errors/BaseError");
 
+/**
+ * The calendars of a tenant: its events and its bookings as iCal. A
+ * calendar a route asks for is read under the route's scope (ADR 0002):
+ * the events and bookings it lists are within that reach, and what hangs
+ * on a booking (its bookables, their events) the domain reads. Under the
+ * public's reach the events are the manager's public projection (ADR
+ * 0003): the calendar lists what the public's list carries, the single
+ * event is what a direct link reaches, and a tenant without a public
+ * projection is `tenant_not_found`.
+ */
 class ICalService {
-  static async getEventCal(
-    eventID,
-    tenantID,
-    { includePast = false, includePrivate = false } = {},
-  ) {
-    const event = await EventManager.getEvent(eventID, tenantID);
-    const tenant = await TenantManager.getTenant(tenantID);
+  /**
+   * @param {string} eventID
+   * @param {string} tenantID
+   * @param {Object} [options]
+   * @param {boolean} [options.includePast=false]
+   * @param {{reach: string, userId?: string|null}} options.scope The
+   *   reach of the route: `PUBLIC` for the public calendar, the reach of
+   *   `ical.events` for a private one
+   */
+  static async getEventCal(eventID, tenantID, { includePast = false, scope }) {
+    const event = await EventManager.getEvent(eventID, tenantID, scope);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
-    // The public calendar is list-type delivery of the supervision (spec
-    // §5.1); `includePrivate` is the management reach the controller checked.
-    if (
-      !event ||
-      (!includePrivate && !isOfferListable({ tenant, offer: event }))
-    ) {
-      throw new Error(`Event with ID ${eventID} not found`);
-    }
-
-    if (!includePast && event.isPast()) {
-      throw new Error(`Event with ID ${eventID} not found`);
+    if (!event || (!includePast && event.isPast())) {
+      throw new NotFoundError("event_not_found", { eventId: eventID });
     }
 
     return this.generateEventCal(event, tenant);
   }
 
+  /**
+   * @param {string[]|undefined} eventIDs
+   * @param {string} tenantID
+   * @param {Object} [options]
+   * @param {boolean} [options.includePast=false]
+   * @param {string|null} [options.from]
+   * @param {string|null} [options.to]
+   * @param {{reach: string, userId?: string|null}} options.scope As of
+   *   `getEventCal`
+   */
   static async getMultiEventCal(
     eventIDs,
     tenantID,
-    {
-      includePast = false,
-      from = null,
-      to = null,
-      includePrivate = false,
-    } = {},
+    { includePast = false, from = null, to = null, scope },
   ) {
-    const events = await EventManager.getEvents(tenantID);
-    const tenant = await TenantManager.getTenant(tenantID);
+    const events = await EventManager.getEvents(tenantID, scope);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!events || events.length === 0) {
       return this.generateMultiEventCal([], tenant);
@@ -52,9 +64,6 @@ class ICalService {
     const toDate = to ? new Date(Number(to)) : null;
 
     const filteredEvents = events.filter((event) => {
-      if (!includePrivate && !isOfferListable({ tenant, offer: event })) {
-        return false;
-      }
       if (!includePast && event.isPast()) return false;
       if (eventIDs?.length > 0 && !eventIDs.includes(event.id)) return false;
 
@@ -111,12 +120,18 @@ class ICalService {
     return cal;
   }
 
-  static async getBookingCal(bookingID, tenantID) {
-    const booking = await BookingManager.getBooking(bookingID, tenantID);
-    const tenant = await TenantManager.getTenant(tenantID);
+  /**
+   * @param {string} bookingID
+   * @param {string} tenantID
+   * @param {{reach: string, userId?: string|null}} scope The reach of
+   *   `ical.bookings`
+   */
+  static async getBookingCal(bookingID, tenantID, scope) {
+    const booking = await BookingManager.getBooking(bookingID, tenantID, scope);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!booking) {
-      throw new Error(`Booking with ID ${bookingID} not found`);
+      throw new NotFoundError("booking_not_found", { bookingID, tenantID });
     }
 
     const cal = ICalService._bookingsCalendar(tenant, true);
@@ -161,18 +176,29 @@ class ICalService {
     });
   }
 
+  /**
+   * @param {string[]} bookingIDs
+   * @param {string} tenantID
+   * @param {Object} [options]
+   * @param {string|null} [options.from]
+   * @param {string|null} [options.to]
+   * @param {{reach: string, userId?: string|null}} options.scope The
+   *   reach of `ical.bookings`
+   */
   static async getMultiBookingCal(
     bookingIDs,
     tenantID,
-    { from = null, to = null } = {},
+    { from = null, to = null, scope },
   ) {
     const bookings = bookingIDs?.length
       ? await Promise.all(
-          bookingIDs.map((id) => BookingManager.getBooking(id, tenantID)),
+          bookingIDs.map((id) =>
+            BookingManager.getBooking(id, tenantID, scope),
+          ),
         )
       : [];
 
-    const tenant = await TenantManager.getTenant(tenantID);
+    const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     const cal = ICalService._bookingsCalendar(tenant, false);
 
@@ -205,8 +231,8 @@ class ICalService {
   /** The reads of the bookables and events of a booking, unless given. */
   static _lookups(tenantID, lookups) {
     return {
-      bookable: (id) => BookableManager.getBookable(id, tenantID),
-      event: (id) => EventManager.getEvent(id, tenantID),
+      bookable: (id) => BookableManager.getBookable(id, tenantID, DOMAIN),
+      event: (id) => EventManager.getEvent(id, tenantID, DOMAIN),
       ...lookups,
     };
   }

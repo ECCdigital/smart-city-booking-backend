@@ -1,6 +1,8 @@
 const { Event } = require("../entities/event/event");
 const EventModel = require("./models/eventModel");
 const { ownCondition } = require("../services/authorization/reach");
+const { REACH } = require("../services/authorization/policy");
+const projection = require("../services/supervision/public-projection");
 const {
   REVIEW_STATUS,
 } = require("../services/supervision/supervision-constants");
@@ -10,18 +12,44 @@ const {
  */
 class EventManager {
   /**
+   * The events of a tenant within a reach (ADR 0002, ADR 0003): under
+   * `public` what the public projection lists (`project` is `"listed"`)
+   * or reaches (`"reached"`) of the tenant's events - which throws
+   * `tenant_not_found` for a tenant without one; under every other reach
+   * the own condition in the query.
+   *
+   * @param {string} tenantId
+   * @param {{reach: string, userId?: string|null}} scope
+   * @param {(condition: Object) => Promise<Event[]>} find
+   * @param {"listed"|"reached"} project The question of the projection
+   * @returns {Promise<Event[]>}
+   */
+  static async _within(tenantId, scope, find, project) {
+    if (scope?.reach === REACH.PUBLIC) {
+      return projection[project](tenantId, await find({}));
+    }
+    return find(ownCondition("event", scope));
+  }
+
+  /**
    * Get all events related to a tenant
    * @param {string} tenantId Identifier of the tenant
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   `public` to the public's list (ADR 0003), the domain says
+   *   `DOMAIN`; none is a programming error
    * @returns List of events
    */
   static async getEvents(tenantId, scope) {
-    const rawEvents = await EventModel.find({
-      tenantId: tenantId,
-      ...ownCondition("ownerUserId", scope),
-    });
-    return rawEvents.map((doc) => doc.toEntity());
+    return EventManager._within(
+      tenantId,
+      scope,
+      async (condition) =>
+        (await EventModel.find({ tenantId, ...condition })).map((doc) =>
+          doc.toEntity(),
+        ),
+      "listed",
+    );
   }
 
   /**
@@ -29,33 +57,39 @@ class EventManager {
    *
    * @param {string} id Logical identifier of the event object
    * @param {string} tenantId Identifier of the tenant
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   `public` to what the public reaches by a direct link (ADR 0003),
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns A single event object
    */
   static async getEvent(id, tenantId, scope) {
-    const rawEvent = await EventModel.findOne({
-      id: id,
-      tenantId: tenantId,
-      ...ownCondition("ownerUserId", scope),
-    });
-    if (!rawEvent) {
-      return null;
-    }
-    return rawEvent.toEntity();
+    const [event = null] = await EventManager._within(
+      tenantId,
+      scope,
+      async (condition) => {
+        const raw = await EventModel.findOne({ id, tenantId, ...condition });
+        return raw ? [raw.toEntity()] : [];
+      },
+      "reached",
+    );
+    return event;
   }
 
   /**
-   * The events of some (tenant, id) references, in one query, whatever
-   * their review or their tenant's level - for the core data a ticket
-   * booking carries (tenant supervision spec §5.2); the booking exists, so
-   * the gate of the offer does not apply, and the caller reads only what it
-   * names.
+   * The events of some (tenant, id) references, in one query - a direct
+   * link each (ADR 0003). The domain reads them whatever their review or
+   * their tenant's level, for the core data a ticket booking carries
+   * (tenant supervision spec §5.2): the booking exists, and the caller
+   * reads only what it names. Under `public` each tenant's events are
+   * what the public reaches, and a tenant without a public projection
+   * contributes none.
    *
    * @param {Array<{tenantId: string, id: string}>} refs
+   * @param {{reach: string, userId?: string|null}} scope As of `getEvent`
    * @returns {Promise<Event[]>} The events that exist, in no order
    */
-  static async getEventsByIds(refs) {
+  static async getEventsByIds(refs, scope) {
     const pairs = refs.filter((ref) => ref?.tenantId && ref?.id);
     if (pairs.length === 0) {
       return [];
@@ -64,8 +98,27 @@ class EventManager {
     const unique = new Map(
       pairs.map(({ tenantId, id }) => [`${tenantId}/${id}`, { tenantId, id }]),
     );
-    const rawEvents = await EventModel.find({ $or: [...unique.values()] });
-    return rawEvents.map((doc) => doc.toEntity());
+    const byTenant = new Map();
+    for (const { tenantId, id } of unique.values()) {
+      byTenant.set(tenantId, [...(byTenant.get(tenantId) ?? []), id]);
+    }
+    const events = [];
+    for (const [tenantId, ids] of byTenant) {
+      const find = async (condition) =>
+        (
+          await EventModel.find({ tenantId, id: { $in: ids }, ...condition })
+        ).map((doc) => doc.toEntity());
+      if (scope?.reach !== REACH.PUBLIC) {
+        events.push(...(await find(ownCondition("event", scope))));
+        continue;
+      }
+      try {
+        events.push(...(await projection.reached(tenantId, await find({}))));
+      } catch (err) {
+        if (err?.code !== "tenant_not_found") throw err;
+      }
+    }
+    return events;
   }
 
   /**
@@ -138,10 +191,11 @@ class EventManager {
    * @returns {Promise<Event[]>} The events, by `review.submittedAt`
    *   ascending, then by id
    */
-  static async getOffersByReviewStatus(tenantId, status) {
+  static async getOffersByReviewStatus(tenantId, status, scope) {
     const rawEvents = await EventModel.find({
       tenantId,
       "review.status": status ?? null,
+      ...ownCondition("event", scope),
     }).sort({ "review.submittedAt": 1, id: 1 });
     return rawEvents.map((doc) => doc.toEntity());
   }
@@ -152,12 +206,17 @@ class EventManager {
    * to what a queue row reads - never the whole event.
    *
    * @param {string[]} tenantIds The tenants to read from
+   * @param {{reach: string, userId?: string|null}} scope As of `getEvents`
    * @returns {Promise<Array<{id: string, tenantId: string, information: {name: string}, isPublic: boolean, review: Object}>>}
    *   Plain rows, by `review.submittedAt` ascending, then by id
    */
-  static async getPendingReviewOffers(tenantIds) {
+  static async getPendingReviewOffers(tenantIds, scope) {
     return EventModel.find(
-      { tenantId: { $in: tenantIds }, "review.status": REVIEW_STATUS.PENDING },
+      {
+        tenantId: { $in: tenantIds },
+        "review.status": REVIEW_STATUS.PENDING,
+        ...ownCondition("event", scope),
+      },
       {
         _id: 0,
         id: 1,

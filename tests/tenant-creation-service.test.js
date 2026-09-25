@@ -130,7 +130,7 @@ describe("TenantCreationService under contention", function () {
       body: VALID,
       creatorUserId: userId,
       creatorIsInstanceOwner: false,
-      mediaScope: { reach: "own", userId },
+      reaches: { "media.read": "own", userId },
     });
 
   it("never lets more than three of a burst of parallel self-creations through", async function () {
@@ -254,7 +254,7 @@ describe("TenantCreationService under contention", function () {
       },
       creatorUserId: USER,
       creatorIsInstanceOwner: false,
-      mediaScope: { reach: "own", userId: USER },
+      reaches: { "media.read": "own", userId: USER },
     });
 
     expect(tenant).to.include({

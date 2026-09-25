@@ -1,5 +1,5 @@
 /**
- * The CSV export on the authorization (authorize spec §3.1, §15, ticket 5).
+ * The CSV export on the authorization.
  *
  * `GET /csv/:tenant/events/:id/bookings` carried `isSignedIn` and checked
  * the two update levels of the bookables in the controller; now the marker
@@ -20,6 +20,7 @@ const {
 } = require("./helpers/booking-lifecycle-harness");
 const { installRouteWorld, FIXTURE_ID } = require("./helpers/route-world");
 const EventManager = require("../src/commons/data-managers/event-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 
 const FORBIDDEN = {
   error: "ForbiddenError",
@@ -53,7 +54,7 @@ describe("authorization on the CSV export route", function () {
       ownerUserId: ROLE_HOLDER,
       bookables: h.bookables,
     });
-    fixtureEvent = await EventManager.getEvent(FIXTURE_ID, TENANT);
+    fixtureEvent = await EventManager.getEvent(FIXTURE_ID, TENANT, DOMAIN);
   });
 
   beforeEach(function () {
@@ -105,7 +106,7 @@ describe("authorization on the CSV export route", function () {
 
   it("answers 404 for an event the reach does not cover", async function () {
     // What the manager answers under a reach that excludes the event: the
-    // export cannot tell "gone" from "not yours", and says neither (§4.2).
+    // export cannot tell "gone" from "not yours", and says neither (glossary "Reichweite").
     EventManager.getEvent.resolves(null);
 
     const res = await exportBookings(ROLE_HOLDER);

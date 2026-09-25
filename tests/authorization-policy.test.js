@@ -1,26 +1,27 @@
 /**
- * Table tests of the authorization policy (authorize spec §8.1): the
+ * Table tests of the authorization policy: the
  * rights table is the test matrix. For every `(resource, action)` of the
- * table and each of the five kinds of principal - anonymous, signed in
- * without a role, holder of exactly one role level, tenant owner, instance
- * owner - the reach `decide` answers is derived a second way from the
- * table's levels, plus the hand cases the spec names and the invariants of
- * the table: the precedence of the principal levels and the shape of its
- * entries.
+ * table and each of the six kinds of principal - anonymous, signed in
+ * without a membership, member without a role, holder of exactly one role
+ * level, tenant owner, instance owner - the reach `decide` answers is
+ * derived a second way from the table's levels, plus the hand cases the
+ * spec names and the invariants of the table: the precedence of the
+ * principal levels, the shape of its entries, and the owner key every
+ * `own` names (ADR 0001).
  */
 
 const { expect } = require("chai");
 
 const {
   decide,
-  decideWith,
   entryOf,
   REACH,
-  PRECEDENCE,
   LEVEL_KEYWORDS,
 } = require("../src/commons/services/authorization/policy");
 const {
   TABLE,
+  OWNER_KEY,
+  ownerKeyOf,
   ROLE_GROUPS,
   ROLE_LEVELS,
 } = require("../src/commons/services/authorization/table");
@@ -32,6 +33,7 @@ function principal(overrides = {}) {
     userId: "user-1",
     tenantId: "tenant-1",
     isInstanceOwner: false,
+    isMember: false,
     isTenantOwner: false,
     grants: {},
     mayCreateTenant: false,
@@ -41,35 +43,41 @@ function principal(overrides = {}) {
 
 const anonymous = () => principal({ userId: null });
 const signedIn = () => principal();
-const tenantOwner = () => principal({ isTenantOwner: true });
+const member = () => principal({ isMember: true });
+const tenantOwner = () => principal({ isMember: true, isTenantOwner: true });
 const instanceOwner = () => principal({ isInstanceOwner: true });
 
-/** A principal holding exactly the given levels, e.g. `manageBookings.readAny`. */
+/** A member holding exactly the given levels, e.g. `manageBookings.readAny`. */
 function roleHolder(...levels) {
   const grants = {};
   for (const level of levels) {
     const [, group, step] = level.match(ROLE_LEVEL);
     grants[group] = { ...(grants[group] || {}), [step]: true };
   }
-  return principal({ grants });
+  return principal({ isMember: true, grants });
 }
 
 /**
  * Which levels each kind of principal satisfies, written down independently
- * of `decide`: the order of the spec (§2.3), instance owner above tenant
- * owner above role above the signed-in user.
+ * of `decide`: the order of the glossary ("Prinzipal"), instance owner
+ * above tenant owner above role above member above the signed-in user.
  */
+const MEMBER_LEVELS = ["signedIn", "tenantMember"];
 const SATISFIES = {
   anonymous: () => false,
   signedIn: (level) => level === "signedIn",
-  roleHolder: (level, granted) => level === "signedIn" || level === granted,
+  member: (level) => MEMBER_LEVELS.includes(level),
+  roleHolder: (level, granted) =>
+    MEMBER_LEVELS.includes(level) || level === granted,
   tenantOwner: (level) => !["instanceOwner", "mayCreateTenant"].includes(level),
   instanceOwner: () => true,
 };
 
+/** The precedence of the reaches: `any` before `own` before `self` before `public`. */
 function expectedReach(entry, kind, granted) {
   if (entry.any && SATISFIES[kind](entry.any, granted)) return REACH.ANY;
   if (entry.own && SATISFIES[kind](entry.own, granted)) return REACH.OWN;
+  if (entry.self && SATISFIES[kind](entry.self, granted)) return REACH.SELF;
   if (entry.public === true) return REACH.PUBLIC;
   return null;
 }
@@ -85,14 +93,17 @@ function entries() {
   return rows;
 }
 
+/** The levels an entry names. */
+const levelsOf = (entry) => [entry.own, entry.self, entry.any].filter(Boolean);
+
 /** The role levels an entry names. */
 function roleLevelsOf(entry) {
-  return [entry.own, entry.any].filter(
+  return levelsOf(entry).filter(
     (level) => typeof level === "string" && ROLE_LEVEL.test(level),
   );
 }
 
-const ORDER = [null, REACH.PUBLIC, REACH.OWN, REACH.ANY];
+const ORDER = [null, REACH.PUBLIC, REACH.SELF, REACH.OWN, REACH.ANY];
 const rank = (reach) => ORDER.indexOf(reach);
 
 describe("authorization policy: the table as the matrix", function () {
@@ -108,9 +119,15 @@ describe("authorization policy: the table as the matrix", function () {
         );
       });
 
-      it("signed in without a role", function () {
+      it("signed in without a membership", function () {
         expect(decide(signedIn(), resource, action)).to.equal(
           expectedReach(entry, "signedIn"),
+        );
+      });
+
+      it("member without a role", function () {
+        expect(decide(member(), resource, action)).to.equal(
+          expectedReach(entry, "member"),
         );
       });
 
@@ -163,7 +180,64 @@ describe("authorization policy: hand cases", function () {
     expect(decide(noTenant, "bookable", "read")).to.equal(null);
     expect(decide(noTenant, "bookable", "readPublic")).to.equal(REACH.PUBLIC);
     expect(decide(noTenant, "booking", "read")).to.equal(REACH.OWN);
-    expect(decide(noTenant, "user", "readSelf")).to.equal(REACH.OWN);
+    expect(decide(noTenant, "user", "readSelf")).to.equal(REACH.SELF);
+  });
+
+  it("self is the principal themselves: the signed in reach it, the anonymous do not", function () {
+    expect(decide(anonymous(), "user", "readSelf")).to.equal(null);
+    expect(decide(signedIn(), "user", "readSelf")).to.equal(REACH.SELF);
+    expect(decide(signedIn(), "role", "readMine")).to.equal(REACH.SELF);
+    expect(decide(signedIn(), "booking", "readMine")).to.equal(REACH.SELF);
+    expect(decide(signedIn(), "invitation", "respond")).to.equal(REACH.SELF);
+    expect(decide(signedIn(), "tenant", "countCheck")).to.equal(REACH.SELF);
+    expect(decide(instanceOwner(), "user", "readSelf")).to.equal(REACH.SELF);
+  });
+
+  it("tenantMember is the membership: a member reaches own, a signed-in stranger nothing", function () {
+    expect(decide(signedIn(), "role", "list")).to.equal(null);
+    expect(decide(member(), "role", "list")).to.equal(REACH.OWN);
+    expect(
+      decide(roleHolder("manageBookings.readAny"), "role", "list"),
+    ).to.equal(REACH.OWN);
+    expect(decide(roleHolder("manageRoles.readAny"), "role", "list")).to.equal(
+      REACH.ANY,
+    );
+    expect(decide(tenantOwner(), "role", "list")).to.equal(REACH.ANY);
+    // Without a tenant nobody is a member.
+    expect(decide(principal({ tenantId: null }), "role", "list")).to.equal(
+      null,
+    );
+    expect(decide(instanceOwner(), "role", "list")).to.equal(REACH.ANY);
+  });
+
+  it("the tags and counters are public aggregates, the staff's whole (ADR 0003)", function () {
+    expect(decide(anonymous(), "bookable", "meta")).to.equal(REACH.PUBLIC);
+    expect(decide(signedIn(), "bookable", "meta")).to.equal(REACH.PUBLIC);
+    expect(decide(signedIn(), "event", "meta")).to.equal(REACH.PUBLIC);
+    expect(
+      decide(roleHolder("manageBookables.readOwn"), "event", "meta"),
+    ).to.equal(REACH.PUBLIC);
+    expect(
+      decide(roleHolder("manageBookables.readAny"), "bookable", "meta"),
+    ).to.equal(REACH.ANY);
+    expect(decide(anonymous(), "calendar", "all")).to.equal(REACH.PUBLIC);
+    expect(decide(tenantOwner(), "calendar", "all")).to.equal(REACH.ANY);
+  });
+
+  it("the seats of an event are the staff's, own or any (ticket 19/5)", function () {
+    expect(decide(anonymous(), "event", "seatCount")).to.equal(null);
+    expect(decide(signedIn(), "event", "seatCount")).to.equal(null);
+    expect(
+      decide(roleHolder("manageBookables.readOwn"), "event", "seatCount"),
+    ).to.equal(REACH.OWN);
+    expect(
+      decide(roleHolder("manageBookables.readAny"), "event", "seatCount"),
+    ).to.equal(REACH.ANY);
+  });
+
+  it("a projection for the signed in is any, the public beyond it where the entry says so", function () {
+    expect(decide(anonymous(), "instanceMedia", "file")).to.equal(REACH.PUBLIC);
+    expect(decide(signedIn(), "instanceMedia", "file")).to.equal(REACH.ANY);
   });
 
   it("mayCreateTenant follows the instance setting, not the tenant ownership", function () {
@@ -190,12 +264,12 @@ describe("authorization policy: hand cases", function () {
     expect(decide(signedIn(), "bookable", "readPublic")).to.equal(REACH.PUBLIC);
   });
 
-  it("the prices of a bookable reach as far as the bookable itself, and the public beyond", function () {
+  it("the prices of a bookable are the public's, the staff with readAny read them whole - own means own, never own plus public (ADR 0003)", function () {
     expect(decide(anonymous(), "bookable", "prices")).to.equal(REACH.PUBLIC);
     expect(decide(signedIn(), "bookable", "prices")).to.equal(REACH.PUBLIC);
     expect(
       decide(roleHolder("manageBookables.readOwn"), "bookable", "prices"),
-    ).to.equal(REACH.OWN);
+    ).to.equal(REACH.PUBLIC);
     expect(
       decide(roleHolder("manageBookables.readAny"), "bookable", "prices"),
     ).to.equal(REACH.ANY);
@@ -220,12 +294,12 @@ describe("authorization policy: invariants of the table", function () {
     for (const { resource, action, entry } of entries()) {
       const where = `${resource}.${action}`;
       expect(Object.keys(entry), where).to.satisfy((keys) =>
-        keys.every((key) => ["public", "own", "any"].includes(key)),
+        keys.every((key) => ["public", "own", "self", "any"].includes(key)),
       );
       if ("public" in entry) {
         expect(entry.public, where).to.be.a("boolean");
       }
-      for (const level of [entry.own, entry.any].filter(Boolean)) {
+      for (const level of levelsOf(entry)) {
         const match = level.match(ROLE_LEVEL);
         if (match) {
           expect(ROLE_GROUPS, `${where}: ${level}`).to.include(match[1]);
@@ -235,18 +309,19 @@ describe("authorization policy: invariants of the table", function () {
         }
       }
       expect(
-        entry.public === true || entry.own || entry.any,
+        entry.public === true || entry.own || entry.self || entry.any,
         `${where} grants nothing`,
       ).to.be.ok;
     }
   });
 
-  it("keeps the precedence: instance owner ⊇ tenant owner ⊇ role ⊇ signed in ⊇ anonymous", function () {
+  it("keeps the precedence: instance owner ⊇ tenant owner ⊇ role ⊇ member ⊇ signed in ⊇ anonymous", function () {
     for (const { resource, action, entry } of entries()) {
       const where = `${resource}.${action}`;
       const chain = [
         anonymous(),
         signedIn(),
+        member(),
         ...roleLevelsOf(entry).map((level) => roleHolder(level)),
         tenantOwner(),
         instanceOwner(),
@@ -257,25 +332,57 @@ describe("authorization policy: invariants of the table", function () {
     }
   });
 
-  it("an entry with a role level for own names a resource whose manager knows its owner key (§4.1)", function () {
-    // The manager of each of these entities translates `own` into its own
-    // query condition; `own` with the level `signedIn` means "self" and
-    // needs no key. The calendar `ical.events` and the attendee list
-    // `exporter.export` are the events' own reach, translated by the
-    // `EventManager` like every other event read.
-    const OWNED = [
-      "bookable",
-      "event",
-      "coupon",
-      "booking",
-      "media",
-      "ical",
-      "exporter",
-    ];
-    for (const { resource, entry } of entries()) {
-      if (typeof entry.own === "string" && ROLE_LEVEL.test(entry.own)) {
-        expect(OWNED, `${resource} has own=${entry.own}`).to.include(resource);
+  it("every own names its owner key, and no owner key names an entry without own (ADR 0001)", function () {
+    for (const { resource, action, entry } of entries()) {
+      const where = `${resource}.${action}`;
+      if (entry.own) {
+        const key = ownerKeyOf(resource, action);
+        expect(key, where).to.be.an("object");
+        const { entry: asks, ...kind } = key;
+        expect(
+          Object.keys(kind),
+          `${where}: a field key or a tenant set, one of the two`,
+        ).to.have.lengthOf(1);
+        expect(["key", "tenantsOf"]).to.include(Object.keys(kind)[0]);
+        // The set "reach" names the tenant entry it is asked with, and
+        // nothing else does.
+        if (kind.tenantsOf === "reach") {
+          const [ofResource, ofAction] = String(asks).split(".");
+          expect(
+            TABLE[ofResource]?.[ofAction],
+            `${where} asks ${asks}`,
+          ).to.be.an("object");
+        } else {
+          expect(
+            asks,
+            `${where}: only the set "reach" names an entry`,
+          ).to.equal(undefined);
+        }
+      } else {
+        expect(() => ownerKeyOf(resource, action), where).to.throw(/no own/);
       }
+    }
+    for (const [resource, directory] of Object.entries(OWNER_KEY)) {
+      expect(TABLE, resource).to.have.property(resource);
+      const perAction = directory.byAction ?? {};
+      for (const action of Object.keys(perAction)) {
+        expect(TABLE[resource], `${resource}.${action}`).to.have.property(
+          action,
+        );
+        expect(
+          TABLE[resource][action].own,
+          `${resource}.${action} has no own`,
+        ).to.be.a("string");
+      }
+    }
+  });
+
+  it("self never shares an entry with own: the two mean different things", function () {
+    for (const { resource, action, entry } of entries()) {
+      expect(
+        Boolean(entry.self && entry.own),
+        `${resource}.${action} names self and own`,
+      ).to.equal(false);
     }
   });
 
@@ -286,49 +393,5 @@ describe("authorization policy: invariants of the table", function () {
         `${resource}.${action}`,
       ).to.be.at.least(rank(decide(tenantOwner(), resource, action)));
     }
-  });
-});
-
-describe("authorization policy: which precedence satisfied the rule", function () {
-  it("names the precedence with the reach, widest first", function () {
-    expect(decideWith(instanceOwner(), "bookable", "read")).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.INSTANCE_OWNER,
-    });
-    expect(decideWith(tenantOwner(), "bookable", "read")).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.TENANT_OWNER,
-    });
-    expect(
-      decideWith(roleHolder("manageBookables.readOwn"), "bookable", "read"),
-    ).to.deep.equal({ reach: REACH.OWN, satisfiedBy: PRECEDENCE.ROLE });
-    expect(decideWith(signedIn(), "booking", "read")).to.deep.equal({
-      reach: REACH.OWN,
-      satisfiedBy: PRECEDENCE.SIGNED_IN,
-    });
-  });
-
-  it("a tenant owner reaches any of a signedIn rule through the ownership, not the sign-in", function () {
-    expect(decideWith(tenantOwner(), "booking", "operate")).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.TENANT_OWNER,
-    });
-  });
-
-  it("a public entry and no reach carry no precedence", function () {
-    expect(decideWith(anonymous(), "event", "read")).to.deep.equal({
-      reach: REACH.PUBLIC,
-      satisfiedBy: null,
-    });
-    expect(decideWith(signedIn(), "bookable", "read")).to.equal(null);
-  });
-
-  it("mayCreateTenant is its own precedence, outside the tenant chain", function () {
-    expect(
-      decideWith(principal({ mayCreateTenant: true }), "tenant", "create"),
-    ).to.deep.equal({
-      reach: REACH.ANY,
-      satisfiedBy: PRECEDENCE.MAY_CREATE_TENANT,
-    });
   });
 });

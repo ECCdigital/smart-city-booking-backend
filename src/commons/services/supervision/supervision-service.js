@@ -24,6 +24,7 @@ const {
 const { normalizeReason } = require("./reason");
 const ReviewService = require("./review-service");
 const { NotFoundError, ConflictError } = require("../../../errors/BaseError");
+const { DOMAIN } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "supervision-service.js",
@@ -64,7 +65,7 @@ class SupervisionService {
     assertSupervisionLevel(level);
     const storedReason = normalizeReason(reason, "invalid_supervision_reason");
 
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     if (!tenant) {
       throw new NotFoundError("tenant_not_found", { id: tenantId });
     }

@@ -42,6 +42,19 @@ class CalendarServiceV2 {
   /**
    * Optimized availability check with request-scoped caching, sweep-line
    * capacity calculation, and checkout-aligned accuracy rules (Phase 0–3).
+   *
+   * @param {string} tenantId
+   * @param {string} bookableId
+   * @param {string|number|Date|null|undefined} start
+   * @param {string|number|Date|null|undefined} end
+   * @param {number} amount
+   * @param {string|{ id: string }|null|undefined} user The one booking
+   *   (permissions, quotas), never the reach
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   bookable of the route is read under (ADR 0002); a bookable out of
+   *   reach is `bookable_not_found`
+   * @throws {NotFoundError} `bookable_not_found`, or the public
+   *   projection's `tenant_not_found`
    */
   static async checkAvailability(
     tenantId,
@@ -50,6 +63,7 @@ class CalendarServiceV2 {
     end,
     amount,
     user,
+    scope,
   ) {
     const startedAt = Date.now();
     const startDate = start ? new Date(start) : new Date();
@@ -68,6 +82,7 @@ class CalendarServiceV2 {
       bookableId,
       timeBegin,
       timeEnd,
+      scope,
     );
 
     const bookable = context.bookable;

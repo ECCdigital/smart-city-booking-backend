@@ -3,6 +3,7 @@ const {
   CheckoutPermissions,
 } = require("../../../commons/services/checkout/item-checkout-service");
 const bunyan = require("bunyan");
+const { BaseError } = require("../../../errors/BaseError");
 const BookingCheckout = require("../../../commons/services/checkout/booking-checkout");
 const {
   BookableManager,
@@ -14,10 +15,19 @@ const {
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
+const { scopeOf } = require("../../../commons/services/authorization");
 const logger = bunyan.createLogger({
   name: "checkout-controller.js",
   level: process.env.LOG_LEVEL,
 });
+
+/**
+ * The status of a refused checkout: an offer the checkout cannot reach is
+ * the public's 404 (ADR 0003), a bad request its 400, everything else the
+ * legacy 409.
+ */
+const statusOf = (err) =>
+  err?.statusCode === 404 ? 404 : err?.cause?.code === 400 ? 400 : 409;
 
 class CheckoutController {
   static async validateItem(request, response) {
@@ -99,7 +109,7 @@ class CheckoutController {
     } catch (err) {
       console.error(err);
       logger.warn(err);
-      return response.status(409).json({
+      return response.status(statusOf(err)).json({
         error: err.message,
         checkoutId,
         checkoutIdGenerated: generated,
@@ -137,7 +147,7 @@ class CheckoutController {
       );
     } catch (err) {
       logger.error(err);
-      response.status(err.cause?.code === 400 ? 400 : 409).send(err.message);
+      response.status(statusOf(err)).send(err.message);
     }
   }
 
@@ -161,7 +171,11 @@ class CheckoutController {
 
     let bookable;
     try {
-      bookable = await BookableManager.getBookable(bookableItem.id, tenantId);
+      bookable = await BookableManager.getBookable(
+        bookableItem.id,
+        tenantId,
+        scopeOf(req),
+      );
     } catch (err) {
       logger.error(
         `Error while loading ${bookableItem.id} for tenant ${tenantId}:`,
@@ -222,8 +236,7 @@ class CheckoutController {
         `Error while creating group booking for tenant ${tenantId}:`,
         err,
       );
-      const status = err.cause?.code === 400 ? 400 : 409;
-      return res.status(status).send(err.message);
+      return res.status(statusOf(err)).send(err.message);
     }
   }
 
@@ -233,7 +246,11 @@ class CheckoutController {
       const user = request.user;
       const id = request.params.id;
 
-      const bookable = await BookableManager.getBookable(id, tenantId);
+      const bookable = await BookableManager.getBookable(
+        id,
+        tenantId,
+        scopeOf(request),
+      );
 
       if (!bookable) {
         return response.status(404).send("Bookable not found");
@@ -260,6 +277,9 @@ class CheckoutController {
 
       return response.status(200).send("OK");
     } catch (err) {
+      if (err instanceof BaseError) {
+        return response.status(err.statusCode).send(err.message);
+      }
       logger.error(err);
       response.status(500).send("Internal server error");
     }

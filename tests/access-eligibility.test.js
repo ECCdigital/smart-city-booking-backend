@@ -102,7 +102,7 @@ describe("AccessService.canOperate", () => {
       "tenant-1",
       "booking-1",
       "door-1",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.true;
   });
@@ -126,7 +126,7 @@ describe("AccessService.canOperate", () => {
       "tenant-1",
       "booking-1",
       "door-1",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.true;
   });
@@ -150,7 +150,7 @@ describe("AccessService.canOperate", () => {
       "tenant-1",
       "booking-1",
       "door-1",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.false;
   });
@@ -165,7 +165,7 @@ describe("AccessService.canOperate", () => {
       "tenant-1",
       "booking-1",
       "missing-door",
-      true,
+      { reach: "any" },
     );
     expect(allowed).to.be.false;
   });

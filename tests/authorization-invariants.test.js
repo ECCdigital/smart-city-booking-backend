@@ -1,6 +1,6 @@
 /**
  * The invariants of the route markers and the order of the routers
- * (authorize spec §8.3).
+ * (glossary "Berechtigung").
  *
  * Every route under `src/platform` carries exactly one of the three
  * markers - `authorize`, `public`, `tokenAuthorized`. Ticket 5 of the
@@ -39,6 +39,9 @@ const { MARKER } = require("../src/commons/services/authorization/middleware");
 const JwtHelper = require("../src/commons/utilities/jwt-helper");
 const UserManager = require("../src/commons/data-managers/user-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
+const {
+  supervisionOf,
+} = require("../src/commons/services/supervision/supervision-constants");
 const { errorHandler } = require("../src/middleware/error-handler");
 const {
   authorize,
@@ -46,6 +49,12 @@ const {
 } = require("../src/commons/services/authorization/middleware");
 const AccessController = require("../src/platform/api/controllers/access-controller");
 const MediaControllerV2 = require("../src/platform/api/v2/controllers/media.controller");
+const MediaManager = require("../src/commons/data-managers/media-manager");
+const { Media } = require("../src/commons/entities/media/media");
+const AccessService = require("../src/commons/services/access/access-service");
+const {
+  DashboardCache,
+} = require("../src/commons/services/dashboard/dashboard-cache");
 
 describe("authorization invariants: every route carries one marker", function () {
   /** `GET /api/foo` for every route, to name the offenders in the message. */
@@ -86,6 +95,54 @@ describe("authorization invariants: every route carries one marker", function ()
   });
 });
 
+/**
+ * The domain's reach never appears at the edge (ADR 0002): `DOMAIN` is
+ * what a caller inside `src/commons` says, a handler hands `scopeOf(req)`
+ * on - or `PUBLIC`, the public's view - and never reads as the domain.
+ * Nor does a handler build the condition of a reach itself
+ * (`ownCondition`): the reach becomes a query condition in the manager
+ * alone (ticket 23).
+ */
+describe("authorization invariants: no DOMAIN and no ownCondition under src/platform", function () {
+  const fs = require("fs");
+  const path = require("path");
+  const PLATFORM = path.join(__dirname, "..", "src", "platform");
+
+  function* files(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        yield* files(full);
+      } else if (entry.name.endsWith(".js")) {
+        yield full;
+      }
+    }
+  }
+
+  /** The platform files whose code (comments stripped) matches `pattern`. */
+  function offendersOf(pattern) {
+    const offenders = [];
+    for (const file of files(PLATFORM)) {
+      const source = fs
+        .readFileSync(file, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+      if (pattern.test(source)) {
+        offenders.push(path.relative(PLATFORM, file));
+      }
+    }
+    return offenders;
+  }
+
+  it("names the domain's reach in no handler, router or engine", function () {
+    expect(offendersOf(/\bDOMAIN\b|reach:\s*"domain"/)).to.deep.equal([]);
+  });
+
+  it("builds the condition of a reach in no handler: the managers do", function () {
+    expect(offendersOf(/\bownCondition\b/)).to.deep.equal([]);
+  });
+});
+
 /** A fresh copy of a router module: bound to the stubs of the test. */
 function freshRouter(modulePath, ...alsoFresh) {
   for (const path of [modulePath, ...alsoFresh]) {
@@ -112,10 +169,10 @@ describe("authorization invariants: the order of the routers", function () {
     sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
     // The markers load the principal; an instance owner passes every route,
     // so the order of the routes is what these two tests read.
-    sinon.stub(UserManager, "getUserPermissions").resolves({
-      tenants: [],
+    sinon.stub(UserManager, "getMembershipPicture").resolves({
       instanceOwner: true,
-      allowCreateTenant: false,
+      mayCreateTenant: false,
+      memberships: [],
     });
   });
 
@@ -198,19 +255,25 @@ describe("authorization invariants: the management gate of a declined tenant", f
 
   /**
    * Everyone is a member of every tenant - `t-unknown`, whose document is
-   * gone, included: owner, manager or plain.
+   * gone, included: owner, manager or plain. Each membership carries the
+   * supervision of its tenant, as the sign-in answer does.
    */
-  function permissionsOf(userId) {
+  function pictureOf(userId) {
     const membership = (tenantId) => ({
       tenantId,
       isOwner: userId === "owner",
-      manageBookables: userId === "manager" ? { readAny: true } : {},
-      manageBookings: userId === "manager" ? { updateAny: true } : {},
+      supervision: supervisionOf(tenants[tenantId] ?? null),
+      grants: {
+        manageBookables: userId === "manager" ? { readAny: true } : {},
+        manageBookings: userId === "manager" ? { updateAny: true } : {},
+      },
+      adminInterfaces: [],
+      freeBookings: false,
     });
     return {
-      tenants: [...Object.keys(tenants), "t-unknown"].map(membership),
       instanceOwner: userId === "admin",
-      allowCreateTenant: false,
+      mayCreateTenant: false,
+      memberships: [...Object.keys(tenants), "t-unknown"].map(membership),
     };
   }
 
@@ -251,8 +314,8 @@ describe("authorization invariants: the management gate of a declined tenant", f
     }));
     sinon.stub(UserManager, "getUser").callsFake(async (id) => ({ id }));
     sinon
-      .stub(UserManager, "getUserPermissions")
-      .callsFake(async (id) => permissionsOf(id));
+      .stub(UserManager, "getMembershipPicture")
+      .callsFake(async (id) => pictureOf(id));
     sinon
       .stub(TenantManager, "getTenant")
       .callsFake(async (id) => tenants[id] ?? null);
@@ -313,7 +376,11 @@ describe("authorization invariants: the management gate of a declined tenant", f
     expect(declined.body.reach).to.equal("own");
   });
 
-  it("does not load the tenant when the rule was satisfied by the sign-in or the instance owner", async function () {
+  it("never loads the tenant: its supervision comes with the principal", async function () {
+    const owner = await request(app())
+      .get("/api/t-declined/bookables")
+      .set(as("owner"));
+    expect(owner.status).to.equal(403);
     const customer = await request(app())
       .get("/api/t-declined/bookings/b1")
       .set(as("customer"));
@@ -329,12 +396,17 @@ describe("authorization invariants: the management gate of a declined tenant", f
     expect(TenantManager.getTenant.called).to.equal(false);
   });
 
-  it("loads the tenant once for the staff and passes an unknown one to the handler", async function () {
-    const declined = await request(app())
+  it("refuses a member who lacks the right with the declination too, and passes an unknown tenant to the handler", async function () {
+    const plain = await request(app())
       .get("/api/t-declined/bookables")
-      .set(as("owner"));
-    expect(declined.status).to.equal(403);
-    expect(TenantManager.getTenant.callCount).to.equal(1);
+      .set(as("plain"));
+    expect(plain.status).to.equal(403);
+    expect(plain.body.code).to.equal("tenant_declined");
+    const free = await request(app())
+      .get("/api/t-free/bookables")
+      .set(as("plain"));
+    expect(free.status).to.equal(403);
+    expect(free.body.code).to.equal("forbidden");
 
     const unknown = await request(app())
       .get("/api/tenants/t-unknown/missing")
@@ -552,5 +624,167 @@ describe("authorization invariants: the declined tenant on the routers", functio
       (await call("get", `/api/${TENANT}/bookings/${FIXTURE_ID}`, OWNER))
         .status,
     ).to.equal(404);
+  });
+
+  // Every path that decides from the principal - not only the marker of
+  // `authorize` - meets the membership of a declined tenant resting
+  // (glossary "Ruhende Mitgliedschaft"); a pending tenant rests nothing.
+
+  /** Runs `probe` with the tenant free, pending and declined. */
+  async function acrossLevels(probe) {
+    const answers = {};
+    for (const level of ["free", "pending", "declined"]) {
+      if (level === "declined") {
+        decline();
+      } else {
+        h.tenant.supervisionLevel = level;
+      }
+      answers[level] = await probe();
+    }
+    return answers;
+  }
+
+  /** A medium of the tenant, as the route world has it by default. */
+  const mediumOf = ({ uploadedBy = ROLE_HOLDER, visibility = "public" } = {}) =>
+    new Media({
+      id: FIXTURE_ID,
+      tenantId: TENANT,
+      kind: "image",
+      mimeType: "image/png",
+      size: 7,
+      originalFileName: "bild.png",
+      uploadedBy,
+      visibility,
+      storage: { provider: "s3", key: "fx" },
+    });
+
+  it("narrows GET /bookings for the staff of a declined tenant to what any signed-in user has", async function () {
+    const idsOf =
+      (userId, query = "") =>
+      async () => {
+        const res = await call(
+          "get",
+          `/api/${TENANT}/bookings${query}`,
+          userId,
+        );
+        expect(res.status, `${userId}${query}`).to.equal(200);
+        return res.body.map((booking) => booking.id).sort();
+      };
+    const all = [FIXTURE_ID, "own-of-owner"].sort();
+
+    expect(await acrossLevels(idsOf(ROLE_HOLDER))).to.deep.equal({
+      free: all,
+      pending: all,
+      declined: [],
+    });
+    expect(await acrossLevels(idsOf(OWNER))).to.deep.equal({
+      free: all,
+      pending: all,
+      declined: ["own-of-owner"],
+    });
+    // The anonymized projection is the public's view, whoever asks (ADR
+    // 0003): of a tenant without a public projection none, for the
+    // management too - their whole list is the one without the flag.
+    const projection = (userId) => async () =>
+      (await call("get", `/api/${TENANT}/bookings?public=true`, userId)).status;
+    expect(await acrossLevels(projection(ROLE_HOLDER))).to.deep.equal({
+      free: 200,
+      pending: 404,
+      declined: 404,
+    });
+    expect((await acrossLevels(projection(null))).declined).to.equal(404);
+  });
+
+  it("hides the metadata of a medium from the staff of a declined tenant", async function () {
+    // The door `media.metadata` is signed in; the resting membership reaches
+    // no medium, and a medium out of reach is not there (ticket 04).
+    for (const userId of [ROLE_HOLDER, OWNER]) {
+      const statuses = await acrossLevels(
+        async () =>
+          (await call("get", `/api/v2/${TENANT}/media/${FIXTURE_ID}`, userId))
+            .status,
+      );
+      expect(statuses, userId).to.deep.equal({
+        free: 200,
+        pending: 200,
+        declined: 404,
+      });
+    }
+  });
+
+  it("closes the files of a declined tenant to its members", async function () {
+    try {
+      for (const [visibility, refused] of [
+        ["intern", 403],
+        ["public", 404],
+      ]) {
+        MediaManager.getMedia.callsFake(async () =>
+          mediumOf({ uploadedBy: "someone-else", visibility }),
+        );
+        const statuses = await acrossLevels(
+          async () =>
+            (
+              await call(
+                "get",
+                `/api/v2/${TENANT}/media/${FIXTURE_ID}/file`,
+                CUSTOMER,
+              )
+            ).status,
+        );
+        expect(statuses, visibility).to.deep.equal({
+          free: 200,
+          pending: 200,
+          declined: refused,
+        });
+      }
+    } finally {
+      MediaManager.getMedia.callsFake(async () => mediumOf());
+    }
+  });
+
+  it("answers the access bookings that the staff of a declined tenant manage nothing there", async function () {
+    const spy = sinon.spy(AccessService, "getUserBookingsWithAccess");
+    try {
+      const manages = await acrossLevels(async () => {
+        spy.resetHistory();
+        const res = await call("get", "/api/access/bookings", ROLE_HOLDER);
+        expect(res.status).to.equal(200);
+        return spy.firstCall.args[1].canManageIn(TENANT);
+      });
+      expect(manages).to.deep.equal({
+        free: true,
+        pending: true,
+        declined: false,
+      });
+    } finally {
+      spy.restore();
+    }
+  });
+
+  it("leaves a declined tenant out of the instance dashboard of its staff", async function () {
+    const statuses = await acrossLevels(async () => {
+      DashboardCache.invalidateAll();
+      return (await call("get", "/api/v2/dashboard/summary", ROLE_HOLDER))
+        .status;
+    });
+    expect(statuses).to.deep.equal({ free: 200, pending: 200, declined: 403 });
+  });
+
+  it("lists a declined tenant for its owner only as one they are a member of", async function () {
+    const idsOf = (query) => async () => {
+      const res = await call("get", `/api/tenants${query}`, OWNER);
+      expect(res.status, query).to.equal(200);
+      return res.body.map((tenant) => tenant.id);
+    };
+    expect(await acrossLevels(idsOf(""))).to.deep.equal({
+      free: [TENANT],
+      pending: [TENANT],
+      declined: [],
+    });
+    expect(await acrossLevels(idsOf("?publicTenants=true"))).to.deep.equal({
+      free: [TENANT],
+      pending: [TENANT],
+      declined: [TENANT],
+    });
   });
 });

@@ -1,6 +1,7 @@
 const Workflow = require("../entities/workflow/workflow");
 const BookingManager = require("./booking-manager");
 const WorkflowModel = require("./models/workflowModel");
+const { DOMAIN } = require("../services/authorization/reach");
 
 class WorkflowManager {
   /**
@@ -129,7 +130,11 @@ class WorkflowManager {
         state.tasks.map(async (task) => {
           return {
             ...task.toObject(),
-            bookingItem: await BookingManager.getBooking(task.id, tenantId),
+            bookingItem: await BookingManager.getBooking(
+              task.id,
+              tenantId,
+              DOMAIN,
+            ),
           };
         }),
       );

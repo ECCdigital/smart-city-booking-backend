@@ -5,6 +5,7 @@ const {
 } = require("./checkout/item-checkout-service");
 const bunyan = require("bunyan");
 const ExternalPriceService = require("./external-price-service");
+const { DOMAIN } = require("./authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "bookable-service.js",
@@ -38,7 +39,11 @@ class BookableService {
   }) {
     let checkoutService = null;
     try {
-      const bookable = await BookableManager.getBookable(bookableId, tenantId);
+      const bookable = await BookableManager.getBookable(
+        bookableId,
+        tenantId,
+        DOMAIN,
+      );
       checkoutService = new ItemCheckoutService({
         user: userId,
         tenantId,
@@ -73,7 +78,11 @@ class BookableService {
   }
 
   static async getPriceCategoriesForBookable(bookableId, tenantId) {
-    const bookable = await BookableManager.getBookable(bookableId, tenantId);
+    const bookable = await BookableManager.getBookable(
+      bookableId,
+      tenantId,
+      DOMAIN,
+    );
     const extPrices = await ExternalPriceService.resolve(bookable, tenantId);
     if (extPrices) {
       return extPrices;

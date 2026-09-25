@@ -18,7 +18,11 @@ const {
   ROLE_HOLDER,
   CUSTOMER,
 } = require("./helpers/booking-lifecycle-harness");
-const { installRouteWorld, FIXTURE_ID } = require("./helpers/route-world");
+const {
+  installRouteWorld,
+  offerReads,
+  FIXTURE_ID,
+} = require("./helpers/route-world");
 const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
@@ -380,7 +384,7 @@ describe("bookable review routes", function () {
     /** The matrix itself, spelled from the spec table. */
     const expected = (level, status, isPublic) => {
       // A pending or declined tenant has no public projection at all: the
-      // tenant gate answers 404 before any offer is asked.
+      // managers answer the public's 404 before any offer is asked.
       if (["pending", "declined"].includes(level)) {
         return { tenantVisible: false, listed: false, reachable: false };
       }
@@ -452,7 +456,7 @@ describe("bookable review routes", function () {
             expect(checkout.body.success, "checkout").to.equal(want.reachable);
             if (!want.reachable) {
               expect(checkout.body.error.reason).to.equal(
-                CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
+                CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
               );
             }
             const validate = await call(
@@ -466,7 +470,8 @@ describe("bookable review routes", function () {
                 timeEnd: checkoutBody(FIXTURE_ID).timeEnd,
               },
             );
-            expect(validate.status === 409, "validateItem").to.equal(
+            // An offer the public cannot reach is not there (ADR 0003).
+            expect(validate.status === 404, "validateItem").to.equal(
               !want.reachable,
             );
           });
@@ -494,7 +499,7 @@ describe("bookable review routes", function () {
         checkoutBody("ticket", { timeBegin: null, timeEnd: null }),
       );
       expect(ticket.body.error.reason).to.equal(
-        CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
+        CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
       );
     });
 
@@ -504,8 +509,37 @@ describe("bookable review routes", function () {
         `/api/${TENANT}/bookables/${FIXTURE_ID}/prices`,
       ]) {
         expect((await call("get", path, CUSTOMER)).status, path).to.equal(404);
-        expect((await call("get", path, ADMIN)).status, path).to.equal(200);
       }
+      // The staff read the prices whole (`any`); the anonymized bookings
+      // are the public's view whoever asks (ADR 0003), the management
+      // list is theirs without the flag.
+      expect(
+        (
+          await call(
+            "get",
+            `/api/${TENANT}/bookables/${FIXTURE_ID}/prices`,
+            ADMIN,
+          )
+        ).status,
+      ).to.equal(200);
+      expect(
+        (
+          await call(
+            "get",
+            `/api/${TENANT}/bookables/${FIXTURE_ID}/bookings?public=true`,
+            ADMIN,
+          )
+        ).status,
+      ).to.equal(404);
+      expect(
+        (
+          await call(
+            "get",
+            `/api/${TENANT}/bookables/${FIXTURE_ID}/bookings`,
+            ADMIN,
+          )
+        ).status,
+      ).to.equal(200);
     });
 
     it("keeps the review out of the booking a checkout stores and answers", async function () {
@@ -532,10 +566,26 @@ describe("bookable review routes", function () {
 
     it("leaves unlisted related bookables out of a public detail's embedding", async function () {
       h.bookables[FIXTURE_ID].review = review("approved");
-      BookableManager.getRelatedBookables.resolves([
-        bookable({ id: "rel-ok", title: "A", review: review("approved") }),
-        bookable({ id: "rel-no", title: "B", review: review("pending") }),
-      ]);
+      // The related bookables as the manager reads them: through the
+      // projection under `public` (the route world's stub knows no rule).
+      const related = [
+        bookable({
+          id: "rel-ok",
+          title: "A",
+          isPublic: true,
+          review: review("approved"),
+        }),
+        bookable({
+          id: "rel-no",
+          title: "B",
+          isPublic: true,
+          review: review("pending"),
+        }),
+      ];
+      const reads = offerReads(() => related, "bookable");
+      BookableManager.getRelatedBookables.callsFake((id, tenantId, scope) =>
+        reads.many(tenantId, scope),
+      );
       try {
         const res = await call(
           "get",

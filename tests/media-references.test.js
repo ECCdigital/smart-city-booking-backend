@@ -18,10 +18,11 @@ const { Media } = require("../src/commons/entities/media/media");
 
 const TENANT = "tenant1";
 const USER = "admin@stadt.de";
-// The reach of `media.read` the adapter hands the guard (authorize spec §5):
-// `any` is the whole library, `null` is no picker right at all.
-const PICKER = { reach: "any", userId: USER };
-const NO_PICKER = { reach: null, userId: USER };
+// The bundle the saver's route hands the guard (`reachesOf(req)`), with the
+// picker right its marker names: `any` is the whole library, `null` is no
+// picker right at all.
+const PICKER = { "media.read": "any", userId: USER };
+const NO_PICKER = { "media.read": null, userId: USER };
 const BACKEND_URL = "https://booking.example.org";
 
 function mediaReference(mediaId) {

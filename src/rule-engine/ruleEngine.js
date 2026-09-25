@@ -8,6 +8,7 @@ const RuleExecutionLog = require("./RuleExecutionLogModel");
 const { transformPlaceholders, buildFacts } = require("./utils");
 const { RESOURCE_CATALOG } = require("./ruleMetadata");
 const TenantManager = require("../commons/data-managers/tenant-manager");
+const { DOMAIN } = require("../commons/services/authorization/reach");
 const crypto = require("crypto");
 const bunyan = require("bunyan");
 
@@ -378,7 +379,7 @@ async function getTenantMail(tenantId, cache) {
 
   let mail = null;
   try {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     mail = tenant?.mail || null;
   } catch (err) {
     logger.error(`Could not resolve tenant mail for "${tenantId}":`, err);

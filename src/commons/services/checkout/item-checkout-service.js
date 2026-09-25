@@ -36,11 +36,12 @@ const {
   shouldSkipOpeningHoursCheck,
 } = require("../../availability/availability-rules");
 const { CheckoutPermissions } = require("./checkout-permissions");
-const { isOfferReachable } = require("../supervision/offer-gate");
 const { CHECKOUT_REASONS } = require("./checkout-reasons");
+const { CheckoutError } = require("../../../errors/CheckoutError");
 const checkoutPolicy = require("./checkout-policy");
 const { CheckoutPolicy } = checkoutPolicy;
-const { BadRequestError } = require("../../../errors/BaseError");
+const { BadRequestError, NotFoundError } = require("../../../errors/BaseError");
+const { DOMAIN, PUBLIC } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "item-checkout-service.js",
@@ -90,6 +91,11 @@ class ItemCheckoutService {
     policy = CheckoutPolicy.SELF_SERVICE,
   ) {
     this.policy = checkoutPolicy.assertCheckoutPolicy(policy);
+    // The reach the checkout reads its offer under (ADR 0003): a
+    // self-booking is the public's, whoever is signed in - nobody books an
+    // offer the public could not reach, and a ticket only with its event
+    // reachable - the administration's manual booking the domain's.
+    this.scope = checkoutPolicy.runsChecks(this.policy) ? PUBLIC : DOMAIN;
     this.manualPriceEur = ItemCheckoutService._normalizeManualPrice(
       this.policy,
       manualPriceEur,
@@ -167,6 +173,13 @@ class ItemCheckoutService {
           : new Bookable(bookableSnapshot);
     } else {
       this.originBookable = await this.getBookable();
+    }
+    if (!this.originBookable) {
+      throw new CheckoutError({
+        reason: CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
+        statusCode: 404,
+        params: { bookableId: this.bookableId },
+      });
     }
     this.externalProviders = await this._resolveExternalProviders();
   }
@@ -263,7 +276,7 @@ class ItemCheckoutService {
     if (!parevaRows.length) return null;
 
     const app = AccessProvider.findActiveApplication(
-      await TenantManager.getTenant(this.tenantId),
+      await TenantManager.getTenant(this.tenantId, DOMAIN),
       PAREVA,
       [ACCESS_APP_TYPE],
     );
@@ -443,8 +456,24 @@ class ItemCheckoutService {
     return amountBooked;
   }
 
+  /**
+   * The origin bookable within the reach of the checkout, or null: for a
+   * self-booking what the public reaches - of a tenant without a public
+   * projection nothing, the same absence as an unknown bookable.
+   */
   async getBookable() {
-    return await BookableManager.getBookable(this.bookableId, this.tenantId);
+    try {
+      return await BookableManager.getBookable(
+        this.bookableId,
+        this.tenantId,
+        this.scope,
+      );
+    } catch (err) {
+      if (err instanceof NotFoundError && err.code === "tenant_not_found") {
+        return null;
+      }
+      throw err;
+    }
   }
 
   /**
@@ -703,37 +732,6 @@ class ItemCheckoutService {
     return grossPrice;
   }
 
-  /**
-   * The offer gate of the tenant supervision (spec §5.1, §5.2): a new
-   * self-booking has to reach the offer at the moment of the attempt -
-   * not at the moment the page was opened, and whoever is signed in. A
-   * check of the self-booking policy like the others, so every entrance
-   * (v1, v2, group, validation) and every position - a ticket of an event
-   * or a group item referencing a bookable included - passes it, for the
-   * bookable and for the event it belongs to.
-   */
-  async checkSupervision() {
-    const tenant = await this._cached("supervisionTenant", () =>
-      TenantManager.getTenant(this.tenantId),
-    );
-    // A ticket is booked with its event: the event's own supervision
-    // state counts as well, so neither an approved ticket opens an
-    // unapproved event nor the other way round.
-    const event = this.hasEvent
-      ? (await this._getAvailabilityProvider()).getEvent()
-      : null;
-    if (!isOfferReachable({ tenant, offer: this.originBookable, event })) {
-      throw {
-        checkType: CHECK_TYPES.SUPERVISION,
-        reason: CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
-        available: false,
-        message: `Das Objekt ${this.originBookable?.title} kann derzeit nicht gebucht werden.`,
-        bookableId: this.bookableId,
-      };
-    }
-    return { checkType: CHECK_TYPES.SUPERVISION, available: true };
-  }
-
   async checkPermissions() {
     const provider = await this._getAvailabilityProvider();
     return runPermissionCheck({
@@ -885,6 +883,7 @@ class ItemCheckoutService {
     const parentBookables = await BookableManager.getAncestorBookables(
       this.originBookable.id,
       this.originBookable.tenantId,
+      DOMAIN,
     );
 
     for (const b of [this.originBookable, ...parentBookables]) {
@@ -974,7 +973,6 @@ class ItemCheckoutService {
 
     if (stopOnFirstError) {
       return await Promise.all([
-        this.checkSupervision(),
         this.checkPermissions(),
         this.checkOpeningHours(),
         this.checkMaxAmount(),
@@ -992,7 +990,6 @@ class ItemCheckoutService {
     }
 
     return await Promise.allSettled([
-      this.checkSupervision(),
       this.checkPermissions(),
       this.checkMaxAmount(),
       this.checkOpeningHours(),

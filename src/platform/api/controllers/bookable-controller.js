@@ -8,10 +8,8 @@ const AccessPointManager = require("../../../commons/data-managers/access-point-
 const { ValidationError } = require("../../../errors/ValidationError");
 const { BaseError, ForbiddenError } = require("../../../errors/BaseError");
 const {
-  decide,
   scopeOf,
-  scopeFor,
-  withinReach,
+  reachesOf,
 } = require("../../../commons/services/authorization");
 const {
   getRelatedOpeningHours,
@@ -21,21 +19,7 @@ const MediaReferenceGuard = require("../../../commons/services/media/media-refer
 const {
   withLockerDetails,
 } = require("../../../commons/services/access/bookable-locker-details");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const ReviewService = require("../../../commons/services/supervision/review-service");
-const {
-  assertOfferReachable,
-  offersForSignedInAggregate,
-  listableOffers,
-  reachableOffers,
-  withoutTicketsOfUnreachableEvents,
-} = require("../../../commons/services/supervision/public-offer-gate");
-const {
-  assertStaffMaySee,
-} = require("../../../commons/services/supervision/public-tenant-gate");
-const {
-  isOfferReachable,
-} = require("../../../commons/services/supervision/offer-gate");
 const {
   OFFER_TYPES,
 } = require("../../../commons/services/supervision/supervision-constants");
@@ -53,26 +37,26 @@ const logger = bunyan.createLogger({
  * Web Controller for Bookables.
  */
 class BookableController {
-  static async getPublicBookables(request, response) {
+  /**
+   * `GET /bookables/public`: the bookables within the reach of the request
+   * - the public's list, which the manager projects (ADR 0003), or for
+   * the staff the tenant's whole (`bookable.readPublic`, `any`). A tenant
+   * without a public projection has none: the public's 404.
+   */
+  static async getPublicBookables(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      // List-type delivery (tenant supervision spec §5.1): what asks to be
-      // listed and passes the tenant's supervision.
-      const tenantRecord = await TenantManager.getTenant(tenant);
-      const bookables = await withoutTicketsOfUnreachableEvents(
-        tenantRecord,
-        listableOffers(
-          tenantRecord,
-          await BookableManager.getBookables(tenant),
-        ),
+      const bookables = await BookableManager.getBookables(
+        tenant,
+        scopeOf(request),
       );
 
       if (request.query.populate === "true") {
         for (const bookable of bookables) {
           bookable._populated = await BookableController._publicPopulation(
             bookable,
-            tenantRecord,
+            scopeOf(request),
           );
         }
       }
@@ -87,6 +71,9 @@ class BookableController {
         ),
       );
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send(`Could not get bookables`);
     }
@@ -94,7 +81,7 @@ class BookableController {
   /**
    * This method is used to get all bookable objects for a specific tenant.
    * It first fetches all bookables from the database.
-   * The reach of the request is the query's condition (authorize spec §4.1).
+   * The reach of the request is the query's condition (glossary "Reichweite").
    * If the 'populate' query parameter is set to 'true', it populates each bookable with related data.
    * Finally, it sends the bookables back with a 200 status code.
    *
@@ -110,22 +97,8 @@ class BookableController {
       const allowedBookables = await BookableManager.getBookables(
         tenant,
         scopeOf(request),
+        { populate: request.query.populate === "true" },
       );
-
-      if (request.query.populate === "true") {
-        for (const bookable of allowedBookables) {
-          bookable._populated = {
-            event: await EventManager.getEvent(
-              bookable.eventId,
-              bookable.tenantId,
-            ),
-            relatedBookables: await BookableManager.getRelatedBookables(
-              bookable.id,
-              bookable.tenantId,
-            ),
-          };
-        }
-      }
       logger.info(
         `${tenant} -- Returning ${allowedBookables.length} bookables to user ${user?.id}`,
       );
@@ -139,7 +112,12 @@ class BookableController {
     }
   }
 
-  static async getPublicBookable(request, response) {
+  /**
+   * `GET /bookables/public/:id`: the bookable within the reach of the
+   * request - what the public reaches by a direct link (ADR 0003), the
+   * staff's whole - or a 404 that names no reason (spec §5.2).
+   */
+  static async getPublicBookable(request, response, next) {
     const tenant = request.params.tenant;
     try {
       const user = request.user;
@@ -150,7 +128,11 @@ class BookableController {
         return response.status(400).send(`${tenant} -- No id provided`);
       }
 
-      const bookable = await BookableManager.getBookable(id, tenant);
+      const bookable = await BookableManager.getBookable(
+        id,
+        tenant,
+        scopeOf(request),
+      );
       if (!bookable) {
         logger.warn(`${tenant} -- Bookable with id ${id} not found.`);
         return response.status(404).send(`Bookable with id ${id} not found`);
@@ -159,7 +141,7 @@ class BookableController {
       if (request.query.populate === "true") {
         bookable._populated = await BookableController._publicPopulation(
           bookable,
-          await TenantManager.getTenant(tenant),
+          scopeOf(request),
         );
       }
 
@@ -171,6 +153,9 @@ class BookableController {
       ]);
       response.status(200).send(withDetails);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(`${tenant} -- ${err.message}`);
       response.status(500).send(`Could not get bookable`);
     }
@@ -178,28 +163,28 @@ class BookableController {
 
   /**
    * What a public bookable carries as `_populated`: its event and the
-   * related bookables, as far as the public may reach them (tenant supervision spec §5.2:
-   * no leak over embedded objects), each without its review.
+   * related bookables within the same reach - under `public` what the
+   * projection lists of the related bookables and reaches of the event
+   * (ADR 0003, spec §5.2: no leak over embedded objects) - in the public
+   * DTOs, without a review.
    *
    * @param {Bookable} bookable
-   * @param {Object} tenantRecord The tenant of the bookable
+   * @param {{reach: string, userId?: string|null}} scope The reach of the request
    * @returns {Promise<{event: Object|null, relatedBookables: Object[]}>}
    */
-  static async _publicPopulation(bookable, tenantRecord) {
+  static async _publicPopulation(bookable, scope) {
     const related = await BookableManager.getRelatedBookables(
       bookable.id,
       bookable.tenantId,
+      scope,
     );
-    const event = await EventManager.getEvent(
-      bookable.eventId,
-      bookable.tenantId,
-    );
-    const eventShown =
-      event && isOfferReachable({ tenant: tenantRecord, offer: event });
+    const event = bookable.eventId
+      ? await EventManager.getEvent(bookable.eventId, bookable.tenantId, scope)
+      : null;
     return {
-      event: eventShown ? event.withoutReview() : null,
-      relatedBookables: reachableOffers(tenantRecord, related).map(
-        (relatedBookable) => relatedBookable.withResolvedMediaUrls(),
+      event: event ? event.withoutReview() : null,
+      relatedBookables: related.map((relatedBookable) =>
+        relatedBookable.withResolvedMediaUrls(),
       ),
     };
   }
@@ -232,23 +217,11 @@ class BookableController {
         id,
         tenant,
         scopeOf(request),
+        { populate: request.query.populate === "true" },
       );
       if (!bookable) {
         logger.warn(`${tenant} -- Bookable with id ${id} not found.`);
         return response.status(404).send(`Bookable with id ${id} not found`);
-      }
-
-      if (request.query.populate === "true") {
-        bookable._populated = {
-          event: await EventManager.getEvent(
-            bookable.eventId,
-            bookable.tenantId,
-          ),
-          relatedBookables: await BookableManager.getRelatedBookables(
-            bookable.id,
-            bookable.tenantId,
-          ),
-        };
       }
 
       logger.info(
@@ -288,7 +261,7 @@ class BookableController {
    * If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    *
    * The route carries the update marker (the obsolete PUT stores both ways);
-   * the creation is the adapter's second decision (authorize spec §5, §11)
+   * the creation is its second question (`also: ["create"]`, ADR 0001)
    * and answers 403 without it.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
@@ -300,7 +273,7 @@ class BookableController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      if (decide(request.principal, "bookable", "create") !== "any") {
+      if (request.reaches?.create !== "any") {
         logger.warn(
           `${tenant} -- User ${user?.id} is not allowed to create bookable`,
         );
@@ -326,7 +299,7 @@ class BookableController {
       BookableController._validateAccessBuffers(bookable);
       await MediaReferenceGuard.assertBookableStorable(
         bookable,
-        scopeFor(request, "media", "read"),
+        reachesOf(request),
       );
       await BookableManager.storeBookable(bookable);
       await BookableController._submitPublicationWish(request, bookable);
@@ -396,7 +369,7 @@ class BookableController {
       BookableController._validateAccessBuffers(bookable);
       await MediaReferenceGuard.assertBookableStorable(
         bookable,
-        scopeFor(request, "media", "read"),
+        reachesOf(request),
       );
       await BookableManager.storeBookable(bookable);
       await BookableController._submitPublicationWish(request, bookable);
@@ -585,15 +558,16 @@ class BookableController {
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
    * @throws {Error} If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    */
-  static async getTags(request, response) {
+  static async getTags(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const bookables = await offersForSignedInAggregate(
-        request.principal,
+      // The aggregate over the bookables within the reach: the public's
+      // list, or the tenant's whole for the staff (`bookable.meta`).
+      const bookables = await BookableManager.getBookables(
         tenant,
-        await BookableManager.getBookables(tenant),
+        scopeOf(request),
       );
       const tags = bookables
         .map((b) => b.tags)
@@ -605,6 +579,9 @@ class BookableController {
       );
       response.status(200).send(tags);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("Could not get tags");
     }
@@ -622,21 +599,25 @@ class BookableController {
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
    * @throws {Error} If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    */
-  static async getOpeningHours(request, response) {
+  static async getOpeningHours(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const id = request.params.id;
 
       if (id) {
-        const bookable = await BookableManager.getBookable(id, tenant);
-        {
-          const openingHours = await getRelatedOpeningHours(
-            bookable.id,
-            tenant,
-          );
-
-          response.status(200).send(openingHours);
+        // The bookable within the reach of the request; none there is a 404.
+        const bookable = await BookableManager.getBookable(
+          id,
+          tenant,
+          scopeOf(request),
+        );
+        if (!bookable) {
+          logger.warn(`${tenant} -- Bookable with id ${id} not found.`);
+          return response.status(404).send(`Bookable with id ${id} not found`);
         }
+        const openingHours = await getRelatedOpeningHours(bookable.id, tenant);
+
+        response.status(200).send(openingHours);
       } else {
         logger.warn(
           `${tenant} -- Could not get opening hours. No id provided.`,
@@ -644,12 +625,15 @@ class BookableController {
         response.sendStatus(400);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("Could not get opening hours");
     }
   }
 
-  static async getBookableOccupancy(request, response) {
+  static async getBookableOccupancy(request, response, next) {
     try {
       const { tenant: tenantId, id: bookableId } = request.params;
       const {
@@ -667,6 +651,19 @@ class BookableController {
         return response.status(400).send(`${tenantId} -- No id provided`);
       }
 
+      // The bookable within the reach of the request; none there is a 404.
+      const bookable = await BookableManager.getBookable(
+        bookableId,
+        tenantId,
+        scopeOf(request),
+      );
+      if (!bookable) {
+        logger.warn(`${tenantId} -- Bookable with id ${bookableId} not found.`);
+        return response
+          .status(404)
+          .send(`Bookable with id ${bookableId} not found`);
+      }
+
       const occupancy = await BookableService.getOccupancy({
         bookableId,
         tenantId,
@@ -678,6 +675,9 @@ class BookableController {
 
       response.status(200).send(occupancy);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("Could not get bookable occupancy");
     }
@@ -694,22 +694,20 @@ class BookableController {
         return response.status(400).send(`${tenantId} -- No id provided`);
       }
 
-      const bookable = await BookableManager.getBookable(bookableId, tenantId);
+      // The bookable within the reach of the request: what the public
+      // reaches by a direct link (ADR 0003, no `isPublic` requirement),
+      // the staff's whole (`bookable.prices`, `any`); none there is a 404
+      // that names no reason (spec §5.2).
+      const bookable = await BookableManager.getBookable(
+        bookableId,
+        tenantId,
+        scopeOf(request),
+      );
       if (!bookable) {
         logger.warn(`${tenantId} -- Bookable with id ${bookableId} not found.`);
         return response
           .status(404)
           .send(`Bookable with id ${bookableId} not found`);
-      }
-
-      // Whoever may read the bookable itself reads its prices - unless the
-      // tenant is declined (spec §5.1). Everyone else gets them by the
-      // direct-link rule of the supervision (§5.2): no `isPublic`
-      // requirement, but the offer has to be reachable.
-      if (withinReach(bookable, "ownerUserId", scopeOf(request))) {
-        await assertStaffMaySee(request);
-      } else {
-        await assertOfferReachable(tenantId, bookable);
       }
 
       const priceCategories =

@@ -1,0 +1,11 @@
+# The public projection lives behind the managers, not at the routes
+
+What the public sees of a tenant's offers - its supervision level, the offer's review status, its wish to be listed, whether the offer was asked for by a list or by a direct link, and that a ticket goes out with its event only - was applied in the handlers: 34 calls of the supervision helpers across ten files, plus 29 gate middlewares on the routers, each new public path having to remember the rule itself, and the applications disagreed (some details required `isPublic`, some did not; staff bypassed the rule in five different ways; tickets of unreachable events leaked through embedded lists). We decided that the reach `public` is a projection the managers apply: a manager asked as the public hands its records to one module (`listed` for list methods, `reached` for methods that name an id) that knows every rule, loads the tenant and the events once, throws `tenant_not_found` for a tenant without a public projection, and strips the review status. The gate middlewares go, every manager method a public path reads through takes a reach, and staff get their management view from the rights table alone - an entry that gives them `any` - never from a branch in the handler. The alternatives were the rules inside each manager (repeats the tenant and event loads and couples every manager to two others) and keeping the gates (every new route has to know).
+
+## Consequences
+
+- A new public endpoint that reads through a manager with `scopeOf(req)` inherits the projection without a line of its own; a handler cannot forget it.
+- `own` keeps its one meaning (ADR 0001): a role holder with `readOwn` sees their own records, never their own plus the public ones. Where that would be a regression (`bookable.prices`), the entry loses `own` instead.
+- Engines and checkout ask as the public for everyone, staff included: nobody books an offer the public could not.
+- The module decides records, not fields; the review status is the one field it removes. Anonymizing bookings stays with the handlers.
+- A handler may ask narrower than its right (`PUBLIC` for the anonymized booking list, iCal without `includePrivate`), never wider.

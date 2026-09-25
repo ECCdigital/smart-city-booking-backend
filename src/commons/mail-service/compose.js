@@ -42,6 +42,7 @@ const { MailType } = require("./mail-types");
 const { resolveRecipients } = require("./recipients");
 const { prepareMailAttachments } = require("./mail-attachments");
 const { render, renderShellNotice } = require("./render");
+const { DOMAIN } = require("../services/authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "mail-compose.js",
@@ -53,7 +54,7 @@ function unique(values) {
 }
 
 async function loadTenant(tenantId) {
-  const tenant = await TenantManager.getTenant(tenantId);
+  const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
   if (!tenant) {
     throw new NotFoundError("tenant_not_found", { tenantId });
   }
@@ -67,7 +68,7 @@ async function loadTenant(tenantId) {
 async function load({ tenantId, bookingIds }) {
   const tenant = await loadTenant(tenantId);
 
-  const found = await BookingManager.getBookings(tenantId, bookingIds);
+  const found = await BookingManager.getBookings(tenantId, bookingIds, DOMAIN);
   const bookings = bookingIds.map((id) =>
     found.find((booking) => booking.id === id),
   );
@@ -83,6 +84,7 @@ async function load({ tenantId, bookingIds }) {
         (booking.bookableItems || []).map((item) => item.bookableId),
       ),
     ),
+    DOMAIN,
   );
   const eventIds = unique(
     bookables
@@ -93,7 +95,7 @@ async function load({ tenantId, bookingIds }) {
     await Promise.all(
       eventIds.map(async (id) => [
         id,
-        await EventManager.getEvent(id, tenantId),
+        await EventManager.getEvent(id, tenantId, DOMAIN),
       ]),
     ),
   );

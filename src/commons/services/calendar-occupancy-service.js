@@ -1,5 +1,6 @@
 const { BookableManager } = require("../data-managers/bookable-manager");
 const BookingManager = require("../data-managers/booking-manager");
+const { DOMAIN } = require("./authorization/reach");
 
 /**
  * Resolves the bookable family (self + transitive relatedBookableIds) in memory.
@@ -49,7 +50,7 @@ class CalendarOccupancyService {
     tenantId,
     { bookableIds = [], timeBegin, timeEnd } = {},
   ) {
-    const allBookables = await BookableManager.getBookables(tenantId);
+    const allBookables = await BookableManager.getBookables(tenantId, DOMAIN);
     const bookableById = new Map(
       allBookables.map((bookable) => [bookable.id, bookable]),
     );
@@ -119,12 +120,14 @@ class CalendarOccupancyService {
         bookableIds,
         timeBegin,
         timeEnd,
+        DOMAIN,
       );
     }
 
     const bookings = await BookingManager.getRelatedBookingsBatch(
       tenantId,
       bookableIds,
+      DOMAIN,
     );
 
     return bookings.filter(

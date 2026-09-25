@@ -1,8 +1,6 @@
-const BookingManager = require("../../../commons/data-managers/booking-manager");
 const Formatters = require("../../../commons/utilities/formatters");
-const EventManager = require("../../../commons/data-managers/event-manager");
+const BookingService = require("../../../commons/services/checkout/booking-service");
 const { scopeOf } = require("../../../commons/services/authorization");
-const { NotFoundError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
 
 const logger = bunyan.createLogger({
@@ -27,30 +25,23 @@ class CsvExportController {
    * GET /csv/:tenant/events/:id/bookings
    *
    * The attendee list of an event, for whoever may change the event
-   * (`exporter.export`). The reach loads it: under `any` every event of
-   * the tenant, under `own` only the ones the caller owns - an event out
-   * of reach is a 404, not a 403 (spec §4.2).
+   * (`exporter.export`). The reach applies to the event: under `any` every
+   * event of the tenant, under `own` only the ones the caller owns - an
+   * event out of reach is a 404, not a 403 (glossary "Reichweite"); its bookings the
+   * domain reads whole (ADR 0002).
    */
   static async getEventBookings(request, response) {
     const {
       params: { tenant: tenantId, id: eventId },
     } = request;
 
-    const event = await EventManager.getEvent(
-      eventId,
+    const eventBookings = await BookingService.getEventBookings(
       tenantId,
+      eventId,
       scopeOf(request),
     );
-    if (!event) {
-      throw new NotFoundError("event_not_found");
-    }
 
     try {
-      const eventBookings = await BookingManager.getEventBookings(
-        tenantId,
-        eventId,
-      );
-
       const attendeeList = eventBookings.map((b) => {
         return {
           id: b.id,

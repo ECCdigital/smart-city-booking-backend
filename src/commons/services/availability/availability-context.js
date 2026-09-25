@@ -6,7 +6,20 @@ const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const {
   isTimeRelatedBookable,
 } = require("../../availability/availability-rules/booking-amount");
+const { DOMAIN } = require("../authorization/reach");
 
+/**
+ * The records an availability check reads, loaded once per request.
+ *
+ * The reach applies to the bookable of the route (ADR 0002): the bookable
+ * and, for a ticket, its event are read with the scope the caller hands
+ * in - the public's for a public route, so an offer the public cannot
+ * reach is not there (ADR 0003) and the service answers
+ * `bookable_not_found`. Everything the bookable depends on - its parents,
+ * the related bookables, the tenant and the bookings - the domain reads
+ * (`DOMAIN`): the same boundary as `CheckoutDataProvider.load`. The scope
+ * is required; without one the manager throws, as everywhere.
+ */
 class AvailabilityContext {
   /**
    * @param {Object} params
@@ -14,12 +27,15 @@ class AvailabilityContext {
    * @param {string} params.bookableId
    * @param {number} params.timeBegin
    * @param {number} params.timeEnd
+   * @param {{reach: string, userId?: string|null}} params.scope The reach
+   *   the bookable and its event are read under
    */
-  constructor({ tenantId, bookableId, timeBegin, timeEnd }) {
+  constructor({ tenantId, bookableId, timeBegin, timeEnd, scope }) {
     this.tenantId = tenantId;
     this.bookableId = bookableId;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
+    this.scope = scope;
 
     this.bookable = null;
     this.parentBookables = [];
@@ -41,14 +57,17 @@ class AvailabilityContext {
    * @param {string} bookableId
    * @param {number} timeBegin
    * @param {number} timeEnd
+   * @param {{reach: string, userId?: string|null}} scope The reach of the
+   *   route, or `DOMAIN`
    * @returns {Promise<AvailabilityContext>}
    */
-  static async create(tenantId, bookableId, timeBegin, timeEnd) {
+  static async create(tenantId, bookableId, timeBegin, timeEnd, scope) {
     const context = new AvailabilityContext({
       tenantId,
       bookableId,
       timeBegin,
       timeEnd,
+      scope,
     });
     await context.load();
     return context;
@@ -57,10 +76,18 @@ class AvailabilityContext {
   async load() {
     const [bookable, parentBookables, relatedBookables, tenant] =
       await Promise.all([
-        BookableManager.getBookable(this.bookableId, this.tenantId),
-        BookableManager.getAncestorBookables(this.bookableId, this.tenantId),
-        BookableManager.getRelatedBookables(this.bookableId, this.tenantId),
-        TenantManager.getTenant(this.tenantId),
+        BookableManager.getBookable(this.bookableId, this.tenantId, this.scope),
+        BookableManager.getAncestorBookables(
+          this.bookableId,
+          this.tenantId,
+          DOMAIN,
+        ),
+        BookableManager.getRelatedBookables(
+          this.bookableId,
+          this.tenantId,
+          DOMAIN,
+        ),
+        TenantManager.getTenant(this.tenantId, DOMAIN),
       ]);
 
     this.metrics.dbQueryCount += 4;
@@ -82,6 +109,7 @@ class AvailabilityContext {
       bookableIds,
       this.timeBegin,
       this.timeEnd,
+      DOMAIN,
     );
     this.metrics.dbQueryCount += 1;
     this.#indexBookings(bookings);
@@ -109,6 +137,7 @@ class AvailabilityContext {
       const untimedBookings = await BookingManager.getRelatedBookingsBatch(
         this.tenantId,
         bookableIds,
+        DOMAIN,
       );
       this.metrics.dbQueryCount += 1;
       this.#indexBookings(untimedBookings);
@@ -116,8 +145,14 @@ class AvailabilityContext {
 
     if (bookable?.type === BOOKABLE_TYPES.TICKET && bookable?.eventId) {
       const [event, eventBookings] = await Promise.all([
-        EventManager.getEvent(bookable.eventId, this.tenantId),
-        BookingManager.getEventBookings(this.tenantId, bookable.eventId),
+        // The event of the ticket within the same reach: what the public
+        // reaches, or the bookable would not have been.
+        EventManager.getEvent(bookable.eventId, this.tenantId, this.scope),
+        BookingManager.getEventBookings(
+          this.tenantId,
+          bookable.eventId,
+          DOMAIN,
+        ),
       ]);
       this.metrics.dbQueryCount += 2;
       this.event = event;
@@ -133,6 +168,7 @@ class AvailabilityContext {
       const children = await BookableManager.getRelatedBookables(
         parent.id,
         this.tenantId,
+        DOMAIN,
       );
       this.metrics.dbQueryCount += 1;
       this.relatedBookablesByParentId.set(parent.id, children);
@@ -155,6 +191,7 @@ class AvailabilityContext {
       extraIds,
       this.timeBegin,
       this.timeEnd,
+      DOMAIN,
     );
     this.metrics.dbQueryCount += 1;
     this.#indexBookings(extraBookings);
@@ -163,6 +200,7 @@ class AvailabilityContext {
       const untimedBookings = await BookingManager.getRelatedBookingsBatch(
         this.tenantId,
         extraIds,
+        DOMAIN,
       );
       this.metrics.dbQueryCount += 1;
       this.#indexBookings(untimedBookings);

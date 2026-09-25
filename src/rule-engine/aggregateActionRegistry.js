@@ -1,5 +1,6 @@
 const MailerService = require("../commons/mail-service/mail-service");
 const TenantManager = require("../commons/data-managers/tenant-manager");
+const { DOMAIN } = require("../commons/services/authorization/reach");
 
 /**
  * Aggregate actions receive ALL matched documents of a tenant group at once
@@ -21,7 +22,7 @@ module.exports = {
     const tenantId = context.tenantId || docs[0].tenantId;
     const address = params.to || context.tenantMail;
 
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
 
     if (!tenant) {
       throw new Error("sendAggregatedEmail: tenant not found");

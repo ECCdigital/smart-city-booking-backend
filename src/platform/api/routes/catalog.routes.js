@@ -10,6 +10,12 @@ router.get(
   authorize("tenant", "catalog"),
   CatalogController.getCatalogByTenant,
 );
-router.put("/", authorize("tenant", "catalog"), CatalogController.storeCatalog);
+// A catalog that is not a single tenant's is the instance's: the marker
+// decides `instanceCatalog.store` too, the handler reads it.
+router.put(
+  "/",
+  authorize("tenant", "catalog", { also: ["instanceCatalog.store"] }),
+  CatalogController.storeCatalog,
+);
 
 module.exports = router;

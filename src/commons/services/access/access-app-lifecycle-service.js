@@ -1,5 +1,7 @@
 const bunyan = require("bunyan");
 const { createClient } = require("./clients/access-client-registry");
+const TenantManager = require("../../data-managers/tenant-manager");
+const { DOMAIN } = require("../authorization/reach");
 
 require("./clients");
 
@@ -39,6 +41,24 @@ class AccessAppLifecycleService {
   static redactBackendState(tenant) {
     const SaltoKsIqActivationService = require("./salto-ks-iq-activation-service");
     return SaltoKsIqActivationService.redactActivations(tenant);
+  }
+
+  /**
+   * The secret a provider signs its webhooks with, from the tenant's active
+   * access application. The webhook route is token-authorized and has no
+   * reach, so the domain reads the tenant (ADR 0002).
+   *
+   * @param {string} tenantId
+   * @param {string} providerId
+   * @returns {Promise<string|null>} The secret, null without one
+   */
+  static async webhookSecretOf(tenantId, providerId) {
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
+    const app = (tenant?.applications || []).find(
+      (a) => a.type === APP_TYPE && a.id === providerId && a.active,
+    );
+
+    return app?.webhookSecret || app?.notificationSecret || null;
   }
 
   static async syncWebhooks(previousTenant, nextTenant) {

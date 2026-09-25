@@ -4,6 +4,7 @@ const sinon = require("sinon");
 const GrantCleanupService = require("../src/commons/services/access/grant-cleanup-service");
 const AccessLogService = require("../src/commons/services/access/access-log-service");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const {
   registerAccessProvider,
@@ -96,6 +97,7 @@ describe("GrantCleanupService", () => {
             },
           },
         },
+        DOMAIN,
       ],
     );
   });

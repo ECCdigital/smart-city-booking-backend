@@ -2,6 +2,7 @@ const {
   BookableManager,
 } = require("../../../commons/data-managers/bookable-manager");
 const EventManager = require("../../../commons/data-managers/event-manager");
+const { scopeOf } = require("../../../commons/services/authorization");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const InstanceManager = require("../../../commons/data-managers/instance-manager");
 const ExternalPriceService = require("../../../commons/services/external-price-service");
@@ -9,15 +10,19 @@ const {
   enforceTenantCatalogAccess,
 } = require("../../../commons/utilities/catalog-participation-utils");
 const {
-  isOfferListable,
-} = require("../../../commons/services/supervision/offer-gate");
-const {
-  withoutTicketsOfUnreachableEvents,
-} = require("../../../commons/services/supervision/public-offer-gate");
-const {
   GroupBookingPermissions,
 } = require("../../../commons/utilities/group-booking-permissions");
+const { NotFoundError } = require("../../../errors/BaseError");
 
+/**
+ * The JSON embed engine: every page reads through the managers with the
+ * route's reach (`json.all`: the public's, staff included), so what it
+ * shows is the public projection the managers apply (ADR 0003) - a list
+ * what is listed, a detail what a direct link reaches, the tickets of an
+ * event what is listed of them, a tenant without a public projection a
+ * 404. On top of it the tenant's own catalog participation and the
+ * bookable's own permissions (`hasAccess`), which are no supervision.
+ */
 class JSONController {
   // The catalog access refusals are the typed errors of the errors module
   // (`tenant_not_found`, `authentication_required`,
@@ -97,13 +102,9 @@ class JSONController {
 
     try {
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
-      let bookables = await BookableManager.getBookables(tenantId);
-
-      // List-type delivery of the supervision (spec §5.1): listed is what
-      // asks for it and passes the tenant's review.
-      bookables = await withoutTicketsOfUnreachableEvents(
-        tenant,
-        bookables.filter((offer) => isOfferListable({ tenant, offer })),
+      let bookables = await BookableManager.getBookables(
+        tenantId,
+        scopeOf(req),
       );
 
       bookables = bookables.filter((bookable) => {
@@ -129,7 +130,11 @@ class JSONController {
 
       const relatedBookables =
         allRelatedIds.length > 0
-          ? await BookableManager.getBookablesByIds(tenantId, allRelatedIds)
+          ? await BookableManager.getBookablesByIds(
+              tenantId,
+              allRelatedIds,
+              scopeOf(req),
+            )
           : [];
 
       const relatedMap = new Map(relatedBookables.map((b) => [b.id, b]));
@@ -160,12 +165,7 @@ class JSONController {
 
         pub.relatedBookables = (bookable.relatedBookableIds ?? [])
           .map((id) => relatedMap.get(id))
-          .filter(
-            (b) =>
-              b &&
-              isOfferListable({ tenant, offer: b }) &&
-              JSONController.hasAccess(b, identity, userRoles),
-          );
+          .filter((b) => b && JSONController.hasAccess(b, identity, userRoles));
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
             JSONController._exportPublicBookable(
@@ -182,10 +182,7 @@ class JSONController {
       res.setHeader("content-type", "application/json");
       res.status(200).send(await Promise.all(result));
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
+      JSONController._fail(res, error, "No bookables found");
     }
   }
 
@@ -208,10 +205,13 @@ class JSONController {
     try {
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
-      const bookable = await BookableManager.getBookable(id, tenantId);
+      const bookable = await BookableManager.getBookable(
+        id,
+        tenantId,
+        scopeOf(req),
+      );
 
-      // The embed interface shows what is listed, its detail included.
-      if (!bookable?.id || !isOfferListable({ tenant, offer: bookable })) {
+      if (!bookable?.id) {
         return res.status(404).json({
           success: false,
           message: "Bookable not found",
@@ -242,13 +242,12 @@ class JSONController {
             ? await BookableManager.getBookablesByIds(
                 tenantId,
                 bookable.relatedBookableIds,
+                scopeOf(req),
               )
             : [];
 
-        pub.relatedBookables = relatedBookables.filter(
-          (b) =>
-            isOfferListable({ tenant, offer: b }) &&
-            JSONController.hasAccess(b, identity, userRoles),
+        pub.relatedBookables = relatedBookables.filter((b) =>
+          JSONController.hasAccess(b, identity, userRoles),
         );
         pub.relatedBookables = await Promise.all(
           pub.relatedBookables.map((b) =>
@@ -270,10 +269,7 @@ class JSONController {
         });
       }
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
+      JSONController._fail(res, error, "Bookable not found");
     }
   }
 
@@ -295,12 +291,9 @@ class JSONController {
     try {
       const identity = req.user;
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
-      let events = await EventManager.getEvents(tenantId);
+      let events = await EventManager.getEvents(tenantId, scopeOf(req));
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
-
-      // List-type delivery of the supervision (spec §5.1).
-      events = events.filter((offer) => isOfferListable({ tenant, offer }));
 
       if (ids) {
         const idsArray = ids.split(",");
@@ -331,25 +324,24 @@ class JSONController {
         const tickets = await BookableManager.getEventBookables(
           tenantId,
           event.id,
+          scopeOf(req),
         );
         event.tickets = await Promise.all(
-          tickets
-            .filter((ticket) => isOfferListable({ tenant, offer: ticket }))
-            .map((ticket) =>
-              JSONController._exportPublicBookable(
-                ticket,
-                tenantId,
-                checkoutInstance,
-                exportOptions,
-              ),
+          tickets.map((ticket) =>
+            JSONController._exportPublicBookable(
+              ticket,
+              tenantId,
+              checkoutInstance,
+              exportOptions,
             ),
+          ),
         );
       }
 
       res.setHeader("content-type", "application/json");
       res.status(200).send(publicEvents);
-    } catch {
-      res.sendStatus(500);
+    } catch (error) {
+      JSONController._fail(res, error, "No events found");
     }
   }
 
@@ -370,29 +362,27 @@ class JSONController {
     try {
       const identity = req.user;
       const userRoles = await JSONController.getUserRoles(tenantId, identity);
-      const event = await EventManager.getEvent(id, tenantId);
+      const event = await EventManager.getEvent(id, tenantId, scopeOf(req));
       const checkoutInstance = await InstanceManager.getInstance();
       const exportOptions = { identity, userRoles, cancellationRefundTiers };
 
-      // The embed interface shows what is listed, its detail included.
-      if (event?.id && isOfferListable({ tenant, offer: event })) {
+      if (event?.id) {
         const tickets = await BookableManager.getEventBookables(
           tenantId,
           event.id,
+          scopeOf(req),
         );
 
         const publicEvent = event.exportPublic({ absoluteMediaUrls: true });
         publicEvent.tickets = await Promise.all(
-          tickets
-            .filter((ticket) => isOfferListable({ tenant, offer: ticket }))
-            .map((ticket) =>
-              JSONController._exportPublicBookable(
-                ticket,
-                tenantId,
-                checkoutInstance,
-                exportOptions,
-              ),
+          tickets.map((ticket) =>
+            JSONController._exportPublicBookable(
+              ticket,
+              tenantId,
+              checkoutInstance,
+              exportOptions,
             ),
+          ),
         );
 
         res.setHeader("content-type", "application/json");
@@ -400,9 +390,17 @@ class JSONController {
       } else {
         res.status(404).send("Event not found");
       }
-    } catch {
-      res.sendStatus(500);
+    } catch (error) {
+      JSONController._fail(res, error, "Event not found");
     }
+  }
+
+  /** The public's 404 of a tenant without a projection, a 500 for the rest. */
+  static _fail(res, error, notFoundMessage) {
+    if (error instanceof NotFoundError) {
+      return res.status(404).json({ success: false, message: notFoundMessage });
+    }
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 
   static async getUserRoles(tenantId, identity) {

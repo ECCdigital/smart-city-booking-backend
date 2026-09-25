@@ -40,6 +40,24 @@ class RoleManager {
   }
 
   /**
+   * The roles of a tenant by their ids, in one query: what the memberships
+   * of a user name. Ids without a role fall away; configuration, read
+   * without a reach (ticket 22/4).
+   *
+   * @param {string[]} ids Logical identifiers of the roles
+   * @param {string} tenantId The tenant id
+   * @returns {Promise<Role[]>} The roles found, in no particular order
+   */
+  static async getRolesByIds(ids, tenantId) {
+    if (!ids?.length) return [];
+    const rawRoles = await RoleModel.find({
+      tenantId: tenantId,
+      id: { $in: ids },
+    });
+    return rawRoles.map((doc) => doc.toEntity());
+  }
+
+  /**
    * Insert a role object into the database or update it.
    *
    * @param {Role|Object} role The role object to be stored.

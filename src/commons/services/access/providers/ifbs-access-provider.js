@@ -11,6 +11,7 @@ const {
 } = require("../../../entities/access/access-point");
 const { AccessOpenError } = require("../../../../errors/AccessOpenError");
 const { NotFoundError } = require("../../../../errors/BaseError");
+const { DOMAIN } = require("../../authorization/reach");
 
 require("../clients");
 
@@ -44,7 +45,7 @@ class IfbsAccessProvider extends AccessProvider {
       return this._client;
     }
 
-    const tenantData = await TenantManager.getTenant(tenant);
+    const tenantData = await TenantManager.getTenant(tenant, DOMAIN);
     const rawApp = this._findActiveApplication(tenantData, PROVIDER_ID, [
       APP_TYPE,
     ]);

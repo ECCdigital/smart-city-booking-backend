@@ -1,6 +1,7 @@
 const bunyan = require("bunyan");
 const MediaManager = require("../../data-managers/media-manager");
 const { MEDIA_KIND } = require("../../schemas/mediaSchema");
+const { DOMAIN } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "mail-media.js",
@@ -114,7 +115,11 @@ async function embedMediaImages(html, tenantId) {
     }
 
     try {
-      const media = await MediaManager.getMedia(target.mediaId, tenantId);
+      const media = await MediaManager.getMedia(
+        target.mediaId,
+        tenantId,
+        DOMAIN,
+      );
 
       if (!media) {
         continue;

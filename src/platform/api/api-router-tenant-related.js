@@ -1,6 +1,6 @@
 /**
  * The tenant router, `/api/:tenant`. Every route carries one marker of the
- * authorization (glossary "Berechtigung", spec §2.4): `authorize(resource,
+ * authorization (glossary "Berechtigung"): `authorize(resource,
  * action)` decides over the rights table and hands the reach (glossary
  * "Reichweite") to the handler as `req.reach`, `public(resource, action)`
  * decides for the anonymous too and never refuses, `public()` is a plainly
@@ -29,13 +29,6 @@ const {
   publicRoute,
   tokenAuthorized,
 } = require("../../commons/services/authorization");
-const {
-  publicTenantGate,
-} = require("../../commons/services/supervision/public-tenant-gate");
-const {
-  publicBookableGate,
-} = require("../../commons/services/supervision/public-offer-gate");
-const { REACH } = require("../../commons/services/authorization/policy");
 const SupervisionController = require("./controllers/supervision-controller");
 const {
   OFFER_TYPES,
@@ -46,73 +39,58 @@ const router = express.Router({ mergeParams: true });
 // BOOKABLES
 // =========
 
-// Public. The public delivery paths of the tenant carry the tenant gate
-// of the supervision after their marker (spec §5.2): under the reach
-// `public` a pending or declined tenant answers 404. Not on the checkout
-// (its gate is a check in the item checkout), not on the existing-booking
-// paths, the payments, the hooks - a blanket gate on `publicRoute()` would
-// be wrong.
-// A route about one bookable carries the offer gate instead, which
-// includes the tenant gate (spec §5.1): under the reach `public` a
-// bookable that is not reachable answers 404.
+// Public. What the public sees of the tenant's offers is the managers'
+// projection under the reach `public` (ADR 0003): a route reads with
+// `scopeOf(req)` and needs no gate of its own - a tenant without a public
+// projection is `404 tenant_not_found`, an offer the public cannot reach is
+// not there. Staff get their management view from the entry's `any`.
 router.get(
   "/bookables/public",
   publicRoute("bookable", "readPublic"),
-  publicTenantGate(),
   BookableController.getPublicBookables,
 );
 router.get(
   "/bookables/public/:id",
   publicRoute("bookable", "readPublic"),
-  publicBookableGate(),
   BookableController.getPublicBookable,
 );
 router.get(
   "/bookables/:id/bookings",
   publicRoute("bookable", "relatedBookings"),
-  // `own` is every signed-in user here: only `any` manages.
-  publicBookableGate({ exemptReaches: [REACH.ANY] }),
   BookingController.getRelatedBookings,
 );
 router.get(
   "/bookables/:id/openingHours",
   publicRoute("bookable", "readPublic"),
-  publicBookableGate(),
   BookableController.getOpeningHours,
 );
 router.get(
   "/bookables/:id/availability/v1",
   publicRoute(),
-  publicBookableGate(),
   CalendarController.getBookableAvailabilityV1,
 );
 router.get(
   "/bookables/:id/availability/v2",
   publicRoute(),
-  publicBookableGate(),
   CalendarController.getBookableAvailabilityV2,
 );
 router.get(
   "/bookables/:id/availability",
   publicRoute(),
-  publicBookableGate(),
   CalendarController.getBookableAvailability,
 );
 router.get(
   "/bookables/:id/block-periods",
   publicRoute(),
-  publicBookableGate(),
   CalendarController.getBookableBlockPeriods,
 );
 router.get(
   "/bookables/:id/occupancy",
   publicRoute("bookable", "readPublic"),
-  publicBookableGate(),
   BookableController.getBookableOccupancy,
 );
 router.get(
   "/bookables/:id/prices",
-  // The handler asks the offer gate for whoever cannot read the bookable.
   publicRoute("bookable", "prices"),
   BookableController.getBookablePriceCategories,
 );
@@ -133,10 +111,10 @@ router.get(
   authorize("bookable", "read"),
   BookableController.getBookable,
 );
-// The obsolete store: an update, or a creation the handler decides (§11).
+// The obsolete store: an update, or a creation the marker decides too.
 router.put(
   "/bookables",
-  authorize("bookable", "update"),
+  authorize("bookable", "update", { also: ["create", "media.read"] }),
   BookableController.storeBookable,
 );
 router.delete(
@@ -155,14 +133,16 @@ router.post(
   authorize("bookable", "reviewDecide"),
   SupervisionController.decideReview(OFFER_TYPES.BOOKABLE),
 );
+// The tags and counters: public aggregates over the public's list, the
+// tenant's whole for the staff (`any`, ADR 0003).
 router.get(
   "/bookables/_meta/tags",
-  authorize("bookable", "meta"),
+  publicRoute("bookable", "meta"),
   BookableController.getTags,
 );
 router.get(
   "/bookables/count/check",
-  authorize("bookable", "meta"),
+  publicRoute("bookable", "meta"),
   BookableController.countCheck,
 );
 
@@ -170,16 +150,10 @@ router.get(
 // ======
 
 // Public
-router.get(
-  "/events",
-  publicRoute("event", "read"),
-  publicTenantGate(),
-  EventController.getEvents,
-);
+router.get("/events", publicRoute("event", "read"), EventController.getEvents);
 router.get(
   "/events/:id",
   publicRoute("event", "read"),
-  publicTenantGate(),
   EventController.getEvent,
 );
 router.get(
@@ -189,7 +163,11 @@ router.get(
 );
 
 // Protected
-router.put("/events", authorize("event", "update"), EventController.storeEvent);
+router.put(
+  "/events",
+  authorize("event", "update", { also: ["create", "media.read"] }),
+  EventController.storeEvent,
+);
 router.delete(
   "/events/:id",
   authorize("event", "delete"),
@@ -208,12 +186,12 @@ router.post(
 );
 router.get(
   "/events/_meta/tags",
-  authorize("event", "meta"),
+  publicRoute("event", "meta"),
   EventController.getTags,
 );
 router.get(
   "/events/count/check",
-  authorize("event", "meta"),
+  publicRoute("event", "meta"),
   EventController.countCheck,
 );
 router.get(
@@ -232,12 +210,12 @@ router.get(
 );
 router.put(
   "/bookings",
-  authorize("booking", "update"),
+  authorize("booking", "update", { also: ["create"] }),
   BookingController.storeBooking,
 );
 router.get(
   "/bookings/assigned",
-  authorize("booking", "read"),
+  authorize("booking", "readMine"),
   BookingController.getAssignedBookings,
 );
 router.get(
@@ -425,7 +403,6 @@ router.post(
 router.get(
   "/checkout/permissions/:id",
   publicRoute(),
-  publicBookableGate(),
   CheckoutController.checkoutPermissions,
 );
 
@@ -466,8 +443,7 @@ router.get(
 // ========
 router.get(
   "/calendar/occupancy",
-  publicRoute(),
-  publicTenantGate(),
+  publicRoute("calendar", "all"),
   CalendarController.getOccupancies,
 );
 
@@ -481,13 +457,12 @@ router.get(
 router.get(
   "/coupons/:id",
   publicRoute("coupon", "lookup"),
-  publicTenantGate(),
   CouponController.getCoupon,
 );
-// The obsolete store: an update, or a creation the handler decides (§11).
+// The obsolete store: an update, or a creation the marker decides too.
 router.put(
   "/coupons",
-  authorize("coupon", "update"),
+  authorize("coupon", "update", { also: ["create"] }),
   CouponController.storeCoupon,
 );
 router.delete(
@@ -501,11 +476,10 @@ router.delete(
 // The tenant listing and upload are gone with the media library — the admin UI
 // picks and uploads media (§4.10). `GET /files/get` stays for good as the
 // resolver of stored legacy addresses; the medium's visibility is the media
-// module's (authorize spec §5), decided in the handler in addition to the
-// reach the marker hands it.
+// rights' to decide, from the questions the marker names.
 router.get(
   "/files/get",
-  publicRoute("media", "file"),
+  publicRoute("media", "file", { also: ["bookingDocument", "intern"] }),
   FileController.getTenantFile,
 );
 
@@ -558,8 +532,12 @@ router.get(
   authorize("role", "readMine"),
   RoleController.getUserRolesByTenant,
 );
-// The obsolete store: an update, or a creation the handler decides (§11).
-router.put("/roles", authorize("role", "update"), RoleController.storeRole);
+// The obsolete store: an update, or a creation the marker decides too.
+router.put(
+  "/roles",
+  authorize("role", "update", { also: ["create"] }),
+  RoleController.storeRole,
+);
 router.get("/roles/:id", authorize("role", "read"), RoleController.getRole);
 router.delete(
   "/roles/:id",

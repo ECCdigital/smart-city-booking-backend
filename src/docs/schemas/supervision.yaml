@@ -105,17 +105,19 @@ components:
     TenantDeclinedError:
       type: object
       description: |
-        The management gate of a declined tenant (glossary "abgewiesen",
-        tenant supervision spec §6.1): every management request of a tenant
-        owner or role holder about a declined tenant - read and write, on
+        The declined tenant (glossary "abgewiesen", tenant supervision spec
+        §6.1): the membership of its tenant owners and members rests
+        (glossary "Ruhende Mitgliedschaft") - they are decided as any
+        signed-in user, and every request refused to them on
         `/api/{tenant}/...`, `/api/tenants/{tenant}/...`,
         `/api/v2/{tenant}/...`, `/csv/{tenant}/...` and `PUT /api/tenants`
-        with the tenant in the body - answers `403 tenant_declined`. Not
-        affected: the instance owner, what any signed-in user has (the own
-        booking, its receipt, refund preview and lock, an invitation - the
-        tenant's staff keep exactly that, at the reach `own`), public and
-        token-authorized routes (booking status, payment callbacks, hooks,
-        webhooks). The body is the JSON form of `ForbiddenError`.
+        with the tenant in the body - read and write - answers
+        `403 tenant_declined`. Not affected: the instance owner, what any
+        signed-in user has (the own booking, its receipt, refund preview and
+        lock, an invitation - the tenant's staff keep exactly that, at the
+        reach `own`), public and token-authorized routes (booking status,
+        payment callbacks, hooks, webhooks), which answer them as anyone
+        else. The body is the JSON form of `ForbiddenError`.
       properties:
         error:
           type: string

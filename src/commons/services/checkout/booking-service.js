@@ -8,7 +8,9 @@
  * `booking-lifecycle/`, the deletion in `booking-lifecycle/booking-deletion.js`.
  */
 
+const bunyan = require("bunyan");
 const BookingManager = require("../../data-managers/booking-manager");
+const EventManager = require("../../data-managers/event-manager");
 const GroupBookingManager = require("../../data-managers/group-booking-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
@@ -34,6 +36,12 @@ const {
   ForbiddenError,
   UnauthorizedError,
 } = require("../../../errors/BaseError");
+const { DOMAIN } = require("../authorization/reach");
+
+const logger = bunyan.createLogger({
+  name: "booking-service.js",
+  level: process.env.LOG_LEVEL,
+});
 
 class BookingService {
   /**
@@ -64,8 +72,8 @@ class BookingService {
 
   static async getCancellationRefundPreview(tenantId, bookingId) {
     const [tenant, booking] = await Promise.all([
-      TenantManager.getTenant(tenantId),
-      BookingManager.getBooking(bookingId, tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
+      BookingManager.getBooking(bookingId, tenantId, DOMAIN),
     ]);
 
     if (!tenant) {
@@ -87,8 +95,8 @@ class BookingService {
 
   static async getUserCancellationRefundPreview(tenantId, bookingId) {
     const [tenant, booking] = await Promise.all([
-      TenantManager.getTenant(tenantId),
-      BookingManager.getBooking(bookingId, tenantId),
+      TenantManager.getTenant(tenantId, DOMAIN),
+      BookingManager.getBooking(bookingId, tenantId, DOMAIN),
     ]);
 
     if (!tenant) {
@@ -133,7 +141,11 @@ class BookingService {
   }
 
   static async getHookCancellationRefundPreview(tenantId, bookingId, hookId) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      DOMAIN,
+    );
 
     if (!booking || !booking.id) {
       throw new NotFoundError("booking_not_found", { bookingId });
@@ -149,8 +161,13 @@ class BookingService {
 
   static async getGroupCancellationRefundPreview(tenantId, groupBookingId) {
     const [tenant, groupBooking] = await Promise.all([
-      TenantManager.getTenant(tenantId),
-      GroupBookingManager.getGroupBooking(tenantId, groupBookingId, false),
+      TenantManager.getTenant(tenantId, DOMAIN),
+      GroupBookingManager.getGroupBooking(
+        tenantId,
+        groupBookingId,
+        false,
+        DOMAIN,
+      ),
     ]);
 
     if (!tenant) {
@@ -163,6 +180,7 @@ class BookingService {
     const bookings = await BookingManager.getBookings(
       tenantId,
       groupBooking.bookingIds,
+      DOMAIN,
     );
     if (bookings.length !== groupBooking.bookingIds.length) {
       throw new NotFoundError("booking_not_found", {
@@ -210,7 +228,7 @@ class BookingService {
   }
 
   static async checkBookingStatus(bookingId, name, tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
 
     if (!tenant.enablePublicStatusView) {
       throw new BaseError("public_status_view_disabled", {
@@ -218,7 +236,11 @@ class BookingService {
       });
     }
 
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      DOMAIN,
+    );
 
     if (!booking.id) {
       throw new NotFoundError("booking_not_found", { bookingId });
@@ -289,7 +311,11 @@ class BookingService {
   }
 
   static async verifyBookingOwnership(tenantId, bookingId, name) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      DOMAIN,
+    );
 
     if (!booking.id) {
       throw new NotFoundError("booking_not_found", { bookingId });
@@ -299,15 +325,141 @@ class BookingService {
   }
 
   static async getBookingStatus(tenantId, bookingId) {
-    const booking = await BookingManager.getBooking(bookingId, tenantId);
+    const booking = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      DOMAIN,
+    );
     if (!booking) {
       throw new NotFoundError("booking_not_found", { bookingId });
     }
     return booking;
   }
 
-  static async getBookedSeatsCount(tenantId, eventId, params) {
-    return await BookingManager.getBookedSeatsCount(tenantId, eventId, params);
+  /**
+   * The booked seats of an event within the reach of the route
+   * (`event.seatCount`, ADR 0002): the event has to be within reach, its
+   * seats are then counted whole by the domain - a ticket of the event
+   * that another user owns counts too.
+   *
+   * @param {string} tenantId
+   * @param {string} eventId
+   * @param {{reach: string, userId?: string|null}} scope
+   * @returns {Promise<number>}
+   * @throws {NotFoundError} `event_not_found` for an event out of reach
+   */
+  static async getBookedSeatsCount(tenantId, eventId, scope) {
+    await BookingService._eventWithinReach(tenantId, eventId, scope);
+    return await BookingManager.getBookedSeatsCount(tenantId, eventId);
+  }
+
+  /**
+   * The bookings of an event within the reach of the route (the attendee
+   * list of the CSV export, `exporter.export`): the event has to be within
+   * reach, its bookings are the domain's to read.
+   *
+   * @param {string} tenantId
+   * @param {string} eventId
+   * @param {{reach: string, userId?: string|null}} scope
+   * @returns {Promise<Booking[]>}
+   * @throws {NotFoundError} `event_not_found` for an event out of reach
+   */
+  static async getEventBookings(tenantId, eventId, scope) {
+    await BookingService._eventWithinReach(tenantId, eventId, scope);
+    return await BookingManager.getEventBookings(tenantId, eventId, DOMAIN);
+  }
+
+  /** The event within the reach, or the 404 that names no reason. */
+  static async _eventWithinReach(tenantId, eventId, scope) {
+    const event = await EventManager.getEvent(eventId, tenantId, scope);
+    if (!event) {
+      throw new NotFoundError("event_not_found", { eventId });
+    }
+    return event;
+  }
+
+  /**
+   * The bookings a payment names, for the provider's callbacks and return
+   * pages (`tokenAuthorized`: the payment's own reference is the
+   * authorization, the domain reads for it). A `G-` id names a group
+   * booking and stands for its bookings; an unknown group is skipped.
+   *
+   * @param {string} tenantId
+   * @param {string[]} ids Booking ids, group booking ids among them
+   * @returns {Promise<Booking[]>}
+   */
+  static async getBookingsOfPayment(tenantId, ids) {
+    const bookingIds = [];
+    for (const id of ids) {
+      if (!id.startsWith("G-")) {
+        bookingIds.push(id);
+        continue;
+      }
+      const group = await GroupBookingManager.getGroupBooking(
+        tenantId,
+        id,
+        false,
+        DOMAIN,
+      );
+      if (group?.bookingIds) {
+        bookingIds.push(...group.bookingIds);
+      } else {
+        logger.warn(`${tenantId} -- could not resolve group booking ${id}`);
+      }
+    }
+    return await BookingManager.getBookings(tenantId, bookingIds, DOMAIN);
+  }
+
+  /**
+   * The one group some bookings form, for an aggregated payment: its id,
+   * or null where they form none or more than one.
+   *
+   * @param {string} tenantId
+   * @param {string[]} bookingIds
+   * @returns {Promise<string|null>}
+   */
+  static async getGroupBookingIdOf(tenantId, bookingIds) {
+    const groups = await GroupBookingManager.getGroupBookingsByBookingIds(
+      tenantId,
+      bookingIds,
+      false,
+      DOMAIN,
+    );
+    return groups.length === 1 ? groups[0].id : null;
+  }
+
+  /**
+   * "My bookings" (`booking.readMine`, reach `self`): the bookings assigned
+   * to the user, read by the domain by the user - in one tenant or across
+   * all. No record of anyone else is in reach, so the route's reach does
+   * not narrow the read.
+   *
+   * @param {string} userId
+   * @param {Object} [options]
+   * @param {string|null} [options.tenantId=null] The tenant, or every one
+   * @param {boolean} [options.populate=false] Carry the primary bookable
+   *   and the workflow status of each booking as `_populated`
+   * @returns {Promise<Booking[]>}
+   */
+  static async getAssignedBookings(
+    userId,
+    { tenantId = null, populate = false } = {},
+  ) {
+    return await BookingManager.getAssignedBookings(userId, tenantId, DOMAIN, {
+      populate,
+    });
+  }
+
+  /**
+   * The booking a hook names, for the hook routes (`tokenAuthorized`: the
+   * hook's secret is the authorization, the domain reads for it).
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @returns {Promise<Booking|null>}
+   */
+  static async getBookingOfHook(tenantId, bookingId) {
+    return await BookingManager.getBooking(bookingId, tenantId, DOMAIN);
   }
 }
 

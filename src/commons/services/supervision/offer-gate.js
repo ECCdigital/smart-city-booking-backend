@@ -1,7 +1,10 @@
 /**
  * The offer gate (tenant supervision spec §5.1): the pure decisions over a
- * tenant and one of its offers (glossary "Angebot"). Two questions, asked
- * by every public delivery path and by the checkout:
+ * tenant and one of its offers (glossary "Angebot"). The rule layer under
+ * the public projection (`public-projection.js`, ADR 0003), which the
+ * managers apply under the reach `public` - no handler, engine or
+ * checkout asks here; the media access asks for what holds a medium
+ * (ticket 04). Two questions:
  *
  *   isOfferListable    list, catalog, feed, aggregate - the offer asks to be
  *                      listed (`isPublic`) and the tenant lets it out
@@ -90,20 +93,8 @@ function isOfferReachable({ tenant, offer, event = null }) {
   );
 }
 
-/**
- * The same tenant question as a query condition, for a list that filters
- * in the database: every tenant at a public level, a missing level
- * included (`null` in `$in` matches a missing field).
- *
- * @returns {Object} The condition to spread into a tenant query.
- */
-function publicTenantCondition() {
-  return { supervisionLevel: { $in: [...PUBLIC_SUPERVISION_LEVELS, null] } };
-}
-
 module.exports = {
   isTenantPubliclyVisible,
   isOfferListable,
   isOfferReachable,
-  publicTenantCondition,
 };

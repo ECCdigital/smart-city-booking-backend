@@ -121,7 +121,6 @@ describe("ItemCheckoutService policy behaviour", function () {
   }
 
   const CHECK_METHODS = [
-    "checkSupervision",
     "checkPermissions",
     "checkOpeningHours",
     "checkMaxAmount",

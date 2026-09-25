@@ -7,7 +7,8 @@
     summary: Instance dashboard KPI summary
     description: |
       Cross-tenant Admin Dashboard KPIs for tenants the caller may access
-      (instance owner: all tenants; otherwise tenant owner or `manageBookings.readAny`).
+      (instance owner: all tenants; otherwise tenant owner or `manageBookings.readAny`,
+      never a declined tenant - the membership rests there).
       Live Mongo aggregations with a short in-process cache (~45s TTL).
       Always echoes `status` and `granularity`; always includes `byPeriod`
       (empty when granularity is omitted). Period keys use Europe/Berlin.

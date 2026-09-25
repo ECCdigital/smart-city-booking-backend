@@ -1,7 +1,6 @@
 const bunyan = require("bunyan");
 const mime = require("mime-types");
 
-const MediaManager = require("../../../commons/data-managers/media-manager");
 const MediaService = require("../../../commons/services/media/media-service");
 const {
   NextcloudManager,
@@ -13,9 +12,7 @@ const {
 const {
   BadRequestError,
   BaseError,
-  ForbiddenError,
   NotFoundError,
-  UnauthorizedError,
 } = require("../../../errors/BaseError");
 const {
   PUBLIC_ROOT,
@@ -23,15 +20,10 @@ const {
   normaliseLegacyPath,
 } = require("../../../commons/services/media/legacy-path");
 const {
-  assertInstanceMediaFileAccess,
-  assertMediaFileAccess,
-  hasActiveMembership,
-} = require("../../../commons/services/media/media-access");
-const {
-  readsRecords,
-  scopeFor,
-  scopeOf,
-} = require("../../../commons/services/authorization");
+  importedFileReadable,
+  legacyFileReadable,
+} = require("../../../commons/services/media/media-rights");
+const { reachesOf } = require("../../../commons/services/authorization");
 const {
   isImportPending,
 } = require("../../../commons/services/media/media-import-status");
@@ -223,28 +215,30 @@ class FileController {
   }
 
   /**
-   * Answers a resolver request in one scope.
+   * Answers a resolver request in the tenant it names, or on the instance.
+   * Who may read what is the media rights', from the questions the route's
+   * marker named: an imported medium follows its visibility, a file of the
+   * old tree is read as an internal medium unless it lies in the public root.
    *
    * @param {Object} request - Express request.
    * @param {Object} response - Express response.
    * @param {Function} next - Express next.
-   * @param {Object} scope - Tenant or instance scope behaviour.
+   * @param {string|null} tenantId - The tenant, `null` on the instance.
    * @returns {Promise<void>}
    */
-  static async _resolve(request, response, next, scope) {
+  static async _resolve(request, response, next, tenantId) {
     let legacyPath;
 
     try {
       legacyPath = FileController._requireLegacyPath(request);
-      const tenantId = scope.tenantId(request);
 
-      const media = await MediaManager.getMediaByLegacyPath(
+      const media = await importedFileReadable(
         tenantId,
         legacyPath,
+        reachesOf(request),
       );
 
       if (media) {
-        await scope.assertMediaAccess(request, media);
         return await FileController._sendMedia(request, response, next, media);
       }
 
@@ -254,7 +248,10 @@ class FileController {
         throw new NotFoundError("file_not_found", { name: legacyPath });
       }
 
-      await scope.assertLegacyAccess(request, legacyPath);
+      legacyFileReadable(
+        { isPublic: legacyRoot(legacyPath) === PUBLIC_ROOT, tenantId },
+        reachesOf(request),
+      );
 
       return await FileController._sendLegacyFile(request, response, next, {
         tenantId,
@@ -284,87 +281,22 @@ class FileController {
   }
 
   /**
-   * Read access to a file the import has not taken over yet. Public files stay
-   * anonymous; everything else needs an active membership in the owning tenant
-   * — the old check let any signed-in user through, whatever tenant they
-   * belonged to (§4.3).
-   *
-   * @param {Object} request - Express request.
-   * @param {string} tenantId - Tenant of the file.
-   * @param {string} legacyPath - The requested path.
-   * @returns {Promise<void>}
-   * @throws {UnauthorizedError|ForbiddenError}
-   */
-  static async _assertLegacyTenantAccess(request, tenantId, legacyPath) {
-    if (legacyRoot(legacyPath) === PUBLIC_ROOT) {
-      return;
-    }
-
-    const { reach, userId } = scopeOf(request);
-
-    if (!userId) {
-      throw new UnauthorizedError("unauthorized");
-    }
-
-    if (reach === "any") {
-      return;
-    }
-
-    if (!(await hasActiveMembership(userId, tenantId))) {
-      throw new ForbiddenError("forbidden");
-    }
-  }
-
-  /**
-   * Read access to a tenant-less legacy file. There is no membership that could
-   * narrow it, so `intern` means any signed-in user of the instance (§4.9).
-   *
-   * @param {Object} request - Express request.
-   * @param {string} legacyPath - The requested path.
-   * @returns {void}
-   * @throws {UnauthorizedError}
-   */
-  static _assertLegacyInstanceAccess(request, legacyPath) {
-    if (legacyRoot(legacyPath) === PUBLIC_ROOT) {
-      return;
-    }
-
-    if (!readsRecords(scopeOf(request))) {
-      throw new UnauthorizedError("unauthorized");
-    }
-  }
-
-  /**
    * Resolve a tenant-less legacy address.
    */
   static async getFile(request, response, next) {
-    return await FileController._resolve(request, response, next, {
-      tenantId: () => null,
-      assertMediaAccess: (req, media) =>
-        assertInstanceMediaFileAccess(media, scopeOf(req)),
-      assertLegacyAccess: (req, legacyPath) =>
-        FileController._assertLegacyInstanceAccess(req, legacyPath),
-    });
+    return await FileController._resolve(request, response, next, null);
   }
 
   /**
    * Resolve a legacy address of a tenant.
    */
   static async getTenantFile(request, response, next) {
-    return await FileController._resolve(request, response, next, {
-      tenantId: (req) => req.params.tenant,
-      assertMediaAccess: (req, media) =>
-        assertMediaFileAccess(media, {
-          file: scopeOf(req),
-          document: scopeFor(req, "media", "bookingDocument"),
-        }),
-      assertLegacyAccess: (req, legacyPath) =>
-        FileController._assertLegacyTenantAccess(
-          req,
-          req.params.tenant,
-          legacyPath,
-        ),
-    });
+    return await FileController._resolve(
+      request,
+      response,
+      next,
+      request.params.tenant,
+    );
   }
 }
 

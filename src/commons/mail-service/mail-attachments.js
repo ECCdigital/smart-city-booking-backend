@@ -15,6 +15,7 @@ const bunyan = require("bunyan");
 const MediaManager = require("../data-managers/media-manager");
 const MediaService = require("../services/media/media-service");
 const { toMediaReference } = require("../services/media/media-reference");
+const { DOMAIN } = require("../services/authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "mail-attachments.js",
@@ -33,7 +34,7 @@ const logger = bunyan.createLogger({
  */
 async function loadMediaMailAttachment(att, tenantId) {
   const mediaId = att.reference.mediaId;
-  const media = await MediaManager.getMedia(mediaId, tenantId);
+  const media = await MediaManager.getMedia(mediaId, tenantId, DOMAIN);
 
   if (!media) {
     logger.warn(`Attachment medium ${mediaId} not found in ${tenantId}`);

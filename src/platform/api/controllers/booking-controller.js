@@ -32,7 +32,7 @@ const {
   CheckoutPolicy,
 } = require("../../../commons/services/checkout/checkout-policy");
 const WorkflowService = require("../../../commons/services/workflow/workflow-service");
-const { decide, scopeOf } = require("../../../commons/services/authorization");
+const { scopeOf, PUBLIC } = require("../../../commons/services/authorization");
 const {
   resolveCheckoutId,
 } = require("../../../commons/utilities/checkout-utils");
@@ -42,12 +42,6 @@ const {
   withCustomerView,
 } = require("../../../commons/services/booking/booking-customer-view");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const {
-  reachableBookableIds,
-} = require("../../../commons/services/supervision/public-offer-gate");
-const {
-  reachableOffers,
-} = require("../../../commons/services/supervision/public-offer-gate");
 const {
   CancellationRefundService,
 } = require("../../../commons/services/payment/cancellation-refund-service");
@@ -73,51 +67,6 @@ function bookingFromRequest(body = {}) {
  * Web Controller for Bookings.
  */
 class BookingController {
-  static _resolvePrimaryBookableId(booking) {
-    if (booking.bookableId) {
-      return booking.bookableId;
-    }
-
-    return booking.bookableItems?.[0]?.bookableId ?? null;
-  }
-
-  static async _populate(bookings) {
-    if (!bookings.length) {
-      return;
-    }
-
-    const tenantId = bookings[0].tenantId;
-    const bookableIds = [
-      ...new Set(
-        bookings
-          .map((booking) =>
-            BookingController._resolvePrimaryBookableId(booking),
-          )
-          .filter(Boolean),
-      ),
-    ];
-
-    const [bookables, workflowStatusMap] = await Promise.all([
-      BookableManager.getBookablesByIdsWithCustomFields(tenantId, bookableIds),
-      WorkflowService.getWorkflowStatusMap(tenantId),
-    ]);
-
-    const bookableById = new Map(
-      bookables.map((bookable) => [bookable.id, bookable]),
-    );
-
-    for (const booking of bookings) {
-      const bookableId = BookingController._resolvePrimaryBookableId(booking);
-      booking._populated = {
-        bookable: bookableId ? bookableById.get(bookableId) ?? null : null,
-        workflowStatus: WorkflowService.resolveWorkflowStatus(
-          workflowStatusMap,
-          booking.id,
-        ),
-      };
-    }
-  }
-
   /** Answers the 404 of a booking that is not there for this request. */
   static _notFound(response, bookingId) {
     return ApiResponse.fail(
@@ -139,7 +88,7 @@ class BookingController {
   /**
    * Get all bookings. With the public flag the anonymized projection of every
    * booking, for anyone; otherwise the bookings within the reach of the
-   * request (authorize spec §4.1) - the public has none and is refused.
+   * request (glossary "Reichweite") - the public has none and is refused.
    * @param request
    * @param response
    * @param next
@@ -151,19 +100,15 @@ class BookingController {
       const user = request.user;
 
       if (request.query.public === "true") {
-        let bookings = await BookingManager.getTenantBookings(tenant);
-        // The projection is an aggregate over the tenant's offers: it names
-        // only what the public can reach, and signing in opens nothing
-        // (tenant supervision spec §5.2). Management (`any`) sees it all.
-        if (request.reach !== "any") {
-          const reachableIds = await reachableBookableIds(tenant);
-          bookings = bookings.filter((b) =>
-            (b.bookableIds || []).every((id) => reachableIds.has(id)),
-          );
-        }
-        const anonymizedBookings = bookings.map((b) => {
-          return BookingController.anonymizeBooking(b);
-        });
+        // The public's view, whoever asks (ADR 0003: a handler asks
+        // narrower than its right, never wider): the manager answers the
+        // bookings of the bookables the public's list carries, and a
+        // tenant without a public projection has none (the public's 404,
+        // staff included). The anonymizing itself is the handler's.
+        const bookings = await BookingManager.getTenantBookings(tenant, PUBLIC);
+        const anonymizedBookings = bookings.map((b) =>
+          BookingController.anonymizeBooking(b),
+        );
 
         logger.info(
           `${tenant} -- sending ${anonymizedBookings.length} anonymized bookings to user ${user?.id}`,
@@ -181,11 +126,8 @@ class BookingController {
       const allowedBookings = await BookingManager.getTenantBookings(
         tenant,
         scopeOf(request),
+        { populate: request.query.populate === "true" },
       );
-
-      if (request.query.populate === "true") {
-        await BookingController._populate(allowedBookings);
-      }
 
       logger.info(
         `${tenant} -- sending ${allowedBookings.length} allowed bookings to user ${user?.id}`,
@@ -211,16 +153,15 @@ class BookingController {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const filter = tenant ? { tenantId: tenant } : {};
-
-      const bookings = await BookingManager.getAssignedBookings({
-        userID: request.principal.userId,
-        filter,
-      });
-
-      if (request.query.populate === "true") {
-        await BookingController._populate(bookings);
-      }
+      // "My bookings" is the domain's read by the user (`self` reaches no
+      // record, ticket 22).
+      const bookings = await BookingService.getAssignedBookings(
+        request.principal.userId,
+        {
+          tenantId: tenant ?? null,
+          populate: request.query.populate === "true",
+        },
+      );
 
       // The tenant snapshot and the event core data a customer's pages
       // render from (tenant supervision spec §5.2), whatever the level of
@@ -242,8 +183,8 @@ class BookingController {
   /**
    * Get all Bookings including those that have a relation to parent or child bookables.
    * With the public flag the anonymized projection of every booking, for
-   * anyone; otherwise the bookings within the reach of the request (authorize
-   * spec §4.1) - the public has none and is refused.
+   * anyone; otherwise the bookings within the reach of the request (glossary
+   * "Reichweite") - the public has none and is refused.
    * @param request
    * @param response
    * @param next
@@ -261,13 +202,19 @@ class BookingController {
       if (!isPublicView && request.reach === "public") {
         return next(new ForbiddenError());
       }
-      const scope = isPublicView ? undefined : scopeOf(request);
-      // The anonymized projection embeds only bookables the public reaches
-      // (tenant supervision spec §5.2: no leak over aggregates).
-      const visibleInView = async (bookables) =>
-        isPublicView
-          ? reachableOffers(await TenantManager.getTenant(tenant), bookables)
-          : bookables;
+      const scope = isPublicView ? PUBLIC : scopeOf(request);
+      if (isPublicView) {
+        // The bookable of the route as the public reaches it (ADR 0003);
+        // none there is the public's 404, naming no reason (spec §5.2).
+        const bookable = await BookableManager.getBookable(
+          bookableId,
+          tenant,
+          PUBLIC,
+        );
+        if (!bookable) {
+          throw new NotFoundError("offer_not_found", { id: bookableId });
+        }
+      }
 
       let bookings = await BookingManager.getRelatedBookings(
         tenant,
@@ -276,8 +223,12 @@ class BookingController {
       );
 
       if (includeRelatedBookings) {
-        let relatedBookables = await visibleInView(
-          await BookableManager.getRelatedBookables(bookableId, tenant),
+        // The dependents within the same reach: under `public` what the
+        // projection lists of them (spec §5.2: no leak over aggregates).
+        const relatedBookables = await BookableManager.getRelatedBookables(
+          bookableId,
+          tenant,
+          scope,
         );
 
         let relatedBookings = [];
@@ -293,8 +244,10 @@ class BookingController {
       }
 
       if (includeParentBookings) {
-        let parentBookables = await visibleInView(
-          await BookableManager.getAncestorBookables(bookableId, tenant),
+        const parentBookables = await BookableManager.getAncestorBookables(
+          bookableId,
+          tenant,
+          scope,
         );
         let parentBookings = [];
         for (let parentBookable of parentBookables) {
@@ -328,6 +281,9 @@ class BookingController {
         response.status(200).send(bookings);
       }
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("Could not get related bookings");
     }
@@ -351,12 +307,11 @@ class BookingController {
           id,
           tenantId,
           scopeOf(request),
+          { populate: true },
         );
         if (!booking) {
           return BookingController._notFound(response, id);
         }
-
-        await BookingController._populate([booking]);
         logger.info(`${tenantId} -- sending booking ${id} to user ${user?.id}`);
         response.status(200).send(booking);
       } else {
@@ -384,7 +339,11 @@ class BookingController {
       if (ids) {
         const splitIds = ids.split(",");
 
-        const bookings = await BookingManager.getBookings(tenantId, splitIds);
+        const bookings = await BookingManager.getBookings(
+          tenantId,
+          splitIds,
+          scopeOf(request),
+        );
         // The tenant snapshot and the event core data a customer's page
         // renders from (tenant supervision spec §5.2), whatever the level.
         const bookingsStatus = await withCustomerView(bookings, (booking) =>
@@ -417,9 +376,13 @@ class BookingController {
   static async storeBooking(request, response, next) {
     const booking = bookingFromRequest(request.body);
 
+    // The booking within the reach of the main action (ADR 0002).
     let isUpdate =
-      !!(await BookingManager.getBooking(booking.id, booking.tenantId)) &&
-      !!booking.id;
+      !!(await BookingManager.getBooking(
+        booking.id,
+        booking.tenantId,
+        scopeOf(request),
+      )) && !!booking.id;
 
     if (isUpdate) {
       await BookingController.updateBooking(request, response, next);
@@ -432,9 +395,9 @@ class BookingController {
     const user = request.user;
     const tenantId = request.params.tenant;
 
-    // The obsolete PUT carries the update marker; the creation is the
-    // adapter's second decision (authorize spec §5, §11).
-    if (decide(request.principal, "booking", "create") !== "any") {
+    // The obsolete PUT carries the update marker and names the creation
+    // as its second decision (`also`, ADR 0001).
+    if (request.reaches?.create !== "any") {
       logger.warn(
         `${tenantId} -- User ${user?.id} is not allowed to create booking.`,
       );
@@ -533,7 +496,11 @@ class BookingController {
         return response.sendStatus(400);
       }
 
-      const booking = await BookingManager.getBooking(id, tenant);
+      const booking = await BookingManager.getBooking(
+        id,
+        tenant,
+        scopeOf(request),
+      );
       if (!booking) {
         const error = new NotFoundError("booking_not_found", { bookingId: id });
         return response.status(error.statusCode).json(error.toJSON());
@@ -584,7 +551,11 @@ class BookingController {
         return response.sendStatus(400);
       }
 
-      const booking = await BookingManager.getBooking(id, tenant);
+      const booking = await BookingManager.getBooking(
+        id,
+        tenant,
+        scopeOf(request),
+      );
       if (!booking) {
         const error = new NotFoundError("booking_not_found", { bookingId: id });
         return response.status(error.statusCode).json(error.toJSON());
@@ -735,7 +706,11 @@ class BookingController {
         }
       }
 
-      const booking = await BookingManager.getBooking(id, tenantId);
+      const booking = await BookingManager.getBooking(
+        id,
+        tenantId,
+        scopeOf(request),
+      );
       if (!booking) {
         const error = new NotFoundError("booking_not_found", { bookingId: id });
         return response.status(error.statusCode).json(error.toJSON());
@@ -798,7 +773,9 @@ class BookingController {
         return response.sendStatus(400);
       }
 
-      const booking = await BookingManager.getBooking(id, tenant);
+      // A hook route is authorized by the hook (`tokenAuthorized`): the
+      // domain reads the booking for it.
+      const booking = await BookingService.getBookingOfHook(tenant, id);
 
       if (!booking || !booking.hooks || booking.hooks.length === 0) {
         return response.sendStatus(404);
@@ -837,7 +814,7 @@ class BookingController {
       const eventId = request.params.id;
 
       // The public sees no bookings of an event; the rest is the reach's
-      // (authorize spec §4.1).
+      // (glossary "Reichweite").
       const allowedBookings =
         request.reach === "public"
           ? []
@@ -903,7 +880,7 @@ class BookingController {
 
   /**
    * The booking a reprint is asked for: the one within the reach of the
-   * request (authorize spec §4.1), else 404. Answers the request itself
+   * request (glossary "Reichweite"), else 404. Answers the request itself
    * and returns null where not.
    */
   static async _reprintable(request, response) {
@@ -958,6 +935,7 @@ class BookingController {
       const updatedBooking = await BookingManager.getBooking(
         booking.id,
         tenantId,
+        scopeOf(request),
       );
 
       response
@@ -1008,6 +986,7 @@ class BookingController {
       const updatedBooking = await BookingManager.getBooking(
         booking.id,
         tenantId,
+        scopeOf(request),
       );
 
       response
@@ -1088,7 +1067,11 @@ class BookingController {
           .send({ message: "Invoice app not found or inactive." });
       }
 
-      const booking = await BookingManager.getBooking(bookingId, tenantId);
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenantId,
+        scopeOf(request),
+      );
       if (!booking) {
         return response.status(404).send({ message: "Booking not found." });
       }
@@ -1117,6 +1100,7 @@ class BookingController {
       const updatedBooking = await BookingManager.getBooking(
         bookingId,
         tenantId,
+        scopeOf(request),
       );
 
       response.status(200).json({

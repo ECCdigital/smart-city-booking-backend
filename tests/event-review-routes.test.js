@@ -18,7 +18,11 @@ const {
   ROLE_HOLDER,
   CUSTOMER,
 } = require("./helpers/booking-lifecycle-harness");
-const { installRouteWorld, FIXTURE_ID } = require("./helpers/route-world");
+const {
+  installRouteWorld,
+  offerReads,
+  FIXTURE_ID,
+} = require("./helpers/route-world");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const {
   BookableManager,
@@ -93,16 +97,11 @@ describe("event review routes", function () {
       bookables: h.bookables,
     });
     // The event store, over a catalogue of this test: reads within the
-    // reach, the conditional review write, the whole-event write.
-    const within = (event, scope) =>
-      scope?.reach !== "own" || event.ownerUserId === scope.userId;
-    restub("getEvent", async (id, tenantId, scope) => {
-      const event = events[id];
-      return event && within(event, scope) ? event : null;
-    });
-    restub("getEvents", async (tenantId, scope) =>
-      Object.values(events).filter((event) => within(event, scope)),
-    );
+    // reach (the public's through the real projection, as the manager
+    // does), the conditional review write, the whole-event write.
+    const reads = offerReads(() => Object.values(events), "event");
+    restub("getEvent", reads.one);
+    restub("getEvents", reads.many);
     restub("updateReview", async ({ id, expectedStatus, review: next }) => {
       const target = events[id];
       if (!target || (target.review?.status ?? null) !== expectedStatus) {
@@ -581,16 +580,13 @@ describe("event review routes", function () {
       return { listed: approved && isPublic, reachable: approved };
     };
 
-    // List-type delivery: lists, embeds, calendars and feeds.
+    // List-type delivery: lists, calendars and feeds.
     const listPaths = [
       `/api/${TENANT}/events`,
       `/json/${TENANT}/events`,
-      `/json/${TENANT}/events/${EVENT_ID}`,
       `/html/${TENANT}/events`,
       `/api/${TENANT}/ical/events`,
-      `/api/${TENANT}/ical/events/${EVENT_ID}`,
       `/api/${TENANT}/ical/feed/events`,
-      `/api/${TENANT}/ical/feed/events/${EVENT_ID}`,
     ];
     // The event embedded in its (listed, approved) ticket: what a direct
     // link may show.
@@ -598,11 +594,15 @@ describe("event review routes", function () {
       `/api/${TENANT}/bookables/public?populate=true`,
       `/api/${TENANT}/bookables/public/ticket?populate=true`,
     ];
-    // Detail-type delivery: the event by direct link, and what booking
-    // its (approved) ticket needs.
+    // Detail-type delivery: the event by direct link - in the engines and
+    // the calendars too, one rule per delivery form (ADR 0003) - and what
+    // booking its (approved) ticket needs.
     const detailPaths = [
       `/api/${TENANT}/events/${EVENT_ID}`,
       `/html/${TENANT}/events/${EVENT_ID}`,
+      `/json/${TENANT}/events/${EVENT_ID}`,
+      `/api/${TENANT}/ical/events/${EVENT_ID}`,
+      `/api/${TENANT}/ical/feed/events/${EVENT_ID}`,
       `/api/${TENANT}/bookables/public/ticket`,
       `/api/${TENANT}/bookables/ticket/prices`,
       `/api/${TENANT}/bookables/ticket/availability`,
@@ -672,7 +672,7 @@ describe("event review routes", function () {
             expect(checkout.body.success, "checkout").to.equal(want.reachable);
             if (!want.reachable) {
               expect(checkout.body.error.reason).to.equal(
-                CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
+                CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
               );
             }
             const validate = await call(
@@ -681,7 +681,8 @@ describe("event review routes", function () {
               null,
               { bookableId: "ticket", amount: 1 },
             );
-            expect(validate.status === 409, "validateItem").to.equal(
+            // An offer the public cannot reach is not there (ADR 0003).
+            expect(validate.status === 404, "validateItem").to.equal(
               !want.reachable,
             );
           });
@@ -715,7 +716,7 @@ describe("event review routes", function () {
       );
       expect(second.body.success).to.equal(false);
       expect(second.body.error.reason).to.equal(
-        CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
+        CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
       );
       expect(JSON.stringify(second.body)).to.not.include("Beschwerde");
       // The existing booking: untouched, and its status still answers.
@@ -748,8 +749,10 @@ describe("event review routes", function () {
         groupBody,
       );
       expect(group.body.success).to.equal(false);
+      // The group checkout reads its lead ticket as the public (ADR 0003):
+      // a ticket of an unapproved event is not there for the public.
       expect(JSON.stringify(group.body)).to.include(
-        CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
+        CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
       );
       const legacy = await call(
         "post",
@@ -757,11 +760,11 @@ describe("event review routes", function () {
         null,
         ticketBody(),
       );
-      expect(legacy.status).to.equal(409);
+      expect(legacy.status).to.equal(404);
       expect(h.store.size).to.equal(storeSizeBefore);
     });
 
-    it("lets a ticket whose event is gone through the event part of the gate", async function () {
+    it("lets a ticket whose event is gone through the event part of the projection", async function () {
       events = {};
       h.bookables.ticket.isPublic = true;
 
@@ -793,7 +796,7 @@ describe("event review routes", function () {
 
   describe("the reach `own` of the event routes", function () {
     const EventController = require("../src/platform/api/controllers/event-controller");
-    const respond = async (handler, userId) => {
+    const respond = async (handler, userId, reach = "own") => {
       const res = {
         status(code) {
           this.statusCode = code;
@@ -807,7 +810,7 @@ describe("event review routes", function () {
       await handler(
         {
           params: { tenant: TENANT, id: EVENT_ID },
-          reach: "own",
+          reach,
           principal: { userId },
         },
         res,
@@ -816,7 +819,7 @@ describe("event review routes", function () {
       return { ...res, error };
     };
 
-    it("shows an owner their unapproved event whole, and anyone else the public projection", async function () {
+    it("shows an owner their unapproved event whole, and under `own` nothing else - never own plus public (ADR 0001)", async function () {
       const mine = await respond(EventController.getEvent, ROLE_HOLDER);
       expect(mine.body.review.status).to.equal(null);
       const mineListed = await respond(EventController.getEvents, ROLE_HOLDER);
@@ -833,14 +836,18 @@ describe("event review routes", function () {
       );
       expect(otherListed.body).to.deep.equal([]);
 
+      // The public list is the public's alone (`public`), not a holder's
+      // `own`: the approved event is listed there, without its review.
       events[EVENT_ID].review = review("approved", { reason: "Geheimgrund" });
       events[EVENT_ID].isPublic = true;
-      const approved = await respond(
+      const stillOwn = await respond(
         EventController.getEvents,
         "other@example.test",
       );
-      expect(approved.body.map((e) => e.id)).to.deep.equal([EVENT_ID]);
-      expect(approved.body[0]).to.not.have.property("review");
+      expect(stillOwn.body).to.deep.equal([]);
+      const asPublic = await respond(EventController.getEvents, null, "public");
+      expect(asPublic.body.map((e) => e.id)).to.deep.equal([EVENT_ID]);
+      expect(asPublic.body[0]).to.not.have.property("review");
     });
   });
 });

@@ -86,8 +86,8 @@
       payload carries it. Whoever saves has to own the tenant named by `id`, or
       the instance; the medium behind a document is checked after that, so a
       save can be refused for the reference rather than the tenant. The owner
-      of a declined tenant is behind the management gate: `403 tenant_declined`
-      (`TenantDeclinedError`).
+      of a declined tenant is refused, the membership rests:
+      `403 tenant_declined` (`TenantDeclinedError`).
     security:
       - bearerAuth: []
     requestBody:
@@ -147,7 +147,9 @@
     description: |
       Every tenant the caller owns, read the same way as a single one — each
       media reference of the legal documents carries the address it resolves
-      to. With `publicTenants=true` the list switches to the public tenant
+      to. A declined tenant (glossary "abgewiesen") is not in it: its owner's
+      membership rests (glossary "Ruhende Mitgliedschaft") and it appears to
+      them, as to every member, in the public export only. With `publicTenants=true` the list switches to the public tenant
       export, which does not carry legal documents at all, but `accessApps`:
       the customer-service contact of every active access application that
       has one, and nothing else of the application. The full export carries the
