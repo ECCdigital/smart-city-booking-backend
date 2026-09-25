@@ -4,32 +4,45 @@
  * of the principal that gets each reach (glossary "Reichweite"):
  *
  *   public: true                  anyone, anonymous included
- *   own:    "<level>"             the principal's own records
+ *   own:    "<level>"             the principal's own records, over the
+ *                                 owner key of the resource (`OWNER_KEY`)
+ *   self:   "<level>"             the principal themselves, no records
+ *                                 (the own profile, the own invitation)
  *   any:    "<level>"             every record of the tenant (or instance)
  *
  * A missing slot means "nobody". The levels are:
  *
  *   "signedIn"                    any signed-in user
+ *   "tenantMember"                a member of the tenant (glossary
+ *                                 "Mitglied"); nobody without a tenant
  *   "<group>.<step>"              a role level, e.g. "manageBookings.readAny"
  *   "tenantOwner"                 the owner of the tenant
  *   "instanceOwner"               the owner of the instance
  *   "mayCreateTenant"             the instance setting that lets a user open
  *                                 a tenant
  *
- * with the fixed precedence instanceOwner ⊇ tenantOwner ⊇ role ⊇ signedIn:
- * an instance owner satisfies every level, a tenant owner every level but
- * `instanceOwner` and `mayCreateTenant` (that one follows the instance
- * setting alone). Actions beyond create, read, update and delete (`qr`,
- * `operate`, `document`, `challenge`, ...) are named entries here, never
- * new role steps: the role steps stay the seven of the role schema.
- * `own: "signedIn"` at an entry whose handler has no owner key
- * (`bookable.meta`, `event.meta`, `role.list`,
- * `invitation.respond`, `tenant.countCheck`) means "any signed-in user,
- * for themselves": the reach `own` is then the handler's to read as
- * "self", not a query condition (§11, §12).
+ * with the fixed precedence instanceOwner ⊇ tenantOwner ⊇ role ⊇
+ * tenantMember ⊇ signedIn: an instance owner satisfies every level, a
+ * tenant owner every level but `instanceOwner` and `mayCreateTenant` (that
+ * one follows the instance setting alone). Actions beyond create, read,
+ * update and delete (`qr`, `operate`, `document`, `challenge`, ...) are
+ * named entries here, never new role steps: the role steps stay the seven
+ * of the role schema.
  *
- * Transcribed from the authorize spec §3, behaviour-equal to today except
- * the changes of §7; ticket 2 to 5 of the chain put the routers on it.
+ * A reach has one meaning (ADR 0001): `own` is always a query condition
+ * over the owner key the directory `OWNER_KEY` names for the entry, "the
+ * signed-in user for themselves" is `self`. The one door left -
+ * `media.metadata`, signed in - names its questions on the marker
+ * (`also: ["read", "bookingDocument"]`), and the media rights pick the
+ * one that applies from the facts of the medium
+ * (`services/media/media-rights.js`).
+ *
+ * Staff get their management view of a public delivery from the table
+ * alone (ADR 0003): a public entry with `any` (`bookable.readPublic`,
+ * `bookable.prices`, `calendar.all`, the tags and counters) answers
+ * everyone the public projection and the role holders the tenant's
+ * records whole; a public entry without `any` (`html`, `json`,
+ * `checkout`, `ical.feed`) asks everyone as the public, staff included.
  */
 
 const ROLE_GROUPS = Object.freeze([
@@ -68,14 +81,10 @@ function crud(group, { publicRead = false } = {}) {
 const TABLE = {
   bookable: {
     ...crud("manageBookables"),
-    readPublic: { public: true },
-    prices: {
-      public: true,
-      own: "manageBookables.readOwn",
-      any: "manageBookables.readAny",
-    },
+    readPublic: { public: true, any: "manageBookables.readAny" },
+    prices: { public: true, any: "manageBookables.readAny" },
     template: { any: "manageBookables.create" },
-    meta: { own: "signedIn" },
+    meta: { public: true, any: "manageBookables.readAny" },
     relatedBookings: {
       public: true,
       own: "signedIn",
@@ -104,7 +113,7 @@ const TABLE = {
       own: "manageBookables.readOwn",
       any: "manageBookables.readAny",
     },
-    meta: { own: "signedIn" },
+    meta: { public: true, any: "manageBookables.readAny" },
     reviewSubmit: { own: "tenantOwner", any: "instanceOwner" },
     reviewDecide: { any: "instanceOwner" },
   },
@@ -144,11 +153,11 @@ const TABLE = {
 
   role: {
     read: { any: "manageRoles.readAny" },
-    list: { own: "signedIn", any: "manageRoles.readAny" },
+    list: { own: "tenantMember", any: "manageRoles.readAny" },
     create: { any: "manageRoles.create" },
     update: { any: "manageRoles.updateAny" },
     delete: { any: "manageRoles.deleteAny" },
-    readMine: { own: "signedIn" },
+    readMine: { self: "signedIn" },
   },
 
   media: {
@@ -167,6 +176,8 @@ const TABLE = {
       own: "signedIn",
       any: "manageBookings.updateAny",
     },
+    // Who reads an internal file beyond the library's `file`: a member.
+    intern: { any: "tenantMember" },
   },
 
   accessPoint: {
@@ -189,7 +200,7 @@ const TABLE = {
   },
 
   accessScan: {
-    resolve: { own: "signedIn" },
+    resolve: { self: "signedIn" },
   },
 
   workflow: {
@@ -200,8 +211,8 @@ const TABLE = {
 
   invitation: {
     manage: { any: "manageUsers.updateAny" },
-    readMine: { own: "signedIn" },
-    respond: { own: "signedIn" },
+    readMine: { self: "signedIn" },
+    respond: { self: "signedIn" },
   },
 
   tenantUser: {
@@ -224,7 +235,7 @@ const TABLE = {
     list: { own: "signedIn", any: "instanceOwner" },
     listPublic: { public: true },
     create: { any: "mayCreateTenant" },
-    countCheck: { own: "signedIn" },
+    countCheck: { self: "signedIn" },
     supervise: { any: "instanceOwner" },
 
     supervisionHistory: { own: "tenantOwner", any: "instanceOwner" },
@@ -241,7 +252,7 @@ const TABLE = {
   },
 
   checkout: { all: { public: true } },
-  calendar: { all: { public: true } },
+  calendar: { all: { public: true, any: "manageBookables.readAny" } },
   holidays: { all: { public: true } },
   bookingStatus: { all: { public: true } },
   html: { all: { public: true } },
@@ -252,7 +263,6 @@ const TABLE = {
       any: "manageBookables.updateAny",
     },
   },
-
 
   instance: {
     readPublic: { public: true },
@@ -272,8 +282,8 @@ const TABLE = {
   },
 
   user: {
-    readSelf: { own: "signedIn" },
-    updateSelf: { own: "signedIn" },
+    readSelf: { self: "signedIn" },
+    updateSelf: { self: "signedIn" },
     read: { any: "instanceOwner" },
     create: { any: "instanceOwner" },
     update: { any: "instanceOwner" },
@@ -282,13 +292,15 @@ const TABLE = {
   },
 
   membership: {
-    readMine: { own: "signedIn" },
+    readMine: { self: "signedIn" },
     read: { any: "instanceOwner" },
   },
 
   instanceMedia: {
     read: { any: "instanceOwner" },
-    file: { public: true, own: "signedIn", any: "instanceOwner" },
+    file: { public: true, any: "signedIn" },
+    // An internal instance file: any signed-in user, no membership narrows it.
+    intern: { any: "signedIn" },
     create: { any: "instanceOwner" },
     update: { any: "instanceOwner" },
     delete: { any: "instanceOwner" },
@@ -300,7 +312,7 @@ const TABLE = {
     store: { any: "instanceOwner" },
     mode: { public: true },
     themes: { public: true },
-    slugAvailability: { own: "signedIn" },
+    slugAvailability: { self: "signedIn" },
   },
 
   accessBookings: {
@@ -314,4 +326,86 @@ const TABLE = {
   auth: { all: { public: true } },
 };
 
-module.exports = { TABLE, ROLE_GROUPS, ROLE_LEVELS };
+/**
+ * The owner key (glossary "Eigentümer-Schlüssel") of every entry with an
+ * `own` slot: what "own" means for the resource, beside the table so the
+ * table stays levels alone. Two kinds:
+ *
+ *   { key: "<field>" }        the field of the record that names its owner;
+ *                             the manager turns `own` into `{ [key]: userId }`
+ *                             (`ownCondition`)
+ *   { tenantsOf: "<set>" }    on the instance level, the tenant set of the
+ *                             principal (`principal.tenants`): "membership"
+ *                             (the tenants they belong to), "ownership" (the
+ *                             ones they own), "reach" (the ones they hold
+ *                             `any` in for the tenant entry `entry` names -
+ *                             the instance dashboard lists the tenants whose
+ *                             own dashboard the user reads). `scopeOf` puts
+ *                             the set on the scope as `tenantIds`, and the
+ *                             manager turns `own` into `{ id: { $in } }`
+ *
+ * A resource names one key for all its `own` entries, or `byAction` where
+ * its entries own different things (a bookable's related bookings are the
+ * booking's, a medium that is a booking document follows the booking).
+ * `assertTable` in `policy.js` checks when the module loads that every
+ * `own` has exactly one key and no key names an entry without `own`.
+ */
+const OWNER_KEY = {
+  bookable: {
+    key: "ownerUserId",
+    byAction: {
+      relatedBookings: { key: "assignedUserId" },
+      reviewSubmit: { tenantsOf: "ownership" },
+    },
+  },
+  event: {
+    key: "ownerUserId",
+    byAction: { reviewSubmit: { tenantsOf: "ownership" } },
+  },
+  booking: { key: "assignedUserId" },
+  groupBooking: { key: "assignedUserId" },
+  coupon: { key: "ownerUserId" },
+  role: { tenantsOf: "membership" },
+  media: {
+    key: "uploadedBy",
+    byAction: {
+      bookingDocument: { key: "assignedUserId" },
+      updateBookingDocument: { key: "assignedUserId" },
+    },
+  },
+  tenant: { tenantsOf: "ownership" },
+  ical: {
+    byAction: {
+      events: { key: "ownerUserId" },
+      bookings: { key: "assignedUserId" },
+    },
+  },
+  exporter: { key: "ownerUserId" },
+  accessBookings: { key: "assignedUserId" },
+  instanceDashboard: { tenantsOf: "reach", entry: "dashboard.read" },
+};
+
+/**
+ * The owner key of an entry: what `own` means at `(resource, action)`.
+ *
+ * @param {string} resource
+ * @param {string} action
+ * @returns {{key: string}|{tenantsOf: "membership"|"ownership"|"reach"}}
+ * @throws {Error} for an entry without `own`, or one whose key is missing
+ */
+function ownerKeyOf(resource, action) {
+  const where = `${resource}.${action}`;
+  if (!TABLE[resource]?.[action]?.own) {
+    throw new Error(`authorization: no own at ${where}, so no owner key`);
+  }
+  const directory = OWNER_KEY[resource];
+  const { byAction, ...shared } = directory ?? {};
+  const key =
+    byAction?.[action] ?? (Object.keys(shared).length ? shared : null);
+  if (!key) {
+    throw new Error(`authorization: no owner key for ${where}`);
+  }
+  return key;
+}
+
+module.exports = { TABLE, OWNER_KEY, ownerKeyOf, ROLE_GROUPS, ROLE_LEVELS };

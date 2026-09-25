@@ -87,14 +87,14 @@ class AccessController {
     const user = request.user;
 
     try {
-      const hasManagePermission = AccessController._canManage(request);
+      const scope = scopeOf(request);
 
       const outcome = await AccessService[action](
         tenant,
         bookingId,
         accessPointId,
         user.id,
-        { hasManagePermission, evidence, channel },
+        { scope, evidence, channel },
       );
 
       if (!outcome.success) {
@@ -186,14 +186,14 @@ class AccessController {
       const { tenant, accessPointId } = request.params;
       const { bookingId } = request.query;
       const user = request.user;
-      const hasManagePermission = AccessController._canManage(request);
+      const scope = scopeOf(request);
 
       const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
-        hasManagePermission,
+        scope,
       );
       if (!allowed) return response.sendStatus(403);
 
@@ -202,7 +202,7 @@ class AccessController {
         bookingId,
         accessPointId,
         user.id,
-        { hasManagePermission },
+        { scope },
       );
 
       logger.info(
@@ -232,14 +232,14 @@ class AccessController {
       const { tenant, accessPointId } = request.params;
       const { openProcessId, bookingId } = request.query;
       const user = request.user;
-      const hasManagePermission = AccessController._canManage(request);
+      const scope = scopeOf(request);
 
       const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
-        hasManagePermission,
+        scope,
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -250,7 +250,7 @@ class AccessController {
         accessPointId,
         openProcessId,
         user.id,
-        { hasManagePermission },
+        { scope },
       );
 
       return ApiResponse.ok(response, { data: status });
@@ -268,14 +268,14 @@ class AccessController {
       const { tenant, accessPointId } = request.params;
       const { bookingId } = request.query;
       const user = request.user;
-      const hasManagePermission = AccessController._canManage(request);
+      const scope = scopeOf(request);
 
       const allowed = await AccessService.canOperate(
         user.id,
         tenant,
         bookingId,
         accessPointId,
-        hasManagePermission,
+        scope,
       );
 
       if (!allowed) return response.sendStatus(403);
@@ -285,7 +285,7 @@ class AccessController {
         bookingId,
         accessPointId,
         user.id,
-        { hasManagePermission },
+        { scope },
       );
       return ApiResponse.ok(response, { data: status });
     } catch (err) {
@@ -320,12 +320,12 @@ class AccessController {
       const { bookingId } = request.query;
       const user = request.user;
 
-      const hasManagePermission = AccessController._canManage(request);
+      const scope = scopeOf(request);
       const allowed = await AccessService.canView(
         user.id,
         tenant,
         bookingId,
-        hasManagePermission,
+        scope,
       );
       if (!allowed) return response.sendStatus(403);
 
@@ -335,7 +335,7 @@ class AccessController {
       const { points, accessEligibility } =
         await AccessService.getByBookingWithEligibility(tenant, bookingId, {
           userId: user.id,
-          hasManagePermission,
+          scope,
         });
 
       return ApiResponse.ok(response, { data: points, accessEligibility });
@@ -358,7 +358,10 @@ class AccessController {
         return ApiResponse.badRequest(response, options.error);
       }
 
-      const targetUserId = AccessController._targetUserOf(request);
+      const targetUserId = AccessService.targetUserOf(
+        scopeOf(request),
+        request.query.userId,
+      );
       if (!targetUserId) {
         return next(new ForbiddenError());
       }
@@ -392,7 +395,10 @@ class AccessController {
         return ApiResponse.badRequest(response, options.error);
       }
 
-      const targetUserId = AccessController._targetUserOf(request);
+      const targetUserId = AccessService.targetUserOf(
+        scopeOf(request),
+        request.query.userId,
+      );
       if (!targetUserId) {
         return next(new ForbiddenError());
       }
@@ -449,49 +455,11 @@ class AccessController {
 
   /**
    * @private
-   * The user whose bookings are asked for: the principal's own, or under the
-   * reach `any` (`accessBookings.read`: the instance owner) whoever
-   * `?userId=` names. Another user's under `own` is nobody's - the caller
-   * asked for what the reach does not cover.
-   *
-   * @param {Object} request Express request
-   * @returns {string|null} The user, or null where the reach does not cover
-   *   the one asked for.
-   */
-  static _targetUserOf(request) {
-    const { reach, userId } = scopeOf(request);
-    const requestedUserId = request.query.userId;
-
-    if (!requestedUserId || requestedUserId === userId) {
-      return userId;
-    }
-
-    return reach === "any" ? requestedUserId : null;
-  }
-
-  /**
-   * @private
-   * Whether the request acts in the manager role at someone else's booking:
-   * the reach `any` of `booking.operate` is what waives the ownership
-   * requirement of the access decision (authorize spec §5). The booking
-   * conditions - committed, paid if priced, not rejected, within its window -
-   * apply to everyone, the manager included; the reach only replaces who the
-   * booking has to belong to.
-   *
-   * @param {Object} request Express request
-   * @returns {boolean} Whether the caller may manage the tenant's bookings
-   */
-  static _canManage(request) {
-    return scopeOf(request).reach === "any";
-  }
-
-  /**
-   * @private
-   * The same question as {@link _canManage}, asked per tenant: whether the
+   * The manager question asked per tenant: whether the
    * user manages the bookings of that tenant. The two tenant-independent
    * lists need it, and the reach of their route is one of the instance -
    * an instance answers nothing about a tenant. So this hands the service
-   * a function (authorize spec §5, §15) that asks what the marker of a
+   * a function (`anyReachIn`) that asks what the marker of a
    * tenant route asks, loaded once and only when the service asks - in a
    * tenant whose membership rests (glossary "Ruhende Mitgliedschaft") the
    * user manages nothing.

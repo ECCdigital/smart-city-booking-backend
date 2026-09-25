@@ -14,6 +14,7 @@ const UserManager = require("../src/commons/data-managers/user-manager");
 const {
   loadPrincipal,
   anyReachIn,
+  tenantsOf,
 } = require("../src/commons/services/authorization/principal");
 const {
   decide,
@@ -151,5 +152,73 @@ describe("authorization principal: a question across tenants", function () {
     expect(await anyReachIn(null, "booking", "operate")("t-any")).to.equal(
       false,
     );
+  });
+});
+
+/**
+ * The tenant sets of the principal (ADR 0002): what "own" means on the
+ * instance level, computed from the same load. `member` lists every
+ * tenant the user belongs to - the resting membership included, the
+ * tenant stays theirs to see -, `owner` and `reach` the rights sets, in
+ * which a resting membership counts for nothing.
+ */
+describe("authorization principal: the tenant sets", function () {
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("lists the memberships, the owned tenants and the ones a tenant entry reaches with any", async function () {
+    stubPermissions({
+      tenants: [
+        membership("t-free", "free"),
+        { tenantId: "t-member", isOwner: false, supervisionLevel: "free" },
+        {
+          tenantId: "t-reader",
+          isOwner: false,
+          manageBookings: { readAny: true },
+          supervisionLevel: "free",
+        },
+        membership("t-pending", "pending"),
+        membership("t-declined", "declined"),
+      ],
+    });
+
+    const principal = await loadPrincipal("u1", "t-free");
+
+    expect(principal.tenants.member).to.deep.equal([
+      "t-free",
+      "t-member",
+      "t-reader",
+      "t-pending",
+      "t-declined",
+    ]);
+    expect(principal.tenants.owner).to.deep.equal(["t-free", "t-pending"]);
+    // `dashboard.read` is `manageBookings.readAny`: the owner satisfies
+    // it, the reader holds it, the plain member does not, the resting
+    // membership holds nothing.
+    expect(principal.tenants.reach).to.deep.equal({
+      "dashboard.read": ["t-free", "t-reader", "t-pending"],
+    });
+    expect(UserManager.getUserPermissions.callCount).to.equal(1);
+  });
+
+  it("answers an owner key's tenant set from the principal, and nothing for the anonymous", async function () {
+    stubPermissions({ tenants: [membership("t1", "free")] });
+    const principal = await loadPrincipal("u1", null);
+    expect(tenantsOf(principal, { tenantsOf: "membership" })).to.deep.equal([
+      "t1",
+    ]);
+    expect(tenantsOf(principal, { tenantsOf: "ownership" })).to.deep.equal([
+      "t1",
+    ]);
+    expect(
+      tenantsOf(principal, { tenantsOf: "reach", entry: "dashboard.read" }),
+    ).to.deep.equal(["t1"]);
+    expect(() => tenantsOf(principal, { tenantsOf: "nowhere" })).to.throw(
+      /unknown tenant set/,
+    );
+
+    const anonymous = await loadPrincipal(null, null);
+    expect(tenantsOf(anonymous, { tenantsOf: "ownership" })).to.deep.equal([]);
   });
 });

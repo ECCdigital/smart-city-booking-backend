@@ -17,6 +17,7 @@ const {
   ConflictError,
   NotFoundError,
 } = require("../../../errors/BaseError");
+const { DOMAIN } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "document-issuance.js",
@@ -141,7 +142,8 @@ async function issue({
     throw new NotFoundError("tenant_not_found", { tenantId });
   }
   const loaded =
-    bookings || (await BookingManager.getBookings(tenantId, bookingIds));
+    bookings ||
+    (await BookingManager.getBookings(tenantId, bookingIds, DOMAIN));
   const missing = bookingIds.filter(
     (id) => !loaded.some((booking) => booking.id === id),
   );
@@ -266,6 +268,8 @@ async function groupBookingIdOf({ tenantId, bookingIds, groupBookingId }) {
   const group = await GroupBookingManager.getGroupBookingByBookingId(
     tenantId,
     bookingIds[0],
+    false,
+    DOMAIN,
   );
   if (!group) {
     throw new NotFoundError("group_booking_not_found", {

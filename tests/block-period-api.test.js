@@ -207,6 +207,7 @@ describe("block periods API", () => {
   });
 
   it("returns block periods from the controller", async () => {
+    sinon.stub(BookableManager, "getBookable").resolves({ id: "camping-a" });
     sinon.stub(BlockPeriodService, "getAvailableBlockPeriods").resolves({
       title: "Camping A",
       blockPeriods: [
@@ -241,6 +242,7 @@ describe("block periods API", () => {
   });
 
   it("returns 400 for non block-period bookables", async () => {
+    sinon.stub(BookableManager, "getBookable").resolves({ id: "camping-a" });
     sinon
       .stub(BlockPeriodService, "getAvailableBlockPeriods")
       .rejects(new BadRequestError("not_block_period_bookable"));
@@ -264,6 +266,7 @@ describe("block periods API", () => {
   });
 
   it("returns 404 when the bookable is missing", async () => {
+    sinon.stub(BookableManager, "getBookable").resolves(null);
     sinon
       .stub(BlockPeriodService, "getAvailableBlockPeriods")
       .rejects(new NotFoundError("bookable_not_found"));
@@ -283,6 +286,7 @@ describe("block periods API", () => {
   });
 
   it("returns 400 for invalid date range input", async () => {
+    sinon.stub(BookableManager, "getBookable").resolves({ id: "camping-a" });
     sinon
       .stub(BlockPeriodService, "getAvailableBlockPeriods")
       .rejects(new BadRequestError("invalid_date_range"));
@@ -303,6 +307,7 @@ describe("block periods API", () => {
   });
 
   it("returns 400 when the date range is too large", async () => {
+    sinon.stub(BookableManager, "getBookable").resolves({ id: "camping-a" });
     sinon
       .stub(BlockPeriodService, "getAvailableBlockPeriods")
       .rejects(new BadRequestError("date_range_too_large"));

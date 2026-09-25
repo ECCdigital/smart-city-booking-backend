@@ -19,7 +19,7 @@ const {
  * secret in the request.
  *
  * The two exceptions are `/signout` and `/me`, which answer about the holder
- * of a session and therefore need one (`user.readSelf`, authorize spec §3.2).
+ * of a session and therefore need one (`user.readSelf`).
  */
 
 // Public auth endpoints

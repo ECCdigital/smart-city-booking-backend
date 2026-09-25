@@ -19,6 +19,7 @@ const EventManager = require("../../data-managers/event-manager");
 const {
   isCompleteTenantMailConfig,
 } = require("../../mail-service/mail-service");
+const { DOMAIN } = require("../authorization/reach");
 
 /**
  * The offer types as the supervision constants name them. Ticket 04 creates
@@ -438,8 +439,8 @@ async function computeReadiness(tenantId, { now = new Date() } = {}) {
   }
   const [instance, bookables, events] = await Promise.all([
     InstanceManager.getInstance(),
-    BookableManager.getBookables(tenantId),
-    EventManager.getEvents(tenantId),
+    BookableManager.getBookables(tenantId, DOMAIN),
+    EventManager.getEvents(tenantId, DOMAIN),
   ]);
   return evaluateReadiness({ tenant, instance, bookables, events, now });
 }

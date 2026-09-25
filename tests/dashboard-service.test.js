@@ -239,16 +239,18 @@ describe("DashboardService summaries", function () {
     assert.ok(!Object.prototype.hasOwnProperty.call(data, "revenueByMonth"));
   });
 
-  it("denies instance summary when user has no allowed tenants", async function () {
-    sandbox.stub(UserManager, "getUserPermissions").resolves({ tenants: [] });
-    sandbox
-      .stub(TenantManager, "getTenants")
-      .resolves([{ id: "demo", name: "Demo" }]);
+  it("denies instance summary when the scope's tenant set reaches no tenant", async function () {
+    // The tenant set is the scope's (ADR 0002): a member who reads no
+    // tenant's dashboard with `any` carries an empty set, and the manager
+    // answers nothing for it.
+    const list = sandbox.stub(TenantManager, "getTenants").resolves([]);
 
     await assert.rejects(
-      () => DashboardService.getInstanceSummary(MEMBER, {}),
+      () =>
+        DashboardService.getInstanceSummary({ ...MEMBER, tenantIds: [] }, {}),
       ForbiddenError,
     );
+    assert.deepStrictEqual(list.firstCall.args, [{ ...MEMBER, tenantIds: [] }]);
   });
 
   it("builds tenant summary with byStatus, byPeriod, byBookable cap", async function () {

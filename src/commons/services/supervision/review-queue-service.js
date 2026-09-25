@@ -40,6 +40,7 @@ const EventManager = require("../../data-managers/event-manager");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const { SUPERVISION_LEVELS, OFFER_TYPES } = require("./supervision-constants");
 const { pageWindow } = require("./page-window");
+const { DOMAIN } = require("../authorization/reach");
 
 const BOOKABLE_EDITOR_BY_TYPE = Object.freeze({
   [BOOKABLE_TYPES.ROOM]: "rooms",
@@ -109,8 +110,9 @@ class ReviewQueueService {
 
     const supervised = (
       await TenantManager.getTenants(
-        {},
+        DOMAIN,
         { supervisionLevel: SUPERVISION_LEVELS.SUPERVISED },
+        DOMAIN,
       )
     ).filter((tenant) => !tenantId || tenant.id === tenantId);
     const tenantNames = new Map(

@@ -86,7 +86,8 @@ class TenantCreationService {
    * @param {Object} params.body The request body; supervision fields are dropped
    * @param {string} params.creatorUserId Becomes the tenant owner
    * @param {boolean} params.creatorIsInstanceOwner
-   * @param {Object} params.mediaScope The creator's media read scope, for the reference guard
+   * @param {Object} params.reaches The bundle of the creator's route, with the
+   *   picker right `media.read` the reference guard asks
    * @param {Date} [params.now] The creation time; default: now
    * @returns {Promise<Tenant>} The stored tenant
    * @throws {BadRequestError} A missing or invalid contact field (`assertContact`)
@@ -100,7 +101,7 @@ class TenantCreationService {
     body,
     creatorUserId,
     creatorIsInstanceOwner,
-    mediaScope,
+    reaches,
     now = new Date(),
   }) {
     TenantCreationService.assertContact(body);
@@ -135,11 +136,7 @@ class TenantCreationService {
 
     // A tenant that does not exist yet owns no media, so any medium named
     // here is refused, which beats storing a reference nobody ever checked.
-    await MediaReferenceGuard.assertTenantStorable(
-      tenant,
-      tenant.id,
-      mediaScope,
-    );
+    await MediaReferenceGuard.assertTenantStorable(tenant, tenant.id, reaches);
 
     tenant.genericMailTemplate = readTemplate(
       "mail-service/templates/default-generic-mail-template.temp.html",

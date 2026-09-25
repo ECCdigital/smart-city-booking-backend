@@ -1,5 +1,5 @@
 /**
- * The three route markers on a bare express app (authorize spec §2.4):
+ * The three route markers on a bare express app (glossary "Berechtigung"):
  * `authorize` answers 401 to the anonymous, 403 to the signed-in without
  * reach and hands the reach to the handler; `public` decides for the
  * anonymous too and never refuses; `tokenAuthorized` checks nothing. A
@@ -22,6 +22,7 @@ const {
   publicRoute,
   tokenAuthorized,
   markerOf,
+  reachesOf,
 } = require("../src/commons/services/authorization/middleware");
 
 const as = (userId) => ({
@@ -174,6 +175,71 @@ describe("authorization middleware: the three markers", function () {
         action: "document",
       });
     });
+
+    describe("also: the second decision of a route on the marker (ADR 0001)", function () {
+      const answerReaches = (req, res) =>
+        res.json({ reach: req.reach ?? null, reaches: req.reaches ?? null });
+      const upsert = app([
+        "/bookings",
+        authorize("booking", "update", { also: ["create"] }),
+        answerReaches,
+      ]);
+      const twoResources = app([
+        "/users",
+        authorize("tenantUser", "manage", {
+          also: ["owner", "instanceCatalog.store"],
+        }),
+        answerReaches,
+      ]);
+
+      it("hands the reach of the main action as req.reach and the others as req.reaches", async function () {
+        const res = await request(upsert)
+          .get("/api/t1/bookings")
+          .set(as("manager"));
+        expect(res.status).to.equal(200);
+        expect(res.body).to.deep.equal({
+          reach: "any",
+          reaches: { create: null },
+        });
+      });
+
+      it("refuses on the main action alone: a second decision of null is the handler's to read", async function () {
+        const res = await request(upsert)
+          .get("/api/t1/bookings")
+          .set(as("customer"));
+        expect(res.status).to.equal(403);
+      });
+
+      it("names another resource as resource.action", async function () {
+        const res = await request(twoResources)
+          .get("/api/t1/users")
+          .set(as("owner"));
+        expect(res.status).to.equal(200);
+        expect(res.body).to.deep.equal({
+          reach: "any",
+          reaches: { owner: "any", "instanceCatalog.store": null },
+        });
+      });
+
+      it("refuses an unknown second entry when the router is built", function () {
+        expect(() =>
+          authorize("booking", "update", { also: ["fly"] }),
+        ).to.throw(/booking\.fly/);
+        expect(() =>
+          authorize("booking", "update", { also: ["unicorn.read"] }),
+        ).to.throw(/unicorn/);
+      });
+
+      it("carries the main action alone as its marker", function () {
+        expect(
+          markerOf(authorize("booking", "update", { also: ["create"] })),
+        ).to.deep.equal({
+          marker: "authorize",
+          resource: "booking",
+          action: "update",
+        });
+      });
+    });
   });
 
   describe("public(resource?, action?)", function () {
@@ -211,6 +277,56 @@ describe("authorization middleware: the three markers", function () {
     it("refuses an entry that is not public when the router is built", function () {
       expect(() => publicRoute("booking", "update")).to.throw(/not public/);
       expect(() => publicRoute("booking", "fly")).to.throw(/booking\.fly/);
+    });
+
+    describe("also, and the bundle reachesOf(req) packs (ticket 04)", function () {
+      const file = app([
+        "/media/:id/file",
+        publicRoute("media", "file", { also: ["bookingDocument", "intern"] }),
+        (req, res) => res.json(reachesOf(req)),
+      ]);
+
+      it("decides the second questions for the anonymous too, never refusing", async function () {
+        const res = await request(file).get("/api/t1/media/m1/file");
+        expect(res.status).to.equal(200);
+        expect(res.body).to.deep.equal({
+          file: "public",
+          bookingDocument: null,
+          intern: null,
+          userId: null,
+        });
+      });
+
+      it("packs the main entry and the second ones by action, with the user", async function () {
+        const res = await request(file)
+          .get("/api/t1/media/m1/file")
+          .set(as("owner"));
+        expect(res.body).to.deep.equal({
+          file: "any",
+          bookingDocument: "any",
+          intern: "any",
+          userId: "owner",
+        });
+      });
+
+      it("refuses an unknown second entry, and one without a public entry, when the router is built", function () {
+        expect(() => publicRoute("media", "file", { also: ["fly"] })).to.throw(
+          /media\.fly/,
+        );
+        expect(() =>
+          publicRoute(undefined, undefined, { also: ["read"] }),
+        ).to.throw(/public entry/);
+      });
+
+      it("carries the main entry alone as its marker", function () {
+        expect(
+          markerOf(publicRoute("media", "file", { also: ["intern"] })),
+        ).to.deep.equal({
+          marker: "public",
+          resource: "media",
+          action: "file",
+        });
+      });
     });
   });
 

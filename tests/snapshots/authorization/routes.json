@@ -491,9 +491,9 @@
   },
   "GET /api/roles": {
     "anonymous": 401,
-    "signedIn": 200,
-    "roleHolder": 200,
-    "tenantOwner": 200,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "tenantOwner": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
     "instanceOwner": 200
   },
   "GET /api/holidays": {
@@ -792,14 +792,14 @@
   },
   "GET /api/v2/:tenant/media/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": 404,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "PATCH /api/v2/:tenant/media/:id": {
     "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": 404,
     "roleHolder": 400,
     "tenantOwner": 400,
     "instanceOwner": 400
@@ -820,7 +820,7 @@
   },
   "GET /api/v2/:tenant/media/:id/usage": {
     "anonymous": 401,
-    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "signedIn": 404,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
@@ -952,14 +952,14 @@
     "instanceOwner": 400
   },
   "GET /api/:tenant/bookables/_meta/tags": {
-    "anonymous": 401,
+    "anonymous": 200,
     "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/bookables/count/check": {
-    "anonymous": 401,
+    "anonymous": 200,
     "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
@@ -1015,14 +1015,14 @@
     "instanceOwner": 400
   },
   "GET /api/:tenant/events/_meta/tags": {
-    "anonymous": 401,
+    "anonymous": 200,
     "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
   },
   "GET /api/:tenant/events/count/check": {
-    "anonymous": 401,
+    "anonymous": 200,
     "signedIn": 200,
     "roleHolder": 200,
     "tenantOwner": 200,
@@ -1813,25 +1813,25 @@
     "instanceOwner": 404
   },
   "GET /html/:tenant/bookables/:id": {
-    "anonymous": 404,
-    "signedIn": 404,
-    "roleHolder": 404,
-    "tenantOwner": 404,
-    "instanceOwner": 404
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
   },
   "GET /html/:tenant/events": {
-    "anonymous": "timeout",
-    "signedIn": "timeout",
-    "roleHolder": "timeout",
-    "tenantOwner": "timeout",
-    "instanceOwner": "timeout"
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
   },
   "GET /html/:tenant/events/:id": {
-    "anonymous": "timeout",
-    "signedIn": "timeout",
-    "roleHolder": "timeout",
-    "tenantOwner": "timeout",
-    "instanceOwner": "timeout"
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
   },
   "GET /json/:tenant/bookables": {
     "anonymous": 200,
@@ -1841,11 +1841,11 @@
     "instanceOwner": 200
   },
   "GET /json/:tenant/bookables/:id": {
-    "anonymous": 404,
-    "signedIn": 404,
-    "roleHolder": 404,
-    "tenantOwner": 404,
-    "instanceOwner": 404
+    "anonymous": 200,
+    "signedIn": 200,
+    "roleHolder": 200,
+    "tenantOwner": 200,
+    "instanceOwner": 200
   },
   "GET /json/:tenant/events": {
     "anonymous": 200,

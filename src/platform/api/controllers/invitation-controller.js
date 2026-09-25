@@ -33,7 +33,11 @@ class InvitationController {
         user.id,
       );
 
-      const tenant = await TenantManager.getTenants();
+      // The tenants the invitations name, whatever their level: the
+      // invitation vouches for its tenant's name.
+      const tenant = await TenantManager.getTenantsByIds(
+        invitations.map((invitation) => invitation.tenantId),
+      );
 
       const invitationsWithTenantNames = invitations.map((invitation) => {
         return {

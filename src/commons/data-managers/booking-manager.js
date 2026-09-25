@@ -9,6 +9,17 @@ const BookableModel = require("./models/bookableModel");
 const { BookableManager } = require("./bookable-manager");
 const { NotFoundError } = require("../../errors/BaseError");
 const { ownCondition } = require("../services/authorization/reach");
+const { REACH } = require("../services/authorization/policy");
+
+/**
+ * The condition of a reach on the bookings (ADR 0002). Under `public` there
+ * is none: what the public sees of them is the handler's projection
+ * (the anonymized list under `?public=true`), so the manager reads the tenant's records whole and the
+ * handler shapes them - the offers alone have their projection in the
+ * manager (ADR 0003).
+ */
+const condition = (scope) =>
+  scope?.reach === REACH.PUBLIC ? {} : ownCondition("booking", scope);
 
 /**
  * Data Manager for Booking objects.
@@ -50,6 +61,7 @@ class BookingManager {
           const bookables = await BookableManager.getBookablesByIds(
             tenantId,
             bookableIds,
+            DOMAIN,
           );
           const bookableFieldsById = new Map(
             bookables.map((bookable) => [
@@ -82,14 +94,15 @@ class BookingManager {
   /**
    * Get all bookings related to a tenant
    * @param {string} tenantId Identifier of the tenant
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
   static async getTenantBookings(tenantId, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -98,15 +111,16 @@ class BookingManager {
    * Get bookings by IDs
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookingIds Array of booking IDs
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
   static async getBookings(tenantId, bookingIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       id: { $in: bookingIds },
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -115,15 +129,16 @@ class BookingManager {
    * Get all bookings related to a bookable object
    * @param {string} tenantId Identifier of the tenant
    * @param {string} bookableId Bookable ID
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
   static async getRelatedBookings(tenantId, bookableId, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": bookableId,
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -132,15 +147,16 @@ class BookingManager {
    * Get bookings related to multiple bookables
    * @param {string} tenantId Identifier of the tenant
    * @param {string[]} bookableIds Array of bookable IDs
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
   static async getRelatedBookingsBatch(tenantId, bookableIds, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "bookableItems.bookableId": { $in: bookableIds },
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -164,15 +180,16 @@ class BookingManager {
    * Get a specific booking
    * @param {string} id Booking ID
    * @param {string} tenantId Tenant ID
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking|null>} Booking or null
    */
   static async getBooking(id, tenantId, scope) {
     const rawBooking = await BookingModel.findOne({
       id: id,
       tenantId: tenantId,
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
 
     if (!rawBooking) {
@@ -511,8 +528,9 @@ class BookingManager {
    * Get bookings for an event
    * @param {string} tenantId Tenant ID
    * @param {string} eventId Event ID
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Event bookings
    */
   static async getEventBookings(tenantId, eventId, scope) {
@@ -530,16 +548,20 @@ class BookingManager {
     );
   }
 
-  static async getBookedSeatsCount(
-    tenantId,
-    eventId,
-    { onlyOwn = false, userId = null } = {},
-  ) {
+  /**
+   * The booked seats of an event, whole: every ticket of every booking
+   * that is not rejected. The event is the caller's to bring within reach
+   * (ADR 0002); its seats are the domain's to count.
+   *
+   * @param {string} tenantId
+   * @param {string} eventId
+   * @returns {Promise<number>}
+   */
+  static async getBookedSeatsCount(tenantId, eventId) {
     const matchStage = {
       tenantId: tenantId,
       isRejected: false,
       "bookableItems._bookableUsed.eventId": eventId,
-      ...(onlyOwn ? { "bookableItems._bookableUsed.ownerUserId": userId } : {}),
     };
 
     const result = await BookingModel.aggregate([
@@ -548,9 +570,6 @@ class BookingManager {
       {
         $match: {
           "bookableItems._bookableUsed.eventId": eventId,
-          ...(onlyOwn
-            ? { "bookableItems._bookableUsed.ownerUserId": userId }
-            : {}),
         },
       },
       {

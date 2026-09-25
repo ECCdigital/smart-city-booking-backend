@@ -1,8 +1,19 @@
 const MediaModel = require("./models/mediaModel");
 const { escapeRegex } = require("../utilities/regex-utils");
+const { ownCondition } = require("../services/authorization/reach");
+const { REACH } = require("../services/authorization/policy");
 
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+
+/**
+ * The condition of a reach on the media (ADR 0002). Under `public` there
+ * is none: what the public sees of a medium is its visibility, which the
+ * media rights decide (`services/media/media-rights.js`) - the offers
+ * alone have their projection in the manager (ADR 0003).
+ */
+const condition = (scope) =>
+  scope?.reach === REACH.PUBLIC ? {} : ownCondition("media", scope);
 
 /**
  * Data Manager for media objects.
@@ -15,7 +26,7 @@ class MediaManager {
    * @param {string} tenantId - Tenant ID.
    * @returns {Promise<Object|null>} The medium or null.
    */
-  static async getMedia(mediaId, tenantId) {
+  static async getMedia(mediaId, tenantId, scope) {
     if (!mediaId) {
       throw new Error("mediaId is required.");
     }
@@ -23,6 +34,7 @@ class MediaManager {
     const rawMedia = await MediaModel.findOne({
       id: mediaId,
       tenantId: tenantId ?? null,
+      ...condition(scope),
     });
 
     return rawMedia ? rawMedia.toEntity() : null;

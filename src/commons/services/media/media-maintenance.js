@@ -22,6 +22,7 @@ const {
 } = require("./media-file-type");
 const { listLegacyTree } = require("./media-import");
 const { MediaUsageService } = require("./media-usage");
+const { DOMAIN } = require("../authorization/reach");
 
 /**
  * How a scope reads in a report — `null` is the instance, not a nameless tenant.
@@ -685,7 +686,7 @@ async function relocate({ dryRun = false, tenantId, to } = {}) {
  */
 async function purgeLegacy({ dryRun = false } = {}) {
   const report = new MigrationReport("purge-legacy", dryRun);
-  const tenants = await TenantManager.getTenants();
+  const tenants = await TenantManager.getTenants(DOMAIN);
 
   const bookingDocumentRoots = Object.values(BOOKING_DOCUMENT).map(
     (type) => type.legacyFolder,

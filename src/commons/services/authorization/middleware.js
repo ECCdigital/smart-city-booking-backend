@@ -3,11 +3,24 @@
  * three markers a route carries, exactly one each.
  *
  *   authorize(resource, action)   signed in, decided; 401 anonymous, 403
- *                                 without reach, else `req.reach`
+ *                                 without reach, else `req.reach`. A route
+ *                                 with a second question (the obsolete
+ *                                 upsert PUT that may create, the user
+ *                                 removal that may hit an owner) names it
+ *                                 on the marker, `{ also: ["create"] }`,
+ *                                 and reads the answer off `req.reaches`
+ *                                 (ADR 0001): the main action alone
+ *                                 refuses, the others may be `null`.
  *   public(resource?, action?)    decided for anonymous principals too; the
  *                                 entry must be public, the handler gets
- *                                 `public | own | any`, never 403. Without
- *                                 arguments: a plainly public route.
+ *                                 `public | self | own | any`, never 403.
+ *                                 Without arguments: a plainly public route.
+ *                                 Second questions go on the marker as at
+ *                                 `authorize` (`{ also: ["intern"] }`).
+ *
+ * `reachesOf(req)` packs what a marker decided into the bundle the media
+ * rights take (`services/media/media-rights.js`): the main entry and the
+ * `also` entries by action, and the `userId`.
  *   tokenAuthorized()             declares a route authorized by a secret
  *                                 in URL or body (hooks, webhooks); the
  *                                 handler keeps checking it as today.
@@ -22,7 +35,7 @@
  * A declined tenant (glossary "Abweisung") is no gate here: the membership
  * in it rests in the principal already (`principal.js`), so `authorize`
  * decides as for anyone else, and `public` and every second decision
- * (`scopeFor`) meet the same principal. What `authorize` adds is the
+ * (`also`) meet the same principal. What `authorize` adds is the
  * answer: a refused principal whose membership rests is told why -
  * `403 tenant_declined` with the tenant's supervision - where anyone else
  * gets a plain `403`.
@@ -39,8 +52,9 @@ const {
   optionalAuth,
 } = require("../../../middleware/auth-middleware");
 const { ForbiddenError } = require("../../../errors/BaseError");
-const { loadPrincipal, anonymous } = require("./principal");
-const { decide, entryOf } = require("./policy");
+const { loadPrincipal, tenantsOf } = require("./principal");
+const { decide, entryOf, REACH } = require("./policy");
+const { ownerKeyOf } = require("./table");
 
 const MARKER = Object.freeze({
   AUTHORIZE: "authorize",
@@ -125,19 +139,46 @@ function afterAuth(auth, req, res, next, then) {
 }
 
 /**
+ * A second entry a route names on its marker: `"<action>"` of the same
+ * resource, or `"<resource>.<action>"` of another. Checked when the
+ * router loads, like the main entry.
+ *
+ * @param {string} resource - The resource of the main action.
+ * @param {string} name
+ * @returns {{name: string, resource: string, action: string}}
+ */
+function secondEntry(resource, name) {
+  const dot = name.indexOf(".");
+  const entry =
+    dot === -1
+      ? { resource, action: name }
+      : { resource: name.slice(0, dot), action: name.slice(dot + 1) };
+  entryOf(entry.resource, entry.action);
+  return { name, ...entry };
+}
+
+/**
  * @param {string} resource
  * @param {string} action
  * @param {Object} [options]
  * @param {TenantOf} [options.tenantOf] Where the route names its tenant,
  *   when not in `:tenant`.
+ * @param {string[]} [options.also] The second decisions of the route, as
+ *   `req.reaches[name]`: `"create"` of the same resource, or
+ *   `"instanceCatalog.store"` of another.
  * @returns {import("express").RequestHandler}
  */
-function authorize(resource, action, { tenantOf = tenantParam } = {}) {
+function authorize(
+  resource,
+  action,
+  { tenantOf = tenantParam, also = [] } = {},
+) {
   if (entryOf(resource, action).public === true) {
     throw new Error(
       `authorization: ${resource}.${action} is public, use public()`,
     );
   }
+  const others = also.map((name) => secondEntry(resource, name));
 
   const handler = (req, res, next) =>
     afterAuth(requireAuth, req, res, next, async () => {
@@ -147,10 +188,32 @@ function authorize(resource, action, { tenantOf = tenantParam } = {}) {
         return next(refusalOf(principal));
       }
       req.reach = reach;
+      req.entry = { resource, action };
+      req.tenantIds = tenantIdsOf(principal, resource, action, reach);
+      if (others.length) {
+        req.reaches = secondDecisions(principal, others);
+      }
       next();
     });
 
   return mark(handler, { marker: MARKER.AUTHORIZE, resource, action });
+}
+
+/**
+ * The answers to the second questions of a route, by the name the marker
+ * gives them.
+ *
+ * @param {Object} principal
+ * @param {{name: string, resource: string, action: string}[]} others
+ * @returns {Object<string, string|null>}
+ */
+function secondDecisions(principal, others) {
+  return Object.fromEntries(
+    others.map((other) => [
+      other.name,
+      decide(principal, other.resource, other.action),
+    ]),
+  );
 }
 
 /**
@@ -160,21 +223,36 @@ function authorize(resource, action, { tenantOf = tenantParam } = {}) {
  *
  * @param {string} [resource]
  * @param {string} [action]
+ * @param {Object} [options]
+ * @param {string[]} [options.also] The second decisions of the route, as
+ *   `req.reaches[name]` - never a refusal, like the main one.
  * @returns {import("express").RequestHandler}
  */
-function publicRoute(resource, action) {
+function publicRoute(resource, action, { also = [] } = {}) {
   const decided = resource !== undefined || action !== undefined;
   if (decided && entryOf(resource, action).public !== true) {
     throw new Error(
       `authorization: ${resource}.${action} is not public, use authorize()`,
     );
   }
+  if (also.length && !decided) {
+    throw new Error("authorization: a second decision needs a public entry");
+  }
+  const others = also.map((name) => secondEntry(resource, name));
 
   const handler = (req, res, next) =>
     afterAuth(optionalAuth, req, res, next, async () => {
-      req.reach = decided
-        ? decide(await principalOf(req), resource, action)
-        : "public";
+      if (decided) {
+        const principal = await principalOf(req);
+        req.reach = decide(principal, resource, action);
+        req.entry = { resource, action };
+        req.tenantIds = tenantIdsOf(principal, resource, action, req.reach);
+        if (others.length) {
+          req.reaches = secondDecisions(principal, others);
+        }
+      } else {
+        req.reach = REACH.PUBLIC;
+      }
       next();
     });
 
@@ -197,35 +275,58 @@ function tokenAuthorized() {
 }
 
 /**
- * The reach of a request as the managers take it (spec §4.1, §4.3): what a
- * handler hands on, never reads.
+ * The tenant set of a decision on the instance level (ADR 0002): under
+ * `own` at an entry whose owner key names a tenant set of the principal
+ * (`OWNER_KEY`, `tenantsOf`), the tenants that set holds; nothing
+ * otherwise.
  *
- * @param {import("express").Request} req
- * @returns {{reach: string|undefined, userId: string|null}}
+ * @param {Object} principal
+ * @param {string} resource
+ * @param {string} action
+ * @param {string|null} reach
+ * @returns {string[]|undefined}
  */
-function scopeOf(req) {
-  return { reach: req.reach, userId: req.principal?.userId ?? null };
+function tenantIdsOf(principal, resource, action, reach) {
+  if (reach !== REACH.OWN) {
+    return undefined;
+  }
+  const key = ownerKeyOf(resource, action);
+  return key.tenantsOf ? tenantsOf(principal, key) : undefined;
 }
 
 /**
- * The reach of a *second* decision of the same request, as the managers and
- * the domain take it (spec §5): a route carries one marker, but an adapter
- * sometimes has a second question to ask - whether the obsolete PUT may
- * create, which media the saver may reference, whether a medium that turned
- * out to be a booking document is theirs. It asks the table again, on the
- * principal already loaded.
+ * The reach of a request as the managers take it (glossary "Reichweite"): what a
+ * handler hands on, never reads. On the instance level the scope carries
+ * the tenant set `own` means there (`tenantIds`, ADR 0002); never the
+ * reach `domain`.
  *
  * @param {import("express").Request} req
- * @param {string} resource
- * @param {string} action
- * @returns {{reach: string|null, userId: string|null}}
+ * @returns {{reach: string|undefined, userId: string|null, tenantIds?: string[]}}
  */
-function scopeFor(req, resource, action) {
-  const principal = req.principal ?? anonymous();
+function scopeOf(req) {
   return {
-    reach: decide(principal, resource, action),
-    userId: principal.userId ?? null,
+    reach: req.reach,
+    userId: req.principal?.userId ?? null,
+    ...(req.tenantIds !== undefined && { tenantIds: req.tenantIds }),
   };
+}
+
+/**
+ * The decided reaches of a request as one bundle, by action: the main
+ * entry of the marker, its `also` entries, and the `userId`. What the
+ * media rights take (`services/media/media-rights.js`) - the domain gets
+ * the answers, never the principal. Only the entries a marker named are
+ * in it; an entry it did not name is no reach.
+ *
+ * @param {import("express").Request} req
+ * @returns {Object<string, string|null>}
+ */
+function reachesOf(req) {
+  return Object.freeze({
+    ...(req.entry && { [req.entry.action]: req.reach ?? null }),
+    ...req.reaches,
+    userId: req.principal?.userId ?? null,
+  });
 }
 
 /**
@@ -246,6 +347,6 @@ module.exports = {
   markerOf,
   principalOf,
   scopeOf,
-  scopeFor,
+  reachesOf,
   MARKER,
 };

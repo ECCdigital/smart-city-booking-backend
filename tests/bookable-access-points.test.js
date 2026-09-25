@@ -41,8 +41,10 @@ describe("BookableController access point references", () => {
         accessPointDetails: { active: true, accessPointIds: [] },
       },
       user: { id: "user-1" },
-      // The tenant owner: reach any, and the right to create.
+      // The tenant owner: reach any, and the right to create (the
+      // marker's second decision, `also: ["create"]`).
       reach: "any",
+      reaches: { create: "any" },
       principal: { userId: "user-1", isTenantOwner: true, grants: {} },
     };
     response = {

@@ -6,6 +6,7 @@ const axios = require("axios");
 const qs = require("qs");
 const crypto = require("crypto");
 const bunyan = require("bunyan");
+const { DOMAIN } = require("../../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "giro-cockpit-payment-service",
@@ -97,6 +98,7 @@ class GiroCockpitPaymentService extends PaymentService {
     const bookings = await BookingManager.getBookings(
       this.tenantId,
       this.bookingIds,
+      DOMAIN,
     );
     const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
     const GIRO_CHECKOUT_URL =

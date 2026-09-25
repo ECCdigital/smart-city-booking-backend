@@ -2,7 +2,6 @@ const UserManager = require("../../../commons/data-managers/user-manager");
 const { User } = require("../../../commons/entities/user/user");
 const bunyan = require("bunyan");
 const UserService = require("../../../commons/services/user-service");
-const { decide } = require("../../../commons/services/authorization");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const { ForbiddenError, NotFoundError } = require("../../../errors/BaseError");
 
@@ -87,8 +86,8 @@ class UserController {
   /**
    * @deprecated Use createUser or updateUser instead.
    *
-   * The route carries `user.update`; an unknown id creates, which is the
-   * adapter's second decision (authorize spec §12).
+   * The route carries `user.update`; an unknown id creates, which the
+   * marker names as its second question (`also: ["create"]`, ADR 0001).
    *
    * @param request
    * @param response
@@ -102,7 +101,7 @@ class UserController {
 
     if (isUpdate) {
       await UserController.updateUser(request, response);
-    } else if (decide(request.principal, "user", "create") !== "any") {
+    } else if (request.reaches?.create !== "any") {
       return next(new ForbiddenError());
     } else {
       await UserController.createUser(request, response);

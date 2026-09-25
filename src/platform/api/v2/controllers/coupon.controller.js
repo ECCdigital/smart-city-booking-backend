@@ -1,9 +1,11 @@
 const CouponManager = require("../../../../commons/data-managers/coupon-manager");
+const TenantManager = require("../../../../commons/data-managers/tenant-manager");
 const {
   COUPON_REASONS,
 } = require("../../../../commons/services/coupon/coupon-reasons");
 const { CouponError } = require("../../../../errors/CouponError");
 const bunyan = require("bunyan");
+const { scopeOf } = require("../../../../commons/services/authorization");
 
 const logger = bunyan.createLogger({
   name: "coupon.controller.v2.js",
@@ -85,7 +87,19 @@ class CouponControllerV2 {
 
     let coupon;
     try {
-      coupon = await CouponManager.getCoupon(couponId, tenantId);
+      // The validation asks as the public (`coupon.lookup`): a tenant
+      // without a public projection has no coupons (ADR 0003) - the
+      // public's 404, naming no reason.
+      if (!(await TenantManager.getTenant(tenantId, scopeOf(req)))) {
+        return res.status(404).json(
+          new CouponError({
+            reason: COUPON_REASONS.NOT_FOUND,
+            statusCode: 404,
+            params: { couponId },
+          }).toJSON(),
+        );
+      }
+      coupon = await CouponManager.getCoupon(couponId, tenantId, scopeOf(req));
     } catch (err) {
       logger.error({ err, tenantId, couponId }, "validateCoupon: load failed");
       return fail(

@@ -77,7 +77,7 @@ describe("Phase 1 booking performance", () => {
       ];
 
       // The reach is the manager's query condition: under `own` the store
-      // answers the user's own booking only (authorize spec §4.1).
+      // answers the user's own booking only (glossary "Reichweite").
       const getTenantBookings = sinon
         .stub(BookingManager, "getTenantBookings")
         .callsFake(async (tenantId, scope) =>

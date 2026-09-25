@@ -17,6 +17,7 @@
 
 const TenantManager = require("../../data-managers/tenant-manager");
 const EventManager = require("../../data-managers/event-manager");
+const { DOMAIN } = require("../authorization/reach");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 
 const eventKey = (tenantId, id) => `${tenantId}\u0000${id}`;
@@ -71,7 +72,7 @@ async function customerViewOf(bookings) {
 
   const [tenants, events] = await Promise.all([
     TenantManager.getTenantsByIds(tenantIds),
-    eventRefs.length ? EventManager.getEventsByIds(eventRefs) : [],
+    eventRefs.length ? EventManager.getEventsByIds(eventRefs, DOMAIN) : [],
   ]);
 
   const snapshotByTenant = new Map(

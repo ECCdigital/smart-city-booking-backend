@@ -1,6 +1,6 @@
 /**
  * The invariants of the route markers and the order of the routers
- * (authorize spec §8.3).
+ * (glossary "Berechtigung").
  *
  * Every route under `src/platform` carries exactly one of the three
  * markers - `authorize`, `public`, `tokenAuthorized`. Ticket 5 of the
@@ -92,6 +92,42 @@ describe("authorization invariants: every route carries one marker", function ()
         }
       }
     }
+  });
+});
+
+/**
+ * The domain's reach never appears at the edge (ADR 0002): `DOMAIN` is
+ * what a caller inside `src/commons` says, a handler hands `scopeOf(req)`
+ * on - or `PUBLIC`, the public's view - and never reads as the domain.
+ */
+describe("authorization invariants: no DOMAIN under src/platform", function () {
+  const fs = require("fs");
+  const path = require("path");
+  const PLATFORM = path.join(__dirname, "..", "src", "platform");
+
+  function* files(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        yield* files(full);
+      } else if (entry.name.endsWith(".js")) {
+        yield full;
+      }
+    }
+  }
+
+  it("names the domain's reach in no handler, router or engine", function () {
+    const offenders = [];
+    for (const file of files(PLATFORM)) {
+      const source = fs
+        .readFileSync(file, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+      if (/\bDOMAIN\b|reach:\s*"domain"/.test(source)) {
+        offenders.push(path.relative(PLATFORM, file));
+      }
+    }
+    expect(offenders).to.deep.equal([]);
   });
 });
 
@@ -630,19 +666,22 @@ describe("authorization invariants: the declined tenant on the routers", functio
       pending: all,
       declined: ["own-of-owner"],
     });
-    // The anonymized projection: the management sees it whole, anyone
-    // else gets the public's answer - of a declined tenant, none.
+    // The anonymized projection is the public's view, whoever asks (ADR
+    // 0003): of a tenant without a public projection none, for the
+    // management too - their whole list is the one without the flag.
     const projection = (userId) => async () =>
       (await call("get", `/api/${TENANT}/bookings?public=true`, userId)).status;
     expect(await acrossLevels(projection(ROLE_HOLDER))).to.deep.equal({
       free: 200,
-      pending: 200,
+      pending: 404,
       declined: 404,
     });
     expect((await acrossLevels(projection(null))).declined).to.equal(404);
   });
 
-  it("refuses the metadata of a medium to the staff of a declined tenant", async function () {
+  it("hides the metadata of a medium from the staff of a declined tenant", async function () {
+    // The door `media.metadata` is signed in; the resting membership reaches
+    // no medium, and a medium out of reach is not there (ticket 04).
     for (const userId of [ROLE_HOLDER, OWNER]) {
       const statuses = await acrossLevels(
         async () =>
@@ -652,7 +691,7 @@ describe("authorization invariants: the declined tenant on the routers", functio
       expect(statuses, userId).to.deep.equal({
         free: 200,
         pending: 200,
-        declined: 403,
+        declined: 404,
       });
     }
   });

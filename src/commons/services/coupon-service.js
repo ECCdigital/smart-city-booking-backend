@@ -1,6 +1,7 @@
 const CouponManager = require("../data-managers/coupon-manager");
 const { COUPON_TYPE } = require("../entities/coupon/coupon");
 const crypto = require("crypto");
+const { DOMAIN } = require("./authorization/reach");
 
 class CouponService {
   static _roundEur(value) {
@@ -20,7 +21,7 @@ class CouponService {
       return bookingPrice;
     }
 
-    const coupon = await CouponManager.getCoupon(couponID, tenantID);
+    const coupon = await CouponManager.getCoupon(couponID, tenantID, DOMAIN);
 
     if (!coupon) {
       return bookingPrice;
@@ -64,7 +65,7 @@ class CouponService {
       return CouponService._unchangedCheckoutPrices(netPrice, vatRate);
     }
 
-    const coupon = await CouponManager.getCoupon(couponID, tenantID);
+    const coupon = await CouponManager.getCoupon(couponID, tenantID, DOMAIN);
 
     if (!coupon) {
       return CouponService._unchangedCheckoutPrices(netPrice, vatRate);

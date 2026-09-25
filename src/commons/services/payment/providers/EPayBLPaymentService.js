@@ -8,6 +8,7 @@ const { Agent } = require("node:https");
 const forge = require("node-forge");
 const { createSecureContext } = require("node:tls");
 const bunyan = require("bunyan");
+const { DOMAIN } = require("../../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "epaybl-payment-service",
@@ -252,6 +253,7 @@ class EPayBLPaymentService extends PaymentService {
     const bookings = await BookingManager.getBookings(
       this.tenantId,
       this.bookingIds,
+      DOMAIN,
     );
     const paymentApp = await getTenantApp(this.tenantId, "ePayBL");
     const cfg = this._getEpayblConfig(paymentApp);

@@ -10,19 +10,9 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const {
-  decide,
   scopeOf,
-  scopeFor,
-  withinReach,
+  reachesOf,
 } = require("../../../commons/services/authorization");
-const TenantManager = require("../../../commons/data-managers/tenant-manager");
-const {
-  isOfferListable,
-} = require("../../../commons/services/supervision/offer-gate");
-const {
-  assertOfferReachable,
-  offersForSignedInAggregate,
-} = require("../../../commons/services/supervision/public-offer-gate");
 
 const logger = bunyan.createLogger({
   name: "event-controller.js",
@@ -34,54 +24,50 @@ const logger = bunyan.createLogger({
  */
 class EventController {
   /**
-   * `GET /events`: whoever may read events gets them whole (under `own`
-   * the events of their own); everyone else - signed in or not - gets the
-   * list-type delivery of the supervision (spec §5.1): what asks to be
-   * listed and passes the tenant's supervision, without its review.
+   * `GET /events`: the events within the reach of the request (`event.read`):
+   * the tenant's whole under `any`, the own ones under `own` - a
+   * management list, never own plus public (ADR 0001) - and for everyone
+   * else the public's list, which the manager projects (ADR 0003): what
+   * asks to be listed and passes the tenant's supervision, without its
+   * review. A tenant without a public projection has none: the public's
+   * 404.
    */
-  static async getEvents(request, response) {
+  static async getEvents(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-      const scope = scopeOf(request);
-      const tenantRecord = await TenantManager.getTenant(tenant);
-      const events = (await EventManager.getEvents(tenant)).flatMap((event) => {
-        if (withinReach(event, "ownerUserId", scope)) {
-          return [event];
-        }
-        return isOfferListable({ tenant: tenantRecord, offer: event })
-          ? [event.withoutReview()]
-          : [];
-      });
+      const events = await EventManager.getEvents(tenant, scopeOf(request));
 
       logger.info(
         `${tenant} -- sending ${events.length} events to user ${user?.id}`,
       );
       response.status(200).send(events);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.warn(err);
       response.status(500).send("could not get events");
     }
   }
 
   /**
-   * `GET /events/:id`: whole within the reach of the request; for everyone
-   * else by the direct-link rule of the supervision (spec §5.2) - no
-   * `isPublic` requirement, but the event has to be reachable, or the
-   * answer is a 404 that names no reason.
+   * `GET /events/:id`: the event within the reach of the request - for
+   * the public what it reaches by a direct link (ADR 0003, no `isPublic`
+   * requirement) - or a 404 that names no reason (spec §5.2): an event
+   * the public cannot reach and one that is not there are the same
+   * absence.
    */
   static async getEvent(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const id = request.params.id;
       if (id) {
-        const event = await EventManager.getEvent(id, tenant);
-        if (!event || withinReach(event, "ownerUserId", scopeOf(request))) {
-          return response.status(200).send(event);
+        const event = await EventManager.getEvent(id, tenant, scopeOf(request));
+        if (!event) {
+          throw new NotFoundError("offer_not_found", { id });
         }
-
-        await assertOfferReachable(tenant, event);
-        response.status(200).send(event.withoutReview());
+        response.status(200).send(event);
       } else {
         logger.warn(`Could not get event. Missing ID.`);
         response.sendStatus(400);
@@ -96,8 +82,9 @@ class EventController {
   }
 
   /**
-   * The booked seats of an event: all under reach `any`, under `own` the
-   * seats of the user's own tickets.
+   * The booked seats of an event within the reach of the request: the
+   * event has to be within reach (404 otherwise), its seats are counted
+   * whole (ADR 0002).
    */
   static async getBookedSeatsCount(request, response) {
     try {
@@ -109,14 +96,16 @@ class EventController {
         return response.sendStatus(400);
       }
 
-      const { reach, userId } = scopeOf(request);
       const count = await BookingService.getBookedSeatsCount(
         tenant,
         id,
-        reach === "own" ? { onlyOwn: true, userId } : {},
+        scopeOf(request),
       );
       response.status(200).send({ bookedSeats: count });
     } catch (err) {
+      if (err instanceof BaseError) {
+        return response.status(err.statusCode).json(err.toJSON());
+      }
       logger.warn(err);
       response.status(500).send("could not get booked seats count");
     }
@@ -151,9 +140,9 @@ class EventController {
 
       const withTicketsBoolean = withTickets === "true";
 
-      // The obsolete PUT carries the update marker; the creation is the
-      // adapter's second decision (authorize spec §5, §11).
-      if (decide(request.principal, "event", "create") !== "any") {
+      // The obsolete PUT carries the update marker and names the creation
+      // as its second decision (`also`, ADR 0001).
+      if (request.reaches?.create !== "any") {
         logger.warn(`User ${user?.id} not allowed to create event`);
         throw new ForbiddenError();
       }
@@ -168,7 +157,7 @@ class EventController {
       await MediaReferenceGuard.assertEventStorable(
         event,
         tenant,
-        scopeFor(request, "media", "read"),
+        reachesOf(request),
       );
       await EventService.createEvent(tenant, event, user, withTicketsBoolean);
 
@@ -209,7 +198,7 @@ class EventController {
       await MediaReferenceGuard.assertEventStorable(
         event,
         tenant,
-        scopeFor(request, "media", "read"),
+        reachesOf(request),
       );
       await EventService.updateEvent(
         tenant,
@@ -253,16 +242,14 @@ class EventController {
     }
   }
 
-  static async getTags(request, response) {
+  static async getTags(request, response, next) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
 
-      const events = await offersForSignedInAggregate(
-        request.principal,
-        tenant,
-        await EventManager.getEvents(tenant),
-      );
+      // The aggregate over the events within the reach: the public's
+      // list, or the tenant's whole for the staff (`event.meta`).
+      const events = await EventManager.getEvents(tenant, scopeOf(request));
       const tags = events
         .map((e) => e.information?.tags || [])
         .flat()
@@ -273,6 +260,9 @@ class EventController {
       );
       response.status(200).send(tags);
     } catch (err) {
+      if (err instanceof BaseError) {
+        return next(err);
+      }
       logger.error(err);
       response.status(500).send("could not get tags");
     }

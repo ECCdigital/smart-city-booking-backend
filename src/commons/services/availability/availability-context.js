@@ -6,6 +6,7 @@ const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const {
   isTimeRelatedBookable,
 } = require("../../availability/availability-rules/booking-amount");
+const { DOMAIN } = require("../authorization/reach");
 
 class AvailabilityContext {
   /**
@@ -57,9 +58,17 @@ class AvailabilityContext {
   async load() {
     const [bookable, parentBookables, relatedBookables, tenant] =
       await Promise.all([
-        BookableManager.getBookable(this.bookableId, this.tenantId),
-        BookableManager.getAncestorBookables(this.bookableId, this.tenantId),
-        BookableManager.getRelatedBookables(this.bookableId, this.tenantId),
+        BookableManager.getBookable(this.bookableId, this.tenantId, DOMAIN),
+        BookableManager.getAncestorBookables(
+          this.bookableId,
+          this.tenantId,
+          DOMAIN,
+        ),
+        BookableManager.getRelatedBookables(
+          this.bookableId,
+          this.tenantId,
+          DOMAIN,
+        ),
         TenantManager.getTenant(this.tenantId),
       ]);
 
@@ -109,6 +118,7 @@ class AvailabilityContext {
       const untimedBookings = await BookingManager.getRelatedBookingsBatch(
         this.tenantId,
         bookableIds,
+        DOMAIN,
       );
       this.metrics.dbQueryCount += 1;
       this.#indexBookings(untimedBookings);
@@ -116,8 +126,12 @@ class AvailabilityContext {
 
     if (bookable?.type === BOOKABLE_TYPES.TICKET && bookable?.eventId) {
       const [event, eventBookings] = await Promise.all([
-        EventManager.getEvent(bookable.eventId, this.tenantId),
-        BookingManager.getEventBookings(this.tenantId, bookable.eventId),
+        EventManager.getEvent(bookable.eventId, this.tenantId, DOMAIN),
+        BookingManager.getEventBookings(
+          this.tenantId,
+          bookable.eventId,
+          DOMAIN,
+        ),
       ]);
       this.metrics.dbQueryCount += 2;
       this.event = event;
@@ -133,6 +147,7 @@ class AvailabilityContext {
       const children = await BookableManager.getRelatedBookables(
         parent.id,
         this.tenantId,
+        DOMAIN,
       );
       this.metrics.dbQueryCount += 1;
       this.relatedBookablesByParentId.set(parent.id, children);
@@ -163,6 +178,7 @@ class AvailabilityContext {
       const untimedBookings = await BookingManager.getRelatedBookingsBatch(
         this.tenantId,
         extraIds,
+        DOMAIN,
       );
       this.metrics.dbQueryCount += 1;
       this.#indexBookings(untimedBookings);

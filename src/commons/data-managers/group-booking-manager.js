@@ -1,19 +1,31 @@
 const GroupBookingModel = require("./models/groupBookingModel");
 const { GroupBooking } = require("../entities/groupBooking/groupBooking");
 const { ownCondition } = require("../services/authorization/reach");
+const { REACH } = require("../services/authorization/policy");
+
+/**
+ * The condition of a reach on the group bookings (ADR 0002). Under `public` there
+ * is none: what the public sees of them is the handler's projection
+ * (nothing yet: no public route lists them), so the manager reads the tenant's records whole and the
+ * handler shapes them - the offers alone have their projection in the
+ * manager (ADR 0003).
+ */
+const condition = (scope) =>
+  scope?.reach === REACH.PUBLIC ? {} : ownCondition("groupBooking", scope);
 
 class GroupBookingManager {
   /**
    * Get all group bookings for a tenant
    * @param {string} tenantId Tenant ID
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<GroupBooking[]>} Array of group bookings
    */
   static async getGroupBookings(tenantId, scope) {
     const rawGroupBookings = await GroupBookingModel.find({
       tenantId: tenantId,
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
     return rawGroupBookings.map((doc) => doc.toEntity());
   }
@@ -23,8 +35,9 @@ class GroupBookingManager {
    * @param {string} tenantId Tenant ID
    * @param {string} groupBookingId Group booking ID
    * @param {boolean} populate Whether to populate bookings
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<GroupBooking|null>} Group booking or null
    */
   static async getGroupBooking(
@@ -36,7 +49,7 @@ class GroupBookingManager {
     let query = GroupBookingModel.findOne({
       tenantId: tenantId,
       id: groupBookingId,
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
 
     if (populate) {
@@ -52,10 +65,11 @@ class GroupBookingManager {
    * Get populated group booking (convenience method)
    * @param {string} tenantId Tenant ID
    * @param {string} groupBookingId Group booking ID
+   * @param {{reach: string, userId?: string|null}} scope As of `getGroupBooking`
    * @returns {Promise<GroupBooking|null>} Populated group booking or null
    */
-  static async getPopulatedGroupBooking(tenantId, groupBookingId) {
-    return await this.getGroupBooking(tenantId, groupBookingId, true);
+  static async getPopulatedGroupBooking(tenantId, groupBookingId, scope) {
+    return await this.getGroupBooking(tenantId, groupBookingId, true, scope);
   }
 
   /**
@@ -63,8 +77,9 @@ class GroupBookingManager {
    * @param {string} tenantId Tenant ID
    * @param {string} bookingId Booking ID
    * @param {boolean} populate Whether to populate bookings
-   * @param {{reach?: string, userId?: string}} [scope] The reach of the
-   *   request (authorize spec §4.1): under `own` only the user's own
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<GroupBooking|null>} Group booking or null
    */
   static async getGroupBookingByBookingId(
@@ -76,7 +91,7 @@ class GroupBookingManager {
     let query = GroupBookingModel.findOne({
       tenantId: tenantId,
       bookingIds: bookingId,
-      ...ownCondition("assignedUserId", scope),
+      ...condition(scope),
     });
 
     if (populate) {

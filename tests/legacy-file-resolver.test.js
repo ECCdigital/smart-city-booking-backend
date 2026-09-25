@@ -9,6 +9,7 @@ const {
   NextcloudManager,
 } = require("../src/commons/data-managers/file-manager");
 const { Media } = require("../src/commons/entities/media/media");
+const { decide } = require("../src/commons/services/authorization");
 const {
   resetImportStatus,
 } = require("../src/commons/services/media/media-import-status");
@@ -52,32 +53,39 @@ function createResponse() {
 }
 
 /**
- * The resolver runs behind `public("media", "file")` (tenant) and
- * `public("instanceMedia", "file")` (instance), so a request carries the
- * reach the marker decided: `public` for the anonymous, `own` for a
- * signed-in user without a media role.
+ * The resolver runs behind `public("media", "file", { also:
+ * ["bookingDocument", "intern"] })` (tenant) and `public("instanceMedia",
+ * "file", { also: ["intern"] })` (instance), so a request carries the
+ * reaches those markers decide over the real table.
  */
 function createRequest({
   user = null,
   name = LEGACY_PATH,
   params = {},
-  reach = user ? "own" : "public",
   isMember = false,
 } = {}) {
+  const principal = {
+    userId: user?.id ?? null,
+    tenantId: params.tenant ?? null,
+    isInstanceOwner: false,
+    isMember,
+    isTenantOwner: false,
+    grants: {},
+    restingMembership: null,
+  };
+  const resource = params.tenant ? "media" : "instanceMedia";
+  const also = params.tenant ? ["bookingDocument", "intern"] : ["intern"];
   return {
     user,
     params,
     query: { name },
     headers: {},
-    reach,
-    principal: {
-      userId: user?.id ?? null,
-      isInstanceOwner: false,
-      isMember,
-      isTenantOwner: false,
-      grants: {},
-      restingMembership: null,
-    },
+    principal,
+    reach: decide(principal, resource, "file"),
+    entry: { resource, action: "file" },
+    reaches: Object.fromEntries(
+      also.map((action) => [action, decide(principal, resource, action)]),
+    ),
     on() {},
   };
 }

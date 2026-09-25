@@ -27,12 +27,14 @@
 # `/events*`, `/bookings?public=true`, `/calendar/occupancy`, coupon lookup,
 # media files, iCal, the JSON and HTML engines, `/checkout/permissions/{id}`
 # and `/api/tenants/{tenant}/payment-apps`) answers `404 tenant_not_found`
-# under the public reach. Staff of a pending tenant keep their reach there
-# (preparation); staff of a declined tenant get the public's 404. A new
-# self-booking of such a tenant is refused by every checkout entrance with
-# the reason `checkout.offer_not_reachable`; the administration's manual
-# booking, existing bookings, payment callbacks, hooks and webhooks are
-# unaffected.
+# under the public reach - no gate middleware: every path reads through a
+# manager as the public, which applies the projection (ADR 0003). Staff of
+# a pending tenant keep their management view where the entry gives them
+# `any` (preparation); staff of a declined tenant get the public's 404. A
+# new self-booking of such a tenant finds no bookable at every checkout
+# entrance (`checkout.bookable_not_found`, v1 `404`); the administration's
+# manual booking, existing bookings, payment callbacks, hooks and webhooks
+# are unaffected.
 #
 # The review of a bookable (glossary "Prüfstatus"): under `supervised` only
 # an approved bookable passes the offer gate. List-type delivery
@@ -44,13 +46,13 @@
 # bookings?public=true`, `/checkout/permissions/{id}` v1 and v2,
 # `/calendar/occupancy?ids=`) follows the direct-link rule: `isPublic` is no
 # requirement, under supervision the approval is; otherwise
-# `404 offer_not_found`, naming no reason. Every checkout entrance refuses
-# a new self-booking of such a bookable with `checkout.offer_not_reachable`.
+# `404 offer_not_found`, naming no reason. Every checkout entrance reads as
+# the public and finds no such bookable (`checkout.bookable_not_found`).
 #
-# Events pass the same gate with their own review. List-type delivery:
-# `GET /api/{tenant}/events`, the JSON engine (list and detail), the HTML
-# engine's list, iCal and the iCal feeds (without `includePrivate`).
-# Detail-type delivery: `GET /api/{tenant}/events/{id}`, the HTML engine's
+# Events pass the same projection with their own review. List-type
+# delivery: `GET /api/{tenant}/events`, the JSON and HTML engines' lists,
+# the iCal calendar and feed (without `includePrivate`). Detail-type
+# delivery: `GET /api/{tenant}/events/{id}`, the JSON and HTML engines'
 # event detail, the event embedded by `?populate=true` in a public bookable,
 # and everything about a ticket of the event - its detail, prices,
 # availability, permission pre-check and every checkout entrance - which

@@ -4,6 +4,7 @@ const TenantManager = require("../../data-managers/tenant-manager");
 const EventManager = require("../../data-managers/event-manager");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const { AvailabilityDataProvider } = require("./availability-data-provider");
+const { DOMAIN } = require("../../services/authorization/reach");
 
 /**
  * Live DB-backed provider aligned with {@link ItemCheckoutService} data access.
@@ -15,13 +16,17 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
    * @param {string} params.bookableId
    * @param {number} params.timeBegin
    * @param {number} params.timeEnd
+   * @param {{reach: string, userId?: string|null}} [params.scope] The
+   *   reach the bookable and its event are read under: the checkout's
+   *   (the public's for a self-booking, ADR 0003), the domain's without one
    */
-  constructor({ tenantId, bookableId, timeBegin, timeEnd }) {
+  constructor({ tenantId, bookableId, timeBegin, timeEnd, scope = DOMAIN }) {
     super();
     this.tenantId = tenantId;
     this.bookableId = bookableId;
     this.timeBegin = timeBegin;
     this.timeEnd = timeEnd;
+    this.scope = scope;
 
     this.bookable = null;
     this.parentBookables = [];
@@ -55,6 +60,7 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
       bookableId: checkoutService.bookableId,
       timeBegin: checkoutService.timeBegin,
       timeEnd: checkoutService.timeEnd,
+      scope: checkoutService.scope,
     });
 
     await provider.load({
@@ -72,9 +78,21 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
     const [bookable, parentBookables, relatedBookables, tenant] =
       await Promise.all([
         bookableOverride ??
-          BookableManager.getBookable(this.bookableId, this.tenantId),
-        BookableManager.getAncestorBookables(this.bookableId, this.tenantId),
-        BookableManager.getRelatedBookables(this.bookableId, this.tenantId),
+          BookableManager.getBookable(
+            this.bookableId,
+            this.tenantId,
+            this.scope,
+          ),
+        BookableManager.getAncestorBookables(
+          this.bookableId,
+          this.tenantId,
+          DOMAIN,
+        ),
+        BookableManager.getRelatedBookables(
+          this.bookableId,
+          this.tenantId,
+          DOMAIN,
+        ),
         TenantManager.getTenant(this.tenantId),
       ]);
 
@@ -85,8 +103,14 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
 
     if (bookable?.type === BOOKABLE_TYPES.TICKET && bookable?.eventId) {
       const [event, eventBookings] = await Promise.all([
-        EventManager.getEvent(bookable.eventId, this.tenantId),
-        BookingManager.getEventBookings(this.tenantId, bookable.eventId),
+        // The event of the ticket within the same reach: what the public
+        // reaches, or the bookable would not have been.
+        EventManager.getEvent(bookable.eventId, this.tenantId, this.scope),
+        BookingManager.getEventBookings(
+          this.tenantId,
+          bookable.eventId,
+          DOMAIN,
+        ),
       ]);
       this.event = event;
       this.eventBookings = eventBookings;
@@ -110,7 +134,11 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
   }
 
   async getRelatedBookablesFor(bookableId) {
-    return BookableManager.getRelatedBookables(bookableId, this.tenantId);
+    return BookableManager.getRelatedBookables(
+      bookableId,
+      this.tenantId,
+      DOMAIN,
+    );
   }
 
   async getConcurrentBookings(bookableId, timeBegin, timeEnd) {
@@ -123,7 +151,7 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
   }
 
   async getRelatedBookings(bookableId) {
-    return BookingManager.getRelatedBookings(this.tenantId, bookableId);
+    return BookingManager.getRelatedBookings(this.tenantId, bookableId, DOMAIN);
   }
 
   getTenant() {

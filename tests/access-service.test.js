@@ -555,7 +555,7 @@ describe("One access point shape on both ways", () => {
   it("asks the booker for evidence, even where they may manage the bookings", async () => {
     const [listed] = await AccessService.getByBooking("tenant-1", "booking-1", {
       userId: "booker-1",
-      hasManagePermission: true,
+      scope: { reach: "any" },
     });
 
     expect(listed.validationRuleTypes).to.deep.equal(["qrScan"]);
@@ -564,7 +564,7 @@ describe("One access point shape on both ways", () => {
   it("asks for no evidence where somebody manages a booking that is not theirs", async () => {
     const [listed] = await AccessService.getByBooking("tenant-1", "booking-1", {
       userId: "manager-1",
-      hasManagePermission: true,
+      scope: { reach: "any" },
     });
 
     expect(listed.validationRuleTypes).to.deep.equal([]);

@@ -1,5 +1,6 @@
 const BookingManager = require("../data-managers/booking-manager");
 const UserManager = require("../data-managers/user-manager");
+const { DOMAIN } = require("../services/authorization/reach");
 
 /**
  * The User Utilities provide tools and functionality exceeding
@@ -17,7 +18,7 @@ class UserUtilities {
    */
   static async linkGuestBookingsToUser(userId, tenant) {
     const user = await UserManager.getUser(userId, tenant);
-    const bookings = await BookingManager.getTenantBookings(tenant);
+    const bookings = await BookingManager.getTenantBookings(tenant, DOMAIN);
 
     const relatedBookings = bookings.filter(
       (b) => b.mail.toLowerCase() === user.id.toLowerCase(),

@@ -23,6 +23,7 @@ const {
   normaliseLegacyPath,
   parseLegacyUrl,
 } = require("./legacy-path");
+const { DOMAIN } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "media-import.js",
@@ -159,7 +160,7 @@ async function importTree({ tenantId, root, report, dryRun }) {
  */
 async function importLegacyMedia({ dryRun = false } = {}) {
   const report = new MigrationReport("import:media", dryRun);
-  const tenants = await TenantManager.getTenants();
+  const tenants = await TenantManager.getTenants(DOMAIN);
   const scopes = [null, ...tenants.map((tenant) => tenant.id)];
 
   for (const tenantId of scopes) {
@@ -185,7 +186,7 @@ async function importLegacyMedia({ dryRun = false } = {}) {
  */
 async function importBookingDocuments({ dryRun = false } = {}) {
   const report = new MigrationReport("import:booking-documents", dryRun);
-  const tenants = await TenantManager.getTenants();
+  const tenants = await TenantManager.getTenants(DOMAIN);
 
   for (const tenant of tenants) {
     for (const type of Object.values(BOOKING_DOCUMENT)) {
@@ -490,14 +491,14 @@ async function rewriteEach({ kind, entities, convert, store, report, dryRun }) {
  */
 async function rewriteReferences({ dryRun = false } = {}) {
   const report = new MigrationReport("import:references", dryRun);
-  const tenants = await TenantManager.getTenants();
+  const tenants = await TenantManager.getTenants(DOMAIN);
 
   for (const tenant of tenants) {
     const tenantId = tenant.id;
 
     await rewriteEach({
       kind: `bookable:${tenantId}`,
-      entities: await BookableManager.getBookables(tenantId),
+      entities: await BookableManager.getBookables(tenantId, DOMAIN),
       convert: (bookable) => convertBookable(bookable, tenantId),
       store: (bookable) => BookableManager.storeBookable(bookable, false),
       report,
@@ -506,7 +507,7 @@ async function rewriteReferences({ dryRun = false } = {}) {
 
     await rewriteEach({
       kind: `event:${tenantId}`,
-      entities: await EventManager.getEvents(tenantId),
+      entities: await EventManager.getEvents(tenantId, DOMAIN),
       convert: (event) => convertEvent(event, tenantId),
       store: (event) => EventManager.storeEvent(event, false),
       report,

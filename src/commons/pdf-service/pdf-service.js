@@ -15,6 +15,7 @@ const {
   resolveBookingTableMeta,
   buildCompactMetaHtml,
 } = require("./pdf-booking-table-meta");
+const { DOMAIN } = require("../services/authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "pdf-service.js",
@@ -353,8 +354,8 @@ class PdfService {
   static async generateSingleReceipt(tenantId, bookingId, receiptNumber) {
     const [tenant, booking, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
-      BookingManager.getBooking(bookingId, tenantId),
-      BookableManager.getBookables(tenantId),
+      BookingManager.getBooking(bookingId, tenantId, DOMAIN),
+      BookableManager.getBookables(tenantId, DOMAIN),
     ]);
 
     const items = PdfService._buildItems(booking, allBookables);
@@ -404,8 +405,8 @@ class PdfService {
     try {
       const [tenant, bookings, allBookables] = await Promise.all([
         TenantManager.getTenant(tenantId),
-        BookingManager.getBookings(tenantId, bookingIds),
-        BookableManager.getBookables(tenantId),
+        BookingManager.getBookings(tenantId, bookingIds, DOMAIN),
+        BookableManager.getBookables(tenantId, DOMAIN),
       ]);
 
       const { bookingRows, totals } = PdfService._buildAggregatedData(
@@ -446,8 +447,8 @@ class PdfService {
     const [tenant, invoiceApp, booking, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
       TenantManager.getTenantApp(tenantId, "invoice"),
-      BookingManager.getBooking(bookingId, tenantId),
-      BookableManager.getBookables(tenantId),
+      BookingManager.getBooking(bookingId, tenantId, DOMAIN),
+      BookableManager.getBookables(tenantId, DOMAIN),
     ]);
 
     const items = PdfService._buildItems(booking, allBookables);
@@ -510,13 +511,13 @@ class PdfService {
 
     const bookingsPromise = providedBookings
       ? Promise.resolve(providedBookings)
-      : BookingManager.getBookings(tenantId, bookingIds);
+      : BookingManager.getBookings(tenantId, bookingIds, DOMAIN);
 
     const [tenant, invoiceApp, bookings, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
       TenantManager.getTenantApp(tenantId, "invoice"),
       bookingsPromise,
-      BookableManager.getBookables(tenantId),
+      BookableManager.getBookables(tenantId, DOMAIN),
     ]);
 
     const { bookingRows, totals } = PdfService._buildAggregatedData(
@@ -574,8 +575,8 @@ class PdfService {
 
     const [tenant, booking, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
-      BookingManager.getBooking(bookingId, tenantId),
-      BookableManager.getBookables(tenantId),
+      BookingManager.getBooking(bookingId, tenantId, DOMAIN),
+      BookableManager.getBookables(tenantId, DOMAIN),
     ]);
 
     const calculation = refundCalculation || {
@@ -683,8 +684,8 @@ class PdfService {
 
     const [tenant, bookings, allBookables] = await Promise.all([
       TenantManager.getTenant(tenantId),
-      BookingManager.getBookings(tenantId, bookingIds),
-      BookableManager.getBookables(tenantId),
+      BookingManager.getBookings(tenantId, bookingIds, DOMAIN),
+      BookableManager.getBookables(tenantId, DOMAIN),
     ]);
 
     const calculations =

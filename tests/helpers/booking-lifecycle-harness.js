@@ -93,20 +93,49 @@ const {
   GroupBooking,
 } = require("../../src/commons/entities/groupBooking/groupBooking");
 
+const {
+  reached,
+} = require("../../src/commons/services/supervision/public-projection");
+const {
+  isTenantPubliclyVisible,
+} = require("../../src/commons/services/supervision/offer-gate");
+
+/**
+ * The offers as a manager answers them under a reach (ADR 0003): under
+ * `public` through the real projection - the stubs of the catalogue know
+ * no rule of their own - and whole otherwise.
+ */
+async function projected(offers, tenantId, scope, project) {
+  return scope?.reach === "public" ? project(tenantId, offers) : offers;
+}
+
 const TENANT = "tenant-1";
 const TENANT_MAIL = "stadt@example.test";
 /**
  * The principals (glossary "Prinzipal") of the tenant, one per level:
  * the instance owner, who also holds the all-role in the tenant; the
  * tenant owner without a role; the holder of every level of every role
- * group; and the customer, signed in without any role.
+ * group; the holder of the `own` levels alone (`readOwn`, `updateOwn`,
+ * `deleteOwn` of every group), who reaches nothing but the own records;
+ * and the customer, signed in without any role.
  */
 const ADMIN = "admin@example.test";
 const OWNER = "owner@example.test";
 const ROLE_HOLDER = "rolle@example.test";
+const READ_OWN_HOLDER = "leser@example.test";
 const CUSTOMER = "erika@example.test";
 /** The one role of the tenant: every level of every group. */
 const ROLE_ALL = "role-all";
+/** The role of the `own` levels alone. */
+const ROLE_READ_OWN = "role-read-own";
+/**
+ * The second tenant, for the questions across tenant borders: its owner
+ * is a member there and nowhere else, and nobody of the first tenant is a
+ * member here.
+ */
+const TENANT_B = "tenant-2";
+const TENANT_B_MAIL = "verein@example.test";
+const OWNER_B = "inhaber@example.test";
 const ORGANIZER = "orga@example.test";
 /** The one supervisor named at the customer's membership. */
 const SUPERVISOR = "chef@example.test";
@@ -320,10 +349,38 @@ function roleAll() {
   });
 }
 
+/** The role holding the `own` levels of every group, and nothing else. */
+function roleReadOwn() {
+  return new Role({
+    id: ROLE_READ_OWN,
+    name: "Nur Eigenes",
+    tenantId: TENANT,
+    adminInterfaces: [],
+    ...Object.fromEntries(
+      ROLE_GROUPS.map((group) => [
+        group,
+        Object.fromEntries(
+          ROLE_LEVELS.map((level) => [level, level.endsWith("Own")]),
+        ),
+      ]),
+    ),
+  });
+}
+
+/** The roles a user holds in a tenant. */
+function rolesOf(userId, tenantId) {
+  if (tenantId !== TENANT) return [];
+  if (userId === ADMIN || userId === ROLE_HOLDER) return [ROLE_ALL];
+  if (userId === READ_OWN_HOLDER) return [ROLE_READ_OWN];
+  return [];
+}
+
 /**
- * The active membership of a user in the tenant: the owner is the tenant
- * owner, the admin and the role holder carry the all-role, the customer
- * names one supervisor; nobody else's does.
+ * The active membership of a user in a tenant: the owner is the tenant
+ * owner, the admin and the role holder carry the all-role, the read-own
+ * holder the own-role, the customer names one supervisor; nobody else's
+ * does. In the second tenant its owner is the owner, and nobody holds a
+ * role.
  */
 function membershipOf(userId, tenantId = TENANT) {
   return {
@@ -331,14 +388,26 @@ function membershipOf(userId, tenantId = TENANT) {
     tenantId,
     status: "active",
     source: "manually",
-    owner: userId === OWNER,
-    roles: userId === ADMIN || userId === ROLE_HOLDER ? [ROLE_ALL] : [],
+    owner:
+      (tenantId === TENANT && userId === OWNER) ||
+      (tenantId === TENANT_B && userId === OWNER_B),
+    roles: rolesOf(userId, tenantId),
     bookingNotificationRecipients:
-      userId === CUSTOMER
+      tenantId === TENANT && userId === CUSTOMER
         ? [{ type: "email", value: SUPERVISOR, label: "" }]
         : [],
     invitations: [],
   };
+}
+
+/**
+ * The memberships of a user: the owner of the second tenant is a member
+ * there alone, everyone else a member of the first tenant alone.
+ */
+function membershipsOf(userId) {
+  return userId === OWNER_B
+    ? [membershipOf(userId, TENANT_B)]
+    : [membershipOf(userId, TENANT)];
 }
 
 /** The instance: the admin owns it, nobody else may open a tenant. */
@@ -377,6 +446,12 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   const counters = { receipt: 0, cancellation: 0, invoice: 0 };
   const catalogue = { ...defaultBookables(), ...(bookables || {}) };
   const tenantRecord = tenant(tenantOverrides);
+  const tenantBRecord = tenant({
+    id: TENANT_B,
+    name: "Verein Nachbarort",
+    mail: TENANT_B_MAIL,
+  });
+  const tenantRecords = { [TENANT]: tenantRecord, [TENANT_B]: tenantBRecord };
   const paymentSettings = { available: true };
 
   const label = (id) => {
@@ -403,16 +478,21 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
 
   // --- the booking store -------------------------------------------------
 
-  /** Whether a stored document is within the reach of a request (§4.1). */
+  /** Whether a stored document is within the reach of a request (glossary "Reichweite"). */
   const withinReach = (doc, scope) =>
     doc && (scope?.reach !== "own" || doc.assignedUserId === scope.userId);
+  /** Whether a stored document is the tenant's: a record of another is not there. */
+  const ofTenant = (doc, tenantId) =>
+    doc && (tenantId === undefined || doc.tenantId === tenantId);
+  // Reads the store twice for one load, as the lifecycle tests count on.
   sinon
     .stub(BookingManager, "getBooking")
-    .callsFake(async (id, tenantId, scope) =>
-      withinReach(store.get(id), scope)
+    .callsFake(async (id, tenantId, scope) => {
+      const doc = store.get(id);
+      return ofTenant(doc, tenantId) && withinReach(doc, scope)
         ? new Booking(clone(store.get(id)))
-        : null,
-    );
+        : null;
+    });
   sinon
     .stub(BookingManager, "getBookings")
     .callsFake(async (tenantId, ids) =>
@@ -531,14 +611,15 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     .stub(GroupBookingManager, "getGroupBooking")
     .callsFake(async (tenantId, id, populate = false, scope) => {
       const doc = groups.get(id);
-      if (!withinReach(doc, scope)) return null;
+      if (!ofTenant(doc, tenantId) || !withinReach(doc, scope)) return null;
       return populate ? populated(doc) : new GroupBooking(clone(doc));
     });
   sinon
     .stub(GroupBookingManager, "getGroupBookingByBookingId")
     .callsFake(async (tenantId, bookingId, populate = false, scope) => {
-      const doc = [...groups.values()].find((group) =>
-        group.bookingIds.includes(bookingId),
+      const doc = [...groups.values()].find(
+        (group) =>
+          ofTenant(group, tenantId) && group.bookingIds.includes(bookingId),
       );
       if (!withinReach(doc, scope)) return null;
       return populate ? populated(doc) : new GroupBooking(clone(doc));
@@ -566,11 +647,24 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
 
   sinon
     .stub(BookableManager, "getBookable")
-    .callsFake(async (id) => catalogue[id] || null);
+    .callsFake(async (id, tenantId, scope) => {
+      const [bookable = null] = await projected(
+        catalogue[id] ? [catalogue[id]] : [],
+        tenantId,
+        scope,
+        reached,
+      );
+      return bookable;
+    });
   sinon
     .stub(BookableManager, "getBookablesByIds")
-    .callsFake(async (tenantId, ids) =>
-      ids.map((id) => catalogue[id]).filter(Boolean),
+    .callsFake(async (tenantId, ids, scope) =>
+      projected(
+        ids.map((id) => catalogue[id]).filter(Boolean),
+        tenantId,
+        scope,
+        reached,
+      ),
     );
   sinon.stub(BookableManager, "getAncestorBookables").resolves([]);
   sinon.stub(BookableManager, "getAllParentBookables").resolves([]);
@@ -580,14 +674,22 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     tenantFields: [],
   });
 
-  sinon.stub(TenantManager, "getTenant").resolves(tenantRecord);
-  // The tenants by id, as the sign-in and the customer view read them: the
-  // tenant of the harness as it is at the moment of the request.
-  sinon
-    .stub(TenantManager, "getTenantsByIds")
-    .callsFake(async (ids) =>
-      ids.includes(TENANT) ? [new Tenant(tenantRecord)] : [],
-    );
+  // The tenant by id: the second tenant when asked for, else the first -
+  // the lifecycle asks for the first under any name. Asked as the public,
+  // only a tenant with a public projection (ADR 0003).
+  sinon.stub(TenantManager, "getTenant").callsFake(async (id, scope) => {
+    const record = tenantRecords[id] ?? tenantRecord;
+    return scope?.reach === "public" && !isTenantPubliclyVisible(record)
+      ? null
+      : record;
+  });
+  // The tenants by id, as the sign-in and the principal read them: the
+  // tenants of the harness as they are at the moment of the request.
+  sinon.stub(TenantManager, "getTenantsByIds").callsFake(async (ids) =>
+    Object.values(tenantRecords)
+      .filter((record) => ids.includes(record.id))
+      .map((record) => new Tenant(record)),
+  );
   sinon
     .stub(TenantManager, "getTenantApp")
     .callsFake(
@@ -602,17 +704,23 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   sinon.stub(InstanceManager, "getInstance").callsFake(async () => instance());
   sinon
     .stub(MembershipManager, "getMembershipByTenantAndUserID")
-    .callsFake(async (tenantId, userId) => membershipOf(userId, tenantId));
+    .callsFake(
+      async (tenantId, userId) =>
+        membershipsOf(userId).find((m) => m.tenantId === tenantId) ?? null,
+    );
   sinon
     .stub(MembershipManager, "getMembershipsByUserID")
-    .callsFake(async (userId) => [membershipOf(userId)]);
+    .callsFake(async (userId) => membershipsOf(userId));
+  const ROLES = { [ROLE_ALL]: roleAll, [ROLE_READ_OWN]: roleReadOwn };
   sinon
     .stub(RoleManager, "getRole")
-    .callsFake(async (id) => (id === ROLE_ALL ? roleAll() : null));
+    .callsFake(async (id) => ROLES[id]?.() ?? null);
   sinon.stub(MembershipManager, "getMembershipsByTenantAndRoles").resolves([]);
-  // The event of the ticket, with what the organizer's notice prints.
-  sinon.stub(EventManager, "getEvent").resolves({
+  // The event of the ticket, with what the organizer's notice prints -
+  // as the manager answers it: projected under `public`.
+  const eventOfTicket = () => ({
     id: "E1",
+    isPublic: true,
     information: {
       name: "Sommerkonzert",
       startDate: "2027-06-21",
@@ -623,6 +731,17 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     eventLocation: { name: "Stadthalle" },
     eventOrganizer: { contactPersonEmailAddress: ORGANIZER },
   });
+  sinon
+    .stub(EventManager, "getEvent")
+    .callsFake(async (id, tenantId, scope) => {
+      const [event = null] = await projected(
+        [eventOfTicket()],
+        tenantId,
+        scope,
+        reached,
+      );
+      return event;
+    });
   sinon.stub(OpeningHoursManager, "hasOpeningHoursConflict").resolves(false);
   sinon.stub(AccessPointManager, "getAccessPointsByIds").resolves([]);
   sinon.stub(MediaManager, "getBookingDocuments").resolves([]);
@@ -832,6 +951,8 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     /** Whether `PaymentUtils.getPaymentService` finds a provider. */
     payment: paymentSettings,
     tenant: tenantRecord,
+    /** The second tenant's record, for the questions across tenant borders. */
+    tenantB: tenantBRecord,
     bookables: catalogue,
     as,
     manualBooking,
@@ -890,11 +1011,16 @@ module.exports = {
   request,
   TENANT,
   TENANT_MAIL,
+  TENANT_B,
+  TENANT_B_MAIL,
   MOUNTS,
   ADMIN,
   OWNER,
+  OWNER_B,
   ROLE_HOLDER,
+  READ_OWN_HOLDER,
   ROLE_ALL,
+  ROLE_READ_OWN,
   CUSTOMER,
   ORGANIZER,
   SUPERVISOR,

@@ -8,6 +8,7 @@ const { ContextDataProvider } = require("../availability/providers");
 const checkWindowAvailabilityModule = require("../availability/check-window-availability");
 const { ItemCheckoutService } = require("./checkout/item-checkout-service");
 const { NotFoundError, BadRequestError } = require("../../errors/BaseError");
+const { DOMAIN } = require("./authorization/reach");
 
 class BlockPeriodService {
   static MAX_RANGE_DAYS = 62;
@@ -29,7 +30,11 @@ class BlockPeriodService {
     amount,
     user,
   ) {
-    const bookable = await BookableManager.getBookable(bookableId, tenantId);
+    const bookable = await BookableManager.getBookable(
+      bookableId,
+      tenantId,
+      DOMAIN,
+    );
 
     if (!bookable) {
       throw new NotFoundError("bookable_not_found", { bookableId, tenantId });

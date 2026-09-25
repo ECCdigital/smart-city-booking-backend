@@ -4,8 +4,6 @@ const {
 } = require("./access-blocking-reasons");
 const { getValidationRule } = require("./access-validation-rules");
 const AccessEvidenceService = require("./access-evidence-service");
-const { withinReach } = require("../authorization/reach");
-const { REACH } = require("../authorization/policy");
 const { AccessPointMode } = require("../../entities/access/access-point");
 const { AccessPointType } = require("../../schemas/accessPointSchema");
 
@@ -337,16 +335,23 @@ function demandedEvidenceOf(accessPoint) {
  * whoever holds both is the booker at their own booking.
  */
 function resolveAccessRole(booking, userId, canManage) {
-  const isOwnBooking = withinReach(booking, "assignedUserId", {
-    reach: REACH.OWN,
-    userId,
-  });
-
-  if (isOwnBooking) {
+  if (isBooker(booking, userId)) {
     return "booker";
   }
 
   return canManage ? "manager" : null;
+}
+
+/**
+ * Whether a booking is the user's: the user it is assigned to. A fact of
+ * the booking, no reach - the access decision never holds one.
+ *
+ * @param {Object} booking
+ * @param {string|null|undefined} userId
+ * @returns {boolean}
+ */
+function isBooker(booking, userId) {
+  return Boolean(userId) && booking?.assignedUserId === userId;
 }
 
 function usesAuthorization(mode) {

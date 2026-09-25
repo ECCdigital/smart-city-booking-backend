@@ -15,6 +15,7 @@ const BookingManager = require("../../data-managers/booking-manager");
 const TenantManager = require("../../data-managers/tenant-manager");
 const AccessLogService = require("./access-log-service");
 const { getAccessProvider } = require("./providers/access-provider-registry");
+const { DOMAIN } = require("../authorization/reach");
 
 require("./providers/register-access-providers");
 
@@ -107,7 +108,7 @@ class GrantCleanupService {
    * @returns {Promise<{ tenants: number, bookings: number, principalsRemoved: number, failures: number }>}
    */
   static async cleanupPrincipals() {
-    const tenants = await TenantManager.getTenants();
+    const tenants = await TenantManager.getTenants(DOMAIN);
     const result = {
       tenants: tenants.length,
       bookings: 0,

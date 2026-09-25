@@ -1,4 +1,6 @@
 const BookingManager = require("../../../commons/data-managers/booking-manager");
+const { scopeOf } = require("../../../commons/services/authorization");
+const BookingService = require("../../../commons/services/checkout/booking-service");
 const GroupBookingManager = require("../../../commons/data-managers/group-booking-manager");
 const bunyan = require("bunyan");
 const PaymentUtils = require("../../../commons/utilities/payment-utils");
@@ -14,32 +16,6 @@ const logger = bunyan.createLogger({
 });
 
 class PaymentController {
-  /**
-   * Resolves booking IDs - if an ID starts with "G-", it's a group booking
-   * and we fetch the actual booking IDs from the group.
-   */
-  static async _resolveBookingIds(tenantId, ids) {
-    const resolvedIds = [];
-
-    for (const id of ids) {
-      if (id.startsWith("G-")) {
-        const groupBooking = await GroupBookingManager.getGroupBooking(
-          tenantId,
-          id,
-        );
-        if (groupBooking && groupBooking.bookingIds) {
-          resolvedIds.push(...groupBooking.bookingIds);
-        } else {
-          logger.warn(`${tenantId} -- could not resolve group booking ${id}`);
-        }
-      } else {
-        resolvedIds.push(id);
-      }
-    }
-
-    return resolvedIds;
-  }
-
   /**
    * Answers an error of the lifecycle at a payment notification: the guard
    * and a missing booking with their status, an aborted transition `pay` as
@@ -76,13 +52,17 @@ class PaymentController {
     );
 
     // Without booking ids the lookup threw before the try and the request
-    // never got an answer (authorize spec §11).
+    // never got an answer.
     if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
       response.status(400).send({ message: "Bookings not found", code: 0 });
       return;
     }
 
-    const bookings = await BookingManager.getBookings(tenantId, bookingIds);
+    const bookings = await BookingManager.getBookings(
+      tenantId,
+      bookingIds,
+      scopeOf(request),
+    );
 
     if (!bookings) {
       response.status(400).send({ message: "Bookings not found", code: 0 });
@@ -191,14 +171,11 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
-    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+    // The provider's callback is authorized by the payment's reference
+    // (`tokenAuthorized`): the domain reads its bookings.
+    const bookings = await BookingService.getBookingsOfPayment(
       tenantId,
-      aggregatedBookingIds,
-    );
-
-    const bookings = await BookingManager.getBookings(
-      tenantId,
-      aggregatedBookingIds,
+      aggregatedBookingIds.filter((id) => !!id),
     );
 
     try {
@@ -281,14 +258,11 @@ class PaymentController {
     }
     aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
 
-    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+    // The provider's callback is authorized by the payment's reference
+    // (`tokenAuthorized`): the domain reads its bookings.
+    const bookings = await BookingService.getBookingsOfPayment(
       tenantId,
-      aggregatedBookingIds,
-    );
-
-    const bookings = await BookingManager.getBookings(
-      tenantId,
-      aggregatedBookingIds,
+      aggregatedBookingIds.filter((id) => !!id),
     );
 
     try {
@@ -370,16 +344,11 @@ class PaymentController {
       aggregatedBookingIds.push(bookingId);
     }
 
-    aggregatedBookingIds = await PaymentController._resolveBookingIds(
+    // The provider's callback is authorized by the payment's reference
+    // (`tokenAuthorized`): the domain reads its bookings.
+    const bookings = await BookingService.getBookingsOfPayment(
       tenantId,
-      aggregatedBookingIds,
-    );
-
-    aggregatedBookingIds = aggregatedBookingIds.filter((id) => !!id);
-
-    const bookings = await BookingManager.getBookings(
-      tenantId,
-      aggregatedBookingIds,
+      aggregatedBookingIds.filter((id) => !!id),
     );
     if (!bookings.length) {
       logger.warn(
@@ -430,7 +399,7 @@ class PaymentController {
   /**
    * The connection test of a provider: the right is the router's
    * (`tenant.paymentTest`, the tenant of the route - it read the tenant
-   * from the body of a GET before, §11).
+   * from the body of a GET before).
    */
   static async testConnection(request, response) {
     const { tenant: tenantId, provider } = request.params;

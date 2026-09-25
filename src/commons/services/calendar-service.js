@@ -6,6 +6,7 @@ const {
 } = require("../utilities/block-period-generator");
 const TenantManager = require("../data-managers/tenant-manager");
 const { NotFoundError } = require("../../errors/BaseError");
+const { DOMAIN } = require("./authorization/reach");
 
 class CalendarService {
   static async checkAvailability(
@@ -26,9 +27,9 @@ class CalendarService {
     endDate.setHours(24, 0, 0, 0);
 
     const [bookable, parentBookables, relatedBookables] = await Promise.all([
-      BookableManager.getBookable(bookableId, tenantId),
-      BookableManager.getAncestorBookables(bookableId, tenantId),
-      BookableManager.getRelatedBookables(bookableId, tenantId),
+      BookableManager.getBookable(bookableId, tenantId, DOMAIN),
+      BookableManager.getAncestorBookables(bookableId, tenantId, DOMAIN),
+      BookableManager.getRelatedBookables(bookableId, tenantId, DOMAIN),
     ]);
 
     if (!bookable) {

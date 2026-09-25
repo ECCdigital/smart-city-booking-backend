@@ -4,24 +4,19 @@ const {
   authorize,
   publicRoute,
 } = require("../../../commons/services/authorization");
-const {
-  publicTenantGate,
-} = require("../../../commons/services/supervision/public-tenant-gate");
 
 const router = asyncRouter();
 
 // Events: the public calendar for everyone; `?includePrivate=true` adds what
-// the reach covers (authorize spec §3.1).
+// the reach covers.
 router.get(
   "/events",
   publicRoute("ical", "events"),
-  publicTenantGate(),
   ICalController.getEventsIcal,
 );
 router.get(
   "/events/:id",
   publicRoute("ical", "events"),
-  publicTenantGate(),
   ICalController.getEventIcal,
 );
 
@@ -29,13 +24,11 @@ router.get(
 router.get(
   "/feed/events",
   publicRoute("ical", "feed"),
-  publicTenantGate(),
   ICalController.getEventsFeed,
 );
 router.get(
   "/feed/events/:id",
   publicRoute("ical", "feed"),
-  publicTenantGate(),
   ICalController.getEventFeed,
 );
 

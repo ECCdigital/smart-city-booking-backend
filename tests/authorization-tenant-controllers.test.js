@@ -1,8 +1,7 @@
 /**
- * The controllers of the tenant router on the reach (authorize spec §4.3,
- * ticket 2): a handler hands `req.reach` and the principal's user to its
+ * The controllers of the tenant router on the reach: a handler hands `req.reach` and the principal's user to its
  * manager and never branches over rights itself. What is left to the
- * adapter: the creation over the obsolete PUT (§5, §11), the anonymized
+ * adapter: the creation over the obsolete PUT (ADR 0001), the anonymized
  * projection of the booking lists, and the 404 of a record outside the
  * reach that the manager did not find.
  */
@@ -33,7 +32,7 @@ const { RoleManager } = require("../src/commons/data-managers/role-manager");
 const ChallengeManager = require("../src/commons/data-managers/challenge-manager");
 const BookingService = require("../src/commons/services/checkout/booking-service");
 const WorkflowService = require("../src/commons/services/workflow/workflow-service");
-const { ForbiddenError } = require("../src/errors/BaseError");
+const { ForbiddenError, NotFoundError } = require("../src/errors/BaseError");
 const { Role } = require("../src/commons/entities/role/role");
 const { Booking } = require("../src/commons/entities/booking/booking");
 
@@ -61,19 +60,42 @@ function response() {
   };
 }
 
-/** A request of the tenant `t1` with the reach and the principal given. */
-function request({ reach, principal, params = {}, query = {}, body = {} }) {
+/**
+ * A request of the tenant `t1` with the reach and the principal given;
+ * `reaches` is what the marker decided beside the main action (`also`).
+ */
+function request({
+  reach,
+  reaches,
+  principal,
+  params = {},
+  query = {},
+  body = {},
+}) {
   return {
     params: { tenant: "t1", ...params },
     query,
     body,
     reach,
+    reaches,
     principal,
     user: principal?.userId ? { id: principal.userId } : null,
   };
 }
 
-const customer = { userId: "erika", isTenantOwner: false, grants: {} };
+const customer = {
+  userId: "erika",
+  isMember: true,
+  isTenantOwner: false,
+  grants: {},
+};
+/** A member of a declined tenant: the membership rests. */
+const resting = {
+  userId: "erika",
+  isMember: false,
+  isTenantOwner: false,
+  grants: {},
+};
 const owner = { userId: "owner", isTenantOwner: true, grants: {} };
 const updater = {
   userId: "updater",
@@ -87,12 +109,17 @@ describe("tenant controllers on the reach", function () {
     sinon.restore();
   });
 
-  describe("the obsolete PUT: the creation is the adapter's second decision", function () {
+  describe("the obsolete PUT: the creation is the marker's second decision", function () {
     it("refuses a creation to a principal who may update but not create", async function () {
       const store = sinon.stub(BookableManager, "storeBookable").resolves();
       const next = sinon.stub();
       await BookableController.createBookable(
-        request({ reach: "any", principal: updater, body: { title: "Raum" } }),
+        request({
+          reach: "any",
+          reaches: { create: null },
+          principal: updater,
+          body: { title: "Raum" },
+        }),
         response(),
         next,
       );
@@ -105,7 +132,12 @@ describe("tenant controllers on the reach", function () {
       const store = sinon.stub(BookableManager, "storeBookable").resolves();
       const res = response();
       await BookableController.createBookable(
-        request({ reach: "any", principal: owner, body: { title: "Raum" } }),
+        request({
+          reach: "any",
+          reaches: { create: "any" },
+          principal: owner,
+          body: { title: "Raum" },
+        }),
         res,
         sinon.stub(),
       );
@@ -263,7 +295,7 @@ describe("tenant controllers on the reach", function () {
   });
 
   describe("the named actions", function () {
-    it("counts the own seats only under own", async function () {
+    it("hands the seat count the reach: the event's, counted whole (ADR 0002)", async function () {
       const count = sinon
         .stub(BookingService, "getBookedSeatsCount")
         .resolves(3);
@@ -276,17 +308,33 @@ describe("tenant controllers on the reach", function () {
       expect(count.firstCall.args).to.deep.equal([
         "t1",
         "e1",
-        { onlyOwn: true, userId: "erika" },
+        { reach: "own", userId: "erika" },
       ]);
 
       await EventController.getBookedSeatsCount(
         request({ reach: "any", principal: owner, params: { id: "e1" } }),
         response(),
       );
-      expect(count.secondCall.args[2]).to.deep.equal({});
+      expect(count.secondCall.args[2]).to.deep.equal({
+        reach: "any",
+        userId: "owner",
+      });
     });
 
-    it("GET /roles/tenant answers the user's own roles (§7.4)", async function () {
+    it("answers 404 for an event out of reach of the seat count", async function () {
+      sinon
+        .stub(BookingService, "getBookedSeatsCount")
+        .rejects(new NotFoundError("event_not_found", { eventId: "e1" }));
+      const res = response();
+      await EventController.getBookedSeatsCount(
+        request({ reach: "own", principal: customer, params: { id: "e1" } }),
+        res,
+      );
+      expect(res.statusCode).to.equal(404);
+      expect(res.body.code).to.equal("event_not_found");
+    });
+
+    it("GET /roles/tenant answers the user's own roles", async function () {
       sinon
         .stub(MembershipManager, "getMembershipByTenantAndUserID")
         .resolves({ roles: ["r1"] });
@@ -302,7 +350,21 @@ describe("tenant controllers on the reach", function () {
       expect(res.body.map((role) => role.id)).to.deep.equal(["r1"]);
     });
 
-    it("POST /challenges creates the challenge in the tenant of the route (§11)", async function () {
+    it("GET /roles/tenant answers an empty list where the membership rests (ticket 07)", async function () {
+      const membership = sinon
+        .stub(MembershipManager, "getMembershipByTenantAndUserID")
+        .resolves({ roles: ["r1"] });
+      const res = response();
+      await RoleController.getUserRolesByTenant(
+        request({ reach: "own", principal: resting }),
+        res,
+      );
+      expect(res.statusCode).to.equal(200);
+      expect(res.body).to.deep.equal([]);
+      expect(membership.called).to.equal(false);
+    });
+
+    it("POST /challenges creates the challenge in the tenant of the route", async function () {
       const create = sinon
         .stub(ChallengeManager, "createChallenge")
         .callsFake(async (tenantId, body) => ({ ...body, tenantId }));
@@ -316,7 +378,7 @@ describe("tenant controllers on the reach", function () {
       expect(res.body.tenantId).to.equal("t1");
     });
 
-    it("GET /bookings/:ids/status answers the status without the dead loop (§11)", async function () {
+    it("GET /bookings/:ids/status answers the status without the dead loop", async function () {
       sinon
         .stub(BookingManager, "getBookings")
         .resolves([

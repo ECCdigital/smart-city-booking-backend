@@ -20,7 +20,7 @@ const {
   ROLE_HOLDER,
   CUSTOMER,
 } = require("./helpers/booking-lifecycle-harness");
-const { installRouteWorld } = require("./helpers/route-world");
+const { offerReads, installRouteWorld } = require("./helpers/route-world");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const {
@@ -92,8 +92,9 @@ describe("supervision: a level change and the tenant's offers", function () {
       h.tenant.supervisionLevel = to;
       return h.tenant;
     });
-    restub(EventManager, "getEvent", async (id) => events[id] ?? null);
-    restub(EventManager, "getEvents", async () => Object.values(events));
+    const reads = offerReads(() => Object.values(events), "event");
+    restub(EventManager, "getEvent", reads.one);
+    restub(EventManager, "getEvents", reads.many);
     const atStatus = (offers) => async (tenantId, status) =>
       tenantId === TENANT
         ? Object.values(offers()).filter(
@@ -221,7 +222,7 @@ describe("supervision: a level change and the tenant's offers", function () {
     listed: false,
     reachable: false,
     bookable: false,
-    refusal: CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
+    refusal: CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
   };
   const reviews = () =>
     structuredClone({

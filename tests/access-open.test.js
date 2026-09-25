@@ -296,7 +296,7 @@ describe("AccessService.open", () => {
       "booking-1",
       "door-1",
       "manager-1",
-      { hasManagePermission: true },
+      { scope: { reach: "any" } },
     );
 
     expect(outcome.success).to.be.true;
@@ -502,7 +502,7 @@ describe("AccessService.open with validation rules", () => {
   it("holds a booker with the manage-bookings permission to the rules", async () => {
     stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
-    const outcome = await open({ hasManagePermission: true });
+    const outcome = await open({ scope: { reach: "any" } });
 
     expect(outcome).to.deep.equal({
       success: false,
@@ -519,7 +519,7 @@ describe("AccessService.open with validation rules", () => {
   it("lets a manager skip the rules of a booking that is not theirs and audits it", async () => {
     stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
-    const outcome = await open({ hasManagePermission: true }, "manager-9");
+    const outcome = await open({ scope: { reach: "any" } }, "manager-9");
 
     expect(outcome.success).to.be.true;
     expect(AccessLogService.log.firstCall.args[0]).to.include({
@@ -533,7 +533,7 @@ describe("AccessService.open with validation rules", () => {
     stubResolvedDoor(sandbox, createBooking(), { accessPoint: QR_RULE });
 
     const outcome = await open({
-      hasManagePermission: true,
+      scope: { reach: "any" },
       evidence: [{ type: "qrScan", scanCode: "current-code" }],
     });
 
@@ -548,7 +548,7 @@ describe("AccessService.open with validation rules", () => {
   it("does not report a bypass when the door required no evidence", async () => {
     stubResolvedDoor(sandbox, createBooking());
 
-    await open({ hasManagePermission: true });
+    await open({ scope: { reach: "any" } });
 
     expect(AccessLogService.log.firstCall.args[0]).to.include({
       evidenceBypassed: false,
@@ -696,7 +696,7 @@ describe("AccessService open at a door that only takes a code", () => {
       "booking-1",
       "door-1",
       "manager-1",
-      { hasManagePermission: true },
+      { scope: { reach: "any" } },
     );
 
     expect(outcome).to.deep.equal({
@@ -990,7 +990,7 @@ describe("AccessService admin override after the access window", () => {
           "tenant-1",
           "booking-1",
           "door-1",
-          true,
+          { reach: "any" },
         ),
         action,
       ).to.be.true;
@@ -1013,7 +1013,7 @@ describe("AccessService admin override after the access window", () => {
         "tenant-1",
         "booking-1",
         "door-1",
-        true,
+        { reach: "any" },
       ),
     ).to.be.false;
   });
@@ -1027,7 +1027,7 @@ describe("AccessService admin override after the access window", () => {
         "tenant-1",
         "booking-1",
         "door-1",
-        false,
+        { reach: "own" },
       ),
     ).to.be.false;
   });
@@ -1040,7 +1040,7 @@ describe("AccessService admin override after the access window", () => {
       "booking-1",
       "door-1",
       "manager-9",
-      { hasManagePermission: true },
+      { scope: { reach: "any" } },
     );
 
     expect(outcome.success).to.be.false;
@@ -1064,7 +1064,7 @@ describe("AccessService admin override after the access window", () => {
       "booking-1",
       "door-1",
       "manager-9",
-      { hasManagePermission: true },
+      { scope: { reach: "any" } },
     );
 
     expect(result.statusSource).to.equal("provider_status");
@@ -1088,7 +1088,7 @@ describe("AccessService admin override after the access window", () => {
         "booking-1",
         "door-1",
         "manager-9",
-        { hasManagePermission: true },
+        { scope: { reach: "any" } },
       );
     } catch (err) {
       error = err;
@@ -1111,7 +1111,7 @@ describe("AccessService admin override after the access window", () => {
       "booking-1",
       "door-1",
       "manager-9",
-      { hasManagePermission: true },
+      { scope: { reach: "any" } },
     );
 
     expect(status).to.deep.include({ open: true, locked: false });
@@ -1136,7 +1136,7 @@ describe("AccessService admin override after the access window", () => {
       "door-1",
       null,
       "manager-9",
-      { hasManagePermission: true },
+      { scope: { reach: "any" } },
     );
 
     expect(AccessLogService.log.firstCall.args[0]).to.include({
@@ -1155,7 +1155,7 @@ describe("AccessService admin override after the access window", () => {
     stubResolvedDoor(sandbox, pastBooking());
 
     await AccessService.close("tenant-1", "booking-1", "door-1", "user-1", {
-      hasManagePermission: true,
+      scope: { reach: "any" },
     });
 
     expect(AccessLogService.log.firstCall.args[0]).to.include({
@@ -1169,7 +1169,7 @@ describe("AccessService admin override after the access window", () => {
     stubResolvedDoor(sandbox, createBooking());
 
     await AccessService.close("tenant-1", "booking-1", "door-1", "manager-9", {
-      hasManagePermission: true,
+      scope: { reach: "any" },
     });
 
     expect(AccessLogService.log.firstCall.args[0]).to.include({
@@ -1189,7 +1189,7 @@ describe("AccessController.open", () => {
     sandbox = sinon.createSandbox();
 
     // The reach of `booking.operate` the route decided: `own` is the booker,
-    // `any` the manager (authorize spec §5).
+    // `any` the manager (glossary "Berechtigung").
     request = {
       params: { tenant: "tenant-1", accessPointId: "door-1" },
       query: { bookingId: "booking-1" },
@@ -1248,8 +1248,9 @@ describe("AccessController.open", () => {
 
     await AccessController.open(request, response);
 
-    expect(open.firstCall.args[4]).to.deep.include({
-      hasManagePermission: true,
+    expect(open.firstCall.args[4].scope).to.deep.equal({
+      reach: "any",
+      userId: request.principal.userId,
     });
   });
 
@@ -1430,10 +1431,9 @@ describe("AccessController.close", () => {
   });
 
   it("hands the user and their manage permission to the close, so the audit knows the capacity", async () => {
-    request.reach = "tenant";
-    request.principal = { userId: "manager-9", reach: "tenant" };
+    request.reach = "any";
+    request.principal = { userId: "manager-9" };
     request.user = { id: "manager-9" };
-    sandbox.stub(AccessController, "_canManage").returns(true);
     const close = sandbox.stub(AccessService, "close").resolves({});
 
     await AccessController.close(request, response);
@@ -1443,7 +1443,7 @@ describe("AccessController.close", () => {
       "booking-1",
       "door-1",
       "manager-9",
-      { hasManagePermission: true },
+      { scope: { reach: "any", userId: "manager-9" } },
     ]);
   });
 });
@@ -1460,8 +1460,8 @@ describe("AccessController status reads", () => {
       query: { bookingId: "booking-1", openProcessId: "77" },
       body: {},
       user: { id: "manager-9" },
-      reach: "tenant",
-      principal: { userId: "manager-9", reach: "tenant" },
+      reach: "any",
+      principal: { userId: "manager-9" },
     };
     response = {
       status: sandbox.stub().returnsThis(),
@@ -1469,7 +1469,6 @@ describe("AccessController status reads", () => {
       sendStatus: sandbox.stub(),
     };
     sandbox.stub(AccessService, "canOperate").resolves(true);
-    sandbox.stub(AccessController, "_canManage").returns(true);
   });
 
   afterEach(() => {
@@ -1486,7 +1485,7 @@ describe("AccessController status reads", () => {
       "booking-1",
       "door-1",
       "manager-9",
-      { hasManagePermission: true },
+      { scope: { reach: "any", userId: "manager-9" } },
     ]);
   });
 
@@ -1528,7 +1527,7 @@ describe("AccessController status reads", () => {
       "door-1",
       "77",
       "manager-9",
-      { hasManagePermission: true },
+      { scope: { reach: "any", userId: "manager-9" } },
     ]);
   });
 });

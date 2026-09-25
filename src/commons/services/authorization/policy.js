@@ -10,22 +10,46 @@
  * fails the start, not a request.
  */
 
-const { TABLE, ROLE_GROUPS, ROLE_LEVELS } = require("./table");
+const {
+  TABLE,
+  OWNER_KEY,
+  ownerKeyOf,
+  ROLE_GROUPS,
+  ROLE_LEVELS,
+} = require("./table");
 
-const REACH = Object.freeze({ ANY: "any", OWN: "own", PUBLIC: "public" });
+const REACH = Object.freeze({
+  ANY: "any",
+  OWN: "own",
+  SELF: "self",
+  PUBLIC: "public",
+  DOMAIN: "domain",
+});
 
-/** The reaches, widest first: the order `decide` tries them in. */
-const REACHES = Object.freeze([REACH.ANY, REACH.OWN, REACH.PUBLIC]);
+/**
+ * The reaches a principal can have, widest first: the order `decide`
+ * tries them in. `domain` is none of them - the domain reads under it
+ * without a principal (ADR 0002, `DOMAIN` in `reach.js`), no route ever
+ * decides it.
+ */
+const REACHES = Object.freeze([REACH.ANY, REACH.OWN, REACH.SELF, REACH.PUBLIC]);
+
+/** The slots of an entry: the reaches, each named by its least level. */
+const SLOTS = Object.freeze(["public", "own", "self", "any"]);
 
 /** The levels that are not a role level. */
 const LEVEL_KEYWORDS = Object.freeze([
   "signedIn",
+  "tenantMember",
   "tenantOwner",
   "instanceOwner",
   "mayCreateTenant",
 ]);
 
 const ROLE_LEVEL = /^([a-zA-Z]+)\.([a-zA-Z]+)$/;
+
+/** The tenant sets of the principal an owner key may name (`table.js`). */
+const TENANT_SETS = Object.freeze(["membership", "ownership", "reach"]);
 
 /**
  * A level of the table, read: a keyword, or a role level with its group
@@ -67,11 +91,18 @@ function entryOf(resource, action) {
   return entry;
 }
 
+/** Whether the principal holds any role level in the tenant. */
+const holdsARole = (principal) =>
+  Object.values(principal.grants ?? {}).some((group) =>
+    Object.values(group ?? {}).some(Boolean),
+  );
+
 /**
  * Whether a principal satisfies a level of the table, with the fixed
- * precedence instanceOwner ⊇ tenantOwner ⊇ role ⊇ signedIn. A resting
- * membership (glossary "Ruhende Mitgliedschaft") is already in the
- * principal: it is no tenant owner and holds no role level there.
+ * precedence instanceOwner ⊇ tenantOwner ⊇ role ⊇ tenantMember ⊇
+ * signedIn. A resting membership (glossary "Ruhende Mitgliedschaft") is
+ * already in the principal: it is no member, no tenant owner and holds no
+ * role level there.
  *
  * @param {Object} principal
  * @param {string|undefined} level
@@ -98,6 +129,12 @@ function satisfies(principal, level) {
       return principal.mayCreateTenant === true;
     case "tenantOwner":
       return principal.isTenantOwner === true;
+    case "tenantMember":
+      return (
+        principal.isMember === true ||
+        principal.isTenantOwner === true ||
+        holdsARole(principal)
+      );
     default:
       return principal.userId != null;
   }
@@ -109,7 +146,7 @@ function satisfies(principal, level) {
  * @param {Object} principal - See `principal.js`.
  * @param {string} resource
  * @param {string} action
- * @returns {"any"|"own"|"public"|null}
+ * @returns {"any"|"own"|"self"|"public"|null} Never `domain`.
  */
 function decide(principal, resource, action) {
   const entry = entryOf(resource, action);
@@ -126,24 +163,83 @@ function decide(principal, resource, action) {
 }
 
 /**
+ * An owner key, read: a field, or a tenant set of the principal - and
+ * for the set "reach" the tenant entry it is asked with, which has to be
+ * an entry of the table.
+ *
+ * @param {string} where
+ * @param {{key?: string, tenantsOf?: string, entry?: string}} key
+ */
+function assertOwnerKey(where, key) {
+  if (key.key) {
+    return;
+  }
+  if (!TENANT_SETS.includes(key.tenantsOf)) {
+    throw new Error(`authorization: unknown owner key at ${where}`);
+  }
+  if (key.tenantsOf === "reach") {
+    const [resource, action] = String(key.entry ?? "").split(".");
+    if (!TABLE[resource]?.[action]) {
+      throw new Error(
+        `authorization: the tenant set "reach" at ${where} names no entry`,
+      );
+    }
+  }
+}
+
+/**
  * Checks every entry of the table once, when the module loads: known
- * slots, known levels. A malformed table is a programming error.
+ * slots, known levels, an owner key for every `own` and none for an entry
+ * without one, `self` and `own` never together. A malformed table is a
+ * programming error.
  */
 function assertTable() {
   for (const [resource, actions] of Object.entries(TABLE)) {
     for (const [action, entry] of Object.entries(actions)) {
       const where = `${resource}.${action}`;
       for (const key of Object.keys(entry)) {
-        if (!["public", "own", "any"].includes(key)) {
+        if (!SLOTS.includes(key)) {
           throw new Error(`authorization: unknown slot ${key} in ${where}`);
         }
       }
-      for (const level of [entry.own, entry.any].filter(Boolean)) {
+      for (const level of [entry.own, entry.self, entry.any].filter(Boolean)) {
         try {
           parseLevel(level);
         } catch (err) {
           throw new Error(`${err.message} in ${where}`);
         }
+      }
+      if (entry.own && entry.self) {
+        throw new Error(`authorization: ${where} names own and self`);
+      }
+      if (entry.own) {
+        ownerKeyOf(resource, action);
+      }
+    }
+  }
+  for (const [resource, directory] of Object.entries(OWNER_KEY)) {
+    if (!TABLE[resource]) {
+      throw new Error(
+        `authorization: owner key of unknown resource ${resource}`,
+      );
+    }
+    const { byAction, ...shared } = directory;
+    for (const [where, key] of [
+      [resource, shared],
+      ...Object.entries(byAction ?? {}).map(([action, key]) => [
+        `${resource}.${action}`,
+        key,
+      ]),
+    ]) {
+      if (Object.keys(key).length) {
+        assertOwnerKey(where, key);
+      }
+    }
+    for (const action of Object.keys(byAction ?? {})) {
+      if (!TABLE[resource][action]?.own) {
+        throw new Error(
+          `authorization: owner key for ${resource}.${action} without own`,
+        );
       }
     }
   }
@@ -159,4 +255,5 @@ module.exports = {
   REACH,
   REACHES,
   LEVEL_KEYWORDS,
+  TENANT_SETS,
 };

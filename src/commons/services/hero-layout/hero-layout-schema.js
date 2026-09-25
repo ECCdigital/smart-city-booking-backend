@@ -1,4 +1,4 @@
-const MediaReferenceGuard = require("../media/media-reference-guard");
+const { assertHeroLayoutStorable } = require("./hero-media");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { MEDIA_REFERENCE_SOURCE } = require("../../schemas/mediaSchema");
 const {
@@ -669,7 +669,7 @@ async function normalizeBackground(input, field = "background") {
   // The media library is only asked once the shape is sound: a lookup for a
   // reference that is malformed anyway would answer the wrong fault.
   errors.throwIfAny();
-  await MediaReferenceGuard.assertHeroLayoutStorable(references);
+  await assertHeroLayoutStorable(references);
 
   return background;
 }
@@ -1183,7 +1183,7 @@ async function normalizeHeroLayout(input, field = "heroLayout") {
   if (!errors.hasErrors()) {
     await sanitizeRichTexts(collectors.richTexts, errors);
     errors.throwIfAny();
-    await MediaReferenceGuard.assertHeroLayoutStorable(collectors.references);
+    await assertHeroLayoutStorable(collectors.references);
   }
 
   errors.throwIfAny();

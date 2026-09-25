@@ -7,12 +7,14 @@ const {
   CustomFieldService,
 } = require("../services/custom-field/custom-field-service");
 const { BookableManager } = require("./bookable-manager");
-const MembershipManager = require("./membership-manager");
 const { ownCondition } = require("../services/authorization/reach");
+const { REACH } = require("../services/authorization/policy");
 const {
   normalizeCancellationRefundTiers,
 } = require("../utilities/cancellation-refund-tiers");
-const { publicTenantCondition } = require("../services/supervision/offer-gate");
+const {
+  publicTenantCondition,
+} = require("../services/supervision/public-projection");
 const {
   SUPERVISION_FIELDS,
   assertSupervisionLevel,
@@ -38,13 +40,15 @@ const DOCUMENT_COUNTERS = ["receiptCount", "invoiceCount", "cancellationCount"];
  */
 class TenantManager {
   /**
-   * The tenants within a reach (authorize spec §4.1): all of them under
-   * `any` or for a caller without a reach, under `own` those of the user's
-   * active memberships - `owned` narrows them to the ones the user owns.
+   * The tenants within a reach (ADR 0002): all of them under `any` and for
+   * the domain, under `own` the tenant set the scope carries
+   * (`tenantIds`: what "own" means for the entry the route decided - the
+   * tenants the user owns, or belongs to), under `public` the tenants the
+   * public sees (ADR 0003, tenant supervision spec §5.2: those at a
+   * public level, a missing level counting as free).
    *
-   * @param {{reach?: string, userId?: string|null}} [scope]
+   * @param {{reach: string, userId?: string|null, tenantIds?: string[]}} scope
    * @param {Object} [options]
-   * @param {boolean} [options.owned=false] Only the tenants the user owns.
    * @param {string} [options.supervisionLevel] Only the tenants at this
    *   supervision level (a tenant without a stored level is `free`).
    * @param {Object} [options.sort] A mongoose sort, e.g.
@@ -53,14 +57,8 @@ class TenantManager {
    * @param {number} [options.limit] Rows at most - the page's size
    * @returns {Promise<Tenant[]>} List of tenants
    */
-  static async getTenants(
-    scope = {},
-    { owned = false, supervisionLevel, sort, skip, limit } = {},
-  ) {
-    const condition = await TenantManager._condition(scope, {
-      owned,
-      supervisionLevel,
-    });
+  static async getTenants(scope, { supervisionLevel, sort, skip, limit } = {}) {
+    const condition = TenantManager._condition(scope, { supervisionLevel });
     let query = TenantModel.find(condition);
     if (sort !== undefined) query = query.sort(sort);
     if (skip !== undefined) query = query.skip(skip);
@@ -73,26 +71,22 @@ class TenantManager {
    * How many tenants `getTenants` would list under the same scope and
    * options - the `total` of a page of them.
    *
-   * @param {{reach?: string, userId?: string|null}} [scope]
+   * @param {{reach: string, userId?: string|null, tenantIds?: string[]}} scope
    * @param {Object} [options]
-   * @param {boolean} [options.owned=false]
    * @param {string} [options.supervisionLevel]
    * @returns {Promise<number>}
    */
-  static async countTenants(
-    scope = {},
-    { owned = false, supervisionLevel } = {},
-  ) {
-    const condition = await TenantManager._condition(scope, {
-      owned,
-      supervisionLevel,
-    });
+  static async countTenants(scope, { supervisionLevel } = {}) {
+    const condition = TenantManager._condition(scope, { supervisionLevel });
     return TenantModel.countDocuments(condition);
   }
 
   /** The query condition of `getTenants` and `countTenants`. */
-  static async _condition(scope, { owned, supervisionLevel }) {
-    const condition = await TenantManager._reachCondition(scope, owned);
+  static _condition(scope, { supervisionLevel }) {
+    const condition =
+      scope?.reach === REACH.PUBLIC
+        ? publicTenantCondition()
+        : { ...ownCondition("tenant", scope) };
     if (supervisionLevel) {
       condition.supervisionLevel =
         supervisionLevel === SUPERVISION_LEVELS.FREE
@@ -100,17 +94,6 @@ class TenantManager {
           : supervisionLevel;
     }
     return condition;
-  }
-
-  /**
-   * The tenants the public sees (tenant supervision spec §5.2): the
-   * tenants at a public level, a missing level counting as free.
-   *
-   * @returns {Promise<Tenant[]>}
-   */
-  static async getPublicTenants() {
-    const rawTenants = await TenantModel.find(publicTenantCondition());
-    return rawTenants.map((doc) => doc.toEntity());
   }
 
   /**
@@ -155,35 +138,22 @@ class TenantManager {
   }
 
   /**
-   * The query condition of a reach: a tenant has no owner key of its own,
-   * "own" is the user's membership in it.
-   *
-   * @param {{reach?: string, userId?: string|null}} scope
-   * @param {boolean} owned
-   * @returns {Promise<Object>}
-   */
-  static async _reachCondition(scope, owned) {
-    // `ownCondition` holds the reach's rules (`public`, or `own` without a
-    // user, is a programming error) and names the user under `own` only.
-    const { userId } = ownCondition("userId", scope);
-    if (!userId) {
-      return {};
-    }
-    const memberships = await MembershipManager.getMembershipsByUserID(userId);
-    const ids = memberships
-      .filter((m) => m.status === "active" && (!owned || m.owner === true))
-      .map((m) => m.tenantId);
-    return { id: { $in: ids } };
-  }
-
-  /**
    * Get a specific tenant object from the database.
    *
    * @param {string} id Logical identifier of the tenant
+   * @param {{reach: string, userId?: string|null}} [scope] The reach of
+   *   a route that asks as the public (`PUBLIC`): then only a tenant with
+   *   a public projection (ADR 0003). Without one, the record.
    * @returns {Promise<Tenant|null>} A single tenant object or null
    */
-  static async getTenant(id) {
-    const rawTenant = await TenantModel.findOne({ id: id });
+  static async getTenant(id, scope) {
+    // Under `public` the tenant the public sees (ADR 0003): a route that
+    // asks as the public gets null for a tenant without a public
+    // projection. Every other read - the domain's, a route's about the
+    // tenant it names - is the record.
+    const condition =
+      scope?.reach === REACH.PUBLIC ? publicTenantCondition() : {};
+    const rawTenant = await TenantModel.findOne({ id: id, ...condition });
     if (!rawTenant) {
       return null;
     }

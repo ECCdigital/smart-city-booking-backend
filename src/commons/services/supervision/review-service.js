@@ -48,6 +48,7 @@ const {
   NotFoundError,
   ConflictError,
 } = require("../../../errors/BaseError");
+const { DOMAIN } = require("../authorization/reach");
 
 const HISTORY_EVENT_BY_ACTION = Object.freeze({
   [REVIEW_ACTIONS.SUBMIT]: HISTORY_EVENT_TYPES.REVIEW_SUBMITTED,
@@ -353,7 +354,8 @@ class ReviewService {
 }
 
 ReviewService.registerOfferAdapter(OFFER_TYPES.BOOKABLE, {
-  load: (tenantId, offerId) => BookableManager.getBookable(offerId, tenantId),
+  load: (tenantId, offerId) =>
+    BookableManager.getBookable(offerId, tenantId, DOMAIN),
   updateReview: ({ tenantId, offerId, expectedStatus, review }) =>
     BookableManager.updateReview({
       tenantId,
@@ -376,7 +378,7 @@ const eventAsOffer = (event) =>
 
 ReviewService.registerOfferAdapter(OFFER_TYPES.EVENT, {
   load: async (tenantId, offerId) =>
-    eventAsOffer(await EventManager.getEvent(offerId, tenantId)),
+    eventAsOffer(await EventManager.getEvent(offerId, tenantId, DOMAIN)),
   updateReview: async ({ tenantId, offerId, expectedStatus, review }) =>
     eventAsOffer(
       await EventManager.updateReview({

@@ -1,32 +1,55 @@
 /**
  * Authorization: one pure policy over a rights table, a principal loaded
- * once per request, and the three route markers. See the authorize spec
- * (`.scratch/architecture/authorize/spec.md`) and the glossary section
- * "Rechte" in `CONTEXT.md`.
+ * once per request, and the three route markers. See the glossary section
+ * "Rechte" in `CONTEXT.md`, the ADRs under `docs/adr/` and the request
+ * flow in `docs/agents/api.md`.
  */
 
-const { loadPrincipal, anyReachIn } = require("./principal");
+const {
+  loadPrincipal,
+  anyReachIn,
+  managesTenant,
+  tenantsOf,
+} = require("./principal");
 const { decide, REACH } = require("./policy");
-const { ownCondition, withinReach, readsRecords } = require("./reach");
-const { TABLE, ROLE_GROUPS, ROLE_LEVELS } = require("./table");
+const {
+  DOMAIN,
+  PUBLIC,
+  ownCondition,
+  withinReach,
+  readsRecords,
+} = require("./reach");
+const {
+  TABLE,
+  OWNER_KEY,
+  ownerKeyOf,
+  ROLE_GROUPS,
+  ROLE_LEVELS,
+} = require("./table");
 const {
   authorize,
   publicRoute,
   tokenAuthorized,
   scopeOf,
-  scopeFor,
+  reachesOf,
   MARKER,
 } = require("./middleware");
 
 module.exports = {
   loadPrincipal,
   anyReachIn,
+  managesTenant,
+  tenantsOf,
   decide,
   REACH,
+  DOMAIN,
+  PUBLIC,
   ownCondition,
   withinReach,
   readsRecords,
   TABLE,
+  OWNER_KEY,
+  ownerKeyOf,
   ROLE_GROUPS,
   ROLE_LEVELS,
   authorize,
@@ -34,6 +57,6 @@ module.exports = {
   publicRoute,
   tokenAuthorized,
   scopeOf,
-  scopeFor,
+  reachesOf,
   MARKER,
 };
