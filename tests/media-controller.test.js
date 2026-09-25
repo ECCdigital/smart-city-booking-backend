@@ -584,8 +584,8 @@ describe("MediaControllerV2", function () {
       );
 
       assert.strictEqual(
-        MediaManager.getMediaList.firstCall.args[0].uploadedBy,
-        undefined,
+        MediaManager.getMediaList.firstCall.args[1].reach,
+        "any",
       );
       assert.strictEqual(res.body.total, 1);
       assert.strictEqual(res.body.items.length, 1);
@@ -599,10 +599,10 @@ describe("MediaControllerV2", function () {
         createResponse(),
       );
 
-      assert.strictEqual(
-        MediaManager.getMediaList.firstCall.args[0].uploadedBy,
-        MEMBER.id,
-      );
+      assert.deepStrictEqual(MediaManager.getMediaList.firstCall.args[1], {
+        reach: "own",
+        userId: MEMBER.id,
+      });
     });
 
     it("shows the tenant owner the whole library", async function () {
@@ -614,8 +614,8 @@ describe("MediaControllerV2", function () {
       );
 
       assert.strictEqual(
-        MediaManager.getMediaList.firstCall.args[0].uploadedBy,
-        undefined,
+        MediaManager.getMediaList.firstCall.args[1].reach,
+        "any",
       );
     });
 
@@ -628,8 +628,8 @@ describe("MediaControllerV2", function () {
       );
 
       assert.strictEqual(
-        MediaManager.getMediaList.firstCall.args[0].uploadedBy,
-        undefined,
+        MediaManager.getMediaList.firstCall.args[1].reach,
+        "any",
       );
     });
 

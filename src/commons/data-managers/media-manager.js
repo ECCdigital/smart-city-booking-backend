@@ -51,19 +51,25 @@ class MediaManager {
    * @param {string} [params.tag] - Filter by a single tag.
    * @param {string} [params.q] - Free-text filter on title and file name.
    * @param {string[]} [params.visibility] - Allowed visibilities.
-   * @param {string} [params.uploadedBy] - Restrict to the media of one uploader.
+   * @param {{reach: string, userId?: string|null}} scope - The reach the
+   *   caller reads under (ADR 0002): the own uploads under `own`, the
+   *   whole library under `any`, the domain says `DOMAIN`; none is a
+   *   programming error.
    * @returns {Promise<{ items: Object[], total: number, page: number, pageSize: number }>}
    */
-  static async getMediaList({
-    tenantId,
-    page = 1,
-    pageSize = DEFAULT_PAGE_SIZE,
-    kind,
-    tag,
-    q,
-    visibility,
-    uploadedBy,
-  } = {}) {
+  static async getMediaList(
+    {
+      tenantId,
+      page = 1,
+      pageSize = DEFAULT_PAGE_SIZE,
+      kind,
+      tag,
+      q,
+      visibility,
+    } = {},
+    scope,
+  ) {
+    const reach = condition(scope);
     const safePage = Math.max(1, Number(page) || 1);
     const safePageSize = Math.min(
       MAX_PAGE_SIZE,
@@ -73,11 +79,7 @@ class MediaManager {
     // Booking documents are never part of the library listing or the picker.
     // Normal media carry no booking references at all, so `null` (which also
     // matches an absent field) is the whole non-document stock.
-    const filter = { tenantId: tenantId ?? null, bookingIds: null };
-
-    if (uploadedBy) {
-      filter.uploadedBy = uploadedBy;
-    }
+    const filter = { tenantId: tenantId ?? null, bookingIds: null, ...reach };
 
     if (kind) {
       filter.kind = kind;
@@ -144,10 +146,14 @@ class MediaManager {
    * stock (regenerate, verify, cleanup) and has no page to show it on.
    *
    * @param {Object} [filter] - Mongo filter, e.g. `{ kind: "image" }`.
+   * @param {{reach: string, userId?: string|null}} scope - As of `getMediaList`.
    * @returns {Promise<Object[]>} The matching media.
    */
-  static async getAllMedia(filter = {}) {
-    const rawMedia = await MediaModel.find(filter).sort({ createdAt: 1 });
+  static async getAllMedia(filter = {}, scope) {
+    const rawMedia = await MediaModel.find({
+      ...filter,
+      ...condition(scope),
+    }).sort({ createdAt: 1 });
 
     return rawMedia.map((raw) => raw.toEntity());
   }
@@ -182,9 +188,16 @@ class MediaManager {
    * @param {string} tenantId - Tenant ID.
    * @param {string} fileName - Original file name of the document.
    * @param {string} [bookingId] - Restrict to the documents of one booking.
+   * @param {{reach: string, userId?: string|null}} scope - As of `getMediaList`.
    * @returns {Promise<Object|null>} The newest matching medium or null.
    */
-  static async getBookingDocumentByFileName(tenantId, fileName, bookingId) {
+  static async getBookingDocumentByFileName(
+    tenantId,
+    fileName,
+    bookingId,
+    scope,
+  ) {
+    const reach = condition(scope);
     if (!fileName) {
       return null;
     }
@@ -192,6 +205,7 @@ class MediaManager {
     const filter = {
       tenantId: tenantId ?? null,
       originalFileName: fileName,
+      ...reach,
     };
 
     // Without a booking the name alone decides, so a caller authorised for
@@ -214,9 +228,11 @@ class MediaManager {
    *
    * @param {string} tenantId - Tenant ID.
    * @param {string} bookingId - The booking the documents belong to.
+   * @param {{reach: string, userId?: string|null}} scope - As of `getMediaList`.
    * @returns {Promise<Object[]>} The booking documents.
    */
-  static async getBookingDocuments(tenantId, bookingId) {
+  static async getBookingDocuments(tenantId, bookingId, scope) {
+    const reach = condition(scope);
     if (!bookingId) {
       return [];
     }
@@ -224,6 +240,7 @@ class MediaManager {
     const rawMedia = await MediaModel.find({
       tenantId: tenantId ?? null,
       bookingIds: bookingId,
+      ...reach,
     });
 
     return rawMedia.map((raw) => raw.toEntity());

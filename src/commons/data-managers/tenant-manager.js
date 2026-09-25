@@ -271,20 +271,6 @@ class TenantManager {
   }
 
   /**
-   * Get all applications for a tenant
-   * @param {string} tenantId
-   * @returns {Promise<Array>} List of applications
-   */
-  static async getTenantApps(tenantId) {
-    const rawTenant = await TenantModel.findOne({ id: tenantId });
-    if (!rawTenant) {
-      return [];
-    }
-    const tenant = rawTenant.toEntity();
-    return tenant.applications;
-  }
-
-  /**
    * Get a specific application for a tenant
    * @param {string} tenantId
    * @param {string} appId

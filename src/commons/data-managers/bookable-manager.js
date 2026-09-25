@@ -259,76 +259,6 @@ class BookableManager {
   }
 
   /**
-   * Get bookables by owner
-   * @param {string} tenantId Tenant ID
-   * @param {string} ownerUserId Owner user ID
-   * @returns {Promise<Bookable[]>} List of bookables
-   */
-  static async getOwnedBookables(tenantId, ownerUserId) {
-    const rawBookables = await BookableModel.find({
-      tenantId: tenantId,
-      ownerUserId: ownerUserId,
-    });
-    return rawBookables.map((doc) => doc.toEntity());
-  }
-
-  /**
-   * Get bookables by tags
-   * @param {string} tenantId Tenant ID
-   * @param {string[]} tags Array of tags
-   * @returns {Promise<Bookable[]>} List of bookables
-   */
-  static async getBookablesByTags(tenantId, tags) {
-    const rawBookables = await BookableModel.find({
-      tenantId: tenantId,
-      tags: { $in: tags },
-    });
-    return rawBookables.map((doc) => doc.toEntity());
-  }
-
-  /**
-   * Search bookables by text
-   * @param {string} tenantId Tenant ID
-   * @param {string} searchText Search text
-   * @returns {Promise<Bookable[]>} List of matching bookables
-   */
-  static async searchBookables(tenantId, searchText) {
-    const rawBookables = await BookableModel.find({
-      tenantId: tenantId,
-      $or: [
-        { title: { $regex: searchText, $options: "i" } },
-        { description: { $regex: searchText, $options: "i" } },
-        { tags: { $in: [new RegExp(searchText, "i")] } },
-      ],
-    });
-    return rawBookables.map((doc) => doc.toEntity());
-  }
-
-  /**
-   * Get direct related bookables (non-recursive, single level)
-   * @param {string} id Bookable ID
-   * @param {string} tenantId Tenant ID
-   * @returns {Promise<Bookable[]>} List of directly related bookables
-   */
-  static async getDirectRelatedBookables(id, tenantId) {
-    const bookable = await BookableModel.findOne({
-      id: id,
-      tenantId: tenantId,
-    });
-
-    if (!bookable || !bookable.relatedBookableIds?.length) {
-      return [];
-    }
-
-    const rawBookables = await BookableModel.find({
-      tenantId: tenantId,
-      id: { $in: bookable.relatedBookableIds },
-    });
-
-    return rawBookables.map((doc) => doc.toEntity());
-  }
-
-  /**
    * Get related bookables (recursive lookup) - an embedded list (ADR
    * 0003): under `public` what the public projection lists of them.
    * @param {string} id Bookable ID
@@ -398,13 +328,15 @@ class BookableManager {
    * configured. Used as the (small) seed set for resolving which bookings
    * grant an access authorization.
    * @param {string} tenantId Tenant ID
+   * @param {{reach: string, userId?: string|null}} scope As of `getBookables`
    * @returns {Promise<Bookable[]>} Bookables with active access points
    */
-  static async getBookablesWithAccessPoints(tenantId) {
+  static async getBookablesWithAccessPoints(tenantId, scope) {
     const rawBookables = await BookableModel.find({
       tenantId: tenantId,
       "accessPointDetails.active": true,
       "accessPointDetails.accessPointIds.0": { $exists: true },
+      ...ownCondition("bookable", scope),
     });
     return rawBookables.map((doc) => doc.toEntity());
   }
@@ -415,13 +347,15 @@ class BookableManager {
    * reference the same access point, e.g. a main entrance shared by rooms.
    * @param {string} tenantId Tenant ID
    * @param {string} accessPointId Access point ID
+   * @param {{reach: string, userId?: string|null}} scope As of `getBookables`
    * @returns {Promise<Bookable[]>} Bookables exposing the access point
    */
-  static async getBookablesByAccessPointId(tenantId, accessPointId) {
+  static async getBookablesByAccessPointId(tenantId, accessPointId, scope) {
     const rawBookables = await BookableModel.find({
       tenantId: tenantId,
       "accessPointDetails.active": true,
       "accessPointDetails.accessPointIds": accessPointId,
+      ...ownCondition("bookable", scope),
     });
     return rawBookables.map((doc) => doc.toEntity());
   }
@@ -579,10 +513,11 @@ class BookableManager {
    * @returns {Promise<Bookable[]>} The bookables, by `review.submittedAt`
    *   ascending, then by id
    */
-  static async getOffersByReviewStatus(tenantId, status) {
+  static async getOffersByReviewStatus(tenantId, status, scope) {
     const rawBookables = await BookableModel.find({
       tenantId,
       "review.status": status ?? null,
+      ...ownCondition("bookable", scope),
     }).sort({ "review.submittedAt": 1, id: 1 });
     return rawBookables.map((doc) => doc.toEntity());
   }
@@ -593,12 +528,17 @@ class BookableManager {
    * queue row reads - never the whole bookable.
    *
    * @param {string[]} tenantIds The tenants to read from
+   * @param {{reach: string, userId?: string|null}} scope As of `getBookables`
    * @returns {Promise<Array<{id: string, tenantId: string, title: string, type: string, isPublic: boolean, review: Object}>>}
    *   Plain rows, by `review.submittedAt` ascending, then by id
    */
-  static async getPendingReviewOffers(tenantIds) {
+  static async getPendingReviewOffers(tenantIds, scope) {
     return BookableModel.find(
-      { tenantId: { $in: tenantIds }, "review.status": REVIEW_STATUS.PENDING },
+      {
+        tenantId: { $in: tenantIds },
+        "review.status": REVIEW_STATUS.PENDING,
+        ...ownCondition("bookable", scope),
+      },
       { _id: 0, id: 1, tenantId: 1, title: 1, type: 1, isPublic: 1, review: 1 },
     )
       .sort({ "review.submittedAt": 1, id: 1 })
@@ -669,20 +609,6 @@ class BookableManager {
     });
 
     return count < maxBookables;
-  }
-
-  /**
-   * Get bookables with custom filter
-   * @param {string} tenantId Tenant ID
-   * @param {Object} filter MongoDB filter object
-   * @returns {Promise<Bookable[]>} Filtered bookables
-   */
-  static async getBookablesCustomFilter(tenantId, filter) {
-    const rawBookables = await BookableModel.find({
-      tenantId: tenantId,
-      ...filter,
-    });
-    return rawBookables.map((doc) => doc.toEntity());
   }
 
   /**

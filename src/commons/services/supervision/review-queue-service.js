@@ -60,7 +60,8 @@ const editorPath = (editor, offerId) =>
  */
 const QUEUE_SOURCES = Object.freeze({
   [OFFER_TYPES.BOOKABLE]: {
-    list: (tenantIds) => BookableManager.getPendingReviewOffers(tenantIds),
+    list: (tenantIds) =>
+      BookableManager.getPendingReviewOffers(tenantIds, DOMAIN),
     title: (bookable) => bookable.title || null,
     adminPath: (bookable) => {
       const editor = BOOKABLE_EDITOR_BY_TYPE[bookable.type];
@@ -68,7 +69,7 @@ const QUEUE_SOURCES = Object.freeze({
     },
   },
   [OFFER_TYPES.EVENT]: {
-    list: (tenantIds) => EventManager.getPendingReviewOffers(tenantIds),
+    list: (tenantIds) => EventManager.getPendingReviewOffers(tenantIds, DOMAIN),
     title: (event) => event.information?.name || null,
     adminPath: (event) => editorPath("events", event.id),
   },

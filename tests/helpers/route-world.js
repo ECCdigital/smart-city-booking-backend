@@ -460,7 +460,6 @@ function installRouteWorld({
       getMediaUsage: async () => [],
       getBookableStats: async () => ({}),
       getParentBookables: async () => [],
-      getDirectRelatedBookables: async () => [],
       detachAccessPoint: async () => 0,
     },
   });
@@ -543,12 +542,13 @@ function installRouteWorld({
     one: invitation,
     only: { getInvitationByUserID: async () => [invitation()] },
   });
-  // The library within the reach: the handler passes the own condition as
-  // `uploadedBy`, the way the real manager takes it.
+  // The library within the reach: the manager builds the own condition
+  // from the scope, the way the real one does.
   stubManager(MediaManager, {
     one: media,
     only: {
-      getMediaList: async ({ tenantId, uploadedBy } = {}) => {
+      getMediaList: async ({ tenantId } = {}, scope) => {
+        const { uploadedBy } = ownCondition("media", scope);
         const items = mediaRecords.filter(
           (record) =>
             record.tenantId === tenantId &&
@@ -609,7 +609,6 @@ function installRouteWorld({
     only: {
       getTenants: async (scope) => tenantsWithin(scope),
       countTenants: async (scope) => tenantsWithin(scope).length,
-      getTenantApps: async () => tenant.applications,
       getTenantAppByType: async () => tenant.applications,
       getTenantAppById: async () => tenant.applications[0],
       getMediaUsage: async () => [],

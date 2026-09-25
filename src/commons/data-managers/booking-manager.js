@@ -328,12 +328,16 @@ class BookingManager {
    * import walks when it converts stored addresses into media references.
    *
    * @param {string} tenantId Tenant ID
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Bookings with at least one attachment
    */
-  static async getBookingsWithAttachments(tenantId) {
+  static async getBookingsWithAttachments(tenantId, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       "attachments.0": { $exists: true },
+      ...condition(scope),
     });
 
     return BookingManager._toEntities(rawBookings);
@@ -347,9 +351,12 @@ class BookingManager {
    *
    * @param {string} tenantId Tenant ID
    * @param {string} fileName File name from the legacy document tree
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Bookings that name the file
    */
-  static async getBookingsByAttachmentFileName(tenantId, fileName) {
+  static async getBookingsByAttachmentFileName(tenantId, fileName, scope) {
     if (!fileName) {
       return [];
     }
@@ -360,6 +367,7 @@ class BookingManager {
         { "attachments.title": fileName },
         { "attachments.name": fileName },
       ],
+      ...condition(scope),
     });
 
     return BookingManager._toEntities(rawBookings);
@@ -407,6 +415,9 @@ class BookingManager {
    * @param {number} timeBegin Start time
    * @param {number} timeEnd End time
    * @param {string|null} bookingToIgnore Booking ID to ignore
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Concurrent bookings
    */
   static async getConcurrentBookings(
@@ -415,10 +426,12 @@ class BookingManager {
     timeBegin,
     timeEnd,
     bookingToIgnore = null,
+    scope,
   ) {
     const relatedBookings = await BookingManager.getRelatedBookings(
       tenantId,
       bookableId,
+      scope,
     );
 
     return BookingManager.filterConcurrentBookings(
@@ -483,6 +496,9 @@ class BookingManager {
    * @param {string[]} bookableIds
    * @param {number} timeBegin
    * @param {number} timeEnd
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>}
    */
   static async getBookingsForBookableFamily(
@@ -490,7 +506,9 @@ class BookingManager {
     bookableIds,
     timeBegin,
     timeEnd,
+    scope,
   ) {
+    const reach = condition(scope);
     if (!bookableIds.length) {
       return [];
     }
@@ -501,27 +519,10 @@ class BookingManager {
       isRejected: { $ne: true },
       timeBegin: { $lt: timeEnd },
       timeEnd: { $gt: timeBegin },
+      ...reach,
     });
 
     return rawBookings.map((doc) => doc.toEntity());
-  }
-
-  /**
-   * Get bookings in a time range
-   * @param {string} tenantId Tenant ID
-   * @param {number} timeBegin Start time
-   * @param {number} timeEnd End time
-   * @returns {Promise<Booking[]>} Bookings in time range
-   */
-  static async getBookingsByTimeRange(tenantId, timeBegin, timeEnd) {
-    const rawBookings = await BookingModel.find({
-      tenantId: tenantId,
-      $or: [
-        { timeBegin: { $gte: timeBegin, $lt: timeEnd } },
-        { timeEnd: { $gt: timeBegin, $lte: timeEnd } },
-      ],
-    });
-    return BookingManager._toEntities(rawBookings);
   }
 
   /**
@@ -633,15 +634,20 @@ class BookingManager {
   }
 
   /**
-   * Get bookings with custom filter
+   * Get bookings with custom filter - a free condition of the domain,
+   * within a reach like every other record read (ticket 22).
    * @param {string} tenantId Tenant ID
    * @param {Object} filter MongoDB filter object
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} Filtered bookings
    */
-  static async getBookingsCustomFilter(tenantId, filter) {
+  static async getBookingsCustomFilter(tenantId, filter, scope) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
       ...filter,
+      ...condition(scope),
     });
     return BookingManager._toEntities(rawBookings);
   }
@@ -661,12 +667,16 @@ class BookingManager {
    * @param {Object} [opts.timeFilter={}] Extra time conditions (e.g. on timeBegin/timeEnd)
    * @param {Object} [opts.match={}] Extra MongoDB conditions (e.g. bookable/locker $or)
    * @param {boolean} [opts.requireCommitted=true] When false, also returns uncommitted bookings
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller reads under (ADR 0002): `own` narrows to the user's own,
+   *   the domain says `DOMAIN`; none is a programming error
    * @returns {Promise<Booking[]>} List of bookings
    */
   static async getUserBookingsFiltered(
     tenantId,
     userId,
     { timeFilter = {}, match = {}, requireCommitted = true } = {},
+    scope,
   ) {
     const rawBookings = await BookingModel.find({
       ...(tenantId ? { tenantId: tenantId } : {}),
@@ -675,6 +685,7 @@ class BookingManager {
       isRejected: false,
       ...timeFilter,
       ...match,
+      ...condition(scope),
     });
     return rawBookings.map((doc) => doc.toEntity());
   }

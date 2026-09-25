@@ -3,7 +3,6 @@ const bunyan = require("bunyan");
 const MediaManager = require("../../../../commons/data-managers/media-manager");
 const MediaService = require("../../../../commons/services/media/media-service");
 const {
-  ownCondition,
   reachesOf,
   scopeOf,
 } = require("../../../../commons/services/authorization");
@@ -210,18 +209,20 @@ class MediaControllerV2 {
       "invalid_visibility",
     );
 
-    // How much of the library the reach covers: everything under `any`, the
-    // caller's own uploads under `own`.
-    const result = await MediaManager.getMediaList({
-      tenantId,
-      page,
-      pageSize,
-      kind,
-      tag,
-      q,
-      visibility: requestedVisibility ? [requestedVisibility] : undefined,
-      ...ownCondition("media", scopeOf(req)),
-    });
+    // How much of the library the reach covers - everything under `any`, the
+    // caller's own uploads under `own` - is the manager's to apply.
+    const result = await MediaManager.getMediaList(
+      {
+        tenantId,
+        page,
+        pageSize,
+        kind,
+        tag,
+        q,
+        visibility: requestedVisibility ? [requestedVisibility] : undefined,
+      },
+      scopeOf(req),
+    );
 
     return res.status(200).json({
       items: result.items.map(MediaControllerV2._toResponse),

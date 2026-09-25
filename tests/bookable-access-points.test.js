@@ -6,6 +6,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const AccessPointManager = require("../src/commons/data-managers/access-point-manager");
 const { ValidationError } = require("../src/errors/ValidationError");
 
@@ -191,7 +192,7 @@ describe("BookableManager access point references", () => {
   it("seeds access resolution from bookables with at least one reference", async () => {
     const find = sandbox.stub(BookableModel, "find").resolves([]);
 
-    await BookableManager.getBookablesWithAccessPoints("tenant-1");
+    await BookableManager.getBookablesWithAccessPoints("tenant-1", DOMAIN);
 
     expect(find.firstCall.args[0]).to.deep.equal({
       tenantId: "tenant-1",
@@ -203,7 +204,11 @@ describe("BookableManager access point references", () => {
   it("finds every bookable referencing one access point", async () => {
     const find = sandbox.stub(BookableModel, "find").resolves([]);
 
-    await BookableManager.getBookablesByAccessPointId("tenant-1", "door-1");
+    await BookableManager.getBookablesByAccessPointId(
+      "tenant-1",
+      "door-1",
+      DOMAIN,
+    );
 
     expect(find.firstCall.args[0]).to.deep.equal({
       tenantId: "tenant-1",

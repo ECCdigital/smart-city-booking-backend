@@ -120,6 +120,7 @@ class CalendarOccupancyService {
         bookableIds,
         timeBegin,
         timeEnd,
+        DOMAIN,
       );
     }
 

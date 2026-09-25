@@ -200,6 +200,7 @@ async function importBookingDocuments({ dryRun = false } = {}) {
           const bookings = await BookingManager.getBookingsByAttachmentFileName(
             tenant.id,
             file.fileName,
+            DOMAIN,
           );
 
           if (bookings.length === 0) {
@@ -516,7 +517,10 @@ async function rewriteReferences({ dryRun = false } = {}) {
 
     await rewriteEach({
       kind: `booking:${tenantId}`,
-      entities: await BookingManager.getBookingsWithAttachments(tenantId),
+      entities: await BookingManager.getBookingsWithAttachments(
+        tenantId,
+        DOMAIN,
+      ),
       convert: (booking) => rewriteAttachments(booking.attachments, tenantId),
       store: (booking) => BookingManager.storeBooking(booking, false),
       report,

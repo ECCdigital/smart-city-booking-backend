@@ -4,6 +4,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const CalendarOccupancyService = require("../src/commons/services/calendar-occupancy-service");
 
 describe("CalendarOccupancyService", () => {
@@ -115,6 +116,7 @@ describe("CalendarOccupancyService", () => {
       ["room-a"],
       500,
       2500,
+      DOMAIN,
     ]);
     assert.strictEqual(occupancies.length, 1);
   });

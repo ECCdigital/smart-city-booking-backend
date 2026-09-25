@@ -364,7 +364,7 @@ ReviewService.registerOfferAdapter(OFFER_TYPES.BOOKABLE, {
       review,
     }),
   listByReviewStatus: (tenantId, status) =>
-    BookableManager.getOffersByReviewStatus(tenantId, status),
+    BookableManager.getOffersByReviewStatus(tenantId, status, DOMAIN),
 });
 
 /** An event as the review service reads an offer. */
@@ -389,7 +389,7 @@ ReviewService.registerOfferAdapter(OFFER_TYPES.EVENT, {
       }),
     ),
   listByReviewStatus: async (tenantId, status) =>
-    (await EventManager.getOffersByReviewStatus(tenantId, status)).map(
+    (await EventManager.getOffersByReviewStatus(tenantId, status, DOMAIN)).map(
       eventAsOffer,
     ),
 });

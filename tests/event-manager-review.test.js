@@ -8,6 +8,7 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 
 const EventManager = require("../src/commons/data-managers/event-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const EventModel = require("../src/commons/data-managers/models/eventModel");
 const { Event } = require("../src/commons/entities/event/event");
 
@@ -77,7 +78,11 @@ describe("EventManager: the review", function () {
     ]);
     const find = sinon.stub(EventModel, "find").returns({ sort });
 
-    const offers = await EventManager.getOffersByReviewStatus("t1", "pending");
+    const offers = await EventManager.getOffersByReviewStatus(
+      "t1",
+      "pending",
+      DOMAIN,
+    );
 
     expect(find.firstCall.args[0]).to.deep.equal({
       tenantId: "t1",
@@ -105,7 +110,10 @@ describe("EventManager: the review", function () {
     const sort = sinon.stub().returns({ lean });
     const find = sinon.stub(EventModel, "find").returns({ sort });
 
-    const offers = await EventManager.getPendingReviewOffers(["t1", "t2"]);
+    const offers = await EventManager.getPendingReviewOffers(
+      ["t1", "t2"],
+      DOMAIN,
+    );
 
     expect(find.firstCall.args[0]).to.deep.equal({
       tenantId: { $in: ["t1", "t2"] },

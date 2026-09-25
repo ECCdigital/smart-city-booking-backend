@@ -91,6 +91,7 @@ class AvailabilityContext {
       bookableIds,
       this.timeBegin,
       this.timeEnd,
+      DOMAIN,
     );
     this.metrics.dbQueryCount += 1;
     this.#indexBookings(bookings);
@@ -170,6 +171,7 @@ class AvailabilityContext {
       extraIds,
       this.timeBegin,
       this.timeEnd,
+      DOMAIN,
     );
     this.metrics.dbQueryCount += 1;
     this.#indexBookings(extraBookings);

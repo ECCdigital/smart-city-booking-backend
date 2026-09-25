@@ -99,8 +99,11 @@ describe("authorization invariants: every route carries one marker", function ()
  * The domain's reach never appears at the edge (ADR 0002): `DOMAIN` is
  * what a caller inside `src/commons` says, a handler hands `scopeOf(req)`
  * on - or `PUBLIC`, the public's view - and never reads as the domain.
+ * Nor does a handler build the condition of a reach itself
+ * (`ownCondition`): the reach becomes a query condition in the manager
+ * alone (ticket 23).
  */
-describe("authorization invariants: no DOMAIN under src/platform", function () {
+describe("authorization invariants: no DOMAIN and no ownCondition under src/platform", function () {
   const fs = require("fs");
   const path = require("path");
   const PLATFORM = path.join(__dirname, "..", "src", "platform");
@@ -116,18 +119,27 @@ describe("authorization invariants: no DOMAIN under src/platform", function () {
     }
   }
 
-  it("names the domain's reach in no handler, router or engine", function () {
+  /** The platform files whose code (comments stripped) matches `pattern`. */
+  function offendersOf(pattern) {
     const offenders = [];
     for (const file of files(PLATFORM)) {
       const source = fs
         .readFileSync(file, "utf8")
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/(^|[^:])\/\/.*$/gm, "$1");
-      if (/\bDOMAIN\b|reach:\s*"domain"/.test(source)) {
+      if (pattern.test(source)) {
         offenders.push(path.relative(PLATFORM, file));
       }
     }
-    expect(offenders).to.deep.equal([]);
+    return offenders;
+  }
+
+  it("names the domain's reach in no handler, router or engine", function () {
+    expect(offendersOf(/\bDOMAIN\b|reach:\s*"domain"/)).to.deep.equal([]);
+  });
+
+  it("builds the condition of a reach in no handler: the managers do", function () {
+    expect(offendersOf(/\bownCondition\b/)).to.deep.equal([]);
   });
 });
 

@@ -224,9 +224,11 @@ class WorkflowService {
       trackedBookings.push(booking.id);
     }
 
-    const rawBacklog = await BookingManager.getBookingsCustomFilter(tenantId, {
-      id: { $nin: trackedBookings },
-    });
+    const rawBacklog = await BookingManager.getBookingsCustomFilter(
+      tenantId,
+      { id: { $nin: trackedBookings } },
+      DOMAIN,
+    );
 
     return rawBacklog.map((booking) => {
       return {

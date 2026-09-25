@@ -95,6 +95,69 @@ const READS = [
   ["TenantManager.getTenants", () => TenantManager.getTenants()],
   ["TenantManager.countTenants", () => TenantManager.countTenants()],
   ["MediaManager.getMedia", () => MediaManager.getMedia("m1", "t1")],
+  // The record reads without a scope until ticket 23 (decided in 22): a
+  // manager hands out records only within a reach, whoever asks.
+  [
+    "BookingManager.getBookingsWithAttachments",
+    () => BookingManager.getBookingsWithAttachments("t1"),
+  ],
+  [
+    "BookingManager.getBookingsByAttachmentFileName",
+    () => BookingManager.getBookingsByAttachmentFileName("t1", "a.pdf"),
+  ],
+  [
+    "BookingManager.getConcurrentBookings",
+    () => BookingManager.getConcurrentBookings("b1", "t1", 1, 2),
+  ],
+  [
+    "BookingManager.getBookingsForBookableFamily",
+    () => BookingManager.getBookingsForBookableFamily("t1", ["b1"], 1, 2),
+  ],
+  [
+    "BookingManager.getBookingsCustomFilter",
+    () => BookingManager.getBookingsCustomFilter("t1", {}),
+  ],
+  [
+    "BookingManager.getUserBookingsFiltered",
+    () => BookingManager.getUserBookingsFiltered("t1", "u1"),
+  ],
+  [
+    "BookableManager.getBookablesWithAccessPoints",
+    () => BookableManager.getBookablesWithAccessPoints("t1"),
+  ],
+  [
+    "BookableManager.getBookablesByAccessPointId",
+    () => BookableManager.getBookablesByAccessPointId("t1", "ap1"),
+  ],
+  [
+    "BookableManager.getOffersByReviewStatus",
+    () => BookableManager.getOffersByReviewStatus("t1", "pending"),
+  ],
+  [
+    "BookableManager.getPendingReviewOffers",
+    () => BookableManager.getPendingReviewOffers(["t1"]),
+  ],
+  [
+    "EventManager.getOffersByReviewStatus",
+    () => EventManager.getOffersByReviewStatus("t1", "pending"),
+  ],
+  [
+    "EventManager.getPendingReviewOffers",
+    () => EventManager.getPendingReviewOffers(["t1"]),
+  ],
+  [
+    "MediaManager.getMediaList",
+    () => MediaManager.getMediaList({ tenantId: "t1" }),
+  ],
+  ["MediaManager.getAllMedia", () => MediaManager.getAllMedia({})],
+  [
+    "MediaManager.getBookingDocumentByFileName",
+    () => MediaManager.getBookingDocumentByFileName("t1", "a.pdf", "b1"),
+  ],
+  [
+    "MediaManager.getBookingDocuments",
+    () => MediaManager.getBookingDocuments("t1", "b1"),
+  ],
 ];
 
 describe("authorization: the managers' own condition", function () {
@@ -119,6 +182,8 @@ describe("authorization: the managers' own condition", function () {
         [TenantModel, "findOne"],
         [TenantModel, "countDocuments"],
         [MediaModel, "findOne"],
+        [MediaModel, "find"],
+        [MediaModel, "countDocuments"],
       ]) {
         sinon.stub(Model, method).resolves([]);
       }
@@ -482,6 +547,40 @@ describe("authorization: the managers' own condition", function () {
       ]);
     });
 
+    it("reads the concurrent bookings of a bookable within the reach it was given", async function () {
+      const related = sinon
+        .stub(BookingManager, "getRelatedBookings")
+        .resolves([]);
+      await BookingManager.getConcurrentBookings("b1", "t1", 1, 2, null, OWN);
+      await BookingManager.getConcurrentBookings(
+        "b1",
+        "t1",
+        1,
+        2,
+        null,
+        DOMAIN,
+      );
+      expect(related.args).to.deep.equal([
+        ["t1", "b1", OWN],
+        ["t1", "b1", DOMAIN],
+      ]);
+    });
+
+    it("narrows the filtered bookings of a user under own, and not for the domain", async function () {
+      const find = sinon.stub(BookingModel, "find").resolves([]);
+      await BookingManager.getUserBookingsFiltered("t1", "u1", {}, OWN);
+      await BookingManager.getUserBookingsFiltered(null, "u1", {}, DOMAIN);
+      expect(find.args.map(([filter]) => filter)).to.deep.equal([
+        {
+          tenantId: "t1",
+          assignedUserId: "u1",
+          isCommitted: true,
+          isRejected: false,
+        },
+        { assignedUserId: "u1", isCommitted: true, isRejected: false },
+      ]);
+    });
+
     it("loads a single booking with the condition under own", async function () {
       const findOne = sinon.stub(BookingModel, "findOne").resolves(null);
       expect(await BookingManager.getBooking("b1", "t1", OWN)).to.equal(null);
@@ -555,6 +654,25 @@ describe("authorization: the managers' own condition", function () {
   });
 
   describe("MediaManager (uploadedBy)", function () {
+    it("lists the library within the reach: the own uploads under own, everything for the domain", async function () {
+      const query = {
+        sort: () => query,
+        skip: () => query,
+        limit: async () => [],
+      };
+      const find = sinon.stub(MediaModel, "find").returns(query);
+      const count = sinon.stub(MediaModel, "countDocuments").resolves(0);
+      await MediaManager.getMediaList({ tenantId: "t1" }, OWN);
+      await MediaManager.getMediaList({ tenantId: "t1" }, DOMAIN);
+      expect(find.args.map(([filter]) => filter)).to.deep.equal([
+        { tenantId: "t1", bookingIds: null, uploadedBy: "u1" },
+        { tenantId: "t1", bookingIds: null },
+      ]);
+      expect(count.args.map(([filter]) => filter)).to.deep.equal(
+        find.args.map(([filter]) => filter),
+      );
+    });
+
     it("loads a single medium with the condition under own", async function () {
       const findOne = sinon.stub(MediaModel, "findOne").resolves(null);
       expect(await MediaManager.getMedia("m1", "t1", OWN)).to.equal(null);

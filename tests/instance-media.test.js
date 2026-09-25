@@ -220,9 +220,9 @@ describe("instance media", function () {
         createResponse(),
       );
 
-      const args = MediaManager.getMediaList.firstCall.args[0];
-      assert.strictEqual(args.tenantId, null);
-      assert.strictEqual(args.uploadedBy, undefined);
+      const [params, scope] = MediaManager.getMediaList.firstCall.args;
+      assert.strictEqual(params.tenantId, null);
+      assert.strictEqual(scope.reach, "any");
     });
 
     it("lets the instance owner patch metadata", async function () {

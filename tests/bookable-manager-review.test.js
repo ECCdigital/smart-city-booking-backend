@@ -11,6 +11,7 @@ const {
   BookableManager,
 } = require("../src/commons/data-managers/bookable-manager");
 const BookableModel = require("../src/commons/data-managers/models/bookableModel");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const { Bookable } = require("../src/commons/entities/bookable/bookable");
 
 const pending = {
@@ -79,6 +80,7 @@ describe("BookableManager: the review", function () {
     const offers = await BookableManager.getOffersByReviewStatus(
       "t1",
       "pending",
+      DOMAIN,
     );
 
     expect(find.firstCall.args[0]).to.deep.equal({
@@ -108,7 +110,10 @@ describe("BookableManager: the review", function () {
     const sort = sinon.stub().returns({ lean });
     const find = sinon.stub(BookableModel, "find").returns({ sort });
 
-    const offers = await BookableManager.getPendingReviewOffers(["t1", "t2"]);
+    const offers = await BookableManager.getPendingReviewOffers(
+      ["t1", "t2"],
+      DOMAIN,
+    );
 
     expect(find.firstCall.args[0]).to.deep.equal({
       tenantId: { $in: ["t1", "t2"] },

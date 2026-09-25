@@ -1471,6 +1471,7 @@ class AccessService {
         timeFilter,
         requireCommitted: !includeEligibility,
       },
+      DOMAIN,
     );
 
     if (!bookings.length) {
@@ -1545,6 +1546,7 @@ class AccessService {
         timeFilter,
         requireCommitted: !includeEligibility,
       },
+      DOMAIN,
     );
 
     if (!bookings.length) {
@@ -1643,17 +1645,21 @@ class AccessService {
     { limit = 10, now = Date.now() } = {},
   ) {
     const id = String(accessPointId);
-    const bookings = await BookingManager.getBookingsCustomFilter(tenant, {
-      isRejected: { $ne: true },
-      $or: [{ timeEnd: null }, { timeEnd: { $gte: now } }],
-      accessInfo: {
-        $elemMatch: {
-          accessPointId: id,
-          isProvisioned: true,
-          revokedAt: null,
+    const bookings = await BookingManager.getBookingsCustomFilter(
+      tenant,
+      {
+        isRejected: { $ne: true },
+        $or: [{ timeEnd: null }, { timeEnd: { $gte: now } }],
+        accessInfo: {
+          $elemMatch: {
+            accessPointId: id,
+            isProvisioned: true,
+            revokedAt: null,
+          },
         },
       },
-    });
+      DOMAIN,
+    );
 
     const running = bookings
       .filter(
@@ -1891,8 +1897,10 @@ class AccessService {
    *   bookableId -> (accessPointId -> the access point's mode and type)
    */
   static async _getAccessTriggerMap(tenant) {
-    const apBookables =
-      await BookableManager.getBookablesWithAccessPoints(tenant);
+    const apBookables = await BookableManager.getBookablesWithAccessPoints(
+      tenant,
+      DOMAIN,
+    );
 
     const accessPointsById = await this._getAccessPointsById(
       tenant,
@@ -1971,6 +1979,7 @@ class AccessService {
     const apBookables = await BookableManager.getBookablesByAccessPointId(
       tenant,
       accessPointId,
+      DOMAIN,
     );
 
     const inheritChildren =
@@ -2563,6 +2572,77 @@ class AccessService {
   }
 
   /**
+   * Records a provider's webhook event on every booking that holds the
+   * access it names, and logs it. The webhook route is token-authorized
+   * and has no reach, so the domain reads the bookings (ADR 0002, ticket
+   * 22) - the way `AccessAppLifecycleService.webhookSecretOf` reads the
+   * tenant.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} event The parsed webhook event: `provider`,
+   *   `externalId`, `eventType`, `timestamp`, `success`, `errorCode`,
+   *   `payload`
+   * @returns {Promise<void>}
+   */
+  static async recordWebhookEvent(tenant, event) {
+    const bookings = await BookingManager.getBookingsCustomFilter(
+      tenant,
+      {
+        "accessInfo.provider": event.provider,
+        "accessInfo.externalId": event.externalId,
+      },
+      DOMAIN,
+    );
+    const timestamp =
+      typeof event.timestamp === "number"
+        ? event.timestamp
+        : new Date(event.timestamp || Date.now()).getTime();
+    const matches = (info) =>
+      info.provider === event.provider &&
+      String(info.externalId) === String(event.externalId);
+
+    for (const booking of bookings) {
+      let changed = false;
+      booking.accessInfo = (booking.accessInfo || []).map((info) => {
+        if (!matches(info)) {
+          return info;
+        }
+
+        changed = true;
+        return {
+          ...info,
+          lastEvent: {
+            type: event.eventType || "webhook",
+            timestamp,
+            source: "webhook",
+            success: event.success !== false,
+            errorCode: event.errorCode || null,
+          },
+        };
+      });
+
+      if (changed) {
+        await BookingManager.storeBooking(booking);
+      }
+
+      await AccessLogService.log({
+        tenantId: tenant,
+        bookingId: booking.id,
+        accessPointId:
+          (booking.accessInfo || []).find(matches)?.accessPointId || null,
+        accessPointType: "door",
+        provider: event.provider,
+        externalId: event.externalId,
+        action: "webhook",
+        actor: { source: "webhook" },
+        result: event.success === false ? "failure" : "success",
+        payload: event.payload || event,
+        errorCode: event.errorCode || null,
+      });
+    }
+  }
+
+  /**
    * @private
    * Fails where the bookable has fewer compartments than the bookings in
    * this booking's window take, this booking included. The occupancy is
@@ -2589,6 +2669,7 @@ class AccessService {
       booking.timeBegin,
       booking.timeEnd,
       booking.id,
+      DOMAIN,
     );
     const occupied = [...others, booking].reduce(
       (sum, concurrent) => sum + this._itemAmount(concurrent, bookable.id),

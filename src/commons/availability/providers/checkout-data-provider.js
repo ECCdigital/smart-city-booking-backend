@@ -147,6 +147,8 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
       this.tenantId,
       timeBegin,
       timeEnd,
+      null,
+      DOMAIN,
     );
   }
 

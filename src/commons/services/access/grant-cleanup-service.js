@@ -120,6 +120,7 @@ class GrantCleanupService {
       const bookings = await BookingManager.getBookingsCustomFilter(
         tenant.id,
         ORPHANED_PRINCIPAL_FILTER,
+        DOMAIN,
       );
 
       for (const booking of bookings) {

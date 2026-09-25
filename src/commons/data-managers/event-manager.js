@@ -191,10 +191,11 @@ class EventManager {
    * @returns {Promise<Event[]>} The events, by `review.submittedAt`
    *   ascending, then by id
    */
-  static async getOffersByReviewStatus(tenantId, status) {
+  static async getOffersByReviewStatus(tenantId, status, scope) {
     const rawEvents = await EventModel.find({
       tenantId,
       "review.status": status ?? null,
+      ...ownCondition("event", scope),
     }).sort({ "review.submittedAt": 1, id: 1 });
     return rawEvents.map((doc) => doc.toEntity());
   }
@@ -205,12 +206,17 @@ class EventManager {
    * to what a queue row reads - never the whole event.
    *
    * @param {string[]} tenantIds The tenants to read from
+   * @param {{reach: string, userId?: string|null}} scope As of `getEvents`
    * @returns {Promise<Array<{id: string, tenantId: string, information: {name: string}, isPublic: boolean, review: Object}>>}
    *   Plain rows, by `review.submittedAt` ascending, then by id
    */
-  static async getPendingReviewOffers(tenantIds) {
+  static async getPendingReviewOffers(tenantIds, scope) {
     return EventModel.find(
-      { tenantId: { $in: tenantIds }, "review.status": REVIEW_STATUS.PENDING },
+      {
+        tenantId: { $in: tenantIds },
+        "review.status": REVIEW_STATUS.PENDING,
+        ...ownCondition("event", scope),
+      },
       {
         _id: 0,
         id: 1,

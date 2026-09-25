@@ -85,7 +85,7 @@ async function regenerate({ dryRun = false, tenantId } = {}) {
     filter.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(filter);
+  const media = await MediaManager.getAllMedia(filter, DOMAIN);
 
   for (const medium of media) {
     try {
@@ -141,7 +141,7 @@ async function backfillDimensions({ dryRun = false, tenantId } = {}) {
     filter.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(filter);
+  const media = await MediaManager.getAllMedia(filter, DOMAIN);
 
   for (const medium of media) {
     try {
@@ -190,7 +190,7 @@ async function backfillDimensions({ dryRun = false, tenantId } = {}) {
  */
 async function verify({ dryRun = false } = {}) {
   const report = new MigrationReport("verify", dryRun);
-  const media = await MediaManager.getAllMedia();
+  const media = await MediaManager.getAllMedia({}, DOMAIN);
 
   for (const medium of media) {
     try {
@@ -238,7 +238,10 @@ async function cleanup({ dryRun = false } = {}) {
       "deleted medium have to be removed by hand",
   );
 
-  const media = await MediaManager.getAllMedia({ kind: MEDIA_KIND.IMAGE });
+  const media = await MediaManager.getAllMedia(
+    { kind: MEDIA_KIND.IMAGE },
+    DOMAIN,
+  );
 
   for (const medium of media) {
     try {
@@ -399,7 +402,7 @@ async function purgeImported({ dryRun = false, tenantId } = {}) {
     scope.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(scope);
+  const media = await MediaManager.getAllMedia(scope, DOMAIN);
   const found = [...countByScope(media)]
     .map(([scopeTenantId, count]) => `${scopeLabel(scopeTenantId)}: ${count}`)
     .join(", ");
@@ -595,7 +598,7 @@ async function relocate({ dryRun = false, tenantId, to } = {}) {
     filter.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(filter);
+  const media = await MediaManager.getAllMedia(filter, DOMAIN);
 
   // What would move, per scope — media and files, the numbers an operator
   // sizes the run with.
