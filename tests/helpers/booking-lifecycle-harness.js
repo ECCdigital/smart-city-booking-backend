@@ -721,6 +721,9 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   sinon
     .stub(RoleManager, "getRole")
     .callsFake(async (id) => ROLES[id]?.() ?? null);
+  sinon
+    .stub(RoleManager, "getRolesByIds")
+    .callsFake(async (ids) => ids.map((id) => ROLES[id]?.()).filter(Boolean));
   sinon.stub(MembershipManager, "getMembershipsByTenantAndRoles").resolves([]);
   // The event of the ticket, with what the organizer's notice prints -
   // as the manager answers it: projected under `public`.

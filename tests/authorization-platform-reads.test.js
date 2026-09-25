@@ -58,13 +58,13 @@ const ALLOWED = {
     "configuration: whether the invoice app is active",
   "TenantManager.getTenantAppByType":
     "configuration: the payment apps as { id, title }",
-  // The roles: the one owner-keyed resource whose manager reads without
-  // a reach - the role list handler still branches over the reach itself
-  // (`tests/authorization-handler-decisions.test.js`). Ticket 05 of the
-  // authorization map takes them.
-  "RoleManager.getRoles": "ticket 05: the roles of every tenant",
-  "RoleManager.getTenantRoles": "ticket 05: the roles of a tenant",
-  "RoleManager.getRole": "ticket 05: one role of a tenant",
+  // The roles are configuration (ticket 22/4, decided in ticket 05): the
+  // rights of a tenant, not its records. The role list handler still
+  // branches over the reach itself
+  // (`tests/authorization-handler-decisions.test.js`).
+  "RoleManager.getRoles": "configuration: the roles of every tenant",
+  "RoleManager.getTenantRoles": "configuration: the roles of a tenant",
+  "RoleManager.getRole": "configuration: one role of a tenant",
 };
 
 function* files(dir) {

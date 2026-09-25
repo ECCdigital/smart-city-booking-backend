@@ -9,6 +9,7 @@ const { DOMAIN } = require("../services/authorization/reach");
 const {
   supervisionOf,
 } = require("../services/supervision/supervision-constants");
+const { ROLE_GROUPS, ROLE_LEVELS } = require("../entities/role/role-catalogue");
 
 class UserManager {
   static async getUser(id, withSensitive = false) {
@@ -286,26 +287,18 @@ class UserManager {
           isOwner: membership.owner,
           adminInterfaces: [],
           freeBookings: false,
-          manageUsers: {},
-          manageRoles: {},
-          manageBookables: {},
-          manageBookings: {},
-          manageCoupons: {},
-          manageMedia: {},
+          ...Object.fromEntries(ROLE_GROUPS.map((group) => [group, {}])),
         };
         tenantPermissions.push(workingPermission);
       }
 
-      const roles = await Promise.all(
-        tenantUserRef.roles.map((roleId) =>
-          RoleManager.getRole(roleId, membership.tenantId),
-        ),
+      const roles = await RoleManager.getRolesByIds(
+        tenantUserRef.roles,
+        membership.tenantId,
       );
 
       for (const role of roles) {
-        if (role) {
-          mergeRoleIntoPermission(workingPermission, role);
-        }
+        mergeRoleIntoPermission(workingPermission, role);
       }
 
       if (workingPermission.isOwner) {
@@ -367,25 +360,7 @@ function mergeRoleIntoPermission(workingPermission, role) {
 
   workingPermission.freeBookings ||= role.freeBookings;
 
-  const dimensions = [
-    "manageUsers",
-    "manageRoles",
-    "manageBookables",
-    "manageBookings",
-    "manageCoupons",
-    "manageMedia",
-  ];
-  const actions = [
-    "create",
-    "readAny",
-    "readOwn",
-    "updateAny",
-    "updateOwn",
-    "deleteAny",
-    "deleteOwn",
-  ];
-
-  for (const dimension of dimensions) {
+  for (const dimension of ROLE_GROUPS) {
     if (!workingPermission[dimension]) {
       workingPermission[dimension] = {};
     }
@@ -393,7 +368,7 @@ function mergeRoleIntoPermission(workingPermission, role) {
       continue;
     }
 
-    for (const action of actions) {
+    for (const action of ROLE_LEVELS) {
       workingPermission[dimension][action] ||= role[dimension][action];
     }
   }

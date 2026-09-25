@@ -396,12 +396,12 @@ function installRouteWorld({
     toEntity: () => user(),
   }));
   const roleOfHarness = RoleManager.getRole;
-  restub(
-    RoleManager,
-    "getRole",
-    async (id, tenant) =>
-      roles.find((r) => r.id === id && r.tenantId === tenant) ??
-      roleOfHarness(id, tenant),
+  const roleOf = async (id, tenant) =>
+    roles.find((r) => r.id === id && r.tenantId === tenant) ??
+    roleOfHarness(id, tenant);
+  restub(RoleManager, "getRole", roleOf);
+  restub(RoleManager, "getRolesByIds", async (ids, tenant) =>
+    (await Promise.all(ids.map((id) => roleOf(id, tenant)))).filter(Boolean),
   );
 
   // The two seams below the managers that would go to the network: the

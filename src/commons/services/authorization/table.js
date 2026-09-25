@@ -45,24 +45,12 @@
  * `checkout`, `ical.feed`) asks everyone as the public, staff included.
  */
 
-const ROLE_GROUPS = Object.freeze([
-  "manageBookables",
-  "manageUsers",
-  "manageRoles",
-  "manageBookings",
-  "manageCoupons",
-  "manageMedia",
-]);
-
-const ROLE_LEVELS = Object.freeze([
-  "create",
-  "readAny",
-  "readOwn",
-  "updateAny",
-  "updateOwn",
-  "deleteAny",
-  "deleteOwn",
-]);
+// The groups and levels a role grants come from the role's catalogue
+// (`entities/role/role-catalogue.js`); the table only checks against them.
+const {
+  ROLE_GROUPS,
+  ROLE_LEVELS,
+} = require("../../entities/role/role-catalogue");
 
 /** The seven CRUD entries of a role group, shared by bookables, coupons, ... */
 function crud(group, { publicRead = false } = {}) {
