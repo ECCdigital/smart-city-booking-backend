@@ -458,14 +458,12 @@ describe("authorization: the managers' own condition", function () {
       expect(listed.called).to.equal(false);
     });
 
-    it("the managers of bookings, coupons, media and group bookings read whole: the handler projects", async function () {
+    // The bookings are the exception: `BookingManager.getTenantBookings`
+    // under `public` reads the tenant's bookings whole and keeps those of
+    // the bookables the public's list carries (ticket 27,
+    // `tests/booking-manager-public-list.test.js`).
+    it("the managers of coupons, media and group bookings read whole: the handler projects", async function () {
       const reads = [
-        [
-          BookingModel,
-          "find",
-          () => BookingManager.getTenantBookings("t1", PUBLIC),
-          { tenantId: "t1" },
-        ],
         [
           CouponModel,
           "findOne",

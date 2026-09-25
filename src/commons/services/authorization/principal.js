@@ -229,31 +229,9 @@ function tenantsOf(principal, key) {
   }
 }
 
-/**
- * Whether the principal manages anything in the tenant of the request:
- * the instance owner, the tenant owner, or a holder of any role level
- * there. The question of the public gates (ADR 0001): staff keep their
- * management view of a pending tenant, and a reach never opens a gate -
- * a customer with `own` on their bookings is asked as the public. A
- * resting membership manages nothing, as the principal already says.
- *
- * @param {Object|null|undefined} principal
- * @returns {boolean}
- */
-function managesTenant(principal) {
-  return Boolean(
-    principal?.isInstanceOwner ||
-      principal?.isTenantOwner ||
-      Object.values(principal?.grants || {}).some((group) =>
-        Object.values(group).some(Boolean),
-      ),
-  );
-}
-
 module.exports = {
   loadPrincipal,
   anyReachIn,
-  managesTenant,
   tenantsOf,
   anonymous,
 };

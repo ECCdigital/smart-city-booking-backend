@@ -5,12 +5,7 @@
  * flow in `docs/agents/api.md`.
  */
 
-const {
-  loadPrincipal,
-  anyReachIn,
-  managesTenant,
-  tenantsOf,
-} = require("./principal");
+const { loadPrincipal, anyReachIn, tenantsOf } = require("./principal");
 const { decide, REACH } = require("./policy");
 const {
   DOMAIN,
@@ -38,7 +33,6 @@ const {
 module.exports = {
   loadPrincipal,
   anyReachIn,
-  managesTenant,
   tenantsOf,
   decide,
   REACH,

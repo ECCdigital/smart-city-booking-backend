@@ -16,11 +16,12 @@ class CheckoutDataProvider extends AvailabilityDataProvider {
    * @param {string} params.bookableId
    * @param {number} params.timeBegin
    * @param {number} params.timeEnd
-   * @param {{reach: string, userId?: string|null}} [params.scope] The
+   * @param {{reach: string, userId?: string|null}} params.scope The
    *   reach the bookable and its event are read under: the checkout's
-   *   (the public's for a self-booking, ADR 0003), the domain's without one
+   *   (the public's for a self-booking, ADR 0003) or `DOMAIN`; required,
+   *   as at every manager (ADR 0002)
    */
-  constructor({ tenantId, bookableId, timeBegin, timeEnd, scope = DOMAIN }) {
+  constructor({ tenantId, bookableId, timeBegin, timeEnd, scope }) {
     super();
     this.tenantId = tenantId;
     this.bookableId = bookableId;

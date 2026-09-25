@@ -8,7 +8,11 @@ const BookingModel = require("./models/bookingModel");
 const BookableModel = require("./models/bookableModel");
 const { BookableManager } = require("./bookable-manager");
 const { NotFoundError } = require("../../errors/BaseError");
-const { ownCondition, DOMAIN } = require("../services/authorization/reach");
+const {
+  ownCondition,
+  DOMAIN,
+  PUBLIC,
+} = require("../services/authorization/reach");
 const { REACH } = require("../services/authorization/policy");
 
 /**
@@ -25,6 +29,21 @@ const condition = (scope) =>
  * Data Manager for Booking objects.
  */
 class BookingManager {
+  /**
+   * The public's view of a tenant's bookings (ADR 0003): the bookings of
+   * the bookables the public's list carries, and none of another - a
+   * tenant without a public projection has no list, and the bookable
+   * manager throws its `tenant_not_found`. The anonymizing is the
+   * handler's; which bookings are the public's is the manager's.
+   */
+  static async _ofListedBookables(tenantId, bookings) {
+    const listed = await BookableManager.getBookables(tenantId, PUBLIC);
+    const listedIds = new Set(listed.map((bookable) => bookable.id));
+    return bookings.filter((booking) =>
+      (booking.bookableIds || []).every((id) => listedIds.has(id)),
+    );
+  }
+
   static async _toEntities(rawBookings) {
     const bookings = rawBookings.map((doc) => doc.toEntity());
     await BookingManager._enrichBookingsWithCustomFields(bookings);
@@ -108,7 +127,10 @@ class BookingManager {
       tenantId: tenantId,
       ...condition(scope),
     });
-    const bookings = await BookingManager._toEntities(rawBookings);
+    let bookings = await BookingManager._toEntities(rawBookings);
+    if (scope?.reach === REACH.PUBLIC) {
+      bookings = await BookingManager._ofListedBookables(tenantId, bookings);
+    }
     if (populate) {
       await BookingManager._populate(bookings);
     }

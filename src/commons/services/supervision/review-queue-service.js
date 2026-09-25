@@ -110,11 +110,9 @@ class ReviewQueueService {
     const window = pageWindow({ page, pageSize });
 
     const supervised = (
-      await TenantManager.getTenants(
-        DOMAIN,
-        { supervisionLevel: SUPERVISION_LEVELS.SUPERVISED },
-        DOMAIN,
-      )
+      await TenantManager.getTenants(DOMAIN, {
+        supervisionLevel: SUPERVISION_LEVELS.SUPERVISED,
+      })
     ).filter((tenant) => !tenantId || tenant.id === tenantId);
     const tenantNames = new Map(
       supervised.map((tenant) => [tenant.id, tenant.name ?? null]),

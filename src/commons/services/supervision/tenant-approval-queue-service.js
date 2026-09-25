@@ -54,16 +54,12 @@ class TenantApprovalQueueService {
     const selection = { supervisionLevel: SUPERVISION_LEVELS.PENDING };
 
     const [tenants, total] = await Promise.all([
-      TenantManager.getTenants(
-        DOMAIN,
-        {
-          ...selection,
-          sort: QUEUE_ORDER,
-          skip: window.skip,
-          limit: window.pageSize,
-        },
-        DOMAIN,
-      ),
+      TenantManager.getTenants(DOMAIN, {
+        ...selection,
+        sort: QUEUE_ORDER,
+        skip: window.skip,
+        limit: window.pageSize,
+      }),
       TenantManager.countTenants(DOMAIN, selection),
     ]);
 

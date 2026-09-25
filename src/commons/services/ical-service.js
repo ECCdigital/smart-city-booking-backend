@@ -131,7 +131,7 @@ class ICalService {
     const tenant = await TenantManager.getTenant(tenantID, DOMAIN);
 
     if (!booking) {
-      throw new Error(`Booking with ID ${bookingID} not found`);
+      throw new NotFoundError("booking_not_found", { bookingID, tenantID });
     }
 
     const cal = ICalService._bookingsCalendar(tenant, true);

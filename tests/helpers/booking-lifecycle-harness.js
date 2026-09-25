@@ -587,13 +587,19 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
     store.delete(id);
     record("store.remove", label(id));
   });
+  // Under `public` the list is the public's, as the real manager answers
+  // it: the bookings of the bookables the public's list carries (the route
+  // world's `getBookables`, which throws the public's `tenant_not_found`).
   sinon
     .stub(BookingManager, "getTenantBookings")
-    .callsFake(async (tenantId, scope) =>
-      [...store.values()]
+    .callsFake(async (tenantId, scope) => {
+      const bookings = [...store.values()]
         .filter((doc) => doc.tenantId === tenantId && withinReach(doc, scope))
-        .map((doc) => new Booking(clone(doc))),
-    );
+        .map((doc) => new Booking(clone(doc)));
+      return scope?.reach === "public"
+        ? BookingManager._ofListedBookables(tenantId, bookings)
+        : bookings;
+    });
   sinon.stub(BookingManager, "getConcurrentBookings").resolves([]);
   sinon.stub(BookingManager, "getRelatedBookings").resolves([]);
   sinon.stub(BookingManager, "getEventBookings").resolves([]);

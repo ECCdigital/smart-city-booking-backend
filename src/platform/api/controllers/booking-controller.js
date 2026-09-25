@@ -101,19 +101,14 @@ class BookingController {
 
       if (request.query.public === "true") {
         // The public's view, whoever asks (ADR 0003: a handler asks
-        // narrower than its right, never wider): the anonymized projection
-        // names only the bookings of bookables the public's list carries
-        // - the manager projects the list, and a tenant without a public
-        // projection has none (the public's 404, staff included). The
-        // anonymizing itself is the handler's.
-        const [bookings, listed] = await Promise.all([
-          BookingManager.getTenantBookings(tenant, PUBLIC),
-          BookableManager.getBookables(tenant, PUBLIC),
-        ]);
-        const listedIds = new Set(listed.map((bookable) => bookable.id));
-        const anonymizedBookings = bookings
-          .filter((b) => (b.bookableIds || []).every((id) => listedIds.has(id)))
-          .map((b) => BookingController.anonymizeBooking(b));
+        // narrower than its right, never wider): the manager answers the
+        // bookings of the bookables the public's list carries, and a
+        // tenant without a public projection has none (the public's 404,
+        // staff included). The anonymizing itself is the handler's.
+        const bookings = await BookingManager.getTenantBookings(tenant, PUBLIC);
+        const anonymizedBookings = bookings.map((b) =>
+          BookingController.anonymizeBooking(b),
+        );
 
         logger.info(
           `${tenant} -- sending ${anonymizedBookings.length} anonymized bookings to user ${user?.id}`,

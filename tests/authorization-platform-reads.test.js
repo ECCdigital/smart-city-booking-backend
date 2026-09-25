@@ -27,6 +27,7 @@ const CouponManager = require("../src/commons/data-managers/coupon-manager");
 const GroupBookingManager = require("../src/commons/data-managers/group-booking-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const MediaManager = require("../src/commons/data-managers/media-manager");
+const { RoleManager } = require("../src/commons/data-managers/role-manager");
 
 const PLATFORM = path.join(__dirname, "..", "src", "platform");
 
@@ -39,6 +40,7 @@ const MANAGERS = {
   GroupBookingManager,
   TenantManager,
   MediaManager,
+  RoleManager,
 };
 
 /** A method that reads, by its name; the writes are not this test's. */
@@ -56,6 +58,13 @@ const ALLOWED = {
     "configuration: whether the invoice app is active",
   "TenantManager.getTenantAppByType":
     "configuration: the payment apps as { id, title }",
+  // The roles: the one owner-keyed resource whose manager reads without
+  // a reach - the role list handler still branches over the reach itself
+  // (`tests/authorization-handler-decisions.test.js`). Ticket 05 of the
+  // authorization map takes them.
+  "RoleManager.getRoles": "ticket 05: the roles of every tenant",
+  "RoleManager.getTenantRoles": "ticket 05: the roles of a tenant",
+  "RoleManager.getRole": "ticket 05: one role of a tenant",
 };
 
 function* files(dir) {
@@ -134,8 +143,12 @@ describe("authorization: the platform reads no record without a reach (ADR 0002)
   });
 
   it("names a reason for every allowed read", function () {
+    // A reason names what the read hands out instead of records - or the
+    // ticket of the map that still owes the reach.
     for (const [read, reason] of Object.entries(ALLOWED)) {
-      expect(reason, read).to.match(/^(counter|yes\/no|configuration): /);
+      expect(reason, read).to.match(
+        /^(counter|yes\/no|configuration|ticket \d\d): /,
+      );
     }
   });
 });
