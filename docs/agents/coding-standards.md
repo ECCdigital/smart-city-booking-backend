@@ -95,7 +95,8 @@ logger.info({ tenantId, bookingId }, "Booking created");
 
 - JSON Schema definitions in `src/commons/schemas/`
 - Validate input at controller or service boundary
-- Domain validation (availability, permissions) belongs in services
+- Domain validation (availability, lifecycle rules) belongs in services
+- Rights are decided once, by the route's marker, never in a service or handler: see [docs/authorization.md](../authorization.md)
 
 ## Comments
 

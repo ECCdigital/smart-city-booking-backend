@@ -84,7 +84,7 @@ Example:
 
 ### Roles
 
-Roles define permission sets within a tenant.
+Roles define permission sets within a tenant: six groups (`manageUsers`, `manageBookables`, `manageBookings`, `manageCoupons`, `manageMedia`, `manageRoles`) with seven levels each (`create`, `readAny`, `readOwn`, `updateAny`, `updateOwn`, `deleteAny`, `deleteOwn`). How a level turns into a reach on a route: [authorization.md](authorization.md).
 
 Example:
 

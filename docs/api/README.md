@@ -13,6 +13,8 @@ Routes are mounted as follows:
 
 Authentication details: [authentication.md](authentication.md)
 
+How the permissions are decided and how to apply them when adding a route: [../authorization.md](../authorization.md)
+
 Admin Dashboard KPIs: [dashboard.md](dashboard.md)
 
 ## Tenants

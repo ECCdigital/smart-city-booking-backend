@@ -133,18 +133,19 @@ Schema reference with examples: [docs/entities.md](docs/entities.md)
 
 ## Documentation
 
-| Topic                                                      | Description                                                      |
-| ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| [Getting started (full stack)](docs/getting-started.md)    | Run API + Admin UI + Storefront (npm or Docker Compose)          |
-| [Architecture](docs/architecture.md)                       | System components, data flow, version lines                      |
-| [Entities](docs/entities.md)                               | Data model and JSON examples                                     |
-| [API Reference](docs/api/README.md)                        | Endpoints, permissions, examples                                 |
-| [Authentication](docs/api/authentication.md)               | Auth routes and JWT configuration                                |
-| [Deployment](docs/deployment.md)                           | Production setup, Docker, full-stack Compose, operations         |
-| [Nextcloud](docs/nextcloud.md)                             | File storage for uploads, attachments, and PDF documents         |
-| [Changelog](docs/CHANGELOG.md)                             | Version history and breaking changes                             |
-| [Web Integration](docs/web-integration.md)                 | Embed bookables & events in existing websites (JS web interface) |
-| [Block Periods (frontend)](docs/block-periods-frontend.md) | Frontend notes for block periods                                 |
+| Topic                                                      | Description                                                          |
+| ---------------------------------------------------------- | -------------------------------------------------------------------- |
+| [Getting started (full stack)](docs/getting-started.md)    | Run API + Admin UI + Storefront (npm or Docker Compose)              |
+| [Architecture](docs/architecture.md)                       | System components, data flow, version lines                          |
+| [Entities](docs/entities.md)                               | Data model and JSON examples                                         |
+| [API Reference](docs/api/README.md)                        | Endpoints, permissions, examples                                     |
+| [Authorization](docs/authorization.md)                     | How to protect a route, extend the rights table, read within a reach |
+| [Authentication](docs/api/authentication.md)               | Auth routes and JWT configuration                                    |
+| [Deployment](docs/deployment.md)                           | Production setup, Docker, full-stack Compose, operations             |
+| [Nextcloud](docs/nextcloud.md)                             | File storage for uploads, attachments, and PDF documents             |
+| [Changelog](docs/CHANGELOG.md)                             | Version history and breaking changes                                 |
+| [Web Integration](docs/web-integration.md)                 | Embed bookables & events in existing websites (JS web interface)     |
+| [Block Periods (frontend)](docs/block-periods-frontend.md) | Frontend notes for block periods                                     |
 
 ---
 
