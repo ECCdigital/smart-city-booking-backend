@@ -4,6 +4,7 @@ const sharp = require("sharp");
 const sinon = require("sinon");
 
 const MediaManager = require("../src/commons/data-managers/media-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const MediaService = require("../src/commons/services/media/media-service");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const storage = require("../src/commons/services/storage");
@@ -377,6 +378,7 @@ describe("media maintenance", () => {
       assert.strictEqual(deleteMedia.callCount, 2);
       assert.deepStrictEqual(MediaManager.getAllMedia.firstCall.args, [
         { legacyPath: { $ne: null } },
+        DOMAIN,
       ]);
     });
 
@@ -385,6 +387,7 @@ describe("media maintenance", () => {
 
       assert.deepStrictEqual(MediaManager.getAllMedia.firstCall.args, [
         { legacyPath: { $ne: null }, tenantId: TENANT },
+        DOMAIN,
       ]);
     });
 
@@ -579,6 +582,7 @@ describe("media maintenance", () => {
 
       assert.deepStrictEqual(MediaManager.getAllMedia.firstCall.args, [
         { "storage.provider": { $ne: "s3" } },
+        DOMAIN,
       ]);
     });
 
@@ -587,6 +591,7 @@ describe("media maintenance", () => {
 
       assert.deepStrictEqual(MediaManager.getAllMedia.firstCall.args, [
         { "storage.provider": { $ne: "s3" }, tenantId: TENANT },
+        DOMAIN,
       ]);
     });
 

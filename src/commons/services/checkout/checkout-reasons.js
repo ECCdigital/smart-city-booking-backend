@@ -15,11 +15,11 @@ const CHECKOUT_REASONS = {
   UNKNOWN: "checkout.unknown",
 
   // bookable
+  // Also the offer a new self-booking cannot reach (ADR 0003): a pending
+  // or declined tenant's, or - under supervision - one not approved. The
+  // checkout reads as the public, and what the public cannot reach is not
+  // there - the reason names no cause on purpose (spec §5.2).
   BOOKABLE_NOT_FOUND: "checkout.bookable_not_found",
-  // The tenant supervision refuses a new self-booking of the offer (a
-  // pending or declined tenant, or - under supervision - an offer not
-  // approved). Names no internal reason on purpose (spec §5.2).
-  OFFER_NOT_REACHABLE: "checkout.offer_not_reachable",
   BOOKABLE_NOT_BOOKABLE: "checkout.bookable_not_bookable",
   BOOKABLE_UNAVAILABLE: "checkout.bookable_unavailable",
   PARENT_UNAVAILABLE: "checkout.parent_unavailable",
@@ -78,7 +78,6 @@ const REASON_BY_CHECK_TYPE = {
   [CHECK_TYPES.TIME_RELATION]: CHECKOUT_REASONS.TIME_REQUIRED,
   [CHECK_TYPES.PRICE_CATEGORY]: CHECKOUT_REASONS.NO_PRICE_CATEGORY,
   [CHECK_TYPES.MAX_AMOUNT]: CHECKOUT_REASONS.MAX_AMOUNT_EXCEEDED,
-  [CHECK_TYPES.SUPERVISION]: CHECKOUT_REASONS.OFFER_NOT_REACHABLE,
 };
 
 module.exports = { CHECKOUT_REASONS, REASON_BY_CHECK_TYPE };

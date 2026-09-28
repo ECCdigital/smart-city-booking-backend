@@ -40,6 +40,7 @@ const EventManager = require("../../data-managers/event-manager");
 const { BOOKABLE_TYPES } = require("../../entities/bookable/bookable");
 const { SUPERVISION_LEVELS, OFFER_TYPES } = require("./supervision-constants");
 const { pageWindow } = require("./page-window");
+const { DOMAIN } = require("../authorization/reach");
 
 const BOOKABLE_EDITOR_BY_TYPE = Object.freeze({
   [BOOKABLE_TYPES.ROOM]: "rooms",
@@ -59,7 +60,8 @@ const editorPath = (editor, offerId) =>
  */
 const QUEUE_SOURCES = Object.freeze({
   [OFFER_TYPES.BOOKABLE]: {
-    list: (tenantIds) => BookableManager.getPendingReviewOffers(tenantIds),
+    list: (tenantIds) =>
+      BookableManager.getPendingReviewOffers(tenantIds, DOMAIN),
     title: (bookable) => bookable.title || null,
     adminPath: (bookable) => {
       const editor = BOOKABLE_EDITOR_BY_TYPE[bookable.type];
@@ -67,7 +69,7 @@ const QUEUE_SOURCES = Object.freeze({
     },
   },
   [OFFER_TYPES.EVENT]: {
-    list: (tenantIds) => EventManager.getPendingReviewOffers(tenantIds),
+    list: (tenantIds) => EventManager.getPendingReviewOffers(tenantIds, DOMAIN),
     title: (event) => event.information?.name || null,
     adminPath: (event) => editorPath("events", event.id),
   },
@@ -108,10 +110,9 @@ class ReviewQueueService {
     const window = pageWindow({ page, pageSize });
 
     const supervised = (
-      await TenantManager.getTenants(
-        {},
-        { supervisionLevel: SUPERVISION_LEVELS.SUPERVISED },
-      )
+      await TenantManager.getTenants(DOMAIN, {
+        supervisionLevel: SUPERVISION_LEVELS.SUPERVISED,
+      })
     ).filter((tenant) => !tenantId || tenant.id === tenantId);
     const tenantNames = new Map(
       supervised.map((tenant) => [tenant.id, tenant.name ?? null]),

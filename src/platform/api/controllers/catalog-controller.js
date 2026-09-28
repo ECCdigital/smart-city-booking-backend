@@ -1,7 +1,6 @@
 const CatalogService = require("../../../commons/services/catalog-service");
 const bunyan = require("bunyan");
 const InstanceManager = require("../../../commons/data-managers/instance-manager");
-const { scopeFor } = require("../../../commons/services/authorization");
 const {
   BaseError,
   BadRequestError,
@@ -220,8 +219,8 @@ class CatalogController {
   /**
    * `PUT /:tenant/catalog` carries the tenant catalog (`tenant.catalog`: the
    * tenant owner) and, for a catalog that is not a single tenant's, the
-   * instance catalog - the second decision of the adapter
-   * (`instanceCatalog.store`: the instance owner, spec §5). A body naming
+   * instance catalog - the marker's second decision
+   * (`instanceCatalog.store`: the instance owner, ADR 0001). A body naming
    * another tenant than the route is refused: the route's tenant is the one
    * the marker was decided in.
    */
@@ -253,7 +252,7 @@ class CatalogController {
       return ApiResponse.created(response, { content: createdCatalog });
     }
 
-    if (scopeFor(request, "instanceCatalog", "store").reach !== "any") {
+    if (request.reaches?.["instanceCatalog.store"] !== "any") {
       throw new ForbiddenError();
     }
 

@@ -14,6 +14,7 @@ const {
   isImpossibleFlagCombination,
 } = require("../booking-lifecycle/booking-state");
 const { BadRequestError } = require("../../../errors/BaseError");
+const { DOMAIN } = require("../authorization/reach");
 
 /**
  * Class representing a bundle checkout service.
@@ -155,6 +156,7 @@ class BundleCheckoutService {
     this._usedCoupon = await CouponManager.getCoupon(
       this.couponCode,
       this.tenant,
+      DOMAIN,
     );
     return this._usedCoupon;
   }
@@ -230,7 +232,7 @@ class BundleCheckoutService {
     }
 
     if (ensureUnique) {
-      if (await BookingManager.getBooking(text, this.tenant)) {
+      if (await BookingManager.getBooking(text, this.tenant, DOMAIN)) {
         return await this.generateBookingReference(
           length,
           chunkLength,
@@ -410,6 +412,7 @@ class BundleCheckoutService {
       const bookable = await BookableManager.getBookable(
         bookableItem.bookableId,
         this.tenant,
+        DOMAIN,
       );
 
       if (!bookable.autoCommitBooking) return false;
@@ -580,6 +583,7 @@ class BundleCheckoutService {
       booking._couponUsed = await CouponManager.getCoupon(
         this.couponCode,
         this.tenant,
+        DOMAIN,
       );
       delete booking._couponUsed._id;
     }

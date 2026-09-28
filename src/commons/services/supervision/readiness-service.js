@@ -19,6 +19,7 @@ const EventManager = require("../../data-managers/event-manager");
 const {
   isCompleteTenantMailConfig,
 } = require("../../mail-service/mail-service");
+const { DOMAIN } = require("../authorization/reach");
 
 /**
  * The offer types as the supervision constants name them. Ticket 04 creates
@@ -432,14 +433,14 @@ function evaluateReadiness({
  * @throws {NotFoundError} For an unknown tenant
  */
 async function computeReadiness(tenantId, { now = new Date() } = {}) {
-  const tenant = await TenantManager.getTenant(tenantId);
+  const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
   if (!tenant) {
     throw new NotFoundError("tenant_not_found", { id: tenantId });
   }
   const [instance, bookables, events] = await Promise.all([
     InstanceManager.getInstance(),
-    BookableManager.getBookables(tenantId),
-    EventManager.getEvents(tenantId),
+    BookableManager.getBookables(tenantId, DOMAIN),
+    EventManager.getEvents(tenantId, DOMAIN),
   ]);
   return evaluateReadiness({ tenant, instance, bookables, events, now });
 }

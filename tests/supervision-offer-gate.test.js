@@ -11,7 +11,6 @@ const {
   isTenantPubliclyVisible,
   isOfferListable,
   isOfferReachable,
-  publicTenantCondition,
 } = require("../src/commons/services/supervision/offer-gate");
 const {
   SUPERVISION_LEVELS,
@@ -69,12 +68,6 @@ describe("supervision offer gate: the tenant part", function () {
       expect(isOfferReachable({ tenant, offer: { isPublic: true } })).to.be
         .false;
     }
-  });
-
-  it("answers the query condition of the visible tenants as a positive list, a missing level included", function () {
-    expect(publicTenantCondition()).to.deep.equal({
-      supervisionLevel: { $in: ["free", "supervised", null] },
-    });
   });
 });
 

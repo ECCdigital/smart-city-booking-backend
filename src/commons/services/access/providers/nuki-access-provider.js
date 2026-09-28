@@ -23,6 +23,7 @@ const {
 } = require("../../../../errors/LockUnreachableError");
 const { NotFoundError } = require("../../../../errors/BaseError");
 const { ValidationError } = require("../../../../errors/ValidationError");
+const { DOMAIN } = require("../../authorization/reach");
 
 require("../clients");
 
@@ -108,7 +109,7 @@ class NukiAccessProvider extends AccessProvider {
       return this._client;
     }
 
-    const tenantData = await TenantManager.getTenant(tenant);
+    const tenantData = await TenantManager.getTenant(tenant, DOMAIN);
     const rawApp = tenantData?.applications?.find(
       (a) => a.type === APP_TYPE && a.id === PROVIDER_ID && a.active,
     );

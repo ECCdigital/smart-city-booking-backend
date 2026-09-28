@@ -1,6 +1,7 @@
 const MediaManager = require("../../data-managers/media-manager");
 const MediaService = require("./media-service");
 const { NextcloudManager } = require("../../data-managers/file-manager");
+const { DOMAIN } = require("../authorization/reach");
 
 /**
  * The three documents the platform writes for a booking. `tag` labels the
@@ -60,7 +61,11 @@ async function storeBookingDocument({ tenantId, bookingIds, file, type }) {
  * @returns {Promise<number>} How many documents lost the booking.
  */
 async function deleteBookingDocuments({ tenantId, bookingId }) {
-  const documents = await MediaManager.getBookingDocuments(tenantId, bookingId);
+  const documents = await MediaManager.getBookingDocuments(
+    tenantId,
+    bookingId,
+    DOMAIN,
+  );
 
   for (const document of documents) {
     // One atomic pull per document — concurrent deletions of bookings sharing
@@ -95,6 +100,7 @@ async function readBookingDocument({ tenantId, bookingId, fileName, type }) {
     tenantId,
     fileName,
     bookingId,
+    DOMAIN,
   );
 
   if (media) {

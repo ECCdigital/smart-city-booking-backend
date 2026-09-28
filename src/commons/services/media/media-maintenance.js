@@ -22,6 +22,7 @@ const {
 } = require("./media-file-type");
 const { listLegacyTree } = require("./media-import");
 const { MediaUsageService } = require("./media-usage");
+const { DOMAIN } = require("../authorization/reach");
 
 /**
  * How a scope reads in a report — `null` is the instance, not a nameless tenant.
@@ -84,7 +85,7 @@ async function regenerate({ dryRun = false, tenantId } = {}) {
     filter.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(filter);
+  const media = await MediaManager.getAllMedia(filter, DOMAIN);
 
   for (const medium of media) {
     try {
@@ -140,7 +141,7 @@ async function backfillDimensions({ dryRun = false, tenantId } = {}) {
     filter.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(filter);
+  const media = await MediaManager.getAllMedia(filter, DOMAIN);
 
   for (const medium of media) {
     try {
@@ -189,7 +190,7 @@ async function backfillDimensions({ dryRun = false, tenantId } = {}) {
  */
 async function verify({ dryRun = false } = {}) {
   const report = new MigrationReport("verify", dryRun);
-  const media = await MediaManager.getAllMedia();
+  const media = await MediaManager.getAllMedia({}, DOMAIN);
 
   for (const medium of media) {
     try {
@@ -237,7 +238,10 @@ async function cleanup({ dryRun = false } = {}) {
       "deleted medium have to be removed by hand",
   );
 
-  const media = await MediaManager.getAllMedia({ kind: MEDIA_KIND.IMAGE });
+  const media = await MediaManager.getAllMedia(
+    { kind: MEDIA_KIND.IMAGE },
+    DOMAIN,
+  );
 
   for (const medium of media) {
     try {
@@ -398,7 +402,7 @@ async function purgeImported({ dryRun = false, tenantId } = {}) {
     scope.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(scope);
+  const media = await MediaManager.getAllMedia(scope, DOMAIN);
   const found = [...countByScope(media)]
     .map(([scopeTenantId, count]) => `${scopeLabel(scopeTenantId)}: ${count}`)
     .join(", ");
@@ -594,7 +598,7 @@ async function relocate({ dryRun = false, tenantId, to } = {}) {
     filter.tenantId = tenantId ?? null;
   }
 
-  const media = await MediaManager.getAllMedia(filter);
+  const media = await MediaManager.getAllMedia(filter, DOMAIN);
 
   // What would move, per scope — media and files, the numbers an operator
   // sizes the run with.
@@ -685,7 +689,7 @@ async function relocate({ dryRun = false, tenantId, to } = {}) {
  */
 async function purgeLegacy({ dryRun = false } = {}) {
   const report = new MigrationReport("purge-legacy", dryRun);
-  const tenants = await TenantManager.getTenants();
+  const tenants = await TenantManager.getTenants(DOMAIN);
 
   const bookingDocumentRoots = Object.values(BOOKING_DOCUMENT).map(
     (type) => type.legacyFolder,
@@ -708,6 +712,7 @@ async function purgeLegacy({ dryRun = false } = {}) {
           const media = await MediaManager.getMediaByLegacyPath(
             scope.tenantId,
             file.legacyPath,
+            DOMAIN,
           );
 
           if (!media) {

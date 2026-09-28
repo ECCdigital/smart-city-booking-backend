@@ -48,6 +48,7 @@ const {
 } = require("../booking-lifecycle/booking-state");
 const { planUpdate } = require("../booking-lifecycle/update-plan");
 const BookingService = require("./booking-service");
+const { DOMAIN } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "booking-checkout.js",
@@ -80,7 +81,7 @@ async function resolveCheckoutCustomFieldValues({
     ...new Set(bookableItems.map((item) => item.bookableId)),
   ];
   const bookables = await Promise.all(
-    bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
+    bookableIds.map((id) => BookableManager.getBookable(id, tenantId, DOMAIN)),
   );
 
   const bookableFields = bookables.flatMap(
@@ -335,7 +336,7 @@ async function createSingleBooking({
     throw causeOf(err);
   }
 
-  return await BookingManager.getBooking(booking.id, tenantId);
+  return await BookingManager.getBooking(booking.id, tenantId, DOMAIN);
 }
 
 async function generateGroupBookingReference(
@@ -368,6 +369,8 @@ async function generateGroupBookingReference(
     const existingGroupBooking = await GroupBookingManager.getGroupBooking(
       tenantId,
       text,
+      false,
+      DOMAIN,
     );
     if (existingGroupBooking?.id) {
       return await generateGroupBookingReference(
@@ -472,7 +475,12 @@ async function createGroupBooking({
     }
   }
 
-  return await GroupBookingManager.getGroupBooking(tenantId, uniqueId, true);
+  return await GroupBookingManager.getGroupBooking(
+    tenantId,
+    uniqueId,
+    true,
+    DOMAIN,
+  );
 }
 
 /**
@@ -555,6 +563,7 @@ async function updateBooking(
   const oldBooking = await BookingManager.getBooking(
     updatedBooking.id,
     tenantId,
+    DOMAIN,
   );
 
   if (!oldBooking) {
@@ -657,7 +666,7 @@ async function updateBooking(
   const onlyAmended = plan.length === 1;
   return onlyAmended
     ? booking
-    : await BookingManager.getBooking(booking.id, tenantId);
+    : await BookingManager.getBooking(booking.id, tenantId, DOMAIN);
 }
 
 module.exports = {

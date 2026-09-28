@@ -29,6 +29,7 @@ const EventManager = require("../../data-managers/event-manager");
 const SupervisionHistoryManager = require("../../data-managers/supervision-history-manager");
 const { SUPERVISION_LEVELS } = require("./supervision-constants");
 const { pageWindow } = require("./page-window");
+const { DOMAIN } = require("../authorization/reach");
 
 /** Longest waiting first, the id making the order total. */
 const QUEUE_ORDER = Object.freeze({ supervisionChangedAt: 1, id: 1 });
@@ -53,16 +54,13 @@ class TenantApprovalQueueService {
     const selection = { supervisionLevel: SUPERVISION_LEVELS.PENDING };
 
     const [tenants, total] = await Promise.all([
-      TenantManager.getTenants(
-        {},
-        {
-          ...selection,
-          sort: QUEUE_ORDER,
-          skip: window.skip,
-          limit: window.pageSize,
-        },
-      ),
-      TenantManager.countTenants({}, selection),
+      TenantManager.getTenants(DOMAIN, {
+        ...selection,
+        sort: QUEUE_ORDER,
+        skip: window.skip,
+        limit: window.pageSize,
+      }),
+      TenantManager.countTenants(DOMAIN, selection),
     ]);
 
     const items = await Promise.all(

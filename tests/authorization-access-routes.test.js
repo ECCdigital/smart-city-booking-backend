@@ -1,6 +1,6 @@
 /**
  * The routes under `api/routes/*` on the authorization, end to end over the
- * lifecycle harness (authorize spec §3.1, ticket 4): access points and access
+ * lifecycle harness: access points and access
  * apps, the tenant catalog, the audit export, the scan resolver and the
  * calendars. What each principal reaches is the routes' alone - the
  * controllers ask nothing any more - and a refusal is the one JSON form of
@@ -121,7 +121,7 @@ describe("authorization on the access, catalog and calendar routes", function ()
       403,
     );
 
-    // ... managing them the tenant owner's (§7.3).
+    // ... managing them the tenant owner's.
     const roleHolder = await get("/access-apps/salto-ks/iqs", ROLE_HOLDER);
     expect(roleHolder.status).to.equal(403);
     expect(roleHolder.body).to.deep.equal(FORBIDDEN);

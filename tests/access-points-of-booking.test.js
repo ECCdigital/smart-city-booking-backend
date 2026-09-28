@@ -43,7 +43,7 @@ describe("AccessController.getAccessPoints", () => {
     expect(
       getByBooking.calledOnceWithExactly("tenant-1", "booking-1", {
         userId: "user-1",
-        hasManagePermission: true,
+        scope: { reach: "any", userId: "user-1" },
       }),
     ).to.be.true;
   });

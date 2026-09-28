@@ -1,6 +1,6 @@
 /**
  * The tenant router on the authorization, end to end over the lifecycle
- * harness (authorize spec §4.2, ticket 2): a booking outside the reach
+ * harness: a booking outside the reach
  * `own` does not exist for the request (404), the same booking answers
  * its owner and the administration, and the router's refusal is the one
  * JSON form of `ForbiddenError`.

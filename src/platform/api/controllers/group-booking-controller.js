@@ -32,8 +32,7 @@ class GroupBookingController {
       const tenantId = req.params.tenant;
       const user = req.user;
 
-      // The groups within the reach of the request (authorize spec §4.1,
-      // §7.1): a customer's own, the administration's all.
+      // The groups within the reach of the request (glossary "Reichweite"): a customer's own, the administration's all.
       const groupBookings = await GroupBookingManager.getGroupBookings(
         tenantId,
         scopeOf(req),
@@ -204,6 +203,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
 
       return res.status(200).json({
@@ -244,6 +244,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
 
       return res.status(200).json({
@@ -340,6 +341,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
 
       return res.status(200).json({
@@ -395,6 +397,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
 
       return res.status(200).json({
@@ -469,6 +472,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
 
       return res.status(200).json({
@@ -534,6 +538,7 @@ class GroupBookingController {
         tenantId,
         groupBookingId,
         true,
+        scopeOf(req),
       );
 
       return res.status(200).json({

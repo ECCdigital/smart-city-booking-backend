@@ -32,7 +32,7 @@ describe("UserManager.getUserPermissions: the supervision of the user's tenants"
       allowAllUsersToCreateTenant: false,
       allowedUsersToCreateTenant: [],
     });
-    sinon.stub(RoleManager, "getRole").resolves(null);
+    sinon.stub(RoleManager, "getRolesByIds").resolves([]);
     sinon.stub(MembershipManager, "getMembershipsByUserID").resolves([
       {
         tenantId: "t-declined",
@@ -90,6 +90,188 @@ describe("UserManager.getUserPermissions: the supervision of the user's tenants"
       "t-declined",
       "t-gone",
     ]);
+  });
+});
+
+/**
+ * The form of the sign-in answer, held through the role catalogue and the
+ * membership picture (tickets 28 and 29 of the authorization map): the
+ * fixture below is the answer of today, and stays.
+ */
+describe("UserManager.getUserPermissions: the form of the sign-in answer", function () {
+  const GROUPS = [
+    "manageUsers",
+    "manageBookables",
+    "manageBookings",
+    "manageCoupons",
+    "manageMedia",
+    "manageRoles",
+  ];
+  const LEVELS = [
+    "create",
+    "readAny",
+    "readOwn",
+    "updateAny",
+    "updateOwn",
+    "deleteAny",
+    "deleteOwn",
+  ];
+  /** A role group as a stored role carries it: every level, false unless named. */
+  const group = (granted = []) =>
+    Object.fromEntries(LEVELS.map((level) => [level, granted.includes(level)]));
+  /** A stored role: every group present, like a document of the role model. */
+  const storedRole = (id, tenantId, { groups = {}, ...rest } = {}) => ({
+    id,
+    name: id,
+    tenantId,
+    adminInterfaces: [],
+    freeBookings: false,
+    assignedUserId: null,
+    ...Object.fromEntries(GROUPS.map((name) => [name, group(groups[name])])),
+    ...rest,
+  });
+  const ROLES = {
+    "t-roles": {
+      kasse: storedRole("kasse", "t-roles", {
+        groups: { manageBookings: ["create", "readAny"] },
+        adminInterfaces: ["bookings"],
+        freeBookings: true,
+      }),
+      medien: storedRole("medien", "t-roles", {
+        groups: {
+          manageMedia: ["readAny", "updateOwn"],
+          manageBookings: ["readOwn"],
+        },
+        adminInterfaces: ["media", "bookings"],
+      }),
+    },
+    "t-declined": {
+      kasse: storedRole("kasse", "t-declined", {
+        groups: { manageBookings: ["readAny"] },
+      }),
+    },
+  };
+  const OWNER_INTERFACES = [
+    "tenants",
+    "users",
+    "locations",
+    "roles",
+    "bookings",
+    "coupons",
+    "rooms",
+    "resources",
+    "tickets",
+    "events",
+    "media",
+  ];
+  const FREE = {
+    supervisionLevel: "free",
+    supervisionChangedAt: null,
+    supervisionReason: null,
+  };
+  const EMPTY_GROUPS = Object.fromEntries(GROUPS.map((name) => [name, {}]));
+
+  beforeEach(function () {
+    sinon.stub(InstanceManager, "getInstance").resolves({
+      ownerUserIds: ["owner"],
+      allowAllUsersToCreateTenant: false,
+      allowedUsersToCreateTenant: [],
+    });
+    const roleOf = (id, tenantId) => ROLES[tenantId]?.[id] ?? null;
+    sinon
+      .stub(RoleManager, "getRolesByIds")
+      .callsFake(async (ids, tenantId) =>
+        ids.map((id) => roleOf(id, tenantId)).filter(Boolean),
+      );
+    sinon.stub(MembershipManager, "getMembershipsByUserID").resolves([
+      { tenantId: "t-owner", status: "active", owner: true, roles: [] },
+      {
+        tenantId: "t-roles",
+        status: "active",
+        owner: false,
+        roles: ["kasse", "medien", "gone"],
+      },
+      { tenantId: "t-member", status: "active", owner: false, roles: [] },
+      {
+        tenantId: "t-declined",
+        status: "active",
+        owner: true,
+        roles: ["kasse"],
+      },
+      { tenantId: "t-left", status: "inactive", owner: true, roles: [] },
+    ]);
+    sinon.stub(TenantManager, "getTenantsByIds").resolves([
+      { id: "t-owner", supervisionLevel: "free" },
+      { id: "t-roles", supervisionLevel: "free" },
+      { id: "t-member", supervisionLevel: "free" },
+      {
+        id: "t-declined",
+        supervisionLevel: "declined",
+        supervisionChangedAt: CHANGED_AT,
+        supervisionReason: "Kein Impressum",
+      },
+    ]);
+  });
+
+  afterEach(function () {
+    sinon.restore();
+  });
+
+  it("is the answer of today: owner defaults, merged roles, empty groups, the declined tenant whole", async function () {
+    const permissions = await UserManager.getUserPermissions("owner");
+
+    expect(permissions).to.deep.equal({
+      instanceOwner: true,
+      allowCreateTenant: true,
+      tenants: [
+        {
+          tenantId: "t-owner",
+          isOwner: true,
+          adminInterfaces: OWNER_INTERFACES,
+          freeBookings: false,
+          ...EMPTY_GROUPS,
+          ...FREE,
+        },
+        {
+          tenantId: "t-roles",
+          isOwner: false,
+          adminInterfaces: ["bookings", "media"],
+          freeBookings: true,
+          ...EMPTY_GROUPS,
+          manageBookings: group(["create", "readAny", "readOwn"]),
+          manageMedia: group(["readAny", "updateOwn"]),
+          manageUsers: group(),
+          manageBookables: group(),
+          manageCoupons: group(),
+          manageRoles: group(),
+          ...FREE,
+        },
+        {
+          tenantId: "t-member",
+          isOwner: false,
+          adminInterfaces: [],
+          freeBookings: false,
+          ...EMPTY_GROUPS,
+          ...FREE,
+        },
+        {
+          tenantId: "t-declined",
+          isOwner: true,
+          adminInterfaces: OWNER_INTERFACES,
+          freeBookings: false,
+          ...EMPTY_GROUPS,
+          manageBookings: group(["readAny"]),
+          manageUsers: group(),
+          manageBookables: group(),
+          manageCoupons: group(),
+          manageMedia: group(),
+          manageRoles: group(),
+          supervisionLevel: "declined",
+          supervisionChangedAt: CHANGED_AT,
+          supervisionReason: "Kein Impressum",
+        },
+      ],
+    });
   });
 });
 

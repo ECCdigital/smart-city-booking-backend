@@ -2,8 +2,7 @@ const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const { Role } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
-const { ForbiddenError } = require("../../../errors/BaseError");
-const { decide } = require("../../../commons/services/authorization");
+const { NotFoundError } = require("../../../errors/BaseError");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("role-controller.js");
@@ -12,6 +11,14 @@ const logger = createComponentLogger("role-controller.js");
  * Web Controller for Roles.
  */
 class RoleController {
+  /**
+   * The reach first, then the projection (glossary "Reichweite"): under
+   * `any` the roles; under `own` - the member's reach, the marker vouched
+   * for the membership (`role.list`, `own: "tenantMember"`) - the public
+   * projection `{ id, name, tenantId }` where asked for, an empty list
+   * otherwise. Without the tenant in the path nobody is a member, so the
+   * instance owner alone gets here, with every role of every tenant.
+   */
   static async getRoles(request, response) {
     try {
       const user = request.user;
@@ -19,21 +26,15 @@ class RoleController {
       const isPublicView =
         request.query.public?.trim()?.toLowerCase() === "true";
 
-      let roles;
+      const roles = tenantId
+        ? await RoleManager.getTenantRoles(tenantId)
+        : await RoleManager.getRoles();
 
-      if (tenantId) {
-        roles = await RoleManager.getTenantRoles(tenantId);
-      } else {
-        roles = await RoleManager.getRoles();
-      }
-
-      // Under `any` the roles; under `own` the public projection where asked
-      // for, else none - a role has no owner (authorize spec §4.1).
       let allowedRoles;
-      if (isPublicView) {
-        allowedRoles = roles.map((role) => role.toPublic());
-      } else if (request.reach === "any") {
+      if (request.reach === "any") {
         allowedRoles = roles;
+      } else if (isPublicView) {
+        allowedRoles = roles.map((role) => role.toPublic());
       } else {
         allowedRoles = [];
       }
@@ -47,19 +48,24 @@ class RoleController {
   }
 
   /**
-   * The roles of the signed-in user in the tenant (authorize spec §7.4): the
-   * public projection where asked for.
+   * The roles of the signed-in user in the tenant: the
+   * public projection where asked for. The membership is the principal's:
+   * a resting membership (glossary "Ruhende Mitgliedschaft") or none gives
+   * nothing, an empty list; the role ids themselves are read from the
+   * membership, which the principal does not carry.
    */
   static async getUserRolesByTenant(req, res) {
-    const userId = req.principal.userId;
+    const { userId, isMember } = req.principal;
     const tenantId = req.params.tenant;
     const isPublicView = Boolean(req.query.public);
 
     try {
-      const membership = await MembershipManager.getMembershipByTenantAndUserID(
-        tenantId,
-        userId,
-      );
+      const membership = isMember
+        ? await MembershipManager.getMembershipByTenantAndUserID(
+            tenantId,
+            userId,
+          )
+        : null;
 
       const roleIds = membership ? membership.roles : [];
 
@@ -103,39 +109,10 @@ class RoleController {
     }
   }
 
-  /**
-   * @obsolete Use createRole or updateRole instead.
-   * @param request
-   * @param response
-   * @returns {Promise<void>}
-   */
-  static async storeRole(request, response, next) {
-    const roleId = request.body.id;
-    const tenantId = request.params.tenant;
-    const role = await RoleManager.getRole(roleId, tenantId);
-
-    const isUpdate = !!role;
-
-    if (isUpdate) {
-      await RoleController.updateRole(request, response);
-    } else {
-      await RoleController.createRole(request, response, next);
-    }
-  }
-
-  /**
-   * The obsolete PUT carries the update marker; the creation is the
-   * adapter's second decision (authorize spec §5, §11).
-   */
-  static async createRole(request, response, next) {
+  static async createRole(request, response) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-
-      if (decide(request.principal, "role", "create") !== "any") {
-        logger.warn(`User ${user?.id} not allowed to create role`);
-        return next(new ForbiddenError());
-      }
 
       const role = new Role(request.body);
       role.id = uuidv4();
@@ -151,11 +128,16 @@ class RoleController {
     }
   }
 
-  static async updateRole(request, response) {
+  static async updateRole(request, response, next) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
       const role = new Role(request.body);
+
+      // A PUT names its role; none of that id in the tenant is a 404.
+      if (!(await RoleManager.getRole(role.id, tenantId))) {
+        return next(new NotFoundError("role_not_found", { roleId: role.id }));
+      }
 
       await RoleManager.storeRole(role, tenantId);
       logger.info(`Updated role ${role.id} by user ${user?.id}`);

@@ -2,6 +2,7 @@ const assert = require("assert");
 const sinon = require("sinon");
 
 const CancellationService = require("../src/commons/services/payment/cancellation-service");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const InvoiceService = require("../src/commons/services/payment/invoice-service");
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const MediaModel = require("../src/commons/data-managers/models/mediaModel");
@@ -104,7 +105,7 @@ describe("booking documents in the media library", function () {
       sandbox.stub(MediaModel, "find").returns(query);
       sandbox.stub(MediaModel, "countDocuments").resolves(0);
 
-      await MediaManager.getMediaList({ tenantId: TENANT });
+      await MediaManager.getMediaList({ tenantId: TENANT }, DOMAIN);
 
       assert.strictEqual(MediaModel.find.firstCall.args[0].bookingIds, null);
       assert.strictEqual(
@@ -113,7 +114,7 @@ describe("booking documents in the media library", function () {
       );
     });
 
-    it("narrows the listing to one uploader when asked to", async function () {
+    it("narrows the listing to the own uploads under own", async function () {
       const query = {
         sort: sinon.stub().returnsThis(),
         skip: sinon.stub().returnsThis(),
@@ -122,7 +123,10 @@ describe("booking documents in the media library", function () {
       sandbox.stub(MediaModel, "find").returns(query);
       sandbox.stub(MediaModel, "countDocuments").resolves(0);
 
-      await MediaManager.getMediaList({ tenantId: TENANT, uploadedBy: "u-1" });
+      await MediaManager.getMediaList(
+        { tenantId: TENANT },
+        { reach: "own", userId: "u-1" },
+      );
 
       assert.strictEqual(MediaModel.find.firstCall.args[0].uploadedBy, "u-1");
     });
@@ -136,6 +140,8 @@ describe("booking documents in the media library", function () {
       const media = await MediaManager.getBookingDocumentByFileName(
         TENANT,
         "invoice-1.pdf",
+        undefined,
+        DOMAIN,
       );
 
       assert.strictEqual(media.id, "media-1");
@@ -155,6 +161,7 @@ describe("booking documents in the media library", function () {
         TENANT,
         "invoice-1.pdf",
         BOOKING,
+        DOMAIN,
       );
 
       assert.strictEqual(
@@ -167,7 +174,12 @@ describe("booking documents in the media library", function () {
       sandbox.stub(MediaModel, "findOne");
 
       assert.strictEqual(
-        await MediaManager.getBookingDocumentByFileName(TENANT, undefined),
+        await MediaManager.getBookingDocumentByFileName(
+          TENANT,
+          undefined,
+          undefined,
+          DOMAIN,
+        ),
         null,
       );
       assert.strictEqual(MediaModel.findOne.called, false);
@@ -349,7 +361,7 @@ describe("booking documents in the media library", function () {
 
       assert.deepStrictEqual(
         MediaManager.getBookingDocumentByFileName.firstCall.args,
-        [TENANT, "receipt-1.pdf", BOOKING],
+        [TENANT, "receipt-1.pdf", BOOKING, DOMAIN],
       );
     });
 

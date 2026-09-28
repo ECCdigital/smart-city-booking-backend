@@ -39,9 +39,10 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const {
-  decide,
+  PUBLIC,
+  tenantsOf,
   scopeOf,
-  scopeFor,
+  reachesOf,
 } = require("../../../commons/services/authorization");
 const ApiResponse = require("../../../commons/utilities/api-response");
 const {
@@ -132,7 +133,7 @@ const logger = bunyan.createLogger({
  * Web Controller for the tenants. The right is the router's (`tenant.*`
  * for the tenant the route names, `tenantUser.*` for its members); a
  * handler hands `scopeOf(req)` on and never branches over rights. Left to
- * the adapter: the creation over the obsolete PUT (authorize spec §12) and
+ * the adapter: the creation over the obsolete PUT (`also: ["create"]`, ADR 0001) and
  * the protection of an owner against removal by a user manager.
  */
 class TenantController {
@@ -146,8 +147,11 @@ class TenantController {
 
   /**
    * The tenants within the reach: in full the ones the user owns (every
-   * one under `any`), with `?publicTenants=true` the public projection of
-   * the ones the user is a member of.
+   * one under `any`; the scope carries the owned set, ADR 0002), with
+   * `?publicTenants=true` the public projection of the ones the user
+   * belongs to. A declined tenant goes out to its owner as to any member:
+   * the membership rests (glossary "Ruhende Mitgliedschaft") and the
+   * tenant stays theirs to see.
    */
   static async getTenants(request, response) {
     try {
@@ -157,10 +161,20 @@ class TenantController {
         assertSupervisionLevel(supervisionLevel);
       }
 
-      const tenants = await TenantManager.getTenants(scopeOf(request), {
-        owned: !publicTenants,
-        ...(supervisionLevel !== undefined && { supervisionLevel }),
-      });
+      const scope = scopeOf(request);
+      // The public projection lists the tenants of the memberships, not the
+      // owned ones the route's owner key names.
+      const tenants = await TenantManager.getTenants(
+        publicTenants
+          ? {
+              ...scope,
+              tenantIds: tenantsOf(request.principal, {
+                tenantsOf: "membership",
+              }),
+            }
+          : scope,
+        { ...(supervisionLevel !== undefined && { supervisionLevel }) },
+      );
 
       response
         .status(200)
@@ -184,7 +198,7 @@ class TenantController {
 
   static async getPublicTenants(request, response) {
     try {
-      const tenants = await TenantManager.getPublicTenants();
+      const tenants = await TenantManager.getTenants(PUBLIC);
       const publicTenants = tenants.map((tenant) => tenant.exportPublic());
       response.status(200).send(publicTenants);
     } catch (error) {
@@ -198,7 +212,7 @@ class TenantController {
       const user = request.user;
       const id = request.params.tenant;
 
-      const tenant = await TenantManager.getTenant(id);
+      const tenant = await TenantManager.getTenant(id, scopeOf(request));
       if (!tenant) {
         return TenantController._notFound(response, id);
       }
@@ -241,15 +255,18 @@ class TenantController {
    * @deprecated Use createTenant or updateTenant instead.
    *
    * The route carries `tenant.update` for the tenant of the body; an
-   * unknown id creates, which is the adapter's second decision
-   * (`tenant.create`, authorize spec §12).
+   * unknown id creates, which the marker names as its second question
+   * (`tenant.create`, ADR 0001).
    */
   static async storeTenant(request, response, next) {
     const tenant = new Tenant(request.body);
     let isUpdate;
 
     try {
-      const existingTenant = await TenantManager.getTenant(tenant.id);
+      const existingTenant = await TenantManager.getTenant(
+        tenant.id,
+        scopeOf(request),
+      );
       isUpdate = !!(existingTenant && existingTenant.id);
     } catch (error) {
       logger.error(error);
@@ -258,7 +275,7 @@ class TenantController {
 
     if (isUpdate) {
       await TenantController.updateTenant(request, response);
-    } else if (decide(request.principal, "tenant", "create") !== "any") {
+    } else if (request.reaches?.create !== "any") {
       return next(new ForbiddenError());
     } else {
       await TenantController.createTenant(request, response);
@@ -325,7 +342,7 @@ class TenantController {
         body: request.body,
         creatorUserId: user.id,
         creatorIsInstanceOwner: request.principal?.isInstanceOwner === true,
-        mediaScope: scopeFor(request, "media", "read"),
+        reaches: reachesOf(request),
       });
       logger.info(`created tenant ${tenant.id} by user ${user?.id}`);
 
@@ -344,7 +361,10 @@ class TenantController {
   static async updateTenant(request, response) {
     try {
       const user = request.user;
-      const tenant = await TenantManager.getTenant(request.body.id);
+      const tenant = await TenantManager.getTenant(
+        request.body.id,
+        scopeOf(request),
+      );
       if (!tenant) {
         return TenantController._notFound(response, request.body.id);
       }
@@ -455,7 +475,7 @@ class TenantController {
       await MediaReferenceGuard.assertTenantStorable(
         request.body,
         tenant.id,
-        scopeFor(request, "media", "read"),
+        reachesOf(request),
       );
 
       fields.forEach((field) => {
@@ -464,7 +484,10 @@ class TenantController {
         }
       });
 
-      const previousTenant = await TenantManager.getTenant(request.body.id);
+      const previousTenant = await TenantManager.getTenant(
+        request.body.id,
+        scopeOf(request),
+      );
       // Backend-owned access-app state (e.g. Salto IQ activations) is
       // neither written by a tenant update nor sent back in the answer.
       AccessAppLifecycleService.preserveBackendState(previousTenant, tenant);
@@ -496,7 +519,7 @@ class TenantController {
       const user = request.user;
       const id = request.params.tenant;
 
-      const tenant = await TenantManager.getTenant(id);
+      const tenant = await TenantManager.getTenant(id, scopeOf(request));
       if (!tenant) {
         return TenantController._notFound(response, id);
       }
@@ -573,6 +596,12 @@ class TenantController {
         params: { tenant: tenantId },
         user,
       } = request;
+
+      // The payment apps of a tenant the public sees (`tenant.paymentApps`,
+      // ADR 0003): none of a tenant without a public projection.
+      if (!(await TenantManager.getTenant(tenantId, scopeOf(request)))) {
+        return response.status(404).send("tenant not found");
+      }
 
       const paymentApps = await TenantManager.getTenantAppByType(
         tenantId,
@@ -732,12 +761,9 @@ class TenantController {
         );
 
       // Only an owner removes an owner: the route's `tenantUser.manage` is
-      // the user manager's, the target's ownership is the second decision
-      // (`tenantUser.owner`, as at `remove-owner`).
-      if (
-        targetMembership?.owner &&
-        decide(request.principal, "tenantUser", "owner") !== "any"
-      ) {
+      // the user manager's, the target's ownership is the marker's second
+      // decision (`tenantUser.owner`, as at `remove-owner`).
+      if (targetMembership?.owner && request.reaches?.owner !== "any") {
         return next(new ForbiddenError());
       }
 
@@ -1020,7 +1046,7 @@ class TenantController {
     }
   }
 
-  // The challenges: the right is the router's (`tenant.challenge`, §7.5).
+  // The challenges: the right is the router's (`tenant.challenge`).
   static async getChallenges(request, response) {
     try {
       const tenantId = request.params.tenant;

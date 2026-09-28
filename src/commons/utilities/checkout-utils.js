@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const UserManager = require("../data-managers/user-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
+const { DOMAIN } = require("../services/authorization/reach");
 
 function primaryEmailFromMail(mail) {
   if (!mail) {
@@ -43,7 +44,7 @@ async function resolveCheckoutId(checkoutId, userID, tenantId) {
 async function resolveCheckoutItems(bookableItems, tenantId) {
   const bookableIds = bookableItems.map((item) => item.bookableId);
   const bookables = await Promise.all(
-    bookableIds.map((id) => BookableManager.getBookable(id, tenantId)),
+    bookableIds.map((id) => BookableManager.getBookable(id, tenantId, DOMAIN)),
   );
 
   const bookableMap = new Map();

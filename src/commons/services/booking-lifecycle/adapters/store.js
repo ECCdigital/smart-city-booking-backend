@@ -17,6 +17,7 @@ const {
   ConflictError,
   NotFoundError,
 } = require("../../../../errors/BaseError");
+const { DOMAIN } = require("../../authorization/reach");
 
 const store = {
   /**
@@ -25,7 +26,7 @@ const store = {
    * @returns {Promise<Object|null>} The booking, or null
    */
   async get(tenantId, bookingId) {
-    return await BookingManager.getBooking(bookingId, tenantId);
+    return await BookingManager.getBooking(bookingId, tenantId, DOMAIN);
   },
 
   /**
@@ -34,7 +35,7 @@ const store = {
    * @returns {Promise<Object[]>} The bookings found
    */
   async getMany(tenantId, bookingIds) {
-    return await BookingManager.getBookings(tenantId, bookingIds);
+    return await BookingManager.getBookings(tenantId, bookingIds, DOMAIN);
   },
 
   /**
@@ -45,7 +46,7 @@ const store = {
    * @returns {Promise<Object|null>} The tenant, or null
    */
   async getTenant(tenantId) {
-    return await TenantManager.getTenant(tenantId);
+    return await TenantManager.getTenant(tenantId, DOMAIN);
   },
 
   /**
@@ -61,6 +62,7 @@ const store = {
       tenantId,
       groupBookingId,
       false,
+      DOMAIN,
     );
   },
 
@@ -92,6 +94,7 @@ const store = {
     const current = await BookingManager.getBooking(
       booking.id,
       booking.tenantId,
+      DOMAIN,
     );
     if (!current) {
       throw new NotFoundError("booking_not_found", { bookingId: booking.id });

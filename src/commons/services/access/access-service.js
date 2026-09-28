@@ -15,6 +15,8 @@ const mailService = require("../../mail-service");
 const { ForbiddenError, ConflictError } = require("../../../errors/BaseError");
 const AccessProvisionError = require("../../../errors/AccessProvisionError");
 const { customerViewOf } = require("../booking/booking-customer-view");
+const { DOMAIN } = require("../authorization/reach");
+const { REACH } = require("../authorization/policy");
 
 const logger = bunyan.createLogger({
   name: "access-service.js",
@@ -30,6 +32,16 @@ const PLATFORM_HOLD = Object.freeze({
   expiresAt: null,
   compartment: null,
 });
+
+/**
+ * Whether a reach manages the bookings of the tenant (ADR 0002): the reach `any` of `booking.operate`, as the route marker
+ * decided it. The one place the reach is read here; the access decision
+ * gets a yes or no.
+ *
+ * @param {{reach?: string}|undefined} scope
+ * @returns {boolean}
+ */
+const managesUnder = (scope) => scope?.reach === REACH.ANY;
 
 class AccessService {
   /**
@@ -49,9 +61,10 @@ class AccessService {
    * @param {string} accessPointId
    * @param {string} userId
    * @param {Object} [options]
-   * @param {boolean} [options.hasManagePermission=false] Replaces booking
-   *   ownership, and exempts the user from the evidence rules at a booking
-   *   that is not theirs - at their own they present evidence like anyone else
+   * @param {{reach?: string}} [options.scope] The reach of the route
+   *   (`booking.operate`): `any` replaces booking ownership, and exempts
+   *   the user from the evidence rules at a booking that is not theirs -
+   *   at their own they present evidence like anyone else
    * @param {Object[]} [options.evidence=[]] Evidence the client sent, e.g. a
    *   scanned code
    * @param {string|null} [options.channel=null] How the client says it reached
@@ -105,7 +118,7 @@ class AccessService {
 
     const decision = decide(booking, [{ accessPoint, bookingContext }], {
       userId,
-      canManage: options.hasManagePermission === true,
+      canManage: managesUnder(options.scope),
     });
 
     // Opening through the API is the remote way in, which a door that only
@@ -264,9 +277,8 @@ class AccessService {
    * @param {string} accessPointId Access point ID
    * @param {string} userId Acting user
    * @param {Object} [options]
-   * @param {boolean} [options.hasManagePermission=false] Whether the user may
-   *   manage the bookings of the tenant - what grants the admin override
-   *   after the door's window
+   * @param {{reach?: string}} [options.scope] The reach of the route:
+   *   `any` is what grants the admin override after the door's window
    * @returns {Promise<Object>} The status after closing
    */
   static async close(tenant, bookingId, accessPointId, userId, options = {}) {
@@ -315,8 +327,8 @@ class AccessService {
    *   resolved The door as the resolver hands it over
    * @param {string|null} userId Acting user, `null` where nobody asked
    * @param {Object} options
-   * @param {boolean} [options.hasManagePermission=false] Whether the user may
-   *   manage the bookings of the tenant
+   * @param {{reach?: string}} [options.scope] The reach of the route:
+   *   `any` manages the bookings of the tenant
    * @returns {{ accessRole: "booker"|"manager"|null, windowOverridden: boolean }}
    */
   static _capacityAt(
@@ -326,7 +338,7 @@ class AccessService {
   ) {
     const decision = decide(booking, [{ accessPoint, bookingContext }], {
       userId,
-      canManage: options.hasManagePermission === true,
+      canManage: managesUnder(options.scope),
     });
 
     return {
@@ -382,7 +394,7 @@ class AccessService {
    * @param {string|null} [userId=null] The user asking; the audit names them
    *   as the actor, and the system where nobody asked
    * @param {Object} [options]
-   * @param {boolean} [options.hasManagePermission=false] As of {@link close}
+   * @param {{reach?: string}} [options.scope] As of {@link close}
    * @returns {Promise<Object>} The status of the open attempt, as of
    *   {@link _toOpenStatusResponse}
    */
@@ -458,7 +470,7 @@ class AccessService {
    * @param {string|null} [userId=null] The user asking; the audit names them
    *   as the actor, and the system where nobody asked
    * @param {Object} [options]
-   * @param {boolean} [options.hasManagePermission=false] As of {@link close}
+   * @param {{reach?: string}} [options.scope] As of {@link close}
    * @returns {Promise<Object>} The status of the access point
    */
   static async getStatus(
@@ -594,10 +606,11 @@ class AccessService {
    * @param {Object} [options] The user asking, whose role at this booking
    *   decides what `validationRuleTypes` demands of them
    * @param {string|null} [options.userId=null] Acting user
-   * @param {boolean} [options.hasManagePermission=false] Whether the user may
-   *   manage the bookings of the tenant. It empties `validationRuleTypes` only
-   *   at someone else's booking - at their own they are the booker and prove
-   *   what the door demands, exactly as the open path decides it.
+   * @param {{reach?: string}} [options.scope] The reach of the route:
+   *   `any` manages the bookings of the tenant. It empties
+   *   `validationRuleTypes` only at someone else's booking - at their own
+   *   they are the booker and prove what the door demands, exactly as the
+   *   open path decides it.
    * @returns {Promise<Object[]>} The access points of the booking
    */
   static async getByBooking(tenant, bookingId, options = {}) {
@@ -620,15 +633,15 @@ class AccessService {
    * @param {string} bookingId Booking ID
    * @param {Object} [options] As for `getByBooking`
    * @param {string|null} [options.userId=null] Acting user
-   * @param {boolean} [options.hasManagePermission=false] Whether the user may
-   *   manage the bookings of the tenant
+   * @param {{reach?: string}} [options.scope] The reach of the route:
+   *   `any` manages the bookings of the tenant
    * @returns {Promise<{ points: Object[], accessEligibility: import("./access-decision").Decision }>}
    *   The access points of the booking and the decision about them
    */
   static async getByBookingWithEligibility(
     tenant,
     bookingId,
-    { userId = null, hasManagePermission = false } = {},
+    { userId = null, scope } = {},
   ) {
     const { booking, compartments, doors } = await this._getBookingAccessPoints(
       tenant,
@@ -637,7 +650,7 @@ class AccessService {
     const entries = [...compartments, ...doors];
     const decision = decide(booking, entries, {
       userId,
-      canManage: hasManagePermission,
+      canManage: managesUnder(scope),
     });
 
     const points = entries.map(({ accessPoint, bookingContext }) =>
@@ -775,7 +788,11 @@ class AccessService {
    */
   static async refreshHolds(tenant, bookingIds) {
     for (const bookingId of bookingIds) {
-      const booking = await BookingManager.getBooking(bookingId, tenant);
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        tenant,
+        DOMAIN,
+      );
       if (!booking) {
         continue;
       }
@@ -1342,24 +1359,36 @@ class AccessService {
   }
 
   /**
+   * The user whose bookings a list is asked for: the principal's own, or
+   * under the reach `any` (`accessBookings.read`: the instance owner)
+   * whoever the request names. Another user's under `own` is nobody's -
+   * the caller asked for what the reach does not cover.
+   *
+   * @param {{reach?: string, userId?: string|null}} scope
+   * @param {string|undefined} requestedUserId
+   * @returns {string|null} The user, or null where the reach does not
+   *   cover the one asked for.
+   */
+  static targetUserOf(scope, requestedUserId) {
+    if (!requestedUserId || requestedUserId === scope.userId) {
+      return scope.userId ?? null;
+    }
+    return managesUnder(scope) ? requestedUserId : null;
+  }
+
+  /**
    * Checks whether a user may operate (open/close/status) the access points of
    * a booking.
    *
    * The booking must always be active (committed, paid if priced, not rejected
    * and within its time window) - this applies to everyone, including users
-   * with the manage-bookings permission. The permission only replaces the
+   * with the reach `any` of `booking.operate`. The reach only replaces the
    * ownership requirement, it does not bypass the booking conditions. The one
-   * exception is the admin override: after the door's window the permission
+   * exception is the admin override: after the door's window the reach
    * still allows close, status and open-status (`decide`,
    * `overriddenAccessPointIds`), never an open.
    */
-  static async canOperate(
-    userId,
-    tenant,
-    bookingId,
-    accessPointId,
-    hasManagePermission,
-  ) {
+  static async canOperate(userId, tenant, bookingId, accessPointId, scope) {
     const resolved = await this._tryResolve(tenant, bookingId, accessPointId);
 
     if (!resolved) {
@@ -1369,7 +1398,7 @@ class AccessService {
     const { accessPoint, bookingContext, booking } = resolved;
     const decision = decide(booking, [{ accessPoint, bookingContext }], {
       userId,
-      canManage: hasManagePermission,
+      canManage: managesUnder(scope),
     });
 
     return decision.operableAccessPointIds.includes(String(accessPointId));
@@ -1383,14 +1412,14 @@ class AccessService {
    * if priced, not rejected) and the user has a role at it: the owner or
    * someone with the manage-bookings permission.
    */
-  static async canView(userId, tenant, bookingId, hasManagePermission) {
-    const booking = await BookingManager.getBooking(bookingId, tenant);
+  static async canView(userId, tenant, bookingId, scope) {
+    const booking = await BookingManager.getBooking(bookingId, tenant, DOMAIN);
 
     if (!booking) {
       return false;
     }
 
-    return decide(booking, [], { userId, canManage: hasManagePermission })
+    return decide(booking, [], { userId, canManage: managesUnder(scope) })
       .canView;
   }
 
@@ -1442,6 +1471,7 @@ class AccessService {
         timeFilter,
         requireCommitted: !includeEligibility,
       },
+      DOMAIN,
     );
 
     if (!bookings.length) {
@@ -1516,6 +1546,7 @@ class AccessService {
         timeFilter,
         requireCommitted: !includeEligibility,
       },
+      DOMAIN,
     );
 
     if (!bookings.length) {
@@ -1614,17 +1645,21 @@ class AccessService {
     { limit = 10, now = Date.now() } = {},
   ) {
     const id = String(accessPointId);
-    const bookings = await BookingManager.getBookingsCustomFilter(tenant, {
-      isRejected: { $ne: true },
-      $or: [{ timeEnd: null }, { timeEnd: { $gte: now } }],
-      accessInfo: {
-        $elemMatch: {
-          accessPointId: id,
-          isProvisioned: true,
-          revokedAt: null,
+    const bookings = await BookingManager.getBookingsCustomFilter(
+      tenant,
+      {
+        isRejected: { $ne: true },
+        $or: [{ timeEnd: null }, { timeEnd: { $gte: now } }],
+        accessInfo: {
+          $elemMatch: {
+            accessPointId: id,
+            isProvisioned: true,
+            revokedAt: null,
+          },
         },
       },
-    });
+      DOMAIN,
+    );
 
     const running = bookings
       .filter(
@@ -1808,9 +1843,11 @@ class AccessService {
     const bookableByKey = new Map();
     await Promise.all(
       [...idsByTenant.entries()].map(async ([tenantId, ids]) => {
-        const bookables = await BookableManager.getBookablesByIds(tenantId, [
-          ...ids,
-        ]);
+        const bookables = await BookableManager.getBookablesByIds(
+          tenantId,
+          [...ids],
+          DOMAIN,
+        );
         for (const bookable of bookables) {
           bookableByKey.set(`${tenantId}:${bookable.id}`, bookable);
         }
@@ -1860,8 +1897,10 @@ class AccessService {
    *   bookableId -> (accessPointId -> the access point's mode and type)
    */
   static async _getAccessTriggerMap(tenant) {
-    const apBookables =
-      await BookableManager.getBookablesWithAccessPoints(tenant);
+    const apBookables = await BookableManager.getBookablesWithAccessPoints(
+      tenant,
+      DOMAIN,
+    );
 
     const accessPointsById = await this._getAccessPointsById(
       tenant,
@@ -1908,12 +1947,12 @@ class AccessService {
         const relatedLookups = [];
         if (inheritChildren) {
           relatedLookups.push(
-            BookableManager.getAllParentBookables(bookable.id, tenant),
+            BookableManager.getAllParentBookables(bookable.id, tenant, DOMAIN),
           );
         }
         if (inheritParents) {
           relatedLookups.push(
-            BookableManager.getRelatedBookables(bookable.id, tenant),
+            BookableManager.getRelatedBookables(bookable.id, tenant, DOMAIN),
           );
         }
 
@@ -1940,6 +1979,7 @@ class AccessService {
     const apBookables = await BookableManager.getBookablesByAccessPointId(
       tenant,
       accessPointId,
+      DOMAIN,
     );
 
     const inheritChildren =
@@ -1968,12 +2008,12 @@ class AccessService {
         const relatedLookups = [];
         if (inheritChildren) {
           relatedLookups.push(
-            BookableManager.getAllParentBookables(bookable.id, tenant),
+            BookableManager.getAllParentBookables(bookable.id, tenant, DOMAIN),
           );
         }
         if (inheritParents) {
           relatedLookups.push(
-            BookableManager.getRelatedBookables(bookable.id, tenant),
+            BookableManager.getRelatedBookables(bookable.id, tenant, DOMAIN),
           );
         }
 
@@ -2284,7 +2324,7 @@ class AccessService {
    *   point
    */
   static async _tryResolve(tenant, bookingId, accessPointId) {
-    const booking = await BookingManager.getBooking(bookingId, tenant);
+    const booking = await BookingManager.getBooking(bookingId, tenant, DOMAIN);
 
     if (!booking) {
       return null;
@@ -2300,7 +2340,7 @@ class AccessService {
   }
 
   static async _getBookingAccessPoints(tenant, bookingId) {
-    const booking = await BookingManager.getBooking(bookingId, tenant);
+    const booking = await BookingManager.getBooking(bookingId, tenant, DOMAIN);
 
     if (!booking) {
       throw new Error(`Booking ${bookingId} not found`);
@@ -2532,6 +2572,77 @@ class AccessService {
   }
 
   /**
+   * Records a provider's webhook event on every booking that holds the
+   * access it names, and logs it. The webhook route is token-authorized
+   * and has no reach, so the domain reads the bookings (ADR 0002, ticket
+   * 22) - the way `AccessAppLifecycleService.webhookSecretOf` reads the
+   * tenant.
+   *
+   * @param {string} tenant Tenant ID
+   * @param {Object} event The parsed webhook event: `provider`,
+   *   `externalId`, `eventType`, `timestamp`, `success`, `errorCode`,
+   *   `payload`
+   * @returns {Promise<void>}
+   */
+  static async recordWebhookEvent(tenant, event) {
+    const bookings = await BookingManager.getBookingsCustomFilter(
+      tenant,
+      {
+        "accessInfo.provider": event.provider,
+        "accessInfo.externalId": event.externalId,
+      },
+      DOMAIN,
+    );
+    const timestamp =
+      typeof event.timestamp === "number"
+        ? event.timestamp
+        : new Date(event.timestamp || Date.now()).getTime();
+    const matches = (info) =>
+      info.provider === event.provider &&
+      String(info.externalId) === String(event.externalId);
+
+    for (const booking of bookings) {
+      let changed = false;
+      booking.accessInfo = (booking.accessInfo || []).map((info) => {
+        if (!matches(info)) {
+          return info;
+        }
+
+        changed = true;
+        return {
+          ...info,
+          lastEvent: {
+            type: event.eventType || "webhook",
+            timestamp,
+            source: "webhook",
+            success: event.success !== false,
+            errorCode: event.errorCode || null,
+          },
+        };
+      });
+
+      if (changed) {
+        await BookingManager.storeBooking(booking);
+      }
+
+      await AccessLogService.log({
+        tenantId: tenant,
+        bookingId: booking.id,
+        accessPointId:
+          (booking.accessInfo || []).find(matches)?.accessPointId || null,
+        accessPointType: "door",
+        provider: event.provider,
+        externalId: event.externalId,
+        action: "webhook",
+        actor: { source: "webhook" },
+        result: event.success === false ? "failure" : "success",
+        payload: event.payload || event,
+        errorCode: event.errorCode || null,
+      });
+    }
+  }
+
+  /**
    * @private
    * Fails where the bookable has fewer compartments than the bookings in
    * this booking's window take, this booking included. The occupancy is
@@ -2558,6 +2669,7 @@ class AccessService {
       booking.timeBegin,
       booking.timeEnd,
       booking.id,
+      DOMAIN,
     );
     const occupied = [...others, booking].reduce(
       (sum, concurrent) => sum + this._itemAmount(concurrent, bookable.id),
@@ -2596,9 +2708,11 @@ class AccessService {
    */
   static async _loadAccessPointSources(tenant, booking) {
     const bookableRelations = await this._getBookableRelations(tenant, booking);
-    const bookables = await BookableManager.getBookablesByIds(tenant, [
-      ...bookableRelations.keys(),
-    ]);
+    const bookables = await BookableManager.getBookablesByIds(
+      tenant,
+      [...bookableRelations.keys()],
+      DOMAIN,
+    );
     const sortedBookables = this._sortBookablesByRelation(
       bookables,
       bookableRelations,
@@ -2850,6 +2964,7 @@ class AccessService {
           const childBookables = await BookableManager.getRelatedBookables(
             bookableId,
             tenant,
+            DOMAIN,
           );
 
           for (const childBookable of childBookables) {
@@ -2865,6 +2980,7 @@ class AccessService {
           const parentBookables = await BookableManager.getAllParentBookables(
             bookableId,
             tenant,
+            DOMAIN,
           );
 
           for (const parentBookable of parentBookables) {

@@ -509,7 +509,7 @@ describe("tenant creation", function () {
     it("uses the same contract: verification proof and the time limit", async function () {
       // At the router the obsolete PUT carries `tenant.update`, which only
       // the instance owner holds for a tenant that does not exist yet; the
-      // adapter's second decision is exercised at the controller seam.
+      // marker's second decision (`also`) is exercised at the controller seam.
       const principal = {
         userId: CUSTOMER,
         tenantId: "brand-new",
@@ -522,6 +522,7 @@ describe("tenant creation", function () {
         user: { id: CUSTOMER },
         principal,
         reach: "any",
+        reaches: { create: "any" },
         params: {},
         query: {},
         body: { id: "brand-new", ...body },

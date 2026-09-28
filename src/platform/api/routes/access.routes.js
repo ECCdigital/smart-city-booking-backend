@@ -19,7 +19,7 @@ router.get(
 );
 
 // Operating a door is the booking's right: the reach `any` is what waives the
-// booking ownership at the access decision (authorize spec §5).
+// booking ownership at the access decision (glossary "Berechtigung").
 router.post(
   "/:accessPointId/open",
   authorize("booking", "operate"),

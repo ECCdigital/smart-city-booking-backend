@@ -5,6 +5,7 @@ const {
   getAccessProvider,
   getAccessProviderCapabilities,
 } = require("./providers/access-provider-registry");
+const { DOMAIN } = require("../authorization/reach");
 
 require("./clients");
 require("./providers/register-access-providers");
@@ -26,7 +27,7 @@ class AccessInfoService {
    *   `capabilities` and `providerCapabilities`
    */
   static async getActiveProviders(tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
 
     return (tenant?.applications || [])
       .filter((a) => a.type === APP_TYPE && a.active)

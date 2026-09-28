@@ -28,7 +28,7 @@ const {
   TIME_END,
   DAY,
 } = require("./helpers/booking-lifecycle-harness");
-const { installRouteWorld } = require("./helpers/route-world");
+const { installRouteWorld, offerReads } = require("./helpers/route-world");
 const EventManager = require("../src/commons/data-managers/event-manager");
 const { Event } = require("../src/commons/entities/event/event");
 
@@ -140,9 +140,12 @@ describe("supervision: the acceptance matrix (§5.1) for both offer types", func
       ownerUserId: ROLE_HOLDER,
       bookables: h.bookables,
     });
+    // The events of this test, read as the manager reads them: the
+    // public's through the real projection.
+    const reads = offerReads(() => Object.values(events), "event");
     for (const [name, impl] of [
-      ["getEvent", async (id) => events[id] ?? null],
-      ["getEvents", async () => Object.values(events)],
+      ["getEvent", reads.one],
+      ["getEvents", reads.many],
     ]) {
       EventManager[name].restore();
       sinon.stub(EventManager, name).callsFake(impl);
@@ -279,7 +282,8 @@ describe("supervision: the acceptance matrix (§5.1) for both offer types", func
             null,
             offer.single(),
           );
-          expect(v1.status, "checkout v1").to.equal(reachable ? 200 : 409);
+          // An offer the public cannot reach is not there (ADR 0003).
+          expect(v1.status, "checkout v1").to.equal(reachable ? 200 : 404);
 
           const v2 = await call(
             "post",
@@ -358,7 +362,7 @@ describe("supervision: the acceptance matrix (§5.1) for both offer types", func
           null,
           offer.single(),
         );
-        expect(v1.status, "checkout v1").to.equal(409);
+        expect(v1.status, "checkout v1").to.equal(404);
         for (const [path, body] of [
           [`/api/v2/${TENANT}/checkout`, offer.single()],
           [`/api/v2/${TENANT}/checkout/group`, offer.group()],
@@ -378,8 +382,8 @@ describe("supervision: the acceptance matrix (§5.1) for both offer types", func
     }
   }
 
-  // The management gate of a declined tenant (`403 tenant_declined`) is
-  // ticket 15; here the owner of a pending tenant prepares everything.
+  // The management routes of a pending tenant stay open to its owner:
+  // every entry with `any` reads the tenant's records whole (ADR 0003).
   it("keeps the management routes open to the owner of a pending tenant", async function () {
     h.tenant.supervisionLevel = "pending";
 

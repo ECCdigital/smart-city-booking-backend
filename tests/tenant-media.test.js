@@ -2,6 +2,7 @@ const assert = require("assert");
 const sinon = require("sinon");
 
 const MediaManager = require("../src/commons/data-managers/media-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const TenantModel = require("../src/commons/data-managers/models/tenantModel");
@@ -18,9 +19,9 @@ const {
 const TENANT = "tenant1";
 const MEDIA = "doc-1";
 const USER = "owner@stadt.de";
-// The reach of `media.read` the adapter hands the guard (authorize spec §5).
-const PICKER = { reach: "any", userId: USER };
-const NO_PICKER = { reach: null, userId: USER };
+// The bundle the saver's route hands the guard, with the picker right.
+const PICKER = { "media.read": "any", userId: USER };
+const NO_PICKER = { "media.read": null, userId: USER };
 
 function mediaReference(mediaId) {
   return { source: "media", mediaId, url: null };
@@ -187,7 +188,7 @@ describe("tenant media", function () {
         PICKER,
       );
 
-      assert.deepStrictEqual(getMedia.firstCall.args, [MEDIA, TENANT]);
+      assert.deepStrictEqual(getMedia.firstCall.args, [MEDIA, TENANT, DOMAIN]);
     });
 
     // Neither a foreign tenant's medium nor an instance medium exists in the
@@ -205,7 +206,11 @@ describe("tenant media", function () {
           ),
           { statusCode: 400, code: "media_reference_unknown" },
         );
-        assert.deepStrictEqual(getMedia.firstCall.args, [foreign, TENANT]);
+        assert.deepStrictEqual(getMedia.firstCall.args, [
+          foreign,
+          TENANT,
+          DOMAIN,
+        ]);
       });
     }
 
@@ -253,7 +258,7 @@ describe("tenant media", function () {
 
       await MediaReferenceGuard.assertTenantStorable(forged, TENANT, PICKER);
 
-      assert.deepStrictEqual(getMedia.firstCall.args, [MEDIA, TENANT]);
+      assert.deepStrictEqual(getMedia.firstCall.args, [MEDIA, TENANT, DOMAIN]);
     });
 
     it("leaves external references alone", async function () {

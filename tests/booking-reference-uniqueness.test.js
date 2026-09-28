@@ -4,6 +4,7 @@ const {
   BundleCheckoutService,
 } = require("../src/commons/services/checkout/bundle-checkout-service");
 const BookingManager = require("../src/commons/data-managers/booking-manager");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 
 const TENANT_ID = "tenant-1";
 
@@ -32,7 +33,11 @@ describe("BundleCheckoutService.generateBookingReference", function () {
       /^[ABCDEFGHJKMNPQRSTUXY]{4}-[ABCDEFGHJKMNPQRSTUXY]{4}$/,
     );
     assert.strictEqual(getBooking.callCount, 1);
-    assert.deepStrictEqual(getBooking.firstCall.args, [reference, TENANT_ID]);
+    assert.deepStrictEqual(getBooking.firstCall.args, [
+      reference,
+      TENANT_ID,
+      DOMAIN,
+    ]);
   });
 
   it("draws again when the tenant already has a booking under the reference", async function () {

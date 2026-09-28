@@ -15,7 +15,7 @@ const logger = bunyan.createLogger({
  * The access apps of a tenant: what a provider knows and what it is
  * configured with. Who may read and who may configure is the routes'
  * (`accessApp.read`, `accessApp.manage`) - the latter the tenant owner's,
- * where the dead role group `manageTenants` used to stand (spec §7.3).
+ * where the dead role group `manageTenants` used to stand.
  */
 class AccessAppController {
   static async getProviders(request, response) {

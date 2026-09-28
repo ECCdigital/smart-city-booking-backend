@@ -14,6 +14,7 @@ const {
   NotFoundError,
 } = require("../../../errors/BaseError");
 const { AccessOpenError } = require("../../../errors/AccessOpenError");
+const { DOMAIN } = require("../authorization/reach");
 
 require("./clients");
 
@@ -500,7 +501,7 @@ class SaltoKsIqActivationService {
    * one lookup, one error.
    */
   static async getSaltoApp(tenantId) {
-    const tenant = await TenantManager.getTenant(tenantId);
+    const tenant = await TenantManager.getTenant(tenantId, DOMAIN);
     const app = tenant?.applications?.find(
       (a) => a.type === APP_TYPE && a.id === PROVIDER_ID && a.active,
     );

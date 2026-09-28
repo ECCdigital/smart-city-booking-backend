@@ -1,14 +1,14 @@
 /**
- * Characterization of the authorization as it is today, route by route
- * (authorize spec §8.2): every route of every router under `src/platform`
- * is called with five principals - anonymous, signed in without a role,
- * holder of every role level, tenant owner, instance owner - and the
+ * Characterization of the authorization as it is today, route by route:
+ * every route of every router under `src/platform` is called with five
+ * principals - anonymous, signed in without a role, holder of every role
+ * level, tenant owner, instance owner - and the
  * status code each gets is pinned in
  * `tests/snapshots/authorization/routes.json`. A 403 whose body is more
  * than the bare `Forbidden` of `sendStatus(403)` is pinned with its body,
- * to show the seven answer forms of a refusal (§1) that §7.6 folds into
+ * to show the seven answer forms of a refusal that are folded into
  * one. A route that never answers is pinned as `timeout` - the hanging
- * challenge endpoints (§7.5).
+ * challenge endpoints.
  *
  * It pins, it does not judge: each ticket of the chain that puts a router
  * on `authorize()` reports the flips against this table. The harness runs

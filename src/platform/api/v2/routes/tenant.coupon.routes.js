@@ -1,9 +1,6 @@
 const { asyncRouter } = require("../../../../middleware/async-router");
 const CouponControllerV2 = require("../controllers/coupon.controller");
 const { publicRoute } = require("../../../../commons/services/authorization");
-const {
-  publicTenantGate,
-} = require("../../../../commons/services/supervision/public-tenant-gate");
 
 const router = asyncRouter();
 
@@ -11,7 +8,6 @@ const router = asyncRouter();
 router.get(
   "/validate/:id",
   publicRoute("coupon", "lookup"),
-  publicTenantGate(),
   CouponControllerV2.validateCoupon,
 );
 

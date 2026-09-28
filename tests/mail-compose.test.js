@@ -10,6 +10,7 @@
 
 const { expect } = require("chai");
 const sinon = require("sinon");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const Handlebars = require("handlebars");
 
 const { compose } = require("../src/commons/mail-service");
@@ -483,6 +484,7 @@ describe("compose: a notice as mail values", function () {
       expect(BookableManager.getBookablesByIds.firstCall.args).to.deep.equal([
         TENANT,
         ["room", "ticket"],
+        DOMAIN,
       ]);
       expect(BookableManager.getBookable.callCount).to.equal(0);
       expect(BookableManager.getBookables.callCount).to.equal(0);

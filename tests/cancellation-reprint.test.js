@@ -139,7 +139,7 @@ describe("cancellation reprint: POST .../cancellation-receipt", function () {
       const stranger = await api()
         .post(`/api/${TENANT}/bookings/${id}/cancellation-receipt`)
         .set(h.as("fremd@example.test"));
-      // Outside the reach `own` the booking is not there (authorize spec §4.2).
+      // Outside the reach `own` the booking is not there (glossary "Reichweite").
       expect(stranger.status).to.equal(404);
       expect(cancellations(h.stored(id))).to.have.length(2);
     });
@@ -255,7 +255,7 @@ describe("cancellation reprint: POST .../cancellation-receipt", function () {
         .post(`/api/${TENANT}/group-bookings/${id}/cancellation-receipt`)
         .set(h.as("fremd@example.test"));
 
-      // Outside the reach `own` the group is not there (authorize spec §4.2).
+      // Outside the reach `own` the group is not there (glossary "Reichweite").
       expect(res.status).to.equal(404);
       expect(h.takeEffects()).to.deep.equal([]);
     });

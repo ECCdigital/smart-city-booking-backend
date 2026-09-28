@@ -22,7 +22,7 @@ router.get(
 router.get("/", authorize("instance", "read"), InstanceController.getInstance);
 router.put(
   "/",
-  authorize("instance", "update"),
+  authorize("instance", "update", { also: ["instanceMedia.read"] }),
   InstanceController.storeInstance,
 );
 

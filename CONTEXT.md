@@ -51,7 +51,7 @@ Die erste Referenz in der Bilderliste eines Bookables — durch die Position bes
 _Avoid_: Hauptbild, Cover, imgUrl (Alt-Feldname)
 
 **Sichtbarkeit (eines Mediums)**:
-Die zweistufige Lese-Einstufung eines Mediums: _public_ (für jedermann lesbar, anonym und cachebar) oder _intern_ (nur für Angehörige des Tenants). Regelt ausschließlich das Lesen — wer ein Medium auswählen, ändern oder löschen darf, bestimmen die Medien-Rechte der Rolle. Für Buchungsdokumente bedeutungslos: deren Zugriff folgt allein aus der Buchungs-Verknüpfung.
+Die zweistufige Lese-Einstufung eines Mediums: _public_ (für jedermann lesbar, anonym und cachebar) oder _intern_ (nur für Mitglieder des Tenants). Regelt ausschließlich das Lesen — wer ein Medium auswählen, ändern oder löschen darf, bestimmen die Medien-Rechte der Rolle. Für Buchungsdokumente bedeutungslos: deren Zugriff folgt allein aus der Buchungs-Verknüpfung. Welche Regel für ein Medium gilt (Bibliothek, Buchungsdokument, Instanz-Medium, Sichtbarkeit), entscheidet eine Stelle aus den Fakten des Mediums; wer fragt, bringt nur seine Reichweiten mit.
 _Avoid_: protected (das ist der Alt-Pfad im Storage), accessLevel (Alt-Feldname), eingeschränkt (als dritte Stufe — gibt es nicht)
 
 **Buchungsdokument**:
@@ -59,7 +59,7 @@ Ein Dokument-Medium mit Verknüpfung zu einer oder mehreren Buchungen — allein
 _Avoid_: Rechnung (als Oberbegriff — Rechnungen sind eine Sorte Buchungsdokument), Invoice-File, Sammelbeleg-Kopie (aggregierte Belege sind ein Medium, keine Kopien)
 
 **Instanz-Medium**:
-Ein Medium ohne Tenant-Zuordnung — instanzweite Inhalte wie Branding und Rechts-Dokumente. Gleiches Datenmodell, keine eigene Entität; _intern_ bedeutet hier „jeder angemeldete Nutzer der Instanz" (es gibt keinen Tenant, dessen Angehörigkeit zählen könnte). Strikt von Tenant-Kontexten getrennt: Instanz-Medien sind nur in Instanz-Kontexten referenzierbar und erscheinen nie in Tenant-Pickern — wer ein Instanz-Bild im Tenant nutzen will, lädt es dort neu hoch. Verwaltet allein vom Instance-Owner.
+Ein Medium ohne Tenant-Zuordnung — instanzweite Inhalte wie Branding und Rechts-Dokumente. Gleiches Datenmodell, keine eigene Entität; _intern_ bedeutet hier „jeder angemeldete Nutzer der Instanz" (es gibt keinen Tenant, dessen Mitgliedschaft zählen könnte). Strikt von Tenant-Kontexten getrennt: Instanz-Medien sind nur in Instanz-Kontexten referenzierbar und erscheinen nie in Tenant-Pickern — wer ein Instanz-Bild im Tenant nutzen will, lädt es dort neu hoch. Verwaltet allein vom Instance-Owner.
 _Avoid_: globale Datei, Instanz-Datei (das meint den Alt-Bestand der tenant-losen File-Endpoints)
 
 **Storage-Ort (eines Mediums)**:
@@ -337,7 +337,7 @@ Der Stufenwechsel des Instanz-Owners von _Freigabe ausstehend_ auf _beaufsichtig
 _Avoid_: Aktivierung, Bestätigung, Approval, Freigabe (unqualifiziert — die Freigabe eines Angebots ist die Prüfentscheidung)
 
 **Abweisung (eines Mandanten)**:
-Der Stufenwechsel des Instanz-Owners auf _abgewiesen_, aus jeder Stufe heraus, wahlweise mit Begründung, jederzeit umkehrbar. Nimmt dem Mandanten sein öffentliches Angebot und seinen Tenant-Ownern und Mitgliedern den Zugriff, ohne ihn zu löschen; die Begründung erreicht die Tenant-Owner mit der Aufsichtsmitteilung zum Stufenwechsel und bleibt als Begründung des jüngsten Stufenwechsels am Mandanten für Tenant-Owner, Mitglieder und Instanz-Owner lesbar. Öffentlich ist ein abgewiesener Mandant von einem auf Freigabe wartenden nicht zu unterscheiden; Personal eines abgewiesenen Mandanten sieht auch die öffentliche Projektion nicht mehr.
+Der Stufenwechsel des Instanz-Owners auf _abgewiesen_, aus jeder Stufe heraus, wahlweise mit Begründung, jederzeit umkehrbar. Nimmt dem Mandanten sein öffentliches Angebot und lässt die Mitgliedschaften seiner Tenant-Owner und Mitglieder ruhen, ohne ihn zu löschen; wird einem von ihnen deshalb etwas verweigert, nennt die Antwort die Abweisung samt Begründung. Die Begründung erreicht die Tenant-Owner mit der Aufsichtsmitteilung zum Stufenwechsel und bleibt als Begründung des jüngsten Stufenwechsels am Mandanten für Tenant-Owner, Mitglieder und Instanz-Owner lesbar. Öffentlich ist ein abgewiesener Mandant von einem auf Freigabe wartenden nicht zu unterscheiden; wer eine ruhende Mitgliedschaft hat, sieht auch die öffentliche Projektion nicht mehr.
 _Avoid_: Ablehnung (das ist die Prüfentscheidung an einem Angebot), Sperrung, Löschung, Deaktivierung
 
 **Freigabeliste der Mandanten**:
@@ -423,12 +423,32 @@ _Avoid_: Enumeration-Schutz (als Sprechbegriff), 409 (als Antwort auf „E-Mail 
 ### Rechte
 
 **Reichweite**:
-Die Antwort einer Berechtigungsprüfung, wenn sie nicht „nein“ lautet: _any_ (alle Datensätze des Mandanten), _own_ (nur die eigenen — dem Nutzer gehörend oder ihm zugewiesen) oder _public_ (nur, was jedermann sieht, auch anonym). Ein Wert, der vom Router an Handler und Manager weitergereicht wird und dort zur Abfragebedingung wird; kein Handler verzweigt selbst über Rechte. _public_ ist keine Bedingung auf Datensätzen, sondern die öffentliche Projektion, die jeder Manager selbst kennt — die Frage „reicht diese Reichweite über das Öffentliche hinaus?“ beantwortet der Router-Helfer, nicht der Handler. Ein Datensatz außerhalb der Reichweite existiert für diesen Nutzer nicht (404), fehlende Reichweite auf der Route ist eine Verweigerung (403). Was jemand an einem eigenen Datensatz _tun_ darf (z.B. eine Buchung stornieren, aber nicht umbuchen), ist keine Reichweite, sondern Sache des jeweiligen Lebenszyklus.
-_Avoid_: Scope (bei Medien bereits Tenant- vs. Instanz-Scope), Level, AccessLevel (das sind die Rollenstufen `readAny`/`readOwn` …)
+Die Antwort einer Berechtigungsprüfung, wenn sie nicht „nein“ lautet: _any_ (alle Datensätze des Mandanten), _own_ (nur die eigenen: über den Eigentümer-Schlüssel des Datensatzes, oder auf Instanz-Ebene über die Mandanten des Prinzipals), _self_ (der Prinzipal selbst, keine Datensätze: das eigene Profil, die eigene Einladung) _public_ (nur, was jedermann sieht, auch anonym) oder _domain_ (die Domäne selbst liest, ohne Prinzipal: Zahlung, Belege, Jobs; kein Router vergibt sie). Ein Wert, der vom Router an Handler, Dienste und Manager weitergereicht wird und erst im Manager zur Abfragebedingung wird; ein Manager liefert Datensätze nie ohne Reichweite (Zähler, Existenzprüfungen und Konfiguration liest er ohne), kein Handler verzweigt selbst über Rechte; Tore an den Routen gibt es nicht, das Personal bekommt seine Verwaltungssicht einer öffentlichen Auslieferung allein über einen Tabelleneintrag mit _any_. Die Reichweite gilt der Sache der Route; ist sie in Reichweite, liest die Domäne ihre abhängigen Datensätze (die Buchungen eines Events, das Event eines Angebots) selbst. _public_ und _self_ sind keine Bedingungen auf Datensätzen: _public_ ist die öffentliche Projektion, die die Manager anwenden (eine Stelle kennt ihre Regeln: Aufsichtsstufe, Prüfstatus, Veröffentlichungswunsch, Liste oder Direktlink, Ticket nur mit seinem Event), _self_ braucht keine. Ein Datensatz außerhalb der Reichweite existiert für diesen Nutzer nicht (404), fehlende Reichweite auf der Route ist eine Verweigerung (403). Was jemand an einem eigenen Datensatz _tun_ darf (z.B. eine Buchung stornieren, aber nicht umbuchen), ist keine Reichweite, sondern Sache des jeweiligen Lebenszyklus.
+_Avoid_: Scope (bei Medien bereits Tenant- vs. Instanz-Scope), Level, AccessLevel (das sind die Rollenstufen `readAny`/`readOwn` …), Projektion für Angemeldete (das ist _any_ für jeden Angemeldeten, keine eigene Reichweite)
+
+**Eigentümer-Schlüssel**:
+Was für eine Sache „eigen“ bedeutet: das Feld des Datensatzes, das seinen Eigentümer nennt (Ersteller eines Angebots, zugewiesener Nutzer einer Buchung), oder auf Instanz-Ebene die Mandantenmenge des Prinzipals (Mitgliedschaft, Eigentum, Reichweite). Die Rechtetabelle nennt ihn je Sache, der Manager wendet ihn an; eine Sache mit der Reichweite _own_ ohne Eigentümer-Schlüssel gibt es nicht.
+_Avoid_: ownerField, ownCondition (der Code-Name der Bedingung), Besitzer
 
 **Prinzipal**:
-Wer einen Request stellt, als ein einmal je Request geladener Wert: Nutzer (oder anonym), Mandant (oder Instanz-Ebene), ob Instance-Owner, ob Tenant-Owner, die zusammengeführten Rollenstufen im Mandanten und ob er Mandanten anlegen darf. Vier Stufen mit fester Vorrangordnung: Instance-Owner erfüllt alles, Tenant-Owner alles im Mandanten, Rolle ihre Stufen, der Angemeldete seine eigenen Datensätze. Die Vorrangordnung gilt ausnahmslos: es gibt keine Route mehr, die einen Instance-Owner abweist. Die Domäne kennt den Prinzipal nicht, nur die daraus abgeleitete Reichweite.
+Wer einen Request stellt, als ein einmal je Request geladener Wert: Nutzer (oder anonym), Mandant (oder Instanz-Ebene), ob Instance-Owner, ob Mitglied, ob Tenant-Owner, die zusammengeführten Rollenstufen im Mandanten, seine Mandanten (in welchen er Mitglied, in welchen Eigentümer ist) und ob er Mandanten anlegen darf. Entsteht aus dem Mitgliedschaftsbild, nie aus der Sign-in-Antwort. Die Abweisung des Mandanten steckt schon im Wert: bei ruhender Mitgliedschaft ist er weder Mitglied noch Tenant-Owner und hat keine Rollenstufen — jeder Weg, der aus dem Prinzipal entscheidet, kennt sie damit ohne eigene Prüfung. Fünf Stufen mit fester Vorrangordnung: Instance-Owner erfüllt alles, Tenant-Owner alles im Mandanten, Rolle ihre Stufen, Mitglied das, was Mitgliedern des Mandanten offensteht, der Angemeldete seine eigenen Datensätze und sich selbst. Die Vorrangordnung gilt ausnahmslos: es gibt keine Route mehr, die einen Instance-Owner abweist. Die Domäne kennt den Prinzipal nicht, nur die daraus abgeleitete Reichweite und, auf Instanz-Ebene, die Mandantenmenge als Wert.
 _Avoid_: User (das ist die Entität), Subject, Caller, Session
+
+**Mitgliedschaftsbild**:
+Alles, was über die Mitgliedschaften eines Nutzers einmal je Nutzer geladen wird: ob Instance-Owner, ob er Mandanten anlegen darf, und je aktiver Mitgliedschaft der Mandant, die Owner-Markierung, die Aufsicht des Mandanten, die über den Rollenkatalog zusammengeführten Rollenstufen und die Zusatzwerte der Rollen (`adminInterfaces`, `freeBookings`). Der eine Baustein, aus dem der Prinzipal und die Sign-in-Antwort entstehen: der Prinzipal lässt darin die ruhende Mitgliedschaft ruhen, die Sign-in-Antwort schreibt es für den Client aus und zeigt auch den abgewiesenen Mandanten ganz. Die Sign-in-Antwort ist eine Projektion des Bildes und nie seine Quelle (ADR 0004).
+_Avoid_: Permissions (der Code-Altname der Sign-in-Antwort), Rechtebild, Berechtigungen des Nutzers
+
+**Rollengruppe, Rollenstufe**:
+Was eine Rolle vergibt: sechs Gruppen (`manageBookables`, `manageUsers`, …) mit je sieben Stufen (`create`, `readAny`, `readOwn`, `updateAny`, `updateOwn`, `deleteAny`, `deleteOwn`). Der Rollenkatalog (`entities/role/role-catalogue.js`) nennt beide an einer Stelle; Rollenschema, Zusammenführung im Mitgliedschaftsbild und Rechtetabelle leiten sich daraus ab. Eine neue Gruppe oder Stufe wird nur dort eingetragen. Handlungen jenseits der sieben Stufen sind Einträge der Rechtetabelle, nie neue Stufen.
+_Avoid_: Permission, Dimension/Action (die Code-Altnamen des Merges), Recht (zu unscharf), Level (das ist die Aufsichtsstufe)
+
+**Mitglied (eines Mandanten)**:
+Ein Nutzer mit aktiver Mitgliedschaft im Mandanten — mit oder ohne Rolle, Tenant-Owner eingeschlossen. Mitglieder lesen die _internen_ Medien ihres Mandanten; was sie darüber hinaus dürfen, geben Tenant-Owner-Markierung und Rollen. Nicht zu verwechseln mit dem Mitglied einer Gruppenbuchung.
+_Avoid_: Angehöriger, Personal (als Modellbegriff), Staff, Member
+
+**Ruhende Mitgliedschaft**:
+Die Mitgliedschaft in einem abgewiesenen Mandanten: sie besteht fort, gibt aber nichts — weder Mitglied noch Tenant-Owner noch Rollenstufen, nur, was jeder Angemeldete hat (die eigene Buchung, ihre Belege, eine Einladung). Lebt wieder auf, sobald der Mandant nicht mehr abgewiesen ist; bei _Freigabe ausstehend_ ruht nichts.
+_Avoid_: gesperrte Mitgliedschaft, suspended, Fremder (der Code-Altname „as for a stranger“)
 
 **Rechtetabelle**:
 Die eine Stelle, die je geschützter Sache (_resource_, z.B. Buchung, AccessPoint) und Handlung (_action_, z.B. lesen, schreiben, bedienen) sagt, welche Stufe des Prinzipals welche Reichweite bekommt. Daten, kein Code; jede Route nennt ihren Eintrag. Handlungen jenseits von anlegen, lesen, ändern, löschen sind benannte Einträge, keine neuen Rollenstufen.

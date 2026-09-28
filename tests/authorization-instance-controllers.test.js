@@ -1,8 +1,7 @@
 /**
- * The controllers of the instance router on the reach (authorize spec
- * §4.3, ticket 3): a handler hands `scopeOf(req)` to its manager and
+ * The controllers of the instance router on the reach: a handler hands `scopeOf(req)` to its manager and
  * never branches over rights itself. What is left to the adapter: the
- * creation over the obsolete PUT of tenants and users (§12), the user
+ * creation over the obsolete PUT of tenants and users (ADR 0001), the user
  * whose access bookings are asked for (`?userId=`: another user's under
  * `any` only), the protection of a tenant owner against removal by a
  * user manager, and the 404 of a record the manager did not find.
@@ -54,12 +53,23 @@ function response() {
 }
 
 /** A request of the instance level with the reach and the principal given. */
-function request({ reach, principal, params = {}, query = {}, body = {} }) {
+/** `reaches` is what the marker decided beside the main action (`also`). */
+function request({
+  reach,
+  reaches,
+  principal,
+  tenantIds,
+  params = {},
+  query = {},
+  body = {},
+}) {
   return {
     params,
     query,
     body,
     reach,
+    reaches,
+    tenantIds,
     principal,
     user: principal?.userId ? { id: principal.userId } : null,
   };
@@ -94,18 +104,18 @@ describe("instance controllers on the reach", function () {
   });
 
   describe("GET /tenants: the list under the reach", function () {
-    it("asks the manager for the tenants the user owns, in full", async function () {
+    it("asks the manager for the tenants the user owns, in full: the tenant set of the scope", async function () {
       const list = sinon
         .stub(TenantManager, "getTenants")
         .resolves([new Tenant({ id: "t1", name: "Stadt" })]);
       const res = response();
       await TenantController.getTenants(
-        request({ reach: "own", principal: customer }),
+        request({ reach: "own", principal: customer, tenantIds: ["t1"] }),
         res,
       );
       expect(list.firstCall.args).to.deep.equal([
-        { reach: "own", userId: "erika" },
-        { owned: true },
+        { reach: "own", userId: "erika", tenantIds: ["t1"] },
+        {},
       ]);
       expect(res.statusCode).to.equal(200);
       expect(res.body[0].id).to.equal("t1");
@@ -120,14 +130,18 @@ describe("instance controllers on the reach", function () {
       await TenantController.getTenants(
         request({
           reach: "own",
-          principal: customer,
+          principal: {
+            ...customer,
+            tenants: { member: ["t1", "t2"], owner: ["t1"], reach: {} },
+          },
+          tenantIds: ["t1"],
           query: { publicTenants: "true" },
         }),
         res,
       );
       expect(list.firstCall.args).to.deep.equal([
-        { reach: "own", userId: "erika" },
-        { owned: false },
+        { reach: "own", userId: "erika", tenantIds: ["t1", "t2"] },
+        {},
       ]);
       expect(res.body[0]).to.deep.equal(
         new Tenant({ id: "t1", name: "Stadt" }).exportPublic(),
@@ -183,7 +197,7 @@ describe("instance controllers on the reach", function () {
     });
   });
 
-  describe("the obsolete PUT: the creation is the adapter's second decision", function () {
+  describe("the obsolete PUT: the creation is the marker's second decision", function () {
     it("PUT /tenants refuses a creation to a principal who may not open a tenant", async function () {
       sinon.stub(TenantManager, "getTenant").resolves(null);
       const store = sinon.stub(TenantManager, "storeTenant").resolves();
@@ -219,6 +233,7 @@ describe("instance controllers on the reach", function () {
       await TenantController.storeTenant(
         request({
           reach: "any",
+          reaches: { create: "any" },
           principal: creator,
           body: {
             id: "new",
@@ -260,6 +275,7 @@ describe("instance controllers on the reach", function () {
       await UserController.storeUser(
         request({
           reach: "any",
+          reaches: { create: "any" },
           principal: instanceOwner,
           body: { id: "new@x", secret: "pw" },
         }),
@@ -357,6 +373,7 @@ describe("instance controllers on the reach", function () {
       await TenantController.removeUser(
         request({
           reach: "any",
+          reaches: { owner: "any" },
           principal: instanceOwner,
           params: { tenant: "t1" },
           body: { userId: "boss" },

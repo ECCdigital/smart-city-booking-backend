@@ -23,6 +23,7 @@ const {
 const {
   BundleCheckoutService,
 } = require("../../../../commons/services/checkout/bundle-checkout-service");
+const { scopeOf } = require("../../../../commons/services/authorization");
 const { CheckoutError } = require("../../../../errors/CheckoutError");
 const { BaseError } = require("../../../../errors/BaseError");
 const PaymentUtils = require("../../../../commons/utilities/payment-utils");
@@ -156,21 +157,26 @@ class CheckoutControllerV2 {
         data,
       });
     } catch (err) {
-      // unexpected (DB/network/etc.) — surface as graceful failure too,
-      // because we promised "always 200" for this endpoint.
-      logger.error(
-        { err, tenantId, bookableId, userId: user?.id },
-        "validateItem: unexpected error",
-      );
+      // A bookable the public cannot reach is the checkout's own refusal
+      // (`bookable_not_found`, thrown by `init`); everything else is
+      // unexpected (DB/network/etc.) and surfaces as a graceful failure
+      // too, because we promised "always 200" for this endpoint.
+      const refusal = err instanceof CheckoutError ? err : null;
+      if (!refusal) {
+        logger.error(
+          { err, tenantId, bookableId, userId: user?.id },
+          "validateItem: unexpected error",
+        );
+      }
 
       return res.status(200).json({
         success: false,
         checkoutId,
         checkoutIdGenerated: generated,
         error: {
-          reason: CHECKOUT_REASONS.UNKNOWN,
-          checkType: null,
-          params: {},
+          reason: refusal?.reason ?? CHECKOUT_REASONS.UNKNOWN,
+          checkType: refusal?.checkType ?? null,
+          params: refusal?.params ?? {},
         },
       });
     } finally {
@@ -263,6 +269,7 @@ class CheckoutControllerV2 {
     );
 
     const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
+      scope: scopeOf(req),
       tenantId,
       user,
       rawBookableItems,
@@ -405,6 +412,7 @@ class CheckoutControllerV2 {
       } = req.body;
 
       const resolved = await CheckoutControllerV2._resolveGroupCheckoutRequest({
+        scope: scopeOf(req),
         tenantId,
         user,
         rawBookableItems,
@@ -485,7 +493,11 @@ class CheckoutControllerV2 {
       const user = req.user;
       const id = req.params.id;
 
-      const bookable = await BookableManager.getBookable(id, tenantId);
+      const bookable = await BookableManager.getBookable(
+        id,
+        tenantId,
+        scopeOf(req),
+      );
 
       if (!bookable) {
         throw new CheckoutError({
@@ -532,6 +544,19 @@ class CheckoutControllerV2 {
 
       return res.status(200).json({ success: true });
     } catch (err) {
+      // A bookable the public cannot reach and one that is not there are
+      // the same absence (ADR 0003, spec §5.2): the pre-check answers the
+      // 404 itself, in the checkout's error shape.
+      if (err instanceof BaseError && err.statusCode === 404) {
+        return res.status(404).json(
+          new CheckoutError({
+            reason: CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
+            statusCode: 404,
+            params: { bookableId: req.params.id },
+            checkType: "permissions",
+          }).toJSON(),
+        );
+      }
       return CheckoutControllerV2._respondWithError(res, err, {
         logMessage: "checkoutPermissions: failed",
         context: {
@@ -553,6 +578,7 @@ class CheckoutControllerV2 {
   static async _resolveGroupCheckoutRequest({
     tenantId,
     user,
+    scope,
     rawBookableItems,
     rawBookingAttempts,
   }) {
@@ -587,10 +613,29 @@ class CheckoutControllerV2 {
     }
 
     const leadBookableId = bookableItems[0].bookableId;
+    // The lead bookable as the public reaches it (ADR 0003): of a tenant
+    // without a public projection nothing - the same absence as an
+    // unknown bookable.
     const bookable = await BookableManager.getBookable(
       leadBookableId,
       tenantId,
-    );
+      scope,
+    ).catch((err) => {
+      if (err instanceof BaseError && err.code === "tenant_not_found") {
+        return null;
+      }
+      throw err;
+    });
+    if (!bookable) {
+      return {
+        error: {
+          reason: CHECKOUT_REASONS.BOOKABLE_NOT_FOUND,
+          statusCode: 404,
+          checkType: null,
+          params: { bookableId: leadBookableId },
+        },
+      };
+    }
     const gb = bookable?.groupBooking;
     if (!gb?.enabled) {
       return {

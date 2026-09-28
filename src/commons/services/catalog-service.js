@@ -28,6 +28,7 @@ const {
   NotFoundError,
 } = require("../../errors/BaseError");
 const { ValidationError } = require("../../errors/ValidationError");
+const { PUBLIC } = require("./authorization/reach");
 
 const ERROR_CODES = SchemaUtils.ERROR_CODES;
 
@@ -216,8 +217,10 @@ class CatalogService {
         };
       }
 
+      // The tenants as the public sees them (ADR 0003): a tenant without
+      // a public projection is not in the bundle.
       const [tenants, memberTenantIds] = await Promise.all([
-        TenantManager.getTenants(),
+        TenantManager.getTenants(PUBLIC),
         getMemberTenantIds(userId),
       ]);
 

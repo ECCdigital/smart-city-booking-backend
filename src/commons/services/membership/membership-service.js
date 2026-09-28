@@ -11,6 +11,7 @@ const {
 } = require("../../utilities/booking-notification-utils");
 const { BadRequestError } = require("../../../errors/BaseError");
 const bunyan = require("bunyan");
+const { DOMAIN } = require("../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "membership-service.js",
@@ -106,7 +107,7 @@ class MembershipService {
         try {
           let tenant = tenantCache.get(m.tenantId);
           if (!tenant) {
-            tenant = await TenantManager.getTenant(m.tenantId);
+            tenant = await TenantManager.getTenant(m.tenantId, DOMAIN);
             if (tenant) tenantCache.set(m.tenantId, tenant);
           }
           if (!tenant) return null;

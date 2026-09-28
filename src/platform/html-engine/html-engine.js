@@ -2,15 +2,14 @@ const {
   BookableManager,
 } = require("../../commons/data-managers/bookable-manager");
 const TenantManager = require("../../commons/data-managers/tenant-manager");
-const {
-  isOfferListable,
-} = require("../../commons/services/supervision/offer-gate");
 const ExternalPriceService = require("../../commons/services/external-price-service");
 const InstanceManager = require("../../commons/data-managers/instance-manager");
 const {
   absoluteUrl,
   enrichAttachment,
 } = require("../../commons/services/media/media-reference");
+// The embeds render the public's view of the offers, whoever asks.
+const { PUBLIC } = require("../../commons/services/authorization/reach");
 
 class HtmlEngine {
   /**
@@ -108,7 +107,10 @@ class HtmlEngine {
     }
 
     for (const bookable of bookables) {
-      const tenantObj = await TenantManager.getTenant(bookable.tenantId);
+      const tenantObj = await TenantManager.getTenant(
+        bookable.tenantId,
+        PUBLIC,
+      );
 
       htmlOutput += '<li class="bt-' + bookable.type + '">';
       // The markup is embedded on foreign websites, so every media address has
@@ -261,10 +263,13 @@ class HtmlEngine {
         "</a>";
     }
 
-    const tenant = await TenantManager.getTenant(bookable.tenantId);
-    let relatedBookables = (
-      await BookableManager.getRelatedBookables(bookable.id, bookable.tenantId)
-    ).filter((offer) => isOfferListable({ tenant, offer }));
+    // The related bookables as the public sees them (ADR 0003): what the
+    // projection lists of them.
+    let relatedBookables = await BookableManager.getRelatedBookables(
+      bookable.id,
+      bookable.tenantId,
+      PUBLIC,
+    );
 
     if (relatedBookables.length > 0) {
       htmlOutput += '<div class="related-bookable-objects">';
@@ -285,7 +290,7 @@ class HtmlEngine {
     let htmlOutput = '<ul class="booking-manager-list">';
 
     for (const event of events) {
-      const tenantObj = await TenantManager.getTenant(event.tenantId);
+      const tenantObj = await TenantManager.getTenant(event.tenantId, PUBLIC);
 
       let tags = "";
       event.information.tags.forEach((tag) => {
@@ -459,6 +464,7 @@ class HtmlEngine {
       let eventLocationBookable = await BookableManager.getBookable(
         event.eventLocation.room,
         event.tenantId,
+        PUBLIC,
       );
 
       htmlOutput += `<div class="room">${eventLocationBookable?.title}</div>`;
@@ -610,14 +616,12 @@ class HtmlEngine {
       }
     }
 
-    const tenant = await TenantManager.getTenant(event.tenantId);
-    let relatedTickets = (
-      await BookableManager.getBookables(event.tenantId)
-    ).filter(
-      (bookable) =>
-        bookable.type === "ticket" &&
-        bookable.eventId === event.id &&
-        isOfferListable({ tenant, offer: bookable }),
+    // The tickets of the event as the public sees them (ADR 0003): what
+    // the projection lists of them, each with its event reachable.
+    const relatedTickets = await BookableManager.getEventBookables(
+      event.tenantId,
+      event.id,
+      PUBLIC,
     );
 
     if (relatedTickets.length > 0) {

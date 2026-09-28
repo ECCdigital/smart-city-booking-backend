@@ -19,7 +19,7 @@ function createBooking(overrides = {}) {
     timeEnd: 2000,
     bookableItems: [{ bookableId: "room" }],
     // The booker of every booking here: the access decision reads the
-    // booking's owner key, it asks nobody (authorize spec §4.1, §5).
+    // booking's owner key, it asks nobody (glossary "Eigentümer-Schlüssel").
     assignedUserId: "user-1",
     ...overrides,
   });
@@ -174,7 +174,7 @@ describe("AccessService.canOperate with buffer", () => {
       "tenant-1",
       "booking-1",
       "door-1",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.true;
   });
@@ -193,7 +193,7 @@ describe("AccessService.canOperate with buffer", () => {
       "tenant-1",
       "booking-1",
       "door-1",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.false;
   });
@@ -206,7 +206,7 @@ describe("AccessService.canOperate with buffer", () => {
       "tenant-1",
       "missing",
       "door-1",
-      true,
+      { reach: "any" },
     );
     expect(allowed).to.be.false;
   });
@@ -225,7 +225,7 @@ describe("AccessService.canOperate with buffer", () => {
       "tenant-1",
       "booking-1",
       "loc-1:ifbs-booking-99",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.true;
   });
@@ -244,7 +244,7 @@ describe("AccessService.canOperate with buffer", () => {
       "tenant-1",
       "booking-1",
       "loc-1:ifbs-booking-99",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.false;
   });
@@ -273,7 +273,7 @@ describe("AccessService.canView", () => {
       "user-1",
       "tenant-1",
       "booking-1",
-      true,
+      { reach: "any" },
     );
     expect(allowed).to.be.true;
   });
@@ -286,7 +286,7 @@ describe("AccessService.canView", () => {
       "user-1",
       "tenant-1",
       "booking-1",
-      true,
+      { reach: "any" },
     );
     expect(allowed).to.be.false;
   });
@@ -299,7 +299,7 @@ describe("AccessService.canView", () => {
       "user-1",
       "tenant-1",
       "booking-1",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.true;
   });
@@ -312,7 +312,7 @@ describe("AccessService.canView", () => {
       "user-1",
       "tenant-1",
       "booking-1",
-      false,
+      { reach: "own" },
     );
     expect(allowed).to.be.false;
   });
@@ -324,7 +324,7 @@ describe("AccessService.canView", () => {
       "user-1",
       "tenant-1",
       "booking-1",
-      true,
+      { reach: "any" },
     );
     expect(allowed).to.be.false;
   });

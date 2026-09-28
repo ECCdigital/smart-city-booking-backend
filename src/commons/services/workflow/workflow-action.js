@@ -2,6 +2,7 @@ const mailService = require("../../mail-service");
 const BookingManager = require("../../data-managers/booking-manager");
 const MembershipManager = require("../../data-managers/membership-manager");
 const { TRIGGER } = require("../booking-lifecycle/booking-state");
+const { DOMAIN } = require("../authorization/reach");
 
 class WorkflowAction {
   constructor(action) {
@@ -72,6 +73,7 @@ class BookingStatusAction extends WorkflowAction {
     const booking = await BookingManager.getBooking(
       this.bookingId,
       this.tenantId,
+      DOMAIN,
     );
 
     if (!booking) return;

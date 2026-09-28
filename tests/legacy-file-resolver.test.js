@@ -5,11 +5,11 @@ const FileController = require("../src/platform/api/controllers/file-controller"
 const MediaManager = require("../src/commons/data-managers/media-manager");
 const TenantManager = require("../src/commons/data-managers/tenant-manager");
 const MediaService = require("../src/commons/services/media/media-service");
-const MembershipManager = require("../src/commons/data-managers/membership-manager");
 const {
   NextcloudManager,
 } = require("../src/commons/data-managers/file-manager");
 const { Media } = require("../src/commons/entities/media/media");
+const { decide } = require("../src/commons/services/authorization");
 const {
   resetImportStatus,
 } = require("../src/commons/services/media/media-import-status");
@@ -53,29 +53,39 @@ function createResponse() {
 }
 
 /**
- * The resolver runs behind `public("media", "file")` (tenant) and
- * `public("instanceMedia", "file")` (instance), so a request carries the
- * reach the marker decided: `public` for the anonymous, `own` for a
- * signed-in user without a media role.
+ * The resolver runs behind `public("media", "file", { also:
+ * ["bookingDocument", "intern"] })` (tenant) and `public("instanceMedia",
+ * "file", { also: ["intern"] })` (instance), so a request carries the
+ * reaches those markers decide over the real table.
  */
 function createRequest({
   user = null,
   name = LEGACY_PATH,
   params = {},
-  reach = user ? "own" : "public",
+  isMember = false,
 } = {}) {
+  const principal = {
+    userId: user?.id ?? null,
+    tenantId: params.tenant ?? null,
+    isInstanceOwner: false,
+    isMember,
+    isTenantOwner: false,
+    grants: {},
+    restingMembership: null,
+  };
+  const resource = params.tenant ? "media" : "instanceMedia";
+  const also = params.tenant ? ["bookingDocument", "intern"] : ["intern"];
   return {
     user,
     params,
     query: { name },
     headers: {},
-    reach,
-    principal: {
-      userId: user?.id ?? null,
-      isInstanceOwner: false,
-      isTenantOwner: false,
-      grants: {},
-    },
+    principal,
+    reach: decide(principal, resource, "file"),
+    entry: { resource, action: "file" },
+    reaches: Object.fromEntries(
+      also.map((action) => [action, decide(principal, resource, action)]),
+    ),
     on() {},
   };
 }
@@ -131,9 +141,6 @@ describe("legacy file resolver", () => {
     sandbox.stub(MediaManager, "countImportedMedia").resolves(0);
     sandbox.stub(MediaManager, "getMediaByLegacyPath").resolves(null);
     sandbox.stub(MediaService, "getStream").resolves(stream);
-    sandbox
-      .stub(MembershipManager, "getMembershipByTenantAndUserID")
-      .resolves(null);
     sandbox
       .stub(NextcloudManager, "statFile")
       .resolves({ etag: "etag-1", lastmod: "Mon, 01 Jan 2024 00:00:00 GMT" });
@@ -206,13 +213,14 @@ describe("legacy file resolver", () => {
       MediaManager.getMediaByLegacyPath
         .withArgs(TENANT, LEGACY_PATH)
         .resolves(mediaFixture({ visibility: "intern" }));
-      MembershipManager.getMembershipByTenantAndUserID.resolves({
-        status: "active",
-      });
 
       const response = createResponse();
       await FileController.getTenantFile(
-        createRequest({ user: { id: "user-1" }, params: { tenant: TENANT } }),
+        createRequest({
+          user: { id: "user-1" },
+          params: { tenant: TENANT },
+          isMember: true,
+        }),
         response,
         () => assert.fail("no error expected"),
       );
@@ -273,16 +281,13 @@ describe("legacy file resolver", () => {
     });
 
     it("serves a protected legacy file to an active member", async () => {
-      MembershipManager.getMembershipByTenantAndUserID.resolves({
-        status: "active",
-      });
-
       const response = createResponse();
       await FileController.getTenantFile(
         createRequest({
           user: { id: "user-1" },
           name: PROTECTED_PATH,
           params: { tenant: TENANT },
+          isMember: true,
         }),
         response,
         () => assert.fail("no error expected"),

@@ -1,3 +1,17 @@
+const { ROLE_GROUPS, ROLE_LEVELS } = require("../entities/role/role-catalogue");
+
+/** One boolean per level for every group of the catalogue, all false. */
+function roleGroupBlocks() {
+  return Object.fromEntries(
+    ROLE_GROUPS.map((group) => [
+      group,
+      Object.fromEntries(
+        ROLE_LEVELS.map((level) => [level, { type: Boolean, default: false }]),
+      ),
+    ]),
+  );
+}
+
 const roleSchemaDefinition = {
   id: { type: String, required: true },
   name: { type: String, required: true },
@@ -18,60 +32,7 @@ const roleSchemaDefinition = {
     ],
     default: [],
   },
-  manageUsers: {
-    create: { type: Boolean, default: false },
-    readAny: { type: Boolean, default: false },
-    readOwn: { type: Boolean, default: false },
-    updateAny: { type: Boolean, default: false },
-    updateOwn: { type: Boolean, default: false },
-    deleteAny: { type: Boolean, default: false },
-    deleteOwn: { type: Boolean, default: false },
-  },
-  manageBookables: {
-    create: { type: Boolean, default: false },
-    readAny: { type: Boolean, default: false },
-    readOwn: { type: Boolean, default: false },
-    updateAny: { type: Boolean, default: false },
-    updateOwn: { type: Boolean, default: false },
-    deleteAny: { type: Boolean, default: false },
-    deleteOwn: { type: Boolean, default: false },
-  },
-  manageBookings: {
-    create: { type: Boolean, default: false },
-    readAny: { type: Boolean, default: false },
-    readOwn: { type: Boolean, default: false },
-    updateAny: { type: Boolean, default: false },
-    updateOwn: { type: Boolean, default: false },
-    deleteAny: { type: Boolean, default: false },
-    deleteOwn: { type: Boolean, default: false },
-  },
-  manageCoupons: {
-    create: { type: Boolean, default: false },
-    readAny: { type: Boolean, default: false },
-    readOwn: { type: Boolean, default: false },
-    updateAny: { type: Boolean, default: false },
-    updateOwn: { type: Boolean, default: false },
-    deleteAny: { type: Boolean, default: false },
-    deleteOwn: { type: Boolean, default: false },
-  },
-  manageMedia: {
-    create: { type: Boolean, default: false },
-    readAny: { type: Boolean, default: false },
-    readOwn: { type: Boolean, default: false },
-    updateAny: { type: Boolean, default: false },
-    updateOwn: { type: Boolean, default: false },
-    deleteAny: { type: Boolean, default: false },
-    deleteOwn: { type: Boolean, default: false },
-  },
-  manageRoles: {
-    create: { type: Boolean, default: false },
-    readAny: { type: Boolean, default: false },
-    readOwn: { type: Boolean, default: false },
-    updateAny: { type: Boolean, default: false },
-    updateOwn: { type: Boolean, default: false },
-    deleteAny: { type: Boolean, default: false },
-    deleteOwn: { type: Boolean, default: false },
-  },
+  ...roleGroupBlocks(),
   assignedUserId: { type: String, default: null },
   freeBookings: { type: Boolean, default: false },
 };

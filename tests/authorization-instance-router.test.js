@@ -1,6 +1,6 @@
 /**
  * The instance router on the authorization, end to end over the lifecycle
- * harness (authorize spec §3.2, ticket 3): the instance owner reaches the
+ * harness: the instance owner reaches the
  * instance, the tenant owner the tenant the route names - in the path or,
  * at `PUT /tenants`, in the body - and everybody else is refused in the
  * one JSON form before the handler. The tenant list hands the reach to
@@ -118,16 +118,19 @@ describe("authorization on the instance router", function () {
     ).to.equal(201);
   });
 
-  it("hands the tenant list its reach", async function () {
+  it("hands the tenant list its reach, with the tenant set own means there (ADR 0002)", async function () {
+    // The customer owns no tenant: the owned list is the empty set.
     await get("/tenants", CUSTOMER);
     expect(TenantManager.getTenants.lastCall.args).to.deep.equal([
-      { reach: "own", userId: CUSTOMER },
-      { owned: true },
+      { reach: "own", userId: CUSTOMER, tenantIds: [] },
+      {},
     ]);
+    // The public projection lists the tenants of the memberships.
     await get("/tenants?publicTenants=true", CUSTOMER);
-    expect(TenantManager.getTenants.lastCall.args[1]).to.deep.equal({
-      owned: false,
-    });
+    expect(TenantManager.getTenants.lastCall.args).to.deep.equal([
+      { reach: "own", userId: CUSTOMER, tenantIds: [TENANT] },
+      {},
+    ]);
     await get("/tenants", ADMIN);
     expect(TenantManager.getTenants.lastCall.args[0]).to.deep.equal({
       reach: "any",

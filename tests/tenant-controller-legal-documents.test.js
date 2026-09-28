@@ -34,6 +34,8 @@ describe("TenantController legal documents", function () {
       query: {},
       body: { id: TENANT },
       reach: "any",
+      entry: { resource: "tenant", action: "update" },
+      reaches: { "media.read": "any" },
       principal: {
         userId: USER,
         isInstanceOwner: true,
@@ -131,11 +133,15 @@ describe("TenantController legal documents", function () {
       await TenantController.updateTenant(req, res);
 
       expect(guardStub.calledOnce).to.be.true;
-      const [checked, tenantId, scope] = guardStub.firstCall.args;
+      const [checked, tenantId, reaches] = guardStub.firstCall.args;
       expect(checked.legalDocuments).to.deep.equal(req.body.legalDocuments);
       expect(tenantId).to.equal(TENANT);
-      // The reach of `media.read`, decided a second time in the adapter (§5).
-      expect(scope).to.deep.equal({ reach: "any", userId: USER });
+      // The bundle of the route, with the picker right its marker names.
+      expect(reaches).to.deep.equal({
+        update: "any",
+        "media.read": "any",
+        userId: USER,
+      });
     });
 
     it("answers 400 with the code when the medium may not be referenced", async function () {

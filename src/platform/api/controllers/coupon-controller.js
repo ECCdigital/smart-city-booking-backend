@@ -1,7 +1,7 @@
 const CouponManager = require("../../../commons/data-managers/coupon-manager");
+const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const { Coupon } = require("../../../commons/entities/coupon/coupon");
-const { ForbiddenError } = require("../../../errors/BaseError");
-const { decide, scopeOf } = require("../../../commons/services/authorization");
+const { scopeOf } = require("../../../commons/services/authorization");
 const bunyan = require("bunyan");
 const CouponService = require("../../../commons/services/coupon-service");
 
@@ -11,51 +11,17 @@ const logger = bunyan.createLogger({
 });
 
 class CouponController {
-  static async storeCoupon(request, response, next) {
-    const tenant = request.params.tenant;
-    try {
-      const coupon = new Coupon(request.body);
-
-      if (!coupon) {
-        return response.status(400).send("Coupon is required");
-      }
-
-      let isUpdate = false;
-      const existingCoupon = await CouponManager.getCoupon(coupon.id, tenant);
-
-      if (existingCoupon) {
-        isUpdate = true;
-      }
-
-      if (isUpdate) {
-        await CouponController.updateCoupon(request, response);
-      } else {
-        await CouponController.createCoupon(request, response, next);
-      }
-    } catch (err) {
-      logger.error(err);
-      response.status(500).send("Could not store coupon");
-    }
-  }
-
   /**
-   * The obsolete PUT carries the update marker; the creation is the
-   * adapter's second decision (authorize spec §5, §11).
+   * `POST /:tenant/coupons`: the id is the discount code the user typed,
+   * or generated when absent; one that exists already is a 400.
    */
-  static async createCoupon(request, response, next) {
+  static async createCoupon(request, response) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
       const coupon = new Coupon(request.body);
 
       coupon.tenantId = tenant;
-
-      if (decide(request.principal, "coupon", "create") !== "any") {
-        logger.warn(
-          `User ${user?.id} not allowed to create coupons ${coupon?.id}`,
-        );
-        return next(new ForbiddenError());
-      }
 
       try {
         coupon.ownerUserId = user.id;
@@ -132,12 +98,19 @@ class CouponController {
 
     console.log(`Getting coupon with id ${id} for tenant ${tenant}`);
 
+    // The lookup asks as the public (`coupon.lookup`): a tenant without a
+    // public projection has no coupons to look up (ADR 0003), the 404
+    // names no reason.
+    if (!(await TenantManager.getTenant(tenant, scopeOf(request)))) {
+      return response.status(404).send("Coupon not found");
+    }
+
     const doesExist = await CouponManager.exists(id, tenant);
     if (!doesExist) {
       return response.status(404).send("Coupon not found");
     }
 
-    const coupon = await CouponManager.getCoupon(id, tenant);
+    const coupon = await CouponManager.getCoupon(id, tenant, scopeOf(request));
     try {
       if (!coupon.isValid()) {
         logger.warn(`${tenant} -- Coupon ${coupon.id} is not valid`);

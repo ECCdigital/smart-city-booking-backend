@@ -8,6 +8,7 @@ const { BookingStatusError } = require("../../../../errors/BookingStatusError");
 const {
   customerViewOf,
 } = require("../../../../commons/services/booking/booking-customer-view");
+const { scopeOf } = require("../../../../commons/services/authorization");
 
 const logger = bunyan.createLogger({
   name: "booking-status.controller.v2.js",
@@ -57,7 +58,11 @@ class BookingStatusControllerV2 {
 
     let bookings;
     try {
-      bookings = await BookingManager.getBookings(tenantId, splitIds);
+      bookings = await BookingManager.getBookings(
+        tenantId,
+        splitIds,
+        scopeOf(req),
+      );
     } catch (err) {
       logger.error(
         { err, tenantId, splitIds },

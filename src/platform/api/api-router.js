@@ -16,13 +16,10 @@ const {
   authorize,
   publicRoute,
 } = require("../../commons/services/authorization");
-const {
-  publicTenantGate,
-} = require("../../commons/services/supervision/public-tenant-gate");
 
 const router = express.Router({ mergeParams: true });
 
-// The instance level (authorize spec §3.2): every route carries its marker.
+// The instance level (glossary "Berechtigung"): every route carries its marker.
 // A route about one tenant names it `:tenant`, as the tenant router does,
 // so the principal is loaded in that tenant; `PUT /tenants` names it in the
 // body.
@@ -47,7 +44,7 @@ router.get(
 );
 router.put(
   "/instances",
-  authorize("instance", "update"),
+  authorize("instance", "update", { also: ["instanceMedia.read"] }),
   InstanceController.storeInstance,
 );
 router.get(
@@ -137,14 +134,17 @@ router.get(
 );
 router.post(
   "/tenants",
-  authorize("tenant", "create"),
+  authorize("tenant", "create", { also: ["media.read"] }),
   TenantController.createTenant,
 );
 // The obsolete store: the tenant is the body's; an unknown id creates,
-// which is the adapter's second decision (§12).
+// which the marker names as its second question (ADR 0001).
 router.put(
   "/tenants",
-  authorize("tenant", "update", { tenantOf: (req) => req.body?.id }),
+  authorize("tenant", "update", {
+    tenantOf: (req) => req.body?.id,
+    also: ["create", "media.read"],
+  }),
   TenantController.storeTenant,
 );
 router.get(
@@ -177,7 +177,6 @@ router.get(
 router.get(
   "/tenants/:tenant/payment-apps",
   publicRoute("tenant", "paymentApps"),
-  publicTenantGate(),
   TenantController.getActivePaymentApps,
 );
 router.get(
@@ -201,9 +200,10 @@ router.post(
   authorize("tenantUser", "manage"),
   TenantController.addUser,
 );
+// Removing an owner is the owners' alone: the marker decides that too.
 router.post(
   "/tenants/:tenant/remove-user",
-  authorize("tenantUser", "manage"),
+  authorize("tenantUser", "manage", { also: ["owner"] }),
   TenantController.removeUser,
 );
 router.post(
@@ -248,8 +248,12 @@ router.post(
   authorize("user", "changeId"),
   UserController.changeUserId,
 );
-// The obsolete store: an unknown id creates, the adapter's second decision.
-router.put("/users", authorize("user", "update"), UserController.storeUser);
+// The obsolete store: an unknown id creates, which the marker decides too.
+router.put(
+  "/users",
+  authorize("user", "update", { also: ["create"] }),
+  UserController.storeUser,
+);
 router.put("/user", authorize("user", "updateSelf"), UserController.updateMe);
 router.delete(
   "/users/:id",
@@ -311,10 +315,10 @@ router.use(require("./routes/instance-catalog.routes"));
 // (§4.9) — `/api/v2/instance/media` replaces them. `GET /files/get` stays as
 // the resolver of legacy paths (§4.10): a public medium for anyone, an intern
 // one for a signed-in user - the medium's visibility decides in the media
-// module, in addition to the reach.
+// rights, from the questions the marker names.
 router.get(
   "/files/get",
-  publicRoute("instanceMedia", "file"),
+  publicRoute("instanceMedia", "file", { also: ["intern"] }),
   FileController.getFile,
 );
 
@@ -323,7 +327,7 @@ router.get(
 
 router.get(
   "/bookings/assigned",
-  authorize("booking", "read"),
+  authorize("booking", "readMine"),
   BookingController.getAssignedBookings,
 );
 

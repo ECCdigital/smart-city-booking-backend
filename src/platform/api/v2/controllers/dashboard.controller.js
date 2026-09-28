@@ -10,6 +10,12 @@ const logger = bunyan.createLogger({
 });
 
 class DashboardControllerV2 {
+  /**
+   * The KPIs across tenants. The route's reach is one of the instance;
+   * which tenants a user under `own` sees is the tenant set the scope
+   * carries (`instanceDashboard.read`: the tenants whose own dashboard
+   * they read, ADR 0002).
+   */
   static async getInstanceSummary(req, res) {
     try {
       const data = await DashboardService.getInstanceSummary(

@@ -61,6 +61,14 @@ Instance (global deployment config)
 - Controllers resolve tenant context from route params or auth
 - Cross-tenant data access is a security bug
 
+## Rights
+
+The authorization lives in `src/commons/services/authorization/`: a principal loaded once per request, the rights table (`table.js`), and one marker per route that decides the reach the managers turn into their query condition. Nothing here repeats it:
+
+- Terms: glossary section "Rechte" in `CONTEXT.md` (Reichweite, Prinzipal, Rechtetabelle, Berechtigung, …)
+- Request flow and how to mark a route: [api.md](api.md)
+- Decisions: [ADR 0001](../adr/0001-reach-has-one-meaning.md) (one meaning of `own`), [ADR 0002](../adr/0002-reach-is-required.md) (no read without a reach), [ADR 0003](../adr/0003-public-projection-behind-the-managers.md) (public projection behind the managers)
+
 ## Key patterns
 
 | Layer      | Pattern                   | Example                                              |

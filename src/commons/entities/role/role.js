@@ -1,16 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const SchemaUtils = require("../../utilities/schemaUtils");
 const { roleSchemaDefinition } = require("../../schemas/roleSchema");
-
-const RolePermission = Object.freeze({
-  MANAGE_BOOKABLES: "manageBookables",
-  MANAGE_USERS: "manageUsers",
-  MANAGE_ROLES: "manageRoles",
-  MANAGE_BOOKINGS: "manageBookings",
-  MANAGE_COUPONS: "manageCoupons",
-  MANAGE_MEDIA: "manageMedia",
-  FREE_BOOKINGS: "freeBookings",
-});
+const { ROLE_GROUPS, ROLE_LEVELS } = require("./role-catalogue");
 
 /**
  * The Role class is the basic definition for the security layer.
@@ -63,5 +54,6 @@ class Role {
 
 module.exports = {
   Role,
-  RolePermission,
+  ROLE_GROUPS,
+  ROLE_LEVELS,
 };

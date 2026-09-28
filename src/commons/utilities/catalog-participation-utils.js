@@ -5,9 +5,7 @@ const {
   NotFoundError,
   UnauthorizedError,
 } = require("../../errors/BaseError");
-const {
-  isTenantPubliclyVisible,
-} = require("../services/supervision/offer-gate");
+const { PUBLIC } = require("../services/authorization/reach");
 
 async function getMemberTenantIds(userId) {
   if (!userId) {
@@ -26,14 +24,14 @@ function hasRestrictedCatalogAccess(tenant, memberTenantIds) {
   return memberTenantIds.has(tenant.id);
 }
 
+/**
+ * The catalog participation of a tenant the caller reads as the public
+ * (`TenantManager.getTenants(PUBLIC)`, ADR 0003): its own wish to be
+ * listed, the catalog's exclusions and its restriction to members. The
+ * supervision is not asked here - a tenant without a public projection
+ * never reaches this.
+ */
 function isTenantListedInCatalog(tenant, catalog, memberTenantIds) {
-  // The tenant gate of the supervision comes first (spec §5.2): a tenant
-  // without a public projection (pending, declined) is not listed, whatever
-  // its catalog participation says.
-  if (!isTenantPubliclyVisible(tenant)) {
-    return false;
-  }
-
   if (!tenant?.catalogParticipation?.visible) {
     return false;
   }
@@ -45,11 +43,15 @@ function isTenantListedInCatalog(tenant, catalog, memberTenantIds) {
   return hasRestrictedCatalogAccess(tenant, memberTenantIds);
 }
 
+/**
+ * The tenant behind a public catalog path, as the public sees it (ADR
+ * 0003): a tenant without a public projection is not there - the 404
+ * names no reason (spec §5.2) - and a restricted participation asks for
+ * a membership.
+ */
 async function enforceTenantCatalogAccess(tenantId, userId) {
-  const tenant = await TenantManager.getTenant(tenantId);
-  // A pending or declined tenant answers as an unknown one (spec §5.2): the
-  // public response names no reason.
-  if (!isTenantPubliclyVisible(tenant)) {
+  const tenant = await TenantManager.getTenant(tenantId, PUBLIC);
+  if (!tenant) {
     throw new NotFoundError("tenant_not_found", { tenantId });
   }
 

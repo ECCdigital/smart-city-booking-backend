@@ -4,6 +4,7 @@ const TenantManager = require("../../../data-managers/tenant-manager");
 const issuance = require("../../documents/document-issuance");
 const mailService = require("../../../mail-service");
 const bunyan = require("bunyan");
+const { DOMAIN } = require("../../authorization/reach");
 
 const logger = bunyan.createLogger({
   name: "invoice-payment-service",
@@ -119,6 +120,7 @@ class InvoicePaymentService extends PaymentService {
     const bookings = await BookingManager.getBookings(
       this.tenantId,
       bookingIds,
+      DOMAIN,
     );
     return issuance.issue({
       tenantId: this.tenantId,

@@ -5,6 +5,8 @@ const sharp = require("sharp");
 const MediaControllerV2 = require("../src/platform/api/v2/controllers/media.controller");
 const InstanceManager = require("../src/commons/data-managers/instance-manager");
 const MediaManager = require("../src/commons/data-managers/media-manager");
+const { decide, TABLE } = require("../src/commons/services/authorization");
+const { DOMAIN } = require("../src/commons/services/authorization/reach");
 const MediaReferenceGuard = require("../src/commons/services/media/media-reference-guard");
 const MediaService = require("../src/commons/services/media/media-service");
 const MembershipManager = require("../src/commons/data-managers/membership-manager");
@@ -54,9 +56,10 @@ function createResponse() {
 
 /**
  * A request on the instance routes: no `:tenant` at all — that absence is the
- * address of the instance library. The reach is what the route decided
- * (`instanceMedia.*`, authorize spec §3.2); who gets which reach is pinned in
- * `authorization-media-routes.test.js`, so a request here simply carries one.
+ * address of the instance library. The reaches are what the table decides
+ * for the principal (`instanceMedia.*`), every entry of
+ * the resource; which ones a route names, and who is turned away at the door,
+ * is pinned in `authorization-media-routes.test.js`.
  */
 function instanceRequest({
   user = null,
@@ -64,8 +67,16 @@ function instanceRequest({
   query = {},
   body = {},
   files,
-  reach = user ? "any" : "public",
+  action = "read",
 }) {
+  const principal = {
+    userId: user?.id ?? null,
+    tenantId: null,
+    isInstanceOwner: Boolean(user) && user.id === OWNER.id,
+    isMember: false,
+    isTenantOwner: false,
+    grants: {},
+  };
   return {
     user,
     params,
@@ -73,20 +84,22 @@ function instanceRequest({
     body,
     files,
     headers: {},
-    reach,
-    principal: {
-      userId: user?.id ?? null,
-      isInstanceOwner: Boolean(user) && user.id === OWNER.id,
-      isTenantOwner: false,
-      grants: {},
-    },
+    principal,
+    reach: decide(principal, "instanceMedia", action),
+    entry: { resource: "instanceMedia", action },
+    reaches: Object.fromEntries(
+      Object.keys(TABLE.instanceMedia).map((other) => [
+        other,
+        decide(principal, "instanceMedia", other),
+      ]),
+    ),
     on() {},
   };
 }
 
-/** The reach of `instanceMedia.read`, as the instance owner holds it. */
-const OWNER_PICKS = { reach: "any", userId: OWNER.id };
-const SIGNED_IN_PICKS = { reach: null, userId: SIGNED_IN.id };
+/** The bundle of the saver's route, with `instanceMedia.read` as the instance owner holds it. */
+const OWNER_PICKS = { "instanceMedia.read": "any", userId: OWNER.id };
+const SIGNED_IN_PICKS = { "instanceMedia.read": null, userId: SIGNED_IN.id };
 
 function createStream() {
   return {
@@ -179,9 +192,11 @@ describe("instance media", function () {
     sandbox
       .stub(MembershipManager, "getMembershipByTenantAndUserID")
       .resolves({ status: "active", owner: true });
-    sandbox
-      .stub(UserManager, "getUserPermissions")
-      .resolves({ tenants: [], instanceOwner: false });
+    sandbox.stub(UserManager, "getMembershipPicture").resolves({
+      instanceOwner: false,
+      mayCreateTenant: false,
+      memberships: [],
+    });
     sandbox.stub(MediaUsageService, "findUsage").resolves([]);
   });
 
@@ -207,9 +222,9 @@ describe("instance media", function () {
         createResponse(),
       );
 
-      const args = MediaManager.getMediaList.firstCall.args[0];
-      assert.strictEqual(args.tenantId, null);
-      assert.strictEqual(args.uploadedBy, undefined);
+      const [params, scope] = MediaManager.getMediaList.firstCall.args;
+      assert.strictEqual(params.tenantId, null);
+      assert.strictEqual(scope.reach, "any");
     });
 
     it("lets the instance owner patch metadata", async function () {
@@ -305,8 +320,8 @@ describe("instance media", function () {
       sandbox.stub(MediaService, "getStream").resolves(createStream());
     });
 
-    // `instanceMedia.file`: `public` for the anonymous, `own` for any
-    // signed-in user, `any` for the owner.
+    // `instanceMedia.file`: `public` for the anonymous, `any` for any
+    // signed-in user.
     async function deliver(media, user) {
       sandbox.stub(MediaManager, "getMedia").resolves(media);
       const res = createResponse();
@@ -315,7 +330,7 @@ describe("instance media", function () {
         instanceRequest({
           user,
           params: { id: "media-1" },
-          reach: user ? (user.id === OWNER.id ? "any" : "own") : "public",
+          action: "file",
         }),
         res,
       );
@@ -355,7 +370,7 @@ describe("instance media", function () {
   });
 
   describe("separation from the tenants", function () {
-    it("looks a medium up without a tenant", async function () {
+    it("looks a medium up without a tenant, as the domain", async function () {
       sandbox.stub(MediaManager, "getMedia").resolves(instanceMediaFixture());
 
       await MediaControllerV2.getMedia(
@@ -366,6 +381,7 @@ describe("instance media", function () {
       assert.deepStrictEqual(MediaManager.getMedia.firstCall.args, [
         "media-1",
         null,
+        DOMAIN,
       ]);
     });
 
@@ -400,6 +416,7 @@ describe("instance media", function () {
       assert.deepStrictEqual(MediaManager.getMedia.firstCall.args, [
         "tenant-media",
         null,
+        DOMAIN,
       ]);
     });
 
@@ -411,7 +428,7 @@ describe("instance media", function () {
         () =>
           MediaReferenceGuard.assertReferencesStorable({
             tenantId: TENANT,
-            scope: OWNER_PICKS,
+            reaches: { "media.read": "any", userId: OWNER.id },
             references: [{ source: "media", mediaId: "media-1" }],
             requirePublic: false,
           }),

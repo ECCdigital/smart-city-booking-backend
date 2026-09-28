@@ -3,6 +3,9 @@ const sinon = require("sinon");
 const CalendarController = require("../src/platform/api/controllers/calendar-controller");
 const CalendarServiceV2 = require("../src/commons/services/calendar-service-v2");
 const CalendarService = require("../src/commons/services/calendar-service");
+const {
+  BookableManager,
+} = require("../src/commons/data-managers/bookable-manager");
 
 function createMockResponse() {
   const headers = new Map();
@@ -25,6 +28,11 @@ function createMockResponse() {
 }
 
 describe("availability R5 — API rollout", () => {
+  beforeEach(() => {
+    // The bookable of the route within the reach of the request (ADR 0003).
+    sinon.stub(BookableManager, "getBookable").resolves({ id: "room-a" });
+  });
+
   afterEach(() => {
     sinon.restore();
   });

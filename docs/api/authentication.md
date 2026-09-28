@@ -176,9 +176,9 @@ Every entry of `permissions.tenants[]` (`/auth/signin`, `/auth/me`, `/auth/sso/s
 
 `supervisionLevel` is `free | supervised | pending | declined` (a tenant without a stored level reads `free`), `supervisionChangedAt` the latest level change or `null`, `supervisionReason` the reason of that latest change (glossary „Begründung des jüngsten Stufenwechsels“) or `null`.
 
-## The management gate of a declined tenant
+## The declined tenant: the membership rests
 
-A declined tenant (glossary „abgewiesen“) is closed to its own people. After the rights decision, `authorize` loads the tenant of the route - only when the rule was satisfied as tenant owner or role holder, once per request - and a declined tenant answers:
+A declined tenant (glossary „abgewiesen“) is closed to its own people. The membership of its tenant owners and members rests (glossary „Ruhende Mitgliedschaft“): the principal is loaded with it resting - no member, no tenant owner, no role level there - so every path that decides rights meets it, the route markers, the handlers' second decisions and the instance routes that ask per tenant alike. A request `authorize` refuses to them answers:
 
 ```http
 HTTP/1.1 403 Forbidden
@@ -195,7 +195,7 @@ HTTP/1.1 403 Forbidden
 }
 ```
 
-This holds for every management request - read and write - on `/api/:tenant/...`, `/api/tenants/:tenant/...`, `/api/v2/:tenant/...`, `/csv/:tenant/...` and `PUT /api/tenants` with the tenant in the body; the supervision history and the readiness check of the tenant included. Not affected:
+This holds for every refused request - read and write, whether or not the membership would have given the right - on `/api/:tenant/...`, `/api/tenants/:tenant/...`, `/api/v2/:tenant/...`, `/csv/:tenant/...` and `PUT /api/tenants` with the tenant in the body; the supervision history and the readiness check of the tenant included. Routes that never refuse (`public`) narrow instead: `GET /api/:tenant/bookings` lists the own bookings, `?public=true` answers the public's `404`. Across tenants the declined one is left out: the owned list of `GET /api/tenants` (it stays in `?publicTenants=true`), the instance dashboard, and what `GET /api/access/bookings` manages. The metadata of its media are refused, its files answer members as the public (`intern` `403`, `public` `404`). Not affected:
 
 - the instance owner (every right stays),
 - what any signed-in user has: the own booking, its receipt, refund preview and lock, an invitation - a tenant owner who booked in the own tenant keeps exactly that, at the reach `own`,
