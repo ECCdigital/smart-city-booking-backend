@@ -1,7 +1,6 @@
 const CouponManager = require("../../../commons/data-managers/coupon-manager");
 const TenantManager = require("../../../commons/data-managers/tenant-manager");
 const { Coupon } = require("../../../commons/entities/coupon/coupon");
-const { ForbiddenError } = require("../../../errors/BaseError");
 const { scopeOf } = require("../../../commons/services/authorization");
 const bunyan = require("bunyan");
 const CouponService = require("../../../commons/services/coupon-service");
@@ -12,57 +11,17 @@ const logger = bunyan.createLogger({
 });
 
 class CouponController {
-  static async storeCoupon(request, response, next) {
-    const tenant = request.params.tenant;
-    try {
-      const coupon = new Coupon(request.body);
-
-      if (!coupon) {
-        return response.status(400).send("Coupon is required");
-      }
-
-      let isUpdate = false;
-      // The coupon within the reach of the main action: a coupon out of
-      // reach is not there, and the creation runs into the unique key.
-      const existingCoupon = await CouponManager.getCoupon(
-        coupon.id,
-        tenant,
-        scopeOf(request),
-      );
-
-      if (existingCoupon) {
-        isUpdate = true;
-      }
-
-      if (isUpdate) {
-        await CouponController.updateCoupon(request, response);
-      } else {
-        await CouponController.createCoupon(request, response, next);
-      }
-    } catch (err) {
-      logger.error(err);
-      response.status(500).send("Could not store coupon");
-    }
-  }
-
   /**
-   * The obsolete PUT carries the update marker and names the creation as
-   * its second question (`also: ["create"]`, ADR 0001).
+   * `POST /:tenant/coupons`: the id is the discount code the user typed,
+   * or generated when absent; one that exists already is a 400.
    */
-  static async createCoupon(request, response, next) {
+  static async createCoupon(request, response) {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
       const coupon = new Coupon(request.body);
 
       coupon.tenantId = tenant;
-
-      if (request.reaches?.create !== "any") {
-        logger.warn(
-          `User ${user?.id} not allowed to create coupons ${coupon?.id}`,
-        );
-        return next(new ForbiddenError());
-      }
 
       try {
         coupon.ownerUserId = user.id;

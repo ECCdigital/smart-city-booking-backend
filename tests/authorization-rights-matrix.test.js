@@ -333,9 +333,10 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       },
       { id: MINE, tenantId: A },
     ),
-    // Creating is a role level of its own: the reader has none.
+    // Creating is a role level of its own, on a route of its own (POST):
+    // the reader has none. The PUT names its record, or finds none.
     row(
-      "put",
+      "post",
       inA("/bookables"),
       {
         anonymous: 401,
@@ -347,6 +348,62 @@ describe("authorization rights matrix: the core routes by principal, stage and t
         foreignOwner: 403,
       },
       { tenantId: A, title: "Neu" },
+    ),
+    row(
+      "put",
+      inA("/bookables"),
+      {
+        anonymous: 401,
+        customer: 403,
+        reader: 404,
+        staff: 404,
+        owner: 404,
+        admin: 404,
+        foreignOwner: 403,
+      },
+      { tenantId: A, title: "Neu" },
+    ),
+    row(
+      "post",
+      inA("/events"),
+      {
+        anonymous: 401,
+        customer: 403,
+        reader: 403,
+        staff: 201,
+        owner: 201,
+        admin: 201,
+        foreignOwner: 403,
+      },
+      { tenantId: A, information: { name: "Neu" } },
+    ),
+    row(
+      "post",
+      inA("/coupons"),
+      {
+        anonymous: 401,
+        customer: 403,
+        reader: 403,
+        staff: 201,
+        owner: 201,
+        admin: 201,
+        foreignOwner: 403,
+      },
+      { id: "neu", tenantId: A, type: "percentage", discount: 10 },
+    ),
+    row(
+      "post",
+      inA("/roles"),
+      {
+        anonymous: 401,
+        customer: 403,
+        reader: 403,
+        staff: 201,
+        owner: 201,
+        admin: 201,
+        foreignOwner: 403,
+      },
+      { tenantId: A, name: "Neu" },
     ),
     row("delete", inA(`/bookables/${FX}`), {
       anonymous: 401,
@@ -446,13 +503,14 @@ describe("authorization rights matrix: the core routes by principal, stage and t
     }),
     // A coupon out of reach is not there for the upsert either (ADR 0002):
     // the PUT turns into a creation, which the reader may not do.
+    // The PUT names its coupon: one out of the reader's reach is not there.
     row(
       "put",
       inA("/coupons"),
       {
         anonymous: 401,
         customer: 403,
-        reader: 403,
+        reader: 404,
         staff: 201,
         owner: 201,
         admin: 201,

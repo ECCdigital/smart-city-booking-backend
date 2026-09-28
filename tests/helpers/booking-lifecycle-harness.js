@@ -925,7 +925,7 @@ async function installHarness({ tenant: tenantOverrides, bookables } = {}) {
   /** The administration books manually with the flags it chooses. */
   async function manualBooking(bookableId, flags = {}, overrides = {}) {
     const res = await api()
-      .put(`/api/${TENANT}/bookings`)
+      .post(`/api/${TENANT}/bookings`)
       .set(as(ADMIN))
       .send({
         tenantId: TENANT,

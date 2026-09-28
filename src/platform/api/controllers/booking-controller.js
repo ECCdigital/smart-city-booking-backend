@@ -366,44 +366,11 @@ class BookingController {
     }
   }
 
-  /**
-   * @obsolete Use createBooking or updateBooking instead.
-   * @param request
-   * @param response
-   * @param next
-   * @returns {Promise<void>}
-   */
-  static async storeBooking(request, response, next) {
-    const booking = bookingFromRequest(request.body);
-
-    // The booking within the reach of the main action (ADR 0002).
-    let isUpdate =
-      !!(await BookingManager.getBooking(
-        booking.id,
-        booking.tenantId,
-        scopeOf(request),
-      )) && !!booking.id;
-
-    if (isUpdate) {
-      await BookingController.updateBooking(request, response, next);
-    } else {
-      await BookingController.createBooking(request, response, next);
-    }
-  }
-
   static async createBooking(request, response, next) {
     const user = request.user;
     const tenantId = request.params.tenant;
 
-    // The obsolete PUT carries the update marker and names the creation
-    // as its second decision (`also`, ADR 0001).
-    if (request.reaches?.create !== "any") {
-      logger.warn(
-        `${tenantId} -- User ${user?.id} is not allowed to create booking.`,
-      );
-      return next(new ForbiddenError());
-    }
-
+    // `POST /:tenant/bookings`, the manual booking of the administration.
     // The body as sent is the checkout's: `status` names the state the
     // booking starts in (booking strand ticket 1), so no entity is read
     // off it here.

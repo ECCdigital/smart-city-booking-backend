@@ -118,11 +118,17 @@ Returns the current user's roles in the tenant, from their membership. **Require
 
 Returns a single role. **Requires JWT.**
 
+### POST /api/:tenant/roles
+
+Creates a role in the tenant; the id is assigned. **Requires JWT.**
+
+_Required permission:_ `manageRoles.create`
+
 ### PUT /api/:tenant/roles
 
-Creates or updates a role in the tenant. **Requires JWT.**
+Updates a role in the tenant; `404 role_not_found` for an id the tenant does not hold. **Requires JWT.**
 
-_Required permissions:_ `role.allowCreate` / `role.allowUpdate`
+_Required permission:_ `manageRoles.updateAny`
 
 > There is no `PUT /api/roles` at instance level. Role writes are always tenant-scoped.
 
@@ -150,11 +156,17 @@ Returns all bookables (including non-public). **Requires JWT.**
 
 Returns a single bookable. **Requires JWT.**
 
+### POST /api/:tenant/bookables
+
+Creates a bookable resource; the id is assigned. **Requires JWT.**
+
+_Required permission:_ `manageBookables.create`
+
 ### PUT /api/:tenant/bookables
 
-Creates or updates a bookable resource. **Requires JWT.**
+Updates a bookable resource; `404` for an id out of reach. **Requires JWT.**
 
-_Required permissions:_ `bookable.allowCreate` / `bookable.allowUpdate`
+_Required permission:_ `manageBookables.updateOwn` / `updateAny`
 
 ### DELETE /api/:tenant/bookables/:id
 
@@ -222,9 +234,13 @@ _Response:_
 
 ## Bookings
 
+### POST /api/:tenant/bookings
+
+Creates a booking on behalf of a customer (a manual booking). **Requires JWT and `manageBookings.create`.** The form names the state the booking starts in as `status` - `requested`, `payment_due` or `confirmed`; `confirmed` on a priced booking needs `paymentMethod` and `timePaid` (`400 missing_payment_details` otherwise), and an explicit `status` wins over the flags sent with it. Any other `status` is `400 invalid_status`. Without a `status` the three flags decide, as before: none - a request; `isCommitted` - awaiting payment (confirmed for a free booking); `isCommitted` and `isPayed` - confirmed and paid. `isPayed` without `isCommitted` on a priced booking, or `isRejected`, is `400 invalid_status`: no state stands for it, nothing is written. The stored booking is then admitted to the lifecycle: the compartments held or the access granted, the receipt of a paid booking issued, the customer, the tenant and the supervisors mailed; where the hold fails, the booking is deleted again and the hold's error answered.
+
 ### PUT /api/:tenant/bookings
 
-Creates a booking on behalf of a customer (a manual booking) or updates one. On a create the form names the state the booking starts in as `status` - `requested`, `payment_due` or `confirmed`; `confirmed` on a priced booking needs `paymentMethod` and `timePaid` (`400 missing_payment_details` otherwise), and an explicit `status` wins over the flags sent with it. Any other `status` is `400 invalid_status`. Without a `status` the three flags decide, as before: none - a request; `isCommitted` - awaiting payment (confirmed for a free booking); `isCommitted` and `isPayed` - confirmed and paid. `isPayed` without `isCommitted` on a priced booking, or `isRejected`, is `400 invalid_status`: no state stands for it, nothing is written. The stored booking is then admitted to the lifecycle: the compartments held or the access granted, the receipt of a paid booking issued, the customer, the tenant and the supervisors mailed; where the hold fails, the booking is deleted again and the hold's error answered. On an update a `status` in the body is discarded, and the flags are the plan of transitions (`400 invalid_status_change` for flags no transition reaches); a body that carries none of `isCommitted`, `isPayed` and `isRejected` is the content change alone, the state stays.
+Updates a booking; `404 booking_not_found` for an id out of reach. **Requires JWT and `manageBookings.updateAny`.** A `status` in the body is discarded, and the flags are the plan of transitions (`400 invalid_status_change` for flags no transition reaches); a body that carries none of `isCommitted`, `isPayed` and `isRejected` is the content change alone, the state stays.
 
 ### POST /api/:tenant/bookings/:id/reinstate
 

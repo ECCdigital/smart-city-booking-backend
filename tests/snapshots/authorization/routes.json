@@ -923,6 +923,13 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
+  "POST /api/:tenant/bookables": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
   "PUT /api/:tenant/bookables": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -986,6 +993,13 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
+  "POST /api/:tenant/events": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
+  },
   "PUT /api/:tenant/events": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -1041,6 +1055,13 @@
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
+  },
+  "POST /api/:tenant/bookings": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 500,
+    "tenantOwner": 500,
+    "instanceOwner": 500
   },
   "PUT /api/:tenant/bookings": {
     "anonymous": 401,
@@ -1378,6 +1399,13 @@
     "tenantOwner": 200,
     "instanceOwner": 200
   },
+  "POST /api/:tenant/coupons": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 400,
+    "tenantOwner": 400,
+    "instanceOwner": 400
+  },
   "PUT /api/:tenant/coupons": {
     "anonymous": 401,
     "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
@@ -1461,6 +1489,13 @@
     "roleHolder": 200,
     "tenantOwner": 200,
     "instanceOwner": 200
+  },
+  "POST /api/:tenant/roles": {
+    "anonymous": 401,
+    "signedIn": "403 {\"error\":\"ForbiddenError\",\"code\":\"forbidden\",\"statusCode\":403,\"params\":{}}",
+    "roleHolder": 201,
+    "tenantOwner": 201,
+    "instanceOwner": 201
   },
   "PUT /api/:tenant/roles": {
     "anonymous": 401,

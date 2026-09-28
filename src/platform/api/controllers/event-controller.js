@@ -4,11 +4,7 @@ const bunyan = require("bunyan");
 const EventService = require("../../../commons/services/event-service");
 const BookingService = require("../../../commons/services/checkout/booking-service");
 const MediaReferenceGuard = require("../../../commons/services/media/media-reference-guard");
-const {
-  BaseError,
-  ForbiddenError,
-  NotFoundError,
-} = require("../../../errors/BaseError");
+const { BaseError, NotFoundError } = require("../../../errors/BaseError");
 const {
   scopeOf,
   reachesOf,
@@ -111,24 +107,6 @@ class EventController {
     }
   }
 
-  /**
-   * @obsolute Use createEvent and updateEvent instead.
-   * @param request
-   * @param response
-   * @returns {Promise<void>}
-   */
-  static async storeEvent(request, response) {
-    const event = new Event(request.body);
-
-    const isUpdate = !!event.id;
-
-    if (isUpdate) {
-      await EventController.updateEvent(request, response);
-    } else {
-      await EventController.createEvent(request, response);
-    }
-  }
-
   static async createEvent(request, response) {
     try {
       const {
@@ -139,13 +117,6 @@ class EventController {
       } = request;
 
       const withTicketsBoolean = withTickets === "true";
-
-      // The obsolete PUT carries the update marker and names the creation
-      // as its second decision (`also`, ADR 0001).
-      if (request.reaches?.create !== "any") {
-        logger.warn(`User ${user?.id} not allowed to create event`);
-        throw new ForbiddenError();
-      }
 
       if (
         (await EventManager.checkPublicEventCount(tenant)) === false &&

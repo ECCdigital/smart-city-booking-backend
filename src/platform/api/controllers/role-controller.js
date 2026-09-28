@@ -2,7 +2,7 @@ const { RoleManager } = require("../../../commons/data-managers/role-manager");
 const MembershipManager = require("../../../commons/data-managers/membership-manager");
 const { Role } = require("../../../commons/entities/role/role");
 const { v4: uuidv4 } = require("uuid");
-const { ForbiddenError } = require("../../../errors/BaseError");
+const { NotFoundError } = require("../../../errors/BaseError");
 const createComponentLogger = require("../../../middleware/logger");
 
 const logger = createComponentLogger("role-controller.js");
@@ -109,39 +109,10 @@ class RoleController {
     }
   }
 
-  /**
-   * @obsolete Use createRole or updateRole instead.
-   * @param request
-   * @param response
-   * @returns {Promise<void>}
-   */
-  static async storeRole(request, response, next) {
-    const roleId = request.body.id;
-    const tenantId = request.params.tenant;
-    const role = await RoleManager.getRole(roleId, tenantId);
-
-    const isUpdate = !!role;
-
-    if (isUpdate) {
-      await RoleController.updateRole(request, response);
-    } else {
-      await RoleController.createRole(request, response, next);
-    }
-  }
-
-  /**
-   * The obsolete PUT carries the update marker and names the creation as
-   * its second decision (`also`, ADR 0001).
-   */
-  static async createRole(request, response, next) {
+  static async createRole(request, response) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
-
-      if (request.reaches?.create !== "any") {
-        logger.warn(`User ${user?.id} not allowed to create role`);
-        return next(new ForbiddenError());
-      }
 
       const role = new Role(request.body);
       role.id = uuidv4();
@@ -157,11 +128,16 @@ class RoleController {
     }
   }
 
-  static async updateRole(request, response) {
+  static async updateRole(request, response, next) {
     try {
       const user = request.user;
       const tenantId = request.params.tenant;
       const role = new Role(request.body);
+
+      // A PUT names its role; none of that id in the tenant is a 404.
+      if (!(await RoleManager.getRole(role.id, tenantId))) {
+        return next(new NotFoundError("role_not_found", { roleId: role.id }));
+      }
 
       await RoleManager.storeRole(role, tenantId);
       logger.info(`Updated role ${role.id} by user ${user?.id}`);

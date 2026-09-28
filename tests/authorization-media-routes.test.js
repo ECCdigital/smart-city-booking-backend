@@ -219,8 +219,8 @@ describe("authorization on the media routes", function () {
     it("hand the guard the picker right their marker names", async function () {
       for (const [method, path, body] of [
         ["put", `/api/${TENANT}/bookables`, { id: FIXTURE_ID }],
-        ["put", `/api/${TENANT}/bookables`, { title: "Neu" }],
-        ["put", `/api/${TENANT}/events`, { title: "Neu" }],
+        ["post", `/api/${TENANT}/bookables`, { title: "Neu" }],
+        ["post", `/api/${TENANT}/events`, { title: "Neu" }],
       ]) {
         const check = path.endsWith("bookables")
           ? "assertBookableStorable"

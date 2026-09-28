@@ -484,6 +484,11 @@ function installRouteWorld({
         one(coupons, "coupon")(id, tenantId, scope),
       getCoupons: async (tenantId, scope) =>
         many(coupons, "coupon")(tenantId, scope),
+      // A creation runs into the unique key: only the world's coupons exist.
+      exists: async (id, tenantId) =>
+        coupons.some(
+          (record) => record.id === id && record.tenantId === tenantId,
+        ),
     },
   });
   // The dashboard counts and aggregates by tenant id into maps; an empty

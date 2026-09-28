@@ -462,7 +462,7 @@ describe("event review routes", function () {
         delete body.id;
 
         const res = await call(
-          "put",
+          "post",
           `/api/${TENANT}/events${query}`,
           OWNER,
           body,
@@ -478,7 +478,7 @@ describe("event review routes", function () {
       const body = form({ isPublic: true });
       delete body.id;
 
-      const res = await call("put", `/api/${TENANT}/events`, OWNER, body);
+      const res = await call("post", `/api/${TENANT}/events`, OWNER, body);
 
       expect(res.status).to.equal(201);
       expect(created().review.status).to.equal("pending");

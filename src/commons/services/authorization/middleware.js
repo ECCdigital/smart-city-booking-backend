@@ -4,10 +4,11 @@
  *
  *   authorize(resource, action)   signed in, decided; 401 anonymous, 403
  *                                 without reach, else `req.reach`. A route
- *                                 with a second question (the obsolete
- *                                 upsert PUT that may create, the user
- *                                 removal that may hit an owner) names it
- *                                 on the marker, `{ also: ["create"] }`,
+ *                                 with a second question (the saver of
+ *                                 media references that needs the picker
+ *                                 right, the user removal that may hit an
+ *                                 owner) names it on the marker,
+ *                                 `{ also: ["media.read"] }`,
  *                                 and reads the answer off `req.reaches`
  *                                 (ADR 0001): the main action alone
  *                                 refuses, the others may be `null`.

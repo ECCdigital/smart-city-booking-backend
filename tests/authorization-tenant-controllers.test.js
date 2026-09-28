@@ -96,11 +96,6 @@ const resting = {
   grants: {},
 };
 const owner = { userId: "owner", isTenantOwner: true, grants: {} };
-const updater = {
-  userId: "updater",
-  isTenantOwner: false,
-  grants: { manageBookables: { updateAny: true } },
-};
 const anonymous = { userId: null, isTenantOwner: false, grants: {} };
 
 describe("tenant controllers on the reach", function () {
@@ -108,24 +103,10 @@ describe("tenant controllers on the reach", function () {
     sinon.restore();
   });
 
-  describe("the obsolete PUT: the creation is the marker's second decision", function () {
-    it("refuses a creation to a principal who may update but not create", async function () {
-      const store = sinon.stub(BookableManager, "storeBookable").resolves();
-      const next = sinon.stub();
-      await BookableController.createBookable(
-        request({
-          reach: "any",
-          reaches: { create: null },
-          principal: updater,
-          body: { title: "Raum" },
-        }),
-        response(),
-        next,
-      );
-      expect(next.firstCall.args[0]).to.be.instanceOf(ForbiddenError);
-      expect(store.called).to.equal(false);
-    });
-
+  describe("the creation: the marker's decision alone", function () {
+    // A principal who may update but not create never reaches the handler:
+    // `POST /:tenant/bookables` carries `bookable.create`, and the marker
+    // refuses (ticket 12). The handler asks nothing about rights itself.
     it("lets the tenant owner create", async function () {
       sinon.stub(BookableManager, "checkPublicBookableCount").resolves(true);
       const store = sinon.stub(BookableManager, "storeBookable").resolves();
@@ -133,7 +114,6 @@ describe("tenant controllers on the reach", function () {
       await BookableController.createBookable(
         request({
           reach: "any",
-          reaches: { create: "any" },
           principal: owner,
           body: { title: "Raum" },
         }),

@@ -6,7 +6,7 @@ const { Bookable } = require("../../../commons/entities/bookable/bookable");
 const { v4: uuidv4 } = require("uuid");
 const AccessPointManager = require("../../../commons/data-managers/access-point-manager");
 const { ValidationError } = require("../../../errors/ValidationError");
-const { BaseError, ForbiddenError } = require("../../../errors/BaseError");
+const { BaseError } = require("../../../errors/BaseError");
 const {
   scopeOf,
   reachesOf,
@@ -236,23 +236,6 @@ class BookableController {
   }
 
   /**
-   * @obsolete User createBookable or updateBookable instead
-   * @param request
-   * @param response
-   * @returns {Promise<void>}
-   */
-  static async storeBookable(request, response, next) {
-    const bookable = new Bookable(request.body);
-    const isUpdate = !!bookable.id;
-
-    if (isUpdate) {
-      await BookableController.updateBookable(request, response, next);
-    } else {
-      await BookableController.createBookable(request, response, next);
-    }
-  }
-
-  /**
    * This method is used to create a new bookable object.
    * It first creates a new bookable object from the request body and assigns a unique id and the user id to it.
    * Then it checks if the maximum number of public bookables has been reached, if the bookable is public.
@@ -260,9 +243,8 @@ class BookableController {
    * If the maximum number has not been reached, it stores the bookable in the database and sends a 201 status code.
    * If an error occurs during the process, it logs the error and sends a 500 status code with an error message.
    *
-   * The route carries the update marker (the obsolete PUT stores both ways);
-   * the creation is its second question (`also: ["create"]`, ADR 0001)
-   * and answers 403 without it.
+   * The route carries the create marker (`POST /:tenant/bookables`); the
+   * picker right of the media references is its second question.
    *
    * @param {Object} request - The HTTP request object, containing the parameters and body.
    * @param {Object} response - The HTTP response object, used to send the response back to the client.
@@ -272,13 +254,6 @@ class BookableController {
     try {
       const tenant = request.params.tenant;
       const user = request.user;
-
-      if (request.reaches?.create !== "any") {
-        logger.warn(
-          `${tenant} -- User ${user?.id} is not allowed to create bookable`,
-        );
-        return next(new ForbiddenError());
-      }
 
       const bookable = new Bookable(request.body);
       bookable.id = uuidv4();

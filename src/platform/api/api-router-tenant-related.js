@@ -111,11 +111,15 @@ router.get(
   authorize("bookable", "read"),
   BookableController.getBookable,
 );
-// The obsolete store: an update, or a creation the marker decides too.
+router.post(
+  "/bookables",
+  authorize("bookable", "create", { also: ["media.read"] }),
+  BookableController.createBookable,
+);
 router.put(
   "/bookables",
-  authorize("bookable", "update", { also: ["create", "media.read"] }),
-  BookableController.storeBookable,
+  authorize("bookable", "update", { also: ["media.read"] }),
+  BookableController.updateBookable,
 );
 router.delete(
   "/bookables/:id",
@@ -163,10 +167,15 @@ router.get(
 );
 
 // Protected
+router.post(
+  "/events",
+  authorize("event", "create", { also: ["media.read"] }),
+  EventController.createEvent,
+);
 router.put(
   "/events",
-  authorize("event", "update", { also: ["create", "media.read"] }),
-  EventController.storeEvent,
+  authorize("event", "update", { also: ["media.read"] }),
+  EventController.updateEvent,
 );
 router.delete(
   "/events/:id",
@@ -208,10 +217,15 @@ router.get(
   publicRoute("booking", "list"),
   BookingController.getBookings,
 );
+router.post(
+  "/bookings",
+  authorize("booking", "create"),
+  BookingController.createBooking,
+);
 router.put(
   "/bookings",
-  authorize("booking", "update", { also: ["create"] }),
-  BookingController.storeBooking,
+  authorize("booking", "update"),
+  BookingController.updateBooking,
 );
 router.get(
   "/bookings/assigned",
@@ -459,11 +473,15 @@ router.get(
   publicRoute("coupon", "lookup"),
   CouponController.getCoupon,
 );
-// The obsolete store: an update, or a creation the marker decides too.
+router.post(
+  "/coupons",
+  authorize("coupon", "create"),
+  CouponController.createCoupon,
+);
 router.put(
   "/coupons",
-  authorize("coupon", "update", { also: ["create"] }),
-  CouponController.storeCoupon,
+  authorize("coupon", "update"),
+  CouponController.updateCoupon,
 );
 router.delete(
   "/coupons/:id",
@@ -532,12 +550,8 @@ router.get(
   authorize("role", "readMine"),
   RoleController.getUserRolesByTenant,
 );
-// The obsolete store: an update, or a creation the marker decides too.
-router.put(
-  "/roles",
-  authorize("role", "update", { also: ["create"] }),
-  RoleController.storeRole,
-);
+router.post("/roles", authorize("role", "create"), RoleController.createRole);
+router.put("/roles", authorize("role", "update"), RoleController.updateRole);
 router.get("/roles/:id", authorize("role", "read"), RoleController.getRole);
 router.delete(
   "/roles/:id",

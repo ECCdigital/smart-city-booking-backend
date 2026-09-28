@@ -258,7 +258,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
 
     it("a manual booking paid but unconfirmed is refused with 400 invalid_status before anything is written: no state stands for it", async function () {
       const res = await api()
-        .put(`/api/${TENANT}/bookings`)
+        .post(`/api/${TENANT}/bookings`)
         .set(h.as(ADMIN))
         .send({ tenantId: TENANT, ...checkoutBody("room"), isPayed: true });
 
@@ -274,7 +274,7 @@ describe("booking lifecycle today: what each state change does at the seam", fun
     describe("a manual booking with a `status`", function () {
       const create = (body) =>
         api()
-          .put(`/api/${TENANT}/bookings`)
+          .post(`/api/${TENANT}/bookings`)
           .set(h.as(ADMIN))
           .send({ tenantId: TENANT, ...checkoutBody("room"), ...body });
 

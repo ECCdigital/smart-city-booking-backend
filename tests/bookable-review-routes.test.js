@@ -285,7 +285,7 @@ describe("bookable review routes", function () {
       const body = form({ review: review("approved"), isPublic: false });
       delete body.id;
 
-      const res = await call("put", `/api/${TENANT}/bookables`, OWNER, body);
+      const res = await call("post", `/api/${TENANT}/bookables`, OWNER, body);
 
       expect(res.status).to.equal(201);
       expect(res.body.review.status).to.equal(null);
@@ -298,7 +298,7 @@ describe("bookable review routes", function () {
       const body = form({ isPublic: true });
       delete body.id;
 
-      const res = await call("put", `/api/${TENANT}/bookables`, OWNER, body);
+      const res = await call("post", `/api/${TENANT}/bookables`, OWNER, body);
 
       expect(res.status).to.equal(201);
       expect(res.body.review.status).to.equal("pending");
