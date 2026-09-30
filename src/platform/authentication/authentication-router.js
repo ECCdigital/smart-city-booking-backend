@@ -93,7 +93,7 @@ router.post(
   AuthenticationController.cardSignup,
 );
 router.get(
-  "/auth/card/link",
+  "/card/link",
   publicRoute("auth", "all"),
   AuthenticationController.confirmCardLink,
 );

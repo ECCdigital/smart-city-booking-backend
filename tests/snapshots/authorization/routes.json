@@ -90,7 +90,7 @@
     "tenantOwner": 400,
     "instanceOwner": 400
   },
-  "GET /auth/auth/card/link": {
+  "GET /auth/card/link": {
     "anonymous": 400,
     "signedIn": 400,
     "roleHolder": 400,
