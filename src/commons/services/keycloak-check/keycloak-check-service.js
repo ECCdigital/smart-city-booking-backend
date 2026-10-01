@@ -55,6 +55,7 @@ const STEPS = [
   require("./rows/redirect-uris-row"),
   // Row 2, `authorize` part, and row 3 (#99): with the first URI row 4
   // accepted.
+  require("./rows/web-client-authorize-rows"),
   // Row 5 (#98): post logout redirect URIs.
   require("./rows/post-logout-redirect-uris-row"),
   // Row 6 (#98): web origins, `direct` mode only.

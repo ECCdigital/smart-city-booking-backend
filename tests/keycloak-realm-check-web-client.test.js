@@ -151,7 +151,7 @@ describe("POST /api/instances/keycloak/check, the Web-Client", function () {
 
       const rows = await check(body);
 
-      expect(Object.keys(rows)).to.include.members(["2", "4", "5", "6"]);
+      expect(Object.keys(rows)).to.include.members(["2", "3", "4", "5", "6"]);
       keycloak.requests.forEach((r) => {
         expect(r.path.startsWith(`${ISSUER}/`), r.url).to.equal(true);
       });
@@ -171,7 +171,7 @@ describe("POST /api/instances/keycloak/check, the Web-Client", function () {
 
       const rows = await check(checkBody({ mode: "direct" }));
 
-      for (const id of [2, 4, 5, 6]) {
+      for (const id of [2, 3, 4, 5, 6]) {
         expect(rows[id], `row ${id}`).to.deep.equal({
           id,
           status: "na",
@@ -531,6 +531,281 @@ describe("POST /api/instances/keycloak/check, the Web-Client", function () {
       expect(rows).not.to.have.property("4");
       expect(requestsTo("GET", "auth")).to.deep.equal([]);
     });
+  });
+
+  describe("row 2, authorize part, and row 3, PKCE S256 enforced", function () {
+    /** The authorize probes for one redirect URI. */
+    const authorizeProbesFor = (uri) =>
+      requestsTo("GET", "auth").filter((r) => r.query.redirect_uri === uri);
+
+    it("are met when Standard flow is on and PKCE S256 is required, probed with the first accepted redirect URI", async function () {
+      installWebClient(keycloak, ISSUER, guideClient());
+
+      const rows = await check();
+
+      expect(rows[2]).to.deep.equal({
+        id: 2,
+        status: "ok",
+        reason: "client_public",
+        parts: [
+          { label: "token", status: "ok", reason: "client_public" },
+          { label: "authorize", status: "ok", reason: "standard_flow_on" },
+        ],
+      });
+      expect(rows[3]).to.deep.equal({
+        id: 3,
+        status: "ok",
+        reason: "pkce_required",
+        parts: [
+          { label: "without_challenge", status: "ok", reason: "pkce_required" },
+          { label: "plain", status: "ok", reason: "pkce_plain_rejected" },
+        ],
+      });
+      const probes = authorizeProbesFor(ADMIN_CALLBACK);
+      const methods = probes.map((r) => r.query.code_challenge_method);
+      expect(methods).to.have.members(["S256", "S256", undefined, "plain"]);
+      const without = probes.find((r) => !r.query.code_challenge_method);
+      expect(without.query).not.to.have.property("code_challenge");
+      expect(without.query).to.include({
+        prompt: "none",
+        client_id: WEB_CLIENT,
+      });
+      const plain = probes.find(
+        (r) => r.query.code_challenge_method === "plain",
+      );
+      expect(plain.query.code_challenge).to.match(/^[A-Za-z0-9_-]{43}$/);
+      expect(authorizeProbesFor(PORTAL_CALLBACK)).to.have.length(1);
+    });
+
+    it("probe with the first redirect URI row 4 accepted, in the order of the body", async function () {
+      installWebClient(
+        keycloak,
+        ISSUER,
+        guideClient({ redirectUris: [PORTAL_CALLBACK] }),
+      );
+
+      const rows = await check();
+
+      expect(partOf(rows[2], "authorize").reason).to.equal("standard_flow_on");
+      expect(rows[3].status).to.equal("ok");
+      expect(authorizeProbesFor(ADMIN_CALLBACK)).to.have.length(1);
+      expect(authorizeProbesFor(PORTAL_CALLBACK)).to.have.length(4);
+    });
+
+    it("probe with a redirect URI whose http variant Keycloak accepted too", async function () {
+      installWebClient(keycloak, ISSUER, guideClient({ redirectUris: ["*"] }));
+
+      const rows = await check();
+
+      expect(rows[4].reason).to.equal("http_accepted");
+      expect(partOf(rows[2], "authorize").reason).to.equal("standard_flow_on");
+      expect(rows[3].status).to.equal("ok");
+    });
+
+    it("are not checkable when row 4 accepted no redirect URI", async function () {
+      installWebClient(keycloak, ISSUER, guideClient({ redirectUris: [] }));
+
+      const rows = await check();
+
+      expect(rows[2]).to.deep.equal({
+        id: 2,
+        status: "na",
+        reason: "no_redirect_uri_accepted",
+        parts: [
+          { label: "token", status: "ok", reason: "client_public" },
+          {
+            label: "authorize",
+            status: "na",
+            reason: "no_redirect_uri_accepted",
+          },
+        ],
+      });
+      expect(rows[3]).to.deep.equal({
+        id: 3,
+        status: "na",
+        reason: "no_redirect_uri_accepted",
+        parts: [
+          {
+            label: "without_challenge",
+            status: "na",
+            reason: "no_redirect_uri_accepted",
+          },
+          { label: "plain", status: "na", reason: "no_redirect_uri_accepted" },
+        ],
+      });
+    });
+
+    it("are not met and not checkable while Standard flow is off", async function () {
+      installWebClient(keycloak, ISSUER, guideClient({ standardFlow: false }));
+
+      const rows = await check();
+
+      expect(rows[2].status).to.equal("fail");
+      expect(rows[2].reason).to.equal("standard_flow_off");
+      expect(partOf(rows[2], "authorize")).to.deep.equal({
+        label: "authorize",
+        status: "fail",
+        reason: "standard_flow_off",
+        details: { error: "unauthorized_client" },
+      });
+      expect(rows[3]).to.deep.equal({
+        id: 3,
+        status: "na",
+        reason: "standard_flow_off",
+        parts: [
+          {
+            label: "without_challenge",
+            status: "na",
+            reason: "standard_flow_off",
+          },
+          { label: "plain", status: "na", reason: "standard_flow_off" },
+        ],
+      });
+      expect(
+        requestsTo("GET", "auth").filter(
+          (r) => r.query.code_challenge_method !== "S256",
+        ),
+      ).to.deep.equal([]);
+    });
+
+    it("row 3 is not met when no PKCE is required", async function () {
+      installWebClient(keycloak, ISSUER, guideClient({ pkce: null }));
+
+      const rows = await check();
+
+      expect(rows[3]).to.deep.equal({
+        id: 3,
+        status: "fail",
+        reason: "pkce_optional",
+        parts: [
+          {
+            label: "without_challenge",
+            status: "fail",
+            reason: "pkce_optional",
+          },
+          { label: "plain", status: "fail", reason: "pkce_plain_accepted" },
+        ],
+      });
+      expect(partOf(rows[2], "authorize").reason).to.equal("standard_flow_on");
+    });
+
+    it("row 3 is not met when PKCE plain is required, while Standard flow reads on", async function () {
+      installWebClient(keycloak, ISSUER, guideClient({ pkce: "plain" }));
+
+      const rows = await check();
+
+      expect(partOf(rows[2], "authorize")).to.deep.equal({
+        label: "authorize",
+        status: "ok",
+        reason: "standard_flow_on",
+      });
+      expect(rows[3]).to.deep.equal({
+        id: 3,
+        status: "fail",
+        reason: "pkce_plain_accepted",
+        parts: [
+          { label: "without_challenge", status: "ok", reason: "pkce_required" },
+          { label: "plain", status: "fail", reason: "pkce_plain_accepted" },
+        ],
+      });
+    });
+
+    it("an unknown Web-Client fails row 2 and leaves rows 2 (authorize), 3, 4, 5 and 6 not checkable", async function () {
+      installWebClient(keycloak, ISSUER, guideClient({ client: "unknown" }));
+
+      const rows = await check(checkBody({ mode: "direct" }));
+
+      expect(rows[2]).to.deep.equal({
+        id: 2,
+        status: "fail",
+        reason: "client_unknown_or_disabled",
+        parts: [
+          {
+            label: "token",
+            status: "fail",
+            reason: "client_unknown_or_disabled",
+            details: { httpStatus: 401, error: "invalid_client" },
+          },
+          { label: "authorize", status: "na", reason: "web_client_invalid" },
+        ],
+      });
+      expect(rows[3].parts.map((part) => part.reason)).to.deep.equal([
+        "web_client_invalid",
+        "web_client_invalid",
+      ]);
+      for (const id of [3, 4, 5, 6]) {
+        expect(rows[id].status, `row ${id}`).to.equal("na");
+        expect(rows[id].reason, `row ${id}`).to.equal("web_client_invalid");
+      }
+      expect(
+        keycloak.requests.map((r) => `${r.method} ${r.path}`),
+      ).to.deep.equal([`GET ${DISCOVERY}`, `POST ${OIDC}/token`]);
+    });
+
+    it("a confidential Web-Client fails row 2, still probes rows 3, 4 and 5, and leaves row 6 not checkable", async function () {
+      installWebClient(
+        keycloak,
+        ISSUER,
+        guideClient({ client: "confidential" }),
+      );
+
+      const rows = await check(checkBody({ mode: "direct" }));
+
+      expect(rows[2].reason).to.equal("client_authentication_on");
+      expect(partOf(rows[2], "authorize").reason).to.equal("standard_flow_on");
+      expect(rows[3].status).to.equal("ok");
+      expect(rows[4].status).to.equal("ok");
+      expect(rows[5].status).to.equal("ok");
+      expect(rows[6].reason).to.equal("web_client_invalid");
+    });
+
+    const UNEXPECTED = [
+      [
+        "a redirect to the URI without an error",
+        (req) => redirect(`${req.query.redirect_uri}?state=${req.query.state}`),
+        { httpStatus: 302, location: ADMIN_CALLBACK },
+      ],
+      [
+        "another error",
+        (req) =>
+          redirect(`${req.query.redirect_uri}?error=access_denied&state=s`),
+        { httpStatus: 302, error: "access_denied", location: ADMIN_CALLBACK },
+      ],
+      [
+        "a server error",
+        () => json(500, { error: "unknown_error" }),
+        { httpStatus: 500, error: "unknown_error" },
+      ],
+    ];
+    for (const [what, answer, details] of UNEXPECTED) {
+      it(`are not checkable for ${what}, each probe on its own`, async function () {
+        const client = installWebClient(keycloak, ISSUER, guideClient());
+        let s256 = 0;
+        keycloak.on("GET", `${OIDC}/auth`, (req) => {
+          const odd =
+            req.query.redirect_uri === ADMIN_CALLBACK &&
+            (req.query.code_challenge_method === "plain" ||
+              (req.query.code_challenge_method === "S256" && ++s256 === 2));
+          return odd ? answer(req) : client.authorize(req);
+        });
+
+        const rows = await check();
+
+        const notCheckable = {
+          status: "na",
+          reason: "unexpected_response",
+          details,
+        };
+        expect(partOf(rows[2], "authorize")).to.deep.equal({
+          label: "authorize",
+          ...notCheckable,
+        });
+        expect(rows[3].parts).to.deep.equal([
+          { label: "without_challenge", status: "ok", reason: "pkce_required" },
+          { label: "plain", ...notCheckable },
+        ]);
+      });
+    }
   });
 
   describe("row 5, Valid Post Logout Redirect URIs", function () {

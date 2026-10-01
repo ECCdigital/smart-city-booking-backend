@@ -111,11 +111,11 @@
       stored values are read fresh, also while Keycloak is not active.
       Nothing is stored.
 
-      Rows present: 1 (realm and issuer), 2 (Web-Client; for now its
-      `token` part), 4 (Valid Redirect URIs) and 5 (Valid Post Logout
+      Rows present: 1 (realm and issuer), 2 (Web-Client), 3 (PKCE S256
+      enforced), 4 (Valid Redirect URIs) and 5 (Valid Post Logout
       Redirect URIs) when the body names such a URI, 6 (Web Origins) in
       `direct` mode with an `adminUi` entry. Further rows follow
-      (ECCdigital/tickets#99–#101). Only row 6 sends an `Origin`.
+      (ECCdigital/tickets#100, #101). Only row 6 sends an `Origin`.
       When row 1 is not `ok`, every other
       row is `na` with `realm_unavailable`. The backend sends codes, never
       prose: the Admin UI formulates every sentence from `reason` and
@@ -242,7 +242,15 @@ components:
             Row 2, part `token`: `client_public`,
             `client_unknown_or_disabled` (`{ httpStatus: 401, error:
             invalid_client }`), `client_authentication_on` (`{ httpStatus:
-            401, error: unauthorized_client }`).
+            401, error: unauthorized_client }`); part `authorize`, with the
+            first redirect URI row 4 accepted: `standard_flow_on`,
+            `standard_flow_off` (`{ error: unauthorized_client }`).
+            Row 3, parts `without_challenge`: `pkce_required`,
+            `pkce_optional`; `plain`: `pkce_plain_rejected`,
+            `pkce_plain_accepted`.
+            Row 2 `authorize` and row 3, always `na`:
+            `no_redirect_uri_accepted` (row 4 accepted none),
+            `web_client_invalid`; row 3 also `standard_flow_off`.
             Row 4, one part per redirect URI: `redirect_uri_accepted`,
             `redirect_uri_rejected` (`{ httpStatus: 400 }`),
             `http_accepted` (`{ uri }`, the `http` variant).
