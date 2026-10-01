@@ -126,11 +126,31 @@ class KeycloakVerifier {
         },
       );
 
+      if (response.data?.active === false) {
+        this.warnIfPrivateClientNotInAudience(token, config.privateClient);
+      }
+
       return response.data;
     } catch (error) {
       logger.error("Keycloak introspection request failed:", error.message);
       throw error;
     }
+  }
+
+  /**
+   * Keycloak 26.6.2 and later answer an introspection `active: false` when
+   * the asking client is not in the token's `aud`. Warns with the fix when
+   * the token shows that cause.
+   */
+  static warnIfPrivateClientNotInAudience(token, privateClient) {
+    const audience = [].concat(jwt.decode(token)?.aud ?? []);
+    if (!privateClient || audience.includes(privateClient)) {
+      return;
+    }
+    logger.warn(
+      `Keycloak introspection answered inactive for a token without the private client "${privateClient}" in its aud. ` +
+        `Keycloak 26.6.2 and later answer so for every such token: add an Audience mapper for "${privateClient}" to the public client (docs/deployment.md, Keycloak).`,
+    );
   }
 
   static async checkTokenActive(token, decoded) {
