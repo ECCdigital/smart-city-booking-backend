@@ -1,5 +1,4 @@
 const PaymentService = require("./payment-service");
-const { getBooking } = require("../../../data-managers/booking-manager");
 const { getTenantApp } = require("../../../data-managers/tenant-manager");
 const BookingManager = require("../../../data-managers/booking-manager");
 const axios = require("axios");
@@ -36,7 +35,11 @@ class PmPaymentService extends PaymentService {
   async createSeparatePaymentUrl() {
     const paymentUrls = [];
     for (const bookingId of this.bookingIds) {
-      const booking = await getBooking(bookingId, this.tenantId);
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        this.tenantId,
+        DOMAIN,
+      );
       const paymentApp = await getTenantApp(this.tenantId, "pmPayment");
       let PM_CHECKOUT_URL;
       if (paymentApp.paymentMode === "prod") {

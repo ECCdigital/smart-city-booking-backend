@@ -69,6 +69,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- Paying a single booking with ePayBL, GiroCockpit or pmPayment failed with `checkout.payment_failed` (`booking read without a reach`): the providers read the booking under the domain's reach again
 - Customers can cancel bookings created before 4.2.0 again: migration `30-09-2026-restore-booking-user-cancellable` restores `cancellationPolicy.userCancellable: true` where `13-07-2026-add-cancellation-contact-hint` left only `{ contactHint: "" }`, which made `request-reject` answer 403 and suppressed the cancellation link and mails
 - The card link mail sent without a link URL (the Admin UI's card signup) pointed to `GET /auth/card/link`, which answered `404 Cannot GET`: the route was declared as `/auth/card/link` on the router mounted at `/auth`, so it lived at `/auth/auth/card/link`. It answers at `/auth/card/link` now and redirects to the Admin UI's success or failure page; route snapshot updated on purpose
 - `GET /api/instances/public` carries `allowAllUsersToCreateTenant` again (dropped with the entity rework), so a storefront can show its "offer spaces" entry to a visitor who is not signed in on an instance where everyone may create a tenant; the allow-list (`allowedUsersToCreateTenant`), the owners and the mail transport stay private. OpenAPI of the public instance lists the flag

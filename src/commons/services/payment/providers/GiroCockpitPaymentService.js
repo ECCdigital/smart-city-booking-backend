@@ -1,5 +1,4 @@
 const PaymentService = require("./payment-service");
-const { getBooking } = require("../../../data-managers/booking-manager");
 const { getTenantApp } = require("../../../data-managers/tenant-manager");
 const BookingManager = require("../../../data-managers/booking-manager");
 const axios = require("axios");
@@ -27,7 +26,11 @@ class GiroCockpitPaymentService extends PaymentService {
   async createSeparatePaymentUrl() {
     const paymentUrls = [];
     for (const bookingId of this.bookingIds) {
-      const booking = await getBooking(bookingId, this.tenantId);
+      const booking = await BookingManager.getBooking(
+        bookingId,
+        this.tenantId,
+        DOMAIN,
+      );
       const paymentApp = await getTenantApp(this.tenantId, "giroCockpit");
       const GIRO_CHECKOUT_URL =
         "https://payment.girosolution.de/girocheckout/api/v2/paypage/init";
