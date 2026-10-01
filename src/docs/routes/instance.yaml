@@ -4,7 +4,8 @@
 # read and write it: the initial supervision level (glossary "Startstufe") a
 # self-created tenant starts at, and whether everyone may create a tenant.
 # The other instance fields travel with the same routes and are not
-# described here.
+# described here. Besides: „Realm prüfen“, the check of the stored Keycloak
+# realm (ECCdigital/tickets#80).
 
 /api/instances/public:
   get:
@@ -90,3 +91,172 @@
         description: Not authenticated
       "403":
         description: Not the instance owner
+
+/api/instances/keycloak/check:
+  post:
+    tags:
+      - Instance
+    summary: Check the stored Keycloak realm („Realm prüfen“)
+    description: |
+      Checks the stored Keycloak realm from outside, without the Admin API,
+      and answers one row per requirement of the Admin UI's setup guide
+      (tab „Single Sign-On“). Instance owner only (`instance.checkRealm`).
+
+      Requests go only to the stored Keycloak-URL
+      (`<serverUrl>/realms/<realm>/…`) and the stored Portal-URL; values
+      of the body only go to Keycloak as query or form parameters and as
+      the `Origin` header. Every probe waits 5 s at most and follows no
+      redirect; only status code, `Location`, JSON `error` codes and
+      `Access-Control-Allow-Origin` are evaluated, never page text. The
+      stored values are read fresh, also while Keycloak is not active.
+      Nothing is stored.
+
+      Rows present: 1 (realm and issuer). Further rows follow
+      (ECCdigital/tickets#98–#101). When row 1 is not `ok`, every other
+      row is `na` with `realm_unavailable`. The backend sends codes, never
+      prose: the Admin UI formulates every sentence from `reason` and
+      `details`.
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/KeycloakCheckRequest"
+    responses:
+      "200":
+        description: The rows, ascending by id.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeycloakCheckResult"
+      "400":
+        description: |
+          `ValidationError` (`message: validation_failed`, `details[]` with
+          `field` as a JSON path into the body and `code` one of `required`,
+          `invalid_enum`, `invalid_type_array`, `invalid_type_string`,
+          `invalid_format`, `max_items`, `max_length`) for a body that breaks
+          the rules of `KeycloakCheckRequest`; `BadRequestError` with
+          `code: keycloak_settings_missing` and
+          `params.missing` (of `serverUrl`, `realm`, `publicClient`,
+          `privateClient`, `privateClientSecret`) when a stored value is
+          empty.
+      "401":
+        description: Not authenticated
+      "403":
+        description: Not the instance owner
+
+components:
+  schemas:
+    KeycloakCheckRequest:
+      type: object
+      required: [mode, apps]
+      description: |
+        The mode and the addresses the setup guide shows. Every string at
+        most 2048 characters.
+      properties:
+        mode:
+          type: string
+          enum: [bff, direct]
+        apps:
+          type: array
+          maxItems: 10
+          description: |
+            One entry per Adresse; `adminUi` one or more times, `storefront`
+            at most once (omitted without a Portal-URL). Entries whose
+            redirect URIs the Admin UI could not determine are not sent.
+          items:
+            type: object
+            required: [app, origin, redirectUris, postLogoutRedirectUris]
+            properties:
+              app:
+                type: string
+                enum: [adminUi, storefront]
+              origin:
+                type: string
+                description: An absolute http(s) origin, no path.
+                example: https://booking.example.de
+              redirectUris:
+                type: array
+                maxItems: 10
+                items:
+                  type: string
+                  description: An absolute http(s) URL.
+                example:
+                  ["https://booking.example.de/admin/api/auth/sso/callback"]
+              postLogoutRedirectUris:
+                type: array
+                maxItems: 10
+                items:
+                  type: string
+                  description: |
+                    An absolute http(s) URL; only the entry of „Benutzer
+                    wechseln“ ends in `*`.
+                example:
+                  - https://booking.example.de/admin/login
+                  - https://booking.example.de/admin/api/auth/sso/login*
+
+    KeycloakCheckResult:
+      type: object
+      properties:
+        checkedAt:
+          type: string
+          format: date-time
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeycloakCheckRow"
+
+    KeycloakCheckStatus:
+      type: string
+      enum: [ok, fail, na, info]
+      description: |
+        `ok` erfüllt, `fail` nicht erfüllt, `na` nicht prüfbar, `info`
+        Information.
+
+    KeycloakCheckRow:
+      type: object
+      required: [id, status, reason]
+      description: |
+        A row with `parts` carries the worst part status (`fail` > `na` >
+        `info` > `ok`) and the reason of the first part with that status.
+        `details` is absent when there is nothing to say.
+      properties:
+        id:
+          type: integer
+          description: The requirement, 1 (realm and issuer) to 10.
+          example: 1
+        status:
+          $ref: "#/components/schemas/KeycloakCheckStatus"
+        reason:
+          type: string
+          description: |
+            Row 1: `issuer_matches` (`details: { issuer }`),
+            `realm_not_found` (`{ httpStatus: 404, url }`),
+            `issuer_mismatch` (`{ expected, actual }`). Any row or part,
+            always `na`: `unexpected_response` (`{ httpStatus, error?,
+            location? }`, `location` origin and path only), `timeout`
+            (`{ url }`), `unreachable` (`{ url, code }`),
+            `realm_unavailable` (row 1 is not `ok`).
+          example: issuer_matches
+        details:
+          type: object
+          additionalProperties: true
+          example: { issuer: "https://sso.example.de/realms/biletado" }
+        parts:
+          type: array
+          items:
+            type: object
+            required: [label, status, reason]
+            properties:
+              label:
+                type: string
+                description: What the part probed, a URI, an origin or a probe key.
+              status:
+                $ref: "#/components/schemas/KeycloakCheckStatus"
+              reason:
+                type: string
+              details:
+                type: object
+                additionalProperties: true

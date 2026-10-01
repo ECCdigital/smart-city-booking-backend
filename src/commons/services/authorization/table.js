@@ -264,6 +264,8 @@ const TABLE = {
     tenantApprovalQueue: { any: "instanceOwner" },
     supervisionNotifications: { any: "instanceOwner" },
     supervisionNotificationRetry: { any: "instanceOwner" },
+    // „Realm prüfen“: the stored Keycloak realm checked from outside.
+    checkRealm: { any: "instanceOwner" },
   },
 
   rule: {
