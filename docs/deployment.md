@@ -28,6 +28,27 @@ The Storefront and Admin UI are separate deployments — see [architecture.md](a
 
 Full wiring matrix and Compose notes: [getting-started.md](getting-started.md).
 
+## Keycloak (SSO)
+
+SSO is set per instance in the Admin UI (Management → Instances → Auth), not in the environment. The backend expects the realm `{Keycloak-URL}/realms/{Realm}` and two clients:
+
+| Admin UI field                           | Keycloak client                                                  | What the backend does with it                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Client-ID für Web-Anwendung              | Public client of Admin UI and Storefront (e.g. `booking-client`) | Accepts a token whose `aud` or `azp` names it                                               |
+| Client-ID für Api-Zugriff, Client Secret | Confidential client of the backend                               | Introspects the token on SSO sign-in and signup and on every API call with a Keycloak token |
+
+The token's issuer must be exactly `{Keycloak-URL}/realms/{Realm}`. When Keycloak moves from `start-dev` to `start`, set `KC_HOSTNAME` to the full URL.
+
+**Keycloak 26.6.2 and later** answer an introspection `active: false` when the asking client is not in the token's `aud` ([upgrade note](https://github.com/keycloak/keycloak/blob/release/26.7/docs/documentation/upgrading/topics/changes/changes-26_6_2.adoc)). Every SSO sign-in then fails with `403 User not active`. Put the backend's client into the token's `aud`:
+
+1. On the public client, add a mapper of type _Audience_, in its dedicated client scope or a default scope of the client.
+2. Set _Included Client Audience_ to the backend's confidential client.
+3. Turn on _Add to access token_.
+
+Users sign in again afterwards, so their new token carries the `aud`. The cause shows in Keycloak's events as `INTROSPECT_TOKEN_ERROR` with "Client '…' is not in the token audience", and in the backend's log as a warning naming the Audience mapper. A deprecated stopgap is _Allow token introspection without audience check_ on the confidential client (Advanced, OpenID Connect Compatibility Modes).
+
+Redirect URIs, web origins and post-logout URIs belong to the client applications: see [Keycloak setup](https://github.com/ECCdigital/smart-city-booking-vue-app/blob/develop/bff/README.md#keycloak-setup) of the Admin UI.
+
 ## Recommended environment settings
 
 ```bash

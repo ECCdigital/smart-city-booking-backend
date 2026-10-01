@@ -69,6 +69,7 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ### Fixed
 
+- SSO sign-in against Keycloak 26.6.2 and later failed with `403 User not active` ([ECCdigital/tickets#65](https://github.com/ECCdigital/tickets/issues/65)): Keycloak refuses the introspection when the backend's client is not in the token's `aud`. The fix is an Audience mapper on the public client, now in [deployment.md](deployment.md#keycloak-sso); the backend warns in its log when an inactive answer has that cause. No API change
 - Paying a single booking with ePayBL, GiroCockpit or pmPayment failed with `checkout.payment_failed` (`booking read without a reach`): the providers read the booking under the domain's reach again
 - Customers can cancel bookings created before 4.2.0 again: migration `30-09-2026-restore-booking-user-cancellable` restores `cancellationPolicy.userCancellable: true` where `13-07-2026-add-cancellation-contact-hint` left only `{ contactHint: "" }`, which made `request-reject` answer 403 and suppressed the cancellation link and mails
 - The card link mail sent without a link URL (the Admin UI's card signup) pointed to `GET /auth/card/link`, which answered `404 Cannot GET`: the route was declared as `/auth/card/link` on the router mounted at `/auth`, so it lived at `/auth/auth/card/link`. It answers at `/auth/card/link` now and redirects to the Admin UI's success or failure page; route snapshot updated on purpose
