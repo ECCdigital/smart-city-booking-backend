@@ -457,3 +457,13 @@ _Avoid_: Policy (als Sprechbegriff), ACL, Permission-Matrix, Rollengruppe (das i
 **Berechtigung**:
 Die Prüfung an einer Route, ob der Prinzipal die Handlung an der Sache ausführen darf, und mit welcher Reichweite. Steht am Router, vor dem Handler: **jede** Route unter `src/platform` trägt genau einen der drei Marker — geprüft, ausdrücklich öffentlich, oder über ein Geheimnis (Token, Hook) autorisiert; ein Test hält das. Nicht zu verwechseln mit der Zugangsentscheidung, die das Bedienen von AccessPoints betrifft und nur das Verwaltungs-Ja der Berechtigung als Eingabe erhält.
 _Avoid_: Authorization (als Sprechbegriff), Berechtigungsprüfung (bei der Zugangsentscheidung als Altname gemeint), Rechteprüfung, Auth (das ist die Anmeldung)
+
+### Favoriten
+
+**Favorit (eines Nutzers)**:
+Die Markierung eines Angebots (Buchungsobjekt oder Event) durch einen angemeldeten Nutzer, sichtbar nur ihm selbst; kein Zustand des Angebots und keine Sache des Mandanten. Erreicht die öffentliche Projektion das Angebot nicht, bleibt der Favorit bestehen und gilt als _nicht verfügbar_; ist das Angebot gelöscht, bleibt er ebenfalls, bis der Nutzer ihn entfernt, und gilt als _gelöscht_. Ein Favorit verschwindet nie von selbst.
+_Avoid_: Merkliste (das ist die Favoritenliste), Bookmark, Wishlist, Watchlist, Like
+
+**Favoritenliste (eines Nutzers)**:
+Alle Favoriten eines Nutzers über alle Mandanten hinweg, gelesen nur vom Nutzer selbst — die Reichweite _self_, keine Datensätze anderer.
+_Avoid_: Merkliste, Favorites (als Sprechbegriff), Wunschliste

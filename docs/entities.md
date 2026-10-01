@@ -881,3 +881,23 @@ Example:
 ```
 
 Providers are `nuki`, `salto-ks`, `ifbs` and `pareva`. `scanCode` and `previousScanCodes` are stored but never returned. Capacity is the bookable's `amount`, never the locker system's: the bookable as a whole can be booked `amount` times at once, an empty `amount` is unlimited, and there is no number per locker system. A booking gets one compartment per booked unit of its item at each of the bookable's locker systems. A Pareva product's stock is Pareva's, asked live at the checkout for as many compartments as the item books; the count against `amount` and Pareva's answer both have to pass, an unlimited `amount` leaves it to Pareva alone.
+
+### Favorite
+
+A favorite (glossary "Favorit", `favorites` collection) is a signed-in user's mark on an offer of a tenant - a bookable or an event, referenced as the pair of tenant and id like bookings reference offers. It belongs to the user alone: no other principal, the instance owner included, reads or writes it over the favorite routes (`favorite.readMine` and `favorite.write` are `self` for every signed-in user). One document per user and offer, unique over `userId`, `tenantId`, `targetType`, `targetId`; the collection starts empty, no migration.
+
+Example:
+
+```json
+{
+  "userId": "erika@example.com",
+  "tenantId": "default",
+  "targetType": "bookable",
+  "targetId": "6f1c0f6e-6f0f-4d0e-9f0a-2b1c9d4e5f60",
+  "title": "Großer Saal",
+  "tenantName": "Stadt Musterhausen",
+  "created": "2026-10-01T08:00:00.000Z"
+}
+```
+
+`title` and `tenantName` are a snapshot taken when the mark was set and never refreshed, so a favorite on an offer that is no longer reachable or no longer exists still says what it was. A favorite never disappears by itself: marking is `PUT /api/v2/:tenant/favorites/:targetType/:targetId` (idempotent, `200` with the entry, `404` for an offer the user does not reach at this moment, `409 favorite.limit_reached` at the limit `FAVORITES_MAX_PER_USER`, default 200), removing is `DELETE` on the same path (idempotent, `204`). A change of the user id moves the favorites with the user; removing the user removes them.

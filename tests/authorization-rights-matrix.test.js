@@ -731,8 +731,54 @@ describe("authorization rights matrix: the core routes by principal, stage and t
     }),
   ];
 
+  /**
+   * The favorites (`favorite.write`, `self`): every signed-in user marks
+   * for themselves, whoever they are in the tenant - and marks only what
+   * they reach at this moment, the offer read with the reach of its entry
+   * (`also` on the marker). A reader holds `own` at `event.read`, so an
+   * event they do not own is not there for them, as at the event routes;
+   * removing touches the user's own mark alone and never looks at the offer.
+   */
+  const favoriteOf = (tenant, targetType, targetId) =>
+    `/api/v2/${tenant}/favorites/${targetType}/${targetId}`;
+  const favoriteRows = () => [
+    row("put", favoriteOf(A, "bookable", FX), {
+      anonymous: 401,
+      customer: 200,
+      reader: 200,
+      staff: 200,
+      owner: 200,
+      admin: 200,
+      foreignOwner: 200,
+    }),
+    row("put", favoriteOf(A, "event", FX), {
+      anonymous: 401,
+      customer: 200,
+      reader: 404,
+      staff: 200,
+      owner: 200,
+      admin: 200,
+      foreignOwner: 200,
+    }),
+    row("put", favoriteOf(A, "event", MINE), {
+      customer: 200,
+      reader: 200,
+      staff: 200,
+    }),
+    row("delete", favoriteOf(A, "bookable", FX), {
+      anonymous: 401,
+      customer: 204,
+      reader: 204,
+      staff: 204,
+      owner: 204,
+      admin: 204,
+      foreignOwner: 204,
+    }),
+  ];
+
   describe("tenant A, free", function () {
     itHolds("free", freeRows());
+    itHolds("free", favoriteRows());
   });
 
   describe("tenant A, waiting for approval: nothing rests for the signed in", function () {
@@ -761,6 +807,24 @@ describe("authorization rights matrix: the core routes by principal, stage and t
       row("get", inA(`/bookables/public/${FX}`), {
         anonymous: 404,
         customer: 404,
+      }),
+      // Nothing to mark for the public, the staff keep their view; the own
+      // mark is removed whatever the tenant's level.
+      row("put", favoriteOf(A, "bookable", FX), {
+        customer: 404,
+        reader: 404,
+        staff: 200,
+        owner: 200,
+        admin: 200,
+        foreignOwner: 404,
+      }),
+      row("delete", favoriteOf(A, "bookable", FX), {
+        customer: 204,
+        reader: 204,
+        staff: 204,
+        owner: 204,
+        admin: 204,
+        foreignOwner: 204,
       }),
     ]);
   });
@@ -895,12 +959,41 @@ describe("authorization rights matrix: the core routes by principal, stage and t
         admin: [],
         foreignOwner: [],
       }),
+      // The favorites are the user's own (`self`), never refused: a member
+      // whose membership rests is the public at the offer and has nothing
+      // to mark (404, not the declination); the instance owner keeps `any`
+      // at the offer and marks; everyone removes their own mark.
+      row("put", favoriteOf(A, "bookable", FX), {
+        customer: 404,
+        reader: 404,
+        staff: 404,
+        owner: 404,
+        admin: 200,
+        foreignOwner: 404,
+      }),
+      row("delete", favoriteOf(A, "bookable", FX), {
+        customer: 204,
+        reader: 204,
+        staff: 204,
+        owner: 204,
+        admin: 204,
+        foreignOwner: 204,
+      }),
     ]);
   });
 
   describe("across the tenant border: tenant B", function () {
     const inB = (path) => `/api/${B}${path}`;
     itHolds("free", [
+      // A favorite needs no membership: a member of A marks what the public
+      // reaches in B, for themselves.
+      row("put", favoriteOf(B, "bookable", FX_B), {
+        customer: 200,
+        staff: 200,
+        owner: 200,
+        foreignOwner: 200,
+        admin: 200,
+      }),
       // A member of A is nobody in B: the management routes refuse them.
       row("get", inB("/bookables"), {
         customer: 403,

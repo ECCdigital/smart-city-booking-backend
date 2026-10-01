@@ -190,7 +190,12 @@ describe("authorization policy: hand cases", function () {
     expect(decide(signedIn(), "booking", "readMine")).to.equal(REACH.SELF);
     expect(decide(signedIn(), "invitation", "respond")).to.equal(REACH.SELF);
     expect(decide(signedIn(), "tenant", "countCheck")).to.equal(REACH.SELF);
+    expect(decide(signedIn(), "favorite", "readMine")).to.equal(REACH.SELF);
+    expect(decide(signedIn(), "favorite", "write")).to.equal(REACH.SELF);
     expect(decide(instanceOwner(), "user", "readSelf")).to.equal(REACH.SELF);
+    // The instance owner is a user like any other at the favorites: `self`,
+    // never the favorites of anyone else.
+    expect(decide(instanceOwner(), "favorite", "write")).to.equal(REACH.SELF);
   });
 
   it("tenantMember is the membership: a member reaches own, a signed-in stranger nothing", function () {

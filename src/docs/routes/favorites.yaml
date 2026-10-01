@@ -1,0 +1,144 @@
+# swagger/routes/favorites.yaml
+
+/api/v2/{tenant}/favorites/{targetType}/{targetId}:
+  put:
+    tags:
+      - Favorites
+    summary: Mark an offer as a favorite of the signed-in user
+    description: |
+      Marks a bookable or an event of the tenant as a favorite of the
+      signed-in user (glossary "Favorit"). Idempotent: an offer already
+      marked answers the existing favorite and adds no second entry.
+
+      A user marks only what they reach at this moment: the offer is read
+      with the public projection (`bookable.readPublic`, `event.read`), or
+      with the management view of staff holding `manageBookables.readAny`.
+      A tenant without a public projection has nothing to mark for the
+      public (`404 tenant_not_found`). The favorite keeps a snapshot of the
+      offer's title and the tenant's name, taken now and never refreshed.
+
+      Favorites are the user's alone: the entry `favorite.write` is `self`
+      for every signed-in user, and nobody else - the instance owner
+      included - reads or writes them over these routes.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/FavoriteTargetTypeParam"
+      - $ref: "#/components/parameters/FavoriteTargetIdParam"
+    responses:
+      "200":
+        description: The favorite, new or already there
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Favorite"
+      "400":
+        description: "`favorite.invalid_target_type`: the target type is neither `bookable` nor `event`"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteError"
+      "401":
+        description: Not authenticated
+      "404":
+        description: "`favorite.offer_not_found`: the user does not reach the offer; `tenant_not_found`: the tenant has no public projection"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteError"
+      "409":
+        description: "`favorite.limit_reached`: the user holds as many favorites as `FAVORITES_MAX_PER_USER` allows (`params.limit`)"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteError"
+  delete:
+    tags:
+      - Favorites
+    summary: Remove a favorite of the signed-in user
+    description: |
+      Removes the signed-in user's favorite on the offer. Idempotent: `204`
+      whether or not there was one. Only the user's own favorite is touched;
+      the offer itself need not be reachable or exist any more.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/TenantParam"
+      - $ref: "#/components/parameters/FavoriteTargetTypeParam"
+      - $ref: "#/components/parameters/FavoriteTargetIdParam"
+    responses:
+      "204":
+        description: Removed, or nothing to remove
+      "400":
+        description: "`favorite.invalid_target_type`: the target type is neither `bookable` nor `event`"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteError"
+      "401":
+        description: Not authenticated
+
+components:
+  parameters:
+    FavoriteTargetTypeParam:
+      name: targetType
+      in: path
+      required: true
+      description: The kind of offer
+      schema:
+        type: string
+        enum:
+          - bookable
+          - event
+    FavoriteTargetIdParam:
+      name: targetId
+      in: path
+      required: true
+      description: The id of the bookable or event within the tenant
+      schema:
+        type: string
+  schemas:
+    Favorite:
+      type: object
+      description: A favorite of the signed-in user. The user is not repeated.
+      properties:
+        tenantId:
+          type: string
+          example: default
+        targetType:
+          type: string
+          enum:
+            - bookable
+            - event
+        targetId:
+          type: string
+          example: 6f1c0f6e-6f0f-4d0e-9f0a-2b1c9d4e5f60
+        title:
+          type: string
+          description: The title of the offer when it was marked
+          example: Großer Saal
+        tenantName:
+          type: string
+          description: The name of the tenant when the offer was marked
+          example: Stadt Musterhausen
+        created:
+          type: string
+          format: date-time
+    FavoriteError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: ConflictError
+        code:
+          type: string
+          example: favorite.limit_reached
+        statusCode:
+          type: integer
+          example: 409
+        params:
+          type: object
+          additionalProperties: true
+          example:
+            limit: 200
