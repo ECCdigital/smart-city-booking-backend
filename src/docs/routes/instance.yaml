@@ -103,7 +103,8 @@
       (tab „Single Sign-On“). Instance owner only (`instance.checkRealm`).
 
       Requests go only to the stored Keycloak-URL
-      (`<serverUrl>/realms/<realm>/…`) and the stored Portal-URL; values
+      (`<serverUrl>/realms/<realm>/…`) and the stored Portal-URL
+      (`<portal origin>/api/auth/sso/login`, the Storefront's sign-in); values
       of the body only go to Keycloak as query or form parameters and as
       the `Origin` header. Every probe waits 5 s at most and follows no
       redirect; only status code, `Location`, JSON `error` codes and
@@ -111,8 +112,8 @@
       stored values are read fresh, also while Keycloak is not active.
       Nothing is stored.
 
-      Rows present: 1 (realm and issuer). Further rows follow
-      (ECCdigital/tickets#98–#101). When row 1 is not `ok`, every other
+      Rows present: 1 (realm and issuer), 10 (Portal-URL). Further rows follow
+      (ECCdigital/tickets#98–#100). When row 1 is not `ok`, every other
       row is `na` with `realm_unavailable`. The backend sends codes, never
       prose: the Admin UI formulates every sentence from `reason` and
       `details`.
@@ -239,6 +240,17 @@ components:
             location? }`, `location` origin and path only), `timeout`
             (`{ url }`), `unreachable` (`{ url, code }`),
             `realm_unavailable` (row 1 is not `ok`).
+
+            Row 10 (the `redirect_uri` of the Storefront's SSO sign-in held
+            against the storefront's first `redirectUris` entry):
+            `storefront_redirect_matches` (`ok`, `{ expected, actual }`),
+            `storefront_origin_mismatch` (`fail`, `{ expected, actual }`,
+            another Adresse), `storefront_path_mismatch` (`na`,
+            `{ expected, actual }`, same Adresse, other path or query),
+            `storefront_not_redirecting` (`na`, `{ httpStatus, location? }`,
+            no redirect to the stored realm's authorize endpoint),
+            `portal_url_missing` (`na`, no stored Portal-URL or no
+            storefront entry in the body).
           example: issuer_matches
         details:
           type: object
