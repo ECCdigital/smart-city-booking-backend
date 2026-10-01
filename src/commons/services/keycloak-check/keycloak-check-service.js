@@ -58,6 +58,7 @@ const STEPS = [
   // Row 7 (#100): API client.
   // Rows 8 and 9 (#100): audience, client roles.
   // Row 10 (#101): Portal-URL.
+  require("./rows/portal-row"),
 ];
 
 /** The stored values no probe can do without, in the order of the form. */
