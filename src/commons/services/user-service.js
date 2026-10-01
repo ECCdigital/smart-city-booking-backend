@@ -11,6 +11,7 @@ const GroupBookingManager = require("../data-managers/group-booking-manager");
 const { BookableManager } = require("../data-managers/bookable-manager");
 const EventManager = require("../data-managers/event-manager");
 const CouponManager = require("../data-managers/coupon-manager");
+const FavoriteManager = require("../data-managers/favorite-manager");
 const MembershipManager = require("../data-managers/membership-manager");
 const InstanceManager = require("../data-managers/instance-manager");
 const TokenSessionService = require("./token-session-service");
@@ -318,6 +319,11 @@ class UserService {
           normalizedNewId,
           session,
         );
+        await FavoriteManager.reassignUserId(
+          previousId,
+          normalizedNewId,
+          session,
+        );
       }
 
       if (Object.keys(userSet).length > 0) {
@@ -393,6 +399,19 @@ class UserService {
       firstName: updated.firstName,
       lastName: updated.lastName,
     };
+  }
+
+  /**
+   * Removes a user and what is the user's alone: their favorites go with
+   * them (glossary "Favorit"), the first cascade of a user removal. The
+   * bookings, memberships and owned offers stay as they are.
+   *
+   * @param {string} userId
+   * @returns {Promise<void>}
+   */
+  static async deleteUser(userId) {
+    await FavoriteManager.removeFavoritesOfUser(userId);
+    await UserManager.deleteUser(userId);
   }
 }
 

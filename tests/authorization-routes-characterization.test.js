@@ -51,10 +51,11 @@ const PRINCIPALS = [
   ["instanceOwner", ADMIN],
 ];
 
-/** The values of the route parameters: the tenant, a provider, the fixture. */
+/** The values of the route parameters: the tenant, a provider, a target type, the fixture. */
 function paramValue(name) {
   if (name === "tenant") return TENANT;
   if (name === "provider") return "nuki";
+  if (name === "targetType") return "bookable";
   return FIXTURE_ID;
 }
 
