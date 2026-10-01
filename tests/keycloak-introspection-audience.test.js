@@ -80,6 +80,15 @@ describe("Keycloak introspection without the private client in aud", function ()
       expect(audienceHints()[0]).to.include('"backend"');
     });
 
+    it("points to the tab „Single Sign-On“ and „Realm prüfen“", async function () {
+      await SsoService.handleLogin(tokenWith("account")).catch(() => {});
+
+      expect(audienceHints()[0])
+        .to.include("„Instanz verwalten → Single Sign-On“")
+        .and.to.include("„Realm prüfen“")
+        .and.not.to.include("docs/deployment.md");
+    });
+
     it("warns for a token without any aud", async function () {
       await SsoService.handleLogin(tokenWith(undefined)).catch(() => {});
 

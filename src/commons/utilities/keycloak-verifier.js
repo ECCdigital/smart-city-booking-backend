@@ -140,7 +140,9 @@ class KeycloakVerifier {
   /**
    * Keycloak 26.6.2 and later answer an introspection `active: false` when
    * the asking client is not in the token's `aud`. Warns with the fix when
-   * the token shows that cause.
+   * the token shows that cause, pointing to the setup guide in the Admin UI
+   * (the one source for Keycloak settings, see smart-city-booking-vue-app
+   * docs/agents/keycloak-realm.md).
    */
   static warnIfPrivateClientNotInAudience(token, privateClient) {
     const audience = [].concat(jwt.decode(token)?.aud ?? []);
@@ -148,8 +150,9 @@ class KeycloakVerifier {
       return;
     }
     logger.warn(
-      `Keycloak introspection answered inactive for a token without the private client "${privateClient}" in its aud. ` +
-        `Keycloak 26.6.2 and later answer so for every such token: add an Audience mapper for "${privateClient}" to the public client (docs/deployment.md, Keycloak).`,
+      `Keycloak introspection answered inactive for a token without the API-Client "${privateClient}" in its aud. ` +
+        `Keycloak 26.6.2 and later answer so for every such token: the Web-Client needs an Audience mapper for "${privateClient}". ` +
+        `See the Admin UI, „Instanz verwalten → Single Sign-On“, step „Audience-Mapper anlegen“, and run „Realm prüfen“ there.`,
     );
   }
 
