@@ -27,6 +27,7 @@ const {
   unreachable,
   discoveryDocument,
 } = require("./helpers/fake-keycloak-http");
+const { installWebClient } = require("./helpers/fake-keycloak-web-client");
 
 const SERVER_URL = "https://idp.example.test";
 const ISSUER = `${SERVER_URL}/realms/city`;
@@ -77,6 +78,11 @@ function checkBody(overrides = {}) {
   };
 }
 
+/** Row 1 of a check's answer, read by id among all rows. */
+function realmRowOf(res) {
+  return res.body.rows.find((row) => row.id === 1);
+}
+
 describe("POST /api/instances/keycloak/check", function () {
   this.timeout(20000);
 
@@ -86,8 +92,9 @@ describe("POST /api/instances/keycloak/check", function () {
   beforeEach(async function () {
     h = await installHarness({ instance: { applications: [keycloakApp()] } });
     keycloak = new FakeKeycloakHttp().install();
-    // The rows after row 1 probe a realm set up as the guide says (#100:
-    // row 7's API client may introspect).
+    // The rows after row 1 probe a realm set up as the guide says: its
+    // Web-Client (#98, #99), and its API client may introspect (#100).
+    installWebClient(keycloak, ISSUER);
     keycloak.on(
       "POST",
       `${ISSUER}/protocol/openid-connect/token/introspect`,
@@ -351,6 +358,7 @@ describe("POST /api/instances/keycloak/check", function () {
         `${other}/.well-known/openid-configuration`,
         json(200, discoveryDocument(other)),
       );
+      installWebClient(keycloak, other);
       keycloak.on(
         "POST",
         `${other}/protocol/openid-connect/token/introspect`,
@@ -359,7 +367,7 @@ describe("POST /api/instances/keycloak/check", function () {
 
       const res = await check();
 
-      expect(res.body.rows[0].details).to.deep.equal({ issuer: other });
+      expect(realmRowOf(res).details).to.deep.equal({ issuer: other });
     });
 
     it("checks a realm while Keycloak is not active yet", async function () {
@@ -369,7 +377,7 @@ describe("POST /api/instances/keycloak/check", function () {
       const res = await check();
 
       expect(res.status).to.equal(200);
-      expect(res.body.rows[0].status).to.equal("ok");
+      expect(realmRowOf(res).status).to.equal("ok");
     });
 
     it("stores nothing", async function () {
@@ -392,7 +400,7 @@ describe("POST /api/instances/keycloak/check", function () {
       const res = await check();
 
       expect(res.status).to.equal(200);
-      expect(res.body.rows[0]).to.deep.equal({
+      expect(realmRowOf(res)).to.deep.equal({
         id: 1,
         status: "ok",
         reason: "issuer_matches",
@@ -408,7 +416,7 @@ describe("POST /api/instances/keycloak/check", function () {
       keycloak.on("GET", DISCOVERY, answer);
       const res = await check();
       expect(res.status).to.equal(200);
-      return res.body.rows[0];
+      return realmRowOf(res);
     }
 
     it("is not met when Keycloak does not know the realm", async function () {
@@ -539,7 +547,7 @@ describe("POST /api/instances/keycloak/check over a real connection", function (
       .send(checkBody());
 
     expect(res.status).to.equal(200);
-    expect(res.body.rows[0]).to.deep.equal({
+    expect(realmRowOf(res)).to.deep.equal({
       id: 1,
       status: "na",
       reason: "unexpected_response",
@@ -563,7 +571,7 @@ describe("POST /api/instances/keycloak/check over a real connection", function (
       .set(h.as(ADMIN))
       .send(checkBody());
 
-    expect(res.body.rows[0]).to.deep.equal({
+    expect(realmRowOf(res)).to.deep.equal({
       id: 1,
       status: "na",
       reason: "unreachable",

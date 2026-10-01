@@ -50,11 +50,16 @@ const { STATUS, GENERIC_REASONS, finding } = require("./findings");
  */
 const STEPS = [
   // Row 2, `token` part (#99): the web client exists and is public.
+  require("./rows/web-client-token-part"),
   // Row 4 (#98): redirect URIs.
+  require("./rows/redirect-uris-row"),
   // Row 2, `authorize` part, and row 3 (#99): with the first URI row 4
   // accepted.
+  require("./rows/web-client-authorize-rows"),
   // Row 5 (#98): post logout redirect URIs.
+  require("./rows/post-logout-redirect-uris-row"),
   // Row 6 (#98): web origins, `direct` mode only.
+  require("./rows/web-origins-row"),
   // Row 7 (#100): API client.
   require("./rows/api-client-row"),
   // Rows 8 and 9 (#100): audience, client roles.

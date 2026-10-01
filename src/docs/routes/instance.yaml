@@ -112,14 +112,18 @@
       stored values are read fresh, also while Keycloak is not active.
       Nothing is stored.
 
-      Rows present: 1 (realm and issuer), 7 (API client), 8 (audience), 9
-      (client roles, only while the stored role mapping is active), 10
-      (Portal-URL). Further rows follow (ECCdigital/tickets#98, #99). Rows 8
-      and 9 read the request's access token when the owner signed in via SSO
-      through the web client; row 8 introspects it as the API client.
-      When row 1 is not `ok`, every other row is `na` with
-      `realm_unavailable`. The backend sends codes, never prose: the Admin
-      UI formulates every sentence from `reason` and `details`.
+      Rows present, ascending by id: 1 (realm and issuer), 2 (Web-Client),
+      3 (PKCE S256 enforced), 4 (Valid Redirect URIs), 5 (Valid Post Logout
+      Redirect URIs), 6 (Web Origins, only in `direct` mode), 7 (API
+      client), 8 (audience), 9 (client roles, only while the stored role
+      mapping is active), 10 (Portal-URL). Rows 4, 5 and 6 are left out
+      when the body gives nothing to probe for them: no redirect URI, no
+      post logout redirect URI, no `adminUi` entry. Only row 6 sends an
+      `Origin`. Rows 8 and 9 read the request's access token when the
+      owner signed in via SSO through the web client; row 8 introspects it
+      as the API client. When row 1 is not `ok`, every other row is `na`
+      with `realm_unavailable`. The backend sends codes, never prose: the
+      Admin UI formulates every sentence from `reason` and `details`.
     security:
       - bearerAuth: []
     requestBody:
@@ -239,6 +243,30 @@ components:
             Row 1: `issuer_matches` (`details: { issuer }`),
             `realm_not_found` (`{ httpStatus: 404, url }`),
             `issuer_mismatch` (`{ expected, actual }`).
+            Row 2, part `token`: `client_public`,
+            `client_unknown_or_disabled` (`{ httpStatus: 401, error:
+            invalid_client }`), `client_authentication_on` (`{ httpStatus:
+            401, error: unauthorized_client }`); part `authorize`, with the
+            first redirect URI row 4 accepted: `standard_flow_on`,
+            `standard_flow_off` (`{ error: unauthorized_client }`).
+            Row 3, parts `without_challenge`: `pkce_required`,
+            `pkce_optional`; `plain`: `pkce_plain_rejected`,
+            `pkce_plain_accepted`.
+            Row 2 `authorize` and row 3, always `na`:
+            `no_redirect_uri_accepted` (row 4 accepted none),
+            `web_client_invalid`; row 3 also `standard_flow_off`.
+            Row 4, one part per redirect URI: `redirect_uri_accepted`,
+            `redirect_uri_rejected` (`{ httpStatus: 400 }`),
+            `http_accepted` (`{ uri }`, the `http` variant).
+            Row 5, one part per post logout redirect URI as sent:
+            `post_logout_redirect_accepted`, `post_logout_redirect_rejected`
+            (`{ httpStatus: 400 }`).
+            Row 6, one part per `adminUi` origin: `origin_allowed`,
+            `origin_not_allowed` (`{ httpStatus }`, 403 or 400).
+            Rows 4, 5 and 6, always `na`: `web_client_invalid` (row 2's
+            `token` part found the Web-Client unknown or disabled; for row 6
+            also any other than `client_public`, or a `401` with
+            `{ httpStatus, error? }`).
             Row 7 (API client may introspect): `introspection_allowed`,
             `api_client_secret_wrong`, `api_client_unknown_or_disabled`,
             `introspection_unauthorized` (`{ httpStatus: 401 }`),
@@ -251,12 +279,7 @@ components:
             not `ok`).
             Row 9 (client roles, only while the role mapping is active):
             `client_roles` (`info`, `{ roles }`), `sso_login_required`,
-            `token_other_client` (`{ azp }`). Any row or part,
-            always `na`: `unexpected_response` (`{ httpStatus, error?,
-            location? }`, `location` origin and path only), `timeout`
-            (`{ url }`), `unreachable` (`{ url, code }`),
-            `realm_unavailable` (row 1 is not `ok`).
-
+            `token_other_client` (`{ azp }`).
             Row 10 (the `redirect_uri` of the Storefront's SSO sign-in held
             against the storefront's first `redirectUris` entry):
             `storefront_redirect_matches` (`ok`, `{ expected, actual }`),
@@ -267,6 +290,11 @@ components:
             no redirect to the stored realm's authorize endpoint),
             `portal_url_missing` (`na`, no stored Portal-URL or no
             storefront entry in the body).
+            Any row or part, always `na`: `unexpected_response`
+            (`{ httpStatus, error?, location? }`, `location` origin and path
+            only), `timeout` (`{ url }`), `unreachable` (`{ url, code }`),
+            `realm_unavailable` (row 1 is not `ok`; used for every other
+            row).
           example: issuer_matches
         details:
           type: object
