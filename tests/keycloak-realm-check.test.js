@@ -27,6 +27,7 @@ const {
   unreachable,
   discoveryDocument,
 } = require("./helpers/fake-keycloak-http");
+const { installWebClient } = require("./helpers/fake-keycloak-web-client");
 
 const SERVER_URL = "https://idp.example.test";
 const ISSUER = `${SERVER_URL}/realms/city`;
@@ -86,6 +87,7 @@ describe("POST /api/instances/keycloak/check", function () {
   beforeEach(async function () {
     h = await installHarness({ instance: { applications: [keycloakApp()] } });
     keycloak = new FakeKeycloakHttp().install();
+    installWebClient(keycloak, ISSUER);
   });
 
   afterEach(async function () {
@@ -324,8 +326,11 @@ describe("POST /api/instances/keycloak/check", function () {
 
       expect((await check(body)).status).to.equal(200);
 
-      expect(keycloak.requests.map((r) => r.url)).to.deep.equal([DISCOVERY]);
-      expect(keycloak.requests[0].headers).not.to.have.property("origin");
+      expect(keycloak.requests[0].url).to.equal(DISCOVERY);
+      keycloak.requests.forEach((r) => {
+        expect(r.path.startsWith(`${ISSUER}/`), r.url).to.equal(true);
+        expect(r.headers).not.to.have.property("origin");
+      });
     });
 
     it("reads the stored values afresh, not from the token check's cache", async function () {
@@ -341,6 +346,7 @@ describe("POST /api/instances/keycloak/check", function () {
         `${other}/.well-known/openid-configuration`,
         json(200, discoveryDocument(other)),
       );
+      installWebClient(keycloak, other);
 
       const res = await check();
 
@@ -377,14 +383,12 @@ describe("POST /api/instances/keycloak/check", function () {
       const res = await check();
 
       expect(res.status).to.equal(200);
-      expect(res.body.rows).to.deep.equal([
-        {
-          id: 1,
-          status: "ok",
-          reason: "issuer_matches",
-          details: { issuer: ISSUER },
-        },
-      ]);
+      expect(res.body.rows[0]).to.deep.equal({
+        id: 1,
+        status: "ok",
+        reason: "issuer_matches",
+        details: { issuer: ISSUER },
+      });
       expect(new Date(res.body.checkedAt).toISOString()).to.equal(
         res.body.checkedAt,
       );
@@ -395,7 +399,6 @@ describe("POST /api/instances/keycloak/check", function () {
       keycloak.on("GET", DISCOVERY, answer);
       const res = await check();
       expect(res.status).to.equal(200);
-      expect(res.body.rows).to.have.length(1);
       return res.body.rows[0];
     }
 
@@ -527,17 +530,15 @@ describe("POST /api/instances/keycloak/check over a real connection", function (
       .send(checkBody());
 
     expect(res.status).to.equal(200);
-    expect(res.body.rows).to.deep.equal([
-      {
-        id: 1,
-        status: "na",
-        reason: "unexpected_response",
-        details: {
-          httpStatus: 302,
-          location: `${serverUrl}/realms/city/moved`,
-        },
+    expect(res.body.rows[0]).to.deep.equal({
+      id: 1,
+      status: "na",
+      reason: "unexpected_response",
+      details: {
+        httpStatus: 302,
+        location: `${serverUrl}/realms/city/moved`,
       },
-    ]);
+    });
     expect(hits).to.deep.equal([
       "/realms/city/.well-known/openid-configuration",
     ]);
@@ -553,16 +554,14 @@ describe("POST /api/instances/keycloak/check over a real connection", function (
       .set(h.as(ADMIN))
       .send(checkBody());
 
-    expect(res.body.rows).to.deep.equal([
-      {
-        id: 1,
-        status: "na",
-        reason: "unreachable",
-        details: {
-          url: `${serverUrl}/realms/city/.well-known/openid-configuration`,
-          code: "ECONNREFUSED",
-        },
+    expect(res.body.rows[0]).to.deep.equal({
+      id: 1,
+      status: "na",
+      reason: "unreachable",
+      details: {
+        url: `${serverUrl}/realms/city/.well-known/openid-configuration`,
+        code: "ECONNREFUSED",
       },
-    ]);
+    });
   });
 });

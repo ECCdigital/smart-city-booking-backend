@@ -111,8 +111,9 @@
       stored values are read fresh, also while Keycloak is not active.
       Nothing is stored.
 
-      Rows present: 1 (realm and issuer). Further rows follow
-      (ECCdigital/tickets#98–#101). When row 1 is not `ok`, every other
+      Rows present: 1 (realm and issuer), 2 (Web-Client; for now its
+      `token` part). Further rows follow (ECCdigital/tickets#98–#101).
+      When row 1 is not `ok`, every other
       row is `na` with `realm_unavailable`. The backend sends codes, never
       prose: the Admin UI formulates every sentence from `reason` and
       `details`.
@@ -234,7 +235,12 @@ components:
           description: |
             Row 1: `issuer_matches` (`details: { issuer }`),
             `realm_not_found` (`{ httpStatus: 404, url }`),
-            `issuer_mismatch` (`{ expected, actual }`). Any row or part,
+            `issuer_mismatch` (`{ expected, actual }`).
+            Row 2, part `token`: `client_public`,
+            `client_unknown_or_disabled` (`{ httpStatus: 401, error:
+            invalid_client }`), `client_authentication_on` (`{ httpStatus:
+            401, error: unauthorized_client }`).
+            Any row or part,
             always `na`: `unexpected_response` (`{ httpStatus, error?,
             location? }`, `location` origin and path only), `timeout`
             (`{ url }`), `unreachable` (`{ url, code }`),

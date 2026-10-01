@@ -50,6 +50,7 @@ const { STATUS, GENERIC_REASONS, finding } = require("./findings");
  */
 const STEPS = [
   // Row 2, `token` part (#99): the web client exists and is public.
+  require("./rows/web-client-token-part"),
   // Row 4 (#98): redirect URIs.
   // Row 2, `authorize` part, and row 3 (#99): with the first URI row 4
   // accepted.
