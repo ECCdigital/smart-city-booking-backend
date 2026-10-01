@@ -42,7 +42,7 @@ async function evaluate(context, results) {
 }
 
 /**
- * The Adresse of the stored Portal-URL, `null` without one or for a value
+ * The origin of the stored Portal-URL, `null` without one or for a value
  * that is no absolute http(s) URL (the Portal tab stores what it is given).
  *
  * @param {?string} portalUrl The stored Portal-URL
@@ -100,7 +100,7 @@ function redirectTargetOf(result) {
 }
 
 /**
- * The Adresse (scheme, host, port) of a URL, `null` for anything that is
+ * The origin (scheme, host, port) of a URL, `null` for anything that is
  * no absolute URL.
  *
  * @param {string} url The URL
@@ -116,8 +116,8 @@ function originOf(url) {
 
 /**
  * The finding of the `redirect_uri` the Storefront sends, held against the
- * callback the guide shows: equal is met; another Adresse means the
- * Portal-URL or the Storefront is set up wrong; the same Adresse with
+ * callback the guide shows: equal is met; another origin means the
+ * Portal-URL or the Storefront is set up wrong; the same origin with
  * another path or query is a Biletado bug, not the realm's, so not
  * checkable.
  *

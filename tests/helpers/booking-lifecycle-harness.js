@@ -68,6 +68,7 @@ const WorkflowManager = require("../../src/commons/data-managers/workflow-manage
 const OpeningHoursManager = require("../../src/commons/utilities/opening-hours-manager");
 const PaymentUtils = require("../../src/commons/utilities/payment-utils");
 const InstanceManager = require("../../src/commons/data-managers/instance-manager");
+const InstanceModel = require("../../src/commons/data-managers/models/instanceModel");
 const { RoleManager } = require("../../src/commons/data-managers/role-manager");
 const CouponService = require("../../src/commons/services/coupon-service");
 const WorkflowService = require("../../src/commons/services/workflow/workflow-service");
@@ -734,6 +735,15 @@ async function installHarness({
   sinon
     .stub(InstanceManager, "getInstance")
     .callsFake(async () => instanceOf(storedInstance));
+  // `InstanceManager.getPortalConfig` reads the stored record itself, lean:
+  // as stored, without the schema's defaults (an absent Portal-URL falls
+  // back to the legacy `catalogUrl`, an emptied one does not). Every other
+  // read of the model goes on as before.
+  sinon
+    .stub(InstanceModel, "findOne")
+    .callThrough()
+    .withArgs({}, sinon.match.has("portalUrl"))
+    .returns({ lean: async () => clone(storedInstance) });
   sinon
     .stub(MembershipManager, "getMembershipByTenantAndUserID")
     .callsFake(
@@ -990,7 +1000,8 @@ async function installHarness({
     tenantB: tenantBRecord,
     /**
      * The stored instance's record; every `InstanceManager.getInstance`
-     * reads it afresh, so a test may change it (`h.instance.applications`).
+     * and `getPortalConfig({ fresh: true })` reads it afresh, so a test
+     * may change it (`h.instance.applications`, `h.instance.portalUrl`).
      */
     instance: storedInstance,
     bookables: catalogue,

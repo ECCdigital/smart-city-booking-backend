@@ -222,11 +222,18 @@ class InstanceManager {
   }
 
   /**
-   * Liefert die Portal-Konfiguration (Aktivierungsstatus der Buchungsangebote
-   * + Portal-URL). Ebenfalls gecached, da auf jeden Catalog-Request gelesen.
+   * The portal configuration (whether the public offers are enabled, and the
+   * Portal-URL). Cached as well, since every catalog request reads it.
+   *
+   * @param {Object} [options]
+   * @param {boolean} [options.fresh=false] Read the database past the cache
+   *   and leave the cache alone („Realm prüfen“ reads the stored values
+   *   fresh)
+   * @returns {Promise<{publicOffersEnabled: boolean, portalUrl: string}>}
+   *   The portal configuration
    */
-  static async getPortalConfig() {
-    const cached = InstanceCache.getPortal();
+  static async getPortalConfig({ fresh = false } = {}) {
+    const cached = fresh ? null : InstanceCache.getPortal();
     if (cached) return cached;
 
     const raw = await InstanceModel.findOne(
@@ -244,7 +251,7 @@ class InstanceManager {
       portalUrl: raw?.portalUrl ?? raw?.catalogUrl ?? DEFAULT_PORTAL.portalUrl,
     };
 
-    InstanceCache.setPortal(portal);
+    if (!fresh) InstanceCache.setPortal(portal);
     return portal;
   }
 

@@ -94,8 +94,11 @@ class KeycloakCheckService {
   static async check(body, { authType = null, accessToken = null } = {}) {
     const request = parseCheckRequest(body);
     const checkedAt = new Date().toISOString();
-    const instance = await InstanceManager.getInstance();
-    const context = KeycloakCheckService._contextOf(instance, request, {
+    const [instance, portal] = await Promise.all([
+      InstanceManager.getInstance(),
+      InstanceManager.getPortalConfig({ fresh: true }),
+    ]);
+    const context = KeycloakCheckService._contextOf(instance, portal, request, {
       authType,
       accessToken,
     });
@@ -125,12 +128,15 @@ class KeycloakCheckService {
    * the instance, and the request.
    *
    * @param {Object} instance The instance, read fresh
+   * @param {Object} portal The portal configuration, read fresh: its
+   *   Portal-URL falls back to the legacy `catalogUrl` only where none was
+   *   ever stored, as for every other reader
    * @param {Object} request The request body
    * @param {Object} caller `{ authType, accessToken }`
    * @returns {Object} The context
    * @throws {BadRequestError} When a stored value is empty
    */
-  static _contextOf(instance, request, { authType, accessToken }) {
+  static _contextOf(instance, portal, request, { authType, accessToken }) {
     const app =
       (instance?.applications || []).find(
         (application) => application.id === "keycloak",
@@ -151,7 +157,7 @@ class KeycloakCheckService {
       privateClient: app.privateClient,
       privateClientSecret: app.privateClientSecret,
       roleMappingActive: Boolean(app.roleMapping?.active),
-      portalUrl: instance.portalUrl || instance.catalogUrl || null,
+      portalUrl: portal.portalUrl || null,
       mode: request.mode,
       apps: request.apps,
       authType,

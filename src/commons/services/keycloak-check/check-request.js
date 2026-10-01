@@ -84,7 +84,7 @@ class CheckRequestFaults {
     return false;
   }
 
-  /** An Adresse: an absolute http(s) origin, nothing after the port. */
+  /** An origin: absolute http(s), nothing after the port. */
   origin(field, value) {
     if (!this.string(field, value)) return;
     if (httpUrlOf(value)?.origin !== value) this.add(field, "invalid_format");

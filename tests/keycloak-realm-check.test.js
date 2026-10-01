@@ -486,6 +486,17 @@ describe("POST /api/instances/keycloak/check", function () {
       });
       expect(keycloak.requests.map((r) => r.url)).to.deep.equal([DISCOVERY]);
     });
+
+    it("is not checkable for a redirect whose Location is no URL, with the status alone", async function () {
+      expect(
+        await realmRowFor(redirect("https://idp example.test/?error=moved")),
+      ).to.deep.equal({
+        id: 1,
+        status: "na",
+        reason: "unexpected_response",
+        details: { httpStatus: 302 },
+      });
+    });
   });
 });
 
@@ -497,14 +508,19 @@ describe("POST /api/instances/keycloak/check over a real connection", function (
   /** The paths the server was asked for, in order. */
   let hits;
   let serverUrl;
+  /** How the server answers the discovery; a test may replace it. */
+  let answerDiscovery;
 
   beforeEach(async function () {
     hits = [];
+    answerDiscovery = (res) => {
+      res.writeHead(302, { Location: "/realms/city/moved" });
+      res.end();
+    };
     server = http.createServer((req, res) => {
       hits.push(req.url);
       if (req.url === "/realms/city/.well-known/openid-configuration") {
-        res.writeHead(302, { Location: "/realms/city/moved" });
-        return res.end();
+        return answerDiscovery(res);
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(
@@ -544,6 +560,35 @@ describe("POST /api/instances/keycloak/check over a real connection", function (
     expect(hits).to.deep.equal([
       "/realms/city/.well-known/openid-configuration",
     ]);
+  });
+
+  it("reads no answer larger than 1 MiB", async function () {
+    answerDiscovery = (res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ...discoveryDocument(`${serverUrl}/realms/city`),
+          padding: "x".repeat(1024 * 1024),
+        }),
+      );
+    };
+
+    const res = await h
+      .api()
+      .post("/api/instances/keycloak/check")
+      .set(h.as(ADMIN))
+      .send(checkBody());
+
+    expect(res.status).to.equal(200);
+    expect(realmRowOf(res)).to.deep.equal({
+      id: 1,
+      status: "na",
+      reason: "unreachable",
+      details: {
+        url: `${serverUrl}/realms/city/.well-known/openid-configuration`,
+        code: "ERR_BAD_RESPONSE",
+      },
+    });
   });
 
   it("names a refused connection", async function () {

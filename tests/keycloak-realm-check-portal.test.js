@@ -134,7 +134,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
     });
   });
 
-  it("is not met when the Storefront names another Adresse, with both values", async function () {
+  it("is not met when the Storefront names another origin, with both values", async function () {
     const actual = "http://storefront:3000/api/auth/sso/callback";
     fake.on("GET", SSO_LOGIN, storefrontRedirect(actual, AUTHORIZE));
 
@@ -146,7 +146,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
     });
   });
 
-  it("is not checkable when the Storefront names the same Adresse with another path: a Biletado bug, not the realm", async function () {
+  it("is not checkable when the Storefront names the same origin with another path: a Biletado bug, not the realm", async function () {
     const actual = `${PORTAL_URL}/api/auth/callback`;
     fake.on("GET", SSO_LOGIN, storefrontRedirect(actual, AUTHORIZE));
 
@@ -182,7 +182,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
   });
 
   describe("what the row touches", function () {
-    it("asks the Storefront only at the Adresse of the stored Portal-URL, never at the body's, without an Origin", async function () {
+    it("asks the Storefront only at the origin of the stored Portal-URL, never at the body's, without an Origin", async function () {
       h.instance.portalUrl = `${PORTAL_URL}/de/start?x=1`;
       const bodyCallback = "http://169.254.169.254/api/auth/sso/callback";
       fake.on("GET", SSO_LOGIN, storefrontRedirect(CALLBACK, AUTHORIZE));
@@ -308,6 +308,28 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
         reason: "portal_url_missing",
       });
       expect(outsideRealm()).to.deep.equal([]);
+    });
+
+    it("is not checkable with an emptied Portal-URL, never falling back to the legacy catalogUrl", async function () {
+      h.instance.portalUrl = "";
+      h.instance.catalogUrl = PORTAL_URL;
+
+      expect(await portalRow()).to.deep.equal({
+        id: 10,
+        status: "na",
+        reason: "portal_url_missing",
+      });
+      expect(outsideRealm()).to.deep.equal([]);
+    });
+
+    it("asks the Storefront under the legacy catalogUrl where no Portal-URL was ever stored", async function () {
+      delete h.instance.portalUrl;
+      h.instance.catalogUrl = PORTAL_URL;
+
+      expect((await portalRow()).reason).to.equal(
+        "storefront_redirect_matches",
+      );
+      expect(outsideRealm().map((r) => r.url)).to.deep.equal([SSO_LOGIN]);
     });
 
     it("is not checkable with a stored Portal-URL that is no absolute http(s) address, and asks no Storefront", async function () {

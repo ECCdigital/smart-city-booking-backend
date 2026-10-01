@@ -97,10 +97,28 @@ function originAndPath(url, base) {
 }
 
 /**
+ * The `Location` of an answer resolved against the probed address, `null`
+ * without one or for one that is no URL.
+ *
+ * @param {Object} result The probe result of an answer
+ * @returns {?URL} The location
+ */
+function locationOf(result) {
+  const location = result.headers.location;
+  if (!location) return null;
+  try {
+    return new URL(location, result.url);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The `na` finding for a probe whose result matches no known case of its
  * row: no answer in time, no connection, or an answer the row does not
  * know. Of an answer it names the status, the `error` code (JSON body or
- * `Location` parameter) and origin and path of the `Location`.
+ * `Location` parameter) and origin and path of the `Location`; a
+ * `Location` that is no URL names nothing.
  *
  * @param {Object} result The probe result (`probe-client.js`)
  * @returns {Object} The finding
@@ -117,8 +135,7 @@ function notCheckable(result) {
   }
 
   const details = { httpStatus: result.status };
-  const location = result.headers.location;
-  const locationUrl = location ? new URL(location, result.url) : null;
+  const locationUrl = locationOf(result);
   const error =
     typeof result.data?.error === "string"
       ? result.data.error

@@ -171,7 +171,7 @@ components:
           type: array
           maxItems: 10
           description: |
-            One entry per Adresse; `adminUi` one or more times, `storefront`
+            One entry per origin; `adminUi` one or more times, `storefront`
             at most once (omitted without a Portal-URL). Entries whose
             redirect URIs the Admin UI could not determine are not sent.
           items:
@@ -284,8 +284,8 @@ components:
             against the storefront's first `redirectUris` entry):
             `storefront_redirect_matches` (`ok`, `{ expected, actual }`),
             `storefront_origin_mismatch` (`fail`, `{ expected, actual }`,
-            another Adresse), `storefront_path_mismatch` (`na`,
-            `{ expected, actual }`, same Adresse, other path or query),
+            another origin), `storefront_path_mismatch` (`na`,
+            `{ expected, actual }`, same origin, other path or query),
             `storefront_not_redirecting` (`na`, `{ httpStatus, location? }`,
             no redirect to the stored realm's authorize endpoint),
             `portal_url_missing` (`na`, no stored Portal-URL or no

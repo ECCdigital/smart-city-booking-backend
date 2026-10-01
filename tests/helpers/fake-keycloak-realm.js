@@ -27,7 +27,7 @@
  *   as Keycloak does with Service accounts off.
  * - 8: any other token is active for the API client.
  * - 10, with `portalUrl`: the Storefront sends its sign-in to the realm with
- *   its callback under the Portal-URL's Adresse.
+ *   its callback under the Portal-URL's origin.
  */
 
 const { json, redirect, discoveryDocument } = require("./fake-keycloak-http");

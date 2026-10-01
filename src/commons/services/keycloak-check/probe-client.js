@@ -6,6 +6,8 @@
  * a page's text is never evaluated. A probe never throws for the network
  * either: no answer in time is the outcome `timeout`, no connection
  * (DNS, refused, TLS) the outcome `unreachable` with Node's error code.
+ * An answer is read up to 1 MiB; a larger one is dropped unread, the
+ * outcome `unreachable` with axios' code `ERR_BAD_RESPONSE`.
  */
 
 const axios = require("axios");
@@ -14,6 +16,12 @@ const { originAndPath } = require("./findings");
 
 /** How long a probe may take, in total (contract: 5 s). */
 const PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * The most of an answer a probe reads: far above any answer the check
+ * evaluates, so a misbehaving server cannot make the backend buffer more.
+ */
+const MAX_ANSWER_BYTES = 1024 * 1024;
 
 /** The axios codes of a request that got no answer in time. */
 const TIMEOUT_CODES = new Set(["ECONNABORTED", "ETIMEDOUT"]);
@@ -107,6 +115,7 @@ async function probe({ method = "GET", url, query, form, headers = {} }) {
       // `timeout` alone is the socket's idle time; this bounds the whole probe.
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       maxRedirects: 0,
+      maxContentLength: MAX_ANSWER_BYTES,
       validateStatus: () => true,
       responseType: "text",
     });
