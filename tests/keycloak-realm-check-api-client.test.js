@@ -47,6 +47,12 @@ const API_CLIENT_BASIC = `Basic ${Buffer.from(
   `${API_CLIENT}:${API_SECRET}`,
 ).toString("base64")}`;
 
+/**
+ * The issuer of a realm other than the stored one, e.g. before the
+ * Keycloak-URL or the realm was changed.
+ */
+const OTHER_ISSUER = "https://old-idp.example.test/realms/city";
+
 /** The Keycloak subject of the instance owner. */
 const OWNER_SUB = "kc-owner";
 
@@ -422,6 +428,32 @@ describe("POST /api/instances/keycloak/check, API client, audience and client ro
       expect(tokenIntrospections()).to.deep.equal([]);
     });
 
+    it("is not checkable with a token of another realm, naming its issuer, and never sends the token anywhere", async function () {
+      introspectionAnswering(json(200, { active: true }));
+      const signIn = ssoAs(webClientClaims({ iss: OTHER_ISSUER }));
+
+      const res = await check(signIn);
+
+      expect(rowOf(res, 8)).to.deep.equal({
+        id: 8,
+        status: "na",
+        reason: "token_other_realm",
+        details: { iss: OTHER_ISSUER },
+      });
+      const token = signIn.Authorization.slice("Bearer ".length);
+      expect(JSON.stringify(keycloak.requests)).not.to.include(token);
+    });
+
+    it("names another realm before another client", async function () {
+      introspectionAnswering(json(200, { active: true }));
+
+      const res = await check(
+        ssoAs(webClientClaims({ iss: OTHER_ISSUER, azp: "storefront" })),
+      );
+
+      expect(rowOf(res, 8).reason).to.equal("token_other_realm");
+    });
+
     it("is not checkable while the API client fails row 7, which drops it from aud (Keycloak 26.8.0)", async function () {
       keycloak.on(
         "POST",
@@ -535,6 +567,31 @@ describe("POST /api/instances/keycloak/check, API client, audience and client ro
       };
       expect(rowOf(res, 8)).to.deep.equal({ id: 8, ...otherClient });
       expect(rowOf(res, 9)).to.deep.equal({ id: 9, ...otherClient });
+    });
+
+    it("is not checkable with a token of another realm, like row 8", async function () {
+      withRoleMapping();
+
+      const res = await check(ssoAs(webClientClaims({ iss: OTHER_ISSUER })));
+
+      const otherRealm = {
+        status: "na",
+        reason: "token_other_realm",
+        details: { iss: OTHER_ISSUER },
+      };
+      expect(rowOf(res, 8)).to.deep.equal({ id: 8, ...otherRealm });
+      expect(rowOf(res, 9)).to.deep.equal({ id: 9, ...otherRealm });
+    });
+
+    it("names another realm while row 8 names the failing API client first, which it reads before any token", async function () {
+      withRoleMapping();
+      keycloak.on("POST", INTROSPECT, json(401, { error: "invalid_client" }));
+      followUpAnswering(json(401, { error: "invalid_client" }));
+
+      const res = await check(ssoAs(webClientClaims({ iss: OTHER_ISSUER })));
+
+      expect(rowOf(res, 8).reason).to.equal("api_client_invalid");
+      expect(rowOf(res, 9).reason).to.equal("token_other_realm");
     });
 
     it("is absent without an active role mapping", async function () {

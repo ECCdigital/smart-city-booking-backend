@@ -120,8 +120,10 @@
       when the body gives nothing to probe for them: no redirect URI, no
       post logout redirect URI, no `adminUi` entry. Only row 6 sends an
       `Origin`. Rows 8 and 9 read the request's access token when the
-      owner signed in via SSO through the web client; row 8 introspects it
-      as the API client. When row 1 is not `ok`, every other row is `na`
+      owner signed in via SSO through the web client of the stored realm
+      (its `iss` the stored issuer); row 8 introspects it as the API
+      client. A token of another realm is never sent anywhere. When row 1
+      is not `ok`, every other row is `na`
       with `realm_unavailable`. The backend sends codes, never prose: the
       Admin UI formulates every sentence from `reason` and `details`.
     security:
@@ -274,12 +276,14 @@ components:
             Row 8 (audience, from the request's access token of an SSO
             sign-in via the web client; `aud` always as an array):
             `audience_present` (`{ aud }`), `audience_missing` (`{ aud }`),
-            `sso_login_required`, `token_other_client` (`{ azp }`),
-            `token_inactive` (`{ aud }`), `api_client_invalid` (row 7 is
-            not `ok`).
+            `sso_login_required`, `token_other_realm` (`{ iss }`, the
+            token's issuer is not the stored one), `token_other_client`
+            (`{ azp }`), `token_inactive` (`{ aud }`), `api_client_invalid`
+            (row 7 is not `ok`; before the token is read).
             Row 9 (client roles, only while the role mapping is active):
             `client_roles` (`info`, `{ roles }`), `sso_login_required`,
-            `token_other_client` (`{ azp }`).
+            `token_other_realm` (`{ iss }`), `token_other_client`
+            (`{ azp }`).
             Row 10 (the `redirect_uri` of the Storefront's SSO sign-in held
             against the storefront's first `redirectUris` entry):
             `storefront_redirect_matches` (`ok`, `{ expected, actual }`),
