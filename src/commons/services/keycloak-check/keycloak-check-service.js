@@ -56,7 +56,10 @@ const STEPS = [
   // Row 5 (#98): post logout redirect URIs.
   // Row 6 (#98): web origins, `direct` mode only.
   // Row 7 (#100): API client.
+  require("./rows/api-client-row"),
   // Rows 8 and 9 (#100): audience, client roles.
+  require("./rows/audience-row"),
+  require("./rows/client-roles-row"),
   // Row 10 (#101): Portal-URL.
   require("./rows/portal-row"),
 ];

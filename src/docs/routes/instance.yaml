@@ -112,11 +112,14 @@
       stored values are read fresh, also while Keycloak is not active.
       Nothing is stored.
 
-      Rows present: 1 (realm and issuer), 10 (Portal-URL). Further rows follow
-      (ECCdigital/tickets#98–#100). When row 1 is not `ok`, every other
-      row is `na` with `realm_unavailable`. The backend sends codes, never
-      prose: the Admin UI formulates every sentence from `reason` and
-      `details`.
+      Rows present: 1 (realm and issuer), 7 (API client), 8 (audience), 9
+      (client roles, only while the stored role mapping is active), 10
+      (Portal-URL). Further rows follow (ECCdigital/tickets#98, #99). Rows 8
+      and 9 read the request's access token when the owner signed in via SSO
+      through the web client; row 8 introspects it as the API client.
+      When row 1 is not `ok`, every other row is `na` with
+      `realm_unavailable`. The backend sends codes, never prose: the Admin
+      UI formulates every sentence from `reason` and `details`.
     security:
       - bearerAuth: []
     requestBody:
@@ -235,7 +238,20 @@ components:
           description: |
             Row 1: `issuer_matches` (`details: { issuer }`),
             `realm_not_found` (`{ httpStatus: 404, url }`),
-            `issuer_mismatch` (`{ expected, actual }`). Any row or part,
+            `issuer_mismatch` (`{ expected, actual }`).
+            Row 7 (API client may introspect): `introspection_allowed`,
+            `api_client_secret_wrong`, `api_client_unknown_or_disabled`,
+            `introspection_unauthorized` (`{ httpStatus: 401 }`),
+            `api_client_public` (`{ httpStatus: 403 }`).
+            Row 8 (audience, from the request's access token of an SSO
+            sign-in via the web client; `aud` always as an array):
+            `audience_present` (`{ aud }`), `audience_missing` (`{ aud }`),
+            `sso_login_required`, `token_other_client` (`{ azp }`),
+            `token_inactive` (`{ aud }`), `api_client_invalid` (row 7 is
+            not `ok`).
+            Row 9 (client roles, only while the role mapping is active):
+            `client_roles` (`info`, `{ roles }`), `sso_login_required`,
+            `token_other_client` (`{ azp }`). Any row or part,
             always `na`: `unexpected_response` (`{ httpStatus, error?,
             location? }`, `location` origin and path only), `timeout`
             (`{ url }`), `unreachable` (`{ url, code }`),
