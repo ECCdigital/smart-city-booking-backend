@@ -12,10 +12,9 @@
  * meaningless (`web_client_invalid`), a client that is not public row 6.
  */
 
-const crypto = require("crypto");
-
 const { probe } = require("../probe-client");
 const { STATUS, finding, partOf, notCheckable } = require("../findings");
+const { randomValue } = require("./authorize-probe");
 
 const ROW_ID = 2;
 const LABEL = "token";
@@ -31,16 +30,6 @@ const REASONS = Object.freeze({
  * with `na`.
  */
 const WEB_CLIENT_INVALID = "web_client_invalid";
-
-/**
- * A random value of 43 URL-safe characters, as long as a PKCE verifier or
- * challenge must be at least; also a probe's `state`.
- *
- * @returns {string} The value
- */
-function randomValue() {
-  return crypto.randomBytes(32).toString("base64url");
-}
 
 /**
  * The first redirect URI of the body, in the order of its apps.
@@ -132,7 +121,6 @@ module.exports = {
   rowIds: () => [ROW_ID],
   evaluate,
   WEB_CLIENT_INVALID,
-  randomValue,
   webClientUnknownOrDisabled,
   webClientPublic,
 };

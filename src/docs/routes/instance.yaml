@@ -112,7 +112,10 @@
       Nothing is stored.
 
       Rows present: 1 (realm and issuer), 2 (Web-Client; for now its
-      `token` part). Further rows follow (ECCdigital/tickets#98–#101).
+      `token` part), 4 (Valid Redirect URIs) and 5 (Valid Post Logout
+      Redirect URIs) when the body names such a URI, 6 (Web Origins) in
+      `direct` mode with an `adminUi` entry. Further rows follow
+      (ECCdigital/tickets#99–#101). Only row 6 sends an `Origin`.
       When row 1 is not `ok`, every other
       row is `na` with `realm_unavailable`. The backend sends codes, never
       prose: the Admin UI formulates every sentence from `reason` and
@@ -240,6 +243,18 @@ components:
             `client_unknown_or_disabled` (`{ httpStatus: 401, error:
             invalid_client }`), `client_authentication_on` (`{ httpStatus:
             401, error: unauthorized_client }`).
+            Row 4, one part per redirect URI: `redirect_uri_accepted`,
+            `redirect_uri_rejected` (`{ httpStatus: 400 }`),
+            `http_accepted` (`{ uri }`, the `http` variant).
+            Row 5, one part per post logout redirect URI as sent:
+            `post_logout_redirect_accepted`, `post_logout_redirect_rejected`
+            (`{ httpStatus: 400 }`).
+            Row 6, one part per `adminUi` origin: `origin_allowed`,
+            `origin_not_allowed` (`{ httpStatus }`, 403 or 400).
+            Rows 4, 5 and 6, always `na`: `web_client_invalid` (row 2's
+            `token` part found the Web-Client unknown or disabled; for row 6
+            also any other than `client_public`, or a `401` with
+            `{ httpStatus, error? }`).
             Any row or part,
             always `na`: `unexpected_response` (`{ httpStatus, error?,
             location? }`, `location` origin and path only), `timeout`
