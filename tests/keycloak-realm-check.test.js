@@ -27,7 +27,7 @@ const {
   unreachable,
   discoveryDocument,
 } = require("./helpers/fake-keycloak-http");
-const { installWebClient } = require("./helpers/fake-keycloak-web-client");
+const { installRealm } = require("./helpers/fake-keycloak-realm");
 
 const SERVER_URL = "https://idp.example.test";
 const ISSUER = `${SERVER_URL}/realms/city`;
@@ -92,14 +92,9 @@ describe("POST /api/instances/keycloak/check", function () {
   beforeEach(async function () {
     h = await installHarness({ instance: { applications: [keycloakApp()] } });
     keycloak = new FakeKeycloakHttp().install();
-    // The rows after row 1 probe a realm set up as the guide says: its
-    // Web-Client (#98, #99), and its API client may introspect (#100).
-    installWebClient(keycloak, ISSUER);
-    keycloak.on(
-      "POST",
-      `${ISSUER}/protocol/openid-connect/token/introspect`,
-      json(200, { active: false }),
-    );
+    // Every row after row 1 runs: against a realm that passes them, for
+    // the addresses of the body.
+    installRealm(keycloak, ISSUER, { apps: checkBody().apps });
   });
 
   afterEach(async function () {
@@ -353,17 +348,7 @@ describe("POST /api/instances/keycloak/check", function () {
       h.instance.applications = [
         keycloakApp({ serverUrl: "https://sso.example.test", realm: "town" }),
       ];
-      keycloak.on(
-        "GET",
-        `${other}/.well-known/openid-configuration`,
-        json(200, discoveryDocument(other)),
-      );
-      installWebClient(keycloak, other);
-      keycloak.on(
-        "POST",
-        `${other}/protocol/openid-connect/token/introspect`,
-        json(200, { active: false }),
-      );
+      installRealm(keycloak, other, { apps: checkBody().apps });
 
       const res = await check();
 

@@ -24,6 +24,10 @@ const {
   unreachable,
   discoveryDocument,
 } = require("./helpers/fake-keycloak-http");
+const {
+  installRealm,
+  storefrontRedirect,
+} = require("./helpers/fake-keycloak-realm");
 
 const SERVER_URL = "https://idp.example.test";
 const ISSUER = `${SERVER_URL}/realms/city`;
@@ -79,29 +83,6 @@ function checkBody(storefront = storefrontEntry()) {
   };
 }
 
-/**
- * The Storefront's redirect to Keycloak's authorize endpoint, the way
- * `login.get.ts` builds it (h3 `sendRedirect`, 302, query in this order).
- *
- * @param {string} redirectUri The `redirect_uri` it sends
- * @param {string} [authorize] The authorize endpoint it knows
- * @returns {Object} The answer
- */
-function storefrontRedirect(redirectUri, authorize = AUTHORIZE) {
-  const location = new URL(authorize);
-  location.searchParams.set("client_id", "booking-client");
-  location.searchParams.set("response_type", "code");
-  location.searchParams.set("scope", "openid email profile");
-  location.searchParams.set("redirect_uri", redirectUri);
-  location.searchParams.set("state", "0123456789abcdef0123456789abcdef");
-  location.searchParams.set(
-    "code_challenge",
-    "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-  );
-  location.searchParams.set("code_challenge_method", "S256");
-  return redirect(location.href);
-}
-
 describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
   this.timeout(20000);
 
@@ -113,7 +94,11 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
       instance: { applications: [keycloakApp()], portalUrl: PORTAL_URL },
     });
     fake = new FakeKeycloakHttp().install();
-    fake.on("GET", DISCOVERY, json(200, discoveryDocument(ISSUER)));
+    // Every row runs, against a realm and a Storefront that pass them.
+    installRealm(fake, ISSUER, {
+      apps: checkBody().apps,
+      portalUrl: PORTAL_URL,
+    });
   });
 
   afterEach(async function () {
@@ -122,6 +107,10 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
     await h.close();
     fake.verify();
   });
+
+  /** The requests to anything but the stored realm. */
+  const outsideRealm = () =>
+    fake.requests.filter((r) => !r.path.startsWith(`${ISSUER}/`));
 
   /** Row 10 of a check with `body`. */
   async function portalRow(body = checkBody()) {
@@ -135,7 +124,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
   }
 
   it("is met when the Storefront sends its sign-in to the stored realm with the callback of the body", async function () {
-    fake.on("GET", SSO_LOGIN, storefrontRedirect(CALLBACK));
+    fake.on("GET", SSO_LOGIN, storefrontRedirect(CALLBACK, AUTHORIZE));
 
     expect(await portalRow()).to.deep.equal({
       id: 10,
@@ -147,7 +136,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
 
   it("is not met when the Storefront names another Adresse, with both values", async function () {
     const actual = "http://storefront:3000/api/auth/sso/callback";
-    fake.on("GET", SSO_LOGIN, storefrontRedirect(actual));
+    fake.on("GET", SSO_LOGIN, storefrontRedirect(actual, AUTHORIZE));
 
     expect(await portalRow()).to.deep.equal({
       id: 10,
@@ -159,7 +148,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
 
   it("is not checkable when the Storefront names the same Adresse with another path: a Biletado bug, not the realm", async function () {
     const actual = `${PORTAL_URL}/api/auth/callback`;
-    fake.on("GET", SSO_LOGIN, storefrontRedirect(actual));
+    fake.on("GET", SSO_LOGIN, storefrontRedirect(actual, AUTHORIZE));
 
     expect(await portalRow()).to.deep.equal({
       id: 10,
@@ -171,7 +160,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
 
   it("is not checkable when the Storefront adds a query to its callback", async function () {
     const actual = `${CALLBACK}?locale=de`;
-    fake.on("GET", SSO_LOGIN, storefrontRedirect(actual));
+    fake.on("GET", SSO_LOGIN, storefrontRedirect(actual, AUTHORIZE));
 
     expect(await portalRow()).to.deep.equal({
       id: 10,
@@ -196,7 +185,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
     it("asks the Storefront only at the Adresse of the stored Portal-URL, never at the body's, without an Origin", async function () {
       h.instance.portalUrl = `${PORTAL_URL}/de/start?x=1`;
       const bodyCallback = "http://169.254.169.254/api/auth/sso/callback";
-      fake.on("GET", SSO_LOGIN, storefrontRedirect(CALLBACK));
+      fake.on("GET", SSO_LOGIN, storefrontRedirect(CALLBACK, AUTHORIZE));
 
       const row = await portalRow(
         checkBody(
@@ -213,11 +202,11 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
         reason: "storefront_origin_mismatch",
         details: { expected: bodyCallback, actual: CALLBACK },
       });
-      expect(fake.requests.map((r) => r.url)).to.deep.equal([
-        DISCOVERY,
-        SSO_LOGIN,
-      ]);
-      expect(fake.requests[1].headers).not.to.have.property("origin");
+      expect(fake.requests[0].url).to.equal(DISCOVERY);
+      expect(outsideRealm().map((r) => r.url)).to.deep.equal([SSO_LOGIN]);
+      fake.requests.forEach((r) => {
+        expect(r.headers, r.url).not.to.have.property("origin");
+      });
     });
   });
 
@@ -318,7 +307,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
         status: "na",
         reason: "portal_url_missing",
       });
-      expect(fake.requests.map((r) => r.url)).to.deep.equal([DISCOVERY]);
+      expect(outsideRealm()).to.deep.equal([]);
     });
 
     it("is not checkable with a stored Portal-URL that is no absolute http(s) address, and asks no Storefront", async function () {
@@ -329,7 +318,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
         status: "na",
         reason: "portal_url_missing",
       });
-      expect(fake.requests.map((r) => r.url)).to.deep.equal([DISCOVERY]);
+      expect(outsideRealm()).to.deep.equal([]);
     });
 
     it("is not checkable without a storefront entry in the body, and asks no Storefront", async function () {
@@ -338,7 +327,7 @@ describe("POST /api/instances/keycloak/check, row 10, Portal-URL", function () {
         status: "na",
         reason: "portal_url_missing",
       });
-      expect(fake.requests.map((r) => r.url)).to.deep.equal([DISCOVERY]);
+      expect(outsideRealm()).to.deep.equal([]);
     });
   });
 });
@@ -350,6 +339,8 @@ describe("POST /api/instances/keycloak/check, row 10, over a real connection", f
   let server;
   /** The paths the server was asked for, in order. */
   let hits;
+  /** Path and query of the Storefront's redirect to Keycloak. */
+  let redirectTarget;
   let baseUrl;
 
   beforeEach(async function () {
@@ -369,6 +360,8 @@ describe("POST /api/instances/keycloak/check, row 10, over a real connection", f
           `${baseUrl}/api/auth/sso/callback`,
           `${baseUrl}/realms/city/protocol/openid-connect/auth`,
         );
+        const target = new URL(answer.headers.location);
+        redirectTarget = `${target.pathname}${target.search}`;
         res.writeHead(302, {
           Location: answer.headers.location,
           "Set-Cookie": [
@@ -417,9 +410,13 @@ describe("POST /api/instances/keycloak/check, row 10, over a real connection", f
       reason: "storefront_redirect_matches",
       details: { expected: callback, actual: callback },
     });
-    expect(hits).to.deep.equal([
-      "/realms/city/.well-known/openid-configuration",
+    // Keycloak shares the address, so the other rows' probes reach it too;
+    // but nothing comes after the Storefront's sign-in (row 10 runs last),
+    // and its redirect target is never asked for.
+    expect(hits[0]).to.equal("/realms/city/.well-known/openid-configuration");
+    expect(hits.slice(hits.indexOf("/api/auth/sso/login"))).to.deep.equal([
       "/api/auth/sso/login",
     ]);
+    expect(hits).not.to.include(redirectTarget);
   });
 });

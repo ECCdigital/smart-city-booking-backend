@@ -22,9 +22,9 @@ const {
   html,
   redirect,
   timeout,
-  discoveryDocument,
 } = require("./helpers/fake-keycloak-http");
 const { installWebClient } = require("./helpers/fake-keycloak-web-client");
+const { installRealm } = require("./helpers/fake-keycloak-realm");
 
 const SERVER_URL = "https://idp.example.test";
 const ISSUER = `${SERVER_URL}/realms/city`;
@@ -98,7 +98,9 @@ describe("POST /api/instances/keycloak/check, the Web-Client", function () {
   beforeEach(async function () {
     h = await installHarness({ instance: { applications: [keycloakApp()] } });
     keycloak = new FakeKeycloakHttp().install();
-    keycloak.on("GET", DISCOVERY, json(200, discoveryDocument(ISSUER)));
+    // Every row runs, against a realm that passes them; each test puts its
+    // Web-Client on the wire over the realm's.
+    installRealm(keycloak, ISSUER);
   });
 
   afterEach(async function () {
@@ -737,8 +739,12 @@ describe("POST /api/instances/keycloak/check, the Web-Client", function () {
         expect(rows[id].status, `row ${id}`).to.equal("na");
         expect(rows[id].reason, `row ${id}`).to.equal("web_client_invalid");
       }
+      // Besides the API client's introspection (rows 7 and 8), which does
+      // not depend on the Web-Client.
       expect(
-        keycloak.requests.map((r) => `${r.method} ${r.path}`),
+        keycloak.requests
+          .filter((r) => r.path !== `${OIDC}/token/introspect`)
+          .map((r) => `${r.method} ${r.path}`),
       ).to.deep.equal([`GET ${DISCOVERY}`, `POST ${OIDC}/token`]);
     });
 

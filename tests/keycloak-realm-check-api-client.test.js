@@ -28,8 +28,8 @@ const {
   FakeKeycloakHttp,
   json,
   timeout,
-  discoveryDocument,
 } = require("./helpers/fake-keycloak-http");
+const { installRealm } = require("./helpers/fake-keycloak-realm");
 
 const SERVER_URL = "https://idp.example.test";
 const ISSUER = `${SERVER_URL}/realms/city`;
@@ -115,11 +115,15 @@ describe("POST /api/instances/keycloak/check, API client, audience and client ro
 
   let h;
   let keycloak;
+  /** The realm's answers, to wrap. */
+  let realm;
 
   beforeEach(async function () {
     h = await installHarness({ instance: { applications: [keycloakApp()] } });
     keycloak = new FakeKeycloakHttp().install();
-    keycloak.on("GET", DISCOVERY, json(200, discoveryDocument(ISSUER)));
+    // Every row runs, against a realm that passes them; each test puts the
+    // API client's answers on the wire over the realm's.
+    realm = installRealm(keycloak, ISSUER, { apps: checkBody().apps });
     // An SSO sign-in of the instance owner: the auth middleware's
     // verification of a Keycloak token (signature, issuer, session) hands
     // out its claims, and the owner's account is bound to the subject.
@@ -157,9 +161,21 @@ describe("POST /api/instances/keycloak/check, API client, audience and client ro
   /** The requests the fake answered for one URL. */
   const requestsTo = (url) => keycloak.requests.filter((r) => r.path === url);
 
+  /** Whether a request to the token endpoint is row 7's follow-up. */
+  const isFollowUp = (r) => r.form.grant_type === "client_credentials";
+
   /** Row 7's follow-up probes: client credentials grants. */
-  const followUps = () =>
-    requestsTo(TOKEN).filter((r) => r.form.grant_type === "client_credentials");
+  const followUps = () => requestsTo(TOKEN).filter(isFollowUp);
+
+  /**
+   * The token endpoint answering row 7's follow-up with `followUp`, and the
+   * Web-Client's probes (rows 2 and 6) as the realm does.
+   */
+  function followUpAnswering(followUp) {
+    keycloak.on("POST", TOKEN, (req) =>
+      isFollowUp(req) ? followUp : realm.token(req),
+    );
+  }
 
   describe("row 7, the API client may introspect", function () {
     it("is met when the introspection with the API client's secret answers a dummy token inactive", async function () {
@@ -213,7 +229,7 @@ describe("POST /api/instances/keycloak/check, API client, audience and client ro
           error_description: "Client authentication failed.",
         }),
       );
-      keycloak.on("POST", TOKEN, followUp);
+      followUpAnswering(followUp);
     }
 
     it("is not met when the secret is wrong, told apart by a client credentials grant after the 401", async function () {
@@ -415,7 +431,7 @@ describe("POST /api/instances/keycloak/check, API client, audience and client ro
           error_description: "Invalid client or Invalid client credentials",
         }),
       );
-      keycloak.on("POST", TOKEN, json(401, { error: "invalid_client" }));
+      followUpAnswering(json(401, { error: "invalid_client" }));
 
       const res = await check(ssoAs(webClientClaims({ aud: undefined })));
 
