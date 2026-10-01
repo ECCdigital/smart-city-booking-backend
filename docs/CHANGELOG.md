@@ -7,6 +7,10 @@ Releases are tagged `v4.x.x` from branch `version/4.x`.
 
 ## [Unreleased]
 
+### Added
+
+- Favorites list (glossary „Favoritenliste“, ticket 73 of the favorites map): a signed-in user reads their favorites across every tenant, or narrowed with `?tenant=`, with `GET /api/v2/favorites` (the references `{ tenantId, targetType, targetId, created }`) and `GET /api/v2/favorites/offers` (the entries with the snapshot, a `status` of `available`, `unavailable` or `deleted`, and with `available` the `offer` in its public projection). The state is decided when the list is read: the offers are loaded per tenant and kind once as the domain and once through the projection `reached`; an offer the domain does not find is `deleted`, one the public does not reach (tenant pending or declined, review not approved, a ticket's event not approved) is `unavailable`. No favorite disappears by itself. Both routes carry `favorite.readMine` (`self`) and sit before the tenant segment of the v2 router; OpenAPI in `src/docs/routes/favorites.yaml`, the route snapshot gains the two routes, the rights matrix the list rows
+
 ### Changed
 
 - Glossary: `CONTEXT.md` gains the section "Favoriten" with the terms "Favorit" and "Favoritenliste" (a signed-in user marks an offer for themselves; the list reads under `self`), decided while charting the favorites map. No code change

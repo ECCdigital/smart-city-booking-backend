@@ -3,7 +3,12 @@
  * at this moment - the offer is read with the reach the route decided -
  * and the favorite carries the snapshot of title and tenant name; a second
  * mark answers the existing favorite; the limit per user refuses with
- * `favorite.limit_reached`; removing is idempotent.
+ * `favorite.limit_reached`; removing is idempotent. The list (glossary
+ * "Favoritenliste") is the domain's read for the user; the hydrated list
+ * decides the state of every entry when it is read - the targets loaded
+ * per tenant and kind once as the domain and once as the public through
+ * the projection `reached` - `available`, `unavailable` or `deleted`, and
+ * no favorite disappears by itself.
  */
 
 const { expect } = require("chai");
@@ -20,7 +25,13 @@ const { Favorite } = require("../src/commons/entities/favorite/favorite");
 const { Bookable } = require("../src/commons/entities/bookable/bookable");
 const { Event } = require("../src/commons/entities/event/event");
 const Tenant = require("../src/commons/entities/tenant/tenant");
-const { DOMAIN } = require("../src/commons/services/authorization/reach");
+const {
+  DOMAIN,
+  PUBLIC,
+} = require("../src/commons/services/authorization/reach");
+const {
+  reached,
+} = require("../src/commons/services/supervision/public-projection");
 const { NotFoundError } = require("../src/errors/BaseError");
 
 const USER = "erika@example.test";
@@ -33,15 +44,31 @@ const PUBLIC_READS = Object.freeze({
   userId: USER,
 });
 
-const room = () =>
-  new Bookable({ id: "room", tenantId: TENANT, title: "Raum", type: "room" });
-const concert = () =>
+const room = (overrides = {}) =>
+  new Bookable({
+    id: "room",
+    tenantId: TENANT,
+    title: "Raum",
+    type: "room",
+    ...overrides,
+  });
+const concert = (id = "E1") =>
   new Event({
-    id: "E1",
+    id,
     tenantId: TENANT,
     information: { name: "Sommerkonzert" },
   });
 const tenant = () => new Tenant({ id: TENANT, name: "Stadt Musterhausen" });
+/** A favorite of the user with the snapshot the mark took. */
+const favoriteOn = (targetType, targetId, tenantId = TENANT) =>
+  Favorite.create({
+    userId: USER,
+    tenantId,
+    targetType,
+    targetId,
+    title: `Titel ${targetId}`,
+    tenantName: "Stadt Musterhausen",
+  });
 
 async function rejection(promise) {
   try {
@@ -258,6 +285,327 @@ describe("FavoriteService", function () {
       expect(error.statusCode).to.equal(400);
       expect(error.code).to.equal("favorite.invalid_target_type");
       expect(getBookable.called).to.equal(false);
+    });
+  });
+
+  describe("getFavorites", function () {
+    it("reads the favorites of the user as the domain, across every tenant or within one", async function () {
+      const mine = [favoriteOn("bookable", "room")];
+      const getFavorites = sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves(mine);
+
+      expect(await FavoriteService.getFavorites({ userId: USER })).to.equal(
+        mine,
+      );
+      expect(getFavorites.firstCall.args).to.deep.equal([USER, null, DOMAIN]);
+
+      await FavoriteService.getFavorites({ userId: USER, tenantId: TENANT });
+      expect(getFavorites.secondCall.args).to.deep.equal([
+        USER,
+        TENANT,
+        DOMAIN,
+      ]);
+    });
+  });
+
+  describe("getFavoriteOffers", function () {
+    const TENANT_B = "tenant-2";
+
+    /** The hydrated entries, as `[targetId, status, has an offer]`. */
+    const states = (entries) =>
+      entries.map(({ targetId, status, offer }) => [
+        targetId,
+        status,
+        offer !== undefined,
+      ]);
+
+    /** The bookables by id and reach a test answers: `domain` and `public`. */
+    function bookablesAnswering(byReach) {
+      return sinon
+        .stub(BookableManager, "getBookablesByIds")
+        .callsFake(async (tenantId, ids, scope) =>
+          (byReach[scope.reach] ?? []).filter(
+            (offer) => offer.tenantId === tenantId && ids.includes(offer.id),
+          ),
+        );
+    }
+
+    it("loads the bookables of a tenant once as the domain and once as the public, and answers the available one with its offer", async function () {
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([favoriteOn("bookable", "room")]);
+      const getBookablesByIds = bookablesAnswering({
+        domain: [room({ review: { status: "approved" } })],
+        public: [room()],
+      });
+
+      const entries = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+        tenantId: TENANT,
+      });
+
+      expect(FavoriteManager.getFavorites.firstCall.args).to.deep.equal([
+        USER,
+        TENANT,
+        DOMAIN,
+      ]);
+      expect(getBookablesByIds.callCount).to.equal(2);
+      expect(getBookablesByIds.args).to.deep.include.members([
+        [TENANT, ["room"], DOMAIN],
+        [TENANT, ["room"], PUBLIC],
+      ]);
+      expect(entries).to.have.length(1);
+      expect(entries[0]).to.include({
+        tenantId: TENANT,
+        targetType: "bookable",
+        targetId: "room",
+        title: "Titel room",
+        tenantName: "Stadt Musterhausen",
+        status: "available",
+      });
+      expect(entries[0]).to.not.have.property("userId");
+      // The offer as the public bookable routes deliver it: media
+      // addresses resolved, no review.
+      expect(entries[0].offer).to.include({ id: "room", title: "Raum" });
+      expect(entries[0].offer).to.have.property("imgUrl");
+      expect(entries[0].offer).to.not.have.property("review");
+    });
+
+    it("answers unavailable for an offer that exists but the public does not reach, without an offer", async function () {
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([favoriteOn("bookable", "room")]);
+      bookablesAnswering({ domain: [room()], public: [] });
+
+      const entries = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+
+      expect(states(entries)).to.deep.equal([["room", "unavailable", false]]);
+      expect(entries[0]).to.include({
+        title: "Titel room",
+        tenantName: "Stadt Musterhausen",
+      });
+    });
+
+    it("answers deleted for an offer the domain does not find, with the snapshot", async function () {
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([favoriteOn("bookable", "gone")]);
+      bookablesAnswering({ domain: [], public: [] });
+
+      const entries = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+
+      expect(states(entries)).to.deep.equal([["gone", "deleted", false]]);
+      expect(entries[0]).to.include({
+        tenantId: TENANT,
+        targetType: "bookable",
+        title: "Titel gone",
+        tenantName: "Stadt Musterhausen",
+      });
+    });
+
+    it("answers unavailable for every offer of a tenant without a public projection: the public's 404 reaches nothing", async function () {
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([
+          favoriteOn("bookable", "room"),
+          favoriteOn("bookable", "hall"),
+        ]);
+      sinon
+        .stub(BookableManager, "getBookablesByIds")
+        .callsFake(async (tenantId, ids, scope) => {
+          if (scope.reach === "public") {
+            throw new NotFoundError("tenant_not_found", { tenantId });
+          }
+          return [room(), room({ id: "hall", title: "Halle" })];
+        });
+
+      const entries = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+
+      expect(states(entries)).to.deep.equal([
+        ["room", "unavailable", false],
+        ["hall", "unavailable", false],
+      ]);
+    });
+
+    it("lets any other error of the public's read through", async function () {
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([favoriteOn("bookable", "room")]);
+      sinon
+        .stub(BookableManager, "getBookablesByIds")
+        .callsFake(async (tenantId, ids, scope) => {
+          if (scope.reach === "public") throw new Error("connection lost");
+          return [room()];
+        });
+
+      const error = await rejection(
+        FavoriteService.getFavoriteOffers({ userId: USER }),
+      );
+
+      expect(error.message).to.equal("connection lost");
+    });
+
+    it("reads the events as (tenant, id) references and answers the available one as the public got it", async function () {
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([favoriteOn("event", "E1"), favoriteOn("event", "E2")]);
+      const getEventsByIds = sinon
+        .stub(EventManager, "getEventsByIds")
+        .callsFake(async (refs, scope) =>
+          scope.reach === "public" ? [concert()] : [concert(), concert("E2")],
+        );
+
+      const entries = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+
+      expect(getEventsByIds.callCount).to.equal(2);
+      expect(getEventsByIds.args).to.deep.include.members([
+        [
+          [
+            { tenantId: TENANT, id: "E1" },
+            { tenantId: TENANT, id: "E2" },
+          ],
+          DOMAIN,
+        ],
+        [
+          [
+            { tenantId: TENANT, id: "E1" },
+            { tenantId: TENANT, id: "E2" },
+          ],
+          PUBLIC,
+        ],
+      ]);
+      expect(states(entries)).to.deep.equal([
+        ["E1", "available", true],
+        ["E2", "unavailable", false],
+      ]);
+      expect(entries[0].offer).to.be.instanceOf(Event);
+      expect(entries[0].offer.information.name).to.equal("Sommerkonzert");
+    });
+
+    it("decides through the real projection: a ticket of an event the supervised tenant has not approved is unavailable, of an approved one available", async function () {
+      TenantManager.getTenant.resolves(
+        new Tenant({
+          id: TENANT,
+          name: "Stadt Musterhausen",
+          supervisionLevel: "supervised",
+        }),
+      );
+      const ticket = () =>
+        new Bookable({
+          id: "tk",
+          tenantId: TENANT,
+          type: "ticket",
+          eventId: "E1",
+          title: "Ticket",
+          review: { status: "approved" },
+        });
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([favoriteOn("bookable", "tk")]);
+      // The manager as it is: the records whole for the domain, through
+      // `reached` for the public.
+      sinon
+        .stub(BookableManager, "getBookablesByIds")
+        .callsFake(async (tenantId, ids, scope) =>
+          scope.reach === "public" ? reached(tenantId, [ticket()]) : [ticket()],
+        );
+      const getEvents = sinon.stub(EventManager, "getEvents").resolves([
+        new Event({
+          id: "E1",
+          tenantId: TENANT,
+          information: { name: "Sommerkonzert" },
+          review: { status: "pending" },
+        }),
+      ]);
+
+      const pending = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+      expect(states(pending)).to.deep.equal([["tk", "unavailable", false]]);
+      expect(getEvents.firstCall.args).to.deep.equal([TENANT, DOMAIN]);
+
+      getEvents.resolves([
+        new Event({
+          id: "E1",
+          tenantId: TENANT,
+          information: { name: "Sommerkonzert" },
+          review: { status: "approved" },
+        }),
+      ]);
+      const approved = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+      expect(states(approved)).to.deep.equal([["tk", "available", true]]);
+      expect(approved[0].offer).to.not.have.property("review");
+    });
+
+    it("loads per tenant and kind, keeps the order of the favorites, and lets one tenant's absence leave the other's offers alone", async function () {
+      const favorites = [
+        favoriteOn("bookable", "room-b", TENANT_B),
+        favoriteOn("event", "E1"),
+        favoriteOn("bookable", "room"),
+        favoriteOn("bookable", "room"),
+      ];
+      sinon.stub(FavoriteManager, "getFavorites").resolves(favorites);
+      const getBookablesByIds = sinon
+        .stub(BookableManager, "getBookablesByIds")
+        .callsFake(async (tenantId, ids, scope) => {
+          if (tenantId === TENANT_B) {
+            if (scope.reach === "public") {
+              throw new NotFoundError("tenant_not_found", { tenantId });
+            }
+            return [room({ id: "room-b", tenantId: TENANT_B })];
+          }
+          return [room()];
+        });
+      const getEventsByIds = sinon
+        .stub(EventManager, "getEventsByIds")
+        .resolves([concert()]);
+
+      const entries = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+
+      expect(states(entries)).to.deep.equal([
+        ["room-b", "unavailable", false],
+        ["E1", "available", true],
+        ["room", "available", true],
+        ["room", "available", true],
+      ]);
+      // Two reads per tenant and kind: tenant B's bookables, tenant A's
+      // bookables (the id once), tenant A's events.
+      expect(getBookablesByIds.callCount).to.equal(4);
+      expect(getBookablesByIds.args.map(([t, ids]) => [t, ids])).to.deep.equal([
+        [TENANT_B, ["room-b"]],
+        [TENANT_B, ["room-b"]],
+        [TENANT, ["room"]],
+        [TENANT, ["room"]],
+      ]);
+      expect(getEventsByIds.callCount).to.equal(2);
+    });
+
+    it("answers an empty list without reading an offer", async function () {
+      sinon.stub(FavoriteManager, "getFavorites").resolves([]);
+      const getBookablesByIds = sinon.stub(
+        BookableManager,
+        "getBookablesByIds",
+      );
+      const getEventsByIds = sinon.stub(EventManager, "getEventsByIds");
+
+      expect(
+        await FavoriteService.getFavoriteOffers({ userId: USER }),
+      ).to.deep.equal([]);
+      expect(getBookablesByIds.called).to.equal(false);
+      expect(getEventsByIds.called).to.equal(false);
     });
   });
 

@@ -49,6 +49,17 @@ class Favorite {
   }
 
   /**
+   * The favorite as a reference alone: the target and when it was set,
+   * without the snapshot - what a catalog view needs to colour the heart.
+   *
+   * @returns {{tenantId: string, targetType: string, targetId: string, created: Date}}
+   */
+  toReference() {
+    const { tenantId, targetType, targetId, created } = this;
+    return { tenantId, targetType, targetId, created };
+  }
+
+  /**
    * Validate the favorite
    * @returns {boolean} True if valid
    */
