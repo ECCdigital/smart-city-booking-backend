@@ -123,10 +123,20 @@ class BookingController {
         return next(new ForbiddenError());
       }
 
+      // `?refundState=open` narrows the list to the bookings whose refund
+      // is still to be paid out (glossary "Erstattungsstand").
+      const refundState = request.query.refundState;
+      if (refundState !== undefined) {
+        CancellationRefundService.validateRefundState(refundState);
+      }
+
       const allowedBookings = await BookingManager.getTenantBookings(
         tenant,
         scopeOf(request),
-        { populate: request.query.populate === "true" },
+        {
+          populate: request.query.populate === "true",
+          ...(refundState !== undefined && { refundState }),
+        },
       );
 
       logger.info(
@@ -576,6 +586,36 @@ class BookingController {
         code: "booking_reinstatement_failed",
         fallback: "Could not reinstate booking",
       });
+    }
+  }
+
+  /**
+   * Sets the refund state of a cancelled booking (glossary
+   * "Erstattungsstand"): the body names `refundState`, `completed` once
+   * the refund is paid out, `open` to take that back. Answers the booking;
+   * 409 `refund_state_not_applicable` for a booking without a refund state.
+   */
+  static async setRefundState(request, response) {
+    try {
+      const { tenant, id } = request.params;
+      const { user } = request;
+
+      const booking = await BookingService.setRefundState(
+        tenant,
+        id,
+        { refundState: request.body?.refundState, userId: user?.id },
+        scopeOf(request),
+      );
+      logger.info(
+        `${tenant} -- refund of booking ${id} set to ${booking.cancellationRefund.refundState} by user ${user?.id}`,
+      );
+      return response.status(200).send(booking);
+    } catch (err) {
+      if (err instanceof BaseError) {
+        return ApiResponse.fail(response, err);
+      }
+      logger.error(err);
+      return response.status(500).send("Could not set refund state");
     }
   }
 

@@ -5,6 +5,9 @@ const {
   STATUSES,
   CANCELLED_FROM_STATUSES,
 } = require("../services/booking-lifecycle/booking-state");
+const {
+  REFUND_STATE,
+} = require("../services/payment/cancellation-refund-service");
 
 const bookingHookSchemaDefinition = {
   id: { type: String, required: true },
@@ -70,6 +73,19 @@ const cancellationAuditSchema = new Schema(
   },
   { _id: false },
 );
+
+// The refund audit as the booking carries it: with the refund state
+// (glossary "Erstattungsstand"), present only where a refund is due. The
+// audit a cancellation document carries has none.
+const cancellationRefundSchema = cancellationAuditSchema.clone().add({
+  refundState: {
+    type: String,
+    enum: Object.values(REFUND_STATE),
+    default: undefined,
+  },
+  refundCompletedAt: { type: Double, default: undefined },
+  refundCompletedByUserId: { type: String, default: undefined },
+});
 
 const attachmentSchemaDefinition = {
   type: {
@@ -166,7 +182,7 @@ const bookingSchemaDefinition = {
     type: Object,
     default: { userCancellable: true, contactHint: "" },
   },
-  cancellationRefund: { type: cancellationAuditSchema, default: undefined },
+  cancellationRefund: { type: cancellationRefundSchema, default: undefined },
 };
 
 module.exports = {

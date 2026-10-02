@@ -429,7 +429,8 @@ function createGroupBookingLifecycle(adapters) {
    * The cancellation of a group (spec part 2, sections 8 and 9): every
    * member `requested → rejected`, `payment_due | confirmed → cancelled`,
    * each with the reason and its own refund audit with the state cancelled
-   * from, written one by one and revoked; one aggregated cancellation
+   * from and, where a refund is due, the open refund state (glossary
+   * "Erstattungsstand"), written one by one and revoked; one aggregated cancellation
    * document for a priced group unless the caller leaves it out; the
    * workflow told per member; one rejection mail for a group of requests,
    * one cancel mail otherwise, with the document.
@@ -471,10 +472,10 @@ function createGroupBookingLifecycle(adapters) {
         refundPercentage,
         cancelledByUserId,
       });
-      booking.cancellationRefund =
-        booking.status === STATUS.CANCELLED
-          ? { ...refund, cancelledFrom: from }
-          : { ...refund };
+      booking.cancellationRefund = CancellationRefundService.toBookingAudit(
+        refund,
+        { status: booking.status, cancelledFrom: from },
+      );
       return { bookingId: booking.id, ...refund };
     });
     const rejection = from === STATUS.REQUESTED;

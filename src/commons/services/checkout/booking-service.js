@@ -30,6 +30,7 @@ const {
 } = require("../payment/cancellation-refund-service");
 const {
   BadRequestError,
+  ConflictError,
   NotFoundError,
   BaseError,
   MethodNotAllowedError,
@@ -448,6 +449,55 @@ class BookingService {
     return await BookingManager.getAssignedBookings(userId, tenantId, DOMAIN, {
       populate,
     });
+  }
+
+  /**
+   * Sets the refund state of a cancelled booking (glossary
+   * "Erstattungsstand"): the administration marks the refund as paid out,
+   * with the moment and the person, or takes that back. No lifecycle
+   * transition - the booking's state stays.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ refundState: string, userId?: string|null }} state
+   * @param {{reach: string, userId?: string|null}} scope The route's reach
+   * @returns {Promise<Booking>} The booking as written
+   * @throws {BadRequestError} `invalid_refund_state`
+   * @throws {NotFoundError} `booking_not_found`
+   * @throws {ConflictError} `refund_state_not_applicable` for a booking
+   *   that carries no refund state
+   */
+  static async setRefundState(
+    tenantId,
+    bookingId,
+    { refundState, userId = null },
+    scope,
+  ) {
+    CancellationRefundService.validateRefundState(refundState);
+
+    const booking = await BookingManager.setRefundState(
+      tenantId,
+      bookingId,
+      { refundState, completedAt: Date.now(), completedByUserId: userId },
+      scope,
+    );
+    if (booking) {
+      return booking;
+    }
+
+    const existing = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      scope,
+    );
+    if (!existing) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    // Already in that state: nothing was written, the first mark stands.
+    if (existing.cancellationRefund?.refundState === refundState) {
+      return existing;
+    }
+    throw new ConflictError("refund_state_not_applicable", { bookingId });
   }
 
   /**

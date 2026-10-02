@@ -510,12 +510,20 @@ async function installHarness({
   const ofTenant = (doc, tenantId) =>
     doc && (tenantId === undefined || doc.tenantId === tenantId);
   // Reads the store twice for one load, as the lifecycle tests count on.
+  /**
+   * A stored document as the manager hands it to a reach: under `own`
+   * without the refund state (glossary "Erstattungsstand").
+   */
+  const entityFor = (doc, scope) => {
+    const booking = new Booking(clone(doc));
+    return scope?.reach === "own" ? booking.hideRefundState() : booking;
+  };
   sinon
     .stub(BookingManager, "getBooking")
     .callsFake(async (id, tenantId, scope) => {
       const doc = store.get(id);
       return ofTenant(doc, tenantId) && withinReach(doc, scope)
-        ? new Booking(clone(store.get(id)))
+        ? entityFor(store.get(id), scope)
         : null;
     });
   sinon
@@ -595,6 +603,33 @@ async function installHarness({
       );
       return clone(previous);
     });
+  // The atomic write of the refund state: only a booking that carries one
+  // and is not in the asked state yet matches; `completed` records moment
+  // and person, `open` drops both.
+  sinon
+    .stub(BookingManager, "setRefundState")
+    .callsFake(async (tenantId, id, state, scope) => {
+      const doc = store.get(id);
+      if (
+        !ofTenant(doc, tenantId) ||
+        !withinReach(doc, scope) ||
+        doc.cancellationRefund?.refundState === undefined ||
+        doc.cancellationRefund.refundState === state.refundState
+      ) {
+        return null;
+      }
+      const refund = { ...doc.cancellationRefund };
+      refund.refundState = state.refundState;
+      if (state.refundState === "completed") {
+        refund.refundCompletedAt = state.completedAt;
+        refund.refundCompletedByUserId = state.completedByUserId;
+      } else {
+        delete refund.refundCompletedAt;
+        delete refund.refundCompletedByUserId;
+      }
+      doc.cancellationRefund = refund;
+      return entityFor(doc, scope);
+    });
   sinon.stub(BookingManager, "replaceBooking").callsFake(async (document) => {
     store.set(document.id, clone(document));
     record("store.restore", `${label(document.id)} ${stateOf(document)}`);
@@ -617,10 +652,17 @@ async function installHarness({
   // world's `getBookables`, which throws the public's `tenant_not_found`).
   sinon
     .stub(BookingManager, "getTenantBookings")
-    .callsFake(async (tenantId, scope) => {
+    .callsFake(async (tenantId, scope, { refundState } = {}) => {
+      if (refundState && scope?.reach === "own") {
+        return [];
+      }
       const bookings = [...store.values()]
         .filter((doc) => doc.tenantId === tenantId && withinReach(doc, scope))
-        .map((doc) => new Booking(clone(doc)));
+        .filter(
+          (doc) =>
+            !refundState || doc.cancellationRefund?.refundState === refundState,
+        )
+        .map((doc) => entityFor(doc, scope));
       return scope?.reach === "public"
         ? BookingManager._ofListedBookables(tenantId, bookings)
         : bookings;
