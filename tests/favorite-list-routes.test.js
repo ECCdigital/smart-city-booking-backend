@@ -7,6 +7,7 @@
  * narrowed by `?tenant=`. The list is the user's alone, whoever they are
  * in a tenant; the state is decided when the list is read: a tenant
  * without a public projection makes its entries `unavailable`, an offer
+ * reached by a direct link alone makes its entry `unlisted`, an offer
  * that is gone makes its entry `deleted`, and no favorite disappears.
  */
 
@@ -42,7 +43,12 @@ describe("favorite routes: reading the favorites list", function () {
   before(async function () {
     h = await installHarness({
       bookables: {
-        [FX]: bookable({ id: FX, title: "Fixture", ownerUserId: ROLE_HOLDER }),
+        [FX]: bookable({
+          id: FX,
+          title: "Fixture",
+          ownerUserId: ROLE_HOLDER,
+          isPublic: true,
+        }),
       },
     });
     installRouteWorld({
@@ -212,6 +218,20 @@ describe("favorite routes: reading the favorites list", function () {
       expect(res.body[0].offer).to.not.have.property("review");
     });
 
+    it("answers unlisted, with the offer, for an offer that no longer asks to be listed - the favorite stays", async function () {
+      await mark(CUSTOMER, A, "bookable", FX);
+      h.bookables[FX].isPublic = false;
+      try {
+        const res = await get(CUSTOMER, "/api/v2/favorites/offers");
+
+        expect(res.status).to.equal(200);
+        expect(states(res.body)).to.deep.equal([[FX, "unlisted", true]]);
+        expect(res.body[0].offer).to.include({ id: FX, isPublic: false });
+      } finally {
+        h.bookables[FX].isPublic = true;
+      }
+    });
+
     it("answers unavailable, without an offer, once the tenant has no public projection - the favorite stays", async function () {
       await mark(CUSTOMER, A, "bookable", FX);
       await mark(CUSTOMER, A, "event", FX);
@@ -252,7 +272,7 @@ describe("favorite routes: reading the favorites list", function () {
       }
     });
 
-    it("tells the three states apart in one list across tenants, and narrows with ?tenant=", async function () {
+    it("tells the states apart in one list across tenants, and narrows with ?tenant=", async function () {
       await mark(CUSTOMER, A, "bookable", FX);
       await mark(CUSTOMER, A, "bookable", MINE);
       await mark(CUSTOMER, B, "bookable", FX_B);

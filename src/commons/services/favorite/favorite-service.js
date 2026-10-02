@@ -16,9 +16,11 @@
  * projection `reached` (does the public reach it?). An offer the domain
  * does not find is `deleted`; one the public does not reach - the tenant
  * pending or declined, the review not approved, a ticket's event not
- * approved - is `unavailable`; the rest is `available` and carries the
- * offer in its public projection. No favorite disappears by itself, and
- * no removal of an offer needs a cascade here.
+ * approved - is `unavailable`; one the public reaches by a direct link
+ * alone, without the wish to be listed (`isPublic`), is `unlisted`; the
+ * rest is `available`. Unlisted and available entries carry the offer in
+ * its public projection. No favorite disappears by itself, and no removal
+ * of an offer needs a cascade here.
  */
 
 const { BookableManager } = require("../../data-managers/bookable-manager");
@@ -31,6 +33,7 @@ const {
   isFavoriteTargetType,
 } = require("../../entities/favorite/favorite");
 const { DOMAIN, PUBLIC } = require("../authorization/reach");
+const { asksToBeListed } = require("../supervision/offer-gate");
 const {
   BadRequestError,
   ConflictError,
@@ -42,10 +45,12 @@ const DEFAULT_MAX_FAVORITES_PER_USER = 200;
 
 /**
  * The state of an entry of the favorites list (glossary "Favoritenliste":
- * _verfügbar_, _nicht verfügbar_, _gelöscht_), decided when it is read.
+ * _verfügbar_, _nicht gelistet_, _nicht verfügbar_, _gelöscht_), decided
+ * when it is read.
  */
 const FAVORITE_STATUS = Object.freeze({
   AVAILABLE: "available",
+  UNLISTED: "unlisted",
   UNAVAILABLE: "unavailable",
   DELETED: "deleted",
 });
@@ -164,7 +169,8 @@ async function loadTargets(favorites) {
 
 /**
  * One entry of the hydrated list: the favorite with its state, and the
- * offer in its public projection where it is available.
+ * offer in its public projection where the public reaches it - listed
+ * (`available`) or by a direct link alone (`unlisted`).
  *
  * @param {Favorite} favorite
  * @param {{reached: Object|null}|undefined} target What `loadTargets`
@@ -181,7 +187,9 @@ function entryOf(favorite, target) {
   }
   return {
     ...entry,
-    status: FAVORITE_STATUS.AVAILABLE,
+    status: asksToBeListed(target.reached)
+      ? FAVORITE_STATUS.AVAILABLE
+      : FAVORITE_STATUS.UNLISTED,
     offer: TARGETS[favorite.targetType].publicView(target.reached),
   };
 }
@@ -203,8 +211,9 @@ class FavoriteService {
   /**
    * The favorites of the user with their state, as the favorites page
    * shows them: each entry with the snapshot, its `status` (`available`,
-   * `unavailable`, `deleted`) and, when available, the `offer` in its
-   * public projection. The order is the favorites', newest first.
+   * `unlisted`, `unavailable`, `deleted`) and, where the public reaches
+   * the offer, the `offer` in its public projection. The order is the
+   * favorites', newest first.
    *
    * @param {Object} params
    * @param {string} params.userId The signed-in user

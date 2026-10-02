@@ -7,8 +7,9 @@
  * "Favoritenliste") is the domain's read for the user; the hydrated list
  * decides the state of every entry when it is read - the targets loaded
  * per tenant and kind once as the domain and once as the public through
- * the projection `reached` - `available`, `unavailable` or `deleted`, and
- * no favorite disappears by itself.
+ * the projection `reached` - `available`, `unlisted` (reached by a direct
+ * link alone), `unavailable` or `deleted`, and no favorite disappears by
+ * itself.
  */
 
 const { expect } = require("chai");
@@ -50,13 +51,16 @@ const room = (overrides = {}) =>
     tenantId: TENANT,
     title: "Raum",
     type: "room",
+    isPublic: true,
     ...overrides,
   });
-const concert = (id = "E1") =>
+const concert = (id = "E1", overrides = {}) =>
   new Event({
     id,
     tenantId: TENANT,
+    isPublic: true,
     information: { name: "Sommerkonzert" },
+    ...overrides,
   });
 const tenant = () => new Tenant({ id: TENANT, name: "Stadt Musterhausen" });
 /** A favorite of the user with the snapshot the mark took. */
@@ -389,6 +393,30 @@ describe("FavoriteService", function () {
       });
     });
 
+    it("answers unlisted, with the offer, for an offer the public reaches by a direct link alone (isPublic false)", async function () {
+      sinon
+        .stub(FavoriteManager, "getFavorites")
+        .resolves([favoriteOn("bookable", "room"), favoriteOn("event", "E1")]);
+      bookablesAnswering({
+        domain: [room({ isPublic: false })],
+        public: [room({ isPublic: false })],
+      });
+      sinon
+        .stub(EventManager, "getEventsByIds")
+        .resolves([concert("E1", { isPublic: false })]);
+
+      const entries = await FavoriteService.getFavoriteOffers({
+        userId: USER,
+      });
+
+      expect(states(entries)).to.deep.equal([
+        ["room", "unlisted", true],
+        ["E1", "unlisted", true],
+      ]);
+      expect(entries[0].offer).to.include({ id: "room", isPublic: false });
+      expect(entries[1].offer.information.name).to.equal("Sommerkonzert");
+    });
+
     it("answers deleted for an offer the domain does not find, with the snapshot", async function () {
       sinon
         .stub(FavoriteManager, "getFavorites")
@@ -506,6 +534,7 @@ describe("FavoriteService", function () {
           type: "ticket",
           eventId: "E1",
           title: "Ticket",
+          isPublic: true,
           review: { status: "approved" },
         });
       sinon

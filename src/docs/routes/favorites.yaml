@@ -55,10 +55,13 @@
       offer exist?) and once through the public projection `reached`
       (does the public reach it by a direct link?), whoever asks:
 
-      - `available`: the public reaches the offer; `offer` is the bookable
-        or the event in its public projection - without its review status,
-        a bookable with its media addresses resolved as the public bookable
-        routes deliver it.
+      - `available`: the public reaches the offer and it asks to be listed
+        (`isPublic`); `offer` is the bookable or the event in its public
+        projection - without its review status, a bookable with its media
+        addresses resolved as the public bookable routes deliver it.
+      - `unlisted`: the public reaches the offer by a direct link alone, it
+        does not ask to be listed (`isPublic` false); `offer` as with
+        `available`.
       - `unavailable`: the offer exists, but the public does not reach it -
         the tenant is pending or declined, the review of the offer is not
         approved under a supervised tenant, or the event a ticket hangs on
@@ -251,14 +254,15 @@ components:
           properties:
             status:
               type: string
-              description: "`available`: the public reaches the offer, `offer` is set. `unavailable`: the offer exists but the public does not reach it. `deleted`: the offer does not exist any more."
+              description: "`available`: the public reaches the offer and it asks to be listed, `offer` is set. `unlisted`: the public reaches the offer by a direct link alone (`isPublic` false), `offer` is set. `unavailable`: the offer exists but the public does not reach it. `deleted`: the offer does not exist any more."
               enum:
                 - available
+                - unlisted
                 - unavailable
                 - deleted
             offer:
               type: object
-              description: Only with `status` `available`. The bookable or the event in its public projection, as the public routes deliver it; never carries a review status.
+              description: Only with `status` `available` or `unlisted`. The bookable or the event in its public projection, as the public routes deliver it; never carries a review status.
               additionalProperties: true
     FavoriteError:
       type: object
