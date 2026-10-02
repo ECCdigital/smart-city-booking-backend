@@ -257,6 +257,8 @@ class BookableController {
 
       const bookable = new Bookable(request.body);
       bookable.id = uuidv4();
+      // The rights were asked of the tenant of the route, not of the body.
+      bookable.tenantId = tenant;
       bookable.ownerUserId = user.id;
       // The review is the review service's alone (supervision spec §3).
       bookable.review = emptyReview();
@@ -312,6 +314,8 @@ class BookableController {
       const user = request.user;
 
       const bookable = new Bookable(request.body);
+      // An edit never moves the bookable out of the tenant of the route.
+      bookable.tenantId = tenant;
 
       const existingBookable = await BookableManager.getBookable(
         bookable.id,
