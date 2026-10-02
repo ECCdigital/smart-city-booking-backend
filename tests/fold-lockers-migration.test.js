@@ -469,6 +469,82 @@ describe("02-09-2026-fold-lockers-into-access-points migration", () => {
     });
   });
 
+  describe("up, with Pareva records of 2024 that name their size as unitId", () => {
+    // Records of 2024 carry the id of a unit the bookable had then as `id`
+    // and the size, the Pareva product id, as `unitId`.
+    const OLD_UNIT_S = "603f5c9d-04bf-4d47-907c-81be473eb5ef";
+    const OLD_UNIT_M = "9e8f7d12-0000-4000-8000-000000000000";
+
+    beforeEach(async () => {
+      mongoose = createFakeMongoose({
+        Tenant: tenants(),
+        Bookable: bookables(),
+        Booking: [
+          ...bookings(),
+          {
+            _id: "k8",
+            id: "pareva-2024",
+            tenantId: TENANT,
+            lockerInfo: [
+              parevaRecord({
+                id: OLD_UNIT_S,
+                unitId: SIZE_S,
+                processId: "p-2024",
+              }),
+            ],
+          },
+          {
+            _id: "k9",
+            id: "pareva-2024-held",
+            tenantId: TENANT,
+            lockerInfo: [
+              parevaRecord({
+                id: OLD_UNIT_M,
+                unitId: SIZE_M,
+                bookableId: "locker-m",
+                isConfirmed: false,
+                processId: null,
+              }),
+            ],
+          },
+        ],
+        AccessPoint: accessPoints(),
+      });
+      await migration.up(mongoose);
+    });
+
+    it("makes no row for the old unit ids", () => {
+      expect(lockerRows().map((doc) => doc.externalId)).to.have.members([
+        IFBS_LOCATION,
+        SIZE_S,
+        SIZE_M,
+      ]);
+    });
+
+    it("grants the compartment at the row of its size", () => {
+      expect(compartments("pareva-2024")).to.have.length(1);
+      expect(compartments("pareva-2024")[0]).to.deep.include({
+        accessPointId: row("pareva", SIZE_S).id,
+        externalId: SIZE_S,
+        bookableId: "locker-s",
+        grant: {
+          authorizationId: "p-2024",
+          externalPrincipalId: null,
+          secret: null,
+        },
+      });
+    });
+
+    it("holds the compartment at the row of its size", () => {
+      expect(compartments("pareva-2024-held")[0]).to.deep.include({
+        accessPointId: row("pareva", SIZE_M).id,
+        externalId: SIZE_M,
+        hold: { holdId: null, expiresAt: null, compartment: null },
+        grant: null,
+      });
+    });
+  });
+
   describe("down", () => {
     beforeEach(async () => {
       await migration.up(mongoose);
