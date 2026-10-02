@@ -79,6 +79,14 @@ function unitExternalId(unit) {
 }
 
 /**
+ * The external id a `lockerInfo` record names. Pareva records of 2024 carry
+ * the id of a unit the bookable had then as `id` and the size as `unitId`.
+ */
+function recordExternalId(record) {
+  return record.unitId ?? record.id;
+}
+
+/**
  * The `lockerId` of each tenant's Pareva application, which locates its
  * sizes. Read raw: the field is not encrypted.
  */
@@ -135,7 +143,12 @@ function collectLockerSystems(bookables, bookings, parevaLockerIds) {
 
   for (const booking of bookings) {
     for (const record of booking.lockerInfo || []) {
-      add(booking.tenantId, record.lockerSystem, record.id, null);
+      add(
+        booking.tenantId,
+        record.lockerSystem,
+        recordExternalId(record),
+        null,
+      );
     }
     for (const entry of booking.accessInfo || []) {
       if (String(entry.accessPointId).startsWith(SYNTHESIZED_ID_PREFIX)) {
@@ -286,7 +299,8 @@ async function foldBookable(Bookable, bookable, rows) {
 
 /** A `lockerInfo` record as the compartment entry the seam keeps. */
 function toCompartmentEntry(tenantId, record, rows) {
-  const row = rows.get(rowKey(tenantId, record.lockerSystem, record.id));
+  const externalId = recordExternalId(record);
+  const row = rows.get(rowKey(tenantId, record.lockerSystem, externalId));
   const metadata = record.ifbsMetadata || null;
   const authorizationId =
     record.isConfirmed && (record.processId ?? metadata?.bookingId) != null
@@ -314,7 +328,7 @@ function toCompartmentEntry(tenantId, record, rows) {
     accessPointId: row.id,
     accessPointType: LOCKER,
     provider: record.lockerSystem,
-    externalId: String(record.id),
+    externalId: String(externalId),
     mode: row.mode,
     bookableId: record.bookableId ?? null,
     hold,
@@ -340,7 +354,8 @@ function toCompartmentEntry(tenantId, record, rows) {
 async function foldBooking(Booking, booking, rows) {
   const records = (booking.lockerInfo || []).filter(
     (record) =>
-      LOCKER_PROVIDERS.includes(record.lockerSystem) && record.id != null,
+      LOCKER_PROVIDERS.includes(record.lockerSystem) &&
+      recordExternalId(record) != null,
   );
   let changed = Boolean(booking.lockerInfo);
 
