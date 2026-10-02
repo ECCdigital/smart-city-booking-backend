@@ -38,6 +38,7 @@ const {
 const {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
+  REFUND_STATUS,
   sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { BOOKING_HOOK_TYPES } = require("../../entities/booking/bookingHook");
@@ -444,8 +445,9 @@ function createBookingLifecycle(adapters) {
    * The cancellation (spec part 2, section 8, `cancel`): `requested →
    * rejected`, `payment_due | confirmed → cancelled`. The state write
    * carries the reason, the refund audit with the state cancelled from
-   * (glossary "Wiederherstellung" returns to it) and drops the hook of a
-   * cancellation request; then the access is revoked, the cancellation
+   * (glossary "Wiederherstellung" returns to it) and, where a refund is
+   * due, the open refund state (glossary "Erstattungsstand"), and drops the
+   * hook of a cancellation request; then the access is revoked, the cancellation
    * document issued for a priced booking unless the caller leaves it out,
    * the workflow told and the customer mailed - the rejection of a request,
    * the cancellation otherwise (a request the customer withdrew through a
@@ -496,6 +498,9 @@ function createBookingLifecycle(adapters) {
       booking.status === STATUS.CANCELLED
         ? { ...refund, cancelledFrom: from }
         : { ...refund };
+    if (CancellationRefundService.isRefundDue(refund, from)) {
+      booking.cancellationRefund.refundStatus = REFUND_STATUS.OPEN;
+    }
 
     const rejection = booking.status === STATUS.REJECTED && !hookId;
     const files = [];

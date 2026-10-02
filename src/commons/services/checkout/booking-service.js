@@ -30,6 +30,7 @@ const {
 } = require("../payment/cancellation-refund-service");
 const {
   BadRequestError,
+  ConflictError,
   NotFoundError,
   BaseError,
   MethodNotAllowedError,
@@ -445,9 +446,59 @@ class BookingService {
     userId,
     { tenantId = null, populate = false } = {},
   ) {
-    return await BookingManager.getAssignedBookings(userId, tenantId, DOMAIN, {
-      populate,
-    });
+    const bookings = await BookingManager.getAssignedBookings(
+      userId,
+      tenantId,
+      DOMAIN,
+      { populate },
+    );
+    // The booker's own view: the refund state is the administration's.
+    return bookings.map((booking) => booking.hideRefundStatus());
+  }
+
+  /**
+   * Sets the refund state of a cancelled booking (glossary
+   * "Erstattungsstand"): the administration marks the refund as paid out,
+   * with the moment and the person, or takes that back. No lifecycle
+   * transition - the booking's state stays.
+   *
+   * @param {string} tenantId
+   * @param {string} bookingId
+   * @param {{ refundStatus: string, userId?: string|null }} state
+   * @param {{reach: string, userId?: string|null}} scope The route's reach
+   * @returns {Promise<Booking>} The booking as written
+   * @throws {BadRequestError} `invalid_refund_status`
+   * @throws {NotFoundError} `booking_not_found`
+   * @throws {ConflictError} `refund_status_not_applicable` for a booking
+   *   that carries no refund state
+   */
+  static async setRefundStatus(
+    tenantId,
+    bookingId,
+    { refundStatus, userId = null },
+    scope,
+  ) {
+    CancellationRefundService.validateRefundStatus(refundStatus);
+
+    const booking = await BookingManager.setRefundStatus(
+      tenantId,
+      bookingId,
+      { refundStatus, completedAt: Date.now(), completedByUserId: userId },
+      scope,
+    );
+    if (booking) {
+      return booking;
+    }
+
+    const existing = await BookingManager.getBooking(
+      bookingId,
+      tenantId,
+      scope,
+    );
+    if (!existing) {
+      throw new NotFoundError("booking_not_found", { bookingId });
+    }
+    throw new ConflictError("refund_status_not_applicable", { bookingId });
   }
 
   /**

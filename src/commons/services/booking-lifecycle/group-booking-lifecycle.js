@@ -39,6 +39,7 @@ const {
 } = require("./booking-lifecycle");
 const {
   CancellationRefundService,
+  REFUND_STATUS,
   sanitizeBankDetails,
 } = require("../payment/cancellation-refund-service");
 const { ConflictError, NotFoundError } = require("../../../errors/BaseError");
@@ -429,7 +430,8 @@ function createGroupBookingLifecycle(adapters) {
    * The cancellation of a group (spec part 2, sections 8 and 9): every
    * member `requested → rejected`, `payment_due | confirmed → cancelled`,
    * each with the reason and its own refund audit with the state cancelled
-   * from, written one by one and revoked; one aggregated cancellation
+   * from and, where a refund is due, the open refund state (glossary
+   * "Erstattungsstand"), written one by one and revoked; one aggregated cancellation
    * document for a priced group unless the caller leaves it out; the
    * workflow told per member; one rejection mail for a group of requests,
    * one cancel mail otherwise, with the document.
@@ -475,6 +477,9 @@ function createGroupBookingLifecycle(adapters) {
         booking.status === STATUS.CANCELLED
           ? { ...refund, cancelledFrom: from }
           : { ...refund };
+      if (CancellationRefundService.isRefundDue(refund, from)) {
+        booking.cancellationRefund.refundStatus = REFUND_STATUS.OPEN;
+      }
       return { bookingId: booking.id, ...refund };
     });
     const rejection = from === STATUS.REQUESTED;

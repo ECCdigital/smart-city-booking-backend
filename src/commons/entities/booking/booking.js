@@ -248,6 +248,23 @@ class Booking {
   }
 
   /**
+   * Drops the refund state (glossary "Erstattungsstand") for a reader who
+   * is not the administration: the booker gets the refund audit, never
+   * whether the refund was paid out.
+   * @returns {Booking} this (for chaining)
+   */
+  hideRefundStatus() {
+    if (this.cancellationRefund) {
+      const audit = { ...this.cancellationRefund };
+      delete audit.refundStatus;
+      delete audit.refundCompletedAt;
+      delete audit.refundCompletedByUserId;
+      this.cancellationRefund = audit;
+    }
+    return this;
+  }
+
+  /**
    * Export booking status information
    * @returns {Object} Status information
    */

@@ -745,6 +745,28 @@ describe("group booking lifecycle: cancel", function () {
     );
   });
 
+  it('opens the refund state per member (glossary "Erstattungsstand"): on a paid group with an amount to refund, not on one awaiting payment, not at 0 %', async function () {
+    const refundStates = async (status, options = {}) => {
+      const { adapters, lifecycle } = groupOf(status);
+      await lifecycle.cancel(TENANT, GROUP, {
+        trigger: TRIGGER.ADMIN,
+        ...options,
+      });
+      return ["B-1", "B-2"].map(
+        (id) => adapters.store.rows.get(id).cancellationRefund.refundStatus,
+      );
+    };
+
+    expect(await refundStates("confirmed")).to.deep.equal(["open", "open"]);
+    expect(await refundStates("payment_due")).to.deep.equal([
+      undefined,
+      undefined,
+    ]);
+    expect(
+      await refundStates("confirmed", { refundPercentage: 0 }),
+    ).to.deep.equal([undefined, undefined]);
+  });
+
   it("rejects a group of requests: rejected, the document, the rejection mail", async function () {
     const { adapters, lifecycle } = groupOf("requested");
 

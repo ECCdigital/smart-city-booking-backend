@@ -35,6 +35,17 @@ BookingSchema.index(
     partialFilterExpression: { isRejected: true },
   },
 );
+// The open refunds (glossary "Erstattungsstand"): the list filter of a
+// tenant and the rule that mails them, which reads across tenants.
+BookingSchema.index(
+  { "cancellationRefund.refundStatus": 1, tenantId: 1 },
+  {
+    name: "cancellationRefund_refundStatus_1_tenantId_1",
+    partialFilterExpression: {
+      "cancellationRefund.refundStatus": { $exists: true },
+    },
+  },
+);
 
 BookingSchema.pre(
   "deleteOne",

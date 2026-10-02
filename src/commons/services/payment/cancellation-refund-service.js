@@ -3,6 +3,7 @@ const { BadRequestError } = require("../../../errors/BaseError");
 const {
   normalizeCancellationRefundTiers,
 } = require("../../utilities/cancellation-refund-tiers");
+const { STATUS } = require("../booking-lifecycle/booking-state");
 
 const CANCELLATION_ORIGINS = Object.freeze({
   USER: "user",
@@ -11,6 +12,16 @@ const CANCELLATION_ORIGINS = Object.freeze({
 });
 
 const CANCELLATION_TIME_ZONE = "Europe/Berlin";
+
+/**
+ * The refund state of a cancelled booking (glossary "Erstattungsstand"):
+ * whether the administration has paid the refund out. Kept at the booking's
+ * refund audit, set by hand; the platform pays nothing out itself.
+ */
+const REFUND_STATUS = Object.freeze({
+  OPEN: "open",
+  COMPLETED: "completed",
+});
 
 class CancellationRefundService {
   static calculate({
@@ -72,6 +83,28 @@ class CancellationRefundService {
         appliedRefundPercentage !== suggestedRefundPercentage,
       cancelledByUserId: cancelledByUserId || null,
     };
+  }
+
+  /**
+   * Whether a cancellation leaves a refund to pay out (glossary
+   * "Erstattungsstand"): the booking was confirmed - so a priced one was
+   * paid - and the calculation refunds an amount.
+   *
+   * @param {Object} calculation What `calculate` answered
+   * @param {string} cancelledFrom The state the booking is cancelled from
+   * @returns {boolean}
+   */
+  static isRefundDue(calculation, cancelledFrom) {
+    return (
+      cancelledFrom === STATUS.CONFIRMED &&
+      (Number(calculation?.refundAmountEur) || 0) > 0
+    );
+  }
+
+  static validateRefundStatus(refundStatus) {
+    if (!Object.values(REFUND_STATUS).includes(refundStatus)) {
+      throw new BadRequestError("invalid_refund_status", { refundStatus });
+    }
   }
 
   static resolvePolicy({ tiers, timeBegin, cancelledAt }) {
@@ -234,5 +267,6 @@ module.exports = {
   CancellationRefundService,
   CANCELLATION_ORIGINS,
   CANCELLATION_TIME_ZONE,
+  REFUND_STATUS,
   sanitizeBankDetails,
 };

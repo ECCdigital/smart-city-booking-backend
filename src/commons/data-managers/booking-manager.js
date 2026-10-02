@@ -14,6 +14,9 @@ const {
   PUBLIC,
 } = require("../services/authorization/reach");
 const { REACH } = require("../services/authorization/policy");
+const {
+  REFUND_STATUS,
+} = require("../services/payment/cancellation-refund-service");
 
 /**
  * The condition of a reach on the bookings (ADR 0002). Under `public` there
@@ -44,9 +47,17 @@ class BookingManager {
     );
   }
 
-  static async _toEntities(rawBookings) {
+  /**
+   * The entities of some documents as a reach sees them: under `own` - the
+   * booker reading their bookings - without the refund state (glossary
+   * "Erstattungsstand"), which is the administration's.
+   */
+  static async _toEntities(rawBookings, scope) {
     const bookings = rawBookings.map((doc) => doc.toEntity());
     await BookingManager._enrichBookingsWithCustomFields(bookings);
+    if (scope?.reach === REACH.OWN) {
+      bookings.forEach((booking) => booking.hideRefundStatus());
+    }
     return bookings;
   }
 
@@ -120,14 +131,21 @@ class BookingManager {
    * @param {boolean} [options.populate=false] Carry the primary bookable
    *   and the workflow status of each booking as `_populated`, read by
    *   the domain: a booking within reach brings its dependents along
+   * @param {string} [options.refundStatus] Only the bookings in this
+   *   refund state (glossary "Erstattungsstand")
    * @returns {Promise<Booking[]>} List of bookings
    */
-  static async getTenantBookings(tenantId, scope, { populate = false } = {}) {
+  static async getTenantBookings(
+    tenantId,
+    scope,
+    { populate = false, refundStatus } = {},
+  ) {
     const rawBookings = await BookingModel.find({
       tenantId: tenantId,
+      ...(refundStatus && { "cancellationRefund.refundStatus": refundStatus }),
       ...condition(scope),
     });
-    let bookings = await BookingManager._toEntities(rawBookings);
+    let bookings = await BookingManager._toEntities(rawBookings, scope);
     if (scope?.reach === REACH.PUBLIC) {
       bookings = await BookingManager._ofListedBookables(tenantId, bookings);
     }
@@ -215,7 +233,7 @@ class BookingManager {
       id: { $in: bookingIds },
       ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
@@ -233,7 +251,7 @@ class BookingManager {
       "bookableItems.bookableId": bookableId,
       ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
@@ -251,7 +269,7 @@ class BookingManager {
       "bookableItems.bookableId": { $in: bookableIds },
       ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
@@ -276,7 +294,7 @@ class BookingManager {
       ...(tenantId ? { tenantId } : {}),
       ...condition(scope),
     });
-    const bookings = await BookingManager._toEntities(rawBookings);
+    const bookings = await BookingManager._toEntities(rawBookings, scope);
     if (populate) {
       await BookingManager._populate(bookings);
     }
@@ -305,7 +323,7 @@ class BookingManager {
       return null;
     }
 
-    const [booking] = await BookingManager._toEntities([rawBooking]);
+    const [booking] = await BookingManager._toEntities([rawBooking], scope);
     if (populate) {
       await BookingManager._populate([booking]);
     }
@@ -392,6 +410,60 @@ class BookingManager {
   }
 
   /**
+   * Sets the refund state of a booking that carries one (glossary
+   * "Erstattungsstand") with one atomic write of those fields alone: a
+   * booking without a refund state - not cancelled, nothing to refund,
+   * reinstated in between - is no match and answers `null`. `completed`
+   * records the moment and the person; `open` drops both.
+   *
+   * @param {string} tenantId Tenant ID
+   * @param {string} bookingId Booking ID
+   * @param {{ refundStatus: string, completedAt?: number, completedByUserId?: string|null }} state
+   * @param {{reach: string, userId?: string|null}} scope The reach the
+   *   caller writes under (ADR 0002)
+   * @returns {Promise<Booking|null>} The booking as written, or null
+   */
+  static async setRefundStatus(
+    tenantId,
+    bookingId,
+    { refundStatus, completedAt, completedByUserId = null },
+    scope,
+  ) {
+    const completion = {
+      "cancellationRefund.refundCompletedAt": completedAt,
+      "cancellationRefund.refundCompletedByUserId": completedByUserId,
+    };
+    const rawBooking = await BookingModel.findOneAndUpdate(
+      {
+        id: bookingId,
+        tenantId: tenantId,
+        "cancellationRefund.refundStatus": { $exists: true },
+        ...condition(scope),
+      },
+      refundStatus === REFUND_STATUS.COMPLETED
+        ? {
+            $set: {
+              "cancellationRefund.refundStatus": refundStatus,
+              ...completion,
+            },
+          }
+        : {
+            $set: { "cancellationRefund.refundStatus": refundStatus },
+            $unset: Object.fromEntries(
+              Object.keys(completion).map((field) => [field, ""]),
+            ),
+          },
+      { new: true },
+    );
+
+    if (!rawBooking) {
+      return null;
+    }
+    const [booking] = await BookingManager._toEntities([rawBooking], scope);
+    return booking;
+  }
+
+  /**
    * Puts a previous document back as a whole, as
    * {@link storeBookingIfStatus} answered it: what the document did not
    * carry is gone again, unlike a `$set` of it.
@@ -452,7 +524,7 @@ class BookingManager {
       ...condition(scope),
     });
 
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
@@ -482,7 +554,7 @@ class BookingManager {
       ...condition(scope),
     });
 
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
@@ -761,7 +833,7 @@ class BookingManager {
       ...filter,
       ...condition(scope),
     });
-    return BookingManager._toEntities(rawBookings);
+    return BookingManager._toEntities(rawBookings, scope);
   }
 
   /**
