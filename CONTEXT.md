@@ -28,6 +28,10 @@ _Avoid_: Admin-Buchung (auch Eigentümer-Updates sind manuell), Buchung ohne Pr�
 Der vom Erfassenden ausdrücklich festgelegte Netto-Stückpreis eines Items einer manuellen Buchung. Ersetzt den Preis, der sich sonst aus Preiskategorien oder externen Anbietern ergäbe; Mehrwertsteuer, Stückzahl und Coupons gelten weiterhin. Bleibt am Item, bis er ausdrücklich entfernt wird — ein Verschieben der Buchung rechnet ihn nicht neu. Nur unter der Checkout-Policy _manuelle Buchung_ wirksam; in einer Selbstbuchung wird er verworfen, nie gespeichert.
 _Avoid_: Preisüberschreibung (technischer Jargon), Fixpreis (das ist die Eigenschaft einer Preiskategorie), Kategorie-Trick (der Alt-Weg über manipulierte Preiskategorien)
 
+**Höchstmenge je Buchung (eines Bookables)**:
+Wie viele Einheiten eines Bookables eine einzelne Buchung höchstens enthalten darf, über alle ihre Positionen dieses Bookables zusammengezählt. Leer heißt unbegrenzt. Gilt für jede vom Buchenden gewählte Position, ob Hauptposition, Addon oder Teil eines Bundles; Pflicht-Addons nicht, ihre Menge folgt der Position, zu der sie gehören. Eine Buchbarkeits-Prüfung: Sie gilt in der Selbstbuchung, nicht in der manuellen Buchung. Unabhängig von der Kapazität des Bookables und von einer Höchstmenge, die ein externer Anbieter vorgibt. Gelten mehrere Grenzen, gilt jede, die strengere entscheidet.
+_Avoid_: maxAmount (so heißt die Grenze eines externen Anbieters und die des Coupons), Kapazität, verfügbare Anzahl (das ist die Obergrenze gleichzeitiger Buchungen insgesamt)
+
 ### Mediathek
 
 **Medium**:

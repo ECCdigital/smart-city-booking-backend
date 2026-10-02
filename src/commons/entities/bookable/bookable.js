@@ -398,6 +398,7 @@ class Bookable {
       location: this.location,
       isBookable: this.isBookable,
       amount: this.amount,
+      maxAmountPerBooking: this.maxAmountPerBooking,
       minBookingDuration: this.minBookingDuration,
       maxBookingDuration: this.maxBookingDuration,
       bookingNotes: this.bookingNotes,

@@ -146,6 +146,17 @@ const bookableSchemaDefinition = {
   // Booking properties
   isBookable: { type: Boolean, default: false },
   amount: { type: Number, default: null },
+  // Units of this bookable one booking may hold at most; null is unlimited.
+  maxAmountPerBooking: {
+    type: Number,
+    default: null,
+    min: 1,
+    validate: (value) =>
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      Number.isInteger(Number(value)),
+  },
   minBookingDuration: { type: Number, default: null },
   maxBookingDuration: { type: Number, default: null },
   autoCommitBooking: { type: Boolean, default: false },
