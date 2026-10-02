@@ -461,7 +461,7 @@ _Avoid_: Authorization (als Sprechbegriff), Berechtigungsprüfung (bei der Zugan
 ### Favoriten
 
 **Favorit (eines Nutzers)**:
-Die Markierung eines Angebots (Buchungsobjekt oder Event) durch einen angemeldeten Nutzer, sichtbar nur ihm selbst; kein Zustand des Angebots und keine Sache des Mandanten. Erreicht die öffentliche Projektion das Angebot nicht, bleibt der Favorit bestehen und gilt als _nicht verfügbar_; ist das Angebot gelöscht, bleibt er ebenfalls, bis der Nutzer ihn entfernt, und gilt als _gelöscht_. Ein Favorit verschwindet nie von selbst.
+Die Markierung eines Angebots (Buchungsobjekt oder Event) durch einen angemeldeten Nutzer, sichtbar nur ihm selbst; kein Zustand des Angebots und keine Sache des Mandanten. Erreicht die öffentliche Projektion das Angebot nicht, bleibt der Favorit bestehen und gilt als _nicht verfügbar_; erreicht sie es nur per Direktlink, ohne Veröffentlichungswunsch (`isPublic`), gilt er als _nicht gelistet_; ist das Angebot gelöscht, bleibt er ebenfalls, bis der Nutzer ihn entfernt, und gilt als _gelöscht_. Ein Favorit verschwindet nie von selbst.
 _Avoid_: Merkliste (das ist die Favoritenliste), Bookmark, Wishlist, Watchlist, Like
 
 **Favoritenliste (eines Nutzers)**:

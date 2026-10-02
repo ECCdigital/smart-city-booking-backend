@@ -513,6 +513,38 @@ function installRouteWorld({
     only: {
       getEvents: (tenantId, scope) =>
         manyOffers(events, "event")(tenantId, scope),
+      // The events of some (tenant, id) references, as the real manager
+      // answers them: within the reach per tenant, `reached` under
+      // `public`, and a tenant without a public projection contributes
+      // none instead of the public's 404.
+      getEventsByIds: async (refs, scope) => {
+        const byTenant = new Map();
+        for (const ref of refs) {
+          if (!ref?.tenantId || !ref?.id) continue;
+          byTenant.set(ref.tenantId, [
+            ...(byTenant.get(ref.tenantId) ?? []),
+            ref.id,
+          ]);
+        }
+        const found = [];
+        for (const [tenantId, ids] of byTenant) {
+          const records = events.filter(
+            (record) =>
+              ids.includes(record.id) &&
+              reaches(record, "event", tenantId, scope),
+          );
+          if (!isPublic(scope)) {
+            found.push(...records);
+            continue;
+          }
+          try {
+            found.push(...(await reached(tenantId, records)));
+          } catch (err) {
+            if (err?.code !== "tenant_not_found") throw err;
+          }
+        }
+        return found;
+      },
       getMediaUsage: async () => [],
     },
   });

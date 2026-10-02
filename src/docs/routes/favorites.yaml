@@ -1,5 +1,98 @@
 # swagger/routes/favorites.yaml
 
+/api/v2/favorites:
+  get:
+    tags:
+      - Favorites
+    summary: The references of the signed-in user's favorites
+    description: |
+      The favorites list of the signed-in user (glossary "Favoritenliste")
+      as references: the target of every favorite and when it was set,
+      across every tenant or narrowed to one with `tenant`. What a catalog
+      view needs to colour the heart, without loading the offers. Newest
+      first.
+
+      The list is the user's alone: the entry `favorite.readMine` is
+      `self` for every signed-in user, whoever they are in a tenant, and
+      nobody else - the instance owner included - reads it. A tenant the
+      user is no member of, or one without a public projection, changes
+      nothing here: the favorites are the user's, not the tenant's.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/FavoriteTenantQuery"
+    responses:
+      "200":
+        description: The references, newest first; an empty list without favorites
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/FavoriteReference"
+      "400":
+        description: "`favorite.invalid_tenant_filter`: `tenant` was given more than once"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteError"
+      "401":
+        description: Not authenticated
+
+/api/v2/favorites/offers:
+  get:
+    tags:
+      - Favorites
+    summary: The signed-in user's favorites with their state
+    description: |
+      The favorites list of the signed-in user for the favorites page:
+      every entry with its snapshot (`title`, `tenantName`), its `status`
+      and, when available, the `offer`. Across every tenant or narrowed to
+      one with `tenant`. Newest first.
+
+      The state is decided when the list is read, never stored. The
+      offers are loaded per tenant and kind once as the domain (does the
+      offer exist?) and once through the public projection `reached`
+      (does the public reach it by a direct link?), whoever asks:
+
+      - `available`: the public reaches the offer and it asks to be listed
+        (`isPublic`); `offer` is the bookable or the event in its public
+        projection - without its review status, a bookable with its media
+        addresses resolved as the public bookable routes deliver it.
+      - `unlisted`: the public reaches the offer by a direct link alone, it
+        does not ask to be listed (`isPublic` false); `offer` as with
+        `available`.
+      - `unavailable`: the offer exists, but the public does not reach it -
+        the tenant is pending or declined, the review of the offer is not
+        approved under a supervised tenant, or the event a ticket hangs on
+        is not approved. No `offer`.
+      - `deleted`: the offer does not exist any more. No `offer`.
+
+      An entry that is unavailable or deleted stays, with the title and the
+      tenant name the mark took; no favorite disappears by itself. The
+      snapshot is never refreshed.
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: "#/components/parameters/FavoriteTenantQuery"
+    responses:
+      "200":
+        description: The entries, newest first; an empty list without favorites
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/FavoriteOffer"
+      "400":
+        description: "`favorite.invalid_tenant_filter`: `tenant` was given more than once"
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteError"
+      "401":
+        description: Not authenticated
+
 /api/v2/{tenant}/favorites/{targetType}/{targetId}:
   put:
     tags:
@@ -81,6 +174,14 @@
 
 components:
   parameters:
+    FavoriteTenantQuery:
+      name: tenant
+      in: query
+      required: false
+      description: Narrows the list to the favorites of this tenant; without it, every tenant
+      schema:
+        type: string
+        example: default
     FavoriteTargetTypeParam:
       name: targetType
       in: path
@@ -125,6 +226,44 @@ components:
         created:
           type: string
           format: date-time
+    FavoriteReference:
+      type: object
+      description: The target of a favorite and when it was set, without the snapshot.
+      properties:
+        tenantId:
+          type: string
+          example: default
+        targetType:
+          type: string
+          enum:
+            - bookable
+            - event
+        targetId:
+          type: string
+          example: 6f1c0f6e-6f0f-4d0e-9f0a-2b1c9d4e5f60
+        created:
+          type: string
+          format: date-time
+    FavoriteOffer:
+      allOf:
+        - $ref: "#/components/schemas/Favorite"
+        - type: object
+          description: A favorite with its state, decided when the list is read.
+          required:
+            - status
+          properties:
+            status:
+              type: string
+              description: "`available`: the public reaches the offer and it asks to be listed, `offer` is set. `unlisted`: the public reaches the offer by a direct link alone (`isPublic` false), `offer` is set. `unavailable`: the offer exists but the public does not reach it. `deleted`: the offer does not exist any more."
+              enum:
+                - available
+                - unlisted
+                - unavailable
+                - deleted
+            offer:
+              type: object
+              description: Only with `status` `available` or `unlisted`. The bookable or the event in its public projection, as the public routes deliver it; never carries a review status.
+              additionalProperties: true
     FavoriteError:
       type: object
       properties:

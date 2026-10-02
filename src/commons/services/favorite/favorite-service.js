@@ -1,13 +1,26 @@
 /**
  * The favorites of a signed-in user (glossary "Favorit", "Favoritenliste"):
- * marking an offer and removing the mark, both idempotent. Favorites are
- * the user's alone, so the service reads them for the user under `DOMAIN`
- * (`self` reaches no record, as "my bookings" does); the offer itself is
- * read with the reach the route decided for it - the public's, or the
- * staff's management view (`also` on the marker: `bookable.readPublic`,
- * `event.read`) - so a user marks only what they reach at this moment. A
- * tenant without a public projection has nothing to mark (`404
- * tenant_not_found`, ADR 0003).
+ * marking an offer and removing the mark, both idempotent, and reading
+ * the list - as references, or hydrated with the state of every entry.
+ * Favorites are the user's alone, so the service reads them for the user
+ * under `DOMAIN` (`self` reaches no record, as "my bookings" does); the
+ * offer itself is read with the reach the route decided for it when
+ * marking - the public's, or the staff's management view (`also` on the
+ * marker: `bookable.readPublic`, `event.read`) - so a user marks only
+ * what they reach at this moment. A tenant without a public projection
+ * has nothing to mark (`404 tenant_not_found`, ADR 0003).
+ *
+ * The state of an entry is decided when the list is read, never stored:
+ * the targets of the favorites are loaded per tenant and kind once as the
+ * domain (does the offer exist?) and once as the public through the
+ * projection `reached` (does the public reach it?). An offer the domain
+ * does not find is `deleted`; one the public does not reach - the tenant
+ * pending or declined, the review not approved, a ticket's event not
+ * approved - is `unavailable`; one the public reaches by a direct link
+ * alone, without the wish to be listed (`isPublic`), is `unlisted`; the
+ * rest is `available`. Unlisted and available entries carry the offer in
+ * its public projection. No favorite disappears by itself, and no removal
+ * of an offer needs a cascade here.
  */
 
 const { BookableManager } = require("../../data-managers/bookable-manager");
@@ -19,7 +32,8 @@ const {
   FavoriteTargetType,
   isFavoriteTargetType,
 } = require("../../entities/favorite/favorite");
-const { DOMAIN } = require("../authorization/reach");
+const { DOMAIN, PUBLIC } = require("../authorization/reach");
+const { asksToBeListed } = require("../supervision/offer-gate");
 const {
   BadRequestError,
   ConflictError,
@@ -30,20 +44,45 @@ const {
 const DEFAULT_MAX_FAVORITES_PER_USER = 200;
 
 /**
- * The entry of the rights table a route names on its marker for the read
- * of each kind of target, and the manager that reads it.
+ * The state of an entry of the favorites list (glossary "Favoritenliste":
+ * _verfügbar_, _nicht gelistet_, _nicht verfügbar_, _gelöscht_), decided
+ * when it is read.
+ */
+const FAVORITE_STATUS = Object.freeze({
+  AVAILABLE: "available",
+  UNLISTED: "unlisted",
+  UNAVAILABLE: "unavailable",
+  DELETED: "deleted",
+});
+
+/**
+ * Each kind of target: the entry of the rights table a route names on its
+ * marker for the read of one offer, the manager reads - one by id, many
+ * by ids within a tenant - and the offer as the public delivery gives it.
  */
 const TARGETS = {
   [FavoriteTargetType.BOOKABLE]: {
     entry: "bookable.readPublic",
     read: (id, tenantId, scope) =>
       BookableManager.getBookable(id, tenantId, scope),
+    readMany: (tenantId, ids, scope) =>
+      BookableManager.getBookablesByIds(tenantId, ids, scope),
     titleOf: (bookable) => bookable.title ?? "",
+    // As the public bookable routes deliver it: media addresses resolved.
+    publicView: (bookable) => bookable.withResolvedMediaUrls(),
   },
   [FavoriteTargetType.EVENT]: {
     entry: "event.read",
     read: (id, tenantId, scope) => EventManager.getEvent(id, tenantId, scope),
+    readMany: (tenantId, ids, scope) =>
+      EventManager.getEventsByIds(
+        ids.map((id) => ({ tenantId, id })),
+        scope,
+      ),
     titleOf: (event) => event.information?.name ?? "",
+    // As the public event routes deliver it: the entity, already without
+    // its review.
+    publicView: (event) => event,
   },
 };
 
@@ -67,7 +106,132 @@ function targetOf(targetType) {
   return TARGETS[targetType];
 }
 
+/** The target of a favorite as a map key. */
+const targetKeyOf = ({ tenantId, targetType, targetId }) =>
+  `${tenantId}/${targetType}/${targetId}`;
+
+/**
+ * The public's read of some offers: what the public reaches of them. A
+ * tenant without a public projection answers the public's 404 at the
+ * managers (ADR 0003); here it reaches none of its offers.
+ *
+ * @param {() => Promise<Object[]>} read
+ * @returns {Promise<Object[]>}
+ */
+async function reachedByPublic(read) {
+  try {
+    return await read();
+  } catch (err) {
+    if (err?.code !== "tenant_not_found") throw err;
+    return [];
+  }
+}
+
+/**
+ * The targets of some favorites, loaded per tenant and kind once as the
+ * domain and once as the public, keyed by target: what exists, and of it
+ * what the public reaches.
+ *
+ * @param {Favorite[]} favorites
+ * @returns {Promise<Map<string, {reached: Object|null}>>} An entry per
+ *   target that exists; `reached` is the offer the public reaches, or null
+ */
+async function loadTargets(favorites) {
+  const groups = new Map();
+  for (const favorite of favorites) {
+    const key = `${favorite.tenantId}/${favorite.targetType}`;
+    const group = groups.get(key) ?? {
+      tenantId: favorite.tenantId,
+      targetType: favorite.targetType,
+      ids: new Set(),
+    };
+    group.ids.add(favorite.targetId);
+    groups.set(key, group);
+  }
+
+  const targets = new Map();
+  for (const { tenantId, targetType, ids } of groups.values()) {
+    const target = TARGETS[targetType];
+    const list = [...ids];
+    const [existing, reached] = await Promise.all([
+      target.readMany(tenantId, list, DOMAIN),
+      reachedByPublic(() => target.readMany(tenantId, list, PUBLIC)),
+    ]);
+    const reachedById = new Map(reached.map((offer) => [offer.id, offer]));
+    for (const offer of existing) {
+      targets.set(targetKeyOf({ tenantId, targetType, targetId: offer.id }), {
+        reached: reachedById.get(offer.id) ?? null,
+      });
+    }
+  }
+  return targets;
+}
+
+/**
+ * One entry of the hydrated list: the favorite with its state, and the
+ * offer in its public projection where the public reaches it - listed
+ * (`available`) or by a direct link alone (`unlisted`).
+ *
+ * @param {Favorite} favorite
+ * @param {{reached: Object|null}|undefined} target What `loadTargets`
+ *   found for the favorite's target; none means the offer is gone
+ * @returns {Object}
+ */
+function entryOf(favorite, target) {
+  const entry = favorite.toResponse();
+  if (!target) {
+    return { ...entry, status: FAVORITE_STATUS.DELETED };
+  }
+  if (!target.reached) {
+    return { ...entry, status: FAVORITE_STATUS.UNAVAILABLE };
+  }
+  return {
+    ...entry,
+    status: asksToBeListed(target.reached)
+      ? FAVORITE_STATUS.AVAILABLE
+      : FAVORITE_STATUS.UNLISTED,
+    offer: TARGETS[favorite.targetType].publicView(target.reached),
+  };
+}
+
 class FavoriteService {
+  /**
+   * The favorites of the user, across every tenant or within one, newest
+   * first - the domain's read for the user (`self` reaches no record).
+   *
+   * @param {Object} params
+   * @param {string} params.userId The signed-in user
+   * @param {string|null} [params.tenantId] The tenant to narrow to
+   * @returns {Promise<Favorite[]>}
+   */
+  static async getFavorites({ userId, tenantId = null }) {
+    return FavoriteManager.getFavorites(userId, tenantId, DOMAIN);
+  }
+
+  /**
+   * The favorites of the user with their state, as the favorites page
+   * shows them: each entry with the snapshot, its `status` (`available`,
+   * `unlisted`, `unavailable`, `deleted`) and, where the public reaches
+   * the offer, the `offer` in its public projection. The order is the
+   * favorites', newest first.
+   *
+   * @param {Object} params
+   * @param {string} params.userId The signed-in user
+   * @param {string|null} [params.tenantId] The tenant to narrow to
+   * @returns {Promise<Object[]>} The entries
+   */
+  static async getFavoriteOffers({ userId, tenantId = null }) {
+    const favorites = await FavoriteManager.getFavorites(
+      userId,
+      tenantId,
+      DOMAIN,
+    );
+    const targets = await loadTargets(favorites);
+    return favorites.map((favorite) =>
+      entryOf(favorite, targets.get(targetKeyOf(favorite))),
+    );
+  }
+
   /**
    * Marks an offer as a favorite of the user. Idempotent: an offer already
    * marked answers the existing favorite, snapshot untouched.
@@ -160,4 +324,5 @@ class FavoriteService {
 
 module.exports = FavoriteService;
 module.exports.DEFAULT_MAX_FAVORITES_PER_USER = DEFAULT_MAX_FAVORITES_PER_USER;
+module.exports.FAVORITE_STATUS = FAVORITE_STATUS;
 module.exports.maxFavoritesPerUser = maxFavoritesPerUser;
